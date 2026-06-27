@@ -50,11 +50,19 @@ function makeCtx(over: Record<string, unknown> = {}): CommandContext {
 
 describe('owner-child-node-executor', () => {
   it('builds a serve:true spec with RIFTY_BIN=0', () => {
-    const spec = buildNodeChildSpawnSpec('/w/app.js', ['a'], { PATH: '/x' }, '/w', 'URL');
+    const spec = buildNodeChildSpawnSpec('/w/app.js', ['a'], { PATH: '/x' }, '/w', 'URL', true);
     expect(spec).toMatchObject({
       entry: { kind: 'url', url: 'URL' },
       argv: ['rifty', '/w/app.js', 'a'],
-      env: { PATH: '/x', RIFTY_BIN: '0', RIFTY_REMOTE_FS: '1', RIFTY_NODE_SERVE: '1' },
+      env: {
+        PATH: '/x',
+        RIFTY_BIN: '0',
+        RIFTY_REMOTE_FS: '1',
+        RIFTY_NODE_SERVE: '1',
+        RIFTY_STDIN_IS_TTY: '0',
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+      },
       cwd: '/w',
       serve: true,
     });

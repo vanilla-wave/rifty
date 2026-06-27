@@ -10,7 +10,13 @@
  * subclasses outside `@riftydev/io` cannot reach it.
  */
 
-import { Duplex, type DuplexInternalOptions, INTERNAL_WRITABLE_SIDE } from './duplex.ts';
+import {
+  Duplex,
+  type DuplexInternalOptions,
+  INTERNAL_WRITABLE_SIDE,
+  ownFinalOverride,
+  ownWriteOverride,
+} from './duplex.ts';
 import type { ReadableOptions } from './readable.ts';
 import { Writable, type WritableOptions } from './writable.ts';
 
@@ -36,13 +42,18 @@ export class Transform extends Duplex {
     // into one bag. The symbol key is invisible to callers outside this package.
     const superOpts: ReadableOptions & WritableOptions & DuplexInternalOptions = {
       ...opts,
-      [INTERNAL_WRITABLE_SIDE]: (innerOpts) =>
+      [INTERNAL_WRITABLE_SIDE]: (innerOpts, owner) =>
         new Writable({
           ...innerOpts,
           write(chunk, encoding, cb): void {
-            const t = transformRef.instance;
+            const t = transformRef.instance ?? (owner as Transform);
             if (!t) {
               cb(new Error('Transform stream not yet bound — internal invariant violated'));
+              return;
+            }
+            const override = ownWriteOverride(t);
+            if (override) {
+              override.call(t, chunk, encoding, cb);
               return;
             }
             if (transformImpl) {
@@ -61,9 +72,14 @@ export class Transform extends Duplex {
             cb();
           },
           final(cb): void {
-            const t = transformRef.instance;
+            const t = transformRef.instance ?? (owner as Transform);
             if (!t) {
               cb(new Error('Transform stream not yet bound — internal invariant violated'));
+              return;
+            }
+            const override = ownFinalOverride(t);
+            if (override) {
+              override.call(t, cb);
               return;
             }
             const finalize = (): void => {

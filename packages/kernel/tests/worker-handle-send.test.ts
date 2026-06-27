@@ -17,6 +17,7 @@
  * (skipped outside SAB-capable runtimes). These kernel-level tests use the
  * stub-Worker factory so they can run in plain Vitest.
  */
+import { once } from '@riftydev/io';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
 import { clearKernelWorkerUrl, setKernelWorkerUrl } from '../src/spawn-worker.ts';
@@ -114,7 +115,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.kill('SIGTERM');
   });
 
-  it("worker exit emits 'disconnect' once and subsequent send returns false", () => {
+  it("worker exit emits 'disconnect' once and subsequent send returns false", async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -130,7 +131,9 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     });
 
     const w = factoryWorker as FakeWorker;
+    const exit = once(handle, 'exit');
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    await exit;
 
     expect(disconnectEvents).toBe(1);
     expect(handle.exitCode).toBe(0);

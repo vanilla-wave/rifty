@@ -15,10 +15,11 @@ Pieces:
 string-valued `overrides`. The older explicit form
 `install(name, version, deps, opts)` still works for callers that already have a
 dependency map. Installed package `bin` metadata becomes launcher shims in the
-containing `node_modules/.bin` scope (shell PATH lookup is a separate,
-not-yet-wired step); non-registry specs such as `file:`, `workspace:`,
-git, and URL tarballs throw named `NotImplementedError`s instead of pretending
-to work. Registry packages declaring install lifecycle scripts (`preinstall`,
+containing `node_modules/.bin` scope; the playground shell now resolves those
+shims through its PATH-style `.bin` lookup and runs them in supervised Node
+workers. Non-registry specs such as `file:`/local paths, `workspace:`,
+git/GitHub shorthand, URL tarballs, and npm aliases throw named
+`NotImplementedError`s instead of pretending to work. Registry packages declaring install lifecycle scripts (`preinstall`,
 `install`, `postinstall`) throw named `NotImplementedError`s; registry tarball
 `prepare` metadata is ignored because npm does not run it for registry
 dependency installs. Script execution is tracked separately from registry

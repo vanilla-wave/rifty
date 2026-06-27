@@ -156,10 +156,6 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (specifier.startsWith('file:')) {
-        const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
-        return readResolved(vfs, pkgCache, filePath, opts.esm);
-      }
       if (specifier.startsWith('data:')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
@@ -167,6 +163,14 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           `Protocol in '${specifier}' is not supported in M2.`,
           opts.fromFile,
         );
+      }
+      if (specifier.startsWith('file:')) {
+        const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
+        const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
+        if (resolved === null) {
+          throw moduleNotFound(specifier, opts.fromFile, opts.esm);
+        }
+        return readResolved(vfs, pkgCache, resolved, opts.esm);
       }
 
       if (specifier.startsWith('#')) {
@@ -249,15 +253,16 @@ function fileUrlToVfsPath(specifier: string, fromFile: string): string {
   let url: URL;
   try {
     url = new URL(specifier);
-  } catch {
+  } catch (err) {
+    const msg = (err as Error).message ?? String(err);
     throw new ModuleLoadError(
       'UNSUPPORTED_PROTOCOL',
       specifier,
-      `Invalid file URL '${specifier}'`,
+      `Invalid file URL '${specifier}': ${msg}`,
       fromFile,
     );
   }
-  if (url.protocol !== 'file:' || (url.host !== '' && url.host !== 'localhost')) {
+  if (url.protocol !== 'file:') {
     throw new ModuleLoadError(
       'UNSUPPORTED_PROTOCOL',
       specifier,
@@ -265,7 +270,16 @@ function fileUrlToVfsPath(specifier: string, fromFile: string): string {
       fromFile,
     );
   }
-  return normalizePath(decodeURIComponent(url.pathname));
+  if (url.host !== '' && url.host !== 'localhost') {
+    throw new ModuleLoadError(
+      'UNSUPPORTED_PROTOCOL',
+      specifier,
+      `file:// host '${url.host}' is not supported in the VFS resolver.`,
+      fromFile,
+    );
+  }
+  const pathname = decodeURIComponent(url.pathname);
+  return normalizePath(pathname.startsWith('/') ? pathname : `/${pathname}`);
 }
 
 /**

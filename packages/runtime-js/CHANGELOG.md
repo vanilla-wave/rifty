@@ -15,6 +15,36 @@
   of leaking JS `TypeError`s. Default remains Node-faithful; explicit `paths`
   still wins.
 
+- **Package-tooling loader blockers closed for Prettier/ESLint-class CLIs.** The module
+  resolver now accepts absolute `file://` specifiers (including percent-decoding
+  and query/hash stripping for VFS reads), CJS sources route real `import()`
+  expressions through the VFS loader with keepalive, and runtime-built lexical
+  `Function` constructors route constructed `import()` bodies through the same
+  loader with the constructing module id baked in while preserving native
+  `name`/`length`/prototype observables (ADR-0171). Helper bindings are
+  source-unique across CJS/ESM/constructed-function transforms; constructed
+  functions that combine routed `import()` with nested `Function` or `with`/`eval` dynamic scope now
+  throw `module-loader.function-constructor-dynamic-scope` instead of letting
+  dynamic scope shadow the loader helper or falling through to host import, and `.constructor`-derived host
+  Function constructors that compile import-bearing source throw
+  `module-loader.function-constructor-derived-host` instead of host-routing.
+  Derived async / generator constructors remain an explicit ceiling, not a fake route. `runNodeEntry`
+  now has a Prettier-shaped guard:
+  `.bin/prettier` → CJS bin → `new Function('specifier','return import(specifier)')`
+  → ESM core → `node:fs` write. Also expands `node:module` with
+  `constants.compileCacheStatus`, non-throwing `enableCompileCache()` (honest
+  `FAILED`, never fake `ENABLED`), `flushCompileCache`, `getCompileCacheDir`,
+  and `isBuiltin`.
+- **Package-tooling Node API support for Prettier/ESLint/typed ESLint.**
+  `node:util` now includes `styleText`, `stripVTControlCharacters`, and
+  `isDeepStrictEqual` (strict Map/Set/typed-array aware comparison) so ESLint's
+  real `stylish` formatter and `typescript-eslint` project service run instead
+  of tripping on missing helpers. `node:fs` callback/promise `stat`/`lstat`
+  support options with a loud `bigint` ceiling, `node:readline` now has a
+  line-oriented `createInterface({ input, output })` / `question()` subset, and
+  cursor helpers (`cursorTo`, `moveCursor`, `clearLine`, `clearScreenDown`) emit
+  ANSI sequences with callback completion. TTY keypress/raw-mode and
+  `readline/promises` remain loud ceilings.
 - **Public `node:os` / `node:path` / `node:perf_hooks` / `node:fs` builtin subpaths** (`./builtins/{os,path,perf_hooks,fs}`, ADR-0166 task 1.9). The same faithful shims that already back the `require('os')` module registry, now also importable directly. The playground aliases the BARE `os`/`path`/`perf_hooks`/`fs` specifiers to these so a Vite bundle containing a heavy node-targeting dependency (the `typescript` engine in the ts-language-service worker) resolves them to REAL rifty shims instead of Vite's empty browser stub (`os.platform is not a function` at the dep's module-eval). No first-party source imports these bare specifiers; it uses `node:*` + the module registry.
 
 ### Changed
@@ -43,6 +73,18 @@
   This closes the stale-transform/stale-AST cache backlog items without dropping
   the fast path for byte-identical reloads.
 
+- **Module-loader hard-ceil/parity tightening for package tooling.** Routed
+  dynamic `import()` now rejects `Symbol` specifiers like real Node instead of
+  resolving the string `"Symbol(...)"`. CJS/ESM `eval("import(...)")` text now
+  hits the directed dynamic-scope ceiling instead of falling through to host
+  import, and object-destructuring defaults such as
+  `const { F = Function.prototype.constructor } = {}` feed the existing
+  derived-host guard instead of escaping it. Dynamically composed derived
+  constructor/eval bodies remain in the explicit exhaustive-metaprogramming backlog
+  instead of causing import-time false positives for Vite-shaped evaluators.
+- **Timer/immediate callback failures surface loudly.** `setImmediate` no longer
+  catches and logs callback exceptions inside the MessageChannel dispatch path;
+  failures propagate like Node instead of being swallowed as console noise.
 - **Node-24 argument validation on the new `assert` / `fs` surfaces** (PR #62 review hardening; parity RED-then-GREEN). `assert.throws`/`doesNotThrow` reject a non-function `fn`, and `assert.rejects`/`doesNotReject` a first arg that is neither a function nor a thenable, with `ERR_INVALID_ARG_TYPE` (was: silently call / `await` a non-callable → mis-reported "Missing expected rejection"). `fs.utimesSync`/`lutimesSync`/`futimesSync` validate the time args via Node's `toUnixTimestamp` rules — a numeric string coerces, but `NaN`/`Infinity`/a non-numeric string throw `ERR_INVALID_ARG_TYPE` (was: a silent `NaN` handed to the VFS clock). `fs.cpSync` `errorOnExist` drops the non-Node `[ERR_FS_CP_EEXIST]:` message prefix (the code already matched). The pre-existing `cp` file→dir / dir→file type-mismatch codes are tracked in `backlog/runtime-js/fs-cp-type-mismatch-error-codes`.
 - **Silent Node divergences — failing-parity-first fixes** (closes backlog/runtime-js/silent-node-divergences). Four `node:` builtins returned WRONG values with no throw (worse than a loud gap); each pinned by a RED-then-GREEN parity case vs Node v24. (1) `util.inspect(value, options)` — the 2nd positional is now an OPTIONS object, not the internal depth counter, so `util.inspect(obj, { depth: null })` renders unlimited (was misread as `depth = NaN`) and `{ depth: 0 }` collapses containers to Node's `[Object]`/`[Array]`/`[Map]`/`[Set]` placeholders; strings inside structures use SINGLE quotes with Node's dynamic `"`/`` ` `` fallback (was `JSON.stringify` double-quotes). Default nesting depth + colors/getters/sorted remain `util-surface-completions`. (2) `querystring.parse` decodes a literal `+` → space (express/formidable) — structural, parse-only (`+`→`%20` BEFORE the decoder so a custom `decodeURIComponent` sees `%20` like Node; `%2B` survives; `querystring.unescape` still leaves `+`). (3) `util.format('%c', arg)` consumes its arg and emits nothing (was keeping the literal `%c` AND leaking the arg). (4) `import.meta.resolve` does real loader resolution (see `docs/public/compat/modules.md`): any `node:` specifier returned verbatim (Node doesn't validate the builtin at resolve time), files → `file://<abs>`, a bare/relative miss throws the resolver's `MODULE_NOT_FOUND` — replaced the inline `new URL(s, baseUrl).href` stub that returned a wrong `file://` URL for bare/`node:` specifiers. `repl/inspect.ts` also gained Node's `<Buffer …>` hex rendering driven by the live `buffer.INSPECT_MAX_BYTES`.
 - **`worker_threads` Vite 8 follow-ups (review).** (a) Kernel-path `workerData: -0`

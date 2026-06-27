@@ -104,17 +104,52 @@ function encodeChunk(chunk: string | Uint8Array): Uint8Array {
   return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
 }
 
-/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(
-  port: MessagePort,
-  fd: number,
-): {
+type StdioCallback = () => void;
+
+interface NodeStdioWriter {
   write(chunk: string | Uint8Array): boolean;
   isTTY: boolean;
   fd: number;
-} {
-  return {
-    isTTY: false,
+  clearLine?(dir?: number, cb?: StdioCallback): boolean;
+  cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
+  moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
+  clearScreenDown?(cb?: StdioCallback): boolean;
+}
+
+function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallback): boolean {
+  const ok = stream.write(sequence);
+  if (cb) queueMicrotask(cb);
+  return ok;
+}
+
+function attachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
+  stream.clearLine = (dir, cb): boolean => {
+    const direction = dir ?? 0;
+    const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
+    return writeControl(stream, `\x1b[${mode}K`, cb);
+  };
+  stream.cursorTo = (x, yOrCb, cb): boolean => {
+    const y = typeof yOrCb === 'number' ? yOrCb : undefined;
+    const callback = typeof yOrCb === 'function' ? yOrCb : cb;
+    const sequence = y === undefined ? `\x1b[${Math.max(0, x) + 1}G` : `\x1b[${y + 1};${x + 1}H`;
+    return writeControl(stream, sequence, callback);
+  };
+  stream.moveCursor = (dx, dy, cb): boolean => {
+    let sequence = '';
+    if (dx < 0) sequence += `\x1b[${-dx}D`;
+    else if (dx > 0) sequence += `\x1b[${dx}C`;
+    if (dy < 0) sequence += `\x1b[${-dy}A`;
+    else if (dy > 0) sequence += `\x1b[${dy}B`;
+    return writeControl(stream, sequence, cb);
+  };
+  stream.clearScreenDown = (cb): boolean => writeControl(stream, '\x1b[0J', cb);
+  return stream;
+}
+
+/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
+function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStdioWriter {
+  const stream: NodeStdioWriter = {
+    isTTY,
     fd,
     write(chunk) {
       const bytes = encodeChunk(chunk);
@@ -129,6 +164,7 @@ function makeStdioWriter(
       return true;
     },
   };
+  return isTTY ? attachTtyControls(stream) : stream;
 }
 
 export interface NodeStdin extends EventEmitter {
@@ -145,7 +181,10 @@ export interface NodeStdin extends EventEmitter {
  * Returns the stdin + a `push(data)` the host source calls. Pre-listener
  * buffering + utf8 stream-decoding match Node's encoding semantics.
  */
-function makeStdinReader(port?: MessagePort): {
+function makeStdinReader(
+  port?: MessagePort,
+  isTTY = false,
+): {
   stdin: NodeStdin;
   push(data: string | Uint8Array): void;
 } {
@@ -180,7 +219,7 @@ function makeStdinReader(port?: MessagePort): {
   };
 
   Object.assign(stdin, {
-    isTTY: false,
+    isTTY,
     fd: 0,
     setEncoding(next: string | null) {
       encoding = next;
@@ -213,6 +252,10 @@ function makeStdinReader(port?: MessagePort): {
     port.start();
   }
   return { stdin, push };
+}
+
+function envFlag(env: Readonly<Record<string, string | undefined>>, key: string): boolean {
+  return env[key] === '1';
 }
 
 /** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
@@ -278,8 +321,8 @@ export class NodeProcess extends EventEmitter {
   set exitCode(v: unknown) {
     this.#exitCode = coerceExitCode(v);
   }
-  stdout: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
-  stderr: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
+  stdout: NodeStdioWriter;
+  stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
 
@@ -304,9 +347,9 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      this.stdout = makeStdioWriter(spec.stdio.stdout, 1);
-      this.stderr = makeStdioWriter(spec.stdio.stderr, 2);
-      const reader = makeStdinReader(spec.stdio.stdin);
+      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'));
+      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'));
+      const reader = makeStdinReader(spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
       this.#wireIpc(spec.stdio.ipc);

@@ -5,10 +5,8 @@
  * the source; the walk tracks lexical scopes so identifier references that look
  * like imports but are shadowed by a parameter or local binding are left alone.
  *
- * The result body, run as the body of an `async () => { ... }` with the helpers
- * `__import`, `__importStatic`, `__slots`, `__rebuildExports` (and `__filename`,
- * `__dirname`, `__importMetaUrl`, `import_meta`) in scope, populates the slot
- * table for the module.
+ * The result body, run as the body of an `async () => { ... }`, uses generated
+ * helper names chosen per source so user bindings cannot shadow loader plumbing.
  */
 
 import type {
@@ -51,6 +49,20 @@ import { ModuleLoadError } from './errors.ts';
  */
 export const RUNTIME_OBJECT_BINDING = '__riftyObject';
 
+export interface TransformHelperNames {
+  readonly dynamicImport: string;
+  readonly importStatic: string;
+  readonly slots: string;
+  readonly rebuildExports: string;
+  readonly importMeta: string;
+  readonly importMetaUrl: string;
+  readonly metaDirname: string;
+  readonly metaFilename: string;
+  readonly assetPath: string;
+  readonly metaResolve: string;
+  readonly runtimeObject: string;
+}
+
 interface ImportBinding {
   /** The synthesized local namespace variable, e.g. `__m0`. */
   readonly ns: string;
@@ -70,6 +82,7 @@ interface Ctx {
   readonly source: string;
   readonly imports: Map<string, ImportBinding>;
   readonly edits: Edit[];
+  readonly helpers: TransformHelperNames;
   /** Stack of scopes; index 0 is module scope. */
   readonly scopes: Scope[];
   /**
@@ -156,14 +169,15 @@ function replacementFor(b: ImportBinding): string {
  * reference (a use, not a declaration / static property name / object key /
  * label) that matches an imported binding and is not shadowed, emits an edit
  * replacing it with the namespace member access. Also rewrites `import.meta`
- * (MetaProperty) → `import_meta` (a wrapper-injected local) and dynamic
- * `import(x)` (ImportExpression) → `__import(x)`.
+ * (MetaProperty) → the wrapper-injected import-meta local and dynamic
+ * `import(x)` (ImportExpression) → the wrapper-injected dynamic import helper.
  */
 function collectRewrites(
   program: Program,
   source: string,
   imports: Map<string, ImportBinding>,
   edits: Edit[],
+  helpers: TransformHelperNames,
 ): void {
   const forbiddenSpans: Array<readonly [number, number]> = [];
   for (const e of edits) forbiddenSpans.push([e.start, e.end]);
@@ -173,6 +187,7 @@ function collectRewrites(
     source,
     imports,
     edits,
+    helpers,
     scopes: [new Map()],
     forbiddenSpans,
   };
@@ -260,17 +275,17 @@ function walk(node: unknown, ctx: Ctx): void {
 
     case 'MetaProperty': {
       const mp = n as unknown as MetaProperty;
-      // import.meta → import_meta. `new.target` is a MetaProperty too — leave alone.
+      // import.meta → generated helper. `new.target` is a MetaProperty too — leave alone.
       if (mp.meta?.name === 'import' && mp.property?.name === 'meta') {
-        emitEdit(ctx, mp.start, mp.end, 'import_meta');
+        emitEdit(ctx, mp.start, mp.end, ctx.helpers.importMeta);
       }
       return;
     }
 
     case 'ImportExpression': {
       const ie = n as unknown as ImportExpression;
-      // Rewrite the leading `import` keyword (6 chars) to `__import`.
-      emitEdit(ctx, ie.start, ie.start + 'import'.length, '__import');
+      // Rewrite the leading `import` keyword (6 chars) to the dynamic import helper.
+      emitEdit(ctx, ie.start, ie.start + 'import'.length, ctx.helpers.dynamicImport);
       walk(ie.source, ctx);
       if (ie.options) walk(ie.options, ctx);
       return;
@@ -516,6 +531,36 @@ export interface TransformResult {
   readonly lineMap: readonly number[];
   /** Every static import / re-export specifier — preloaded by the caller. */
   readonly staticImports: readonly string[];
+  /** Collision-free helper identifiers used by the rewritten body. */
+  readonly helpers: TransformHelperNames;
+}
+
+function uniqueHelperName(source: string, used: Set<string>, base: string): string {
+  let candidate = base;
+  let suffix = 0;
+  while (used.has(candidate) || source.includes(candidate)) {
+    suffix++;
+    candidate = `${base}${suffix}`;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+function createHelperNames(source: string): TransformHelperNames {
+  const used = new Set<string>();
+  return {
+    dynamicImport: uniqueHelperName(source, used, '__import'),
+    importStatic: uniqueHelperName(source, used, '__importStatic'),
+    slots: uniqueHelperName(source, used, '__slots'),
+    rebuildExports: uniqueHelperName(source, used, '__rebuildExports'),
+    importMeta: uniqueHelperName(source, used, 'import_meta'),
+    importMetaUrl: uniqueHelperName(source, used, '__importMetaUrl'),
+    metaDirname: uniqueHelperName(source, used, '__metaDirname'),
+    metaFilename: uniqueHelperName(source, used, '__metaFilename'),
+    assetPath: uniqueHelperName(source, used, '__assetPath'),
+    metaResolve: uniqueHelperName(source, used, '__metaResolve'),
+    runtimeObject: uniqueHelperName(source, used, RUNTIME_OBJECT_BINDING),
+  };
 }
 
 /**
@@ -546,6 +591,8 @@ export function transformEsm(source: string, id: string): TransformResult {
   const staticImports = new Set<string>();
   /** Map of local binding name (in the original source) → resolved import. */
   const importedBindings = new Map<string, ImportBinding>();
+  const helpers = createHelperNames(source);
+  const generatedNames = new Set(Object.values(helpers));
   let importCounter = 0;
 
   for (const node of program.body) {
@@ -555,36 +602,46 @@ export function transformEsm(source: string, id: string): TransformResult {
         // resolved PATH, not a module. Deliberately NOT in staticImports — the
         // asset is never evaluated as a module (may be binary, e.g. opencode's
         // `photon_rs_bg.wasm`).
-        handleFileImport(node, `__file${importCounter++}`, edits);
+        handleFileImport(
+          node,
+          uniqueHelperName(source, generatedNames, `__file${importCounter++}`),
+          edits,
+          helpers,
+        );
       } else {
-        const ns = `__m${importCounter++}`;
-        handleImportDeclaration(node, ns, edits, importedBindings);
+        const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
+        handleImportDeclaration(node, ns, edits, importedBindings, helpers);
         staticImports.add(literalString(node.source.value));
       }
     } else if (node.type === 'ExportNamedDeclaration') {
       const sourceLit = node.source ? literalString(node.source.value) : null;
       if (sourceLit !== null) {
-        const ns = `__m${importCounter++}`;
-        handleReExportNamed(node, ns, edits, sourceLit);
+        const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
+        handleReExportNamed(node, ns, edits, sourceLit, helpers);
         staticImports.add(sourceLit);
       } else {
-        handleExportNamed(node, edits, importedBindings);
+        handleExportNamed(node, edits, importedBindings, helpers);
       }
     } else if (node.type === 'ExportDefaultDeclaration') {
-      handleExportDefault(node, edits, source);
+      handleExportDefault(node, edits, source, helpers);
     } else if (node.type === 'ExportAllDeclaration') {
-      const ns = `__m${importCounter++}`;
+      const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
       const sourceLit = literalString(node.source.value);
-      handleExportAll(node, ns, edits, sourceLit);
+      handleExportAll(node, ns, edits, sourceLit, helpers);
       staticImports.add(sourceLit);
     }
   }
 
-  collectRewrites(program, source, importedBindings, edits);
+  collectRewrites(program, source, importedBindings, edits, helpers);
 
   const applied = applyEdits(source, edits);
-  const body = `__rebuildExports();\n${applied.body}`;
-  return { body, lineMap: [0, ...applied.lineMap], staticImports: [...staticImports] };
+  const body = `${helpers.rebuildExports}();\n${applied.body}`;
+  return {
+    body,
+    lineMap: [0, ...applied.lineMap],
+    staticImports: [...staticImports],
+    helpers,
+  };
 }
 
 /**
@@ -611,9 +668,14 @@ function isFileAttributeImport(node: ImportDeclaration): boolean {
  * the path string; namespace specifier → `{ default: <path> }`. Named specifiers
  * are meaningless for a file asset and are dropped.
  */
-function handleFileImport(node: ImportDeclaration, assetVar: string, edits: Edit[]): void {
+function handleFileImport(
+  node: ImportDeclaration,
+  assetVar: string,
+  edits: Edit[],
+  helpers: TransformHelperNames,
+): void {
   const spec = literalString(node.source.value);
-  const lines: string[] = [`const ${assetVar} = __assetPath(${JSON.stringify(spec)});`];
+  const lines: string[] = [`const ${assetVar} = ${helpers.assetPath}(${JSON.stringify(spec)});`];
   for (const s of node.specifiers) {
     if (s.type === 'ImportDefaultSpecifier') {
       lines.push(`const ${s.local.name} = ${assetVar};`);
@@ -629,9 +691,10 @@ function handleImportDeclaration(
   ns: string,
   edits: Edit[],
   importedBindings: Map<string, ImportBinding>,
+  helpers: TransformHelperNames,
 ): void {
   const spec = literalString(node.source.value);
-  const lines: string[] = [`const ${ns} = __importStatic(${JSON.stringify(spec)});`];
+  const lines: string[] = [`const ${ns} = ${helpers.importStatic}(${JSON.stringify(spec)});`];
 
   for (const s of node.specifiers) {
     if (s.type === 'ImportDefaultSpecifier') {
@@ -653,17 +716,20 @@ function handleReExportNamed(
   ns: string,
   edits: Edit[],
   sourceLit: string,
+  helpers: TransformHelperNames,
 ): void {
-  const lines: string[] = [`{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)});`];
+  const lines: string[] = [
+    `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)});`,
+  ];
   for (const s of node.specifiers) {
     const exported =
       s.exported.type === 'Identifier' ? s.exported.name : String(s.exported.value ?? '');
     const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
     lines.push(
-      `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ns}[${JSON.stringify(local)}] });`,
+      `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ns}[${JSON.stringify(local)}] });`,
     );
   }
-  lines.push('__rebuildExports(); }');
+  lines.push(`${helpers.rebuildExports}(); }`);
   edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
 }
 
@@ -671,6 +737,7 @@ function handleExportNamed(
   node: ExportNamedDeclaration,
   edits: Edit[],
   imports: Map<string, ImportBinding>,
+  helpers: TransformHelperNames,
 ): void {
   if (node.declaration) {
     const decl = node.declaration;
@@ -681,10 +748,10 @@ function handleExportNamed(
     const trailing: string[] = [];
     for (const n of names) {
       trailing.push(
-        `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(n)}, { configurable: true, enumerable: true, get: () => ${n} });`,
+        `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(n)}, { configurable: true, enumerable: true, get: () => ${n} });`,
       );
     }
-    trailing.push('__rebuildExports();');
+    trailing.push(`${helpers.rebuildExports}();`);
     edits.push({ start: decl.end, end: node.end, text: `\n${trailing.join('\n')}` });
     return;
   }
@@ -696,14 +763,19 @@ function handleExportNamed(
     const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
     const ref = referenceFor(local, imports);
     lines.push(
-      `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ref} });`,
+      `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ref} });`,
     );
   }
-  lines.push('__rebuildExports();');
+  lines.push(`${helpers.rebuildExports}();`);
   edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
 }
 
-function handleExportDefault(node: ExportDefaultDeclaration, edits: Edit[], _source: string): void {
+function handleExportDefault(
+  node: ExportDefaultDeclaration,
+  edits: Edit[],
+  _source: string,
+  helpers: TransformHelperNames,
+): void {
   const decl = node.declaration;
   if ((decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && decl.id) {
     const name = decl.id.name;
@@ -713,14 +785,14 @@ function handleExportDefault(node: ExportDefaultDeclaration, edits: Edit[], _sou
     edits.push({
       start: decl.end,
       end: node.end,
-      text: `\n__slots.default = ${name};\n__rebuildExports();`,
+      text: `\n${helpers.slots}.default = ${name};\n${helpers.rebuildExports}();`,
     });
     return;
   }
-  // Anonymous declaration or expression — wrap as an assignment to __slots.default,
+  // Anonymous declaration or expression — wrap as an assignment to the default slot,
   // leaving the body/expr in place for the walker to rewrite refs inside it.
-  edits.push({ start: node.start, end: decl.start, text: '__slots.default = (' });
-  edits.push({ start: decl.end, end: node.end, text: ');\n__rebuildExports();' });
+  edits.push({ start: node.start, end: decl.start, text: `${helpers.slots}.default = (` });
+  edits.push({ start: decl.end, end: node.end, text: `);\n${helpers.rebuildExports}();` });
 }
 
 function referenceFor(local: string, imports: Map<string, ImportBinding>): string {
@@ -737,15 +809,16 @@ function handleExportAll(
   ns: string,
   edits: Edit[],
   sourceLit: string,
+  helpers: TransformHelperNames,
 ): void {
   if (node.exported) {
     const exportedName =
       node.exported.type === 'Identifier' ? node.exported.name : String(node.exported.value ?? '');
-    const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); ${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exportedName)}, { configurable: true, enumerable: true, get: () => ${ns} }); __rebuildExports(); }`;
+    const text = `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)}); ${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exportedName)}, { configurable: true, enumerable: true, get: () => ${ns} }); ${helpers.rebuildExports}(); }`;
     edits.push({ start: node.start, end: node.end, text });
     return;
   }
-  const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); for (const __k of ${RUNTIME_OBJECT_BINDING}.keys(${ns})) if (__k !== 'default') ${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, __k, { configurable: true, enumerable: true, get: ((k) => () => ${ns}[k])(__k) }); __rebuildExports(); }`;
+  const text = `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)}); for (const __k of ${helpers.runtimeObject}.keys(${ns})) if (__k !== 'default') ${helpers.runtimeObject}.defineProperty(${helpers.slots}, __k, { configurable: true, enumerable: true, get: ((k) => () => ${ns}[k])(__k) }); ${helpers.rebuildExports}(); }`;
   edits.push({ start: node.start, end: node.end, text });
 }
 

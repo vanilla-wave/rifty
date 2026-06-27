@@ -112,6 +112,19 @@ describe('createBinExecutor', () => {
     expect(req?.args).toEqual(['--flag', 'x']);
     expect(req?.cwd).toBe('/proj');
     expect(req?.env).toEqual({ FOO: 'bar' });
+    expect(req?.isTTY).toBe(false);
+  });
+
+  it('passes terminal TTY metadata into the bin spawn request', async () => {
+    const fake = makeFakeSpawn();
+    const exec = createBinExecutor({ spawn: fake.spawn });
+    const { ctx } = makeCtx({ isTTY: true });
+
+    const p = exec('/proj/node_modules/.bin/prettier', ['--write', 'src/a.ts'], ctx);
+    fake.emitExit(0);
+    await p;
+
+    expect(fake.req()?.isTTY).toBe(true);
   });
 
   it('propagates a non-zero exit code', async () => {

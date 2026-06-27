@@ -5,9 +5,11 @@ Date: 2026-06
 
 > TL;DR: The `Shell` + cwd/env + npm-install + bin/`execSync` execution move WHOLESALE into a persistent **workspace owner** (the real-vite bootstrap generalized to a mode-parametrized owner, spawned `serve:true` at App-mount, addressed by a stable `workspaceId`); the PAGE terminal becomes a thin client over a **pty channel = structured `pty:*` frames on the kernel fork-mode IPC MessagePort** (control AND stdout/stderr chunks on one ordered channel, `sessionId`+`runId` correlated). No kernel API change (kernel stays generic; pty is a playground-layer protocol). This is ADR-0143 **P2**, gated on ADR-0144 (`serve`).
 
+> Correction 2026-06-23: this ADR records the accepted P2 target. The landed package-tooling slice is narrower: owner-resident shell/npm plus supervised child Node workers over the owner remote-fs path close browser `.bin` execution for Prettier/ESLint-class CLIs; `execSync` node-entry routing remains a separate residual (`docs/backlog/runtime-js/execsync-node-entry-loader.md`).
+
 ## Context
 
-ADR-0143 chose D (owner-worker holds `node_modules` + runs the shell/CLI in-realm; PAGE = viewer) and ADR-0144 landed P1 (`serve` keep-alive). The shell still ENOENTs end-to-end: `new Shell` lives on PAGE (`terminal-manager.ts:86`), `npm install` writes PAGE memory (`App.tsx:326` over `SyncMirrorVfs`), and each `.bin` invocation spawns a kernel worker with its OWN empty store (`App.tsx:355` → `bin-executor.ts`) → `runNodeEntry` reads an empty mirror → ENOENT (ADR-0143 dead link). `packages/shell` is realm-agnostic (deps = io+vfs only; verified) — the class body needs NO change; what couples the FLOW to PAGE is (1) who installs `syncMirror()`, (2) who supplies `execBin`, (3) the PAGE consumers holding the `Shell` + the in-process `onChunk`/`signal`/`stdin` plumbing. P2 relocates all three into the owner and replaces the in-process call with a wire.
+ADR-0143 chose D (owner-worker holds `node_modules` + runs the shell/CLI in-realm; PAGE = viewer) and ADR-0144 landed P1 (`serve` keep-alive). At acceptance time the shell still ENOENTed end-to-end: `new Shell` lived on PAGE (`terminal-manager.ts:86`), `npm install` wrote PAGE memory (`App.tsx:326` over `SyncMirrorVfs`), and each `.bin` invocation spawned a kernel worker with its OWN empty store (`App.tsx:355` → `bin-executor.ts`) → `runNodeEntry` read an empty mirror → ENOENT (ADR-0143 dead link). `packages/shell` is realm-agnostic (deps = io+vfs only; verified) — the class body needs NO change; what coupled the FLOW to PAGE was (1) who installs `syncMirror()`, (2) who supplies `execBin`, (3) the PAGE consumers holding the `Shell` + the in-process `onChunk`/`signal`/`stdin` plumbing. P2 relocates all three into the owner and replaces the in-process call with a wire.
 
 Subsystem map (verified 2026-06-14): kernel stdout/stderr/stdin streams carry ONLY `Uint8Array` (byte, `bindPortAsReadable`/`bindPortAsWritable`) — a framed protocol cannot ride them; the fork-mode IPC MessagePort (`handle.send`/`process.on('message')`, ADR-0045) is the ONLY existing structured page↔owner channel and already carries `rifty:vfs-write` frames. The real-vite owner is the working persistent-owner prototype (`serve:true`, owns its `syncMirror`, serves snapshot/nm-read/vfs-write ports) but is spawned per-`vite`-run and killed on mode-leave; its install/loader/store/serve machinery is realm-generic, the vite/HMR/preview tail is runtime-specific.
 
@@ -32,6 +34,8 @@ owner → page: pty:ready{sid}
 
 **3. Relocate npm + bin into the SAME owner store (atomic).** `npm install` runs against the owner `syncMirror()`; `execBin` runs the resolved shim via `runNodeEntry` IN-REALM (the per-bin worker spawn collapses) so `kind:'url'` reads hit the populated owner tree. Moving one without the other re-introduces ENOENT — they land together. `BinExecutor`/`runNodeEntry`/`setNodeEntryWorkerUrl` seams stay frozen (ADR-0137); only the realm + the spawn body change.
 
+> Correction 2026-06-23: `.bin` execution landed through the owner-worker child path with remote-fs access to the owner tree, not by collapsing every bin into the owner realm. The fidelity point is preserved (real shim, real loader, populated owner store); the concurrency/`execSync` parts remain governed by their later residuals.
+
 **4. SIGINT cooperative, NOT `handle.kill`.** Ctrl-C → `pty:signal` → the owner aborts that run's `AbortController` → `exit 130` (ADR-0089 cooperative model preserved). `handle.kill` would terminate the whole persistent owner — wrong. A thrown command error folds into `pty:exit{error}` (no shared cross-realm object).
 
 **5. PAGE thin client.** `terminal-manager.ts` becomes a pty port client (holds `sessionId` + handle, no `Shell`); `RiftyTerminal`/`TerminalPanel` unchanged (DOM-bound, stay on PAGE); the dead-duplicate `shell-adapter.ts`/`useShellSession` (referenced only by its own test) is removed.
@@ -50,7 +54,7 @@ owner → page: pty:ready{sid}
 
 ## Consequences
 
-- (+) Kills the ENOENT bug class at the root — shell, `npm`, bin/`execSync` share one in-realm store; `cowsay hi` runs end-to-end.
+- (+) Historical target: kill the ENOENT bug class at the root by making shell, `npm`, bin/`execSync` share one in-realm store; `cowsay hi` runs end-to-end. Corrected 2026-06-23: the delivered `.bin` path closes this for real package-tooling CLIs through owner-worker child execution; `execSync` node-entry routing is still tracked separately.
 - (+) Editor/explorer read the persistent owner (not dev-server-gated) — the tree exists before/after any vite run; P3 generalizes the same ports.
 - (+) No kernel change; `packages/shell` + `packages/terminal` untouched (realm + host wiring flip only). The owner built here is P4's single owner (no throwaway).
 - (−) Single owner JS thread: a CPU-bound CLI stalls the owner (dev server + other sessions) until P6.

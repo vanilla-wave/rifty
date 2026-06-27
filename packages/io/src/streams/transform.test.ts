@@ -5,6 +5,7 @@
 // Duplex getter for Node-compatible introspection.
 import { describe, expect, it } from 'vitest';
 import { Duplex } from './duplex.ts';
+import { PassThrough } from './pass-through.ts';
 import { Transform } from './transform.ts';
 import { Writable } from './writable.ts';
 
@@ -93,6 +94,25 @@ describe('Duplex.write routes to the writable side', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(seen).toEqual([1, 2]);
+  });
+
+  it('instance _write override is honored on a PassThrough (fast-glob static provider)', async () => {
+    const stream = new PassThrough({ objectMode: true }) as PassThrough & {
+      _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void;
+    };
+    const seen: unknown[] = [];
+    stream._write = (index, _enc, done) => {
+      stream.push({ path: `file-${String(index)}` });
+      stream.end();
+      done();
+    };
+    stream.on('data', (entry) => seen.push(entry));
+    const ended = new Promise<void>((resolve) => stream.once('end', () => resolve()));
+
+    stream.write(0);
+    await ended;
+
+    expect(seen).toEqual([{ path: 'file-0' }]);
   });
 
   it('Duplex public options interface does not expose the internal writable-side hook', () => {

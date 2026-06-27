@@ -358,6 +358,28 @@ describe('createTerminalManager (pty port client)', () => {
     manager.dispose();
   });
 
+  it('runs a new foreground command after a non-zero command exits', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const firstRun = manager.runLine(session.id, 'false');
+    await waitForExecs(fake.execs, 1);
+    fake.execs[0]!.resolve(1);
+    await expect(firstRun).resolves.toBe(1);
+    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 1 });
+
+    const secondRun = manager.runLine(session.id, 'echo after');
+    await waitForExecs(fake.execs, 2);
+    expect(fake.execs.map((e) => e.line)).toEqual(['false', 'echo after']);
+    expect(fake.execs[1]!.rid).not.toBe(fake.execs[0]!.rid);
+    fake.execs[1]!.resolve(0);
+    await expect(secondRun).resolves.toBe(0);
+    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 0 });
+
+    manager.dispose();
+  });
+
   it('forwards raw terminal input to the active run stdin', async () => {
     const fake = makeFakeOwner();
     const manager = createTerminalManager({ owner: fake.owner });

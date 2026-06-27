@@ -56,9 +56,9 @@ All were INFRA — none needed a curated package-substitution registry.
   `distribution/dependency-license-audit`)
   (+ SDK facade-limit docs closed in `packages/rifty/README.md`; existing
   create-rifty-template / workbench-controllers / framework-bindings-kit remain tagged M11).
-- npm-client: package.json-driven install and `.bin` launcher shims are landed; shell-side
-  `.bin` PATH lookup (CLIs invokable by name) is still open as
-  `shell/node-modules-bin-execution`; prod proxy remains filed as `prod-npm-registry-proxy`.
+- npm-client: package.json-driven install, `.bin` launcher shims, shell-side `.bin` PATH
+  lookup, and generic `npm run` script routing have since landed; prod proxy remains filed
+  as `prod-npm-registry-proxy`.
 - net: http.request/get loopback self-calls now route through registered local ports; ADR-0048
   streaming preview frames are reconciled as landed, with true page-worker `ReadableStream`
   backpressure still owned by the blocked perf item.

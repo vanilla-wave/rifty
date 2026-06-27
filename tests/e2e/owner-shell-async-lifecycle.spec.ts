@@ -58,7 +58,7 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/,
  *   importer (`/src/workers/kernel-worker-entry.ts`) — fetching the importer is
  *   a FALSE guard (it never carries the markers, fix or no fix).
  */
-test.describe('child-realm async lifecycle: true drain observables (child-realm-async-lifecycle)', () => {
+test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', () => {
   test('post-top-level setTimeout work completes AND child drains promptly (no cap hang)', async ({
     page,
     browserName,

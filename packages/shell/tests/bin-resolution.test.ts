@@ -1,6 +1,6 @@
 /**
  * PATH-style `node_modules/.bin/<name>` resolution + execution dispatch
- * (closes backlog shell/node-modules-bin-execution).
+ * (closes the historical shell .bin execution backlog).
  *
  * Each case pins one failure mode of the dispatch contract:
  *   - a bare name with no builtin resolves to the nearest `.bin/<name>` shim

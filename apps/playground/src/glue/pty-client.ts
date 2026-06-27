@@ -131,25 +131,40 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       // Owner already dead — no pty:ready will arrive; resolve now so the caller
       // (`await session.ready`) proceeds to exec(), which fails fast nonzero.
       if (disconnected) return Promise.resolve();
-      deps.send({ type: 'pty:open', sid, cwd: seed?.cwd, env: seed?.env });
-      return new Promise((res) => s.readyResolvers.push(res));
+      return new Promise((res, rej) => {
+        s.readyResolvers.push(res);
+        try {
+          deps.send({ type: 'pty:open', sid, cwd: seed?.cwd, env: seed?.env });
+        } catch (err) {
+          const idx = s.readyResolvers.indexOf(res);
+          if (idx !== -1) s.readyResolvers.splice(idx, 1);
+          rej(err);
+        }
+      });
     },
     exec(sid: string, line: string, opts: ExecOptions): Promise<number> {
       // Owner dead — settle nonzero now rather than posting a doomed pty:exec
       // and registering a run no pty:exit will ever resolve.
       if (disconnected) return Promise.resolve(OWNER_DIED_EXIT);
       const rid = `r${++ridCounter}`;
-      deps.send({
-        type: 'pty:exec',
-        sid,
-        rid,
-        line,
-        cols: opts.cols,
-        rows: opts.rows,
-        isTTY: opts.isTTY,
+      return new Promise((resolve, reject) => {
+        runs.set(rid, { sid, resolve, onChunk: opts.onChunk });
+        opts.onStart?.(rid);
+        try {
+          deps.send({
+            type: 'pty:exec',
+            sid,
+            rid,
+            line,
+            cols: opts.cols,
+            rows: opts.rows,
+            isTTY: opts.isTTY,
+          });
+        } catch (err) {
+          runs.delete(rid);
+          reject(err);
+        }
       });
-      opts.onStart?.(rid);
-      return new Promise((resolve) => runs.set(rid, { sid, resolve, onChunk: opts.onChunk }));
     },
     writeStdin(sid: string, rid: string, data: Uint8Array): void {
       deps.send({ type: 'pty:stdin', sid, rid, data });

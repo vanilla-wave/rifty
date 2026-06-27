@@ -194,11 +194,7 @@ if (channel) {
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
     keepaliveUnref();
-    try {
-      item.fn(...item.args);
-    } catch (err) {
-      console.error(err);
-    }
+    item.fn(...item.args);
   };
 }
 

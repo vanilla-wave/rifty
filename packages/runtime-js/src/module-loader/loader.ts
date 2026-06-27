@@ -1,5 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
+import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { executeCjs } from './cjs.ts';
@@ -80,6 +81,13 @@ setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
   const loader = createModuleLoader(vfs, { cwd });
   return loader.import(script, script);
 });
+
+type LoaderRequire = ((specifier: string) => unknown) & {
+  resolve: (specifier: string) => string;
+  cache: Record<string, unknown>;
+  extensions: Record<string, never>;
+  main: undefined;
+};
 
 /**
  * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by sync
@@ -216,6 +224,27 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     // absolute path matches.
     return resolver.resolve(id, { fromFile: id, esm: false });
   }
+
+  __setCreateRequireImpl((from: string): LoaderRequire => {
+    const req = ((specifier: string): unknown => {
+      const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
+      if (resolved.kind === 'esm') {
+        throw new ModuleLoadError(
+          'UNSUPPORTED_PROTOCOL',
+          specifier,
+          `require() of ES Module ${resolved.id} from ${from} is not supported. Use dynamic import() instead.`,
+          from,
+        );
+      }
+      return deps.loadSync(resolved.id);
+    }) as LoaderRequire;
+    req.resolve = (specifier: string): string =>
+      resolver.resolve(specifier, { fromFile: from, esm: false }).id;
+    req.cache = Object.create(null) as Record<string, unknown>;
+    req.extensions = Object.create(null) as Record<string, never>;
+    req.main = undefined;
+    return req;
+  });
 
   return {
     require(specifier, from = cwd) {

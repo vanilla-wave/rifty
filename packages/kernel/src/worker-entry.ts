@@ -152,7 +152,7 @@ export function getKernelPreEntryHook(): KernelPreEntryHook | null {
 }
 
 /**
- * Optional drain hook (child-realm-async-lifecycle). For a run-to-completion
+ * Optional drain hook (ADR-0152). For a run-to-completion
  * child (`serve` absent/false) that finished its entry top-level WITHOUT
  * throwing, the kernel `await`s this BEFORE reaping — letting the realm drain
  * its event loop (pending timers/immediates/imports) the way real Node exits on
@@ -396,7 +396,7 @@ export function installWorkerEntry(
 
     // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
     // compute the outcome — the realm-independent core (unit-tested via
-    // runEntryLifecycle). child-realm-async-lifecycle: serve workers are kept
+    // runEntryLifecycle). ADR-0152: serve workers are kept
     // alive by their ports (never drained here); a drain rejection (recorded
     // unhandledrejection / cap timeout) becomes stderr + exit 1 (no silent stub).
     const outcome = await runEntryLifecycle(spec, {

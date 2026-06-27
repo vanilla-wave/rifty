@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Worker stdout/stderr no longer loses final chunks on natural exit.**
+  Worker-backed process exit arrives on the Worker message channel while stdio
+  bytes arrive on separate MessagePorts, so a final CLI line could land after
+  `{type:'exit'}` and be dropped by EOF/foreground mute. Natural worker exit now
+  defers EOF/`exit` briefly to drain in-flight stdio; `kill()` stays immediate.
 - **Worker uncaught-error diagnostic no longer vanishes** (backlog/kernel/worker-global-error-to-stderr). `spawnWorker`'s `error` handler mapped a worker's uncaught GLOBAL error (one that escaped worker-entry's top-level try/catch — thrown in a queueMicrotask/timer, or an unhandled EventEmitter `'error'` re-throw like EADDRINUSE) to exit 1 but dropped its message → loud exit, silent terminal. Now the message (+`filename:lineno`) is forwarded onto the child's stderr stream via a new `SpawnWorkerResult.onUncaughtError` seam (process-manager pushes it into `handle.stderr()`), and the exit is deferred one microtask so the async stderr `'data'` flushes BEFORE a foreground consumer's synchronous exit-gate mutes output. The generic top-level-throw path (stack already on stderr) is unchanged.
 - **Dispatcher backstop is uncounted infra (ADR-0158, keepalive gap-e).** `SyncRpcDispatcher` now captures the HOST `setInterval`/`clearInterval` at module load and arms its backstop timer on them, instead of the realm's global `setInterval` (which a worker realm replaces with runtime-js's keepalive-counted wrapper). The infra timer therefore never enters the event-loop keepalive count, by construction (ADR-0152 §5 precedent) — removing the prior depth-1 count-then-`.unref()` coupling and any risk of pinning a nested child's (depth-2) drain. Guard: `sync-dispatch.test.ts` asserts the backstop arms the host timer, not the wrapped global.
 

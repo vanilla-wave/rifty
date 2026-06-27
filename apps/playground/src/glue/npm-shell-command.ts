@@ -22,6 +22,7 @@
  * durable tree.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import {
   type InstallOptions,
   type InstallResult,
@@ -105,14 +106,48 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
  * leading `@` isn't a version separator, so look for the *second* `@`.
  */
 function parseSpec(spec: string): { name: string; range: string } {
+  const directUnsupported = unsupportedDependencySpec(spec);
+  if (directUnsupported) throwUnsupportedDependencySpec(spec, directUnsupported);
   if (spec.startsWith('@')) {
     const at = spec.indexOf('@', 1);
     if (at < 0) return { name: spec, range: 'latest' };
-    return { name: spec.slice(0, at), range: spec.slice(at + 1) || 'latest' };
+    const range = spec.slice(at + 1) || 'latest';
+    const unsupported = unsupportedDependencySpec(range);
+    if (unsupported) throwUnsupportedDependencySpec(spec, unsupported);
+    return { name: spec.slice(0, at), range };
   }
   const at = spec.indexOf('@');
   if (at < 0) return { name: spec, range: 'latest' };
-  return { name: spec.slice(0, at), range: spec.slice(at + 1) || 'latest' };
+  const range = spec.slice(at + 1) || 'latest';
+  const unsupported = unsupportedDependencySpec(range);
+  if (unsupported) throwUnsupportedDependencySpec(spec, unsupported);
+  return { name: spec.slice(0, at), range };
+}
+
+function unsupportedDependencySpec(range: string): string | null {
+  const trimmed = range.trim();
+  if (trimmed === '.' || trimmed === '..') return 'file';
+  if (/^(?:\.{0,2}\/|\/)/.test(trimmed)) return 'file';
+  if (/^(file|link):/.test(trimmed)) return 'file';
+  if (trimmed.startsWith('workspace:')) return 'workspace';
+  if (/^(git\+|git:|github:|gitlab:|bitbucket:)/.test(trimmed) || /\.git(?:#|$)/.test(trimmed)) {
+    return 'git';
+  }
+  if (/^https?:/.test(trimmed)) return 'http-tarball';
+  if (trimmed.startsWith('npm:')) return 'npm-alias';
+  if (isGithubShorthand(trimmed)) return 'git';
+  return null;
+}
+
+function isGithubShorthand(spec: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[#@].+)?$/.test(spec);
+}
+
+function throwUnsupportedDependencySpec(spec: string, feature: string): never {
+  throw new NotImplementedError(
+    `npm-client.dependency-spec.${feature}`,
+    `${spec} is outside registry semver/tag installs`,
+  );
 }
 
 async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJson> {
@@ -129,51 +164,76 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
     };
   }
   const text = await vfs.readFileText(path);
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('expected an object');
-    }
-    const raw = parsed as Record<string, unknown>;
-    const dependencies =
-      raw.dependencies && typeof raw.dependencies === 'object' && !Array.isArray(raw.dependencies)
-        ? Object.fromEntries(
-            Object.entries(raw.dependencies).filter(
-              (entry): entry is [string, string] => typeof entry[1] === 'string',
-            ),
-          )
-        : {};
-    const scripts =
-      raw.scripts && typeof raw.scripts === 'object' && !Array.isArray(raw.scripts)
-        ? Object.fromEntries(
-            Object.entries(raw.scripts).filter(
-              (entry): entry is [string, string] => typeof entry[1] === 'string',
-            ),
-          )
-        : {};
-    const devDependencies = readStringMap(raw.devDependencies);
-    const optionalDependencies = readStringMap(raw.optionalDependencies);
-    return {
-      raw,
-      name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
-      version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
-      scripts,
-      dependencies,
-      devDependencies,
-      optionalDependencies,
-    };
+    parsed = JSON.parse(text) as unknown;
   } catch (err) {
     throw new Error(`npm: package.json at ${path} is not valid JSON: ${(err as Error).message}`);
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`npm: package.json at ${path} must be an object`);
+  }
+  const raw = parsed as Record<string, unknown>;
+  const dependencies = readPackageJsonStringMap(raw, 'dependencies');
+  const scripts = readPackageJsonScripts(raw);
+  const devDependencies = readPackageJsonStringMap(raw, 'devDependencies');
+  const optionalDependencies = readPackageJsonStringMap(raw, 'optionalDependencies');
+  return {
+    raw,
+    name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
+    version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
+    scripts,
+    dependencies,
+    devDependencies,
+    optionalDependencies,
+  };
 }
 
-function readStringMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === 'string',
-    ),
-  );
+async function readPackageScripts(vfs: Vfs, cwd: string): Promise<Record<string, string>> {
+  const path = `${cwd}/package.json`;
+  if (!(await vfs.exists(path))) return {};
+  const text = await vfs.readFileText(path);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch (err) {
+    throw new Error(`npm: package.json at ${path} is not valid JSON: ${(err as Error).message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`npm: package.json at ${path} must be an object`);
+  }
+  return readPackageJsonScripts(parsed as Record<string, unknown>);
+}
+
+function readPackageJsonStringMap(
+  raw: Record<string, unknown>,
+  field: string,
+): Record<string, string> {
+  const value = raw[field];
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
+    throw new NotImplementedError(`npm-client.package-json.${field}`);
+  }
+  const out: Record<string, string> = {};
+  for (const [name, range] of Object.entries(value)) {
+    if (typeof range !== 'string') {
+      // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
+      throw new NotImplementedError(`npm-client.package-json.${field}`);
+    }
+    out[name] = range;
+  }
+  return out;
+}
+
+function readPackageJsonScripts(raw: Record<string, unknown>): Record<string, string> {
+  return raw.scripts && typeof raw.scripts === 'object' && !Array.isArray(raw.scripts)
+    ? Object.fromEntries(
+        Object.entries(raw.scripts).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      )
+    : {};
 }
 
 async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson): Promise<void> {
@@ -198,8 +258,8 @@ async function runPackageScript(
     return 1;
   }
 
-  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
-  const command = pkg.scripts[scriptName];
+  const packageScripts = await readPackageScripts(deps.vfs, ctx.cwd);
+  const command = packageScripts[scriptName];
   if (!command) {
     ctx.stderr.write(`npm: missing script '${scriptName}'\n`);
     return 1;
@@ -208,7 +268,31 @@ async function runPackageScript(
     ctx.stderr.write('npm: script execution is not available in this shell\n');
     return 1;
   }
-  return deps.runScript(scriptName, command, ctx);
+  const scriptSteps = [
+    [`pre${scriptName}`, packageScripts[`pre${scriptName}`]],
+    [scriptName, appendScriptArguments(command, scriptForwardArgs(args))],
+    [`post${scriptName}`, packageScripts[`post${scriptName}`]],
+  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  for (const [name, scriptCommand] of scriptSteps) {
+    const code = await deps.runScript(name, scriptCommand, ctx);
+    if (code !== 0) return code;
+  }
+  return 0;
+}
+
+function scriptForwardArgs(args: readonly string[]): readonly string[] {
+  const rest = args.slice(1);
+  return rest[0] === '--' ? rest.slice(1) : [];
+}
+
+function appendScriptArguments(command: string, args: readonly string[]): string {
+  if (args.length === 0) return command;
+  return `${command} ${args.map(quoteShellWord).join(' ')}`;
+}
+
+function quoteShellWord(value: string): string {
+  if (value.length > 0 && !/[\s'"\\;&|<>$*?\[]/u.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 async function runInstall(
@@ -236,7 +320,7 @@ async function runInstall(
     const hasPackageJsonDeps =
       Object.keys(pkg.devDependencies).length > 0 ||
       Object.keys(pkg.optionalDependencies).length > 0;
-    if (specs.length === 0 && !hasPackageJsonDeps) {
+    if (specs.length === 0 && !hasPackageJsonDeps && !hasRootLifecycleScript(pkg.scripts)) {
       ctx.stdout.write('npm: no dependencies to install\n');
       return 0;
     }
@@ -289,6 +373,15 @@ async function runInstall(
     }
     return reportInstallError(err, ctx);
   }
+}
+
+function hasRootLifecycleScript(scripts: Record<string, string>): boolean {
+  return (
+    scripts.preinstall !== undefined ||
+    scripts.install !== undefined ||
+    scripts.postinstall !== undefined ||
+    scripts.prepare !== undefined
+  );
 }
 
 /**

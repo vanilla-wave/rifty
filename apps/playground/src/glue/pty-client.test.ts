@@ -130,6 +130,60 @@ describe('pty-client', () => {
   const settledOr = <T>(p: Promise<T>, pending: T): Promise<T> =>
     Promise.race([p, new Promise<T>((r) => setTimeout(() => r(pending), 50))]);
 
+  it('does not lose a synchronous pty:ready reply during openSession send', async () => {
+    const ref: { client?: ReturnType<typeof createPtyClient> } = {};
+    const client = createPtyClient({
+      send: (frame) => {
+        if (frame.type === 'pty:open') ref.client?.onFrame({ type: 'pty:ready', sid: frame.sid });
+      },
+    });
+    ref.client = client;
+
+    const settled = await settledOr(
+      client.openSession('s1').then(() => 'resolved' as const),
+      'pending' as const,
+    );
+    expect(settled).toBe('resolved');
+  });
+
+  it('does not lose a synchronous pty:exit reply during exec send', async () => {
+    const ref: { client?: ReturnType<typeof createPtyClient> } = {};
+    let startedRid: string | null = null;
+    let sentRid: string | null = null;
+    const client = createPtyClient({
+      send: (frame) => {
+        if (frame.type === 'pty:exec') {
+          sentRid = frame.rid;
+          ref.client?.onFrame({
+            type: 'pty:exit',
+            sid: frame.sid,
+            rid: frame.rid,
+            code: 7,
+            cwd: '/after',
+            env: { DONE: '1' },
+          });
+        }
+      },
+    });
+    ref.client = client;
+
+    const settled = await settledOr(
+      client.exec('s1', 'fast-fail', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+        onStart: (rid) => {
+          startedRid = rid;
+        },
+      }),
+      -999,
+    );
+    expect(settled).toBe(7);
+    expect(startedRid).toBe(sentRid);
+    expect(client.snapshot('s1')).toEqual({ cwd: '/after', env: { DONE: '1' } });
+  });
+
   it('disconnect resolves a pending openSession waiter (owner died before pty:ready)', async () => {
     const { client } = harness();
     const ready = client.openSession('s1'); // no pty:ready will ever arrive

@@ -24,7 +24,7 @@ A clean fix touches the controller contract (which ADR-0150 deliberately left "s
 - Or: the boot closure wires a driver `onExit` callback that drives the controller to stop (still needs a controller entry point, so the first option is cleaner).
 - Either way: emit a `pty:dev-server { status: 'stopped', error: 'dev server exited (code …)' }` so the page tears the LIVE pill + preview (mirrors `realVite.ts`'s owner-exit synthesized frame).
 
-Relates to `runtime-js/child-realm-async-lifecycle` (serve-mode keepalive / loud-fail) and `shell/owner-graceful-drain-on-terminate`.
+Relates to ADR-0152 serve-mode keepalive / loud-fail behavior and `shell/owner-graceful-drain-on-terminate`.
 
 ## Reversibility
 

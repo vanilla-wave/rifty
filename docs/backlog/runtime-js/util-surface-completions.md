@@ -3,8 +3,8 @@ area: runtime-js
 status: parked
 title: node:util pure-JS surface completions
 created: 2026-06-20
-why: Batch of node:util methods absent from default export — all pure-JS (no platform dep), several reuse existing machinery (assert deepEqualImpl, util.deprecate, os errno table); parseArgs the headline (modern CLIs drop minimist/yargs for it).
-user_story: As a CLI author, I want util.parseArgs (+styleText, isDeepStrictEqual, MIMEType…), but today they're missing from util.ts → real Node CLIs throw / divergent
+why: Batch of node:util methods absent from default export — all pure-JS (no platform dep), several reuse existing machinery (util.deprecate, os errno table); parseArgs the headline (modern CLIs drop minimist/yargs for it).
+user_story: As a CLI author, I want util.parseArgs (+MIMEType, parseEnv, errno helpers…), but today those remaining methods are missing from util.ts → real Node CLIs throw / divergent
 sources: [docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §5]
 code: [packages/runtime-js/src/builtins/util.ts, packages/runtime-js/src/builtins/assert.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/process.ts]
 ---
@@ -16,8 +16,8 @@ All pure-JS, no platform dep. `process.stdout.isTTY=false` (process.ts:102) → 
 | Feature · since | Real path | Anchor / fidelity |
 |---|---|---|
 | **parseArgs** v18.3/v20 (HEADLINE) | port Node's plain-JS parser: strict errors, tokens, multiple, short, allowNegative, allowPositionals | new in util.ts · low |
-| styleText v20.12/v22 + stripVTControlCharacters v16.11 | ANSI SGR table + Node's exact ansi-regex; validateOneOf on bad format | low |
-| isDeepStrictEqual v9 | re-export assert.ts deepEqualImpl (assert.ts:69) strict=true→bool; verify typed-array/boxed/Map/Set | low |
+| styleText v20.12/v22 + stripVTControlCharacters v16.11 | ✅ landed for package-tooling: ANSI SGR table, format validation, stream color gating, Node-shaped `validateStream` edge cases, `none` no-op, and ANSI stripping are covered in `tests/conformance/builtins/util.test.ts` | shipped |
+| isDeepStrictEqual v9 | ✅ landed for package-tooling: strict Map/Set/typed-array-aware comparison is covered in `tests/conformance/builtins/util.test.ts` | shipped |
 | getSystemErrorName/Map/Message v9.7/v16/v23.1 | negate os.ts errno table (positive-keyed) → neg-errno→[code,msg] + libuv msg strings | **med** — sign+msg byte-exact |
 | MIMEType/MIMEParams v19.9 | hand-built WHATWG MIME parser | low |
 | aborted v17.3 | Promise + signal.addEventListener('abort',…,{once}); WeakRef-to-resource optional | low |
@@ -30,7 +30,7 @@ All pure-JS, no platform dep. `process.stdout.isTTY=false` (process.ts:102) → 
 
 ## Options or Next
 
-Parity-first, per-feature promotable. Per feature: failing parity test (real Node oracle) → implement → matrix ❌→✅. Order: parseArgs (strict/tokens/multiple/short suites first), then near-free isDeepStrictEqual + styleText/strip, then errno trio (byte-exact msgs), parseEnv, getCallSites (subset edges throw NotImplementedError), MIMEType, deprecated tail.
+Parity-first, per-feature promotable. Per feature: failing parity test (real Node oracle) → implement → matrix ❌→✅. Order: parseArgs (strict/tokens/multiple/short suites first), then errno trio (byte-exact msgs), parseEnv, getCallSites (subset edges throw NotImplementedError), MIMEType, deprecated tail. `styleText`, `stripVTControlCharacters`, and `isDeepStrictEqual` are no longer part of this remaining backlog surface.
 
 ## Reversibility
 

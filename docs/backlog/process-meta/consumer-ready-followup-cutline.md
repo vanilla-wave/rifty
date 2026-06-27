@@ -36,7 +36,8 @@ Hard consumer contract follow-ups:
 
 Runtime/project fidelity follow-ups:
 
-- `runtime-js/zlib-web-compression-subset` — first honest `node:zlib` subset.
+- `runtime-js/zlib-web-compression-subset` — remaining `node:zlib` follow-ups
+  after the first honest one-shot subset (ADR-0159).
 - `runtime-js/platform-arch-adoption-friction` — ADR-0026 reconsideration gate.
 - `runtime-js/fs-promises-filehandle` — `fs.promises.open()` / FileHandle.
 - `runtime-js/vm-unwired-seams` — wire the `node:vm` wasm-URL env-config into a
@@ -67,8 +68,6 @@ index is complete):
 
 - `net/cross-realm-http-loopback` — loopback `http.request` across Worker
   realms (port registry is realm-local).
-- `shell/node-modules-bin-execution` — PATH-style `.bin` launcher execution by
-  command name.
 
 (`runtime-js/vm-sandbox-residual-gaps` closed in M11: function hoisting,
 completion values, destructuring `var` patterns, and post-run persistence fixed;

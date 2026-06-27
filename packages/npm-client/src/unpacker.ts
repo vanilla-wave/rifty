@@ -69,6 +69,7 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
     }
     if (typeFlag === '2') {
       // Bail loudly so the user knows which package tripped the missing feature. See file-level doc.
+      // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
       throw new NotImplementedError(
         'npm-client.tar.symlink',
         `tar symlinks not supported until M12 (entry: ${pendingLongName ?? `${prefix}${headerName}`})`,

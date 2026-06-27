@@ -3,7 +3,7 @@ area: runtime-js
 status: active
 title: Route execSync's child through the node-entry bootstrap (shebang + relative imports)
 created: 2026-06-14
-why: child_process.spawn('node', …) is wired to the node-entry bootstrap (ADR-0137) so a shebang'd / relative-import script goes through the module loader, while execSync's recursive runner still builds a raw kind:'source' spec — inconsistent dispatch. (Both worker-spawn paths also share the worker-VFS transport blocker tracked in shell/node-modules-bin-execution.)
+why: child_process.spawn('node', …) is wired to the node-entry bootstrap (ADR-0137) so a shebang'd / relative-import script goes through the module loader, while execSync's recursive runner still builds a raw kind:'source' spec — inconsistent dispatch. The historical shell `.bin` worker-transport blocker is closed; this residual is now only execSync entry-kind parity.
 user_story: As a developer whose code calls `execSync('node script.js')` on a script with a shebang or relative imports, I want it to run like `child_process.spawn` does (via the module loader), but today execSync's recursive runner still uses the raw kind:'source' path so it breaks on the shebang.
 sources: [ADR-0137, ADR-0143, M11]
 code: [packages/runtime-js/src/ipc/handlers.ts, packages/runtime-js/src/ipc/recursive-runner.ts]
@@ -30,20 +30,15 @@ directly). The fix needs the recursive runner to own the entry-kind decision
 
 - **CORRECTION (2026-06-14):** an earlier draft of this item called the entry-kind
   flip "the SAFE REVERSIBLE increment, landable NOW on unit/conformance alone." That
-  is wrong for the PRODUCTION path. Today `execSync` works end-to-end in COI because
-  the handler builds `kind:'source'` carrying the script BYTES in the spec (`handlers.ts`
-  resolves them on PAGE; the child worker never reads a file). Flipping the browser
-  path to `kind:'url'` (node-entry bootstrap) makes the child read `entryPath` from its
-  OWN empty store → ENOENT → it **regresses the passing COI e2e
-  `tests/e2e/execsync-sab.spec.ts`** (and `exec-sync-worker.test.ts` in a real COI run).
-  The flip is transport-independent ONLY for the stubbed unit/conformance suites
-  (`handlers.test.ts` / `child_process.test.ts` substitute `runWorker` and never read a
-  file). So the flip is NOT a standalone increment.
-- The worker-VFS transport is **DECIDED → D (owner-worker), ADR-0143**. The entry-kind
-  flip lands WITH D: once `execSync` runs in the owner-worker (files local), `kind:'url'`
-  reads succeed for plain AND shebang/relative-import scripts, and `execsync-sab.spec.ts`
-  passes through the loader path instead of regressing. Until then `execSync` stays on
-  `kind:'source'` (no behavior change) and shebang/relative `execSync` remains the gap.
+  was wrong for the then-production path: `execSync` worked in COI because the handler
+  built `kind:'source'` carrying the script BYTES in the spec, while a `kind:'url'`
+  child read from its own empty store and regressed `tests/e2e/execsync-sab.spec.ts`.
+  The shell `.bin` transport is now closed by the owner-worker child path, but this
+  recursive runner still needs its own node-entry routing decision and regression tests.
+- Keep `execSync` on `kind:'source'` until the recursive runner can route browser child
+  specs through node-entry without breaking the Node-hosted conformance substitute.
+  Then shebang/relative-import `execSync` can share the same loader path as
+  `child_process.spawn('node', …)`.
 - The shebang/relative-import gap is loud, not silent: `// TODO` at `ipc/handlers.ts`
   (the `kind:'source'` spec-build site), this item, and ADR-0143's phasing.
 

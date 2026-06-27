@@ -60,6 +60,7 @@ describe('vite command — real installed bin routing', () => {
   it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
     expect(source).toContain('const runPackageScript = async');
     expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('execBin: ownerBinExecutor');
     expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
     expect(source).toContain('const result = await scriptShell.run(command');
     expect(source).not.toContain('only the dev line boots the co-resident server');

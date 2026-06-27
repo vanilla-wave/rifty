@@ -16,14 +16,24 @@ export function buildNodeChildSpawnSpec(
   env: Record<string, string>,
   cwd: string,
   nodeEntryUrl: string,
+  tty = false,
 ): SpawnWorkerSpec {
+  const isTTY = tty ? '1' : '0';
   return {
     entry: { kind: 'url', url: nodeEntryUrl },
     argv: ['rifty', entry, ...args],
     // RIFTY_BIN=0 → runNodeEntry(bin:false) imports the entry directly (not a
     // .bin shim). serve:true → kernel keeps it alive; the bootstrap owns the
     // run-vs-serve decision (ADR-0155). RIFTY_NODE_SERVE gates the new path.
-    env: { ...env, RIFTY_BIN: '0', RIFTY_REMOTE_FS: '1', RIFTY_NODE_SERVE: '1' },
+    env: {
+      ...env,
+      RIFTY_BIN: '0',
+      RIFTY_REMOTE_FS: '1',
+      RIFTY_NODE_SERVE: '1',
+      RIFTY_STDIN_IS_TTY: '0',
+      RIFTY_STDOUT_IS_TTY: isTTY,
+      RIFTY_STDERR_IS_TTY: isTTY,
+    },
     cwd,
     serve: true,
   };
@@ -73,7 +83,9 @@ export function createOwnerChildNodeExecutor(
   // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
   // shared driver's listener registration run before the first suspension.
   return async (entry, args, ctx, hooks) => {
-    const handle = spawn(buildNodeChildSpawnSpec(entry, args, ctx.env, ctx.cwd, nodeEntryUrl));
+    const handle = spawn(
+      buildNodeChildSpawnSpec(entry, args, ctx.env, ctx.cwd, nodeEntryUrl, ctx.isTTY === true),
+    );
     // Shared foreground driver (stream/abort/exit). A server child posts
     // `rifty:node-listening` → register a preview slot; the slot is removed on
     // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)

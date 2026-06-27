@@ -7,7 +7,9 @@ Date: 2026-06
 
 ## Context
 
-`install()` writes `node_modules/.bin/<cmd>` launcher shims (`#!/usr/bin/env node` + `import('../<pkg>/<bin>')`) but the shell had no PATH-style lookup — a bare `eslint` hit "command not found" (exit 127). `npm run` special-cased `vite`/dev-script in the host runner. Closes `docs/backlog/shell/node-modules-bin-execution.md`.
+`install()` writes `node_modules/.bin/<cmd>` launcher shims (`#!/usr/bin/env node` + `import('../<pkg>/<bin>')`) but the shell had no PATH-style lookup — a bare `eslint` hit "command not found" (exit 127). `npm run` special-cased `vite`/dev-script in the host runner. Closes the historical shell `.bin` execution backlog.
+
+> Correction 2026-06-23: the original text named the backlog file directly. That file is now retired because the owner-worker child path and generic non-dev `npm run` routing have landed; this ADR keeps the historical decision, while the delivered status lives in changelog/compat.
 
 Executing a Node program needs a Worker realm; the shell layer's deps are only `@riftydev/io` + `@riftydev/vfs` (no kernel). So execution can't live in the shell.
 
@@ -33,6 +35,11 @@ Executing a Node program needs a Worker realm; the shell layer's deps are only `
 - Registered commands still shadow same-named shims — the playground keeps `vite` lifecycle ownership.
 - New public API (IRREVERSIBLE): shell `BinExecutor` type + `ShellOptions.execBin`; runtime-js `setNodeEntryWorkerUrl`/`getNodeEntryWorkerUrl` host-wiring seam (mirrors `setKernelWorkerUrl`) + the `runNodeEntry` primitive. Additive — existing callers unchanged.
 - The module loader now strips a leading shebang (CJS + ESM) — Node parity; benefits every "run a VFS Node entry" path.
-- Verification split (honest): the execution MECHANISM (`runNodeEntry` + loader + launcher-target resolve) is proven by node unit tests + parity. NOT YET working end-to-end in the browser — a draft COI e2e showed the spawned bin worker's `syncMirror` is an empty in-worker realm that does not hold the installed `node_modules`, so a real CLI `ENOENT`s on its shim. The shell contract (resolve / dispatch / `which` / 126-127) IS delivered + tested; the playground execution is wired but the worker-VFS transport is incomplete.
+- Verification split (historical, corrected below): the execution MECHANISM (`runNodeEntry` + loader + launcher-target resolve) was proven by node unit tests + parity. At ADR acceptance the browser end-to-end path still failed — a draft COI e2e showed the spawned bin worker's `syncMirror` was an empty in-worker realm that did not hold the installed `node_modules`, so a real CLI `ENOENT`ed on its shim. The shell contract (resolve / dispatch / `which` / 126-127) was delivered + tested; the playground execution was wired but the worker-VFS transport was incomplete.
   - **Corrected (2026-06-14, ADR-0143):** the original parenthetical here — "after ADR-0135 `install()` runs in the worker/OPFS realm" — was WRONG. That describes the PREVIEW/install flow; the SHELL's ad-hoc `npm install` writes to **PAGE memory** (ADR-0135: page is memory-backed, sync OPFS is worker-only, no shared OPFS), so the bin worker can never reach it by "opening the install realm's OPFS". The fix is a transport/ownership decision, settled as **D (owner-worker)** in ADR-0143.
-- Follow-ups (tracked in `docs/backlog/shell/node-modules-bin-execution.md`): the bin worker-VFS transport — **decided D (owner-worker) in ADR-0143** (the old "make the bin worker read the install realm's OPFS-backed VFS" premise was wrong, see Corrected above); `execSync` shebang/relative via the node-entry bootstrap (lands inside D — the standalone flip regresses `execsync-sab.spec.ts`, see `docs/backlog/runtime-js/execsync-node-entry-loader.md`); routing `npm run` script lines through `.bin` (replacing the hardcoded vite/dev switch).
+  - **Corrected (2026-06-23):** the browser `.bin` path is now delivered by the owner-worker child path and covered by `tests/e2e/owner-shell-prettier-eslint.spec.ts`; the remaining separate residual is `execSync` shebang/relative-import routing via node-entry.
+- Follow-ups (corrected 2026-06-23): the bin worker-VFS transport was **decided D
+  (owner-worker) in ADR-0143** and is now closed by the owner-worker child path;
+  `npm run` script lines route through `.bin` for non-dev scripts. The remaining
+  separate residual is `execSync` shebang/relative-import routing via node-entry
+  (`docs/backlog/runtime-js/execsync-node-entry-loader.md`).

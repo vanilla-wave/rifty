@@ -524,6 +524,12 @@ async function pickTypeScriptStarter(page: Page): Promise<void> {
   );
 }
 
+async function waitForTypeScriptStarterDevServer(page: Page): Promise<void> {
+  await expect
+    .poll(() => terminalBuffer(page), { timeout: 30_000 })
+    .toContain('[vite] dev server ready on port 5174');
+}
+
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
 async function openFileViaPalette(page: Page, filename: string): Promise<void> {
   // Palette items are snapshotted once when the palette opens. Wait for the
@@ -553,10 +559,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await page.goto('/');
     await pickTypeScriptStarter(page);
 
-    // Owner shell ready: terminal 1 echoes the boot dev line (same gate the
-    // owner-editor spec uses). Terminal 1 then runs `vite` (blocks its prompt), so
-    // open a SECOND idle shell on the same persistent owner for file commands.
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    // Owner shell ready: terminal 1 runs `vite` (blocks its prompt), so open a
+    // SECOND idle shell on the same persistent owner for file commands.
+    await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const tsPath = `${root}/src/lsp-check.ts`;
     await openShellTerminal(page);
@@ -847,7 +852,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await page.goto('/');
     await pickTypeScriptStarter(page);
 
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await waitForTypeScriptStarterDevServer(page);
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 90_000 });
     const root = await activeRootFromHint(page);
     const { usesDep, depTs, depDts } = dependencyProjectPaths(root);
@@ -1056,7 +1061,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await page.goto('/');
     await pickTypeScriptStarter(page);
 
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const { greeterTs, appTs } = referencesProjectPaths(root);
     await openShellTerminal(page);
@@ -1241,7 +1246,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await page.goto('/');
     await pickTypeScriptStarter(page);
 
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const { fixGreeter, fixApp, organizeTs, formatTs } = codeActionProjectPaths(root);
     await openShellTerminal(page);

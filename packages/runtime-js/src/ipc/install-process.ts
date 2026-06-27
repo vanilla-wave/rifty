@@ -6,7 +6,8 @@
  * MessagePorts + ADR-0045 fork-IPC — and installs it on `globalThis.process`.
  * `installNodeRuntime` is the pre-entry hook: it builds the process AND, gated
  * to Node workers, runs the rich extras (`patchPromiseForNextTick` for nextTick
- * ordering + `globalThis.Buffer`). WASI workers skip those (no over-Node).
+ * ordering + `globalThis.Buffer` + `globalThis.global`). WASI workers skip
+ * those (no over-Node).
  *
  * Registers itself as the kernel's pre-entry hook at module load — host bundles
  * wire it in by importing this BEFORE `@riftydev/kernel/worker-entry`:
@@ -32,6 +33,7 @@ import {
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
 import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
+import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /**
@@ -66,10 +68,11 @@ export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcess {
 /**
  * Pre-entry hook: install the seeded process, then — only for Node workers —
  * the rich extras. Gate: a WASI worker self-identifies via `__RIFTY_WASI_WASM_URL`
- * and gets NEITHER the Promise.then nextTick patch NOR `globalThis.Buffer` (no
- * Node over-implementation where it shouldn't be). Every other kernel worker
- * (.bin / execSync / node-serve / dev-server / owner) is a Node worker and gets
- * both — closing the latent gap where `.bin`/execSync children lacked them.
+ * and gets NEITHER the Promise.then nextTick patch NOR `globalThis.Buffer` NOR
+ * `globalThis.global` (no Node over-implementation where it shouldn't be).
+ * Every other kernel worker (.bin / execSync / node-serve / dev-server / owner)
+ * is a Node worker and gets them — closing the latent gap where `.bin`/execSync
+ * children lacked them.
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
 export function installNodeRuntime(spec: WorkerSpawnSpec): void {
@@ -85,6 +88,7 @@ export function installNodeRuntime(spec: WorkerSpawnSpec): void {
   if (isNode) {
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
+    installWebGlobals();
     // Node-CJS realm-compat globals (`global`/writable `self`/shared-memory
     // `TextDecoder`) that Rolldown's emnapi pthread worker needs — see
     // `worker-realm-compat.ts`. Node workers only (a WASI guest runs raw WASI,

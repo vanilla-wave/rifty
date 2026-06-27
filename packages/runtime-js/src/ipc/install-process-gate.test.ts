@@ -20,6 +20,7 @@ import { installNodeProcessShim, installNodeRuntime } from './install-process.ts
 const NATIVE_THEN = Promise.prototype.then;
 const ORIGINAL_PROCESS = (globalThis as { process?: unknown }).process;
 const ORIGINAL_BUFFER = (globalThis as { Buffer?: unknown }).Buffer;
+const ORIGINAL_GLOBAL = (globalThis as { global?: unknown }).global;
 
 function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
   const port = (): MessagePort => new MessageChannel().port1;
@@ -40,6 +41,7 @@ afterEach(() => {
     configurable: true,
   });
   (globalThis as { Buffer?: unknown }).Buffer = ORIGINAL_BUFFER;
+  (globalThis as { global?: unknown }).global = ORIGINAL_GLOBAL;
 });
 
 describe('pre-entry gate (ADR-0157)', () => {
@@ -50,13 +52,58 @@ describe('pre-entry gate (ADR-0157)', () => {
     // NEGATIVE: no Node over-implementation for a non-Node worker.
     expect(Promise.prototype.then).toBe(NATIVE_THEN);
     expect((globalThis as { Buffer?: unknown }).Buffer).not.toBe(RiftyBuffer);
+    expect((globalThis as { global?: unknown }).global).toBe(ORIGINAL_GLOBAL);
   });
 
-  it('Node worker: seeds the process AND installs Buffer + the nextTick Promise patch', () => {
+  it('Node worker: seeds the process AND installs Buffer + global + the nextTick Promise patch', () => {
+    (globalThis as { global?: unknown }).global = undefined;
     installNodeRuntime(spec());
     expect((globalThis as { process?: unknown }).process).toBeInstanceOf(NodeProcess);
     expect(Promise.prototype.then).not.toBe(NATIVE_THEN);
     expect((globalThis as { Buffer?: unknown }).Buffer).toBe(RiftyBuffer);
+    expect((globalThis as { global?: unknown }).global).toBe(globalThis);
+  });
+
+  it('Node worker: maps kernel TTY metadata onto process stdio streams', () => {
+    installNodeRuntime(
+      spec({
+        RIFTY_STDIN_IS_TTY: '1',
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+      }),
+    );
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    expect(proc.stdin.isTTY).toBe(true);
+    expect(proc.stdout.isTTY).toBe(true);
+    expect(proc.stderr.isTTY).toBe(true);
+  });
+
+  it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
+    const stdout = new MessageChannel();
+    const s = spec({ RIFTY_STDOUT_IS_TTY: '1' });
+    const proc = installNodeProcessShim({
+      ...s,
+      stdio: { ...s.stdio, stdout: stdout.port1 },
+    });
+    const stream = proc.stdout as typeof proc.stdout & {
+      clearLine(dir?: number, cb?: () => void): boolean;
+      cursorTo(x: number, y?: number, cb?: () => void): boolean;
+      moveCursor(dx: number, dy: number, cb?: () => void): boolean;
+      clearScreenDown(cb?: () => void): boolean;
+    };
+    const nextChunk = new Promise<unknown>((resolve) => {
+      stdout.port2.onmessage = (ev) => resolve(ev.data);
+      stdout.port2.start();
+    });
+
+    expect(typeof stream.clearLine).toBe('function');
+    expect(typeof stream.cursorTo).toBe('function');
+    expect(typeof stream.moveCursor).toBe('function');
+    expect(typeof stream.clearScreenDown).toBe('function');
+    expect(stream.clearLine(0)).toBe(true);
+
+    const chunk = await nextChunk;
+    expect(new TextDecoder().decode(chunk as Uint8Array)).toBe('\x1b[2K');
   });
 
   it('Node worker: process.nextTick beats Promise.then (Node ordering)', async () => {

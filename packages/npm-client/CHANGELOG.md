@@ -53,8 +53,9 @@
   `install({ vfs, cwd, registry })` now reads `<cwd>/package.json`, deriving the
   root name/version, `dependencies`, `devDependencies`, root
   `optionalDependencies`, and string-valued `overrides`. Root optionals keep the
-  existing warn-and-skip semantics, while `file:`, `workspace:`, git, URL
-  tarball, and npm-alias specs throw named `NotImplementedError`s. Package
+  existing warn-and-skip semantics, while `file:`/local paths, `workspace:`,
+  git/GitHub shorthand, URL tarball, and npm-alias specs throw named
+  `NotImplementedError`s. Package
   install-time lifecycle scripts (`preinstall`, `install`, `postinstall`) also
   throw named `NotImplementedError`s instead of being silently skipped. Registry
   `prepare` metadata is ignored because published tarballs are already prepared.
@@ -62,10 +63,10 @@
   containing-scope `node_modules/.bin` LAUNCHER shims (no symlinks per
   ADR-0050) — `#!/usr/bin/env node` + `import('../<pkg>/<bin>')`, not a byte
   copy: a copy breaks bins that resolve relative imports (vite/tsc). Lockfile
-  replay recreates them without refetching packuments. Shell-side `.bin` PATH
-  lookup is NOT wired yet — CLIs are not invokable by name until
-  `docs/backlog/shell/node-modules-bin-execution` lands. The playground
-  `npm install` wrapper and Real Vite worker bootstrap now call the
+  replay recreates them without refetching packuments. The first M11 cut only
+  wrote the shims; shell-side `.bin` PATH lookup and owner-worker execution
+  landed later, so installed CLIs are now invokable by name. The playground
+  `npm install` wrapper and Real Vite worker bootstrap call the
   package.json-driven API.
 - **Native-dependency install policy (ADR-0051).** The installer now throws
   `ENATIVEUNSUPPORTED` (with `packageName`/`version`/`reason`/`platform`) when a
@@ -80,6 +81,12 @@
 
 ### Fixed
 
+- **Unconstrained installs prefer the registry `latest` dist-tag over higher prereleases.**
+  `npm install prettier`/`{ prettier: '*' }` now resolves the package's
+  `dist-tags.latest` first, matching npm's bare-install behavior, instead of
+  letting `pickBestVersion('*')` choose a newer alpha such as
+  `4.0.0-alpha.13`. Explicit ranges still never silently fall back to
+  `latest`; a non-matching range keeps throwing "No matching version".
 - **Registry tarball `prepare` metadata no longer blocks installs.** Published
   registry packages can carry `scripts.prepare`, but npm does not run that hook
   when installing dependency tarballs from the registry. The live Vite bootstrap

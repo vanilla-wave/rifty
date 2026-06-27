@@ -45,6 +45,7 @@ export interface BinSpawnRequest {
   readonly args: readonly string[];
   readonly env: Record<string, string>;
   readonly cwd: string;
+  readonly isTTY: boolean;
 }
 
 export interface BinExecutorDeps {
@@ -73,7 +74,13 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
     // the owner `node <file>` executor via run-foreground-child. Server-capable
     // bins can also surface child IPC through the optional hooks.
-    const req: BinSpawnRequest = { shimPath: binPath, args, env: ctx.env, cwd: ctx.cwd };
+    const req: BinSpawnRequest = {
+      shimPath: binPath,
+      args,
+      env: ctx.env,
+      cwd: ctx.cwd,
+      isTTY: ctx.isTTY === true,
+    };
     deps.onStart?.(req, ctx);
     const handle = deps.spawn(req);
     deps.onSpawn?.(req, handle, ctx);
