@@ -48,6 +48,13 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
+  it('gates a clean first-run boot behind the project launcher instead of auto-running the default preset', () => {
+    expect(source).toContain('needsProjectChoiceOnBoot');
+    expect(source).toContain("store.setLauncherTab('starters')");
+    expect(source).toContain('store.openLauncher()');
+    expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
+  });
+
   it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
     // Single-store-owner regression guard (exactly one authoritative store; page
     // holds no authoritative fs): the page must not construct or write a local

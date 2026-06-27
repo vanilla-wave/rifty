@@ -1360,6 +1360,12 @@ body {
   height: 100%;
   background: var(--rf-preview-bg);
 }
+.rf-preview__empty {
+  position: absolute;
+  inset: 0;
+  background: var(--rf-preview-bg);
+  pointer-events: none;
+}
 .rf-preview__overlay {
   position: absolute;
   inset: 0;
@@ -2694,6 +2700,11 @@ body.rf-resizing iframe {
   font: 600 10.5px / 14px var(--rf-font-sans);
   letter-spacing: 0.1em;
   color: var(--rf-text-faint);
+}
+.rf-projects__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 .rf-projects__grid {
   display: grid;

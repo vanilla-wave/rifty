@@ -36,6 +36,7 @@ import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
+import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
 import {
   degradedBannerVisible,
@@ -51,6 +52,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
+import { needsProjectChoiceOnBoot } from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -1685,6 +1687,18 @@ export function App(props: AppProps) {
     }
   });
 
+  function openFirstRunLauncher(): void {
+    store.setLauncherTab('starters');
+    store.openLauncher();
+  }
+
+  createEffect(() => {
+    const idx = projectIndex();
+    if (!idx || initialBootDecisionMade) return;
+    initialBootDecisionMade = true;
+    if (needsProjectChoiceOnBoot(idx)) openFirstRunLauncher();
+  });
+
   // Auto-dismiss the store toast (ADR-0165 §9). The page `flashToast` self-clears,
   // but the store toast otherwise LINGERS FOREVER — and at top-right (z-index 1000)
   // it sits over the launcher's close button, blocking it. A delete-Undo toast
@@ -1742,7 +1756,7 @@ export function App(props: AppProps) {
   // OWNER snapshot (the one
   // source of truth) — no `vite`-gated swap. Editor edits write to the owner; the
   // sync snapshot holds project-file content, the async read-port covers the rest.
-  let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
+  let initialBootDecisionMade = false;
 
   function presetForId(id: string): Preset {
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
@@ -2116,18 +2130,11 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the owner workspace (idempotent). The default README is seeded
-    // owner-side in `seedProject` (single store owner — no page store to write).
-    void seedViteWorkspace(DEFAULT_PRESET).catch(() => {
-      /* best-effort seeding */
-    });
-    initialRunTimer = setTimeout(() => {
-      void queuePresetTransition(() => runVitePreset(DEFAULT_PRESET));
-    }, 0);
+    /* Project-first boot: the owner index decides whether to show the chooser;
+       no starter files or dev server are seeded until the user picks one. */
   });
 
   onCleanup(() => {
-    if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
     void flushPendingEditorWrites();
     manager.dispose();
@@ -2304,6 +2311,30 @@ export function App(props: AppProps) {
       return;
     }
     store.openDialog({ kind: 'delete', id });
+  }
+
+  async function onResetBrowserSandbox(): Promise<void> {
+    const confirmed =
+      globalThis.confirm?.('Delete all saved browser sandbox state and reload?') ?? false;
+    if (!confirmed) return;
+    discardPendingProgramWrite();
+    try {
+      manager.dispose();
+    } catch {
+      /* reload follows; best-effort cleanup */
+    }
+    try {
+      const owner = workspaceOwner();
+      owner.close();
+      await Promise.race([
+        owner.closed.catch(() => 0),
+        new Promise((resolve) => setTimeout(resolve, 750)),
+      ]);
+    } catch {
+      /* reload follows; best-effort cleanup */
+    }
+    await resetBrowserSandboxState();
+    globalThis.location?.reload();
   }
 
   // Open the Save-as-project dialog for the active scratch (ProjectsTab save CTA).
@@ -3101,6 +3132,7 @@ export function App(props: AppProps) {
         onSave={openSaveDialog}
         onMenu={(id) => store.setMenuFor(id)}
         onMenuAction={onMenuAction}
+        onResetSandbox={() => void onResetBrowserSandbox()}
       />
 
       <ProjectDialogs

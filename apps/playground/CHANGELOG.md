@@ -117,6 +117,8 @@
   declare the ordered `openFiles` set, the first file is active, and entry files
   such as `src/main.js` use the same close/reopen/save/GIT flow as every other
   editable file.
+- Clean browser sessions now open the existing project launcher over the IDE on
+  `Starters` and wait for a user choice before running a dev server.
 - The default Vite template now installs `vite@^7.0.0` plus
   `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
   `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
@@ -205,6 +207,9 @@
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
   The Problems count badge now keeps its number vertically centered, and closing
   the active idle terminal focuses the previous terminal tab.
+- The preview pane now keeps its normal browser frame visible with an empty body
+  while a server is still starting, and the Projects tab has a confirmed sandbox
+  reset that clears browser state and reloads.
 - **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
   and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
   non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips

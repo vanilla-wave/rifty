@@ -259,6 +259,13 @@ export function PreviewPanel(props: {
             />
           )}
         </Show>
+        {phase() === 'starting' && (
+          <div
+            class="rf-preview__empty"
+            data-testid="preview-empty"
+            aria-label="Preview waiting for server"
+          />
+        )}
         {phase() === 'error' && (
           <div class="rf-preview__overlay">
             <p class="rf-preview__overlay-title">Preview couldn't load in-frame</p>

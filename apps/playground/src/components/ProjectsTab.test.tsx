@@ -15,6 +15,7 @@ const baseProps = {
   onMenu: () => {},
   onMenuAction: () => {},
   onNewFromStarter: () => {},
+  onResetSandbox: () => {},
 };
 
 describe('ProjectsTab', () => {
@@ -36,5 +37,11 @@ describe('ProjectsTab', () => {
   it('hides the scratch banner when there is no scratch', () => {
     const html = renderToString(() => ProjectsTab({ ...baseProps, scratch: null }));
     expect(html).not.toContain('Node API scratch');
+  });
+
+  it('offers a hard browser sandbox reset from the Projects list', () => {
+    const html = renderToString(() => ProjectsTab(baseProps));
+    expect(html).toContain('data-action="reset-browser-sandbox"');
+    expect(html).toContain('Reset sandbox');
   });
 });
