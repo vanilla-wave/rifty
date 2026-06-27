@@ -22,9 +22,9 @@
 
 ### Fixed
 
-- **Terminal Problems stays pinned to the right.** The Problems tab no longer
-  scrolls with terminal session tabs, and empty Enter in running/idle terminals
-  stays quiet instead of showing `terminal is busy` or extra blank prompt rows.
+- **Terminal Problems stays pinned to the left.** The Problems tab sits before
+  terminal session tabs, and empty Enter in running/idle terminals submits a
+  blank shell line without showing `terminal is busy` or extra blank prompt rows.
 - **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
   and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
   non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips

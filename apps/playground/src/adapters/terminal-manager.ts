@@ -156,13 +156,13 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
 
   async function runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number> {
     const session = getSession(id);
+    const trimmed = input.trim();
+    if (trimmed.length === 0) return 0;
+
     if (session.activeRid) {
       write(session, 'terminal is busy\n', 'stderr');
       return 1;
     }
-
-    const trimmed = input.trim();
-    if (trimmed.length === 0) return 0;
 
     session.status = 'running';
     session.exitCode = undefined;

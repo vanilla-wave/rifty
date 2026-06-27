@@ -225,6 +225,26 @@ describe('createTerminalManager (pty port client)', () => {
     manager.dispose();
   });
 
+  it('treats empty input as shell Enter while a process is running', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const writer = makeWriter();
+    manager.attachWriter(session.id, writer.write);
+
+    const run = manager.runLine(session.id, 'wait');
+    await waitForExecs(fake.execs, 1);
+
+    await expect(manager.runLine(session.id, '')).resolves.toBe(0);
+
+    expect(writer.calls).toEqual([]);
+    expect(fake.execs).toHaveLength(1);
+    fake.execs[0]!.resolve(0);
+    await run;
+
+    manager.dispose();
+  });
+
   it('reads cwd/env from the owner snapshot cache', () => {
     const fake = makeFakeOwner();
     fake.snapshots.set('terminal-1', { cwd: '/work', env: { FOO: 'bar' } });

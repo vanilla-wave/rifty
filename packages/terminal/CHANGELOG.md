@@ -10,8 +10,8 @@
 
 ### Fixed
 
-- Empty Enter in line mode now stays on the current prompt instead of submitting
-  a blank command and appending an extra prompt row.
+- Empty Enter in line mode now submits the blank shell line but redraws the next
+  prompt without appending an extra blank row.
 - `RiftyTerminal.dispose()` now treats addon/xterm teardown as best-effort. A
   WebGL addon dispose failure no longer escapes into the host framework and
   leaves UI updates half-applied.

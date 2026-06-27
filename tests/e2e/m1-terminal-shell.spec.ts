@@ -90,10 +90,11 @@ test.describe('M1 - terminal shell', () => {
 
     const after = await terminalBuffer(page);
     expect(after).not.toContain('terminal is busy');
-    expect(terminalPromptCount(after)).toBe(terminalPromptCount(before));
+    expect(terminalPromptCount(after)).toBe(terminalPromptCount(before) + 1);
+    expect(after).not.toMatch(/(?:^|\n)> \n\n> /u);
   });
 
-  test('empty Enter in an idle terminal does not leave blank prompt rows', async ({ page }) => {
+  test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
     await page.goto('/');
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     await openShellTerminal(page);
@@ -105,7 +106,8 @@ test.describe('M1 - terminal shell', () => {
     await page.waitForTimeout(250);
 
     const after = await terminalBuffer(page);
-    expect(after).toBe(before);
+    expect(terminalPromptCount(after)).toBe(terminalPromptCount(before) + 3);
+    expect(after).not.toMatch(/(?:^|\n)> \n\n> /u);
   });
 
   test('terminal tabs switch between their own buffers', async ({ page }) => {
@@ -148,30 +150,28 @@ test.describe('M1 - terminal shell', () => {
     await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
   });
 
-  test('new-terminal button stays attached while Problems stays pinned right', async ({ page }) => {
+  test('new-terminal button stays attached while Problems stays pinned left', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
 
     await openShellTerminal(page);
 
+    const firstTabBox = await terminalSessionTabs(page).first().boundingBox();
     const lastTabBox = await terminalSessionTabs(page).last().boundingBox();
     const actionBox = await page.getByRole('button', { name: 'New terminal' }).boundingBox();
     const problemsBox = await page.locator('[data-testid="problems-tab"]').boundingBox();
     const tabsbarBox = await page.locator('.rf-terminal-tabsbar').boundingBox();
 
+    expect(firstTabBox).not.toBeNull();
     expect(lastTabBox).not.toBeNull();
     expect(actionBox).not.toBeNull();
     expect(problemsBox).not.toBeNull();
     expect(tabsbarBox).not.toBeNull();
     const gap = Math.abs((actionBox?.x ?? 0) - ((lastTabBox?.x ?? 0) + (lastTabBox?.width ?? 0)));
     expect(gap).toBeLessThanOrEqual(1);
-    expect(problemsBox?.x ?? 0).toBeGreaterThan((actionBox?.x ?? 0) + (actionBox?.width ?? 0));
-    const rightGap = Math.abs(
-      (tabsbarBox?.x ?? 0) +
-        (tabsbarBox?.width ?? 0) -
-        ((problemsBox?.x ?? 0) + (problemsBox?.width ?? 0)),
-    );
-    expect(rightGap).toBeLessThanOrEqual(1);
+    expect(problemsBox?.x ?? 0).toBeLessThan(firstTabBox?.x ?? 0);
+    const leftGap = Math.abs((problemsBox?.x ?? 0) - (tabsbarBox?.x ?? 0));
+    expect(leftGap).toBeLessThanOrEqual(1);
   });
 
   test('npm run vite resolves the seeded script through the installed Vite CLI', async ({

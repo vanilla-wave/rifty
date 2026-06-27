@@ -255,14 +255,14 @@ describe('RiftyTerminal — Enter and line buffering', () => {
     expect(rec.lines).toEqual(['hi']);
   });
 
-  it('keeps an empty Enter on the current prompt without submitting a blank command', async () => {
+  it('submits an empty Enter and redraws the next prompt without a blank row', async () => {
     const { term, rec } = createTerminal();
     const writes = tapWrites(term);
 
     await term.handleInput('\r');
 
-    expect(rec.lines).toEqual([]);
-    expect(writes.join('')).not.toContain('\r\n');
+    expect(rec.lines).toEqual(['']);
+    expect(writes.join('').match(/\r\n/gu)).toHaveLength(1);
   });
 });
 
@@ -1293,11 +1293,11 @@ describe('RiftyTerminal — Ctrl+C', () => {
     await term.handleInput('f');
     await term.handleInput('\x03'); // Ctrl+C mid-typing.
     await term.handleInput('\r');
-    expect(rec.lines).toEqual([]);
+    expect(rec.lines).toEqual(['']);
 
     await term.handleInput('ok');
     await term.handleInput('\r');
-    expect(rec.lines).toEqual(['ok']);
+    expect(rec.lines).toEqual(['', 'ok']);
   });
 
   it('is processed even while a command is running (busy=true)', async () => {
