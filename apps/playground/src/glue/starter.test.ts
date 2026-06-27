@@ -1,6 +1,6 @@
 import { Shell } from '@riftydev/shell';
 import { asyncVfs, dirname } from '@riftydev/vfs';
-import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
+import { createMemoryFs, installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { PRESETS, type Preset } from '../presets.ts';
 import {
@@ -160,6 +160,26 @@ describe('seedFilesForStarter (starter, root)', () => {
         expect(dirty.stdout).not.toContain('node_modules/');
         expect(dirty.stdout).not.toContain('dist/');
       }
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
+  it('commits against the supplied VFS, not the ambient async mirror', async () => {
+    installMemoryFs();
+    try {
+      const { vfs } = createMemoryFs();
+      const root = '/projects/isolated';
+      const files = seedFilesForStarter(starterById('project-files'), root);
+      for (const [path, content] of Object.entries(files)) {
+        await vfs.mkdir(dirname(path), { recursive: true });
+        await vfs.writeFile(path, content);
+      }
+
+      await ensureStarterInitialCommit(vfs, root);
+
+      const ref = await vfs.readFileText(`${root}/.git/refs/heads/main`);
+      expect(ref).toMatch(/^[0-9a-f]{40}\n$/);
     } finally {
       resetSyncMirror();
     }

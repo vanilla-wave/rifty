@@ -12,7 +12,7 @@
  * entry path + the Preset's `files[]` overlaid under the root. NO stored
  * per-project artifact, so the reset baseline survives reload and can't drift.
  */
-import { type RunResult, Shell } from '@riftydev/shell';
+import { makeGit, vfsToGitFs } from '@riftydev/git';
 import type { Vfs } from '@riftydev/vfs';
 import { PRESETS, type Preset } from '../presets.ts';
 import { resolveBootstrapConfig } from '../templates/project-spec.ts';
@@ -83,12 +83,23 @@ export function seedFilesForStarter(starter: Starter, root: string): Record<stri
 
 const INITIAL_COMMIT_MESSAGE = 'Initial commit';
 
-function assertGitOk(command: string, result: RunResult): void {
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `${command} failed with ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-    );
+async function headCommitExists(g: ReturnType<typeof makeGit>): Promise<boolean> {
+  try {
+    await g.resolveRef('HEAD');
+    return true;
+  } catch {
+    return false;
   }
+}
+
+async function stageInitialTree(g: ReturnType<typeof makeGit>): Promise<boolean> {
+  const changed = await g.status();
+  for (const entry of changed) {
+    if (entry.status === '111') continue;
+    if (entry.status === '101' || entry.status === '100') await g.remove(entry.filepath);
+    else await g.add(entry.filepath);
+  }
+  return changed.some((entry) => entry.status !== '111');
 }
 
 /**
@@ -96,20 +107,19 @@ function assertGitOk(command: string, result: RunResult): void {
  * root commit on `main`, clean worktree, generated files left ignored.
  */
 export async function ensureStarterInitialCommit(vfs: Vfs, root: string): Promise<void> {
-  const sh = new Shell({ cwd: root });
-  if (!(await vfs.exists(`${root}/.git/HEAD`))) {
-    assertGitOk('git init', await sh.run('git init'));
-  }
-  const log = await sh.run('git log --oneline');
-  if (log.exitCode === 0 && log.stdout.trim() !== '') return;
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+  if (!(await vfs.exists(`${root}/.git/HEAD`))) await g.init();
+  if (await headCommitExists(g)) return;
 
-  const status = await sh.run('git status --porcelain');
-  assertGitOk('git status --porcelain', status);
-  if (status.stdout.trim() === '') return;
+  const hasChanges = await stageInitialTree(g);
+  if (!hasChanges) return;
 
-  assertGitOk('git add .', await sh.run('git add .'));
-  assertGitOk(
-    `git commit -m "${INITIAL_COMMIT_MESSAGE}"`,
-    await sh.run(`git commit -m "${INITIAL_COMMIT_MESSAGE}"`),
-  );
+  const timestamp = Math.floor(Date.now() / 1000);
+  const author = {
+    name: 'rifty',
+    email: 'rifty@localhost',
+    timestamp,
+    timezoneOffset: 0,
+  };
+  await g.commit({ message: INITIAL_COMMIT_MESSAGE, author, committer: author });
 }
