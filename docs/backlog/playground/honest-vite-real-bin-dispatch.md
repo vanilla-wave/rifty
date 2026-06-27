@@ -5,7 +5,7 @@ title: `vite` runs the real `node_modules/.bin/vite` (retire the curated dispatc
 created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `shell.registerCommand('vite')` no longer shadows the installed binary; `vite` resolves through `.bin`.
 user_story: As a developer, I want `which vite` → the installed shim and `vite` → the real CLI running, so Vite features/flags/config are owned by Vite, not rifty's curated parser.
-sources: [ADR-0148, ADR-0173, ADR-0174, ADR-0137, ADR-0155, ADR-0150, docs/backlog/shell/node-modules-bin-execution.md, docs/backlog/playground/honest-vite-command-umbrella.md]
+sources: [ADR-0148, ADR-0173, ADR-0174, ADR-0137, ADR-0155, ADR-0150, docs/backlog/playground/honest-vite-command-umbrella.md]
 code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/owner-child-bin-executor.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/vite-cli-prep.ts]
 ---
 

@@ -60,6 +60,7 @@ describe('vite command — real installed bin routing', () => {
   it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
     expect(source).toContain('const runPackageScript = async');
     expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('execBin: ownerBinExecutor');
     expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
     expect(source).toContain('const result = await scriptShell.run(command');
     expect(source).not.toContain('only the dev line boots the co-resident server');
@@ -112,15 +113,6 @@ describe('node-server runtime branch', () => {
   it('runs the entry as the server program with cwd at the project root', () => {
     // express.static('public') resolves against process.cwd()
     expect(source).toContain('setProcessCwd(cfg.root)');
-  });
-});
-
-describe('owner npm run script routing', () => {
-  it('routes non-dev package scripts through the shell/.bin executor', () => {
-    expect(source).toContain('const scriptShell = new Shell({');
-    expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain('scriptShell.run(command');
-    expect(source).not.toContain('is not supported yet; only the dev line boots');
   });
 });
 
