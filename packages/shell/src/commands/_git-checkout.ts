@@ -24,6 +24,9 @@ import { hasGlobMeta } from './_glob.ts';
  * (public API only — no deep import of package internals).
  */
 type Git = ReturnType<typeof makeGit>;
+type PathspecMapper = (pathspec: string) => string;
+
+const identityPathspec: PathspecMapper = (pathspec) => pathspec;
 
 /**
  * Static middle of git's detached-HEAD advisory (verbatim from real git 2.50.1,
@@ -53,6 +56,25 @@ Turn off this advice by setting config variable advice.detachedHead to false`;
  * git 2.50.1 (see packages/git/fixtures/{checkout,switch}-detached.err).
  */
 export type DetachedStyle = 'checkout' | 'switch';
+
+/** A cwd-relative/absolute pathspec normalized outside the governing repo root. */
+export class OutsideRepoPathspecError extends Error {
+  constructor(
+    readonly pathspec: string,
+    readonly root: string,
+  ) {
+    super(`${pathspec}: '${pathspec}' is outside repository at '${root}'`);
+    this.name = 'OutsideRepoPathspecError';
+  }
+}
+
+/** A rev-like token had a valid base ref but did not resolve as a revision. */
+export class RevisionArgumentError extends Error {
+  constructor(readonly rev: string) {
+    super(`ambiguous argument '${rev}': unknown revision or path not in the working tree`);
+    this.name = 'RevisionArgumentError';
+  }
+}
 
 /**
  * Render a `switch`-result to stderr (stdout stays empty, matching real git —
@@ -111,6 +133,18 @@ export function renderCheckoutError(e: unknown, ctx: CommandContext): number {
     ctx.stderr.write(`error: pathspec '${e.pathspec}' did not match any file(s) known to git\n`);
     return 1;
   }
+  if (e instanceof OutsideRepoPathspecError) {
+    ctx.stderr.write(
+      `fatal: ${e.pathspec}: '${e.pathspec}' is outside repository at '${e.root}'\n`,
+    );
+    return 128;
+  }
+  if (e instanceof RevisionArgumentError) {
+    ctx.stderr.write(
+      `fatal: ambiguous argument '${e.rev}': unknown revision or path not in the working tree.\n`,
+    );
+    return 128;
+  }
   if (e instanceof BranchExistsError) {
     ctx.stderr.write(`fatal: a branch named '${e.branch}' already exists\n`);
     return 128;
@@ -120,6 +154,22 @@ export function renderCheckoutError(e: unknown, ctx: CommandContext): number {
     return 128;
   }
   throw e; // not a git user-error — a real bug, surface it.
+}
+
+export function renderCheckoutOrFatal(e: unknown, ctx: CommandContext): number {
+  try {
+    return renderCheckoutError(e, ctx);
+  } catch (fatal) {
+    ctx.stderr.write(`fatal: ${fatal instanceof Error ? fatal.message : String(fatal)}\n`);
+    return 128;
+  }
+}
+
+export function renderRevisionAndPathAmbiguity(arg: string, ctx: CommandContext): number {
+  ctx.stderr.write(`fatal: ambiguous argument '${arg}': both revision and filename\n`);
+  ctx.stderr.write("Use '--' to separate paths from revisions, like this:\n");
+  ctx.stderr.write("'git <command> [<revision>...] -- [<file>...]'\n");
+  return 128;
 }
 
 /**
@@ -132,14 +182,38 @@ type CheckoutPlan =
   | { kind: 'restore-explicit'; pathspecs: string[]; source?: string }
   | { kind: 'positional'; positionals: string[]; force: boolean };
 
-/**
- * Revspec arithmetic markers (`HEAD~1`, `main^`, `@{-1}`, `HEAD@{1}`). iso-git's
- * resolveRef parses only plain ref names — not `~`/`^`/`@{` navigation — so a
- * ref/source token carrying one is a CEILING: loud-throw rather than leak the raw
- * "Could not find HEAD~1" plumbing error. (`~`/`^`/`@{` never appear in real ref
- * names — git forbids them, see git-check-ref-format.)
- */
+/** Reflog marker remains a hard ceiling (no reflog); `~`/`^` are parsed in @riftydev/git. */
 export const REVSPEC_MARKER = /[~^]|@\{/;
+
+function revisionSyntaxBase(rev: string): string | undefined {
+  const idx = rev.search(/[~^]/);
+  if (idx === -1) return undefined;
+  const base = rev.slice(0, idx);
+  return base.length === 0 ? undefined : base;
+}
+
+async function hasResolvableRevisionBase(g: Git, rev: string): Promise<boolean> {
+  const base = revisionSyntaxBase(rev);
+  if (base === undefined) return false;
+  try {
+    await g.resolveRevision(base);
+    return true;
+  } catch (e) {
+    if (e instanceof NotImplementedError) return true;
+    return false;
+  }
+}
+
+export async function revisionExists(g: Git, rev: string): Promise<boolean> {
+  try {
+    await g.resolveRevision(rev);
+    return true;
+  } catch (e) {
+    if (e instanceof NotImplementedError) throw e;
+    if (await hasResolvableRevisionBase(g, rev)) throw new RevisionArgumentError(rev);
+    return false;
+  }
+}
 
 /**
  * Ceiling flags rejected during parse → `NotImplementedError('git.checkout.<slug>')`
@@ -194,23 +268,25 @@ function parseCheckout(args: string[]): CheckoutPlan {
     positionals.push(t);
   }
 
-  // Revspec arithmetic on any ref/source token (a positional, or `-b`'s start
-  // point) is a ceiling — loud-throw before dispatch (else iso-git leaks raw).
+  // Reflog expressions need a reflog rifty does not keep. Parent arithmetic is
+  // implemented by @riftydev/git's resolveRevision, so only `@{...}` stays loud.
   const refTokens = createName !== undefined ? positionals.slice(0, 1) : positionals;
   for (const t of refTokens) {
-    if (REVSPEC_MARKER.test(t)) {
+    if (t.includes('@{')) {
       throw new NotImplementedError(
         'git.checkout.revspec',
-        'rev arithmetic (HEAD~1, main^, @{-1}, HEAD@{1}) is not supported',
+        'reflog revspecs (@{-1}, HEAD@{1}) are not supported',
       );
     }
   }
 
   if (createName !== undefined) {
+    if (positionals.length > 1) throw new NotImplementedError('git.checkout.args');
     startPoint = positionals[0];
     return { kind: 'create', name: createName, startPoint, force };
   }
   if (dashDash !== -1) {
+    if (positionals.length > 1) throw new NotImplementedError('git.checkout.args');
     for (const p of afterDashDash) {
       if (hasGlobMeta(p)) throw new NotImplementedError('git.checkout.glob-pathspec');
     }
@@ -229,7 +305,12 @@ function parseCheckout(args: string[]): CheckoutPlan {
  * Ceiling flags/globs throw loud (exit 128); typed git user-errors map to git's
  * exact stderr (caught here, never reaching the generic handler).
  */
-export async function doCheckout(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+export async function doCheckout(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
   let plan: CheckoutPlan;
   try {
     plan = parseCheckout(args);
@@ -254,22 +335,31 @@ export async function doCheckout(g: Git, args: string[], ctx: CommandContext): P
       if (plan.pathspecs.length === 0) {
         // `git checkout --` / `git checkout <ref> --` with no pathspecs. Real git
         // 2.50.1 treats this as a no-op (exit 0, silent on a clean tree) — the
-        // "you must specify path(s) to restore" fatal belongs to `git restore`,
-        // NOT `checkout`. A revspec source was already rejected during parse.
+        // "you must specify path(s) to restore" fatal belongs to `git restore`.
+        // Still validate an explicit source so `checkout BAD --` cannot false-succeed.
+        if (plan.source !== undefined) {
+          try {
+            await g.resolveRevision(plan.source);
+          } catch (e) {
+            if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
+            ctx.stderr.write(`fatal: invalid reference: ${plan.source}\n`);
+            return 128;
+          }
+        }
         return 0;
       }
       await g.checkout({
         op: 'restore',
-        pathspecs: plan.pathspecs,
+        pathspecs: plan.pathspecs.map(mapPathspec),
         ...(plan.source !== undefined ? { source: plan.source } : {}),
       });
       return 0; // restore is silent
     }
 
     // `await` so a rejection lands in THIS try/catch (not returned unawaited).
-    return await doCheckoutPositional(g, plan.positionals, plan.force, ctx);
+    return await doCheckoutPositional(g, plan.positionals, plan.force, ctx, mapPathspec);
   } catch (e) {
-    return renderCheckoutError(e, ctx);
+    return renderCheckoutOrFatal(e, ctx);
   }
 }
 
@@ -285,6 +375,7 @@ async function doCheckoutPositional(
   positionals: string[],
   force: boolean,
   ctx: CommandContext,
+  mapPathspec: PathspecMapper,
 ): Promise<number> {
   if (positionals.length === 0) {
     // Bare `git checkout`: real git 2.50.1 is a no-op (exit 0, silent on a clean
@@ -298,18 +389,16 @@ async function doCheckoutPositional(
     // to the BRANCH (real git's ref-vs-path precedence for one arg). Only when it
     // is NOT a ref do we treat it as an index pathspec. (The genuine 2-arg
     // revision==path ambiguity refusal is deferred — see backlog.)
-    const isRef = await g
-      .resolveRef(x)
-      .then(() => true)
-      .catch(() => false);
+    const isRef = await revisionExists(g, x);
     if (isRef) {
       const res = await g.checkout({ op: 'switch', ref: x, force });
       if (res.op === 'switch') renderSwitch(res, x, ctx);
       return 0;
     }
+    const pathspec = mapPathspec(x);
     const tracked = await g.listFiles();
-    if (tracked.some((p) => pathspecMatch(p, x))) {
-      await g.checkout({ op: 'restore', pathspecs: [x] });
+    if (tracked.some((p) => pathspecMatch(p, pathspec))) {
+      await g.checkout({ op: 'restore', pathspecs: [pathspec] });
       return 0;
     }
     // Neither a ref nor a tracked path — glob-magic is a ceiling, else pathspec miss.
@@ -319,20 +408,21 @@ async function doCheckoutPositional(
 
   // Multiple positionals: `<tree-ish> <pathspec...>` if the first resolves.
   const first = positionals[0] as string;
-  const restSpecs = positionals.slice(1);
+  const restSpecs = positionals.slice(1).map(mapPathspec);
   for (const p of restSpecs) {
     if (hasGlobMeta(p)) throw new NotImplementedError('git.checkout.glob-pathspec');
   }
-  const firstIsRef = await g
-    .resolveRef(first)
-    .then(() => true)
-    .catch(() => false);
+  const firstIsRef = await revisionExists(g, first);
   if (firstIsRef) {
+    const firstPathspec = mapPathspec(first);
+    if ((await g.status()).some((entry) => pathspecMatch(entry.filepath, firstPathspec))) {
+      return renderRevisionAndPathAmbiguity(first, ctx);
+    }
     await g.checkout({ op: 'restore', pathspecs: restSpecs, source: first });
     return 0;
   }
   // First isn't a ref → treat ALL positionals as index pathspecs.
   if (hasGlobMeta(first)) throw new NotImplementedError('git.checkout.glob-pathspec');
-  await g.checkout({ op: 'restore', pathspecs: positionals });
+  await g.checkout({ op: 'restore', pathspecs: positionals.map(mapPathspec) });
   return 0;
 }

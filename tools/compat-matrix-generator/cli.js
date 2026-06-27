@@ -482,13 +482,13 @@ const matrices = [
     file: 'git.md',
     title: 'Compatibility matrix — git (`@riftydev/git`)',
     intro:
-      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local porcelain is byte-identical to canonical git (same object SHA-1s); the network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
+      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local objects are canonical git objects (same SHA-1s for identical inputs); selected porcelain text is parity-pinned where stated. The network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
     rows: [
       ['`init` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
       [
         '`add <pathspec…>` / `add .` / `-A` / `-u` / `-f`',
         '✅',
-        "ALL-OR-NOTHING (a single unmatched pathspec stages nothing → `fatal: pathspec … did not match`); a gone-but-tracked path stages its deletion; an explicit `.gitignore`-ignored path is refused (`-f` overrides); no pathspec → git's `Nothing specified, nothing added.` (exit 0). Unknown flag → `NotImplementedError('git.add.<flag>')` (exit 128), never silently dropped",
+        "ALL-OR-NOTHING (a single unmatched pathspec stages nothing → `fatal: pathspec … did not match`); a gone-but-tracked path stages its deletion; an explicit `.gitignore`-ignored path is refused (`-f` overrides, including ignored children reached via `.`/directory pathspecs); no pathspec → git's `Nothing specified, nothing added.` (exit 0). Unknown flag → `NotImplementedError('git.add.<flag>')` (exit 128), never silently dropped",
       ],
       [
         '`.gitignore` honored',
@@ -515,11 +515,15 @@ const matrices = [
         '✅',
         'Byte-exact vs git 2.50.1 (frozen golden fixtures); path-sorted XY codes',
       ],
-      ['`log` / `log --oneline`', '✅', 'Byte-exact short-oid + subject (frozen fixtures)'],
       [
-        '`diff` (index ↔ workdir, unstaged)',
+        '`log` / `log --oneline` / `-n` / `--format` / `<ref>` / `a..b` / `-- <path>`',
         '⚠️',
-        'Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Binary changes render `Binary files … differ` (never a mojibake hunk). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`--cached`/`diff HEAD`/two-ref/pathspec forms → loud `git.diff.<x>` ceiling (exit 128), never the bare diff silently',
+        'Byte-exact short-oid + subject for the frozen fixture core; bounded flags support agent workflows (`%H`, `%h`, `%s`, `%an`, `%ae`) plus parent-range exclusion and single-path history filtering. Default long log is structured and includes merge parents, but does not yet render every real-git header such as `Date:`. Non-integer `-n`/`--max-count` is fatal, never a full-log fallback',
+      ],
+      [
+        '`diff` / `--staged` / `--cached [<rev>]` / `diff <rev> [<path>]` / `diff <a> <b> [<path>]`',
+        '⚠️',
+        'Correct tree selection: bare = index↔workdir tracked files, staged = tree↔index (unborn HEAD = empty tree), one ref = tree↔workdir with index-gated additions, two refs = tree↔tree. Pathspecs work with or without `--`; missing pathspecs yield an empty diff; trailing-slash directory pathspecs match descendants. `--name-only`, `--name-status`, and `--stat` are supported. Binary changes render `Binary files … differ`. Hunk body is structured LCS, NOT byte-exact git diff text',
       ],
       ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
       [
@@ -533,7 +537,7 @@ const matrices = [
         'Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git',
       ],
       [
-        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`)',
+        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / reflog revspec (`@{…}`)',
         '❌',
         "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo",
       ],
@@ -545,17 +549,57 @@ const matrices = [
       [
         '`restore [--staged] [--source=<tree>] <pathspec>`',
         '✅',
-        "Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; revspec source reuses the checkout revspec ceiling; no-match → pathspec-miss (exit 1)",
+        "Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); `--source=HEAD~1` parent arithmetic works; silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; no-match → pathspec-miss (exit 1)",
+      ],
+      [
+        '`reset <path>` / `reset --soft|--mixed|--hard <rev>`',
+        '✅',
+        'Path reset (`reset [HEAD] -- <path>`) unstages without touching the worktree; tree reset moves HEAD with real soft/mixed/hard index/worktree semantics, including hard-reset removal of tracked paths absent from the target tree, mixed-reset `Unstaged changes after reset:` output, and the hard-reset `HEAD is now at …` stdout summary. Annotated commit tags peel before ref writes; non-commit tag targets are rejected before moving HEAD. Mode+pathspec forms (`reset --hard <path>`) loud-throw until non-HEAD path resets are implemented. Parent arithmetic (`HEAD~1`, `main^`, `HEAD^0`) supported; reflog/peel revspecs stay loud ceilings',
+      ],
+      [
+        '`show <rev>` / `show <rev>:<path>`',
+        '⚠️',
+        'Commit/tree/tag/blob reads over the object database; commit show prints the summary plus structured patch vs first parent (root commit vs empty tree), while merge commits print `Merge:` and omit the patch like real git. Patch text is structured, not byte-exact full git diff headers. Blob path form prints bytes from the selected tree and reports the selected blob oid',
+      ],
+      [
+        '`tag` list / lightweight / annotated / delete',
+        '✅',
+        'Local tag refs via isomorphic-git (`tag`, `annotatedTag`, `deleteTag`); GPG signing is a loud ceiling',
+      ],
+      [
+        '`remote` list / `-v` / add / remove / `ls-remote <url|remote>`',
+        '✅',
+        'Local remotes are config-backed; `remote add/remove` reject unsupported flags and extra operands before mutating config. `ls-remote --tags/--heads` maps to server-ref prefixes; `ls-remote origin` and bare `ls-remote` (default `origin`) resolve the remote URL before transport checks; no configured origin reports the real fatal. Smart HTTP shares the same transport/CORS loud ceilings as clone/fetch/push',
+      ],
+      [
+        '`merge` / `cherry-pick` / `stash`',
+        '⚠️',
+        "Backed by isomorphic-git primitives and covered for clean fast-forward/non-fast-forward merge, clean cherry-pick, and tracked-file stash push/list/pop/apply/drop with `stash@{n}` selection. Stash uses temporary identity without persisting fallback `user.name`/`user.email` into config. Extra merge/cherry-pick operands and unsupported flags loud-throw before mutation. isomorphic-git's stash is tracked-files only: `stash -u`/`--include-untracked`/`--all` → `NotImplementedError('git.stash.include-untracked')`; `stash push <pathspec>` → `git.stash.pathspec`; `stash show -p` is not implemented. Complex conflict workflows (`merge --continue`, custom strategies, conflict marker/index state) remain loud ceilings",
+      ],
+      [
+        '`revert <commit>`',
+        '⚠️',
+        "Clean single-parent commit revert only: requires a clean worktree and every touched path to still match the reverted commit's post-image, then writes the inverse and records a normal `Revert \"<subject>\"` commit. Dirty worktrees, conflicts, merge commits/mainline, multiple commits, `--no-commit`, and sequencer modes (`--continue|--abort|--quit|--skip`) loud-throw via `NotImplementedError('git.revert.<x>')` before mutation",
+      ],
+      [
+        '`apply <patch-file>` / `apply -`',
+        '⚠️',
+        'Clean text unified-diff applier over the VFS worktree (not the index): add/modify/delete hunks, file path or stdin, all-or-nothing preflight. From repo subdirectories, patch entries outside cwd scope are ignored before unsupported metadata is interpreted. Context mismatch leaves every file untouched and exits 1 with git-style `patch failed` / `patch does not apply` text. `--3way`, `--index`/`--cached`, `--check`, reverse/reject/stat modes, binary patches, renames/copies, mode-only changes, quoted/unsafe paths, and no-final-newline hunks are directed ceilings',
+      ],
+      [
+        '`rm` / `mv`',
+        '⚠️',
+        "`rm` refuses modified tracked files unless forced, treats `-r` as recursion (not force), validates all pathspecs before mutation, and prints `rm '<path>'` on success. `mv` refuses untracked sources before mutation, moves files into existing directories, and refuses destination overwrite unless forced; `mv <dir>` is still `NotImplementedError('git.mv.directory')`. Both update VFS and index together for tracked files",
       ],
       [
         '`config <key>` / `config <key> <value>`',
         '⚠️',
-        "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git",
+        "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. Value-pattern/multi-value forms and `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<x>')` (exit 128) — no full-dump/multi-value primitive in iso-git",
       ],
       [
         '`clone <url> [<dir>]` / `fetch [<remote>]` / `pull [<remote> <ref>]` / `push [<remote> <ref>]` (smart HTTP)',
         '✅',
-        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `-f`/`--force` honored on push',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; no URL exits 129 with usage; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `clone`/`fetch` parse `--depth` and `--single-branch`; `clone` parses `--no-tags`; `fetch` parses single `src:dst` refspecs plus `--tags`/`--prune`/`--prune-tags`; `push` parses single `src:dst`, delete refspecs, and `--tags`; multi/wildcard refspecs stay loud ceilings',
       ],
       [
         '`corsProxy`',
@@ -563,7 +607,16 @@ const matrices = [
         'Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws',
       ],
       ['`onAuth` (HTTPS Basic / PAT)', '✅', 'Injected token provider for private repos + push'],
-      ['Shallow `depth` / `singleBranch`', '✅', 'Passed through to clone/fetch'],
+      [
+        'Verb from a subdirectory of the repo',
+        '✅',
+        'Repo discovery walks up to `.git/HEAD`; cwd-relative pathspecs are translated to root-relative paths for add/diff/log/checkout/restore/reset/rm/mv. Output paths remain repo-root-relative like the existing porcelain surface',
+      ],
+      [
+        'Shallow `depth` / `singleBranch` / tag flags',
+        '✅',
+        'Passed through to clone/fetch where supported by isomorphic-git',
+      ],
       [
         'SSH (`ssh://`, `git@host:`)',
         '❌',
@@ -600,14 +653,9 @@ const matrices = [
         'Surfaced loud (isomorphic-git `GitPushError`), no silent retry',
       ],
       [
-        'Verb from a subdirectory of the repo',
+        'rebase / am / submodules / worktrees / sparse + partial clone',
         '❌',
-        '`git.subdir` ceiling (exit 128) — cwd-relative pathspec prefixing not implemented yet; run git from the repository root. Loud, never a silent wrong-tree result',
-      ],
-      [
-        'rebase / submodules / worktrees / sparse + partial clone',
-        '❌',
-        'Out of the v1 subset — throw `NotImplementedError`',
+        'Out of the current browser/VFS-backed subset — throw `NotImplementedError`; `am` needs a real mailbox engine, never a fake patch applier',
       ],
       ['gc / repack / prune / reflog / bisect / blame / hooks', '❌', 'Out of the v1 subset'],
     ],
@@ -628,7 +676,7 @@ const matrices = [
       'git runs as pure JS (isomorphic-git) over the Memory VFS — local porcelain writes canonical git objects, so commit/tree/blob SHA-1s match real git exactly; the network is smart-HTTP only.',
       'Browser same-origin ceiling: GitHub/GitLab/Bitbucket smart-HTTP endpoints send no CORS headers, so cross-origin clone/fetch/push need `RIFTY_GIT_CORS_PROXY` (D-004) or a CORS-enabled host; SSH and `git://` need raw TCP that the browser has not. All throw `NotImplementedError` — never a silent network failure.',
       'The VFS has no exec-bit or symlink layer (ADR-0050/0167): file mode is fixed `100644`, so repos containing executable files or symlinks diverge in tree-SHA from canonical git. Recorded as a loud limitation, not a silent lie.',
-      'Exotic plumbing (rebase, submodules, worktrees, sparse/partial clone, gc, reflog, bisect, blame, hooks, `.gitattributes`/CRLF filters, GPG signing) is out of the v1 subset and throws `NotImplementedError`.',
+      'Exotic plumbing (rebase, conflict-aware revert/apply, apply 3-way/index/mailbox modes, am patch-mailbox workflows, submodules, worktrees, sparse/partial clone, gc, reflog, bisect, blame, hooks, `.gitattributes`/CRLF filters, GPG signing) is out of the current subset and throws `NotImplementedError`.',
     ],
   },
 ];

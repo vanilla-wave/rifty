@@ -139,6 +139,7 @@ export function serveProjectIndex(
   base: string,
   flush?: () => Promise<void>,
   refresh?: () => void,
+  initializeStarterGit?: (root: string) => Promise<void>,
 ): () => void {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const publish = (): ProjectIndex => {
@@ -255,15 +256,19 @@ export function serveProjectIndex(
   // publish when there is no scratch.
   const resetScratch = (starter: string, opId?: string): void => {
     const index = loadIndex(fs, base);
+    const root = rootForId('scratch');
     if (index.scratch) {
       // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
-      resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), rootForId('scratch')));
+      resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
       writeIndex(fs, base, {
         ...index,
         scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
       });
     }
-    void flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
+    void (async (): Promise<void> => {
+      if (index.scratch) await initializeStarterGit?.(root);
+      await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
+    })();
   };
   // ADR-0165 §6 reset (named project): wipe + re-derive `/projects/<id>` from the
   // project's own starter (read from the index — authoritative), bump editedAt,
@@ -272,32 +277,36 @@ export function serveProjectIndex(
   const resetProjectTree = (projectId: string, opId?: string): void => {
     const index = loadIndex(fs, base);
     const target = index.projects.find((p) => p.id === projectId);
+    const root = rootForId(projectId);
     if (target) {
-      resetProjectToStarter(
-        fs,
-        projectId,
-        seedFilesForStarter(starterById(target.starter), rootForId(projectId)),
-      );
+      resetProjectToStarter(fs, projectId, seedFilesForStarter(starterById(target.starter), root));
       const projects = index.projects.map((p) =>
         p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
       );
       writeIndex(fs, base, { ...index, projects });
     }
-    void flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
+    void (async (): Promise<void> => {
+      if (target) await initializeStarterGit?.(root);
+      await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
+    })();
   };
   // ADR-0165 §6 fresh scratch from a starter: (re)create the scratch entry +
   // re-point activeId='scratch' + re-seed /scratch from the bundle. Unlike reset,
   // this works when index.scratch is null (post-Save), restoring the Save
   // precondition for the NEXT save. The prior project entries are untouched.
   const newScratch = (starter: string, opId?: string): void => {
-    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), rootForId('scratch')));
+    const root = rootForId('scratch');
+    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
     const index = loadIndex(fs, base);
     writeIndex(fs, base, {
       ...index,
       activeId: 'scratch',
       scratch: { starter, dirty: false, editedAt: 'no edits yet' },
     });
-    void flushThenPublish(opId);
+    void (async (): Promise<void> => {
+      await initializeStarterGit?.(root);
+      await flushThenPublish(opId);
+    })();
   };
   // ADR-0165 §3 durable switch: persist the active root so the respawned owner
   // (and a later reload) reads the RIGHT activeId — without it the on-disk index

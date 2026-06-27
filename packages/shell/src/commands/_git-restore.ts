@@ -10,7 +10,7 @@
 import { PathspecError, type makeGit, pathspecMatch } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import type { CommandContext } from '../types.ts';
-import { REVSPEC_MARKER, renderCheckoutError } from './_git-checkout.ts';
+import { renderCheckoutError, renderCheckoutOrFatal } from './_git-checkout.ts';
 import { hasGlobMeta } from './_glob.ts';
 
 /**
@@ -18,6 +18,9 @@ import { hasGlobMeta } from './_glob.ts';
  * the package's public surface, so we derive it from the factory's return type.
  */
 type Git = ReturnType<typeof makeGit>;
+type PathspecMapper = (pathspec: string) => string;
+
+const identityPathspec: PathspecMapper = (pathspec) => pathspec;
 
 /**
  * Parsed `git restore`: which trees to write (`staged` = index←HEAD, `worktree`
@@ -77,11 +80,12 @@ function parseRestore(args: string[]): RestorePlan {
   if (staged && source !== undefined) {
     throw new NotImplementedError('git.restore.staged-source', 'index restore is from HEAD only');
   }
-  // Revspec arithmetic in `--source` is the same ceiling as checkout's source.
-  if (source !== undefined && REVSPEC_MARKER.test(source)) {
+  // Reflog expressions need a reflog rifty does not keep. Parent arithmetic is
+  // implemented by @riftydev/git's resolveRevision.
+  if (source?.includes('@{')) {
     throw new NotImplementedError(
       'git.checkout.revspec',
-      'rev arithmetic (HEAD~1, main^, @{-1}, HEAD@{1}) is not supported',
+      'reflog revspecs (@{-1}, HEAD@{1}) are not supported',
     );
   }
   const pathspecs = [...positionals, ...afterDashDash];
@@ -99,7 +103,12 @@ function parseRestore(args: string[]): RestorePlan {
  * ←`--source`). Typed git user-errors (pathspec-miss, ceilings) map via
  * {@link renderCheckoutError}.
  */
-export async function doRestore(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+export async function doRestore(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
   let plan: RestorePlan;
   try {
     plan = parseRestore(args);
@@ -107,7 +116,13 @@ export async function doRestore(g: Git, args: string[], ctx: CommandContext): Pr
     return renderCheckoutError(e, ctx);
   }
 
-  if (plan.pathspecs.length === 0) {
+  let pathspecs: string[];
+  try {
+    pathspecs = plan.pathspecs.map(mapPathspec);
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+  if (pathspecs.length === 0) {
     // Real git: `fatal: you must specify path(s) to restore` (exit 128). Bounded
     // — loud rather than a silent no-op (that would lie about doing nothing).
     // Render here (exit 128) so it never leaks as the shell's generic `git: ` exit-1.
@@ -123,7 +138,7 @@ export async function doRestore(g: Git, args: string[], ctx: CommandContext): Pr
       // pathspec matching no tracked file would be a no-op, so validate against
       // the index first (all-or-nothing, like the checkout restore engine).
       const tracked = await g.listFiles();
-      for (const spec of plan.pathspecs) {
+      for (const spec of pathspecs) {
         const matches = tracked.filter((p) => pathspecMatch(p, spec));
         if (matches.length === 0) throw new PathspecError(spec);
         for (const p of matches) await g.unstage(p);
@@ -132,12 +147,12 @@ export async function doRestore(g: Git, args: string[], ctx: CommandContext): Pr
     if (plan.worktree) {
       await g.checkout({
         op: 'restore',
-        pathspecs: plan.pathspecs,
+        pathspecs,
         ...(plan.source !== undefined ? { source: plan.source } : {}),
       });
     }
     return 0; // restore is silent
   } catch (e) {
-    return renderCheckoutError(e, ctx);
+    return renderCheckoutOrFatal(e, ctx);
   }
 }

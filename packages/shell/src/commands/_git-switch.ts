@@ -9,7 +9,12 @@
 import type { makeGit } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import type { CommandContext } from '../types.ts';
-import { renderCheckoutError, renderSwitch } from './_git-checkout.ts';
+import {
+  renderCheckoutError,
+  renderCheckoutOrFatal,
+  renderSwitch,
+  revisionExists,
+} from './_git-checkout.ts';
 
 /**
  * The facade returned by {@link makeGit}. Its named interface (`Git`) is not on
@@ -59,13 +64,16 @@ function parseSwitch(args: string[]): SwitchPlan {
   }
 
   if (createName !== undefined) {
+    if (positionals.length > 1) throw new NotImplementedError('git.switch.args');
     return { kind: 'create', name: createName, startPoint: positionals[0] };
   }
   if (detach) {
+    if (positionals.length > 1) throw new NotImplementedError('git.switch.args');
     const commit = positionals[0];
     if (commit === undefined) throw new NotImplementedError('git.switch.detach-missing-commit');
     return { kind: 'detach', commit };
   }
+  if (positionals.length > 1) throw new NotImplementedError('git.switch.args');
   const ref = positionals[0];
   if (ref === undefined) throw new NotImplementedError('git.switch.no-target');
   return { kind: 'branch', ref };
@@ -109,10 +117,7 @@ export async function doSwitch(g: Git, args: string[], ctx: CommandContext): Pro
     // name that is neither a branch nor any ref is `fatal: invalid reference`.
     const branches = await g.listBranches();
     if (!branches.includes(plan.ref)) {
-      const isRef = await g
-        .resolveRef(plan.ref)
-        .then(() => true)
-        .catch(() => false);
+      const isRef = await revisionExists(g, plan.ref);
       if (isRef) {
         ctx.stderr.write(`fatal: a branch is expected, got commit '${plan.ref}'\n`);
         return 128;
@@ -126,6 +131,6 @@ export async function doSwitch(g: Git, args: string[], ctx: CommandContext): Pro
     if (res.op === 'switch') renderSwitch(res, plan.ref, ctx, 'switch');
     return 0;
   } catch (e) {
-    return renderCheckoutError(e, ctx);
+    return renderCheckoutOrFatal(e, ctx);
   }
 }

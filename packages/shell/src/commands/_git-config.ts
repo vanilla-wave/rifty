@@ -3,8 +3,9 @@
  * getConfig/setConfig on `.git/config`). `config <key>` (or `--get`) prints the
  * value + `\n` (exit 0); an UNSET key → exit 1, no output (real git 2.50.1).
  * `config <key> <value>` writes it, silent (exit 0). Full-dump / multi-value /
- * unset flags (`--list`/`--get-all`/`--unset`/…) have no iso-git analog → loud
- * {@link NotImplementedError} (exit 128). Bounded v1, never a silent partial.
+ * value-pattern / unset flags (`--list`/`--get-all`/`--unset`/…) have no iso-git
+ * analog → loud {@link NotImplementedError} (exit 128). Bounded v1, never a
+ * silent partial.
  */
 import type { makeGit } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
@@ -55,11 +56,17 @@ async function runConfig(g: Git, args: string[], ctx: CommandContext): Promise<n
     throw new NotImplementedError('git.config', 'no key');
   }
 
-  // `<key> <value>` → set (silent, exit 0). `--get <key> <value>` is a misuse;
-  // real git errors on it, but here it silently degrades to a plain get — a known
-  // v1 divergence, not a v1 target. Treat a value as a set only without `--get`.
-  if (positionals.length >= 2 && !getFlag) {
-    await g.setConfig(key, positionals.slice(1).join(' '));
+  // `<key> <value>` → set (silent, exit 0). `--get <key> <value-pattern>` is a
+  // real git form, but this bounded v1 has no value-pattern primitive; loud
+  // ceiling beats a silent false miss/match.
+  if (getFlag && positionals.length !== 1) {
+    throw new NotImplementedError('git.config.value-pattern');
+  }
+  if (positionals.length > 2 && !getFlag) {
+    throw new NotImplementedError('git.config.value-pattern');
+  }
+  if (positionals.length === 2 && !getFlag) {
+    await g.setConfig(key, positionals[1] as string);
     return 0;
   }
 

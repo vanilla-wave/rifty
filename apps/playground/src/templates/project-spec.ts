@@ -180,6 +180,29 @@ export function projectScripts(spec: ProjectSpec): Record<string, string> {
   return spec.runtime === 'vite' ? { dev: body, vite: body } : { dev: body, start: body };
 }
 
+const GIT_INIT_CONFIG = `[core]
+\trepositoryformatversion = 0
+\tfilemode = false
+\tbare = false
+\tlogallrefupdates = true
+\tsymlinks = false
+\tignorecase = true
+`;
+
+const PROJECT_GITIGNORE = `node_modules/
+dist/
+.vite/
+*.log
+`;
+
+function initializedGitFiles(root: string): Record<string, string> {
+  return {
+    [`${root}/.git/HEAD`]: 'ref: refs/heads/main\n',
+    [`${root}/.git/config`]: GIT_INIT_CONFIG,
+    [`${root}/.gitignore`]: PROJECT_GITIGNORE,
+  };
+}
+
 export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;
@@ -244,6 +267,7 @@ export function resolveBootstrapConfig(
   };
   if (spec.runtime === 'node-server') {
     const seedFiles: Record<string, string> = {
+      ...initializedGitFiles(root),
       [entryPath]: spec.entry.content,
       [`${root}/package.json`]: pkg.json,
     };
@@ -251,6 +275,7 @@ export function resolveBootstrapConfig(
     return { ...base, runtime: 'node-server', sqlite: spec.sqlite, seedFiles };
   }
   const seedFiles: Record<string, string> = {
+    ...initializedGitFiles(root),
     [`${root}/index.html`]: buildIndexHtml(spec.htmlTitle, spec.entry.relativePath),
     [entryPath]: spec.entry.content,
     [`${root}/package.json`]: pkg.json,

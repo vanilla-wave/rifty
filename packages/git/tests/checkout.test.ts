@@ -80,6 +80,30 @@ it('detaches HEAD when checking out a raw oid', async () => {
   expect(await g.resolveRef('HEAD')).toBe(oid);
 });
 
+it('detaches annotated tags at the tagged commit so children have commit parents', async () => {
+  const feat = await g.resolveRef('feat');
+  await g.createTag({
+    name: 'v-feat',
+    object: feat,
+    annotated: true,
+    message: 'feat release\n',
+    tagger: AUTHOR,
+  });
+
+  const r = await g.checkout({ op: 'switch', ref: 'v-feat' });
+  expect(r).toMatchObject({ op: 'switch', detached: true, target: undefined });
+  expect(await g.currentBranch()).toBeUndefined();
+  expect(await g.resolveRef('HEAD')).toBe(feat);
+
+  await vfs.writeFile('/r/f.txt', 'child\n');
+  await g.add('f.txt');
+  const child = await g.commit({ message: 'child', author: AUTHOR });
+  const shown = await g.show(child);
+  expect(shown.type).toBe('commit');
+  if (shown.type !== 'commit') throw new Error('expected commit');
+  expect(shown.commit.parents).toEqual([feat]);
+});
+
 it('restores a path from the index, discarding the worktree change', async () => {
   await vfs.writeFile('/r/f.txt', 'STAGED\n');
   await g.add('f.txt');
@@ -139,6 +163,31 @@ it('restores all files under a directory pathspec (index source)', async () => {
   if (r.op === 'restore') expect(r.restored.sort()).toEqual(['d/a.txt', 'd/b.txt']);
   expect(await vfs.readFileText('/r/d/a.txt')).toBe('A\n');
   expect(await vfs.readFileText('/r/d/b.txt')).toBe('B\n');
+});
+
+it('restore from index recreates a missing parent directory', async () => {
+  await vfs.mkdir('/r/d', { recursive: true });
+  await vfs.writeFile('/r/d/a.txt', 'A\n');
+  await g.add('d/a.txt');
+
+  await vfs.rm('/r/d', { recursive: true, force: true });
+  const r = await g.checkout({ op: 'restore', pathspecs: ['d/a.txt'] });
+
+  expect(r).toEqual({ op: 'restore', restored: ['d/a.txt'] });
+  expect(await vfs.readFileText('/r/d/a.txt')).toBe('A\n');
+});
+
+it('restore from a tree-ish recreates a missing parent directory', async () => {
+  await vfs.mkdir('/r/d', { recursive: true });
+  await vfs.writeFile('/r/d/a.txt', 'HEAD\n');
+  await g.add('d/a.txt');
+  await g.commit({ message: 'add nested', author: AUTHOR });
+
+  await vfs.rm('/r/d', { recursive: true, force: true });
+  const r = await g.checkout({ op: 'restore', pathspecs: ['d/a.txt'], source: 'HEAD' });
+
+  expect(r).toEqual({ op: 'restore', restored: ['d/a.txt'] });
+  expect(await vfs.readFileText('/r/d/a.txt')).toBe('HEAD\n');
 });
 
 // C3 — multi-pathspec restore is ALL-OR-NOTHING: one unmatched → throw, write nothing.

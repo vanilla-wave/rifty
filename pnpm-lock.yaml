@@ -50,6 +50,9 @@ importers:
       '@rifty-examples/vite-like-dev':
         specifier: workspace:*
         version: link:../../examples/vite-like-dev
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@riftydev/io':
         specifier: workspace:*
         version: link:../../packages/io
