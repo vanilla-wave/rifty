@@ -9,7 +9,7 @@ import type {
   TerminalRewriteRule,
 } from '@riftydev/terminal';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
@@ -18,6 +18,7 @@ export function BottomPanel(props: {
   collapsed: boolean;
   sessions: readonly TerminalSessionSnapshot[];
   activeSessionId: string;
+  terminalFocusEpoch?: number;
   modeHint?: TerminalModeHint;
   onToggleCollapse(): void;
   onSelectSession(id: string): void;
@@ -54,6 +55,10 @@ export function BottomPanel(props: {
     let n = 0;
     for (const diags of props.diagnostics?.values() ?? []) n += diags.length;
     return n;
+  });
+
+  createEffect(() => {
+    if ((props.terminalFocusEpoch ?? 0) > 0) setView('terminal');
   });
 
   return (
@@ -168,6 +173,7 @@ export function BottomPanel(props: {
                   onSignal={() => props.onSignal?.(id)}
                   onRawInput={(data) => props.onRawInput?.(id, data)}
                   onLink={props.onLink}
+                  focusEpoch={id === props.activeSessionId ? props.terminalFocusEpoch : 0}
                   onLine={(line, dims) => props.onLine(id, line, dims)}
                   modeHint={props.modeHint}
                   completer={props.completer}

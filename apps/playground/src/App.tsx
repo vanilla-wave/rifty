@@ -524,6 +524,7 @@ export function App(props: AppProps) {
     manager.sessions().filter((session) => !hiddenSessionIds.has(session.id));
   const [sessions, setSessions] = createSignal<TerminalSessionSnapshot[]>(visibleSessions());
   const [activeSessionId, setActiveSessionId] = createSignal(manager.activeSessionId());
+  const [terminalFocusEpoch, setTerminalFocusEpoch] = createSignal(0);
   const [terminalHistory, setTerminalHistory] = createSignal<readonly TerminalHistoryRecord[]>(
     props.terminalPersistence.initialHistory,
   );
@@ -566,6 +567,7 @@ export function App(props: AppProps) {
     const session = manager.createSession(title);
     manager.select(session.id);
     refreshTerminalState();
+    setTerminalFocusEpoch((epoch) => epoch + 1);
     return session;
   }
 
@@ -2369,6 +2371,7 @@ export function App(props: AppProps) {
               collapsed={layout.consoleCollapsed()}
               sessions={sessions()}
               activeSessionId={activeSessionId()}
+              terminalFocusEpoch={terminalFocusEpoch()}
               onToggleCollapse={() => layout.toggleConsole()}
               onSelectSession={selectSession}
               onCreateSession={() => createSession()}

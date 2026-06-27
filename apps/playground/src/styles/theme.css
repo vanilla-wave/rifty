@@ -1374,8 +1374,17 @@ body {
   inset: 8px 4px 8px 14px;
   background: #171a21;
   border-radius: var(--rf-r-sm);
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  line-height: 18px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045);
   overflow: hidden;
+}
+.rf-terminal .xterm,
+.rf-terminal .xterm-helper-textarea {
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  line-height: 18px;
 }
 
 /* — terminal overlays: pop surface, soft radius — */

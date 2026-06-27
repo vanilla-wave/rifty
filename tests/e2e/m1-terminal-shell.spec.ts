@@ -9,6 +9,14 @@ import {
 const terminalSessionTabs = (page: Page) =>
   page.locator('.rf-terminal-tab').filter({ hasText: /^Terminal \d+/ });
 
+async function terminalOwnsFocus(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const terminal = document.querySelector('[data-testid="terminal"]');
+    const active = document.activeElement;
+    return terminal != null && active != null && terminal.contains(active);
+  });
+}
+
 test.describe('M1 - terminal shell', () => {
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await page.goto('/');
@@ -56,6 +64,15 @@ test.describe('M1 - terminal shell', () => {
 
     await expectTerminalContains(page, 'hello-from-shell');
     expect(await terminalBuffer(page)).not.toContain('[worker ready]');
+  });
+
+  test('new terminal receives keyboard focus immediately', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+
+    await openShellTerminal(page);
+
+    await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
   });
 
   test('terminal tabs switch between their own buffers', async ({ page }) => {

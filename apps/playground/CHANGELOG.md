@@ -56,6 +56,9 @@
   `Project files scratch`), and exposes a missing project instead of falling back
   to scratch copy; the top-bar chip now also pins the app font instead of
   inheriting the browser's button default.
+- **New terminal tabs now take keyboard focus immediately.** Creating a
+  terminal switches back to the terminal view, focuses the active xterm instance,
+  and keeps the terminal DOM renderer pinned to the JetBrains Mono metrics.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.
