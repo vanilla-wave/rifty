@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Live registry roundtrip manual smoke (registry.npmjs.org via Vite proxy)
 created: 2026-06-08
 why: mock-based install pipeline verified; live registry.npmjs.org-through-Vite-proxy path needs a manual smoke, not captured done anywhere

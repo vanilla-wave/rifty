@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Playground sidebar boot default — Explorer vs Presets
 created: 2026-06-08
 why: VSCode shell puts Explorer + Presets behind an activity bar; one must be the boot default — choice carries a live TODO(ADR) marker

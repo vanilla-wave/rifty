@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: process/module/loader surface (emitWarning, --env-file, SourceMap, stripTypeScriptTypes, data: import)
 created: 2026-06-20
 why: Self-contained process/module/loader methods absent — libs surface deprecations via emitWarning (gone → vanish/crash), CLIs load env via --env-file, and loaders/source-map APIs are incomplete; all pure-JS over existing EventEmitter/registry/VFS/loader.

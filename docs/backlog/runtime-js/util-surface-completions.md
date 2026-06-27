@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:util pure-JS surface completions
 created: 2026-06-20
 why: Batch of node:util methods absent from default export — all pure-JS (no platform dep), several reuse existing machinery (util.deprecate, os errno table); parseArgs the headline (modern CLIs drop minimist/yargs for it).

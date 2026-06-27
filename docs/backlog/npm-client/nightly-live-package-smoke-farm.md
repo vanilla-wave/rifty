@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: parked
+status: draft
 title: Nightly live-package smoke farm (install + require + one call for top-N pure-JS packages)
 created: 2026-06-12
 why: express demo norm — ~5-7 bugs per new real-package consumer; a farm turns per-consumer surprises into a pipeline feeding compat-matrix

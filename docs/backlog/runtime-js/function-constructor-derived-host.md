@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Derived host Function constructors cannot route dynamic import
 created: 2026-06-24
 why: ADR-0171 routes lexical `Function` inside rifty-loaded modules, but `fn.constructor`, `Function.prototype.constructor`, and equivalent derived constructor paths read the browser host `Function`. Using them to compile source containing `import()` falls back to host dynamic import instead of the VFS module loader.

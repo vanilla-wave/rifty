@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: resolver-internal resolution cache (key, full-clear on invalidate, never cache not-found)
 created: 2026-06-08
 why: no resolution cache — react from 200 files = 200 node_modules walks + pkg-json parses; invalidation is the whole risk; the backlog item is this file

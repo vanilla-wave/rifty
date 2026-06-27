@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: D owner-worker execution model — milestone tracker (P1-P6)
 created: 2026-06-14
 why: ADR-0143 decided D (one owner-worker holds node_modules and supervises shell/CLI/execSync execution; PAGE = viewer). It is milestone-scale + multi-ADR; this tracks the phases, decided forks, ordering, and per-phase status so the work is explicit, not silent backlog.

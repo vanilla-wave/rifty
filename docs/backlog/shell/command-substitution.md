@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Shell command substitution `$(…)` / `` `…` ``
 created: 2026-06-08
 why: not parsed — tokenizer emits the literal characters

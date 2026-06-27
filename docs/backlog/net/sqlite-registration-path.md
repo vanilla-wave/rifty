@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: Exact node:sqlite builtin registration module path
 created: 2026-06-08
 why: Harness-local side-effect registration is provisional; TODO(backlog: net/sqlite-registration-path) marker still open

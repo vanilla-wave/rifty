@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Buffer pending statics — poolSize / constants / transcode / kStringMaxLength / kMaxLength
 created: 2026-06-08
 why: unimplemented Buffer surface awaiting a real consumer — compat rows ❌ Pending

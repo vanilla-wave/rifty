@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: WASI symlink syscalls (path_symlink / path_readlink / path_link) — needs VFS symlink layer (M12)
 created: 2026-06-08
 why: VFS has no symlink layer, so all three return E_NOSYS; intentionally deferred to M12 until a real use case appears

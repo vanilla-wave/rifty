@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: git state workflows: reflog, conflicts, advanced revert/apply
 created: 2026-06-23
 why: The local git surface now covers clean agent workflows, including clean revert/apply, but stateful recovery and conflict workflows need a real git-state layer, not one-off porcelain flags.

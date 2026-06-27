@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:stream WHATWG bridge + modern statics
 created: 2026-06-20
 why: node:stream/web + Node<->WHATWG bridge + modern static surface honestly unclaimed (ADR-0154); all pure-JS adapters over Chromium ReadableStream/WritableStream + existing EventEmitter lifecycle.

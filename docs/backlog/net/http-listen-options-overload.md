@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: HttpServer.listen options-object overload — confirm and promote to ADR
 created: 2026-06-08
 why: Shipped Node-parity widening still carries a TODO(backlog: net/http-listen-options-overload) marker; needs confirm→promote, not new work

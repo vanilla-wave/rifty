@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: git command + capability over VFS (isomorphic-git)
 created: 2026-06-13
 closed: 2026-06-22

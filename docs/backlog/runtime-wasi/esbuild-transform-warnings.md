@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: active
+status: draft
 title: Preserve non-fatal esbuild transform warnings
 created: 2026-06-26
 why: dev esbuild bridge throws on successful transforms that emit stderr warnings and returns warnings as empty.

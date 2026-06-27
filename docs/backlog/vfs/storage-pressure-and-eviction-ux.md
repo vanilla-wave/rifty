@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: Browser storage pressure and eviction UX
 created: 2026-06-12
 why: the playground now requests persistent storage, surfaces quota, and can export/import a JSON workspace archive, but browser-specific eviction and out-of-space flows still need user-tested UX

@@ -1,6 +1,6 @@
 ---
 area: net
-status: blocked
+status: draft
 title: WebSocket upgrade transcoder caps a frame at a fixed 100 MiB; guest ws maxPayload above the default is not honored
 created: 2026-06-18
 why: the bridge upgrade transcoder enforces a fixed 100 MiB reassembly cap (the ws default); a guest ws server/client maxPayload set ABOVE 100 MiB is silently capped by the transport, and the transport bound is not separately configurable

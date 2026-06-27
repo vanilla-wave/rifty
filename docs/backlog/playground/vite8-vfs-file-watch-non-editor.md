@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: vite8 — non-editor file changes don't update the preview (chokidar dead over the VFS)
 created: 2026-06-21
 why: Vite's chokidar watcher gets NO events over rifty's VFS (sync-mirror/OPFS fires no real fs.watch); only editor saves route via a bespoke IPC. A file changed from the terminal (`echo > src/x.js`), a generated file, or an `npm`-written file triggers ZERO preview reaction — real Vite would watcher-detect it and (HMR off) full-reload.

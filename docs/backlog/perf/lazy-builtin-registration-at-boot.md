@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0089 — lazy builtin registration at worker boot (names-only split + deferred execSync handler install, hot-core eager)
 created: 2026-06-08
 why: worker boot eagerly evaluates 40+ builtin module bodies; a log-only worker drags whole builtin surface; child_process barrel pulls kernel/worker-spawn; write-before-code

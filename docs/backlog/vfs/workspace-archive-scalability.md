@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: Streaming workspace archive formats
 created: 2026-06-12
 why: JSON workspace archive v1 is dependency-free and enough for source portability, but large trees need streaming export/import and possibly zip/tar interoperability

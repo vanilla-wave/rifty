@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Vendored chalk + full-express tarball fixtures + integration-fixtures refresh tool
 created: 2026-06-08
 why: ADR-0021 mandates offline vendored-tarball tests; picocolors/ms/kleur + diamond landed, chalk/express + refresh script still open

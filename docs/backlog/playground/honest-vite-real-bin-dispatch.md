@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: `vite` runs the real `node_modules/.bin/vite` (retire the curated dispatch)
 created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `shell.registerCommand('vite')` no longer shadows the installed binary; `vite` resolves through `.bin`.

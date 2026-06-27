@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:test built-in runner
 created: 2026-06-12
 why: package-authored test suites increasingly use node:test, but a runner commits to scheduling, reporter, mock, and TestContext semantics; keep that contract separate from the minimal vm subset

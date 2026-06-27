@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: node:sqlite setReadBigInts(true) BigInt INTEGER read mode
 created: 2026-06-08
 why: Prebuilt sql.js WASM stores INTEGER as JS number; no bigint read mode — needs custom WASM rebuild

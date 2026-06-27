@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: npm-client
-status: active
+status: draft
 title: ADR-0088 — bounded-concurrency tarball fetch in npm install (placement walk stays serial + deterministic)
 created: 2026-06-08
 why: npm install fully serial — Σ of every packument+tarball RTT; biggest structural throughput lever; write-before-code

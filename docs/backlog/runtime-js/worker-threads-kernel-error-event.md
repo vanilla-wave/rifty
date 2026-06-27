@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: worker_threads kernel-path 'error' event for worker-runtime uncaught exceptions
 created: 2026-06-20
 why: a kernel-backed Worker that throws at runtime emits only 'exit' 1, not Node's 'error' (with the real Error) then 'exit'

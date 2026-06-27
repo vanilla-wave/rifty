@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: node:sqlite unwired DatabaseSync/StatementSync members
 created: 2026-06-08
 why: Members off the opencode boot/query path are unimplemented (loud NotImplementedError)

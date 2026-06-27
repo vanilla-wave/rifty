@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: vfs
-status: active
+status: draft
 title: ADR-0084 — normalizePath already-normalized fast-path + normalized-string path helpers in @riftydev/vfs
 created: 2026-06-08
 why: dirname/basename/extname/segments re-run full normalizePath on already-normalized strings (OPFS write 3x, MemoryBackend ~5x/syscall); chokepoint on every fs syscall + resolver probe

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Named-project autosave throttle/cadence policy
 created: 2026-06-21
 why: ADR-0165 says named projects autosave with no Save button, but the trigger/cadence is unspecified — every keystroke would thrash OPFS, never saving would lose work on a crash

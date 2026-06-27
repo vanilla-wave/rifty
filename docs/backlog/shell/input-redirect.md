@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Shell input redirect (`cmd < file`)
 created: 2026-06-08
 why: `<` tokenized but throws — no stdin-from-file wiring; explicit M12 item

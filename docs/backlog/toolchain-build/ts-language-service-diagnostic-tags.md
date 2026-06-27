@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: TS language service diagnostic tags and related info
 created: 2026-06-26
 why: Diagnostics claim parity while LSP/Monaco drops TS relatedInformation and unused/deprecated tags.

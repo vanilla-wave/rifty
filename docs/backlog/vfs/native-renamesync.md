@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: Native renameSync on the sync VFS mirror (replace copyTree+rm)
 created: 2026-06-08
 why: FsSync has no renameSync; directory rename copies subtrees via copyTree+rmSync instead of moving in place

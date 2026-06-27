@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Shell state and environment profile fidelity
 created: 2026-06-25
 why: cwd/env mutation is user-visible through owner-resident shell sessions, child processes, `npm run`, and PTY exit frames, but the model is spread across closures and snapshots.

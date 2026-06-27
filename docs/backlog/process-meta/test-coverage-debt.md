@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Test-coverage debt ledger — missing parity/regression guards for already-wired seams
 created: 2026-06-13
 why: Several shipped or ADR-claimed behaviors have no test (and some ADRs cite test files that do not exist), so a regression in a live seam passes CI; consolidated into one ledger of missing-coverage entries — each a distinct, articulable failure mode — instead of one tiny file each.

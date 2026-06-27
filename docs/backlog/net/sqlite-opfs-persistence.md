@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: node:sqlite OPFS durable persistence (vs in-memory-first sql.js)
 created: 2026-06-08
 why: Every DatabaseSync is a fresh in-memory db regardless of path; no cross-reload durability

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Wire capabilities-detection (single source of truth) into startup + e2e logging
 created: 2026-06-08
 why: D-006 specifies a data-driven capabilities source for the browser-compat report; ambiguous whether detectCapabilities is wired into startup + e2e logging

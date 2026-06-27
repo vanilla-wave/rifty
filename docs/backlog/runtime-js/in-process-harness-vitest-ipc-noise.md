@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: installProcessGlobals() in-process under vitest leaks IPC deserialize noise
 created: 2026-06-12
 why: fullstack-demo-live-run.opt-in passes 8/8 but vitest's worker IPC logs "Unable to deserialize cloned data" unhandled rejections after the suite

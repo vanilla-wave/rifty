@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: parked
+status: draft
 title: TS language service — inlay hint label-part metadata
 created: 2026-06-24
 why: TS inlay hints can carry interactive display parts with file/span metadata, but rifty's current LSP shape exposes string labels only

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: `vite` dev path must not silently drop args / run unknown subcommands
 created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: the owner no longer parses `vite` args; the installed Vite CLI owns flags/help/version/unknown subcommands.

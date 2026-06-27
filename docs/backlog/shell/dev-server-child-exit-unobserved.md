@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Post-ready dev-server child exit is unobserved (stale LIVE pill on a mid-run crash)
 created: 2026-06-17
 why: P6b moved the dev server into a serve:true supervised child; the owner driver watches the child's exit only during the boot window and inside stop(). If the child crashes AFTER it reported ready (request-handler throw, OOM), nothing transitions the controller — the LIVE pill stays 'running' and /preview/<port>/ 502s until the user Ctrl-Cs/restarts.

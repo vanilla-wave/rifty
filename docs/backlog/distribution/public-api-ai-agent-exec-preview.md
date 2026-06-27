@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: Residual AI-agent sandbox exec streaming + preview URL API
 created: 2026-06-12
 why: ADR-0131 landed only public FS read/write; agent contract still needs streamed exec results and a normalized preview URL surface

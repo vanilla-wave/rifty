@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: vfs
-status: active
+status: draft
 title: ADR-0085 — FsSync.statSyncOrNull non-throwing stat to collapse existsSync+statSync double-probe
 created: 2026-06-08
 why: resolver does existsSync THEN statSync at 7 sites — two normalize + two lookups per logical "is this a file?"; new cross-package FsSync method, write-before-code

@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: node:sqlite StatementSync.columns() column metadata
 created: 2026-06-08
 why: sql.js compiled without SQLITE_ENABLE_COLUMN_METADATA; faithful shape unavailable — needs custom WASM rebuild

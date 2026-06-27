@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: M12 — AI-IDE product UI (chat + streamed tool-calls / diff / approve) over the IDE-kit
 created: 2026-06-13
 why: the AI-IDE needs an agent-facing UI (chat, streaming tool calls, diff review, approve-gate, history) that generic rifty IDE atoms do not provide

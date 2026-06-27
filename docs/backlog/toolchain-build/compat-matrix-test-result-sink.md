@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: Feed compat matrices from test results instead of static inventories
 created: 2026-06-13
 why: cli.js holds hand-curated ✅/⚠️/❌ rows and only validates that cited test FILES exist — a row stays ✅ even if its test is skipped or gutted, so claims can silently drift from test outcomes

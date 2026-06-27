@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: Lazy `node:sqlite` engine bring-up for a bare `node <file>`
 created: 2026-06-18
 why: the 30 s sql.js WASM engine is brought up eagerly only on the template path (`cfg.sqlite`); a bare `node <file>` that imports `node:sqlite` has no engine, so `DatabaseSync` is unavailable until lazily wired

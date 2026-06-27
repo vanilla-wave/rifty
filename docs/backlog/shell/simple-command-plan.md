@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: SimpleCommandPlan lowering before execution
 created: 2026-06-25
 why: `Shell.runSegment` mixes syntax handling, env-prefix, redirects, glob expansion, command lookup, context construction, abort handling, bin dispatch, and redirect flushing in one broad path.

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Refresh the opt-in m10-hmr e2e for the ADR-0165 multi-project default boot
 created: 2026-06-22
 why: the opt-in real-Vite HMR e2e (tests/e2e/m10-hmr.spec.ts, RIFTY_E2E_HMR=1) was written for the pre-ADR-0165 default-preset boot + per-run worker; multi-project changed the default boot (scratch from DEFAULT_PRESET at /scratch) so the spec is bit-rotted

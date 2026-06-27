@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Gate tsconfig baseUrl bare-specifier fallback by moduleResolution
 created: 2026-06-26
 why: auto-discovered tsconfig baseUrl is applied to bare specifiers even when modern TS moduleResolution would not use it.

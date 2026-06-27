@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Buffer.from(arrayBuffer) copies instead of aliasing the backing ArrayBuffer (Node view-semantics divergence, untracked)
 created: 2026-06-13
 why: Buffer.from(arrayBuffer) copies while Node returns a Buffer that views the same backing ArrayBuffer — a silent behavioral divergence flagged deferred in ADR-0030 with no consumer hit yet; the compat row is a bare ✅ that masks it.

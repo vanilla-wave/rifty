@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Shadow-registry substitution has no debug-disable flag promised by ADR-0006
 created: 2026-06-13
 why: ADR-0006 Mechanism promises 'A flag disables it for debugging' but no such flag exists — InstallOptions has no disable/bypass field, resolveOverride is consulted unconditionally, and RIFTY_*SHADOW/disableOverrides finds nothing repo-wide; the ADR claims an escape hatch that does not exist.

@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: server.address() full {address, family, port} shape
 created: 2026-06-21
 why: rifty's http/net server.address() returns only { port }; real Node returns { address, family, port }, so AddressInfo-reading code (logging, "listening on http://host:port", family branching) sees undefined address/family.

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Configurable loader map + binary (.wasm) asset loader (vs fixed text-extension set)
 created: 2026-06-08
 why: ADR-0067 ships a fixed text-extension loader set; configurability + binary loader need real requirements

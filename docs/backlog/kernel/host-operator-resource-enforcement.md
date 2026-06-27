@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: parked
+status: draft
 title: Host-operator resource enforcement policy
 created: 2026-06-12
 why: hard resource controls need a kernel public-behavior design, separate from the shipped trust-model documentation

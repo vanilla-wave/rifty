@@ -1,6 +1,6 @@
 ---
 area: net
-status: blocked
+status: draft
 title: WebSocket permessage-deflate (RFC7692) — negotiate or honestly decline the client offer
 created: 2026-06-18
 why: full RFC7692 fidelity needs real deflate/inflate support; current bridge explicitly declines compression and compat marks it ❌ instead of silently claiming support

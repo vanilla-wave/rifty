@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: node:sqlite Node-vs-rifty head-to-head parity case (sequenced to DatabaseSync shim)
 created: 2026-06-08
 why: Parity case was deferred to the shim task; confirm the now-landed sqlite cases satisfy ADR-0065's mandate

@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: Client-only node:https request/get subset over browser fetch
 created: 2026-06-19
 why: ADR-0010 makes the whole node:https surface a loud stub, but client request/get can be a faithful fetch-backed subset without promising TLS sockets or https.createServer

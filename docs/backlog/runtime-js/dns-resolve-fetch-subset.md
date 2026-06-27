@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: node:dns resolve* browser-safe fetch/DoH subset
 created: 2026-06-19
 why: dns.resolve* is only tracked inside the aggregate loud-stub backlog, but fetch-backed DNS lookups can unblock HTTP/WebSocket-oriented packages without pretending to provide OS resolver semantics

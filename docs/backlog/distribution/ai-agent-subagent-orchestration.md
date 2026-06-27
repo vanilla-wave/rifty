@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: M12 — subagent / task orchestration over the embeddable Pi loop
 created: 2026-06-13
 why: the one genuine opencode-richer feature that survives the browser ceiling — agents dispatching focused sub-tasks with isolated context

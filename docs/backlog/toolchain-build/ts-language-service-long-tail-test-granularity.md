@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: Split TS language-service long-tail parity tests by feature
 created: 2026-06-26
 why: one large parity test can pass vacuously for empty result pairs and stops later feature checks on the first failure.

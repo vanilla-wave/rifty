@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Failed root optionalDependency permanently defeats the lockfile fast path
 created: 2026-06-12
 why: lockfile-write drops failed optionals, but the next install's coverage check requires every top-level request (optionals included) to be pinned — one failed optional forces a full registry re-resolve on EVERY subsequent install

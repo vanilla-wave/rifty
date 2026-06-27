@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: monaco-vscode-api service-only spike
 created: 2026-06-25
 why: Verify the low-risk VS Code service layer before touching file models, TS providers, or extension hosting.

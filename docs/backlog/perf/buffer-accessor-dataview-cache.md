@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0082 — per-instance cached DataView for Buffer int/float accessors
 created: 2026-06-08
 why: every readUInt*/writeUInt* allocates a throwaway DataView; ~30 accessors; needs OOB parity cases; write-before-code

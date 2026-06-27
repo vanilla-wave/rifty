@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: Umbrella — honest `vite` command (real CLI fidelity, no curated-shim drift)
 created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `vite` now resolves to and runs the installed node_modules/.bin/vite CLI, not an owner-registered curated command.

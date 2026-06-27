@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: vfs
-status: active
+status: draft
 title: OPFS writeFileSync single shared slice + WASI fd_write aliasing gate
 created: 2026-06-08
 why: OPFS writeFileSync copies the buffer twice (cache + write-through); 2N->N — but safety disputed by cross-cutting #44 (WASI fd_write in-place mutation); the backlog item is this file

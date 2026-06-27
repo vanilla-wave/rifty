@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: Light theme for playground (currently dark-only)
 created: 2026-06-08
 why: Chosen direction is a polished dark IDE; a light/dark toggle is a deferred non-goal

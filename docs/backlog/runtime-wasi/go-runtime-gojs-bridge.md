@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: Go-runtime (gojs) bridge for non-esbuild Go-WASM guests
 created: 2026-06-08
 why: deferred per ADR-0044 D3; moot for esbuild (ADR-0047 runs the real WASIp1 build) — needed only if another gojs guest with no WASI build appears

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: M13 — export a project as a Starter / share-by-link / import
 created: 2026-06-21
 why: ADR-0165 keeps the export/import engine live and the baseline = re-derivable Starter bundle artifact intentionally reusable, but the M13 sharing surfaces (save-as-Starter, share-by-link, import external projects) are explicitly out of scope and ship disabled with a "soon" pill

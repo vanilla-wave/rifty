@@ -1,6 +1,6 @@
 ---
 area: service-worker
-status: blocked
+status: draft
 title: ADR-0123 page-proxy retirement follow-up is untracked (dual bridge path lingers indefinitely)
 created: 2026-06-13
 why: ADR-0123 deliberately keeps two preview bridge paths (page window proxy + direct SW→Worker) coexisting with a retirement follow-up gated on deployed old-SW/new-page skew elapsing; nothing tracks that gate, so the legacy page proxy lingers as maintenance surface and a second readiness/auth path.

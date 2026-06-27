@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: fs.promises.open() and FileHandle API
 created: 2026-06-12
 why: callback/sync fd APIs plus promises mkdtemp/opendir/truncate are covered, but the richer FileHandle object surface is larger than the high-frequency fd wall and should not be faked

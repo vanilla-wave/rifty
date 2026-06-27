@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Buffer fixed-width int accessors lack Node range/bounds validation
 created: 2026-06-21
 why: the variable-width accessors now throw ERR_OUT_OF_RANGE / ERR_BUFFER_OUT_OF_BOUNDS (Node-faithful), but the fixed-width family (readUInt8…/writeUInt8…) still silently truncates an out-of-range value and throws a bare DataView RangeError on OOB — a pre-existing silent divergence the var-width fix made inconsistent.

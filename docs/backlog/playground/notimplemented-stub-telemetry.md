@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: NotImplementedError hit telemetry (dev console/statusbar counter of stubs real consumers touch)
 created: 2026-06-12
 why: cheap; stub-priority is currently guesswork — a hit counter from real playground sessions turns backlog prioritization into data

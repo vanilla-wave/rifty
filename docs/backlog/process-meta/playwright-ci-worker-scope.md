@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Scope Playwright CI serialization to heavy TS-LS specs
 created: 2026-06-26
 why: global CI worker count serializes the full e2e suite although the contention is limited to heavy TS-LS/fullstack specs.

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node-builtin loud-stub capability gaps — tls/dns(non-localhost)/readline/perf_hooks/v8/vm/dgram/tty/string_decoder/os.setPriority/crypto.Hash.copy/fs O_SYNC throw
 created: 2026-06-13
 why: These node: builtin features throw NotImplementedError — a real runtime capability absence a consumer hits when running ordinary npm code; tracked here as the capability limitation itself, distinct from the compat-visibility item which only proposes ❌ matrix rows.

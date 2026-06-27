@@ -1,6 +1,6 @@
 ---
 area: service-worker
-status: active
+status: draft
 title: Generated apps/playground/public/sw.js committed + not gitignored — drift surface ADR-0016 was meant to eliminate
 created: 2026-06-13
 why: apps/playground/public/sw.js is a build output of sw-plugin.ts yet is git-tracked and not gitignored, so two sources of truth for SW logic coexist (sw.ts + the committed 27KB bundle) — the precise condition ADR-0016/A-017 closed, and two of ADR-0016's acceptance criteria (de-VCS sw.js + add to .gitignore) are unmet.

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Per-file revert-to-Starter (needs source provenance)
 created: 2026-06-21
 why: ADR-0165 reset is WHOLE-workspace re-seed only; a user who wants to undo edits to ONE file must blow away the entire scratch — per-file revert needs a baseline diff that doesn't exist yet

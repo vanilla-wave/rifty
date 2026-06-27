@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: net
-status: active
+status: draft
 title: ADR-0091 — optional dispatchStruct({url,method,headers,body}) fast-path on CrossRealmPortHandler
 created: 2026-06-08
 why: per-request body copied 5-6x across realms (no Transferables); skip one O(N) copy + arrayBuffer() drain + Request rebuild; write-before-code

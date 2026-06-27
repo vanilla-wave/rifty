@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: NONE-items quick-wins batch (E) — internal byte-identical perf fixes, no ADR/Q
 created: 2026-06-08
 why: a batch of byte-identical internal micro-fixes that ship immediately with no ADR/Q; not yet implemented (ascii-mask needs a failing parity case first)

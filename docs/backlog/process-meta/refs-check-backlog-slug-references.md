@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: refs:check does not validate backlog→backlog slug references; cutline cites a deleted backlog item and stays green
 created: 2026-06-13
 why: tools/refs/check.mjs validates only ADR index/citations and docs/... path citations, so backlog items that reference sibling items by bare slug (e.g. 'npm-client/prod-npm-registry-deploy-smoke') are unenforced — the consumer-ready cutline cites a backlog item ADR-0133 already deleted and CI stays green, leaving a reader chasing a 404 or re-doing closed work.

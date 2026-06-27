@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: File-backed VS Code model references for playground editor tabs
 created: 2026-06-25
 why: EditorHost hand-maintains Monaco models, paths, dirty state, read-only fallbacks, and disposal; VS Code model references may make that seam deeper.

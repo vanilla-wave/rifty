@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: EPIC E — create-rifty starter template (E1-E3)
 created: 2026-06-08
 why: host config that CANNOT be packaged into a library — COOP/COEP headers, module-worker config, sw.js build, WASM copy, worker URLs — only templated; this is exactly the bundler-bit boundary the SDK facade can't hide

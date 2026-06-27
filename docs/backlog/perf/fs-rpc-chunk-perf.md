@@ -1,6 +1,6 @@
 ---
 area: perf
-status: active
+status: draft
 title: P6a child fs.* RPC chunk perf — O(N²) read re-reads + base64 write inflation + node_modules stat storms
 created: 2026-06-16
 why: ADR-0150 v1 accepts these; large-file reads/writes over the per-chunk fs.* RPC are quadratic, writes carry base64 inflation, and a child require() walk is many sequential blocking round-trips; P6b's dev-server child amplifies (vite transforms + large bundles/wasm/sourcemaps + from-scratch install writes + big dep walks vs P6a's lighter CLIs)

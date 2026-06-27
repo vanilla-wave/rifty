@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:vm defined-but-unwired seams — wasm-URL env-config + explicit disposeContext
 created: 2026-06-14
 why: two real seams from the ADR-0142 vm work are implemented + typed but have no production caller — tracked so they are not mistaken for live wiring nor rot into unexplained dead code

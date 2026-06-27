@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:crypto beyond the sync-hash subset (ciphers/KDF/sign)
 created: 2026-06-11
 why: crypto is a deliberate sync subset (sha256/sha1/md5 + HMAC + random); auth/JWT/cookie-signing libs need pbkdf2/scrypt/createCipheriv/sign — recorded so the deliberate limit is auditable, with the real cost (SubtleCrypto is async-only) noted

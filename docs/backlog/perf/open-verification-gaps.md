@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: Open verification gaps — unresolved correctness gates + missing parity coverage (parity-first)
 created: 2026-06-08
 why: §7 lists correctness gates not independently re-verified + parity cases that must exist (parity-first hard rule) BEFORE the dependent perf changes land

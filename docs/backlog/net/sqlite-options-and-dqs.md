@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: node:sqlite inert options (readOnly/allowExtension/timeout) + DQS toggle made effective
 created: 2026-06-08
 why: Options accepted-but-inert and DQS can't be toggled in prebuilt sql.js WASM — needs custom rebuild

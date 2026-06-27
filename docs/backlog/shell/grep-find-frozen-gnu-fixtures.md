@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: grep/find frozen-GNU byte-fixtures deferred; ls --color/-l not byte-fixtured
 created: 2026-06-08
 why: ADR-0093(b) wants frozen-GNU golden fixtures as the oracle for ls/grep/find; ggrep/gfind not installed on the box, so grep/find ride hand-asserted conformance tests instead

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Runtime-built Function import() routing cannot cross dynamic Function/eval scope
 created: 2026-06-24
 why: ADR-0171 routes `import()` inside lexical `Function` constructor sources by rewriting the syntax to a loader-owned helper. `with` or direct/dynamic `eval` inside the constructed source can materialize a helper-shaped binding at runtime without that exact binding name appearing in the source, turning Node's `import()` syntax into an identifier lookup and silently routing to user code. A nested runtime-built `Function("... import(...) ...")` has the same trust problem: the inner constructor would be the host/global constructor unless rifty provides a real realm/prototype membrane.

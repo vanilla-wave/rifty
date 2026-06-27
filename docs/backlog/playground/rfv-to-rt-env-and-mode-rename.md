@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Rename RIFTY_RFV_* env prefix → RIFTY_RT_* + Mode token 'real-vite' → 'project'
 created: 2026-06-08
 why: ADR-0078 made the real-vite worker template-agnostic but left two Vite-branded names; generic surface still carries "RFV" / "real-vite"

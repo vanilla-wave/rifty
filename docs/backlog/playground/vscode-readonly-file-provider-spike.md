@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Read-only VS Code FileSystemProvider over the rifty owner snapshot
 created: 2026-06-25
 why: Before replacing the playground Explorer, prove that VS Code file services can browse rifty files without creating a second source of truth.

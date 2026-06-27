@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: Parity http mode — dump full response status+headers+body, not stdout-only
 created: 2026-06-12
 why: all three ADR-0130 http bugs (204 body, content-length, chunked) are response-framing bugs invisible to the current http parity driver, which exposes only {status, statusText, contentType, body}

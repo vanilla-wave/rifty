@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: Worker-realm conformance harness (run conformance subset inside a real kernel worker via Playwright)
 created: 2026-06-12
 why: node:sqlite passed conformance in vitest/Node realm yet first-ever run in the target kernel-worker realm (ADR-0130 demo) broke — "tested" ≠ "runs where it ships"

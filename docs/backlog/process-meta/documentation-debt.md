@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Documentation debt ledger — ADR/backlog/compat record drift where docs outran code
 created: 2026-06-13
 why: A cluster of low-effort record-honesty drifts (ADR prose, backlog status, compat narrative, ADR numbering) where the documentation no longer matches shipped code; consolidated into one ledger instead of one tiny backlog file each.

@@ -1,6 +1,6 @@
 ---
 area: terminal
-status: active
+status: draft
 title: ADR-0122 deferred items (tty.setRawMode, literal ETX raw mode, terminal process-group ownership) have no backlog home
 created: 2026-06-13
 why: ADR-0122's Decision explicitly defers tty.setRawMode/literal-ETX-raw-mode/richer process-group ownership to 'future backlog', but none of these exist in docs/backlog and setRawMode/isRaw are absent from packages/ — a real, untracked deferral.

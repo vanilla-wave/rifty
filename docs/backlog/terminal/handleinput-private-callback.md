@@ -1,6 +1,6 @@
 ---
 area: terminal
-status: active
+status: draft
 title: Make RiftyTerminal.handleInput private + add onHandleInput callback
 created: 2026-06-08
 why: handleInput still public async (terminal.ts:104, TSDoc "production callers must not call this"); no test-observability callback; ~30 tests call it directly

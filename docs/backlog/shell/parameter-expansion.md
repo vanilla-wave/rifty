@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Shell parameter expansion (`${VAR:-default}`, `${#VAR}`, `${VAR%suf}` …)
 created: 2026-06-08
 why: only plain `${NAME}` supported; advanced POSIX forms throw from tokenizer

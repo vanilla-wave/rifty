@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: net
-status: blocked
+status: draft
 title: ADR-0093 — supersede ADR-0048 for end-to-end page<->worker ReadableStream (#22 fix b)
 created: 2026-06-08
 why: real page↔worker streaming overturns recorded M12/page-buffered deferral (ADR-0017 / ADR-0048 D2 / ADR-0055); bumps PREVIEW_PORT_FRAME_VERSION 2->3; REQUIRES a decision subagent

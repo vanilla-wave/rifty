@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: vite8 — prune dead esbuild/rollup shim overlays (phantom node_modules, version-drift, lying pass-through)
 created: 2026-06-21
 why: `overlayShims()` unconditionally writes phantom `node_modules/esbuild` (pass-through transform that returns input UNCHANGED; package version 0.21.5 ≠ the install override `@esbuild/wasi-preview1@0.28.0`) and `node_modules/rollup/dist/native.js` (parse returns an EMPTY ESTree Program) on every Vite boot — but Vite 8 depends on NEITHER (it transforms via oxc, parses via `rolldown/parseAst`). Dead today, but a latent silent-lie: a user/plugin `import 'esbuild'`/`require('rollup')` resolves to the LYING shim instead of MODULE_NOT_FOUND, the version drifts, and the overlay also overwrites lightningcss AFTER the lockfile (on-disk bytes ≠ recorded integrity).

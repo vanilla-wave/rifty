@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: M12 — AI-first IDE agent harness on Pi (pi-agent-core) over the rifty sandbox
 created: 2026-06-13
 why: build an in-browser AI coding agent for Node projects whose only external dep is an OpenAI-compatible endpoint; chosen over the opencode facade (whose tool layer needs native spawn — a browser ceiling)

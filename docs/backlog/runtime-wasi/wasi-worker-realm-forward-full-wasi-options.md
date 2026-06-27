@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: active
+status: draft
 title: Kernel-worker WASI run-path drops cwd+stdin; two run-paths diverge on ADR-0049 semantics with no parity guard
 created: 2026-06-13
 why: In-process runWasi forwards cwd+stdin+preopens but kernel-worker runWasiInWorker reconstructs WasiOptions by hand and omits cwd and stdin, so the worker path cannot satisfy esbuild (no cwd->fd3 hoist, no stdin transform) — the precise failures ADR-0049 documents as fixed — and no test pins worker-path parity, so the drift is invisible.

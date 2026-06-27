@@ -33,5 +33,8 @@ Decide, record, re-cut plan, continue, report after:
 
 Human reviews recorded decisions retrospectively — never a sync gate. (Confirm-first cases: `AGENTS.md` §Decisions.)
 
+## Backlog readiness (draft → ready)
+Items/epics are `draft` until refined. **Never implement from a draft** — first bring it to `ready` with the `rifty-refine` skill: deep analysis (code + ADRs + real Node behavior), grill the requester on scenarios until scope is sharp, resolve every fork (IRREVERSIBLE → ADR before `ready`, per the checklist above). `ready` = an implementer builds it whole: zero new decisions, zero new in-scope backlog items, the ADR (if any) already exists. A `ready` item carries Acceptance / Parity cases / Out-of-scope (loud-throw) / Decisions; a `ready` epic carries its Outcome (user value, mission-anchored) + end-to-end User scenario + enumerated Items. Closure = delete on done (git history is the record). Frontmatter shape + validation: `docs/backlog/README.md`.
+
 ## Always reversible (no logging)
 Naming, in-package file structure, internal helpers, doc wording, comments, test descriptions (not test logic — see AGENTS.md). Behavior-preserving contract-stable refactors/perf any size — CHANGELOG only.

@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: runWasi → kernel ProcessHandle dispatch wiring (ADR-0038 left as TODO)
 created: 2026-06-08
 why: ADR-0038 bridges runWasi to kernel spawnWorker so big WASI tools don't block the main thread, but the audit records the dispatch wiring was left as a TODO; keep as future runtime-wasi/kernel wiring work

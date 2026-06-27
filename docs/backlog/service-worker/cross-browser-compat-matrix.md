@@ -1,6 +1,6 @@
 ---
 area: service-worker
-status: parked
+status: draft
 title: browsers.md cross-browser capability/compat matrix (first cross-browser CI run)
 created: 2026-06-08
 why: docs/public/compat/README.md lists browsers.md as "coming with first cross-browser CI run"; the matrix and the run that generates it are both unfinished

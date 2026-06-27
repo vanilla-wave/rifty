@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: parked
+status: draft
 title: TS language service — encoded classification format knob
 created: 2026-06-24
 why: Monaco semantic tokens require TS 2020 encoded classifications, but raw TS defaults to Original format when no encoded format is passed

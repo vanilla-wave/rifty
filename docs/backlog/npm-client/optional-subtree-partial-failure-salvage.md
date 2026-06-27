@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Optional-subtree partial failure — salvage surviving required siblings vs npm atomic-rollback
 created: 2026-06-08
 why: rifty salvages surviving required siblings of a failed optional descendant; real npm rolls the whole optional subtree back atomically — an unpinned Node-parity divergence

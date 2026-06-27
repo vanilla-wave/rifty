@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Consumer Ready follow-up cutline
 created: 2026-06-12
 why: The current branch delivers a large adoption slice, but full Consumer Ready still has tracked future work across areas

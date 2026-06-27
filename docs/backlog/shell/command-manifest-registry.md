@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Shell command manifest registry for fidelity and tooling
 created: 2026-06-25
 why: Command names, implemented flags, loud ceilings, stdin modes, completion names, and future compat rows are not described by one source of truth.

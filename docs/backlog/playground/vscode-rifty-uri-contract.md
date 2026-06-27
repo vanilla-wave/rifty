@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: VS Code URI contract for rifty workspace files
 created: 2026-06-25
 why: VS Code services require URI-backed file identity, while the playground currently passes raw VFS paths through Monaco and TS-LS glue.

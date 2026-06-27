@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: active
+status: draft
 title: True backpressured MemoryVfs.openReadable (await drain) + 50 MiB heap-delta benchmark
 created: 2026-06-13
 why: MemoryVfs.openReadable pull() enqueues each chunk without awaiting any drain, so the TL;DR 'true backpressured streaming' overstates the memory backend; the heap-delta benchmark is also unbuilt.

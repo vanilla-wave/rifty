@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Background & / job control deferred (distinct from ADR-0089 cancellation)
 created: 2026-06-08
 why: Shell.run rejects bare & with NotImplementedError('shell.background'); true backgrounding needs a job model, not subsumed by ADR-0089's Ctrl-C cancellation contract

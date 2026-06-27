@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Re-anchor the per-milestone document/backlog review ritual after PROJECT_PLAN retires
 created: 2026-06-08
 why: PROJECT_PLAN's closing "living document / review-each-milestone" ritual loses its home when the file retires; the explicit per-milestone promote/rollback loop must re-anchor to ROADMAP/CLAUDE
