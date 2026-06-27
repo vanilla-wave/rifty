@@ -189,10 +189,17 @@ const GIT_INIT_CONFIG = `[core]
 \tignorecase = true
 `;
 
+const PROJECT_GITIGNORE = `node_modules/
+dist/
+.vite/
+*.log
+`;
+
 function initializedGitFiles(root: string): Record<string, string> {
   return {
     [`${root}/.git/HEAD`]: 'ref: refs/heads/main\n',
     [`${root}/.git/config`]: GIT_INIT_CONFIG,
+    [`${root}/.gitignore`]: PROJECT_GITIGNORE,
   };
 }
 

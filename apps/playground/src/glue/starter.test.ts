@@ -91,17 +91,23 @@ describe('seedFilesForStarter (starter, root)', () => {
 
       for (const preset of PRESETS) {
         const root = `/projects/${preset.id}`;
-        for (const [path, content] of Object.entries(
-          seedFilesForStarter(starterById(preset.id), root),
-        )) {
+        const files = seedFilesForStarter(starterById(preset.id), root);
+        expect(files[`${root}/.gitignore`]).toContain('node_modules/');
+        for (const [path, content] of Object.entries(files)) {
           await vfs.mkdir(dirname(path), { recursive: true });
           await vfs.writeFile(path, content);
         }
+        await vfs.mkdir(`${root}/node_modules/pkg`, { recursive: true });
+        await vfs.writeFile(`${root}/node_modules/pkg/index.js`, 'generated dependency\n');
+        await vfs.mkdir(`${root}/dist`, { recursive: true });
+        await vfs.writeFile(`${root}/dist/bundle.js`, 'generated build output\n');
 
         const sh = new Shell({ cwd: root });
         const status = await sh.run('git status --porcelain');
         expect(status.exitCode).toBe(0);
         expect(status.stderr).toBe('');
+        expect(status.stdout).not.toContain('node_modules/');
+        expect(status.stdout).not.toContain('dist/');
 
         const config = await sh.run('git config core.repositoryformatversion');
         expect(config.exitCode).toBe(0);
