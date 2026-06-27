@@ -78,6 +78,11 @@ describe('dev-server boot preview routing', () => {
       source.indexOf('loader.import(\n      cfg.runtimeSpecifier'),
     );
   });
+
+  it('loud-rejects user vite.config files before curated dev boot can ignore them', () => {
+    expect(source).toContain("import { assertNoUserViteConfig } from './vite-config-guard.ts'");
+    expect(source).toContain('assertNoUserViteConfig(root)');
+  });
 });
 
 describe('node-server runtime branch', () => {

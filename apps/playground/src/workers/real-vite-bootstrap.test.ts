@@ -17,6 +17,19 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
   });
 
+  it('passes browser HMR config to real vite .bin dev children', () => {
+    expect(source).toContain('const VITE_DEFAULT_DEV_PORT = 5173');
+    expect(source).toContain('RIFTY_VITE_CLI_HMR');
+    expect(source).toContain('RIFTY_VITE_CLI_PORT');
+    expect(source).toContain('withViteCliArgs');
+  });
+
+  it('forwards editor writes into the active real vite CLI child', () => {
+    expect(source).toContain('let activeViteDevChild');
+    expect(source).toContain("type: 'rifty:vite-file-change'");
+    expect(source).toContain('activeViteDevChild?.send');
+  });
+
   it('accepts VFS write frames over the kernel worker IPC channel', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
@@ -30,16 +43,33 @@ describe('real Vite bootstrap preview routing', () => {
   });
 });
 
-describe('vite command — production build/preview routing', () => {
-  it('routes `vite build`/`preview` to real handlers while optimize still loud-rejects', () => {
-    expect(source).toContain('rejectProductionCommandForVite8');
-    expect(source).toContain('upstream-blocked for the vite8 preset');
-    expect(source).toContain("if (sub === 'build')");
-    expect(source).toContain('return runBuild(ctx);');
-    expect(source).toContain("if (sub === 'preview')");
-    expect(source).toContain('return runPreview(ctx);');
-    expect(source).toContain("if (sub === 'optimize')");
-    expect(source).toContain('is not supported yet');
+describe('vite command — real installed bin routing', () => {
+  it('does not register an owner vite command that would shadow node_modules/.bin/vite', () => {
+    expect(source).not.toContain("shell.registerCommand('vite'");
+    expect(source).not.toContain('classifyViteCommand');
+    expect(source).toContain('createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl');
+    expect(source).toContain("binNameOf(req.shimPath) === 'vite'");
+  });
+
+  it('mirrors server-capable non-vite bins into the preview registry', () => {
+    expect(source).toContain('const binPreviewSids = new WeakMap<object, string>()');
+    expect(source).toContain('previews.addNode(sid, message.ports)');
+    expect(source).toContain('previews.removeBySid(sid)');
+  });
+
+  it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
+    expect(source).toContain('const runPackageScript = async');
+    expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
+    expect(source).toContain('const result = await scriptShell.run(command');
+    expect(source).not.toContain('only the dev line boots the co-resident server');
+  });
+
+  it('waits for preset dev-config dependency restore before running the next pty command', () => {
+    expect(source).toContain('let devConfigReady: Promise<void> = Promise.resolve()');
+    expect(source).toContain('devConfigReady = prepareActiveDevConfigDeps()');
+    expect(source).toContain("if (frame.type === 'pty:exec')");
+    expect(source).toContain('void devConfigReady.then(() => server.handleFrame(frame))');
   });
 });
 

@@ -3,6 +3,7 @@ import {
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
+  runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
@@ -53,8 +54,7 @@ test.describe('Vite 7 production build/preview', () => {
     await expectTerminalContains(page, '[vite] dev server ready on port 5174', 90_000);
 
     await openShellTerminal(page);
-    await runTerminalLine(page, 'vite build');
-    await expectTerminalContains(page, '[vite] production build complete', 120_000);
+    await runTerminalLineSettled(page, 'vite build', 120_000);
 
     await runTerminalLine(page, 'cat dist/index.html');
     await expectTerminalContains(page, /assets\/index-[^"]+\.js/, 20_000);

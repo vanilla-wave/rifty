@@ -15,7 +15,7 @@
  * unit tests drive a fake handle — the real Worker is an e2e-only boundary.
  */
 
-import type { BinExecutor } from '@riftydev/shell';
+import type { BinExecutor, CommandContext } from '@riftydev/shell';
 import { runForegroundChild } from './run-foreground-child.ts';
 
 /** Read-side of a worker stdio stream (subset of `@riftydev/io` `Readable`). */
@@ -34,6 +34,7 @@ export interface BinWorkerHandle {
   stderr(): BinReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  send?(message: unknown): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -49,6 +50,14 @@ export interface BinSpawnRequest {
 export interface BinExecutorDeps {
   /** Spawns the node-entry worker for the shim and returns its handle. */
   readonly spawn: (req: BinSpawnRequest) => BinWorkerHandle;
+  /** Optional lifecycle hook for owners that mirror server-capable bins into UI state. */
+  readonly onStart?: (req: BinSpawnRequest, ctx: CommandContext) => void;
+  /** Optional child handle hook for owners that need to send control messages. */
+  readonly onSpawn?: (req: BinSpawnRequest, handle: BinWorkerHandle, ctx: CommandContext) => void;
+  /** Optional child→owner IPC hook (e.g. listened ports from server-capable bins). */
+  readonly onMessage?: (req: BinSpawnRequest, message: unknown, ctx: CommandContext) => void;
+  /** Optional exit hook (runs before the executor promise resolves). */
+  readonly onExit?: (req: BinSpawnRequest, ctx: CommandContext) => void;
 }
 
 /** Build a {@link BinExecutor} over an injected node-entry worker spawn. */
@@ -62,9 +71,15 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     // removed mid-flight surfaces there as a loud worker error (exit 1 + stderr),
     // never a silent 0. Foreground machinery (decode + stream + Ctrl+C kill/mute
     // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
-    // the owner `node <file>` executor via run-foreground-child — a bin child is
-    // run-to-completion, so it wires no `onMessage`/`onExit`.
-    const handle = deps.spawn({ shimPath: binPath, args, env: ctx.env, cwd: ctx.cwd });
-    return runForegroundChild(handle, ctx);
+    // the owner `node <file>` executor via run-foreground-child. Server-capable
+    // bins can also surface child IPC through the optional hooks.
+    const req: BinSpawnRequest = { shimPath: binPath, args, env: ctx.env, cwd: ctx.cwd };
+    deps.onStart?.(req, ctx);
+    const handle = deps.spawn(req);
+    deps.onSpawn?.(req, handle, ctx);
+    return runForegroundChild(handle, ctx, {
+      onMessage: deps.onMessage ? (message) => deps.onMessage?.(req, message, ctx) : undefined,
+      onExit: deps.onExit ? () => deps.onExit?.(req, ctx) : undefined,
+    });
   };
 }

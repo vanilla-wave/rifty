@@ -40,6 +40,82 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.exit).not.toHaveBeenCalled();
   });
 
+  it('server whose entry stays pending after listen still posts ports', async () => {
+    const d = deps({
+      runEntry: vi.fn(() => new Promise<void>(() => {})),
+      listPorts: vi.fn(() => [5174]),
+    });
+    await runNodeProgramLifecycle(d);
+    expect(d.servePreview).toHaveBeenCalledWith(5174);
+    expect(d.postListening).toHaveBeenCalledWith([5174]);
+    expect(d.awaitDrain).not.toHaveBeenCalled();
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  it('pending entry without a port keeps polling instead of exiting', async () => {
+    let waits = 0;
+    const d = deps({
+      runEntry: vi.fn(() => new Promise<void>(() => {})),
+      listPorts: vi.fn(() => []),
+      wait: vi.fn(async () => {
+        waits++;
+        if (waits === 2) throw new Error('stop polling');
+      }),
+    });
+    await expect(runNodeProgramLifecycle(d)).rejects.toThrow('stop polling');
+    expect(d.awaitDrain).not.toHaveBeenCalled();
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  it('returned entry with a pending drain can still become a server on a later listen', async () => {
+    let polls = 0;
+    const d = deps({
+      runEntry: vi.fn(async () => {}),
+      listPorts: vi.fn(() => (polls > 0 ? [5174] : [])),
+      awaitDrain: vi.fn(() => new Promise<void>(() => {})),
+      wait: vi.fn(async () => {
+        polls += 1;
+      }),
+    });
+    await runNodeProgramLifecycle(d);
+    expect(d.awaitDrain).toHaveBeenCalledOnce();
+    expect(d.servePreview).toHaveBeenCalledWith(5174);
+    expect(d.postListening).toHaveBeenCalledWith([5174]);
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  it('late-listen polling unrefs its own timer so it does not hold the drain open', async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const unref = vi.fn();
+    const timers: Array<() => void> = [];
+    const timerStub = ((callback: unknown) => {
+      timers.push(() => {
+        if (typeof callback === 'function') callback();
+      });
+      return { unref };
+    }) as unknown as typeof setTimeout;
+    vi.stubGlobal('setTimeout', timerStub);
+    try {
+      let polls = 0;
+      const d = deps({
+        runEntry: vi.fn(async () => {}),
+        listPorts: vi.fn(() => (polls > 0 ? [5174] : [])),
+        awaitDrain: vi.fn(() => new Promise<void>(() => {})),
+      });
+      const run = runNodeProgramLifecycle(d);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(unref).toHaveBeenCalledOnce();
+      polls = 1;
+      timers.shift()?.();
+      await run;
+      expect(d.servePreview).toHaveBeenCalledWith(5174);
+      expect(d.exit).not.toHaveBeenCalled();
+    } finally {
+      vi.stubGlobal('setTimeout', originalSetTimeout);
+    }
+  });
+
   it('entry process.exit code propagates (drain + preview skipped)', async () => {
     const err = Object.assign(new Error('x'), { code: 'RIFTY_PROCESS_EXIT', exitCode: 3 });
     const d = deps({

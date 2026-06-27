@@ -16,8 +16,17 @@ describe('Vite build/preview shim overlay', () => {
     expect(source).toContain("html.includes('.assets/')");
   });
 
-  it('passes esbuild supported feature flags through to the WASI transform', () => {
-    expect(source).toContain('supported: options.supported,');
-    expect(source).not.toContain('esbuild.transform.supported.');
+  it('installs the shared esbuild WASI transform bridge before Vite imports esbuild', () => {
+    expect(source).toContain(
+      "import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts'",
+    );
+    expect(source.indexOf('installEsbuildTransformBridge(root)')).toBeLessThan(
+      source.indexOf("loader.import('vite'"),
+    );
+  });
+
+  it('loud-rejects user vite.config files before curated build/preview can ignore them', () => {
+    expect(source).toContain("import { assertNoUserViteConfig } from './vite-config-guard.ts'");
+    expect(source.split('assertNoUserViteConfig(root)').length - 1).toBe(2);
   });
 });

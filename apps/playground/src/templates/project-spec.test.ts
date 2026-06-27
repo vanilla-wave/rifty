@@ -198,8 +198,10 @@ describe('vite8 opt-in preset', () => {
 });
 
 describe('terminal dev command derivation', () => {
-  it("boots vite templates with the visible 'vite' command", () => {
-    expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe('vite');
+  it('boots vite templates through the real vite CLI pinned to the template port', () => {
+    expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe(
+      'vite --host 0.0.0.0 --strictPort --port 5174',
+    );
   });
 
   it("boots node-server templates through 'npm run dev' pinned to the project root", () => {

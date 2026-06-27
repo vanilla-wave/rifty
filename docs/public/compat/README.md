@@ -17,6 +17,7 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - [zlib.md](./zlib.md) — `node:zlib` web-compression-backed async subset (ADR-0159)
 - [ts-language-service.md](./ts-language-service.md) — in-browser `ts.LanguageService` over the VFS (`@riftydev/ts-language-service`, ADR-0166)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
+- [vite-command.md](./vite-command.md) — playground `vite` command through the installed `.bin` CLI (ADR-0174)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal `node <file>` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@riftydev/runtime-wasi`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

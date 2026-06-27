@@ -38,6 +38,11 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
+import {
+  type ViteDevServerWithModuleGraph,
+  invalidateViteModule,
+} from './real-vite-invalidation.ts';
+import { type ViteCliMode, type ViteCliPrepareOptions, prepareViteCli } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -73,6 +78,67 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
   installRemoteSyncFs(syncApi.call);
 }
 
+declare global {
+  // Set by the generated Vite CLI config wrapper's configureServer hook.
+  // eslint-disable-next-line no-var
+  var __riftyActiveViteServer: ViteDevServerWithModuleGraph | undefined;
+}
+
+interface ViteFileChangeMessage {
+  readonly type: 'rifty:vite-file-change';
+  readonly path: string;
+}
+
+function isViteFileChangeMessage(message: unknown): message is ViteFileChangeMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as { readonly type?: unknown; readonly path?: unknown };
+  return candidate.type === 'rifty:vite-file-change' && typeof candidate.path === 'string';
+}
+
+function installViteFileChangeBridge(): void {
+  proc.on?.('message', (message: unknown) => {
+    if (!isViteFileChangeMessage(message)) return;
+    const server = globalThis.__riftyActiveViteServer;
+    if (server) invalidateViteModule(server, message.path);
+  });
+}
+
+function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
+  return value === 'dev' || value === 'build' || value === 'preview' || value === 'run'
+    ? value
+    : null;
+}
+
+function parsePort(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
+}
+
+function viteCliPrepareOptionsFromEnv(
+  env: Record<string, string | undefined>,
+): ViteCliPrepareOptions {
+  const port = parsePort(env.RIFTY_VITE_CLI_PORT);
+  const userConfigPath = env.RIFTY_VITE_CLI_USER_CONFIG;
+  return {
+    ...(port === null
+      ? {}
+      : {
+          hmr: {
+            enabled: env.RIFTY_VITE_CLI_HMR === '1',
+            port,
+          },
+        }),
+    ...(userConfigPath ? { userConfigPath } : {}),
+  };
+}
+
+const viteCliMode = viteCliModeFromEnv(proc.env.RIFTY_VITE_CLI_MODE);
+if (viteCliMode !== null) {
+  await prepareViteCli(proc.cwd(), viteCliMode, viteCliPrepareOptionsFromEnv(proc.env));
+  if (viteCliMode === 'dev') installViteFileChangeBridge();
+}
+
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
 // builtins are registered unconditionally here — http/net are needed both for
@@ -101,7 +167,13 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
   // backlog/kernel/worker-per-process-residuals + terminal/raw-stdin-deferred-items.
   installLoudStdin(proc);
   await runNodeProgramLifecycle({
-    runEntry: () => runNodeEntry({ vfs: syncMirror(), entryPath, cwd: proc.cwd(), bin: false }),
+    runEntry: () =>
+      runNodeEntry({
+        vfs: syncMirror(),
+        entryPath,
+        cwd: proc.cwd(),
+        bin: proc.env.RIFTY_BIN === '1',
+      }),
     listPorts: () => listPorts(),
     awaitDrain: () => awaitDrain(),
     servePreview: (port) =>

@@ -198,8 +198,74 @@ export function transformSync(_input, _options = {}) {
   throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
 }
 
-export async function build(_opts) {
-  throw new NotImplementedError('esbuild.build', 'use vite build with the transform bridge');
+function loaderForPath(path) {
+  if (/\\.tsx$/i.test(path)) return 'tsx';
+  if (/\\.ts$/i.test(path)) return 'ts';
+  if (/\\.jsx$/i.test(path)) return 'jsx';
+  return 'js';
+}
+
+function firstEntryPoint(opts) {
+  if (!Array.isArray(opts.entryPoints) || opts.entryPoints.length !== 1 || typeof opts.entryPoints[0] !== 'string') {
+    throw new NotImplementedError('esbuild.build.entryPoints', 'rifty config bundling supports one string entry point');
+  }
+  return opts.entryPoints[0];
+}
+
+async function loadEntryThroughPlugins(opts, entry) {
+  const onLoad = [];
+  const api = {
+    onResolve() {
+      // The minimal config bridge does not traverse imports. Vite's own
+      // externalize plugin may register resolvers; they are relevant only if a
+      // config imports extra modules, which remains a loud gap below.
+    },
+    onLoad(options, callback) {
+      onLoad.push({ filter: options && options.filter, callback });
+    },
+  };
+  for (const plugin of opts.plugins || []) {
+    if (plugin && typeof plugin.setup === 'function') plugin.setup(api);
+  }
+  for (const hook of onLoad) {
+    if (hook.filter && !hook.filter.test(entry)) continue;
+    const loaded = await hook.callback({ path: entry, namespace: 'file', pluginData: undefined });
+    if (loaded) {
+      return {
+        contents: typeof loaded.contents === 'string' ? loaded.contents : decodeInput(loaded.contents || ''),
+        loader: loaded.loader || loaderForPath(entry),
+      };
+    }
+  }
+  throw new NotImplementedError('esbuild.build.onLoad', 'rifty config bundling needs an onLoad result for the entry');
+}
+
+export async function build(opts = {}) {
+  if (opts.write !== false) {
+    throw new NotImplementedError('esbuild.build.write', 'rifty config bundling supports write:false only');
+  }
+  const entry = firstEntryPoint(opts);
+  const loaded = await loadEntryThroughPlugins(opts, entry);
+  const result = await transformBridge()(loaded.contents, {
+    loader: loaded.loader,
+    format: opts.format || 'esm',
+    target: Array.isArray(opts.target) ? opts.target.join(',') : opts.target,
+    sourcemap: opts.sourcemap,
+  });
+  const text = result.code;
+  return {
+    errors: [],
+    warnings: result.warnings || [],
+    outputFiles: [
+      {
+        path: opts.outfile || '<stdout>',
+        contents: new TextEncoder().encode(text),
+        text,
+      },
+    ],
+    metafile: opts.metafile ? { inputs: { [entry]: {} }, outputs: {} } : undefined,
+    mangleCache: undefined,
+  };
 }
 
 export function buildSync(_opts) {

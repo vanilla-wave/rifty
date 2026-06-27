@@ -148,29 +148,24 @@ export function devScriptCommand(spec: ProjectSpec): string {
 
 /**
  * Is `name` one of the spec's lifecycle-owning dev-line script aliases (the keys
- * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? The page realm boots
- * the co-resident dev server ONLY for these names; any other `npm run <script>`
- * (e.g. `build`/`lint`) is not yet routed and must loud-reject rather than
- * silently boot dev. Matched by NAME, not command string: the on-disk
- * package.json command can lag the active preset (a preset switch updates the
- * owner's spec before the tree's package.json is re-seeded, so `npm run dev` on a
- * node preset may still read a stale `vite` command) — but the dev-line NAME is
- * stable, and `runDevServer` boots the owner's CURRENT runtime regardless.
- * TODO(backlog: shell/node-modules-bin-execution)
+ * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? Node-server dev
+ * aliases still use the lifecycle-owned preview path. Vite aliases run through
+ * the real shell/bin path, so the script body is the source of truth.
  */
 export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
   return Object.hasOwn(projectScripts(spec), name);
 }
 
 /**
- * The visible terminal line the playground runs to boot a template — the
- * lifecycle-owning `vite` command for vite templates, `npm run dev` (resolved
- * through the seeded package.json script) for node servers. The node line is
- * `cd <root> && …`-pinned: `npm run` reads package.json from the SESSION cwd,
- * and the auto-boot session may have a persisted/user cwd outside the project.
+ * The visible terminal line the playground runs to boot a template — the real
+ * `vite` CLI with template port flags for vite templates, `npm run dev`
+ * (resolved through the seeded package.json script) for node servers. The node
+ * line is `cd <root> && …`-pinned: `npm run` reads package.json from the
+ * SESSION cwd, and the auto-boot session may have a persisted/user cwd outside
+ * the project.
  */
 export function terminalDevLine(spec: ProjectSpec, root: string): string {
-  if (spec.runtime === 'vite') return 'vite';
+  if (spec.runtime === 'vite') return `vite --host 0.0.0.0 --strictPort --port ${spec.defaultPort}`;
   return `cd ${root} && npm run dev`;
 }
 

@@ -1,11 +1,10 @@
 import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import { runWasi } from '@riftydev/runtime-wasi';
-import { transformWithEsbuild } from '@riftydev/shadow-registry/esbuild-transform';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import esbuildWasmUrl from '../../../../tools/shadow-registry/vendor/esbuild-wasi-preview1/esbuild.wasm?url';
 import { viteBuildShimFiles } from '../glue/esbuild-shim.ts';
+import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -71,48 +70,6 @@ function installCreateRequire(loader: Loader, root: string): void {
   globalThis.process.env.PWD = root;
 }
 
-function loaderFor(v: string | undefined): 'js' | 'jsx' | 'ts' | 'tsx' {
-  return v === 'jsx' || v === 'ts' || v === 'tsx' ? v : 'js';
-}
-
-function formatFor(v: string | undefined): 'esm' | 'cjs' | 'iife' | undefined {
-  return v === 'cjs' || v === 'iife' || v === 'esm' ? v : undefined;
-}
-
-function sourcemapFor(v: boolean | string | undefined): 'inline' | 'external' | undefined {
-  if (v === 'inline') return 'inline';
-  if (v === true || v === 'external' || v === 'both') return 'external';
-  return undefined;
-}
-
-function targetFor(v: string | readonly string[] | undefined): string | undefined {
-  if (typeof v === 'string') return v;
-  return Array.isArray(v) ? v.join(',') : undefined;
-}
-
-async function installEsbuildBridge(root: string): Promise<void> {
-  const response = await fetch(esbuildWasmUrl);
-  if (!response.ok) {
-    throw new Error(`esbuild WASI binary fetch failed: HTTP ${response.status}`);
-  }
-  const wasm = await response.arrayBuffer();
-  globalThis.__riftyEsbuildTransform = async (source, options = {}) =>
-    transformWithEsbuild(runWasi, wasm, {
-      source: typeof source === 'string' ? source : dec.decode(source),
-      workspace: root,
-      loader: loaderFor(options.loader),
-      jsx:
-        options.jsx === 'transform' || options.jsx === 'preserve' || options.jsx === 'automatic'
-          ? options.jsx
-          : undefined,
-      format: formatFor(options.format),
-      target: targetFor(options.target),
-      minify: options.minify,
-      sourcemap: sourcemapFor(options.sourcemap),
-      supported: options.supported,
-    });
-}
-
 export async function flushSyncMirror(): Promise<void> {
   const mirror = syncMirror() as { flush?: () => Promise<void> };
   if (typeof mirror.flush === 'function') await mirror.flush();
@@ -138,8 +95,9 @@ export async function bootBuild(opts: {
   readonly log: (chunk: string) => void;
 }): Promise<void> {
   const { root, log } = opts;
+  assertNoUserViteConfig(root);
   overlayBuildShims(root);
-  await installEsbuildBridge(root);
+  installEsbuildTransformBridge(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
 
@@ -166,6 +124,7 @@ export async function bootPreview(opts: {
   readonly log: (chunk: string) => void;
 }): Promise<{ readonly port: number; stop(): Promise<void> }> {
   const { root, port, log } = opts;
+  assertNoUserViteConfig(root);
   assertBuiltDist(root);
   overlayBuildShims(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });

@@ -11,7 +11,7 @@
  *
  * The common head (runtime globals, VFS bridges, seed, npm install, module
  * loader) is template-agnostic; the tail dispatches on the template's runtime:
- * - `'vite'` — import the dev-server package and boot it (HMR bridge, shims).
+ * - `'vite'` — run the installed `.bin/vite` CLI in a child (UI mirrors ports).
  * - `'node-server'` — run the ENTRY itself as a long-running server program
  *   (optionally bringing up the `node:sqlite` WASM engine first).
  *
@@ -36,10 +36,12 @@ import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { type CommandContext, Shell } from '@riftydev/shell';
+import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
+import type { BinWorkerHandle } from '../glue/bin-executor.ts';
 import { installStampSatisfied } from '../glue/install-stamp.ts';
+import { type NodeChildMessage, isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
@@ -78,9 +80,9 @@ import { resolveNodeEntry } from './node-entry-resolve.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
-import { createOwnerChildViteCommand } from './owner-child-vite-command.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
+import type { ViteCliMode } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -88,8 +90,9 @@ import {
 } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
-const VITE_PREVIEW_PORT = 4173;
 const dec = new TextDecoder();
+const VITE_DEFAULT_DEV_PORT = 5173;
+const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -208,6 +211,106 @@ function seedTemplateNodeModulesFiles(cfg: BootstrapConfig): void {
   }
 }
 
+function binNameOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
+function viteCliMode(args: readonly string[]): ViteCliMode {
+  if (args.some((arg) => arg === '--help' || arg === '-h' || arg === '--version' || arg === '-v')) {
+    return 'run';
+  }
+  const sub = args.find((arg) => !arg.startsWith('-'));
+  if (sub === 'build') return 'build';
+  if (sub === 'preview') return 'preview';
+  if (sub === 'optimize') return 'run';
+  return 'dev';
+}
+
+function parsePositivePort(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
+}
+
+function viteCliPort(args: readonly string[], fallback: number): number {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--port' || arg === '-p') return parsePositivePort(args[i + 1]) ?? fallback;
+    if (arg.startsWith('--port='))
+      return parsePositivePort(arg.slice('--port='.length)) ?? fallback;
+  }
+  return fallback;
+}
+
+function viteConfigArg(args: readonly string[]): string | null {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--config' || arg === '-c') return args[i + 1] ?? null;
+    if (arg.startsWith('--config=')) return arg.slice('--config='.length);
+  }
+  return null;
+}
+
+function withoutViteConfigArgs(args: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--config' || arg === '-c') {
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--config=')) continue;
+    out.push(arg);
+  }
+  return out;
+}
+
+function resolveCliPath(cwd: string, path: string): string {
+  return normalizePath(path.startsWith('/') ? path : `${cwd}/${path}`);
+}
+
+function withViteCliArgs(binPath: string, args: readonly string[], ctx: CommandContext): string[] {
+  if (binNameOf(binPath) !== 'vite' || viteCliMode(args) !== 'dev') return [...args];
+  return [
+    ...withoutViteConfigArgs(args),
+    '--config',
+    normalizePath(`${ctx.cwd}/${VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH}`),
+  ];
+}
+
+function withViteCliEnv(
+  binPath: string,
+  args: readonly string[],
+  ctx: CommandContext,
+  opts?: {
+    readonly hmrEnabled: boolean;
+    readonly port: number;
+  },
+): CommandContext {
+  if (binNameOf(binPath) !== 'vite') return ctx;
+  const mode = viteCliMode(args);
+  const userConfigPath = viteConfigArg(args);
+  return {
+    ...ctx,
+    env: {
+      ...ctx.env,
+      RIFTY_VITE_CLI_MODE: mode,
+      ...(mode === 'dev' && opts
+        ? {
+            RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
+            RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
+            ...(userConfigPath === null
+              ? {}
+              : { RIFTY_VITE_CLI_USER_CONFIG: resolveCliPath(ctx.cwd, userConfigPath) }),
+          }
+        : {}),
+    },
+  };
+}
+
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
@@ -278,9 +381,9 @@ async function bootShellOwner(opts: {
     }
   }
 
-  // Multi-port preview registry (ADR-0155): one set of previewable ports — the
-  // co-resident dev server's slot (mirrored in `send` above) + each running
-  // `node <file>` server.
+  // Multi-port preview registry (ADR-0155/0174): one set of previewable ports —
+  // the co-resident dev server's slot (mirrored in `send` above), real
+  // `vite preview`, plus each running `node <file>` / server-capable `.bin`.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
 
   // The persistent owner is spawned once with the default template; a preset
@@ -292,6 +395,21 @@ async function bootShellOwner(opts: {
   let devFromScratch = fromScratch;
   let lastDevTemplateId: string | null = null;
   let lastDevRoot: string | null = null;
+  let devConfigReady: Promise<void> = Promise.resolve();
+
+  async function prepareActiveDevConfigDeps(): Promise<void> {
+    try {
+      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+      seedTemplateNodeModulesFiles(devCfg);
+      publishSnapshot();
+    } catch (err) {
+      log(
+        `[shell-owner/worker] dev config dependency restore failed: ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
 
   // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
@@ -369,31 +487,108 @@ async function bootShellOwner(opts: {
     },
   });
 
+  let activeViteDevChild: BinWorkerHandle | null = null;
   // Editor writes land via the vfs-write bridge; forward them to the running dev
   // server's HMR (the virtual FS fires no real watcher events) + republish.
   const onVfsWrite = (path: string): void => {
     publishSnapshot();
     devServer.notifyFileChanged(path);
+    activeViteDevChild?.send?.({ type: 'rifty:vite-file-change', path });
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
 
   const vfs = new SyncMirrorVfs();
   const registry = createProxiedRegistryClient();
-  // ADR-0150: each foreground CLI runs in a supervised child worker-process
-  // (RIFTY_REMOTE_FS=1) reading the owner store over fs.* sync-RPC — the owner
-  // stays a free async supervisor (blocking work left it). The in-realm
-  // createOwnerBinExecutor stays as a documented fallback (owner-bin-executor.ts).
-  const ownerBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl);
+  let vitePreviewActive = false;
+  let binRunSeq = 0;
+  const binPreviewSids = new WeakMap<object, string>();
+  const onViteListening = (
+    req: { readonly args: readonly string[] },
+    message: NodeChildMessage,
+    ctx: CommandContext,
+  ) => {
+    const firstPort = message.ports[0];
+    if (firstPort === undefined) return;
+    const mode = viteCliMode(req.args);
+    if (mode === 'preview') {
+      vitePreviewActive = true;
+      previews.setPreview(firstPort);
+      ctx.stdout.write(`[vite] preview ready on port ${firstPort}\n`);
+      return;
+    }
+    if (mode === 'dev') {
+      ctx.stdout.write(`[vite] dev server ready on port ${firstPort}\n`);
+      send({
+        type: 'pty:dev-server',
+        status: 'running',
+        port: firstPort,
+        url: `/preview/${firstPort}/`,
+      });
+    }
+  };
+  // ADR-0174: each foreground CLI runs as a server-capable supervised child over
+  // the real `.bin` shim. For `vite` we only mirror lifecycle/preview state; the
+  // installed CLI owns command parsing, config loading, dev/build/preview behavior.
+  const childBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl, {
+    onStart: (req, ctx) => {
+      const name = binNameOf(req.shimPath);
+      if (name !== 'vite') binPreviewSids.set(req, `bin-${++binRunSeq}`);
+      if (name === 'vite' && viteCliMode(req.args) === 'dev') {
+        const port = parsePositivePort(req.env.RIFTY_VITE_CLI_PORT) ?? devCfg.port;
+        ctx.stdout.write(`[real-vite/worker] starting dev server on port ${port}...\n`);
+        send({ type: 'pty:dev-server', status: 'starting' });
+      }
+    },
+    onSpawn: (req, handle) => {
+      if (binNameOf(req.shimPath) === 'vite' && viteCliMode(req.args) === 'dev') {
+        activeViteDevChild = handle;
+      }
+    },
+    onMessage: (req, message, ctx) => {
+      if (!isNodeChildMessage(message)) return;
+      if (binNameOf(req.shimPath) === 'vite') {
+        onViteListening(req, message, ctx);
+        return;
+      }
+      const sid = binPreviewSids.get(req);
+      if (sid !== undefined) previews.addNode(sid, message.ports);
+    },
+    onExit: (req) => {
+      const sid = binPreviewSids.get(req);
+      if (sid !== undefined) previews.removeBySid(sid);
+      if (binNameOf(req.shimPath) !== 'vite') return;
+      const mode = viteCliMode(req.args);
+      if (mode === 'dev') {
+        activeViteDevChild = null;
+        send({ type: 'pty:dev-server', status: 'stopped' });
+      }
+      if (mode === 'preview' && vitePreviewActive) {
+        vitePreviewActive = false;
+        previews.clearPreview();
+      }
+    },
+  });
+  const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
+    const viteArgs = withViteCliArgs(binPath, args, ctx);
+    const viteCtx = withViteCliEnv(
+      binPath,
+      args,
+      ctx,
+      devCfg.runtime === 'vite'
+        ? {
+            hmrEnabled: devCfg.hmrEnabled,
+            port: VITE_DEFAULT_DEV_PORT,
+          }
+        : undefined,
+    );
+    return childBinExecutor(binPath, viteArgs, viteCtx);
+  };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
   const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl, {
     // Thread the recursive worker URLs so the dev-server child can spawn
     // Rolldown's WASI worker_threads pool (Vite 8).
-    kernelWorkerUrl: opts.kernelWorkerUrl,
-    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
-  });
-  const viteCommand = createOwnerChildViteCommand(opts.devServerWorkerUrl, {
     kernelWorkerUrl: opts.kernelWorkerUrl,
     nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
   });
@@ -419,78 +614,6 @@ async function bootShellOwner(opts: {
     }
   };
 
-  const rejectProductionCommandForVite8 = (sub: string, ctx: CommandContext): boolean => {
-    if (devSpec.id !== 'vite8') return false;
-    ctx.stderr.write(
-      `vite: \`vite ${sub}\` is upstream-blocked for the vite8 preset (Rolldown WASI build/preview); use the default Vite 7 preset for production build/preview.\n`,
-    );
-    return true;
-  };
-
-  const rejectUnsupportedViteArgs = (
-    sub: string,
-    args: readonly string[],
-    ctx: CommandContext,
-  ): boolean => {
-    if (args.length <= 1) return false;
-    ctx.stderr.write(
-      `vite: \`vite ${sub}\` arguments are not supported in rifty yet; run exactly \`vite ${sub}\`.\n`,
-    );
-    return true;
-  };
-
-  const viteChildParams = (port: number) => ({
-    templateId: devSpec.id,
-    slug: devSlug,
-    setup: devFromScratch ? ('from-scratch' as const) : ('instant' as const),
-    root: devCfg.root,
-    port,
-  });
-
-  const runBuild = async (ctx: CommandContext): Promise<number> => {
-    if (rejectProductionCommandForVite8('build', ctx)) return 1;
-    const code = await viteCommand.build(viteChildParams(devCfg.port), ctx);
-    if (code === 0) {
-      await flushSyncMirror();
-      publishSnapshot();
-    }
-    return code;
-  };
-
-  const runPreview = async (ctx: CommandContext): Promise<number> => {
-    if (rejectProductionCommandForVite8('preview', ctx)) return 1;
-    const code = await viteCommand.preview(viteChildParams(VITE_PREVIEW_PORT), ctx, {
-      onReady: (previewPort) => previews.setPreview(previewPort),
-      onExit: () => previews.clearPreview(),
-    });
-    return ctx.signal?.aborted ? 130 : code;
-  };
-
-  const npmCommand = createNpmShellCommand({
-    vfs,
-    registry,
-    flush: flushSyncMirror,
-    // Stamp the install for the CURRENT project slug (same key the dev-server
-    // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
-    // this tree — otherwise the arrival re-runs and replaces node_modules,
-    // dropping the user's `npm install` (ADR-0135).
-    projectSlug: () => devSlug,
-    // Only the spec's lifecycle-owning dev-line NAME (dev/vite/start) boots the
-    // co-resident dev server. Arbitrary `npm run <script>` (e.g. `build`/`lint`)
-    // is not yet routed through a real node_modules/.bin exec; loud-reject it
-    // rather than silently boot dev. Matched by NAME, not command: a preset
-    // switch updates `devSpec` before the tree's package.json is re-seeded, so the
-    // on-disk `dev` command can be stale (vite on a node preset) while the dev line
-    // must still boot the owner's CURRENT runtime. TODO(backlog: shell/node-modules-bin-execution)
-    runScript: (name, command, ctx) => {
-      if (isDevScriptName(devSpec, name)) return runDevServer(ctx);
-      ctx.stderr.write(
-        `npm: \`npm run ${name}\` (\`${command}\`) is not supported yet; only the dev line boots the co-resident server\n`,
-      );
-      return Promise.resolve(1);
-    },
-  });
-
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
@@ -501,6 +624,46 @@ async function bootShellOwner(opts: {
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
       env: seed?.env ?? {},
       execBin: ownerBinExecutor,
+    });
+    const runPackageScript = async (
+      name: string,
+      command: string,
+      ctx: CommandContext,
+    ): Promise<number> => {
+      // Node-server dev aliases still drive the lifecycle-owned preview state.
+      // Vite scripts run through the real shell/bin path so `npm run vite` is as
+      // honest as typing `vite` directly.
+      if (devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)) {
+        return runDevServer(ctx);
+      }
+      const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env });
+      try {
+        const result = await scriptShell.run(command, {
+          onChunk: (chunk, stream) => {
+            if (stream === 'stdout') ctx.stdout.write(chunk);
+            else ctx.stderr.write(chunk);
+          },
+          signal: ctx.signal,
+          isTTY: ctx.isTTY,
+          cols: ctx.cols,
+          rows: ctx.rows,
+          stdin: ctx.stdin,
+        });
+        return result.exitCode;
+      } finally {
+        scriptShell.dispose();
+      }
+    };
+    const npmCommand = createNpmShellCommand({
+      vfs,
+      registry,
+      flush: flushSyncMirror,
+      // Stamp the install for the CURRENT project slug (same key the dev-server
+      // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
+      // this tree — otherwise the arrival re-runs and replaces node_modules,
+      // dropping the user's `npm install` (ADR-0135).
+      projectSlug: () => devSlug,
+      runScript: runPackageScript,
     });
     shell.registerCommand('npm', async (args, ctx) => {
       // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
@@ -524,28 +687,6 @@ async function bootShellOwner(opts: {
       const code = await npmCommand(args, ctx);
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
-    });
-    // ADR-0173: Vite 7 build/preview use real production handlers. Vite 8
-    // production remains loud-rejected in rejectProductionCommandForVite8();
-    // optimize stays out of scope for both templates.
-    // TODO(backlog: playground/vite8-production-build-preview)
-    shell.registerCommand('vite', (args, ctx) => {
-      const sub = args[0];
-      if (sub === 'build') {
-        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
-        return runBuild(ctx);
-      }
-      if (sub === 'preview') {
-        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
-        return runPreview(ctx);
-      }
-      if (sub === 'optimize') {
-        ctx.stderr.write(
-          `vite: \`vite ${sub}\` is not supported yet — dependency optimization is out of scope for the rifty sandbox. Run \`vite\`, \`vite build\`, or \`vite preview\`.\n`,
-        );
-        return Promise.resolve(1);
-      }
-      return runDevServer(ctx);
     });
     // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
     // then run it in a supervised child. A long-running server child registers a
@@ -580,6 +721,7 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
+      devConfigReady = prepareActiveDevConfigDeps();
     },
   });
 
@@ -633,7 +775,14 @@ async function bootShellOwner(opts: {
   kernelIpc.onMessage?.((message) => {
     if (isPtyIpcMessage(message)) {
       // Only page→owner frames are inbound here; ignore a stray owner→page echo.
-      if (isPageToOwner(message.frame)) void server.handleFrame(message.frame);
+      if (isPageToOwner(message.frame)) {
+        const frame = message.frame;
+        if (frame.type === 'pty:exec') {
+          void devConfigReady.then(() => server.handleFrame(frame));
+          return;
+        }
+        void server.handleFrame(frame);
+      }
       return;
     }
     if (isVfsWriteIpcMessage(message)) {

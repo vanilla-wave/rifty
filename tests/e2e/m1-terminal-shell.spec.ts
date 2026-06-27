@@ -113,7 +113,7 @@ test.describe('M1 - terminal shell', () => {
     expect(gap).toBeLessThanOrEqual(1);
   });
 
-  test('npm run vite resolves the seeded script + routes to the co-resident dev server', async ({
+  test('npm run vite resolves the seeded script through the installed Vite CLI', async ({
     page,
   }) => {
     await page.goto('/');
@@ -123,12 +123,13 @@ test.describe('M1 - terminal shell', () => {
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');
 
-    // The owner npm resolves the `vite` package script and routes it to the
-    // co-resident dev server; one is already running (boot), so the single-active
-    // guard reports it — proving the script resolved (not unknown/missing).
-    await expectTerminalContains(page, 'dev server already running', 10_000);
+    // The owner npm resolves the seeded `vite` script through the shell/bin path,
+    // so this proves package scripts do not fall back to the old co-resident
+    // special-case or a missing-script stub.
+    await expectTerminalContains(page, '[vite] dev server ready on port 5173', 30_000);
     const buf = await terminalBuffer(page);
     expect(buf).not.toContain("unknown subcommand 'run'");
     expect(buf).not.toContain('missing script');
+    expect(buf).not.toContain('dev server already running');
   });
 });

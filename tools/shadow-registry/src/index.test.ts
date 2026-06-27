@@ -52,13 +52,15 @@ describe('shadow-registry', () => {
     expect(devNative).toContain('emptyProgram');
   });
 
-  it('viteBuildShimFiles delegates esbuild transform to the injected async WASI bridge', () => {
+  it('viteBuildShimFiles delegates esbuild transform/config-build to the injected async WASI bridge', () => {
     const buildEsbuild = viteBuildShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
     const devEsbuild = viteBrowserShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
 
     expect(buildEsbuild).toContain('__riftyEsbuildTransform');
     expect(buildEsbuild).toContain('NotImplementedError');
     expect(buildEsbuild).toContain('esbuild.transformSync');
+    expect(buildEsbuild).toContain('loadEntryThroughPlugins');
+    expect(buildEsbuild).toContain('opts.write !== false');
     expect(buildEsbuild).not.toBe(devEsbuild);
     expect(devEsbuild).toContain('__riftyEsbuildTransform');
     expect(devEsbuild).toContain('dev-server did not install the WASI transform bridge');
