@@ -1356,6 +1356,11 @@ export class RiftyTerminal {
       this.insertPrintable('\n');
       return;
     }
+    if (this.buffer.trim().length === 0) {
+      if (this.buffer.length > 0) this.renderBuffer('', 0);
+      this.resetEditState();
+      return;
+    }
     this.clearSuggestion();
     this.term.write('\r\n');
     const line = this.buffer;

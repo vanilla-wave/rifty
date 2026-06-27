@@ -92,6 +92,17 @@ describe('BottomPanel', () => {
     expect(newTerminal).toBeGreaterThan(tablist);
   });
 
+  it('pins Problems to the right of terminal tabs and the new-terminal action', () => {
+    const html = render();
+    const tabsbar = html.indexOf('class="rf-terminal-tabsbar"');
+    const newTerminal = html.indexOf('aria-label="New terminal"', tabsbar);
+    const problems = html.indexOf('data-testid="problems-tab"', tabsbar);
+
+    expect(tabsbar).toBeGreaterThanOrEqual(0);
+    expect(newTerminal).toBeGreaterThan(tabsbar);
+    expect(problems).toBeGreaterThan(newTerminal);
+  });
+
   it('keeps only the active mounted terminal discoverable by test id', () => {
     const html = render();
 

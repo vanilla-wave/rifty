@@ -1177,6 +1177,9 @@ body {
   background: var(--rf-accent-sel);
   color: var(--rf-accent-text-2);
 }
+.rf-terminal-tab--problems {
+  margin-left: auto;
+}
 .rf-terminal-tab__select {
   display: flex;
   align-items: center;

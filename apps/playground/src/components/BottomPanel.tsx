@@ -127,23 +127,6 @@ export function BottomPanel(props: {
                 );
               }}
             </For>
-            <div class="rf-terminal-tab" data-active={view() === 'problems'} data-running={false}>
-              <button
-                type="button"
-                role="tab"
-                class="rf-terminal-tab__select"
-                data-testid="problems-tab"
-                aria-selected={view() === 'problems'}
-                onClick={() => setView('problems')}
-              >
-                <span class="rf-terminal-tab__label">Problems</span>
-                <Show when={problemCount() > 0}>
-                  <span class="rf-console__badge" data-testid="problems-count">
-                    {problemCount()}
-                  </span>
-                </Show>
-              </button>
-            </div>
           </div>
           <button
             type="button"
@@ -157,6 +140,27 @@ export function BottomPanel(props: {
           >
             +
           </button>
+          <div
+            class="rf-terminal-tab rf-terminal-tab--problems"
+            data-active={view() === 'problems'}
+            data-running={false}
+          >
+            <button
+              type="button"
+              role="tab"
+              class="rf-terminal-tab__select"
+              data-testid="problems-tab"
+              aria-selected={view() === 'problems'}
+              onClick={() => setView('problems')}
+            >
+              <span class="rf-terminal-tab__label">Problems</span>
+              <Show when={problemCount() > 0}>
+                <span class="rf-console__badge" data-testid="problems-count">
+                  {problemCount()}
+                </span>
+              </Show>
+            </button>
+          </div>
         </div>
       </div>
       <div class="rf-console__body">
