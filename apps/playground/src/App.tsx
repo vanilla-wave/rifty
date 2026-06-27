@@ -10,7 +10,15 @@ import {
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { basename, joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import {
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
@@ -1661,14 +1669,22 @@ export function App(props: AppProps) {
   createEffect(() => {
     const owner = workspaceOwner();
     const mirror = bridgeProjectIndex(owner.snapshotPort);
-    const unsub = mirror.subscribe(setProjectIndex);
+    let sawIndexReply = false;
+    const unsub = mirror.subscribe((idx) => {
+      sawIndexReply = true;
+      setProjectIndex(idx);
+    });
     void mirror.request(); // owner re-publishes (recovers a pre-listener push)
+    const retryRequest = setInterval(() => {
+      if (!sawIndexReply) void mirror.request();
+    }, 250);
     for (const id of pendingOnDiskDeletes) {
       void deleteProjectTree(owner.snapshotPort, id).catch((err: unknown) =>
         console.error('[project-index] retry delete failed', err),
       );
     }
     onCleanup(() => {
+      clearInterval(retryRequest);
       unsub();
       mirror.dispose();
     });
@@ -1681,7 +1697,7 @@ export function App(props: AppProps) {
   createEffect(() => {
     const idx = projectIndex();
     if (!idx) return;
-    store.hydrateIndex(idx);
+    untrack(() => store.hydrateIndex(idx));
     for (const id of pendingOnDiskDeletes) {
       if (!idx.projects.some((p) => p.id === id)) pendingOnDiskDeletes.delete(id);
     }
@@ -1690,6 +1706,11 @@ export function App(props: AppProps) {
   function openFirstRunLauncher(): void {
     store.setLauncherTab('starters');
     store.openLauncher();
+  }
+
+  function closeLauncher(): void {
+    initialBootDecisionMade = true;
+    store.closeLauncher();
   }
 
   createEffect(() => {
@@ -2251,6 +2272,7 @@ export function App(props: AppProps) {
     pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
+    initialBootDecisionMade = true;
     const runPick = async (): Promise<void> => {
       const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
       const tsGate = wasDirty ? undefined : beginTsPresetTransition();
@@ -2794,7 +2816,7 @@ export function App(props: AppProps) {
           store.setDialog(null);
         } else if (store.launcherOpen()) {
           e.preventDefault();
-          store.closeLauncher();
+          closeLauncher();
         }
       }
     };
@@ -3124,7 +3146,7 @@ export function App(props: AppProps) {
           store.setLauncherTab(tab);
           saveLauncherTab(globalThis.localStorage, tab); // remember for next open (§9)
         }}
-        onClose={() => store.closeLauncher()}
+        onClose={closeLauncher}
         onSearch={(q) => store.setQ(q)}
         onCat={(cat) => store.setCat(cat)}
         onPickStarter={onPickStarter}

@@ -1,8 +1,10 @@
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceText } from './helpers/opfs.ts';
 import {
+  expectViteDevServerReady,
   insertTerminalLineSettled,
   openShellTerminal,
+  pickStarter,
   runTerminalLine,
   terminalBuffer,
 } from './helpers/playground.ts';
@@ -513,16 +515,8 @@ async function pickStarterAndWaitForTemplate(
 ): Promise<void> {
   const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
   const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click(`[data-preset="${preset}"]`);
-
-  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
-  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await discard.click();
-  }
-
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await pickStarter(page, preset);
+  await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
   await expect(editorLines).toContainText(editorNeedle, { timeout: 45_000 });
   await expect
     .poll(() => fetchPreviewOk(page, 5174), {
@@ -591,12 +585,7 @@ async function fetchPreviewText(
 }
 
 async function waitForTypeScriptStarterDevServer(page: Page): Promise<void> {
-  await expect
-    .poll(() => fetchPreviewOk(page, 5174), {
-      timeout: 30_000,
-      intervals: [500, 1_000, 2_000],
-    })
-    .toBe(true);
+  await expectViteDevServerReady(page, 5174, 30_000);
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */

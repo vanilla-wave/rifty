@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -66,7 +67,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
   }) => {
     test.skip(browserName !== 'chromium', 'child drain is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await expect
       .poll(() => terminalBuffer(page), { timeout: 60_000 })
@@ -108,7 +109,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
   }) => {
     test.skip(browserName !== 'chromium', 'child drain is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await expect
       .poll(() => terminalBuffer(page), { timeout: 60_000 })
@@ -144,7 +145,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     test.skip(browserName !== 'chromium', 'dev-server fetch — chromium only for COI parity');
 
     // Navigate first so the dev server is warm (webServer may lazily compile).
-    await page.goto('/');
+    await bootProjectFiles(page);
     await expect
       .poll(() => terminalBuffer(page), { timeout: 60_000 })
       .toMatch(viteDevReadyPattern());

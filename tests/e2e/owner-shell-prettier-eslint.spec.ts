@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootShell,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -13,8 +14,7 @@ test.describe('owner shell runs real Prettier and ESLint package tooling', () =>
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(300_000);
-    await page.goto('/');
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await bootShell(page);
     await openShellTerminal(page);
 
     await runTerminalLine(

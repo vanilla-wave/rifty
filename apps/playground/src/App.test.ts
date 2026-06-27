@@ -52,7 +52,18 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('needsProjectChoiceOnBoot');
     expect(source).toContain("store.setLauncherTab('starters')");
     expect(source).toContain('store.openLauncher()');
+    expect(source).toContain('function closeLauncher(): void');
+    expect(source).toContain('initialBootDecisionMade = true;');
+    expect(source).toContain('onClose={closeLauncher}');
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
+  });
+
+  it('retries the project-index request until the owner bridge answers', () => {
+    expect(source).toContain('let sawIndexReply = false;');
+    expect(source).toContain('sawIndexReply = true;');
+    expect(source).toContain('const retryRequest = setInterval(() => {');
+    expect(source).toContain('if (!sawIndexReply) void mirror.request();');
+    expect(source).toContain('clearInterval(retryRequest);');
   });
 
   it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
@@ -914,6 +925,10 @@ describe('App wires the sequential switch + index mirror (ADR-0165 §3)', () => 
   it('hydrates the page project-index mirror from the owner at ready', () => {
     expect(source).toContain('bridgeProjectIndex(');
     expect(source).toContain('.request()'); // subscribe-handshake re-publish
+  });
+
+  it('hydrates owner index without subscribing to local dirty scratch changes', () => {
+    expect(source).toContain('untrack(() => store.hydrateIndex(idx))');
   });
 
   it('does not label a missing active project as the scratch in the header', () => {

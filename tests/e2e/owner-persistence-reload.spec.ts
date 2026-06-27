@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs } from './helpers/opfs.ts';
+import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
 import {
+  closeLauncherIfOpen,
   expectTerminalContains,
   openShellTerminal,
+  pickStarter,
   runTerminalLine,
 } from './helpers/playground.ts';
 
@@ -39,6 +41,7 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     // Deterministic start: wipe this page's owner workspace namespace only.
     await clearWorkspaceOpfs(page);
     await page.reload();
+    await pickStarter(page, 'project-files');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
     await openShellTerminal(page);
 
@@ -48,11 +51,15 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     await runTerminalLine(page, `echo ${marker} > /scratch/persist.txt`);
     await runTerminalLine(page, 'cat /scratch/persist.txt');
     await expectTerminalContains(page, marker, 15_000);
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/persist.txt'), { timeout: 60_000 })
+      .toContain(marker);
 
     // Reload: the browser terminates the owner worker; on re-boot the owner wires
     // OPFS (initBackend) and preloads the persisted tree before serving.
     await page.reload();
-    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 60_000 });
+    await closeLauncherIfOpen(page);
     await openShellTerminal(page);
     await runTerminalLine(page, 'cat /scratch/persist.txt');
     await expectTerminalContains(page, marker, 20_000);

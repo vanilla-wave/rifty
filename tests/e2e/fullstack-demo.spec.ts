@@ -11,7 +11,7 @@
  * generous polls, network required.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains } from './helpers/playground.ts';
+import { expectTerminalContains, pickStarter } from './helpers/playground.ts';
 
 const PORT = 3210;
 
@@ -27,22 +27,12 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    // Let the app settle (terminal wired, initial boot command issued) before
-    // interacting — clicks during the mount storm can land on replaced nodes.
-    // ADR-0150 P6b: the dev server runs in a supervised child that reads the owner
-    // store over fs.* RPC; the default vite preset boots it on first load. The 30s
-    // wait absorbs the child spawn + over-RPC dep walk (backlog: perf/fs-rpc-chunk-perf).
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 30_000);
-
     // Select the demo preset. ADR-0165 §9 moved the gallery into the launcher
-    // modal: open the chip, switch to the Starters tab, then pick the card. The
-    // launcher closes on pick (a fresh scratch from the chosen starter) and the
+    // modal: pick the card from the first-run launcher. The launcher closes on pick
+    // (a fresh scratch from the chosen starter) and the
     // boot proceeds — proven by the `npm run dev` terminal lines just below, so no
     // redundant chip-text assertion (the chip now shows the scratch name, not the id).
-    await page.click('[data-action="open-launcher"]');
-    await page.getByRole('button', { name: 'Starters', exact: true }).click();
-    await page.click('[data-preset="express-sqlite"]');
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+    await pickStarter(page, 'express-sqlite');
     // From-scratch preset (ADR-0135, revised): the visible `npm install` runs in
     // the OWNER realm (which serves the preview), streaming each package to the
     // terminal — `npm run dev` boots the node server co-resident in the owner

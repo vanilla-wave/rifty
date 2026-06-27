@@ -11,6 +11,7 @@ test.describe('M0 — Foundation', () => {
   }) => {
     await page.goto('/');
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-testid="terminal"]')).toBeVisible();
     await expect(page.locator('[data-testid="editor"]')).toBeVisible();
     await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveAttribute(
@@ -18,12 +19,6 @@ test.describe('M0 — Foundation', () => {
       'true',
       { timeout: 30_000 },
     );
-    await expect(page.getByRole('tab', { name: /project-summary\.js/ })).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(page.getByRole('tab', { name: /project\.json/ })).toBeVisible({
-      timeout: 30_000,
-    });
     await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   });
 

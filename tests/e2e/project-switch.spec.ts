@@ -17,7 +17,12 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
-import { expectTerminalContains, runTerminalLineSettled } from './helpers/playground.ts';
+import {
+  bootProjectFiles,
+  expectTerminalContains,
+  pickStarter as pickStarterFromLauncher,
+  runTerminalLineSettled,
+} from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
@@ -49,12 +54,7 @@ async function newShell(page: Page): Promise<void> {
 }
 
 async function pickStarter(page: Page, id: string): Promise<void> {
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
-    timeout: OWNER_DURABLE_TIMEOUT,
-  });
+  await pickStarterFromLauncher(page, id);
 }
 
 /** Open the launcher Projects tab via the top-bar chip. */
@@ -152,7 +152,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
 
     // A fresh load (no OPFS wipe — the wipe would discard the baked dependency
     // snapshot and force a Rollup native-binary install that fails under WASI).
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
@@ -216,7 +216,7 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     const alphaMark = `ALPHA-${tag}`;
     const betaMark = `BETA-${tag}`;
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });

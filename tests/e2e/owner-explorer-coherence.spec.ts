@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
@@ -20,7 +21,7 @@ test.describe('owner explorer coherence (ADR-0146 explorer-reflects-owner / ADR-
   test('the file explorer reflects a file the shell writes', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(60_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // The explorer renders the OWNER snapshot from boot (SSoT, ADR-0148) — wait
     // for the shell to be ready (the boot sequence echoed the dev line).

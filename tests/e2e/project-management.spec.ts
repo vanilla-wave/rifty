@@ -24,7 +24,11 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
-import { runTerminalLineSettled, terminalBuffer } from './helpers/playground.ts';
+import {
+  pickStarter as pickStarterFromLauncher,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
 // close button is never transiently covered (the toast auto-dismisses too, but this
@@ -46,6 +50,7 @@ async function bootScratch(page: Page): Promise<void> {
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
     timeout: 15_000,
   });
+  await pickStarterFromLauncher(page, 'project-files');
   await expect(hintLocator(page)).toContainText('Commands run in /scratch;', { timeout: 30_000 });
 }
 

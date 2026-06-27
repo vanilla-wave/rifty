@@ -22,6 +22,7 @@ export async function openShellTerminal(
   options: { readonly focus?: boolean } = {},
 ): Promise<number> {
   const focus = options.focus ?? true;
+  await closeLauncherIfOpen(page, 0);
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
   await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
@@ -73,11 +74,50 @@ export async function openShellTerminal(
   return slotIndex;
 }
 
+export async function pickStarter(page: Page, id = 'project-files'): Promise<void> {
+  const launcher = page.locator('[data-testid="launcher"]');
+  if (!(await launcher.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    await page.click('[data-action="open-launcher"]');
+  }
+  await expect(launcher).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: 'Starters', exact: true }).click();
+  await page.click(`[data-preset="${id}"]`);
+
+  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
+  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await discard.click();
+  }
+
+  await expect(launcher).toHaveCount(0, { timeout: 90_000 });
+}
+
+export async function closeLauncherIfOpen(page: Page, timeout = 1_000): Promise<void> {
+  const launcher = page.locator('[data-testid="launcher"]');
+  if (!(await launcher.isVisible({ timeout }).catch(() => false))) return;
+  await page.locator('.rf-launcher__close').click();
+  await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+}
+
+export async function bootStarter(page: Page, id = 'project-files'): Promise<void> {
+  await page.goto('/');
+  await pickStarter(page, id);
+}
+
+export async function bootProjectFiles(page: Page): Promise<void> {
+  await bootStarter(page, 'project-files');
+}
+
+export async function bootShell(page: Page): Promise<void> {
+  await page.goto('/');
+  await closeLauncherIfOpen(page, 15_000);
+}
+
 export async function runTerminalLine(
   page: Page,
   line: string,
   targetSlot: 'active' | number = 'active',
 ): Promise<void> {
+  await closeLauncherIfOpen(page, 0);
   if (targetSlot !== 'active') {
     const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
     await expect(tab).toBeVisible();
@@ -203,4 +243,29 @@ export async function selectPreset(page: Page, id: string): Promise<void> {
     }
   }
   await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 5_000 });
+}
+
+export async function expectViteDevServerReady(
+  page: Page,
+  port = 5174,
+  timeout = 60_000,
+  slot: 'active' | number = 'active',
+): Promise<void> {
+  const ready = new RegExp(
+    `\\[vite\\] dev server ready on port ${port}|VITE v\\d+(?:\\.\\d+){0,2}\\s+ready|localhost:${port}|\\[status\\] LIVE :${port}`,
+    'u',
+  );
+  await expect
+    .poll(
+      async () => {
+        const buffer = await terminalBuffer(page, slot);
+        const live = await page
+          .getByText(`LIVE :${port}`, { exact: true })
+          .isVisible({ timeout: 250 })
+          .catch(() => false);
+        return live ? `${buffer}\n[status] LIVE :${port}` : buffer;
+      },
+      { timeout },
+    )
+    .toMatch(ready);
 }

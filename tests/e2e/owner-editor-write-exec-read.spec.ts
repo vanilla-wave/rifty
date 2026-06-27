@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 /**
@@ -40,15 +41,13 @@ test.describe('a page editor write is read back by exec in the owner', () => {
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(60_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // Wait for the owner shell to be ready: terminal 1 echoes the boot dev line.
     // By now the owner seed has run, so the edit below is not clobbered by a
     // later seed write.
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
-    await expect
-      .poll(() => terminalBuffer(page, 0), { timeout: 90_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page, 5174, 90_000, 0);
 
     // A second idle shell on the same persistent owner — the reader.
     await openShellTerminal(page);

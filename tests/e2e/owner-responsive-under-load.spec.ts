@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { pickStarter } from './helpers/playground.ts';
 
 /**
  * No jank under load: the PAGE main thread stays responsive while the owner does
@@ -43,12 +44,14 @@ test.describe('page stays responsive while the owner does heavy read work', () =
     const openBtn = page.locator('[data-action="open-palette"]');
     const palette = page.getByTestId('command-palette');
 
-    // The command bar renders before the owner spawns; from here the boot window
-    // (owner spawn → vite install/transform burst) is reliably busy. Probe the page
-    // main thread across it: each click must open the palette within a tight bound.
+    await expect(openBtn).toBeVisible({ timeout: 30_000 });
+    await pickStarter(page, 'project-files');
+
+    // The project choice starts the boot window (owner respawn → vite
+    // install/transform burst). Probe the page main thread across it: each click
+    // must open the palette within a tight bound.
     // Unconditional probes (no LIVE gate) so a fast warm boot can't race us to zero
     // samples — the early probes always land while the owner is still booting.
-    await expect(openBtn).toBeVisible({ timeout: 30_000 });
     for (let i = 0; i < 6; i += 1) {
       await openBtn.click();
       // Normal render is <100ms; a sync owner-read block would be multiple seconds

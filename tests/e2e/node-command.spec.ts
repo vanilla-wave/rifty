@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -84,7 +85,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // Let the initial dev-server boot storm settle before interacting: clicks/
     // keystrokes during the mount storm land on replaced nodes (a typed line can
@@ -132,7 +133,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // SW must control the page before /preview/<port>/ can route (mirror fullstack-demo).
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
@@ -217,7 +218,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(240_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
@@ -297,7 +298,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,

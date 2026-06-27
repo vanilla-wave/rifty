@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { pickStarter } from '../e2e/helpers/playground.ts';
 
 /**
  * Prod-artifact smoke: the workspace owner MUST boot on the PRODUCTION bundle
@@ -32,6 +33,7 @@ test.describe('production build smoke', () => {
     page.on('pageerror', (e) => bootErrors.push(`pageerror: ${e.message}`));
 
     await page.goto('/');
+    await pickStarter(page, 'project-files');
 
     // The owner is SAB-gated: COI must be live on the prod headers (not just dev).
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
