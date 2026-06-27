@@ -8,13 +8,25 @@ describe('Yandex Cloud npm registry proxy', () => {
 
     expect(compose).toContain('caddy:2');
     expect(compose).toContain('network_mode: host');
-    expect(caddy).toContain('registry.rifty.dev');
+    expect(caddy).toContain('registry.rifty.dev, registry-origin.rifty.dev');
+    expect(compose).toContain('registry.rifty.dev, registry-origin.rifty.dev');
     expect(caddy).toContain('handle_path /npm-registry/*');
     expect(caddy).toContain('reverse_proxy https://registry.npmjs.org');
     expect(caddy).toContain('header_up Host registry.npmjs.org');
     expect(caddy).toContain('Access-Control-Allow-Origin "*"');
     expect(caddy).toContain('Access-Control-Allow-Methods "GET, HEAD, OPTIONS"');
     expect(caddy).toContain('Cross-Origin-Resource-Policy "cross-origin"');
+    expect(caddy).toContain(
+      '@packuments path_regexp packument_cache ^/npm-registry/(?:@[^/]+/[^/]+|[^/]+)$',
+    );
+    expect(caddy).toContain('>Cache-Control "public, max-age=300, stale-while-revalidate=86400"');
+    expect(caddy).toContain('>Vary "Accept"');
+    expect(caddy).toContain('@tarballs path_regexp tarball_cache ^/npm-registry/.*/-/.*\\.tgz$');
+    expect(caddy).toContain('>Cache-Control "public, max-age=31536000, immutable"');
+    expect(compose).toContain(
+      '@packuments path_regexp packument_cache ^/npm-registry/(?:@[^/]+/[^/]+|[^/]+)$',
+    );
+    expect(compose).toContain('@tarballs path_regexp tarball_cache ^/npm-registry/.*/-/.*\\.tgz$');
     expect(caddy).toContain('@unsupported not method GET HEAD OPTIONS');
     expect(caddy).toContain('Allow "GET, HEAD, OPTIONS"');
     expect(existsSync('deploy/yandex/npm-registry/api-gateway.yaml')).toBe(false);
@@ -38,9 +50,15 @@ describe('Yandex Cloud npm registry proxy', () => {
     expect(hostingNetlify).not.toContain('Required Netlify site environment');
     expect(hostingNetlify).toContain('registry.rifty.dev');
     expect(hostingDomains).toContain(
-      '| `registry.rifty.dev` | Yandex Cloud | npm registry proxy |',
+      '| `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |',
     );
-    expect(hostingDomains).toContain('registry.rifty.dev.  A');
+    expect(hostingDomains).toContain(
+      '| `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |',
+    );
+    expect(hostingDomains).toContain(
+      'registry.rifty.dev.  CNAME  409f80b3d8827091.topology.gslb.yccdn.ru.',
+    );
+    expect(hostingDomains).toContain('registry-origin.rifty.dev.  A');
     expect(workflow).toContain('Smoke PR preview registry proxy');
     expect(workflow).toContain('Smoke production registry proxy');
     expect(workflow).toContain(

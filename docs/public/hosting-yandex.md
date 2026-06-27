@@ -26,7 +26,16 @@ Current resources:
   `e9b0ph17evqtt1lnvl17`).
 - Security group: `rifty-registry-proxy` (`enp064boa7v26die0el1`), ingress
   `80/tcp` + `443/tcp`, egress all.
-- DNS: `registry.rifty.dev. 600 A 93.77.177.79` in zone `rifty`.
+- DNS: `registry.rifty.dev. 600 CNAME
+  409f80b3d8827091.topology.gslb.yccdn.ru.` in zone `rifty`.
+- CDN origin DNS: `registry-origin.rifty.dev. 600 A 93.77.177.79` in zone
+  `rifty`; keep this pointed at the VM so the CDN origin never loops back to
+  itself.
+- CDN resource: `bc8rt27zbc2ycfeghqjn` (`registry.rifty.dev`, provider CNAME
+  `409f80b3d8827091.topology.gslb.yccdn.ru`, origin
+  `registry-origin.rifty.dev`, cert `fpql3mp7n30ddn15vtd3`). Before rollback or
+  provider changes, verify an edge probe serves the `registry.rifty.dev` cert,
+  not the default `*.yccdn.cloud.yandex.net` cert.
 
 One-off create/update shape:
 
@@ -43,5 +52,6 @@ yc compute instance create-with-container rifty-npm-registry-proxy \
 node tools/registry/smoke-npm-registry.mjs https://registry.rifty.dev
 ```
 
-After VM recreation, update the `registry.rifty.dev` A record to the new public
-IP and wait for Caddy to issue/renew TLS.
+After VM recreation, update only the `registry-origin.rifty.dev` A record to the
+new public IP and wait for Caddy to issue/renew origin TLS. Keep
+`registry.rifty.dev` pointed at the CDN CNAME unless rolling CDN back to the VM.

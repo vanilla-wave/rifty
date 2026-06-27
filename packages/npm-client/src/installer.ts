@@ -166,6 +166,7 @@ interface ResolveContext {
  */
 interface ResolutionSource {
   resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
+  prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
 }
 
 export async function install(opts: InstallOptions): Promise<InstallResult>;
@@ -481,7 +482,8 @@ async function walkAndPin(
   // straddles an await; running placement concurrently would make which version
   // wins the flat slot depend on resolve-completion order, not request order,
   // breaking the express-diamond contract (installer.test.ts:225 — ms@2.1.3
-  // flat, ms@2.0.0 nested). ONLY the tarball fetch is parallelized (bounded
+  // flat, ms@2.0.0 nested). Packument prefetch may overlap metadata I/O, but it
+  // never places a package. Tarball fetch is also parallelized (bounded
   // semaphore): tarball bytes feed extractTarGz/files alone, never the dep walk
   // (pin.dependencies comes from the packument/lockfile, not the tarball), so
   // fetch order cannot perturb layout. Concurrent same-(name,version) fetches
@@ -489,8 +491,7 @@ async function walkAndPin(
   // fetch: an OPTIONAL-boundary node awaits its own fetch BEFORE recursing (see
   // the `isOptionalBoundary` site) so a failed optional fetch skips its WHOLE
   // subtree before it is walked — npm parity, and identical to the old serial
-  // walk. Tree + on-disk layout identical to the serial version =>
-  // behavior-preserving (ADR-0081 rule 4 does not fire; CHANGELOG-only).
+  // walk.
   const FETCH_CONCURRENCY = 8; // perf knob only; any value yields the identical tree.
   const sem = new Semaphore(FETCH_CONCURRENCY);
 
@@ -510,6 +511,17 @@ async function walkAndPin(
     installPath: string;
     optional: { depName: string; depRange: string; parentName: string } | null;
   }> = [];
+
+  function prefetchPackuments(
+    dependencies: Record<string, string>,
+    parentInstallPath: string,
+    parentName: string,
+  ): void {
+    if (!source.prefetch) return;
+    for (const [depName, depRange] of Object.entries(dependencies)) {
+      source.prefetch(depName, depRange, { parentName, parentInstallPath });
+    }
+  }
 
   function visit(
     name: string,
@@ -624,6 +636,7 @@ async function walkAndPin(
       // failed grandchild is warned-and-skipped while surviving siblings still
       // pin — rifty SALVAGES the optional subtree's survivors rather than doing
       // npm's atomic-rollback. Characterization-pinned; see Q-2026-06-07-324.
+      prefetchPackuments(pin.dependencies, installPath, pin.name);
       for (const [depName, depRange] of Object.entries(pin.dependencies)) {
         await visit(depName, depRange, installPath, pin.name, optional);
       }
@@ -631,6 +644,7 @@ async function walkAndPin(
       // platform-specific native helpers like fsevents). A resolve-time failure
       // is caught here; a fetch-time failure is attributed at the await site via
       // the `optional` descriptor propagated into the subtree.
+      prefetchPackuments(pin.optionalDependencies, installPath, pin.name);
       for (const [depName, depRange] of Object.entries(pin.optionalDependencies)) {
         const desc = { depName, depRange, parentName: pin.name };
         try {
@@ -642,9 +656,11 @@ async function walkAndPin(
     })();
   }
 
+  prefetchPackuments(topLevelDependencies, '', rootName);
   for (const [depName, depRange] of Object.entries(topLevelDependencies)) {
     await visit(depName, depRange, '', rootName, null);
   }
+  prefetchPackuments(topLevelOptionalDependencies, '', rootName);
   for (const [depName, depRange] of Object.entries(topLevelOptionalDependencies)) {
     const desc = { depName, depRange, parentName: rootName };
     try {
@@ -838,6 +854,9 @@ function assertNativeSupported(name: string, version: string, manifest: VersionM
  */
 function createRegistrySource(opts: InstallOptions): ResolutionSource {
   const packumentCache = opts.packumentCache ?? new Map<string, Packument>();
+  const PACKUMENT_CONCURRENCY = 8;
+  const packumentSem = new Semaphore(PACKUMENT_CONCURRENCY);
+  const inFlightPackuments = new Map<string, Promise<Packument>>();
   // Live-resolve was chosen because coverage failed for some top-level pin, but
   // the lockfile's other entries can still seed integrity for the rest.
   let existingLockfile: Lockfile | null = null;
@@ -847,17 +866,57 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
     return existingLockfile;
   };
 
-  return {
-    async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const override = resolveOverride(name, ctx.parentName, opts.overrides);
-      const effectiveName = override?.name ?? name;
-      const effectiveRange = override?.range ?? range;
+  const loadPackument = (name: string): Promise<Packument> => {
+    const cached = packumentCache.get(name);
+    if (cached) return Promise.resolve(cached);
+    let pending = inFlightPackuments.get(name);
+    if (!pending) {
+      pending = packumentSem
+        .run(async () => {
+          const packument = await opts.registry.getPackument(name);
+          packumentCache.set(name, packument);
+          return packument;
+        })
+        .finally(() => {
+          inFlightPackuments.delete(name);
+        });
+      void pending.catch(() => undefined);
+      inFlightPackuments.set(name, pending);
+    }
+    return pending;
+  };
 
-      let packument = packumentCache.get(effectiveName);
-      if (!packument) {
-        packument = await opts.registry.getPackument(effectiveName);
-        packumentCache.set(effectiveName, packument);
-      }
+  const effectiveRequest = (
+    name: string,
+    range: string | null,
+    parentName: string | undefined,
+  ): {
+    override: ReturnType<typeof resolveOverride>;
+    effectiveName: string;
+    effectiveRange: string | null;
+  } => {
+    const override = resolveOverride(name, parentName, opts.overrides);
+    return {
+      override,
+      effectiveName: override?.name ?? name,
+      effectiveRange: override?.range ?? range,
+    };
+  };
+
+  return {
+    prefetch(name, range, ctx): void {
+      const { effectiveName } = effectiveRequest(name, range, ctx.parentName);
+      void loadPackument(effectiveName);
+    },
+
+    async resolve(name, range, ctx): Promise<ResolvedPin> {
+      const { override, effectiveName, effectiveRange } = effectiveRequest(
+        name,
+        range,
+        ctx.parentName,
+      );
+
+      const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
       let pick = pickBestVersion(versions, effectiveRange);
       if (!pick && rangeIsUnconstrained(effectiveRange)) {
