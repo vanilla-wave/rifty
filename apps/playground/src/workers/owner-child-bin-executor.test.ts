@@ -18,7 +18,7 @@ describe('buildChildSpawnSpec', () => {
     expect(spec.env.RIFTY_REMOTE_FS).toBe('1');
     expect(spec.env.RIFTY_BIN).toBe('1');
     expect(spec.env.RIFTY_NODE_SERVE).toBe('1');
-    expect(spec.env.RIFTY_STDIN_IS_TTY).toBe('1');
+    expect(spec.env.RIFTY_STDIN_IS_TTY).toBe('0');
     expect(spec.env.RIFTY_STDOUT_IS_TTY).toBe('1');
     expect(spec.env.RIFTY_STDERR_IS_TTY).toBe('1');
     expect(spec.env.HOME).toBe('/root');

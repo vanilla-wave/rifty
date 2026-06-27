@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
+  and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
+  non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips
+  readline shortcuts instead of tripping the loud stdin guard.
 - **Starter templates now open as initialized git repositories.** Every
   template root seeds a real `Initial commit` on `main` plus a project
   `.gitignore`, and starter-generated `package-lock.json` is folded into that

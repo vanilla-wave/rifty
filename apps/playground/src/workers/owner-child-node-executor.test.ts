@@ -59,7 +59,7 @@ describe('owner-child-node-executor', () => {
         RIFTY_BIN: '0',
         RIFTY_REMOTE_FS: '1',
         RIFTY_NODE_SERVE: '1',
-        RIFTY_STDIN_IS_TTY: '1',
+        RIFTY_STDIN_IS_TTY: '0',
         RIFTY_STDOUT_IS_TTY: '1',
         RIFTY_STDERR_IS_TTY: '1',
       },

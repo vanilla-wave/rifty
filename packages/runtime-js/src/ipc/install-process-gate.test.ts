@@ -78,6 +78,34 @@ describe('pre-entry gate (ADR-0157)', () => {
     expect(proc.stderr.isTTY).toBe(true);
   });
 
+  it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
+    const stdout = new MessageChannel();
+    const s = spec({ RIFTY_STDOUT_IS_TTY: '1' });
+    const proc = installNodeProcessShim({
+      ...s,
+      stdio: { ...s.stdio, stdout: stdout.port1 },
+    });
+    const stream = proc.stdout as typeof proc.stdout & {
+      clearLine(dir?: number, cb?: () => void): boolean;
+      cursorTo(x: number, y?: number, cb?: () => void): boolean;
+      moveCursor(dx: number, dy: number, cb?: () => void): boolean;
+      clearScreenDown(cb?: () => void): boolean;
+    };
+    const nextChunk = new Promise<unknown>((resolve) => {
+      stdout.port2.onmessage = (ev) => resolve(ev.data);
+      stdout.port2.start();
+    });
+
+    expect(typeof stream.clearLine).toBe('function');
+    expect(typeof stream.cursorTo).toBe('function');
+    expect(typeof stream.moveCursor).toBe('function');
+    expect(typeof stream.clearScreenDown).toBe('function');
+    expect(stream.clearLine(0)).toBe(true);
+
+    const chunk = await nextChunk;
+    expect(new TextDecoder().decode(chunk as Uint8Array)).toBe('\x1b[2K');
+  });
+
   it('Node worker: process.nextTick beats Promise.then (Node ordering)', async () => {
     installNodeRuntime(spec());
     const proc = (globalThis as { process?: unknown }).process as NodeProcess;

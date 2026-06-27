@@ -1,11 +1,13 @@
 /**
- * Loud stubs for `node:dns`, `node:tls`, `node:readline`. Exist so `import`
- * succeeds (Vite static-imports them all); every method call throws
- * NotImplementedError rather than silently corrupting behaviour. `node:https`
- * lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub); `node:zlib` is a
- * real web-compression-backed subset in `./zlib.ts` (ADR-0159).
+ * Loud stubs/subsets for network-ish and terminal-ish Node builtins. `node:dns`
+ * has a localhost lookup subset; `node:readline` has the line-oriented CLI
+ * subset plus cursor helpers that real package CLIs reach. Unsupported members
+ * still throw NotImplementedError rather than silently corrupting behaviour.
+ * `node:https` lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub);
+ * `node:zlib` is a real web-compression-backed subset in `./zlib.ts` (ADR-0159).
  */
 import { NotImplementedError } from '@riftydev/io';
+import { EventEmitter } from './events.ts';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';
 
 const notImpl = (feature: string) => () => {
@@ -17,6 +19,20 @@ interface ReadlineWritable {
 }
 
 type ReadlineCallback = () => void;
+
+interface ReadlineReadable extends EventEmitter {
+  setEncoding?(encoding: string): void;
+  resume?(): void;
+  pause?(): void;
+}
+
+interface ReadlineOptions {
+  readonly input: ReadlineReadable;
+  readonly output?: ReadlineWritable;
+  readonly prompt?: string;
+}
+
+type CreateInterfaceArgs = ReadlineReadable | ReadlineOptions;
 
 function writeControl(stream: ReadlineWritable, sequence: string, cb?: ReadlineCallback): boolean {
   const ok = stream.write(sequence);
@@ -57,6 +73,133 @@ function moveCursor(
   if (dy < 0) sequence += `\x1b[${-dy}A`;
   else if (dy > 0) sequence += `\x1b[${dy}B`;
   return writeControl(stream, sequence, cb);
+}
+
+function isReadlineOptions(value: CreateInterfaceArgs): value is ReadlineOptions {
+  return typeof (value as ReadlineOptions).input !== 'undefined';
+}
+
+function resolveReadlineOptions(
+  inputOrOptions: CreateInterfaceArgs,
+  output?: ReadlineWritable,
+): ReadlineOptions {
+  if (isReadlineOptions(inputOrOptions)) return inputOrOptions;
+  return { input: inputOrOptions, output };
+}
+
+const READLINE_DECODER = new TextDecoder();
+
+function decodeReadlineChunk(chunk: unknown): string {
+  if (typeof chunk === 'string') return chunk;
+  if (chunk instanceof Uint8Array) return READLINE_DECODER.decode(chunk);
+  if (chunk instanceof ArrayBuffer) return READLINE_DECODER.decode(new Uint8Array(chunk));
+  if (ArrayBuffer.isView(chunk)) {
+    return READLINE_DECODER.decode(
+      new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength),
+    );
+  }
+  return String(chunk);
+}
+
+export class Interface extends EventEmitter {
+  readonly input: ReadlineReadable;
+  readonly output?: ReadlineWritable;
+  line = '';
+  #closed = false;
+  #prompt: string;
+  #questionCallbacks: Array<(answer: string) => void> = [];
+  readonly #onData = (chunk: unknown): void => {
+    this.#acceptChunk(decodeReadlineChunk(chunk));
+  };
+  readonly #onEnd = (): void => {
+    if (this.line.length > 0) {
+      this.#emitLine(this.line);
+      this.line = '';
+    }
+    this.close();
+  };
+
+  constructor(options: ReadlineOptions) {
+    super();
+    this.input = options.input;
+    this.output = options.output;
+    this.#prompt = options.prompt ?? '';
+    this.input.setEncoding?.('utf8');
+    this.input.on('data', this.#onData);
+    this.input.once('end', this.#onEnd);
+    this.input.once('close', this.#onEnd);
+    this.input.resume?.();
+  }
+
+  question(query: string, cb: (answer: string) => void): void {
+    if (this.#closed) throw new Error('readline.Interface is closed');
+    this.output?.write(query);
+    this.#questionCallbacks.push(cb);
+  }
+
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.input.off('data', this.#onData);
+    this.input.off('end', this.#onEnd);
+    this.input.off('close', this.#onEnd);
+    this.input.pause?.();
+    this.emit('close');
+  }
+
+  pause(): this {
+    this.input.pause?.();
+    return this;
+  }
+
+  resume(): this {
+    this.input.resume?.();
+    return this;
+  }
+
+  prompt(): void {
+    if (this.#prompt.length > 0) this.output?.write(this.#prompt);
+  }
+
+  setPrompt(prompt: string): void {
+    this.#prompt = prompt;
+  }
+
+  getPrompt(): string {
+    return this.#prompt;
+  }
+
+  #acceptChunk(text: string): void {
+    let pending = this.line + text;
+    while (pending.length > 0) {
+      const nl = pending.search(/\r\n|\n|\r/u);
+      if (nl === -1) {
+        this.line = pending;
+        return;
+      }
+      const sep = pending[nl] === '\r' && pending[nl + 1] === '\n' ? 2 : 1;
+      const line = pending.slice(0, nl);
+      pending = pending.slice(nl + sep);
+      this.#emitLine(line);
+    }
+    this.line = '';
+  }
+
+  #emitLine(line: string): void {
+    const question = this.#questionCallbacks.shift();
+    if (question) {
+      question(line);
+      return;
+    }
+    this.emit('line', line);
+  }
+}
+
+function createInterface(
+  inputOrOptions: CreateInterfaceArgs,
+  output?: ReadlineWritable,
+): Interface {
+  return new Interface(resolveReadlineOptions(inputOrOptions, output));
 }
 
 // Browser-only "dns": only `localhost` resolves. Vite's `server.listen()` calls
@@ -165,7 +308,8 @@ export const http2 = {
 };
 
 export const readline = {
-  createInterface: notImpl('readline.createInterface'),
+  createInterface,
+  Interface,
   cursorTo,
   moveCursor,
   clearLine,

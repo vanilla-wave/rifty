@@ -30,7 +30,7 @@ export function buildChildSpawnSpec(req: BinSpawnRequest, nodeEntryUrl: string):
       RIFTY_BIN: '1',
       RIFTY_REMOTE_FS: '1',
       RIFTY_NODE_SERVE: '1',
-      RIFTY_STDIN_IS_TTY: isTTY,
+      RIFTY_STDIN_IS_TTY: '0',
       RIFTY_STDOUT_IS_TTY: isTTY,
       RIFTY_STDERR_IS_TTY: isTTY,
     },

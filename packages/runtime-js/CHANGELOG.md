@@ -40,10 +40,11 @@
   `isDeepStrictEqual` (strict Map/Set/typed-array aware comparison) so ESLint's
   real `stylish` formatter and `typescript-eslint` project service run instead
   of tripping on missing helpers. `node:fs` callback/promise `stat`/`lstat`
-  support options with a loud `bigint` ceiling, and `node:readline` cursor
-  helpers (`cursorTo`, `moveCursor`, `clearLine`, `clearScreenDown`) now emit
-  ANSI sequences with callback completion while interactive readline remains a
-  loud ceiling.
+  support options with a loud `bigint` ceiling, `node:readline` now has a
+  line-oriented `createInterface({ input, output })` / `question()` subset, and
+  cursor helpers (`cursorTo`, `moveCursor`, `clearLine`, `clearScreenDown`) emit
+  ANSI sequences with callback completion. TTY keypress/raw-mode and
+  `readline/promises` remain loud ceilings.
 - **Public `node:os` / `node:path` / `node:perf_hooks` / `node:fs` builtin subpaths** (`./builtins/{os,path,perf_hooks,fs}`, ADR-0166 task 1.9). The same faithful shims that already back the `require('os')` module registry, now also importable directly. The playground aliases the BARE `os`/`path`/`perf_hooks`/`fs` specifiers to these so a Vite bundle containing a heavy node-targeting dependency (the `typescript` engine in the ts-language-service worker) resolves them to REAL rifty shims instead of Vite's empty browser stub (`os.platform is not a function` at the dep's module-eval). No first-party source imports these bare specifiers; it uses `node:*` + the module registry.
 
 ### Changed
