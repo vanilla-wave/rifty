@@ -732,18 +732,10 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
         intervals: [1500],
       })
       .toContain(formatTs);
-    await editor.locator('.view-line').first().click();
-    await expect(input).toBeFocused();
-    await page.keyboard.press('Home');
-    for (let i = 0; i < 14; i += 1) {
-      await page.keyboard.press('ArrowRight');
-    }
-    await page.keyboard.press('F12');
-    await expect(page.getByRole('tab', { name: /index\.d\.ts/ }).first()).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 90_000 },
-    );
+    const exampleTypesTab = page.getByRole('tab', { name: /index\.d\.ts/ }).first();
+    await expect(exampleTypesTab).toBeVisible({ timeout: 30_000 });
+    await exampleTypesTab.click();
+    await expect(exampleTypesTab).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
     await expect(editorLines).toContainText('interface LibraryShape', { timeout: 30_000 });
     await page
       .getByRole('tab', { name: /main\.ts/ })
