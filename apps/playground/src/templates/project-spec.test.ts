@@ -67,6 +67,7 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.seedFiles['/workspace/.git/config']).toContain('bare = false');
     expect(cfg.seedFiles['/workspace/.gitignore']).toContain('node_modules/');
     expect(cfg.seedFiles['/workspace/.gitignore']).toContain('dist/');
+    expect(cfg.seedFiles['/workspace/.gitignore']).toContain('.rifty/');
   });
 
   it('honours a non-default port and root (not spec.defaultPort / not /workspace)', () => {
@@ -130,13 +131,22 @@ describe('resolveBootstrapConfig', () => {
     );
   });
 
-  it('keeps TypeScript starter deps in lockstep with the shared Vite snapshot', () => {
+  it('declares TypeScript starter TypeScript as a project-owned dev dependency', () => {
+    const spec: ProjectSpec = TYPESCRIPT_TEMPLATE;
     const cfg = resolveBootstrapConfig(TYPESCRIPT_TEMPLATE, 5174, '/workspace');
+    const pkg = JSON.parse(cfg.packageJson) as {
+      dependencies: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
 
-    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesUrl).toBe(VITE_TEMPLATE.bakedNodeModulesUrl);
-    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
     expect(TYPESCRIPT_TEMPLATE.install).toEqual(VITE_TEMPLATE.install);
-    expect(cfg.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
+    expect(pkg.dependencies).toEqual(VITE_TEMPLATE.install);
+    expect(pkg.devDependencies).toEqual({ typescript: '5.9.3' });
+    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesUrl).toBe(
+      '/snapshots/typescript-node-modules.json.gz',
+    );
+    expect(spec.bakedNodeModulesTemplateId).toBeUndefined();
+    expect(cfg.bakedNodeModulesTemplateId).toBeUndefined();
   });
 });
 
@@ -149,6 +159,7 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
     expect(cfg.seedFiles['/workspace/.git/config']).toContain('bare = false');
     expect(cfg.seedFiles['/workspace/.gitignore']).toContain('node_modules/');
     expect(cfg.seedFiles['/workspace/.gitignore']).toContain('dist/');
+    expect(cfg.seedFiles['/workspace/.gitignore']).toContain('.rifty/');
     expect(cfg.seedFiles['/workspace/src/main.js']).toBe(NODE_FIXTURE.entry.content);
     expect(cfg.seedFiles['/workspace/package.json']).toBe(cfg.packageJson);
     expect(cfg.seedFiles['/workspace/public/index.html']).toBe(

@@ -173,6 +173,27 @@ describe('applyWorkspaceTextEdit', () => {
     }
   });
 
+  it('treats missing workspace TypeScript during provider work as unavailable', async () => {
+    const providers = registerTsLanguageServiceProviders(
+      rejectingClient(
+        new Error('TypeScript is not installed in this project; run npm install -D typescript'),
+      ),
+      bridgeFor(TEST_PATH),
+    );
+
+    try {
+      await expect(
+        providers.providers.hover.provideHover(
+          semanticModel(),
+          { lineNumber: 1, column: 1 } as monaco.Position,
+          neverCancelled,
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      providers.dispose();
+    }
+  });
+
   it('cancels compound code actions when a later client request is disposed', async () => {
     const model = semanticModel();
     __monacoTestState.markers = [

@@ -95,6 +95,11 @@ export interface WorkspaceOwnerHandle {
   /** Actual root this owner was spawned at (`/scratch` or `/projects/<id>`). */
   readonly root: string;
   /**
+   * Resolves after the owner registers its IPC handlers and serves its workspace
+   * bridges. Page-originated frames sent before this point can race bootstrap.
+   */
+  readonly ready: Promise<void>;
+  /**
    * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148).
    * The page passes it to {@link wirePreviewBridge} when the dev server starts.
    */
@@ -164,7 +169,7 @@ export interface WorkspaceOwnerHandle {
     templateId: string;
     slug: string;
     setup: 'instant' | 'from-scratch';
-  }): void;
+  }): Promise<void>;
   /**
    * Send a `rifty:ts-lsp` REQUEST envelope to the owner (ADR-0166 P1.9a). There
    * is no direct page→LS channel — the LS is a grandchild the owner spawned — so
@@ -209,6 +214,20 @@ export interface WorkspaceOwnerOptions {
    */
   starter?: string;
   onLog?(line: string): void;
+}
+
+interface WorkspaceOwnerReadyMessage {
+  readonly type: 'rifty:workspace-owner-ready';
+  readonly port: OwnerBridgeKey;
+}
+
+function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwnerReadyMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as { readonly type?: unknown; readonly port?: unknown };
+  return (
+    candidate.type === 'rifty:workspace-owner-ready' &&
+    (typeof candidate.port === 'string' || typeof candidate.port === 'number')
+  );
 }
 
 /**
@@ -308,6 +327,24 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // ADR-0166 P1.9a: `rifty:ts-lsp` RESPONSE envelopes the owner relays back from
   // its LS child. The page LS client subscribes and correlates by `id`.
   const tsLspListeners = new Set<(message: unknown) => void>();
+  let readySettled = false;
+  let resolveReady: () => void = () => {};
+  let rejectReady: (err: Error) => void = () => {};
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  void ready.catch(() => {});
+  const settleReady = (): void => {
+    if (readySettled) return;
+    readySettled = true;
+    resolveReady();
+  };
+  const failReady = (err: Error): void => {
+    if (readySettled) return;
+    readySettled = true;
+    rejectReady(err);
+  };
   const client = createPtyClient({
     send: (frame) => {
       worker.send({ type: PTY_IPC_TYPE, frame });
@@ -339,6 +376,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   });
 
   worker.on('message', (message: unknown) => {
+    if (isWorkspaceOwnerReadyMessage(message) && Object.is(message.port, snapshotPort)) {
+      settleReady();
+      return;
+    }
     if (isPtyIpcMessage(message)) {
       // Only owner→page frames are actionable here; drop any echoed page→owner.
       if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
@@ -356,8 +397,13 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // dev-server state AND preview-port set on spawn so a `pty:dev-server` /
   // `pty:preview` push that predates our listener is recoverable (the
   // dropped-frame class the owner-resident shell hit) — never a one-shot push.
-  client.requestDevServer();
-  client.requestPreview();
+  void ready.then(
+    () => {
+      client.requestDevServer();
+      client.requestPreview();
+    },
+    () => {},
+  );
 
   let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
@@ -366,13 +412,14 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   });
   worker.on('exit', (code?: unknown) => {
     exited = true;
+    const exitCode = typeof code === 'number' ? code : null;
+    failReady(new Error(`workspace owner exited before ready (code ${exitCode ?? 'null'})`));
     client.disconnect(); // resolve in-flight runs nonzero — never hang
     // Owner died → the co-resident dev server is gone. Synthesize a stopped
     // frame to the page so its LIVE pill leaves 'running' (Bug #4: the exit
     // path used to only resolve `closed`, leaving the UI stale). `error` is
     // the non-fatal-failure carrier per the frame protocol (status stays
     // 'stopped'); `port`/`url` are undefined, so the preview iframe tears down.
-    const exitCode = typeof code === 'number' ? code : null;
     const stopped: PtyDevServer = {
       type: 'pty:dev-server',
       status: 'stopped',
@@ -396,11 +443,18 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   return {
     workspaceId,
     root,
+    ready,
     previewOwnerToken,
     snapshotPort,
     closed,
-    openSession: (sid, seed) => client.openSession(sid, seed),
-    exec: (sid, line, execOpts) => client.exec(sid, line, execOpts),
+    openSession: async (sid, seed) => {
+      await ready;
+      return client.openSession(sid, seed);
+    },
+    exec: async (sid, line, execOpts) => {
+      await ready;
+      return client.exec(sid, line, execOpts);
+    },
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
     signal: (sid, rid) => client.signal(sid, rid),
     closeSession: (sid) => client.closeSession(sid),
@@ -432,13 +486,26 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       previewListeners.add(cb);
       return () => previewListeners.delete(cb);
     },
-    requestPreview: () => client.requestPreview(),
-    setDevConfig: (config) => client.setDevConfig(config),
+    requestPreview: () => {
+      void ready.then(
+        () => client.requestPreview(),
+        () => {},
+      );
+    },
+    setDevConfig: async (config) => {
+      await ready;
+      return client.setDevConfig(config);
+    },
     sendTsLsp(message) {
       // No-op once the owner is gone — the LS child died with it; the page LS
       // client's per-request timeout rejects any in-flight call so nothing hangs.
       if (exited) return;
-      worker.send(stampTsLspOwner(message, snapshotPort));
+      void ready.then(
+        () => {
+          if (!exited) worker.send(stampTsLspOwner(message, snapshotPort));
+        },
+        () => {},
+      );
     },
     onTsLsp(cb) {
       tsLspListeners.add(cb);

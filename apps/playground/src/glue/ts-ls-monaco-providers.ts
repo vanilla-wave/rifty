@@ -66,6 +66,10 @@ const RIFTY_MARKER_OWNER = 'rifty-ts';
 const ORGANIZE_IMPORTS_KIND = 'source.organizeImports';
 const FIX_ALL_KIND = 'source.fixAll.ts';
 const APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND = 'rifty.ts.applyCompletionWorkspaceEdit';
+const MISSING_WORKSPACE_TYPESCRIPT_ERROR =
+  'TypeScript is not installed in this project; run npm install -D typescript';
+const BROKEN_WORKSPACE_TYPESCRIPT_ERROR = 'workspace TypeScript compiler unreadable';
+const UNREADABLE_WORKSPACE_TYPESCRIPT_LIB_ERROR = 'workspace TypeScript lib unreadable';
 
 /** The minimal editor seam the providers need (subset of `EditorApi`). */
 export interface EditorPathBridge {
@@ -88,11 +92,24 @@ function isDisposedClientError(err: unknown): boolean {
   return err instanceof Error && err.message === DISPOSED_CLIENT_ERROR;
 }
 
+function isTsUnavailableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.message.includes(MISSING_WORKSPACE_TYPESCRIPT_ERROR) ||
+    err.message.includes(BROKEN_WORKSPACE_TYPESCRIPT_ERROR) ||
+    err.message.includes(UNREADABLE_WORKSPACE_TYPESCRIPT_LIB_ERROR)
+  );
+}
+
+function isProviderLifecycleError(err: unknown): boolean {
+  return isDisposedClientError(err) || isTsUnavailableError(err);
+}
+
 async function tsRequestOr<T>(request: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await request();
   } catch (err) {
-    if (isDisposedClientError(err)) return fallback;
+    if (isProviderLifecycleError(err)) return fallback;
     throw err;
   }
 }
@@ -105,7 +122,7 @@ async function tsRequestResult<T>(request: () => Promise<T>): Promise<TsRequestR
   try {
     return { status: 'ok', value: await request() };
   } catch (err) {
-    if (isDisposedClientError(err)) return { status: 'disposed' };
+    if (isProviderLifecycleError(err)) return { status: 'disposed' };
     throw err;
   }
 }

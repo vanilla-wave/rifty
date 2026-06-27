@@ -93,6 +93,36 @@ async function importOwner(): Promise<typeof import('./realVite.ts')> {
 }
 
 describe('Bug #4 — owner death: stale running + silent write loss', () => {
+  it('holds TS-LSP requests until the owner reports ready', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    const request = {
+      type: 'rifty:ts-lsp',
+      request: { id: 1, type: 'ts:init', projectRoot: '/scratch' },
+    };
+
+    handle.sendTsLsp(request);
+    await Promise.resolve();
+
+    expect(
+      fakeWorker.sent.some(
+        (m) => !!m && typeof m === 'object' && (m as { type?: unknown }).type === 'rifty:ts-lsp',
+      ),
+    ).toBe(false);
+
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+    });
+    await handle.ready;
+    await Promise.resolve();
+
+    const tsFrame = fakeWorker.sent.find(
+      (m) => !!m && typeof m === 'object' && (m as { type?: unknown }).type === 'rifty:ts-lsp',
+    );
+    expect(tsFrame).toBeDefined();
+  });
+
   it('notifies dev-server listeners with a non-running frame on owner exit', async () => {
     const { startWorkspaceOwner } = await importOwner();
     const handle = startWorkspaceOwner();

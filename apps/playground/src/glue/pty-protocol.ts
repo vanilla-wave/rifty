@@ -64,9 +64,15 @@ export type PtyDevServerReq = { type: 'pty:dev-server-req' };
  */
 export type PtyDevConfig = {
   type: 'pty:dev-config';
+  id: string;
   templateId: string;
   slug: string;
   setup: 'instant' | 'from-scratch';
+};
+export type PtyDevConfigReady = {
+  type: 'pty:dev-config-ready';
+  id: string;
+  error?: string;
 };
 
 /** One previewable listening port (dev server or a `node <file>` server). */
@@ -97,7 +103,13 @@ export type PageToOwnerFrame =
   | PtyDevServerReq
   | PtyDevConfig
   | PtyPreviewReq;
-export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit | PtyDevServer | PtyPreview;
+export type OwnerToPageFrame =
+  | PtyReady
+  | PtyChunk
+  | PtyExit
+  | PtyDevServer
+  | PtyPreview
+  | PtyDevConfigReady;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
 
 /** kernel fork-IPC envelope discriminator (sits beside 'rifty:vfs-write'). */
@@ -124,6 +136,7 @@ const OWNER_TO_PAGE = new Set([
   'pty:exit',
   'pty:dev-server',
   'pty:preview',
+  'pty:dev-config-ready',
 ]);
 export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {
   return PAGE_TO_OWNER.has(f.type);

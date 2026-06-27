@@ -11,6 +11,7 @@ export default defineConfig({
   // GitHub's ubuntu runner advertises enough cores for parallel Playwright, but
   // TS-LS/fullstack specs cold-boot owner + child workers and fetch large bundles.
   // Serialize CI e2e; local runs keep Playwright's default worker count.
+  // TODO(backlog: process-meta/playwright-ci-worker-scope): scope CI serialization to TS-LS-heavy specs.
   workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

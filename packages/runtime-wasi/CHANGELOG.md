@@ -13,6 +13,10 @@
 
 ### Fixed
 
+- **PR #76 review gap recorded explicitly.** Added a backlog contract and
+  `TODO(backlog:)` seam for the playground dev esbuild bridge to preserve
+  successful transform warnings instead of throwing on non-empty stderr.
+
 - **Vite 8 browser boot — two WASI faithfulness fixes.** (a) `worker-entry`'s
   top-level guest-run is gated on the kernel having published a *wasi-guest* spec
   (one carrying the WASM-URL key), not merely "in a worker"; the gate is the

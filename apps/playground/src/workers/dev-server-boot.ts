@@ -257,6 +257,7 @@ export async function bootDevServer(opts: {
   });
 
   let activeServer: ViteDevServer | null = null;
+  // TODO(backlog: playground/dev-server-synthetic-watcher-dead-set): remove or differentiate this branch; both paths publish.
   const syntheticWatcherChanges = new Set<string>();
   function handleViteFileChange(path: string): void {
     const modulePath = normalizePath(path);

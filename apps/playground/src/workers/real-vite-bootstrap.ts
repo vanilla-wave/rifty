@@ -40,7 +40,10 @@ import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
-import { installStampSatisfied } from '../glue/install-stamp.ts';
+import {
+  effectiveDepsFromPackageJsonText,
+  installStampSatisfiedForPackageJson,
+} from '../glue/install-stamp.ts';
 import { type NodeChildMessage, isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
@@ -100,6 +103,9 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 const VITE_DEFAULT_DEV_PORT = 5173;
 const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
+const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
+const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
+const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -108,6 +114,10 @@ function log(line: string): void {
   // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
   // page-side WorkerProcessHandle.stdout() emits each chunk, realVite.ts -> onLog.
   globalThis.process.stdout.write(line);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Decode an LS-child stdout/stderr chunk for the owner log (tolerant, like realVite). */
@@ -189,7 +199,7 @@ async function restoreInstantDeps(
 ): Promise<void> {
   if (!cfg.bakedNodeModulesUrl) return;
   const vfs = new SyncMirrorVfs();
-  if (await installStampSatisfied(vfs, cfg.root, slug)) return;
+  if (await installStampSatisfiedForPackageJson(vfs, cfg.root, slug, cfg.packageJson)) return;
   const fs = syncMirror();
   clearProjectTree(fs, cfg.root);
   fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
@@ -434,6 +444,26 @@ async function bootShellOwner(opts: {
   let lastDevRoot: string | null = null;
   let devConfigReady: Promise<void> = Promise.resolve();
 
+  function devConfigRequestsWorkspaceTypeScript(): boolean {
+    return effectiveDepsFromPackageJsonText(devCfg.packageJson)?.typescript !== undefined;
+  }
+
+  async function waitForWorkspaceTypeScript(root: string): Promise<void> {
+    const path = normalizePath(`${root}/${TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH}`);
+    const started = performance.now();
+    while (!syncMirror().existsSync(path)) {
+      if (performance.now() - started >= TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS) {
+        throw new Error(`workspace TypeScript not ready at ${path}`);
+      }
+      await sleep(TS_LSP_TYPESCRIPT_READY_POLL_MS);
+    }
+  }
+
+  async function waitForTsLspDependencies(): Promise<void> {
+    await devConfigReady;
+    if (devConfigRequestsWorkspaceTypeScript()) await waitForWorkspaceTypeScript(devCfg.root);
+  }
+
   async function prepareActiveDevConfigDeps(): Promise<void> {
     try {
       if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
@@ -463,7 +493,12 @@ async function bootShellOwner(opts: {
         fromScratch: devFromScratch,
         installStampSatisfied:
           devFromScratch &&
-          (await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug)) !== null,
+          (await installStampSatisfiedForPackageJson(
+            new SyncMirrorVfs(),
+            devCfg.root,
+            devSlug,
+            devCfg.packageJson,
+          )) !== null,
       });
       if (cleanForSwitch) {
         // Root OR template switched (ADR-0165 §5): a fresh worker per preset used
@@ -716,7 +751,12 @@ async function bootShellOwner(opts: {
       // preserving the user's edits. Runs in the owner, ATOMIC with the install (the
       // `npm install && <dev>` boot line never races it).
       if (devFromScratch && isFullInstall(args)) {
-        const stamped = await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug);
+        const stamped = await installStampSatisfiedForPackageJson(
+          new SyncMirrorVfs(),
+          devCfg.root,
+          devSlug,
+          devCfg.packageJson,
+        );
         if (!stamped) {
           const fs = syncMirror();
           clearProjectTree(fs, devCfg.root);
@@ -767,6 +807,7 @@ async function bootShellOwner(opts: {
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
       devConfigReady = prepareActiveDevConfigDeps();
+      return devConfigReady;
     },
   });
 
@@ -836,8 +877,31 @@ async function bootShellOwner(opts: {
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy
     // spawn on first frame). Only REQUEST envelopes are inbound from the page.
+    // Preset switches restore package.json/node_modules asynchronously; the LS
+    // must see the same dependency-ready tree as the dev line before it resolves
+    // the workspace `typescript` package.
     if (isTsRequestMessage(message) && tsLspOwnerMatches(message, port)) {
-      relayTsLspRequest(message);
+      void (async (): Promise<void> => {
+        await waitForTsLspDependencies();
+        relayTsLspRequest(message);
+      })().catch((err: unknown) => {
+        const requestId = message.request.id;
+        const error = err instanceof Error ? err : new Error(String(err));
+        kernelIpc.send?.(
+          stampTsLspOwner(
+            {
+              type: 'rifty:ts-lsp',
+              response: {
+                id: requestId,
+                ok: false,
+                kind: 'error',
+                error: { name: error.name, message: error.message },
+              },
+            },
+            port,
+          ),
+        );
+      });
     }
   });
 
@@ -871,6 +935,7 @@ async function bootShellOwner(opts: {
       await ensureStarterInitialCommit(ownerGitVfs(), root);
     },
   );
+  kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port });
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.

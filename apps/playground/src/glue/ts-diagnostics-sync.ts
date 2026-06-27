@@ -17,11 +17,13 @@ export interface TsDiagnosticsSyncOptions<Diagnostic, Marker> {
     updater: (prev: Map<string, readonly Diagnostic[]>) => Map<string, readonly Diagnostic[]>,
   ) => void;
   readonly toMarkers: (diagnostics: readonly Diagnostic[]) => readonly Marker[];
+  readonly beforeRequest?: () => Promise<void>;
   readonly warn: (message: string) => void;
 }
 
 export interface TsDiagnosticsSync {
   handleDocument(ev: EditorDocumentEvent): void;
+  refreshOpenDiagnostics(): Promise<void>;
   dispose(): void;
 }
 
@@ -42,6 +44,8 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
   async function refreshDiagnostics(path: string, version: number): Promise<void> {
     if (disposed) return;
     try {
+      await options.beforeRequest?.();
+      if (disposed || !openPaths.has(path) || diagnosticVersions.get(path) !== version) return;
       const [semantic, syntactic] = await Promise.all([
         options.client.getSemanticDiagnostics(path),
         options.client.getSyntacticDiagnostics(path),
@@ -73,7 +77,14 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     if (ev.kind === 'close') {
       bumpDiagnosticVersion(ev.path);
       clearTimer(ev.path);
-      if (openPaths.delete(ev.path)) void options.client.close(ev.path);
+      if (openPaths.delete(ev.path)) {
+        void (async (): Promise<void> => {
+          await options.beforeRequest?.();
+          if (!disposed) await options.client.close(ev.path);
+        })().catch((err: unknown) => {
+          if (!disposed) options.warn((err as Error).message);
+        });
+      }
       options.setMarkers(ev.path, []);
       options.setDiagnostics((prev) => {
         if (!prev.has(ev.path)) return prev;
@@ -90,20 +101,26 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
       ev.path,
       setTimeout(() => {
         debounceTimers.delete(ev.path);
-        let push: Promise<void>;
-        if (openPaths.has(ev.path)) {
-          push = options.client.update(ev.path, ev.text);
-        } else {
-          openPaths.add(ev.path);
-          push = options.client.open(ev.path, ev.text);
-        }
-        void push.then(
-          () => refreshDiagnostics(ev.path, version),
-          (err: unknown) => {
-            if (!disposed) options.warn((err as Error).message);
-          },
-        );
+        void (async (): Promise<void> => {
+          await options.beforeRequest?.();
+          if (disposed || diagnosticVersions.get(ev.path) !== version) return;
+          if (openPaths.has(ev.path)) {
+            await options.client.update(ev.path, ev.text);
+          } else {
+            openPaths.add(ev.path);
+            await options.client.open(ev.path, ev.text);
+          }
+          await refreshDiagnostics(ev.path, version);
+        })().catch((err: unknown) => {
+          if (!disposed) options.warn((err as Error).message);
+        });
       }, options.debounceMs),
+    );
+  }
+
+  async function refreshOpenDiagnostics(): Promise<void> {
+    await Promise.all(
+      [...openPaths].map((path) => refreshDiagnostics(path, bumpDiagnosticVersion(path))),
     );
   }
 
@@ -115,5 +132,5 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     diagnosticVersions.clear();
   }
 
-  return { handleDocument, dispose };
+  return { handleDocument, refreshOpenDiagnostics, dispose };
 }

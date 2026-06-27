@@ -23,7 +23,7 @@ describe('App terminal startup wiring', () => {
   // stays enforced for both runtimes and both setup kinds.
   it('auto-starts the active preset through the command that owns the real worker lifecycle', () => {
     expect(source).toContain(
-      'await runTerminalSequence(session.id, presetBootLines(preset, activeRoot()))',
+      'void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()))',
     );
     expect(source).not.toContain("['npm install', 'npm run dev']");
     // hardcoded boot literals bypassing the dispatch helper are banned
@@ -99,6 +99,18 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('if (path !== programMirrorPath(activeRoot(), activeTemplate()))');
   });
 
+  it('drops a debounced program write before reseeding a picked starter', () => {
+    const runPreset = source.match(
+      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(runPreset).toBeDefined();
+    expect(source).toContain('function discardPendingProgramWrite(): void');
+    expect(source).toMatch(
+      /function discardPendingProgramWrite\(\): void \{[\s\S]*?clearTimeout\(programWriteTimer\);[\s\S]*?pendingProgramWrite = undefined;[\s\S]*?\}/,
+    );
+    expect(runPreset).toMatch(/discardPendingProgramWrite\(\);\s*seedViteWorkspace\(preset\);/);
+  });
+
   it('opens configured preset files as inactive editor tabs', () => {
     expect(source).toContain('function openPresetEditorTabs(preset: Preset): void');
     expect(source).toContain('for (const path of preset.openFiles ?? [])');
@@ -130,8 +142,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('await waitForTerminalIdle(devServerSessionId)');
     expect(source).toContain('await waitForDevServerBoot(targetSessionId, generation)');
     expect(source).toContain(
-      "if (devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running')",
+      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
     );
+    expect(source).toContain('if (restartNeeded)');
     expect(source).toContain('devServerSessionId = session.id');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.
@@ -188,7 +201,17 @@ describe('App terminal startup wiring', () => {
   it('delegates TS diagnostic synchronization to the versioned helper', () => {
     expect(source).toContain('createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>');
     expect(source).toContain('api.onDocument(diagnosticSync.handleDocument)');
+    expect(source).toContain('beforeRequest: waitForTsRequestGate');
     expect(source).toContain('diagnosticSync.dispose()');
+  });
+
+  it('waits for the workspace owner before sending TS language-service requests', () => {
+    expect(source).toContain('const owner = workspaceOwner();');
+    expect(source).toContain('const waitForTsRequestGate = async (): Promise<void> => {');
+    expect(source).toContain('await owner.ready;');
+    expect(source).toContain('await tsPresetTransitionReady;');
+    expect(source).toContain('await waitForTsRequestGate();');
+    expect(source).toContain('if (disposed) return false;');
   });
 
   it('reinitializes rifty TS when starter files change under the same active root', () => {
@@ -200,6 +223,43 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
     expect(source).toContain(
       'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
+    );
+    expect(source).toContain('await diagnosticSync.refreshOpenDiagnostics();');
+  });
+
+  it('waits for picked starter boot before replaying TS documents', () => {
+    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPreset = source.slice(runPresetStart, runPresetEnd);
+    const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
+    const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
+    const pickStarter = source.slice(pickStarterStart, pickStarterEnd);
+    const reinit = source.match(
+      /function reinitializeTsForPickedPreset\(preset: Preset\): void \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(runPresetStart).toBeGreaterThan(-1);
+    expect(runPresetEnd).toBeGreaterThan(runPresetStart);
+    expect(source).toContain('let tsPresetTransitionReady: Promise<void> = Promise.resolve();');
+    expect(source).toContain('await tsPresetTransitionReady;');
+    expect(pickStarterStart).toBeGreaterThan(-1);
+    expect(pickStarterEnd).toBeGreaterThan(pickStarterStart);
+    expect(pickStarter.indexOf('beginTsPresetTransition();')).toBeLessThan(
+      pickStarter.indexOf('store.pickStarter(id);'),
+    );
+    expect(pickStarter).toContain('void runVitePreset(presetForId(id), tsGate);');
+    expect(reinit).toBeDefined();
+    expect(reinit).toMatch(/openPresetEditorTabs\(preset\);[\s\S]*setTsProjectRevision/);
+    expect(runPreset).toContain('templateId: templateForPreset(preset).id,');
+    expect(runPreset).toContain('await workspaceOwner().setDevConfig({');
+    expect(runPreset).toMatch(/finally \{[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/);
+    expect(runPreset.indexOf('const session = devServerSession();')).toBeLessThan(
+      runPreset.indexOf('await workspaceOwner().setDevConfig({'),
+    );
+    expect(runPreset).toMatch(
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await restartDevServer\(restartSessionId\);[\s\S]*?reinitializeTsForPickedPreset\(preset\);[\s\S]*?return;/,
+    );
+    expect(runPreset).toMatch(
+      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForDevServerBoot\(session\.id, generation\);[\s\S]*?reinitializeTsForPickedPreset\(preset\);/,
     );
   });
 

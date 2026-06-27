@@ -3,7 +3,7 @@
  * `bakedNodeModulesUrl`, run a real `install()` into a memory VFS and write
  * the resulting node_modules + lockfile as a gzipped JSON asset under
  * `public/snapshots/`. Run via `pnpm snapshots:bake` after changing a baked
- * template's `install` map; the asset is committed (deploys stay hermetic).
+ * template's dependency maps; the asset is committed (deploys stay hermetic).
  *
  * Same installer, same shadow overrides, same native-dep gate as the worker —
  * the baked tree is byte-equivalent to what a worker-side install produces
@@ -36,7 +36,8 @@ if (baked.length === 0) {
 for (const spec of baked) {
   const url = spec.bakedNodeModulesUrl;
   if (!url) continue;
-  console.log(`baking ${spec.id} (${JSON.stringify(spec.install)}) from ${registryBaseUrl}…`);
+  const requestedDeps = { ...spec.install, ...(spec.devDependencies ?? {}) };
+  console.log(`baking ${spec.id} (${JSON.stringify(requestedDeps)}) from ${registryBaseUrl}…`);
 
   const { vfs, fsSync } = createMemoryFs();
   await vfs.mkdir(ROOT, { recursive: true });

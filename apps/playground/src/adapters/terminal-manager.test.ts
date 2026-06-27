@@ -67,6 +67,7 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
   const owner: WorkspaceOwnerHandle = {
     workspaceId: 'ws-test',
     root: '/scratch',
+    ready: Promise.resolve(),
     previewOwnerToken: 'ws-test-token',
     snapshotPort: 59124,
     closed: Promise.resolve(null),
@@ -109,7 +110,9 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
       return () => {};
     },
     requestPreview(): void {},
-    setDevConfig(): void {},
+    setDevConfig(): Promise<void> {
+      return Promise.resolve();
+    },
     sendTsLsp(): void {},
     onTsLsp(): () => void {
       return () => {};

@@ -4,6 +4,7 @@ import {
   depsEqual,
   installStampPath,
   installStampSatisfied,
+  installStampSatisfiedForPackageJson,
   readEffectiveDeps,
   readInstallStamp,
   restampSlug,
@@ -83,6 +84,46 @@ describe('install stamp (ADR-0135)', () => {
       dependencies: { vite: '^5.4.0', lodash: '^4' },
     });
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
+  it('is not satisfied for a different template package.json under the same slug', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs, {
+      name: 'app',
+      dependencies: { vite: '^7.0.0' },
+    });
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 12, 'scratch');
+
+    const typescriptPackageJson = JSON.stringify({
+      name: 'app',
+      dependencies: { vite: '^7.0.0' },
+      devDependencies: { typescript: '5.9.3' },
+    });
+
+    expect(
+      await installStampSatisfiedForPackageJson(vfs, ROOT, 'scratch', typescriptPackageJson),
+    ).toBeNull();
+  });
+
+  it('is satisfied when a stamped package.json keeps template deps plus user deps', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs, {
+      name: 'app',
+      dependencies: { vite: '^7.0.0', cowsay: '^1.6.0' },
+    });
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 20, 'scratch');
+
+    const templatePackageJson = JSON.stringify({
+      name: 'app',
+      dependencies: { vite: '^7.0.0' },
+    });
+
+    expect(
+      (await installStampSatisfiedForPackageJson(vfs, ROOT, 'scratch', templatePackageJson))
+        ?.packages,
+    ).toBe(20);
   });
 
   it('is not satisfied without node_modules, without a stamp, or without package.json', async () => {

@@ -245,6 +245,7 @@ export function createEsbuildTransformBridge(workspace: string): EsbuildTransfor
       );
     }
     if (stderr.trim().length > 0) {
+      // TODO(backlog: runtime-wasi/esbuild-transform-warnings): return successful esbuild warnings instead of throwing.
       throw new NotImplementedError('esbuild.transform.warnings', stderr.trim());
     }
     const wantsExternalMap = options.sourcemap && options.sourcemap !== 'inline';

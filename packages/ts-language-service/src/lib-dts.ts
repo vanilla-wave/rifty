@@ -16,7 +16,7 @@
  */
 
 import type { FsSync } from '@riftydev/vfs';
-import tsVendored from 'typescript';
+import type tsVendored from 'typescript';
 import { readFileUtf8 } from './vfs-ts-host.ts';
 
 type TypeScriptApi = typeof tsVendored;
@@ -24,7 +24,7 @@ type TypeScriptApi = typeof tsVendored;
 export interface LoadedTypeScriptCompiler {
   readonly ts: TypeScriptApi;
   readonly libMap: ReadonlyMap<string, string>;
-  readonly source: 'vendored' | 'workspace';
+  readonly source: 'workspace';
   readonly packageRoot?: string;
 }
 
@@ -253,7 +253,7 @@ export async function loadTypeScriptCompilerForProject(
 ): Promise<LoadedTypeScriptCompiler> {
   const workspaceRoot = findWorkspaceTypeScriptRoot(fsSync, projectRoot);
   if (!workspaceRoot) {
-    return { ts: tsVendored, libMap: await loadLibDts(), source: 'vendored' };
+    throw new Error('TypeScript is not installed in this project; run npm install -D typescript');
   }
 
   const compilerPath = `${workspaceRoot}/lib/typescript.js`;

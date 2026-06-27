@@ -14,7 +14,7 @@ code: [packages/ts-language-service/src/service.ts]
 Landed 2026-06-22: umbrella closed. Core + long-tail TS LS surfaces now have
 engine wrappers, worker frames, page-client methods, parity coverage, and Monaco
 providers wherever Monaco 0.52 exposes a provider API. Workspace TypeScript
-version loading is covered by ADR-0169; the one-click playground TypeScript
+version loading is covered by ADR-0177; the one-click playground TypeScript
 preset is shipped.
 
 CORE DELIVERED under ADR-0166 — kept as the umbrella closure record.
