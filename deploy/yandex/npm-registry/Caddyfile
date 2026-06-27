@@ -2,13 +2,20 @@
 	admin off
 }
 
-registry.rifty.dev {
+registry.rifty.dev, registry-origin.rifty.dev {
 	header {
 		>Access-Control-Allow-Origin "*"
 		>Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
 		>Access-Control-Allow-Headers "accept, content-type"
 		>Cross-Origin-Resource-Policy "cross-origin"
 	}
+
+	@packuments path_regexp packument_cache ^/npm-registry/(?:@[^/]+/[^/]+|[^/]+)$
+	header @packuments >Cache-Control "public, max-age=300, stale-while-revalidate=86400"
+	header @packuments >Vary "Accept"
+
+	@tarballs path_regexp tarball_cache ^/npm-registry/.*/-/.*\.tgz$
+	header @tarballs >Cache-Control "public, max-age=31536000, immutable"
 
 	@options method OPTIONS
 	respond @options "" 204

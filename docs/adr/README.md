@@ -101,6 +101,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0134 | install() per-package progress hook (onPackage) |
 | 0156 | Typed browser shim registry and wasm32 native policy |
 | 0163 | Yandex Cloud streaming npm-registry proxy |
+| 0175 | Bounded-concurrency packument prefetch in npm install |
+| 0176 | Cache headers for npm registry proxy |
 
 ### playground
 

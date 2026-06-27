@@ -100,6 +100,47 @@ class GaugeRegistry extends RegistryClient {
   }
 }
 
+/**
+ * Same live gauge as GaugeRegistry, but on packument metadata fetches. The
+ * placement walk must stay serial, so this only proves metadata prefetch overlap.
+ */
+class PackumentGaugeRegistry extends RegistryClient {
+  private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
+  private inFlight = 0;
+  peakInFlight = 0;
+
+  constructor(db: Map<string, Map<string, FakeRegistryEntry>>) {
+    super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
+    this.db = db;
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    this.inFlight++;
+    this.peakInFlight = Math.max(this.peakInFlight, this.inFlight);
+    try {
+      await new Promise((r) => setTimeout(r, 5));
+      const versions = this.db.get(name);
+      if (!versions) throw new Error(`fake registry: no packument for ${name}`);
+      const versionsMap: Record<string, VersionManifest> = {};
+      for (const [v, entry] of versions) versionsMap[v] = entry.manifest;
+      const sorted = [...versions.keys()].sort();
+      const latest = sorted[sorted.length - 1] ?? '0.0.0';
+      return { name, 'dist-tags': { latest }, versions: versionsMap };
+    } finally {
+      this.inFlight--;
+    }
+  }
+
+  override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+    const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
+    if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
+    const [, name, version] = match;
+    const entry = this.db.get(name ?? '')?.get(version ?? '');
+    if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
+    return entry.tarball;
+  }
+}
+
 async function makeEntry(
   name: string,
   version: string,
@@ -209,6 +250,24 @@ describe('install — deterministic layout under bounded-concurrency fetch (#24)
     await install('root', '1.0.0', { express: '^4' }, { vfs, cwd: '/proj', registry });
     // Strict: serial would cap at 1; concurrent fetch lifts it above 1.
     expect(registry.peakInFlight).toBeGreaterThan(1);
+  });
+
+  it('prefetches sibling packuments concurrently without perturbing express diamond layout', async () => {
+    const registry = new PackumentGaugeRegistry(await expressDiamondDb());
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const result = await install(
+      'root',
+      '1.0.0',
+      { express: '^4' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    expect(registry.peakInFlight).toBeGreaterThan(1);
+    expect(result.lockfile.packages['node_modules/ms']?.version).toBe('2.1.3');
+    expect(result.lockfile.packages['node_modules/finalhandler/node_modules/ms']?.version).toBe(
+      '2.0.0',
+    );
   });
 });
 
