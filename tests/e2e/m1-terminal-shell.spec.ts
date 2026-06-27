@@ -150,6 +150,27 @@ test.describe('M1 - terminal shell', () => {
     await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
   });
 
+  test('closing the active idle terminal focuses the previous terminal tab', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+
+    await openShellTerminal(page);
+    await page.getByRole('button', { name: 'New terminal' }).click();
+    await expect(page.getByRole('tab', { name: 'Terminal 3' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    await page.getByRole('button', { name: 'Close Terminal 3' }).click();
+
+    await expect(terminalSessionTabs(page)).toHaveCount(2);
+    await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
+  });
+
   test('new-terminal button stays attached while Problems stays pinned left', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();

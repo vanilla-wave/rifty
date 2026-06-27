@@ -574,7 +574,16 @@ export function App(props: AppProps) {
   function closeSession(id: string): void {
     const session = manager.snapshot(id);
     if (session.status === 'running') return;
+    const visibleBefore = visibleSessions();
+    const closingIndex = visibleBefore.findIndex((candidate) => candidate.id === id);
+    const fallback =
+      closingIndex > 0 ? visibleBefore[closingIndex - 1] : visibleBefore[closingIndex + 1];
+    const wasActive = manager.activeSessionId() === id;
     hiddenSessionIds.add(id);
+    if (wasActive && fallback) {
+      manager.select(fallback.id);
+      setTerminalFocusEpoch((epoch) => epoch + 1);
+    }
     refreshTerminalState();
   }
 

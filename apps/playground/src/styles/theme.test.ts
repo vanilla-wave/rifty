@@ -67,4 +67,12 @@ describe('terminal typography styles', () => {
     expect(css).toContain('.rf-terminal .xterm');
     expect(css).toContain('.rf-terminal .xterm-helper-textarea');
   });
+
+  it('centers the Problems count inside its fixed badge circle', () => {
+    const block = css.slice(css.indexOf('.rf-console__badge'), css.indexOf('/* Problems panel'));
+
+    expect(block).toContain('min-width: 16px;');
+    expect(block).toContain('height: 16px;');
+    expect(block).toContain('line-height: 16px;');
+  });
 });

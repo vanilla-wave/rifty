@@ -1290,6 +1290,7 @@ body {
   background: var(--rf-accent);
   color: #1d1f26;
   font: 600 10px / 1 var(--rf-font-sans);
+  line-height: 16px;
 }
 
 /* Problems panel (ADR-0166 P1.9c). */

@@ -25,6 +25,8 @@
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
+  The Problems count badge now keeps its number vertically centered, and closing
+  the active idle terminal focuses the previous terminal tab.
 - **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
   and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
   non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips
