@@ -57,6 +57,7 @@ import {
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
+import { ensureStarterInitialCommit, seedFilesForStarter, starterById } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
 import {
@@ -66,6 +67,7 @@ import {
 } from '../glue/vfs-snapshot-port.ts';
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
+import { DEFAULT_PRESET } from '../presets.ts';
 import {
   type BootstrapConfig,
   type ProjectSpec,
@@ -149,6 +151,19 @@ function seedProject(cfg: BootstrapConfig): void {
       ),
     );
   }
+}
+
+function seedStarterBaseline(starter: string, root: string): void {
+  const fs = syncMirror();
+  for (const [path, content] of Object.entries(seedFilesForStarter(starterById(starter), root))) {
+    const np = normalizePath(path);
+    fs.mkdirSync(dirname(np), { recursive: true });
+    fs.writeFileSync(np, enc.encode(content));
+  }
+}
+
+function ownerGitVfs(): SyncMirrorVfs {
+  return new SyncMirrorVfs();
 }
 
 /**
@@ -348,7 +363,10 @@ async function bootShellOwner(opts: {
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
 
+  const freshRoot = !syncMirror().existsSync(cfg.root);
   seedProject(cfg);
+  if (freshRoot) seedStarterBaseline(starter, cfg.root);
+  await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
   // Instant presets: pre-seed node_modules from the baked snapshot into the owner
   // store NOW, before any dev line (the full fs is already present). from-scratch
   // deps come from the explicit `npm install` boot step — nothing to do here.
@@ -821,6 +839,7 @@ async function bootShellOwner(opts: {
     '/',
     flushSyncMirror,
     publishSnapshot,
+    (root) => ensureStarterInitialCommit(ownerGitVfs(), root),
   );
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
@@ -865,9 +884,9 @@ async function bootstrap(): Promise<void> {
   const slug = env.RIFTY_RFV_SLUG ?? spec.id;
   // Active STARTER (preset id) for a synthesized scratch entry (ADR-0165 §4): the
   // slug is the active ROOT id ('scratch' or a projectId), not the starter, so the
-  // page sends the real starter over RIFTY_RFV_STARTER. Fall back to the spawn
-  // template id (a fresh boot before the page picks anything).
-  const starter = env.RIFTY_RFV_STARTER ?? spec.id;
+  // page sends the real starter over RIFTY_RFV_STARTER. Fall back to the default
+  // starter id (a fresh boot before the page picks anything).
+  const starter = env.RIFTY_RFV_STARTER ?? DEFAULT_PRESET.id;
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);

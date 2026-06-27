@@ -12,6 +12,8 @@
  * entry path + the Preset's `files[]` overlaid under the root. NO stored
  * per-project artifact, so the reset baseline survives reload and can't drift.
  */
+import { type RunResult, Shell } from '@riftydev/shell';
+import type { Vfs } from '@riftydev/vfs';
 import { PRESETS, type Preset } from '../presets.ts';
 import { resolveBootstrapConfig } from '../templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts';
@@ -77,4 +79,37 @@ export function seedFilesForStarter(starter: Starter, root: string): Record<stri
     files[`${root}${rel}`] = f.content;
   }
   return files;
+}
+
+const INITIAL_COMMIT_MESSAGE = 'Initial commit';
+
+function assertGitOk(command: string, result: RunResult): void {
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `${command} failed with ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
+  }
+}
+
+/**
+ * Make a freshly-seeded Starter look like a normal project checkout: one real
+ * root commit on `main`, clean worktree, generated files left ignored.
+ */
+export async function ensureStarterInitialCommit(vfs: Vfs, root: string): Promise<void> {
+  const sh = new Shell({ cwd: root });
+  if (!(await vfs.exists(`${root}/.git/HEAD`))) {
+    assertGitOk('git init', await sh.run('git init'));
+  }
+  const log = await sh.run('git log --oneline');
+  if (log.exitCode === 0 && log.stdout.trim() !== '') return;
+
+  const status = await sh.run('git status --porcelain');
+  assertGitOk('git status --porcelain', status);
+  if (status.stdout.trim() === '') return;
+
+  assertGitOk('git add .', await sh.run('git add .'));
+  assertGitOk(
+    `git commit -m "${INITIAL_COMMIT_MESSAGE}"`,
+    await sh.run(`git commit -m "${INITIAL_COMMIT_MESSAGE}"`),
+  );
 }

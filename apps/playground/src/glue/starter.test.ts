@@ -10,6 +10,7 @@ import {
 import { SOCKET_LAB_TEMPLATE } from '../templates/socket-lab.ts';
 import {
   GROUP_FOR_CATEGORY,
+  ensureStarterInitialCommit,
   seedFilesForStarter,
   starterById,
   starterFromPreset,
@@ -112,6 +113,52 @@ describe('seedFilesForStarter (starter, root)', () => {
         const config = await sh.run('git config core.repositoryformatversion');
         expect(config.exitCode).toBe(0);
         expect(config.stdout).toBe('0\n');
+      }
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
+  it('commits every Starter baseline as one clean initial commit', async () => {
+    installMemoryFs();
+    try {
+      const vfs = asyncVfs();
+      if (!vfs) throw new Error('no async vfs');
+
+      for (const preset of PRESETS) {
+        const root = `/projects/${preset.id}`;
+        const files = seedFilesForStarter(starterById(preset.id), root);
+        for (const [path, content] of Object.entries(files)) {
+          await vfs.mkdir(dirname(path), { recursive: true });
+          await vfs.writeFile(path, content);
+        }
+        await vfs.mkdir(`${root}/node_modules/pkg`, { recursive: true });
+        await vfs.writeFile(`${root}/node_modules/pkg/index.js`, 'generated dependency\n');
+        await vfs.mkdir(`${root}/dist`, { recursive: true });
+        await vfs.writeFile(`${root}/dist/bundle.js`, 'generated build output\n');
+
+        await ensureStarterInitialCommit(vfs, root);
+        await ensureStarterInitialCommit(vfs, root);
+
+        const sh = new Shell({ cwd: root });
+        const status = await sh.run('git status --porcelain');
+        expect(status).toMatchObject({ exitCode: 0, stdout: '', stderr: '' });
+
+        const log = await sh.run('git log --oneline');
+        expect(log.exitCode).toBe(0);
+        expect(log.stderr).toBe('');
+        expect(log.stdout.trim().split('\n')).toHaveLength(1);
+        expect(log.stdout).toMatch(/^[0-9a-f]{7} Initial commit\n$/);
+
+        const editablePath = Object.keys(files).find(
+          (path) => !path.includes('/.git/') && !path.includes('/node_modules/'),
+        );
+        if (!editablePath) throw new Error(`no editable path for ${preset.id}`);
+        await vfs.writeFile(editablePath, `${files[editablePath] ?? ''}\n// user edit\n`);
+        const dirty = await sh.run('git status --porcelain');
+        expect(dirty.stdout).toContain(` M ${editablePath.slice(root.length + 1)}`);
+        expect(dirty.stdout).not.toContain('node_modules/');
+        expect(dirty.stdout).not.toContain('dist/');
       }
     } finally {
       resetSyncMirror();

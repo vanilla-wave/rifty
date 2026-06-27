@@ -20,10 +20,9 @@
 ### Fixed
 
 - **Starter templates now open as initialized git repositories.** Every
-  template root seeds the same `.git/HEAD` and core config that rifty's
-  `git init` creates plus a project `.gitignore`, so terminal `git status`
-  ignores generated `node_modules`/build output after picking or resetting a
-  starter.
+  template root seeds a real `Initial commit` on `main` plus a project
+  `.gitignore`, so terminal `git status` starts clean and later reports only the
+  user's edits while ignoring generated `node_modules`/build output.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.
