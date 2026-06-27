@@ -3,17 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { ProjectSwitcherChip } from './ProjectSwitcherChip.tsx';
 
 describe('ProjectSwitcherChip', () => {
-  it('reads "Untitled scratch" + dirty dot when the active scratch is dirty', () => {
+  it('shows the starter-derived scratch name + dirty dot when the active scratch is dirty', () => {
     const html = renderToString(() =>
       ProjectSwitcherChip({
-        name: 'Untitled scratch',
+        name: 'React scratch',
         glyph: 'R',
         glyphColor: '#6FC9E8',
         dirty: true,
         onOpen: () => {},
       }),
     );
-    expect(html).toContain('Untitled scratch');
+    expect(html).toContain('React scratch');
     expect(html).toContain('rf-chip__dot');
     expect(html).toContain('data-dirty="true"');
   });

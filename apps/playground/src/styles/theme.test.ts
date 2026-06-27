@@ -46,4 +46,10 @@ describe('multi-project launcher styles (ADR-0165 §9)', () => {
       expect(css).toContain(sel);
     }
   });
+  it('pins the project chip name to the app font instead of the button default', () => {
+    const chipBlock = css.slice(css.indexOf('.rf-chip {'), css.indexOf('.rf-chip {') + 320);
+    const block = css.slice(css.indexOf('.rf-chip__name'), css.indexOf('.rf-chip__name') + 160);
+    expect(chipBlock).toContain('font: 500 12.5px / 16px var(--rf-font-sans);');
+    expect(block).toContain('font: inherit;');
+  });
 });

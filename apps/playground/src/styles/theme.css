@@ -304,6 +304,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  font: 500 12.5px / 16px var(--rf-font-sans);
+  color: var(--rf-text);
   cursor: pointer;
 }
 .rf-chip[data-dirty="true"] {
@@ -319,7 +321,7 @@ body {
   text-align: center;
 }
 .rf-chip__name {
-  font-size: 12.5px;
+  font: inherit;
   color: rgba(255, 255, 255, 0.85);
 }
 .rf-chip__dot {

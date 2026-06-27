@@ -68,12 +68,12 @@ describe('StatusBar project surface', () => {
     isOpfs: true,
     storagePersisted: true,
     coi: true,
-    activeName: 'Untitled scratch',
+    activeName: 'React scratch',
     activeStarter: 'react',
   };
   it('shows the active project name + starter', () => {
     const html = renderToString(() => StatusBar({ ...base }));
-    expect(html).toContain('Untitled scratch');
+    expect(html).toContain('React scratch');
     expect(html).toContain('react');
   });
   it('shows UNSAVED when dirty + persisted', () => {

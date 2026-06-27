@@ -375,6 +375,22 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('index-set-active rejects an unknown project id without corrupting the index', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    writeIndex(fs, '/', {
+      activeId: 'p-1',
+      scratch: null,
+      projects: [{ id: 'p-1', name: 'A', starter: 'project-files', editedAt: 'a' }],
+    });
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    expect(() => setActiveIndex(PORT, 'p-missing')).toThrow(/unknown active project/i);
+    expect(loadIndex(fs, '/').activeId).toBe('p-1');
+
+    tearOwner();
+  });
+
   it('index-new-scratch (re)creates the scratch entry AFTER a Save (index scratch:null) so the next Save works', async () => {
     // Post-Save shape: a project listed, scratch:null, activeId=the project.
     const fs = new MemoryFsSync();

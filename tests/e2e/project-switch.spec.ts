@@ -93,6 +93,13 @@ async function switchToProject(page: Page, name: string, id: string): Promise<vo
   });
 }
 
+async function expectProjectChipName(page: Page, name: string): Promise<void> {
+  const chipName = page.locator('[data-action="open-launcher"] .rf-chip__name');
+  await expect(chipName).toHaveText(name, { timeout: 15_000 });
+  await expect(chipName).not.toHaveText('Untitled scratch');
+  await expect(chipName).toHaveCSS('font-family', /JetBrains Mono/);
+}
+
 async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
   return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
 }
@@ -154,7 +161,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
     // boots (proves the esbuild/rollup shim overlaid at /scratch, not /workspace).
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
-    await expect(page.locator('[data-action="open-launcher"]')).toContainText('Untitled scratch');
+    await expectProjectChipName(page, 'Project files scratch');
     await expectTerminalContains(page, 'starting dev server on port', 30_000);
 
     // Pick a DIFFERENT starter (node-worker — also the Vite template, instant
@@ -166,7 +173,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
 
     // Single source: every root-keyed surface still resolves from store.activeId.
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
-    await expect(page.locator('[data-action="open-launcher"]')).toContainText('Untitled scratch');
+    await expectProjectChipName(page, 'Node worker map scratch');
 
     // The dev server re-boots in the switched-in scratch (the restart path follows
     // the store-derived active starter/root, ADR-0165 §4 — not a frozen preset).
@@ -252,11 +259,13 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     // tree survives the respawn — re-read it from OPFS while Alpha is the live owner.
     await switchToProject(page, alphaName, alphaId);
     await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 60_000 });
+    await expectProjectChipName(page, alphaName);
     await expectProjectMarker(page, alphaId, alphaMark);
 
     // Switch to Beta: its distinct tree is intact too across the second respawn.
     await switchToProject(page, betaName, betaId);
     await expect(hint).toContainText(`Commands run in /projects/${betaId};`, { timeout: 60_000 });
+    await expectProjectChipName(page, betaName);
     await expectProjectMarker(page, betaId, betaMark);
     expect(await readProjectMarker(page, betaId)).not.toContain(alphaMark);
   });

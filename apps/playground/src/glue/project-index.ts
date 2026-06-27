@@ -99,14 +99,27 @@ export function loadIndex(fs: IndexFs, base: string): ProjectIndex {
   if (raw.scratch !== null && !isScratch(raw.scratch)) {
     throw new Error(`corrupt project index at ${path}: scratch`);
   }
-  return { activeId: raw.activeId, scratch: raw.scratch, projects: raw.projects };
+  const index: ProjectIndex = {
+    activeId: raw.activeId,
+    scratch: raw.scratch,
+    projects: raw.projects,
+  };
+  assertActiveIdHasProject(index, path);
+  return index;
 }
 
 /** Write the index, flushed write-through (durable before return). */
 export function writeIndex(fs: IndexFs, base: string, index: ProjectIndex): void {
   const path = INDEX_PATH(base);
+  assertActiveIdHasProject(index, path);
   fs.mkdirSync(dirname(path), { recursive: true });
   fs.writeFileSync(path, enc.encode(`${JSON.stringify(index, null, 2)}\n`));
+}
+
+function assertActiveIdHasProject(index: ProjectIndex, path: string): void {
+  if (index.activeId === 'scratch') return;
+  if (index.projects.some((project) => project.id === index.activeId)) return;
+  throw new Error(`corrupt project index at ${path}: activeId missing project ${index.activeId}`);
 }
 
 /**
