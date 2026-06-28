@@ -69,8 +69,27 @@ jobs:
         # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      # Cache the browser binary keyed by the resolved Playwright version so a
+      # version bump (lockfile) busts it but day-to-day runs skip the uncached,
+      # CDN-variable download. The apt system deps (`install-deps`) live outside
+      # ~/.cache/ms-playwright, so they run on every hit too.
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # Two lanes against the same suite, run as separate steps so a heavy
+      # cold-boot never contends with the parallel light lane (replaces the old
+      # global workers=1 that serialized the whole suite). Heavy = serialized
+      # TS-LS/fullstack specs; light = the rest in parallel.
+      - run: pnpm test:e2e:heavy
+      - run: pnpm test:e2e:light
       # Prod-artifact smoke: builds the app + serves it with `pnpm preview`
       # (Netlify COI headers) and asserts the owner boots. Catches prod-only
       # regressions the dev-server e2e above can't (green-checks-but-broken-deploy).

@@ -16,6 +16,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Fail-fast on CI: the prod smoke is 3 serial specs against a fresh build —
+  // stop after 2 failures rather than re-booting the heavy preview artifact.
+  maxFailures: process.env.CI ? 2 : undefined,
   reporter: process.env.CI ? [['github']] : 'list',
   use: {
     baseURL: `http://localhost:${port}`,
