@@ -249,6 +249,12 @@ export interface WorkspaceOwnerOptions {
   onLog?(line: string): void;
 }
 
+export interface ProjectIndexOwnerOptions {
+  /** Stable workspace id; defaults to a generated token. */
+  workspaceId?: string;
+  onLog?(line: string): void;
+}
+
 interface WorkspaceOwnerReadyMessage {
   readonly type: 'rifty:workspace-owner-ready';
   readonly port: OwnerBridgeKey;
@@ -261,6 +267,141 @@ function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwn
     candidate.type === 'rifty:workspace-owner-ready' &&
     (typeof candidate.port === 'string' || typeof candidate.port === 'number')
   );
+}
+
+const NO_PROJECT_SELECTED_MSG = 'Choose a project before running commands.\n';
+
+/**
+ * Spawn a project-index-only owner: it hydrates/serves the durable project list
+ * without seeding a workspace root, publishing a file snapshot, opening ptys, or
+ * preparing a dev server. This is the first-run chooser bridge; the real
+ * workspace owner is spawned only after the user chooses a starter/project.
+ */
+export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): WorkspaceOwnerHandle {
+  const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
+  const snapshotPort = ownerBridgeKey(workspaceId);
+  const log = opts.onLog ?? (() => {});
+
+  if (!isSabIpcSupported()) {
+    throw new NotImplementedError(
+      'startProjectIndexOwner',
+      'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
+        'or run inside the playground dev server (vite.config.ts ships them).',
+    );
+  }
+
+  log(`[project-index-owner] spawning chooser owner (workspace ${workspaceId})\n`);
+
+  const handle = globalProcessManager.spawnWorker(
+    'project-index-owner',
+    {
+      entry: { kind: 'url', url: bootstrapWorkerUrl },
+      argv: ['rifty', 'project-index-owner'],
+      env: {
+        RIFTY_OWNER_MODE: 'project-index',
+        RIFTY_WORKSPACE_ID: workspaceId,
+        RIFTY_RFV_PORT: String(snapshotPort),
+      },
+      cwd: '/',
+      serve: true,
+    },
+    /* ppid */ 1,
+    { cwd: '/' },
+  );
+
+  if (handle.kind !== 'worker') {
+    throw new NotImplementedError(
+      'startProjectIndexOwner',
+      `globalProcessManager.spawnWorker returned kind=${handle.kind}; expected 'worker'`,
+    );
+  }
+  const worker = handle;
+
+  let readySettled = false;
+  let resolveReady: () => void = () => {};
+  let rejectReady: (err: Error) => void = () => {};
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  void ready.catch(() => {});
+  const settleReady = (): void => {
+    if (readySettled) return;
+    readySettled = true;
+    resolveReady();
+  };
+  const failReady = (err: Error): void => {
+    if (readySettled) return;
+    readySettled = true;
+    rejectReady(err);
+  };
+
+  const decodeChunk = (chunk: unknown): string => {
+    if (chunk instanceof Uint8Array) return dec.decode(chunk);
+    if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
+    if (ArrayBuffer.isView(chunk)) {
+      return dec.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+    }
+    return typeof chunk === 'string' ? chunk : '';
+  };
+  worker.stdout().on('data', (chunk: unknown) => {
+    const text = decodeChunk(chunk);
+    if (text) log(text);
+  });
+  worker.stderr().on('data', (chunk: unknown) => {
+    const text = decodeChunk(chunk);
+    if (text) log(text);
+  });
+
+  worker.on('message', (message: unknown) => {
+    if (isWorkspaceOwnerReadyMessage(message) && Object.is(message.port, snapshotPort)) {
+      settleReady();
+    }
+  });
+
+  let exited = false;
+  let resolveClosed: (code: number | null) => void = () => {};
+  const closed = new Promise<number | null>((resolve) => {
+    resolveClosed = resolve;
+  });
+  worker.on('exit', (code?: unknown) => {
+    exited = true;
+    const exitCode = typeof code === 'number' ? code : null;
+    failReady(new Error(`project index owner exited before ready (code ${exitCode ?? 'null'})`));
+    resolveClosed(exitCode);
+  });
+
+  return {
+    workspaceId,
+    root: '/',
+    ready,
+    previewOwnerToken: 'project-index-only',
+    snapshotPort,
+    closed,
+    openSession: () => Promise.resolve(),
+    exec: (_sid, _line, execOpts) => {
+      execOpts.onChunk(NO_PROJECT_SELECTED_MSG, 'stderr');
+      return Promise.resolve(1);
+    },
+    writeStdin: () => {},
+    signal: () => {},
+    closeSession: () => {},
+    writeFile(path) {
+      throw new Error(`writeFile(${path}): ${NO_PROJECT_SELECTED_MSG.trim()}`);
+    },
+    exportArchive: () => Promise.reject(new Error(NO_PROJECT_SELECTED_MSG.trim())),
+    importArchive: () => Promise.reject(new Error(NO_PROJECT_SELECTED_MSG.trim())),
+    snapshot: () => ({ cwd: '/scratch', env: {} }),
+    onDevServer: () => () => {},
+    onPreview: () => () => {},
+    requestPreview: () => {},
+    setDevConfig: () => Promise.reject(new Error(NO_PROJECT_SELECTED_MSG.trim())),
+    sendTsLsp: () => {},
+    onTsLsp: () => () => {},
+    close() {
+      if (!exited) handle.kill('SIGTERM');
+    },
+  };
 }
 
 /**

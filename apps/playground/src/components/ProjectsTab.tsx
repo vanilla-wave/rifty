@@ -58,15 +58,13 @@ export function ProjectsTab(props: {
                   {sc.dirty ? 'edited just now · not yet saved' : 'no edits yet'}
                 </div>
               </div>
-              <Show when={!scratchActive()}>
-                <button
-                  type="button"
-                  class="rf-btn rf-btn--outline"
-                  onClick={() => props.onSwitch('scratch')}
-                >
-                  Switch to
-                </button>
-              </Show>
+              <button
+                type="button"
+                class="rf-btn rf-btn--outline"
+                onClick={() => props.onSwitch('scratch')}
+              >
+                {scratchActive() ? 'Open' : 'Switch to'}
+              </button>
               <button
                 type="button"
                 class="rf-btn rf-btn--lime"

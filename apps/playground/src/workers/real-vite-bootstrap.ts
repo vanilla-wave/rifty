@@ -210,8 +210,9 @@ function ownerGitVfs(): SyncMirrorVfs {
  * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
  * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
  * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
- * preset's tree and re-seeds THIS preset's package.json so the snapshot matches,
- * then restores it. A missing/drifted snapshot leaves deps absent (vite fails
+ * preset's dependency-owned files and re-seeds THIS preset's package.json so the
+ * snapshot matches, then restores it. User files in the root are never removed by
+ * dependency restore. A missing/drifted snapshot leaves deps absent (vite fails
  * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
  * NOT come here: the explicit `npm install` boot step is their only source.
  */
@@ -224,7 +225,9 @@ async function restoreInstantDeps(
   const vfs = new SyncMirrorVfs();
   if (await installStampSatisfiedForPackageJson(vfs, cfg.root, slug, cfg.packageJson)) return;
   const fs = syncMirror();
-  clearProjectTree(fs, cfg.root);
+  fs.rmSync(`${cfg.root}/node_modules`, { recursive: true, force: true });
+  fs.rmSync(`${cfg.root}/package-lock.json`, { force: true });
+  fs.rmSync(`${cfg.root}/package.json`, { force: true });
   fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
   const result = await ensureProjectDependencies({
     vfs,
@@ -1154,6 +1157,15 @@ async function bootstrap(): Promise<void> {
   // fresh empty-env process (see the snapshot note). Downstream `process.env`
   // readers (node-server `process.env.PORT`, programs) must still see it.
   globalThis.process.env = env;
+
+  if (env.RIFTY_OWNER_MODE === 'project-index') {
+    reconcileOwnerIndexAtBoot(syncMirror(), starter);
+    const tearIndexBridge = serveProjectIndex(port, syncMirror(), '/', flushSyncMirror);
+    kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port });
+    log('[project-index-owner/worker] project index bridge live; workspace not seeded\n');
+    void tearIndexBridge;
+    return;
+  }
 
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real project.

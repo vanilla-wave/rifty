@@ -76,6 +76,7 @@ import { type ActiveId, type ProjectIndex, rootForId } from './glue/project-inde
 import type { PreviewPortEntry } from './glue/pty-protocol.ts';
 import {
   type WorkspaceOwnerHandle,
+  startProjectIndexOwner,
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
@@ -170,6 +171,15 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
   };
 }
 
+function createNoProjectSelectedOwner(): WorkspaceOwnerHandle {
+  return isSabIpcSupported()
+    ? startProjectIndexOwner({
+        workspaceId: loadWorkspaceId(),
+        onLog: (line) => console.info(line),
+      })
+    : createUnavailableOwner();
+}
+
 export interface AppProps {
   /**
    * Bundle from `bootstrapPlayground()`: VFS backend descriptor (ADR-0013) plus
@@ -232,10 +242,10 @@ export function App(props: AppProps) {
   // launcher, dialogs, and status bar. Hydrated from the owner-published index
   // mirror (`projectIndex()`); `storage` from the real boot backend. The
   // App-level wrapper binds dirty to `fileWriteOwner` (§57) and defers the on-disk
-  // delete to the owner tree (§56). The cold-boot default index models the active
-  // scratch from DEFAULT_PRESET (so the chip/banner/Save work before the owner
-  // publishes); `onDiskDelete` reads `workspaceOwner()` LAZILY at fire-time, so the
-  // store can be created here — before the owner is spawned below — with no TDZ hit.
+  // delete to the owner tree (§56). The cold-boot default index is empty: no
+  // scratch/starter is chosen until the user picks one from the launcher.
+  // `onDiskDelete` reads `workspaceOwner()` LAZILY at fire-time, so the store can
+  // be created here — before the full workspace owner is spawned — with no TDZ hit.
   // §56 durable-delete tracking: ids whose on-disk removal was POSTED but not yet
   // confirmed by an owner re-publish. A delete fired during the owner teardown→
   // respawn gap (switch) reaches no listener and is dropped, so the project would
@@ -247,7 +257,7 @@ export function App(props: AppProps) {
   const store = createAppProjectStore({
     index: projectIndex() ?? {
       activeId: 'scratch',
-      scratch: { starter: DEFAULT_PRESET.id, dirty: false, editedAt: 'no edits yet' },
+      scratch: null,
       projects: [],
     },
     storage: storageMode,
@@ -713,20 +723,8 @@ export function App(props: AppProps) {
 
   const activeTemplate = (): ProjectSpec => templateForPreset(presetForId(activeStarterId()));
 
-  // Persistent workspace owner (ADR-0146 owner-resident shell + ADR-0148
-  // co-resident dev server): hosts the resident `Shell` per session + cwd/env +
-  // the CO-RESIDENT dev server, runs `npm install` + bin/`execSync` + `vite`
-  // in-realm against ITS `syncMirror()` — the one store the explorer/editor read
-  // over the snapshot/nm bridges. Spawned once at setup, killed on cleanup. Gated
-  // on SAB IPC: in the single-store-owner model there is no PAGE shell fallback,
-  // so a non-isolated host gets a fail-loud stub owner that surfaces the
-  // requirement per command (rather than crashing the app tree at setup).
-  // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
-  // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
-  // effect reads `workspaceOwner()` so the signal swap re-runs them — that swap IS
-  // the re-wire to the new owner.
-  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(
-    isSabIpcSupported()
+  function createActiveWorkspaceOwner(): WorkspaceOwnerHandle {
+    return isSabIpcSupported()
       ? startWorkspaceOwner({
           // ADR-0165 §4: root + slug follow the STORE's active id (scratch on boot,
           // a projectId after switch); template/setup follow the active STARTER.
@@ -738,7 +736,19 @@ export function App(props: AppProps) {
           setup: presetForId(activeStarterId()).setup,
           onLog: (line) => console.info(line),
         })
-      : createUnavailableOwner(),
+      : createUnavailableOwner();
+  }
+
+  // Workspace owner signal (ADR-0146/0148/0165): cold boot starts with an
+  // index-only chooser owner, so no project root is seeded/published until the
+  // user picks a starter/project. The full shell/dev-server owner is spawned by
+  // `ensureWorkspaceOwnerStarted()` or `switchTo()`.
+  // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
+  // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
+  // effect reads `workspaceOwner()` so the signal swap re-runs them — that swap IS
+  // the re-wire to the new owner.
+  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(
+    createNoProjectSelectedOwner(),
   );
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
   const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
@@ -931,6 +941,29 @@ export function App(props: AppProps) {
       env: props.terminalPersistence.initialState.env,
     },
   });
+  let workspaceOwnerStarted = false;
+  let workspaceOwnerStart: Promise<WorkspaceOwnerHandle> | null = null;
+  const [workspaceOwnerReady, setWorkspaceOwnerReady] = createSignal(false);
+
+  async function ensureWorkspaceOwnerStarted(markReady = true): Promise<WorkspaceOwnerHandle> {
+    if (workspaceOwnerStarted) return workspaceOwner();
+    if (workspaceOwnerStart) return workspaceOwnerStart;
+    const current = workspaceOwner();
+    workspaceOwnerStart = (async (): Promise<WorkspaceOwnerHandle> => {
+      setWorkspaceOwnerReady(false);
+      current.close();
+      await current.closed;
+      const next = createActiveWorkspaceOwner();
+      setOwnerHandle(next);
+      await manager.rebindOwner(next);
+      workspaceOwnerStarted = true;
+      if (markReady) setWorkspaceOwnerReady(true);
+      return next;
+    })().finally(() => {
+      workspaceOwnerStart = null;
+    });
+    return workspaceOwnerStart;
+  }
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
   // Used by `runTerminalSequence` to echo `$ <line>` for boot sequences (the
@@ -1754,7 +1787,9 @@ export function App(props: AppProps) {
   const activeGlyph = createMemo(() => glyphFor(activeStarterId()));
   const activeName = createMemo((): string => {
     const id = store.activeId();
-    if (id === 'scratch') return scratchDisplayName(activeGlyph().label);
+    if (id === 'scratch') {
+      return store.scratch() ? scratchDisplayName(activeGlyph().label) : 'Choose project';
+    }
     return store.projects().find((p) => p.id === id)?.name ?? `Missing project (${id})`;
   });
 
@@ -1800,6 +1835,10 @@ export function App(props: AppProps) {
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
   async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+    if (!workspaceOwnerStarted) {
+      flashError('Choose a project before editing files');
+      return;
+    }
     await workspaceOwner().writeFrameAcked({
       type: 'write',
       path,
@@ -2072,6 +2111,8 @@ export function App(props: AppProps) {
       // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
       // already describe the NEXT project. Gate stays false (store decided already).
       // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
+      workspaceOwnerStarted = false;
+      setWorkspaceOwnerReady(false);
 
       // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
       // A switch otherwise never updates the on-disk `activeId`, so the respawned
@@ -2132,6 +2173,8 @@ export function App(props: AppProps) {
         restartDevServer: async () => {
           setDevServerStatus('stopped');
           await manager.rebindOwner(workspaceOwner());
+          workspaceOwnerStarted = true;
+          setWorkspaceOwnerReady(true);
           if (restartDevServerSessionId) {
             await restartDevServer(restartDevServerSessionId);
           }
@@ -2151,8 +2194,7 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    /* Project-first boot: the owner index decides whether to show the chooser;
-       no starter files or dev server are seeded until the user picks one. */
+    if (!initialBootDecisionMade) openFirstRunLauncher();
   });
 
   onCleanup(() => {
@@ -2257,9 +2299,9 @@ export function App(props: AppProps) {
   // (after a prior Save the owner index is `scratch:null`). Read the port at fire
   // time; skipped in memory mode (no durable index). The owner is not respawned on
   // a pick — it stays rooted at /scratch and re-seeds the live tree.
-  function durableNewScratch(id: string): void {
+  async function durableNewScratch(id: string): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
-      void newScratchIndex(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
+      await newScratchIndex(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
         console.error('[project-index] new scratch failed', err),
       );
     }
@@ -2276,9 +2318,12 @@ export function App(props: AppProps) {
     const runPick = async (): Promise<void> => {
       const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
       const tsGate = wasDirty ? undefined : beginTsPresetTransition();
+      if (!wasDirty) setWorkspaceOwnerReady(false);
       store.pickStarter(id);
       if (!wasDirty) {
-        durableNewScratch(id);
+        await ensureWorkspaceOwnerStarted(false);
+        await durableNewScratch(id);
+        setWorkspaceOwnerReady(true);
         await runVitePreset(presetForId(id), tsGate);
       }
     };
@@ -2441,7 +2486,7 @@ export function App(props: AppProps) {
     const pending = pendingAfterSave();
     if (pending) {
       setPendingAfterSave(null);
-      if (await saveWait.durable) applyPendingTarget(pending);
+      if (await saveWait.durable) await applyPendingTarget(pending);
     } else if (!ephemeral) {
       pendingSaveAutoSwitchId = id;
       void switchToSavedProjectAfterSave(id, saveWait.durable);
@@ -2554,13 +2599,26 @@ export function App(props: AppProps) {
   // dirty-guarded `requestSwitch`/`pickStarter`: re-invoking the guarded ones from
   // a still-dirty scratch would re-open the switch dialog and never flip activeId,
   // so the owner would respawn at the new root with the OLD template/starter.
-  function applyPendingTarget(target: { pendingStarter?: string; pendingId?: string }): void {
-    const pendingStarter = target.pendingStarter;
-    if (pendingStarter) {
+  async function applyPendingTarget(target: {
+    pendingStarter?: string;
+    pendingId?: string;
+  }): Promise<void> {
+    if (target.pendingStarter) {
+      const pendingStarter = target.pendingStarter;
       const tsGate = beginTsPresetTransition();
-      store.confirmPickStarter(pendingStarter);
-      durableNewScratch(pendingStarter);
-      void queuePresetTransition(() => runVitePreset(presetForId(pendingStarter), tsGate));
+      const runPendingStarter = async (): Promise<void> => {
+        setWorkspaceOwnerReady(false);
+        store.confirmPickStarter(pendingStarter);
+        await ensureWorkspaceOwnerStarted(false);
+        await durableNewScratch(pendingStarter);
+        setWorkspaceOwnerReady(true);
+        await runVitePreset(presetForId(pendingStarter), tsGate);
+      };
+      if (presetTransitioning()) {
+        await queuePresetTransition(runPendingStarter);
+        return;
+      }
+      void queuePresetTransition(runPendingStarter);
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void trackSwitch(switchTo(target.pendingId));
@@ -2573,7 +2631,7 @@ export function App(props: AppProps) {
   function onSwitchDiscardThen(): void {
     const d = store.dialog();
     store.setDialog(null);
-    if (d?.kind === 'switch') applyPendingTarget(d);
+    if (d?.kind === 'switch') void applyPendingTarget(d);
   }
 
   // Save-then-continue: stash the pending target, then open the Save dialog (which
@@ -2856,7 +2914,11 @@ export function App(props: AppProps) {
   const isOpfs = storageMode === 'opfs';
 
   return (
-    <div class="rf-app">
+    <div
+      class="rf-app"
+      data-workspace-owner={workspaceOwnerReady() ? 'workspace' : 'chooser'}
+      data-project-index={projectIndex() ? 'ready' : 'loading'}
+    >
       <Show when={props.boot.swError && !swBannerDismissed()}>
         <div class="rf-banner" role="alert" data-banner="sw-error">
           <span class="rf-banner__msg">{swErrorBannerMessage(props.boot.swError ?? '')}</span>

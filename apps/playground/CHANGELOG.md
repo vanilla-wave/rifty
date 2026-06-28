@@ -202,6 +202,11 @@
   gap explicit in `backlog/playground/vite-preview-cors-middleware-parity`.
   `tests/e2e/vite7-build-preview.spec.ts` pins `vite build` -> `vite preview`
   -> `/preview/4173/`.
+- **First-run chooser no longer loads the default project behind the modal.**
+  Cold boot starts an index-only owner, keeps the editor empty, and only spawns
+  the full workspace owner after the user opens a saved scratch/project or picks
+  a starter. Re-opening a persisted scratch preserves user files while
+  dependency restore only refreshes dependency-owned paths.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.

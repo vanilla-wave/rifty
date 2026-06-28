@@ -6,6 +6,18 @@ function stripTerminal(text: string): string {
   return text.replace(ANSI_SGR, '');
 }
 
+async function waitForWorkspaceOwner(page: Page): Promise<void> {
+  await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+    timeout: 90_000,
+  });
+}
+
+async function waitForProjectIndex(page: Page): Promise<void> {
+  await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
+    timeout: 90_000,
+  });
+}
+
 export async function terminalBuffer(
   page: Page,
   slot: 'active' | number = 'active',
@@ -22,7 +34,14 @@ export async function openShellTerminal(
   options: { readonly focus?: boolean } = {},
 ): Promise<number> {
   const focus = options.focus ?? true;
-  await closeLauncherIfOpen(page, 0);
+  if (
+    await page
+      .locator('[data-testid="launcher"]')
+      .isVisible({ timeout: 0 })
+      .catch(() => false)
+  ) {
+    await openActiveProjectFromLauncher(page);
+  }
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
   await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
@@ -77,7 +96,9 @@ export async function openShellTerminal(
 export async function pickStarter(page: Page, id = 'project-files'): Promise<void> {
   const launcher = page.locator('[data-testid="launcher"]');
   if (!(await launcher.isVisible({ timeout: 1_000 }).catch(() => false))) {
-    await page.click('[data-action="open-launcher"]');
+    await page.click('[data-action="open-launcher"]', { timeout: 2_000 }).catch(async (err) => {
+      if (!(await launcher.isVisible({ timeout: 0 }).catch(() => false))) throw err;
+    });
   }
   await expect(launcher).toBeVisible({ timeout: 5_000 });
   await page.getByRole('button', { name: 'Starters', exact: true }).click();
@@ -89,6 +110,34 @@ export async function pickStarter(page: Page, id = 'project-files'): Promise<voi
   }
 
   await expect(launcher).toHaveCount(0, { timeout: 90_000 });
+  await waitForWorkspaceOwner(page);
+}
+
+export async function openActiveProjectFromLauncher(page: Page): Promise<void> {
+  const launcher = page.locator('[data-testid="launcher"]');
+  await expect(launcher).toBeVisible({ timeout: 5_000 });
+  await waitForProjectIndex(page);
+  await page.getByRole('button', { name: /^Projects/ }).click();
+
+  const scratchOpen = launcher.locator('.rf-scratch').getByRole('button', {
+    name: /^(Open|Switch to)$/,
+  });
+  if (await scratchOpen.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await scratchOpen.click();
+    await expect(launcher).toHaveCount(0, { timeout: 90_000 });
+    await waitForWorkspaceOwner(page);
+    return;
+  }
+
+  const activeProject = launcher.locator('.rf-pcard[data-active="true"]').first();
+  if (await activeProject.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await activeProject.click();
+    await expect(launcher).toHaveCount(0, { timeout: 90_000 });
+    await waitForWorkspaceOwner(page);
+    return;
+  }
+
+  await pickStarter(page, 'project-files');
 }
 
 export async function closeLauncherIfOpen(page: Page, timeout = 1_000): Promise<void> {
@@ -108,8 +157,7 @@ export async function bootProjectFiles(page: Page): Promise<void> {
 }
 
 export async function bootShell(page: Page): Promise<void> {
-  await page.goto('/');
-  await closeLauncherIfOpen(page, 15_000);
+  await bootProjectFiles(page);
 }
 
 export async function runTerminalLine(

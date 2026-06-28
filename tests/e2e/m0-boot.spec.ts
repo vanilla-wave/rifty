@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
+  pickStarter,
   runTerminalLine,
 } from './helpers/playground.ts';
 
@@ -20,6 +22,21 @@ test.describe('M0 — Foundation', () => {
       { timeout: 30_000 },
     );
     await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
+  });
+
+  test('first-run boot keeps the project unloaded until a starter is chosen', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
+
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+    await expect
+      .poll(async () => (await editorLines.textContent()) ?? '', { timeout: 2_000 })
+      .not.toContain("import project from './project.json'");
+
+    await pickStarter(page, 'project-files');
+    await expect(editorLines).toContainText("import project from './project.json'", {
+      timeout: 60_000,
+    });
   });
 
   test('crossOriginIsolated is enabled', async ({ page }) => {
@@ -48,7 +65,7 @@ test.describe('M0 — Foundation', () => {
   });
 
   test('shell file commands round-trip through the workspace VFS', async ({ page }) => {
-    await page.goto('/');
+    await bootProjectFiles(page);
     await openShellTerminal(page);
 
     const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;

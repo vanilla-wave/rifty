@@ -114,6 +114,18 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain('relayTsLspRequest(message);');
   });
 
+  it('restores instant dependencies without wiping user files in the project root', () => {
+    const restoreStart = source.indexOf('async function restoreInstantDeps(');
+    const restoreEnd = source.indexOf('function seedTemplateNodeModulesFiles', restoreStart);
+    const restore = source.slice(restoreStart, restoreEnd);
+    expect(restoreStart).toBeGreaterThan(-1);
+    expect(restoreEnd).toBeGreaterThan(restoreStart);
+    expect(restore).not.toContain('clearProjectTree(fs, cfg.root)');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/node_modules`');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/package-lock.json`');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/package.json`');
+  });
+
   it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');

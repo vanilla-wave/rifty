@@ -50,12 +50,21 @@ describe('App terminal startup wiring', () => {
 
   it('gates a clean first-run boot behind the project launcher instead of auto-running the default preset', () => {
     expect(source).toContain('needsProjectChoiceOnBoot');
+    expect(source).toContain('function createNoProjectSelectedOwner(): WorkspaceOwnerHandle');
+    expect(source).toMatch(
+      /createSignal<WorkspaceOwnerHandle>\(\s*createNoProjectSelectedOwner\(\),?\s*\)/,
+    );
+    expect(source).toContain("sources: { dev: '', realVite: '' }");
     expect(source).toContain("store.setLauncherTab('starters')");
     expect(source).toContain('store.openLauncher()');
     expect(source).toContain('function closeLauncher(): void');
     expect(source).toContain('initialBootDecisionMade = true;');
     expect(source).toContain('onClose={closeLauncher}');
+    expect(source).toContain('await ensureWorkspaceOwnerStarted(false);');
+    expect(source).toContain('await durableNewScratch(id);');
+    expect(source).toContain('setWorkspaceOwnerReady(true);');
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
+    expect(source).not.toContain('seedViteWorkspace(DEFAULT_PRESET);');
   });
 
   it('retries the project-index request until the owner bridge answers', () => {
