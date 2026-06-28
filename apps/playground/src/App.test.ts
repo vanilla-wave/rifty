@@ -420,6 +420,15 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('gitBranch={activeGitScm().branch}');
   });
 
+  it('flushes pending editor writes before opening SCM status', () => {
+    expect(source).toContain("function selectSidebarView(view: 'explorer' | 'scm'): void");
+    expect(source).toContain("if (view === 'scm' && willShow) {");
+    expect(source).toContain('flushPendingProgramWrite();');
+    expect(source).toContain('editorApi?.flushPendingWrites();');
+    expect(source).toContain('requestActiveGitStatus();');
+    expect(source).toContain("onClick={() => selectSidebarView('scm')}");
+  });
+
   it('opens SCM rows as blob-vs-blob Monaco diffs from owner HEAD blobs, never raw git diff text', () => {
     expect(source).toContain('async function openWorkingHeadDiff(row: ScmResourceRow)');
     expect(source).toContain('const path = row.path;');

@@ -1989,6 +1989,22 @@ export function App(props: AppProps) {
     notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
   }
 
+  function requestActiveGitStatus(): void {
+    const owner = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
+    requestGitStatus(owner.snapshotPort);
+  }
+
+  function selectSidebarView(view: 'explorer' | 'scm'): void {
+    const willShow = layout.view() !== view || layout.sidebarCollapsed();
+    if (view === 'scm' && willShow) {
+      flushPendingProgramWrite();
+      editorApi?.flushPendingWrites();
+      requestActiveGitStatus();
+    }
+    layout.selectView(view);
+  }
+
   function discardPendingProgramWrite(): void {
     if (programWriteTimer) {
       clearTimeout(programWriteTimer);
@@ -2620,7 +2636,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() !== 'scm'}
-                onClick={() => layout.selectView('explorer')}
+                onClick={() => selectSidebarView('explorer')}
               >
                 Files
               </button>
@@ -2629,7 +2645,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() === 'scm'}
-                onClick={() => layout.selectView('scm')}
+                onClick={() => selectSidebarView('scm')}
               >
                 SCM
               </button>

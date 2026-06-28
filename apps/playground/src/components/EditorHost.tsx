@@ -91,6 +91,7 @@ export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
   openWorkingDiff(input: EditorWorkingDiffInput): void;
   openTextDiff(input: EditorTextDiffInput): void;
+  flushPendingWrites(): void;
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
    * is the absolute VFS path (program tab -> active template entry); a no-op
@@ -314,6 +315,7 @@ export function EditorHost(props: EditorHostProps) {
     }
   >();
   const gitOriginalTextCache = new Map<string, Promise<string>>();
+  const dirtyGutterLocalPaths = new Set<string>();
   let dirtyGutterSeq = 0;
   // path → unsubscribe for an in-flight "await the next snapshot frame" retry
   // (a seeded project file racing the owner publish). Cleared once the file
@@ -356,12 +358,14 @@ export function EditorHost(props: EditorHostProps) {
       emitDocument(id, 'change');
       if (suppressProgramEcho || !programModel) return;
       props.onProgramChange(programModel.getValue());
+      dirtyGutterLocalPaths.add(docPathForTab(id));
       if (id === activeId()) updateDirtyGutterForActive();
       return;
     }
     if (readOnlyPaths.has(id)) return;
     emitDocument(id, 'change');
     setTabs((t) => setDirty(t, id, true));
+    dirtyGutterLocalPaths.add(docPathForTab(id));
     scheduleWrite(id);
     if (id === activeId()) updateDirtyGutterForActive();
   }
@@ -425,16 +429,24 @@ export function EditorHost(props: EditorHostProps) {
     const model = models.get(id);
     const path = docPathForTab(id);
     const code = statusCodeForPath(path);
-    if (!editor || !model || activeTabKind() === 'diff' || readOnlyPaths.has(id) || !code) {
+    const localChange = dirtyGutterLocalPaths.has(path);
+    if (
+      !editor ||
+      !model ||
+      activeTabKind() === 'diff' ||
+      readOnlyPaths.has(id) ||
+      (!code && !localChange)
+    ) {
       clearDirtyGutter();
       return;
     }
     dirtyGutterSeq += 1;
     const seq = dirtyGutterSeq;
     const ref = 'HEAD';
-    const original = statusHasOriginalBlob(code)
-      ? readGitOriginalTextCached(path, ref)
-      : Promise.resolve('');
+    const original =
+      code === undefined || statusHasOriginalBlob(code)
+        ? readGitOriginalTextCached(path, ref)
+        : Promise.resolve('');
     original.then(
       (originalText) => {
         if (seq !== dirtyGutterSeq || activeId() !== id) return;
@@ -443,7 +455,7 @@ export function EditorHost(props: EditorHostProps) {
       },
       (err: unknown) => {
         if (seq === dirtyGutterSeq && activeId() === id) dirtyGutterDecorations?.clear();
-        props.onError?.((err as Error).message);
+        if (code !== undefined) props.onError?.((err as Error).message);
       },
     );
   }
@@ -493,6 +505,16 @@ export function EditorHost(props: EditorHostProps) {
     // the editor writes there, not the read-only owner-snapshot `vfs` it reads from.
     setTabs((t) => setDirty(t, path, false));
     props.onFileWritten?.(path, m.getValue());
+  }
+
+  function flushPendingWrites(): void {
+    const pending = [...writeTimers.keys()];
+    for (const path of pending) {
+      const timer = writeTimers.get(path);
+      if (timer) clearTimeout(timer);
+      writeTimers.delete(path);
+      flushWrite(path);
+    }
   }
 
   function scheduleWrite(path: string): void {
@@ -916,6 +938,7 @@ export function EditorHost(props: EditorHostProps) {
       openFile,
       openWorkingDiff,
       openTextDiff,
+      flushPendingWrites,
       setMarkers(path, markers) {
         const model = models.get(tabIdForPath(path));
         if (model) monaco.editor.setModelMarkers(model, 'rifty-ts', markers);
@@ -1003,6 +1026,7 @@ export function EditorHost(props: EditorHostProps) {
       if (path === currentProgramPath) return;
       const previousPath = currentProgramPath;
       currentProgramPath = path;
+      dirtyGutterLocalPaths.delete(previousPath);
       if (programModel) {
         emitDocumentPath(previousPath, '', 'close');
         emitDocumentPath(path, programModel.getValue(), 'open');
@@ -1031,6 +1055,7 @@ export function EditorHost(props: EditorHostProps) {
       if (root === diffRoot) return;
       diffRoot = root;
       gitOriginalTextCache.clear();
+      dirtyGutterLocalPaths.clear();
       clearDirtyGutter();
       clearGitDiffTabs();
     });

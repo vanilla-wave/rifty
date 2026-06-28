@@ -56,6 +56,9 @@
 
 ### Fixed
 
+- **SCM now sees Monaco editor edits immediately.** Opening Source Control flushes
+  pending editor writes before requesting owner git status, and dirty gutters can
+  mark changed lines from the local buffer while the owner status feed catches up.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.

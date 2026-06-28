@@ -51,9 +51,21 @@ describe('EditorHost git diff contract', () => {
   it('renders dirty gutter marks from the same owner HEAD original text as Open Changes', () => {
     expect(source).toContain("from '../glue/dirty-gutter.ts';");
     expect(source).toContain('dirtyGutterDecorations');
+    expect(source).toContain('const dirtyGutterLocalPaths = new Set<string>();');
+    expect(source).toContain('dirtyGutterLocalPaths.add(docPathForTab(id));');
     expect(source).toContain('linesDecorationsClassName: `rf-dirty-gutter');
     expect(source).toContain('readGitOriginalTextCached(path, ref)');
+    expect(source).toContain('(!code && !localChange)');
     expect(source).toContain('props.gitStatus?.()');
+  });
+
+  it('exposes a flush hook so SCM can publish pending editor writes before reading status', () => {
+    expect(source).toContain('flushPendingWrites(): void;');
+    expect(source).toContain('function flushPendingWrites(): void');
+    expect(source).toContain('const pending = [...writeTimers.keys()];');
+    expect(source).toContain('writeTimers.delete(path);');
+    expect(source).toContain('flushWrite(path);');
+    expect(source).toContain('flushPendingWrites,');
   });
 
   it('exposes a generic text diff API for Explorer blob-vs-blob compare', () => {
