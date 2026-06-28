@@ -1,14 +1,19 @@
 import type { VfsDirent } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import {
+  type AsyncFsOpsTarget,
   type FsOpsTarget,
   copyTree,
   createDir,
+  createDirAsync,
   createFile,
+  createFileAsync,
   deletePath,
+  deletePathAsync,
   looksBinary,
   readText,
   renamePath,
+  renamePathAsync,
   writeText,
 } from './fs-ops.ts';
 
@@ -98,6 +103,39 @@ class FakeFs implements FsOpsTarget {
   }
 }
 
+class AsyncFakeFs extends FakeFs implements AsyncFsOpsTarget {
+  readonly calls: unknown[] = [];
+  async writeFile(
+    path: string,
+    data: Uint8Array,
+    options: { recursive?: boolean } = {},
+  ): Promise<void> {
+    this.calls.push({
+      op: 'write',
+      path,
+      size: data.byteLength,
+      recursive: options.recursive ?? false,
+    });
+    this.writeFileSync(path, data);
+  }
+  async mkdir(path: string, options: { recursive?: boolean }): Promise<void> {
+    this.calls.push({ op: 'mkdir', path, recursive: options.recursive ?? false });
+    this.mkdirSync(path, options);
+  }
+  async rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void> {
+    this.calls.push({ op: 'rm', path, recursive: options.recursive, force: options.force });
+    this.rmSync(path, options);
+  }
+  async rename(from: string, to: string): Promise<void> {
+    this.calls.push({ op: 'rename', from, to });
+    renamePath(this, from, to);
+  }
+  async copy(from: string, to: string): Promise<void> {
+    this.calls.push({ op: 'copy', from, to });
+    copyTree(this, from, to);
+  }
+}
+
 describe('createFile / createDir', () => {
   it('creates an empty file and its parents', () => {
     const fs = new FakeFs();
@@ -182,6 +220,24 @@ describe('deletePath', () => {
     deletePath(fs, '/d');
     expect(fs.existsSync('/d')).toBe(false);
     expect(fs.existsSync('/d/sub/b.js')).toBe(false);
+  });
+});
+
+describe('async fs ops', () => {
+  it('routes create/delete/rename helpers through async target methods', async () => {
+    const fs = new AsyncFakeFs();
+
+    await createFileAsync(fs, '/workspace/a.txt');
+    await createDirAsync(fs, '/workspace/dir');
+    await renamePathAsync(fs, '/workspace/a.txt', '/workspace/b.txt');
+    await deletePathAsync(fs, '/workspace/b.txt');
+
+    expect(fs.calls).toEqual([
+      { op: 'write', path: '/workspace/a.txt', size: 0, recursive: false },
+      { op: 'mkdir', path: '/workspace/dir', recursive: false },
+      { op: 'rename', from: '/workspace/a.txt', to: '/workspace/b.txt' },
+      { op: 'rm', path: '/workspace/b.txt', recursive: true, force: false },
+    ]);
   });
 });
 

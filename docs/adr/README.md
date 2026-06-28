@@ -131,6 +131,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0165 | Multi-project management with durable scratch |
 | 0173 | Vite 7 production build and preview |
 | 0174 | Run vite through installed bin |
+| 0179 | Expose git status classifier from git facade |
 
 ### toolchain-build
 

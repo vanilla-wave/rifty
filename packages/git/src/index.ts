@@ -9,6 +9,7 @@ export {
 } from './errors.ts';
 export { type GitFs, type GitStat, vfsToGitFs } from './fs-adapter.ts';
 export { makeGit, pathspecMatch } from './git.ts';
+export { porcelainXY } from './status.ts';
 export {
   type GitHttp,
   type GitHttpRequest,

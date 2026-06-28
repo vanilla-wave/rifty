@@ -18,6 +18,9 @@
 
 ### Added
 
+- `porcelainXY(code)`: shared statusMatrix → porcelain-XY classifier for shell
+  `git status --porcelain` and playground SCM status projections, keeping the
+  rifty-git status labels on one public facade.
 - **Git porcelain hard-ceil expansion.** `makeGit()` now exposes parent revspec
   resolution (`HEAD~n`, `^`), tree-selecting `diff()` modes (unstaged, staged,
   HEAD↔worktree, ref↔ref), `reset` soft/mixed/hard, `show`, tag CRUD, remote

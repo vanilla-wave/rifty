@@ -18,7 +18,15 @@
  */
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
-import { type Accessor, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
+import { type DirtyGutterChange, dirtyGutterChanges } from '../glue/dirty-gutter.ts';
 import { classifyOpen } from '../glue/editor-open.ts';
 import {
   type EditorTab,
@@ -26,6 +34,7 @@ import {
   closeTab,
   initialTabs,
   nextActiveAfterClose,
+  openDiffTab,
   openFileTab,
   setDirty,
   setProgramTitle,
@@ -45,6 +54,29 @@ export interface EditorOpenFileOptions {
   readonly reveal?: { readonly line: number; readonly column: number };
 }
 
+export interface EditorWorkingDiffInput {
+  readonly path: string;
+  readonly ref: string;
+  readonly modified?: string;
+  readonly deleted?: boolean;
+  readonly hasOriginal?: boolean;
+}
+
+export interface EditorTextDiffInput {
+  readonly id: string;
+  readonly path: string;
+  readonly title: string;
+  readonly originalTitle: string;
+  readonly modifiedTitle: string;
+  readonly original: string;
+  readonly modified: string;
+}
+
+export interface EditorGitOriginalTextInput {
+  readonly path: string;
+  readonly ref: string;
+}
+
 /** A model open/change/close event the page LS client reacts to (ADR-0166 P1.9b). */
 export interface EditorDocumentEvent {
   /** Absolute VFS path (the program tab maps to the active template entry). */
@@ -57,6 +89,8 @@ export interface EditorDocumentEvent {
 /** Imperative handle handed to the App so the explorer can open files. */
 export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
+  openWorkingDiff(input: EditorWorkingDiffInput): void;
+  openTextDiff(input: EditorTextDiffInput): void;
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
    * is the absolute VFS path (program tab -> active template entry); a no-op
@@ -120,6 +154,8 @@ export interface EditorHostProps {
    *  (shell-written) — reads its bytes from the owner. `content` is null when over
    *  the read cap. Files read this way are view-only. */
   readNodeModulesFile?(path: string): Promise<{ size: number; content: Uint8Array | null }>;
+  readGitOriginalText?(input: EditorGitOriginalTextInput): Promise<string>;
+  readonly gitStatus?: Accessor<ReadonlyMap<string, string>>;
 }
 
 let themeDefined = false;
@@ -234,9 +270,21 @@ function languageForPath(path: string): string {
 
 const dec = new TextDecoder();
 
+function riftyGitOriginalUri(path: string, ref: string): monaco.Uri {
+  return monaco.Uri.from({
+    scheme: 'rifty-git',
+    authority: 'owner',
+    path,
+    query: `ref=${encodeURIComponent(ref)}`,
+  });
+}
+
 export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
+  let diffContainer: HTMLDivElement | undefined;
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  let diffEditor: monaco.editor.IStandaloneDiffEditor | undefined;
+  let dirtyGutterDecorations: monaco.editor.IEditorDecorationsCollection | undefined;
   let editorOpenerDisposable: monaco.IDisposable | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
   let currentProgramPath = props.programPath();
@@ -255,6 +303,18 @@ export function EditorHost(props: EditorHostProps) {
   const modelContentDisposables = new Map<string, monaco.IDisposable>();
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const diffModels = new Map<
+    string,
+    {
+      original: monaco.editor.ITextModel;
+      modified: monaco.editor.ITextModel;
+      disposeModified: boolean;
+      path: string;
+      title: string;
+    }
+  >();
+  const gitOriginalTextCache = new Map<string, Promise<string>>();
+  let dirtyGutterSeq = 0;
   // path → unsubscribe for an in-flight "await the next snapshot frame" retry
   // (a seeded project file racing the owner publish). Cleared once the file
   // opens; torn down on unmount so a never-arriving frame leaks nothing.
@@ -296,12 +356,14 @@ export function EditorHost(props: EditorHostProps) {
       emitDocument(id, 'change');
       if (suppressProgramEcho || !programModel) return;
       props.onProgramChange(programModel.getValue());
+      if (id === activeId()) updateDirtyGutterForActive();
       return;
     }
     if (readOnlyPaths.has(id)) return;
     emitDocument(id, 'change');
     setTabs((t) => setDirty(t, id, true));
     scheduleWrite(id);
+    if (id === activeId()) updateDirtyGutterForActive();
   }
   function emitDocument(id: string, kind: EditorDocumentEvent['kind']): void {
     if (documentListeners.size === 0) return;
@@ -313,6 +375,77 @@ export function EditorHost(props: EditorHostProps) {
     if (documentListeners.size === 0) return;
     const ev: EditorDocumentEvent = { path, text, kind };
     for (const cb of documentListeners) cb(ev);
+  }
+
+  function gitOriginalCacheKey(path: string, ref: string): string {
+    return `${props.root()}:${ref}:${path}`;
+  }
+
+  function readGitOriginalTextCached(path: string, ref: string): Promise<string> {
+    const key = gitOriginalCacheKey(path, ref);
+    const cached = gitOriginalTextCache.get(key);
+    if (cached) return cached;
+    const read = props.readGitOriginalText;
+    if (!read) return Promise.reject(new Error('git original-content provider is unavailable'));
+    const next = read({ path, ref });
+    gitOriginalTextCache.set(key, next);
+    return next;
+  }
+
+  function statusCodeForPath(path: string): string | undefined {
+    return props.gitStatus?.().get(path);
+  }
+
+  function statusHasOriginalBlob(code: string): boolean {
+    return code !== '??' && code[0] !== 'A';
+  }
+
+  function dirtyGutterDecoration(
+    change: DirtyGutterChange,
+    model: monaco.editor.ITextModel,
+  ): monaco.editor.IModelDeltaDecoration {
+    const lineNumber = Math.min(Math.max(1, change.lineNumber), model.getLineCount());
+    return {
+      range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+      options: {
+        isWholeLine: true,
+        linesDecorationsClassName: `rf-dirty-gutter rf-dirty-gutter--${change.kind}`,
+        linesDecorationsTooltip: `rifty-git ${change.kind} line`,
+      },
+    };
+  }
+
+  function clearDirtyGutter(): void {
+    dirtyGutterSeq += 1;
+    dirtyGutterDecorations?.clear();
+  }
+
+  function updateDirtyGutterForActive(): void {
+    const id = activeId();
+    const model = models.get(id);
+    const path = docPathForTab(id);
+    const code = statusCodeForPath(path);
+    if (!editor || !model || activeTabKind() === 'diff' || readOnlyPaths.has(id) || !code) {
+      clearDirtyGutter();
+      return;
+    }
+    dirtyGutterSeq += 1;
+    const seq = dirtyGutterSeq;
+    const ref = 'HEAD';
+    const original = statusHasOriginalBlob(code)
+      ? readGitOriginalTextCached(path, ref)
+      : Promise.resolve('');
+    original.then(
+      (originalText) => {
+        if (seq !== dirtyGutterSeq || activeId() !== id) return;
+        const changes = dirtyGutterChanges(originalText, model.getValue());
+        dirtyGutterDecorations?.set(changes.map((change) => dirtyGutterDecoration(change, model)));
+      },
+      (err: unknown) => {
+        if (seq === dirtyGutterSeq && activeId() === id) dirtyGutterDecorations?.clear();
+        props.onError?.((err as Error).message);
+      },
+    );
   }
 
   /** Apply a queued reveal once its tab is the editor's active model (P1.9c jump). */
@@ -351,6 +484,7 @@ export function EditorHost(props: EditorHostProps) {
 
   const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
   const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
+  const activeTabKind = createMemo(() => tabs().find((tab) => tab.id === activeId())?.kind);
 
   function flushWrite(path: string): void {
     const m = models.get(path);
@@ -583,7 +717,121 @@ export function EditorHost(props: EditorHostProps) {
     }
   }
 
+  function openWorkingDiff(input: EditorWorkingDiffInput): void {
+    const path = input.path;
+    const tabId = tabIdForPath(path);
+    let disposeModified = false;
+    if (input.deleted !== true) openFile(path, { activate: false });
+    let modified = input.deleted === true ? undefined : models.get(tabId);
+    if (modified && readOnlyPaths.has(tabId)) {
+      props.onError?.(`Cannot open diff for ${path}: working file is not text-editable`);
+      return;
+    }
+    if (!modified && input.modified !== undefined) {
+      modified = monaco.editor.createModel(
+        input.modified,
+        languageForPath(path),
+        monaco.Uri.from({ scheme: 'rifty-working', path }),
+      );
+      disposeModified = true;
+    }
+    if (!modified) {
+      props.onError?.(`Cannot open diff for ${path}: working file is not available`);
+      return;
+    }
+    const id = `diff:${input.ref}:${path}`;
+    const originalText =
+      input.hasOriginal === false
+        ? Promise.resolve('')
+        : readGitOriginalTextCached(path, input.ref);
+    originalText.then(
+      (text) => {
+        const previous = diffModels.get(id);
+        previous?.original.dispose();
+        if (previous?.disposeModified) previous.modified.dispose();
+        const original = monaco.editor.createModel(
+          text,
+          languageForPath(path),
+          riftyGitOriginalUri(path, input.ref),
+        );
+        const title = `${basename(path)} ↔ ${input.ref}`;
+        diffModels.set(id, { original, modified, disposeModified, path, title });
+        setTabs((t) =>
+          openDiffTab(t, {
+            id,
+            kind: 'diff',
+            path,
+            title,
+            originalTitle: input.ref,
+            modifiedTitle: basename(path),
+            dirty: false,
+          }),
+        );
+        setActiveId(id);
+      },
+      (err: unknown) => {
+        if (disposeModified) modified.dispose();
+        props.onError?.((err as Error).message);
+      },
+    );
+  }
+
+  function openTextDiff(input: EditorTextDiffInput): void {
+    const previous = diffModels.get(input.id);
+    previous?.original.dispose();
+    if (previous?.disposeModified) previous.modified.dispose();
+    const original = monaco.editor.createModel(
+      input.original,
+      languageForPath(input.path),
+      monaco.Uri.from({
+        scheme: 'rifty-compare-original',
+        path: input.path,
+        query: `id=${encodeURIComponent(input.id)}`,
+      }),
+    );
+    const modified = monaco.editor.createModel(
+      input.modified,
+      languageForPath(input.path),
+      monaco.Uri.from({
+        scheme: 'rifty-compare-modified',
+        path: input.path,
+        query: `id=${encodeURIComponent(input.id)}`,
+      }),
+    );
+    diffModels.set(input.id, {
+      original,
+      modified,
+      disposeModified: true,
+      path: input.path,
+      title: input.title,
+    });
+    setTabs((t) =>
+      openDiffTab(t, {
+        id: input.id,
+        kind: 'diff',
+        path: input.path,
+        title: input.title,
+        originalTitle: input.originalTitle,
+        modifiedTitle: input.modifiedTitle,
+        dirty: false,
+      }),
+    );
+    setActiveId(input.id);
+  }
+
   function closeFile(path: string): void {
+    const diff = diffModels.get(path);
+    if (diff) {
+      const next = nextActiveAfterClose(tabs(), path, activeId());
+      setTabs((t) => closeTab(t, path));
+      diffModels.delete(path);
+      setActiveId(next);
+      queueMicrotask(() => {
+        diff.original.dispose();
+        if (diff.disposeModified) diff.modified.dispose();
+      });
+      return;
+    }
     clearAwait(path);
     const timer = writeTimers.get(path);
     if (timer) {
@@ -633,6 +881,22 @@ export function EditorHost(props: EditorHostProps) {
       hideCursorInOverviewRuler: true,
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
+    dirtyGutterDecorations = editor.createDecorationsCollection();
+    if (diffContainer) {
+      diffEditor = monaco.editor.createDiffEditor(diffContainer, {
+        theme: 'rifty-dark',
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 12.5,
+        lineHeight: 21,
+        fontFamily: MONO_FONT_STACK,
+        fontLigatures: true,
+        renderSideBySide: true,
+        scrollBeyondLastLine: false,
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+      });
+    }
     editorOpenerDisposable = monaco.editor.registerEditorOpener({
       openCodeEditor(source, resource, selectionOrPosition) {
         if (!editor || source !== editor) return false;
@@ -650,6 +914,8 @@ export function EditorHost(props: EditorHostProps) {
 
     props.registerApi({
       openFile,
+      openWorkingDiff,
+      openTextDiff,
       setMarkers(path, markers) {
         const model = models.get(tabIdForPath(path));
         if (model) monaco.editor.setModelMarkers(model, 'rifty-ts', markers);
@@ -744,6 +1010,37 @@ export function EditorHost(props: EditorHostProps) {
       if (activeId() === PROGRAM_TAB_ID) publishActiveInfo(PROGRAM_TAB_ID);
     });
 
+    let diffRoot = props.root();
+    function clearGitDiffTabs(): void {
+      const ids = [...diffModels.keys()];
+      if (ids.length === 0) return;
+      diffEditor?.setModel(null);
+      for (const id of ids) {
+        const diff = diffModels.get(id);
+        if (!diff) continue;
+        diff.original.dispose();
+        if (diff.disposeModified) diff.modified.dispose();
+        diffModels.delete(id);
+      }
+      setTabs((t) => t.filter((tab) => tab.kind !== 'diff'));
+      if (ids.includes(activeId())) setActiveId(PROGRAM_TAB_ID);
+    }
+
+    createEffect(() => {
+      const root = props.root();
+      if (root === diffRoot) return;
+      diffRoot = root;
+      gitOriginalTextCache.clear();
+      clearDirtyGutter();
+      clearGitDiffTabs();
+    });
+
+    createEffect(() => {
+      props.gitStatus?.();
+      gitOriginalTextCache.clear();
+      updateDirtyGutterForActive();
+    });
+
     createEffect(() => {
       const title = props.programTitle();
       setTabs((t) => setProgramTitle(t, title));
@@ -751,11 +1048,24 @@ export function EditorHost(props: EditorHostProps) {
 
     createEffect(() => {
       const id = activeId();
+      const diff = diffModels.get(id);
+      if (diff && diffEditor) {
+        const { original, modified } = diff;
+        diffEditor.setModel({ original, modified });
+        props.onActive({
+          label: diff.title,
+          language: languageForPath(diff.path),
+          path: diff.path,
+        });
+        return;
+      }
+      diffEditor?.setModel(null);
       const model = models.get(id) ?? programModel;
       if (!editor || !model) return;
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });
       publishActiveInfo(id);
+      updateDirtyGutterForActive();
       // The model just became active — apply a queued Problems click-to-jump.
       applyPendingRevealIfActive();
     });
@@ -767,7 +1077,14 @@ export function EditorHost(props: EditorHostProps) {
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
     editorOpenerDisposable?.dispose();
+    dirtyGutterDecorations?.clear();
+    diffEditor?.dispose();
     editor?.dispose();
+    for (const diff of diffModels.values()) {
+      diff.original.dispose();
+      if (diff.disposeModified) diff.modified.dispose();
+    }
+    diffModels.clear();
     for (const disposable of modelContentDisposables.values()) disposable.dispose();
     modelContentDisposables.clear();
     for (const m of models.values()) m.dispose();
@@ -786,7 +1103,13 @@ export function EditorHost(props: EditorHostProps) {
         onOpenPreviewTab={props.onOpenPreviewTab}
       />
       <div class="rf-editor__surface">
-        <div ref={container} class="rf-editor" data-testid="editor" />
+        <div
+          ref={container}
+          class="rf-editor"
+          data-testid="editor"
+          data-active={activeTabKind() !== 'diff'}
+        />
+        <div ref={diffContainer} class="rf-diff-editor" data-active={activeTabKind() === 'diff'} />
       </div>
     </div>
   );

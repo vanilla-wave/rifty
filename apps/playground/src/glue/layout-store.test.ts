@@ -40,7 +40,7 @@ describe('loadLayout', () => {
       previewW: 520,
       sidebarCollapsed: true,
       consoleCollapsed: false,
-      view: 'presets',
+      view: 'scm',
     };
     saveLayout(storage, state);
     expect(loadLayout(storage)).toEqual(state);
@@ -73,8 +73,8 @@ describe('clampLayout', () => {
       previewW: 9999,
       sidebarCollapsed: true,
       consoleCollapsed: true,
-      view: 'presets',
+      view: 'scm',
     });
-    expect(out).toMatchObject({ sidebarCollapsed: true, consoleCollapsed: true, view: 'presets' });
+    expect(out).toMatchObject({ sidebarCollapsed: true, consoleCollapsed: true, view: 'scm' });
   });
 });

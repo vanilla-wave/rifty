@@ -4,6 +4,40 @@
 
 ### Added
 
+- **Explorer now supports drag/drop upload, drag-move, path copy, and compare.**
+  Dropped files write exact owner bytes, in-tree drags use owner rename frames,
+  and compares open Monaco blob-vs-blob text diffs instead of raw git diff text.
+- **Explorer rows now support copy, cut, paste, and duplicate.** The file tree
+  keeps an ephemeral page clipboard, but every paste/duplicate mutation routes
+  through owner `copy` or atomic `rename` frames with VS Code-style copy names.
+- **Source Control can now stage, unstage, discard, and commit through the owner.**
+  SCM actions call the owner git RPC, resolve commit identity in the owner, and
+  refresh the owner status feed after ack instead of mutating rows optimistically.
+- **Explorer file rows can now download exact working bytes.** The playground
+  serves a full-byte owner read bridge for single-file downloads, so over-cap and
+  binary files save from the owner instead of the capped page snapshot.
+- **Explorer rows now show rifty-git decorations.** The playground subscribes to
+  the owner-pushed SCM status feed and tints changed files/folders with honest
+  M/U/A/D badges without reading `.git` from the page snapshot.
+- **Source Control has a read-only rifty-git panel.** The sidebar can show
+  Staged/Changes groups from the shared owner status feed plus branch and commit
+  history read through the owner git RPC channel.
+- **Source Control rows now open blob-vs-blob Monaco diffs.** The page fetches
+  `HEAD:<path>` blobs through the owner git RPC channel and compares them with
+  the live working model, avoiding raw structured-LCS diff text.
+- **Explorer mutations now have an owner-routed writable VFS target.** `OwnerRpcFs`
+  sends async create, rename, copy, and delete frames to the workspace owner and
+  resolves only after the read-only snapshot reflects the owner result.
+- **Playground SCM now has an owner-pushed rifty-git status feed.** The owner
+  debounces status recomputes from existing snapshot mutation triggers, skips
+  unchanged deltas, serves late subscribers, and exposes a page path→code cache.
+- **Playground SCM can now call git in the workspace owner.** A keyed
+  page↔owner `rifty:git` RPC bridge exposes real `@riftydev/git` status, show,
+  diff, log, branch, add, unstage, commit, restore, and reset operations without
+  reading `.git` from the page snapshot.
+- **Explorer owner VFS frames can now rename and copy paths.** The owner-side
+  write bridge applies no-clobber recursive rename/copy mutations and fails
+  loudly after owner exit instead of routing them through a stale fallback.
 - **Vite 7 production build/preview (ADR-0173).** The default Vite template now
   supports `vite build` -> real hashed/minified `dist/` and `vite preview` ->
   `/preview/4173/` serving that built bundle through the existing SW bridge.
@@ -744,8 +778,8 @@
   store directly (`snapshotFs` throws on write; owner = SSoT, ADR-0148/0150), so the explorer's
   disabled create/rename/delete machinery — wired to the throwing snapshot — is removed rather
   than left hidden behind a `readOnly` prop. Create/rename/delete happen via the editor or
-  terminal (routed to the owner) and reflect on the next poll. Owner-routed in-tree CRUD →
-  `backlog: playground/owner-routed-explorer-crud`.
+  terminal (routed to the owner) and reflect on the next poll. Owner-routed in-tree CRUD was
+  later implemented by the SCM file-manager work.
 
 - **The page holds no authoritative VFS store — the owner is the single store
   owner (D-acceptance A1/A2; `d-owner-worker-milestone`).** P4 left a SECOND

@@ -4,7 +4,7 @@
  * State lives in {@link EditorHost.tsx}; this only renders + emits intent.
  */
 import { For } from 'solid-js';
-import { type EditorTab, PROGRAM_TAB_ID } from '../glue/editor-tabs.ts';
+import type { EditorTab } from '../glue/editor-tabs.ts';
 import { Icon } from './icons.tsx';
 
 export function EditorTabs(props: {
@@ -26,7 +26,7 @@ export function EditorTabs(props: {
               class="rf-tab"
               role="tab"
               tabIndex={0}
-              data-tab={tab.id === PROGRAM_TAB_ID ? 'program' : 'file'}
+              data-tab={tab.kind}
               data-active={props.activeId === tab.id}
               aria-selected={props.activeId === tab.id}
               onClick={() => props.onSelect(tab.id)}
@@ -38,7 +38,7 @@ export function EditorTabs(props: {
               }}
               onAuxClick={(e) => {
                 // Middle-click closes file tabs (VSCode parity).
-                if (e.button === 1 && tab.kind === 'file') {
+                if (e.button === 1 && tab.kind !== 'program') {
                   e.preventDefault();
                   props.onClose(tab.id);
                 }
@@ -50,7 +50,7 @@ export function EditorTabs(props: {
                 <span class="rf-tab__dot" data-dirty={tab.dirty} aria-hidden="true" />
               )}
               <span class="rf-tab__label">{tab.title}</span>
-              {tab.kind === 'file' && (
+              {tab.kind !== 'program' && (
                 <button
                   type="button"
                   class="rf-tab__close"

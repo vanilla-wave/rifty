@@ -9,18 +9,43 @@
  *    idempotent (re-activates), preventing two models over one path.
  */
 
-export type TabKind = 'program' | 'file';
+export type TabKind = 'program' | 'file' | 'diff';
 
-export interface EditorTab {
-  /** Stable id: `__program__` for the program tab, absolute path for files. */
+export interface ProgramEditorTab {
+  /** Stable id: `__program__` for the program tab. */
   readonly id: string;
-  readonly kind: TabKind;
+  readonly kind: 'program';
   readonly title: string;
-  /** Absolute VFS path — set only for `kind: 'file'`. */
-  readonly path?: string;
-  /** Unsaved-changes dot (file tabs only). */
+  readonly dirty: false;
+}
+
+export interface FileEditorTab {
+  /** Stable id: absolute VFS path. */
+  readonly id: string;
+  readonly kind: 'file';
+  readonly title: string;
+  /** Absolute VFS path. */
+  readonly path: string;
+  /** Unsaved-changes dot. */
   readonly dirty: boolean;
 }
+
+export interface DiffEditorTab {
+  /** Stable id: `diff:<ref>:<absolute VFS path>`. */
+  readonly id: string;
+  readonly kind: 'diff';
+  readonly title: string;
+  /** Absolute VFS path for the working side. */
+  readonly path: string;
+  /** Diff tabs compare a read-only original against the working model. */
+  readonly originalTitle: string;
+  readonly modifiedTitle: string;
+  readonly dirty: false;
+}
+
+export type EditorTab = ProgramEditorTab | FileEditorTab | DiffEditorTab;
+export type DiffEditorTabInput = Omit<DiffEditorTab, 'kind' | 'dirty'> &
+  Partial<Pick<DiffEditorTab, 'kind' | 'dirty'>>;
 
 export const PROGRAM_TAB_ID = '__program__';
 
@@ -36,6 +61,11 @@ export function initialTabs(programTitle: string): EditorTab[] {
 export function openFileTab(tabs: readonly EditorTab[], path: string, title: string): EditorTab[] {
   if (tabs.some((t) => t.id === path)) return [...tabs];
   return [...tabs, { id: path, kind: 'file', title, path, dirty: false }];
+}
+
+export function openDiffTab(tabs: readonly EditorTab[], tab: DiffEditorTabInput): EditorTab[] {
+  if (tabs.some((t) => t.id === tab.id)) return [...tabs];
+  return [...tabs, { ...tab, kind: 'diff', dirty: false }];
 }
 
 /** Close a tab. The program tab is non-closable (returns the list unchanged). */

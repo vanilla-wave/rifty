@@ -15,6 +15,7 @@ import {
   assertSupportedTransport,
   makeGit,
   pathspecMatch,
+  porcelainXY,
   vfsToGitFs,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
@@ -48,48 +49,6 @@ const DEFAULT_AUTHOR_EMAIL = 'rifty@localhost';
 /** Short (7-char) oid, git's default abbreviation length. */
 function short(oid: string): string {
   return oid.slice(0, 7);
-}
-
-/**
- * isomorphic-git statusMatrix code (`${head}${workdir}${stage}`) → git
- * porcelain-v1 `XY` (X = staged/index column, Y = worktree column). Codes
- * verified against real git 2.50.1:
- *   020 untracked              → `??`
- *   022 staged-new (added)     → `A `
- *   003 staged-new then rm'd   → `AD`
- *   111 unchanged              → (omitted)
- *   121 modified, unstaged     → ` M`
- *   122 modified, staged       → `M `
- *   123 staged then modified   → `MM`
- *   101 deleted, unstaged      → ` D`
- *   100 deleted, staged        → `D `
- * Any unmapped code falls through to a best-effort `??`-style raw so a gap is
- * visible, never silently dropped.
- */
-function porcelainXY(code: string): string | null {
-  switch (code) {
-    case '111': // HEAD==WORKDIR==STAGE — unchanged, nothing to report
-      return null;
-    case '020': // untracked
-      return '??';
-    case '022': // staged new (added to index, no HEAD)
-      return 'A ';
-    case '003': // staged new then deleted from workdir
-      return 'AD';
-    case '121': // modified, unstaged
-      return ' M';
-    case '122': // modified, staged
-      return 'M ';
-    case '123': // staged then modified again
-      return 'MM';
-    case '101': // deleted, unstaged
-      return ' D';
-    case '100': // deleted, staged
-      return 'D ';
-    default:
-      // Unknown matrix code — surface the raw code rather than hide a gap.
-      return code;
-  }
 }
 
 /** Render `git status --porcelain` v1: one `XY filepath` line per changed file. */

@@ -20,4 +20,30 @@ describe('EditorTabs', () => {
     expect(html).toContain('aria-label="Open preview in new tab"');
     expect(html).toContain('Preview');
   });
+
+  it('renders diff tabs as closable open editors', () => {
+    const html = renderToString(() =>
+      EditorTabs({
+        tabs: [
+          { id: PROGRAM_TAB_ID, kind: 'program', title: 'src/main.js', dirty: false },
+          {
+            id: 'diff:HEAD:/workspace/src/main.ts',
+            kind: 'diff',
+            title: 'main.ts ↔ HEAD',
+            path: '/workspace/src/main.ts',
+            originalTitle: 'HEAD',
+            modifiedTitle: 'main.ts',
+            dirty: false,
+          },
+        ],
+        activeId: 'diff:HEAD:/workspace/src/main.ts',
+        onSelect: () => {},
+        onClose: () => {},
+      }),
+    );
+
+    expect(html).toContain('data-tab="diff"');
+    expect(html).toContain('main.ts ↔ HEAD');
+    expect(html).toContain('aria-label="Close main.ts ↔ HEAD"');
+  });
 });

@@ -12,9 +12,16 @@ describe('real Vite bootstrap preview routing', () => {
     // ADR-0148 (co-resident dev server runs inside the store owner): the owner's
     // single vfs-write handler forwards editor writes to
     // the running dev server's HMR (the virtual FS fires no real watcher events).
-    expect(source).toContain('const onVfsWrite = (path: string): void');
+    expect(source).toContain('const onVfsWrite = (paths: readonly string[]): void');
+    expect(source).toContain('for (const path of paths)');
     expect(source).toContain('devServer.notifyFileChanged(path)');
     expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
+  });
+
+  it('uses the status-aware owner publish wrapper for every owner mutation refresh hook', () => {
+    expect(source).toContain('onSnapshotDirty: publishOwnerState');
+    expect(source).not.toContain('onSnapshotDirty: publishSnapshot');
+    expect(source).toContain('flushSyncMirror,\n    publishOwnerState,');
   });
 
   it('passes browser HMR config to real vite .bin dev children', () => {
@@ -34,6 +41,13 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
     expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
+  });
+
+  it('acks owner-routed VFS writes with real owner-side apply errors', () => {
+    expect(source).toContain("type: 'rifty:vfs-write-ack'");
+    expect(source).toContain('opId: message.opId');
+    expect(source).toContain('ok: false');
+    expect(source).toContain('error: { name: error.name, message: error.message }');
   });
 
   it('re-seeds template-owned node_modules files into the owner before child dev boot', () => {
