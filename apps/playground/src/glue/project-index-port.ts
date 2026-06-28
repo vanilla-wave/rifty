@@ -89,6 +89,7 @@ type IndexResetProjectFrame = IndexOp & {
 type IndexNewScratchFrame = IndexOp & {
   readonly type: 'index-new-scratch';
   readonly starter: string;
+  readonly preserveDirtySameStarter?: boolean;
 };
 /**
  * Persist a SWITCH of the active root to the index (ADR-0165 §3). A plain switch
@@ -101,6 +102,15 @@ type IndexSetActiveFrame = IndexOp & {
   readonly type: 'index-set-active';
   readonly activeId: string;
 };
+/**
+ * Persist that the active scratch became a user draft (ADR-0165 §57). This is
+ * deliberately separate from `index-new-scratch`: file edits must never re-seed
+ * `/scratch`, only make the existing tree reload-discoverable as a dirty draft.
+ */
+type IndexMarkScratchDirtyFrame = IndexOp & {
+  readonly type: 'index-mark-scratch-dirty';
+  readonly starter: string;
+};
 type IndexMutationFrame =
   | IndexDeleteFrame
   | IndexSaveFrame
@@ -108,7 +118,8 @@ type IndexMutationFrame =
   | IndexResetFrame
   | IndexResetProjectFrame
   | IndexNewScratchFrame
-  | IndexSetActiveFrame;
+  | IndexSetActiveFrame
+  | IndexMarkScratchDirtyFrame;
 type IndexFrame =
   | IndexRequestFrame
   | IndexReplyFrame
@@ -294,10 +305,23 @@ export function serveProjectIndex(
   // re-point activeId='scratch' + re-seed /scratch from the bundle. Unlike reset,
   // this works when index.scratch is null (post-Save), restoring the Save
   // precondition for the NEXT save. The prior project entries are untouched.
-  const newScratch = (starter: string, opId?: string): void => {
+  const newScratch = (
+    starter: string,
+    opId?: string,
+    opts: { readonly preserveDirtySameStarter?: boolean } = {},
+  ): void => {
     const root = rootForId('scratch');
-    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
     const index = loadIndex(fs, base);
+    if (
+      opts.preserveDirtySameStarter === true &&
+      index.activeId === 'scratch' &&
+      index.scratch?.dirty === true &&
+      index.scratch.starter === starter
+    ) {
+      void flushThenPublish(opId);
+      return;
+    }
+    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
     writeIndex(fs, base, {
       ...index,
       activeId: 'scratch',
@@ -319,6 +343,17 @@ export function serveProjectIndex(
     writeIndex(fs, base, { ...index, activeId });
     void flushThenPublish(opId);
   };
+  const markScratchDirty = (starter: string, opId?: string): void => {
+    const index = loadIndex(fs, base);
+    if (index.activeId === 'scratch' && (index.scratch !== null || fs.existsSync('/scratch'))) {
+      const scratch = index.scratch ?? { starter, dirty: false, editedAt: 'no edits yet' };
+      writeIndex(fs, base, {
+        ...index,
+        scratch: { ...scratch, dirty: true, editedAt: new Date().toISOString() },
+      });
+    }
+    void flushThenPublish(opId);
+  };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
     if (frame.type === 'index-req') publish();
@@ -328,8 +363,12 @@ export function serveProjectIndex(
     else if (frame.type === 'index-rename') renameProject(frame.projectId, frame.name, frame.opId);
     else if (frame.type === 'index-reset') resetScratch(frame.starter, frame.opId);
     else if (frame.type === 'index-reset-project') resetProjectTree(frame.projectId, frame.opId);
-    else if (frame.type === 'index-new-scratch') newScratch(frame.starter, frame.opId);
+    else if (frame.type === 'index-new-scratch')
+      newScratch(frame.starter, frame.opId, {
+        preserveDirtySameStarter: frame.preserveDirtySameStarter,
+      });
     else if (frame.type === 'index-set-active') setActive(frame.activeId, frame.opId);
+    else if (frame.type === 'index-mark-scratch-dirty') markScratchDirty(frame.starter, frame.opId);
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
   let torn = false;
@@ -609,11 +648,28 @@ export function resetProjectIndex(key: OwnerBridgeKey, projectId: string): Promi
  * Posted on every starter pick so a pick AFTER a Save (index scratch:null) still
  * re-establishes the scratch the next Save needs.
  */
-export function newScratchIndex(key: OwnerBridgeKey, starter: string): Promise<ProjectIndex> {
+export function newScratchIndex(
+  key: OwnerBridgeKey,
+  starter: string,
+  opts: { readonly preserveDirtySameStarter?: boolean } = {},
+): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
-    { type: 'index-new-scratch', starter } satisfies IndexNewScratchFrame,
+    {
+      type: 'index-new-scratch',
+      starter,
+      preserveDirtySameStarter: opts.preserveDirtySameStarter,
+    } satisfies IndexNewScratchFrame,
     (index) => index.activeId === 'scratch' && index.scratch?.starter === starter,
+  );
+}
+
+/** Page side: persist that the active scratch has user edits (ADR-0165 §57). */
+export function markScratchDirtyIndex(key: OwnerBridgeKey, starter: string): Promise<ProjectIndex> {
+  return postIndexMutation(
+    key,
+    { type: 'index-mark-scratch-dirty', starter } satisfies IndexMarkScratchDirtyFrame,
+    (index) => index.activeId !== 'scratch' || index.scratch?.dirty === true,
   );
 }
 

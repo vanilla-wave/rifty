@@ -1,6 +1,7 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  markScratchDirtyIndex,
   newScratchIndex,
   renameProjectIndex,
   resetProjectIndex,
@@ -419,6 +420,76 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(() => saveProjectIndex(PORT, 'p-2', 'B', 'node-worker')).not.toThrow();
 
     dispose();
+    tearOwner();
+  });
+
+  it('index-new-scratch can preserve a dirty same-starter draft from a fast edit race', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch/src', { recursive: true });
+    fs.writeFileSync('/scratch/src/main.js', enc.encode('user edit'));
+    writeIndex(fs, '/', {
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: true, editedAt: 'edited just now' },
+      projects: [],
+    });
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    await newScratchIndex(PORT, 'project-files', { preserveDirtySameStarter: true });
+
+    expect(readUtf8(fs, '/scratch/src/main.js')).toBe('user edit');
+    expect(loadIndex(fs, '/').scratch).toMatchObject({
+      starter: 'project-files',
+      dirty: true,
+    });
+
+    tearOwner();
+  });
+
+  it('index-mark-scratch-dirty persists a dirty scratch draft without reseeding files', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch/src', { recursive: true });
+    fs.writeFileSync('/scratch/src/main.js', enc.encode('user edit'));
+    writeIndex(fs, '/', {
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
+      projects: [],
+    });
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const received: ProjectIndex[] = [];
+    const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
+    await Promise.resolve();
+
+    await markScratchDirtyIndex(PORT, 'project-files');
+
+    expect(readUtf8(fs, '/scratch/src/main.js')).toBe('user edit');
+    expect(received.at(-1)).toMatchObject({
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: true },
+    });
+    expect(loadIndex(fs, '/').scratch).toMatchObject({
+      starter: 'project-files',
+      dirty: true,
+    });
+
+    dispose();
+    tearOwner();
+  });
+
+  it('index-mark-scratch-dirty synthesizes the scratch entry when the tree exists but the index is cold-empty', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch/src', { recursive: true });
+    fs.writeFileSync('/scratch/src/main.js', enc.encode('user edit'));
+    writeIndex(fs, '/', { activeId: 'scratch', scratch: null, projects: [] });
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    await markScratchDirtyIndex(PORT, 'node-worker');
+
+    expect(loadIndex(fs, '/')).toMatchObject({
+      activeId: 'scratch',
+      scratch: { starter: 'node-worker', dirty: true },
+    });
+    expect(readUtf8(fs, '/scratch/src/main.js')).toBe('user edit');
+
     tearOwner();
   });
 

@@ -63,7 +63,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('initialBootDecisionMade = true;');
     expect(source).toContain('onClose={closeLauncher}');
     expect(source).toContain('await ensureWorkspaceOwnerStarted(false);');
-    expect(source).toContain('await durableNewScratch(id);');
+    expect(source).toContain('await durableNewScratch(id, { preserveDirtySameStarter: true });');
     expect(source).toContain('setWorkspaceOwnerReady(true);');
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
     expect(source).not.toContain('seedViteWorkspace(DEFAULT_PRESET);');
@@ -149,14 +149,19 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('paints picked starter tabs before owner seed, then refreshes after acked snapshot', () => {
+  it('paints a picked starter before boot without repainting or reseeding over early edits', () => {
     const loadPresetUi = source.match(
       /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
+    const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
+    const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
+    const pickStarter = source.slice(pickStarterStart, pickStarterEnd);
     const runPreset = source.match(
       /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(loadPresetUi).toBeDefined();
+    expect(pickStarterStart).toBeGreaterThan(-1);
+    expect(pickStarterEnd).toBeGreaterThan(pickStarterStart);
     expect(runPreset).toBeDefined();
     expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
     expect(source).toContain(
@@ -166,26 +171,25 @@ describe('App terminal startup wiring', () => {
     expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
-    expect(runPreset).toMatch(
-      /await loadPresetUi\(preset\);[\s\S]*?await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
+    expect(pickStarter).toMatch(
+      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?void runVitePreset\(presetForId\(id\), tsGate\);/,
     );
+    expect(runPreset).not.toContain('await loadPresetUi(preset);');
+    expect(runPreset).not.toContain('seedViteWorkspace(preset);');
     expect(source).not.toContain("createSignal('main.js')");
     expect(source).not.toContain("createSignal('javascript')");
     expect(source).not.toContain('discardPendingProgramWrite');
   });
 
-  it('flushes pending editor writes before seeding a picked preset (no mid-seed entry clobber)', () => {
+  it('does not reseed a picked starter during dev-server boot', () => {
     const runPreset = source.match(
       /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
-    // The de-specialized entry rides the ordinary debounced owner-write path; a
-    // pending write must be drained before the (async) seed + snapshot await so it
-    // can't fire mid-seed and overwrite the freshly-seeded preset entry the dev
-    // server runs (replaces the old discardPendingProgramWrite guard).
-    expect(runPreset).toMatch(
-      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);/,
-    );
+    expect(runPreset).toContain('Re-loading/re-seeding here can erase');
+    expect(runPreset).not.toContain('await seedViteWorkspace(preset);');
+    expect(runPreset).not.toContain('await flushPendingEditorWrites();');
+    expect(runPreset).not.toContain('resetEditorToActiveInitialFiles();');
   });
 
   it('uses preset openFiles as the complete ordered initial editor tab set', () => {
@@ -447,6 +451,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const [tsProjectRevision, setTsProjectRevision] = createSignal(0)');
     expect(source).toContain('tsProjectRevision();');
     expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
+    expect(source).toContain("if (frame.status !== 'stopped') setWorkspaceOwnerReady(true);");
     expect(source).toContain("const wasRunning = devServerStatus() === 'running';");
     expect(source).toContain("if (frame.status === 'running' && !wasRunning)");
     expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
@@ -888,9 +893,10 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
 // behavioral contract — dirty from a REAL owner write, deferred delete that Undo
 // cancels — is pinned exactly.
 describe('App project wiring', () => {
-  it('markDirty fires on the owner onFileWritten signal, not a UI counter', () => {
+  it('markDirty fires on the owner onFileWritten signal and persists scratch dirty', () => {
     createRoot((dispose) => {
       let firedWrite: ((path: string, content: string) => void) | undefined;
+      const onScratchDirty = vi.fn();
       const owner = {
         onFileWritten: (cb: (p: string, c: string) => void) => {
           firedWrite = cb;
@@ -905,10 +911,12 @@ describe('App project wiring', () => {
         },
         storage: 'opfs',
         owner,
+        onScratchDirty,
       });
       expect(store.scratch()?.dirty).toBe(false);
       firedWrite?.('/scratch/src/main.js', 'x'); // a REAL owner write
       expect(store.scratch()?.dirty).toBe(true);
+      expect(onScratchDirty).toHaveBeenCalledWith('react');
       dispose();
     });
   });

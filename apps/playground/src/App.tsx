@@ -65,6 +65,7 @@ import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
   deleteProjectTree,
+  markScratchDirtyIndex,
   newScratchIndex,
   renameProjectIndex,
   resetProjectIndex,
@@ -269,6 +270,12 @@ export function App(props: AppProps) {
     },
     storage: storageMode,
     owner: fileWriteOwner,
+    onScratchDirty: (starter) => {
+      if (saveAffordance(storageMode).ephemeral) return;
+      void markScratchDirtyIndex(workspaceOwner().snapshotPort, starter).catch((err: unknown) =>
+        console.error('[project-index] mark scratch dirty failed', err),
+      );
+    },
     // §56: the page-mirror delete + Undo is REAL (launcher updates, restore works).
     // After the grace window the DURABLE removal of `/projects/<id>` posts an
     // `index-delete` to the owner (the OPFS index is worker-writable-only,
@@ -877,6 +884,7 @@ export function App(props: AppProps) {
         devServerOwnerSessionId = frame.sid ?? null;
       }
       setDevServerStatus(frame.status);
+      if (frame.status !== 'stopped') setWorkspaceOwnerReady(true);
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
       }
@@ -2082,7 +2090,9 @@ export function App(props: AppProps) {
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
       setPresetTransitioning(true);
-      await loadPresetUi(preset);
+      // The caller already painted the starter UI and, for OPFS, established the
+      // owner tree via durableNewScratch(). Re-loading/re-seeding here can erase
+      // edits made during the boot window.
       const restartNeeded = lifecycleDevServerRunning();
       const restartSessionId = restartNeeded
         ? (devServerSessionId ?? devServerSession().id)
@@ -2097,14 +2107,6 @@ export function App(props: AppProps) {
         session = devServerSession();
         devServerSessionId = session.id;
       }
-      // Drain pending editor writes BEFORE seeding: the de-specialized entry now
-      // rides the ordinary debounced owner-write path, so an un-acked entry edit
-      // must not fire mid-seed (seed + snapshot await span >300ms) and clobber the
-      // freshly-seeded preset entry the dev server runs.
-      await flushPendingEditorWrites();
-      await seedViteWorkspace(preset);
-      await waitForActiveSnapshotFrame();
-      resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
       // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
       // must update the runtime before the dev line runs. `slug` keys the install
@@ -2346,9 +2348,12 @@ export function App(props: AppProps) {
   // (after a prior Save the owner index is `scratch:null`). Read the port at fire
   // time; skipped in memory mode (no durable index). The owner is not respawned on
   // a pick — it stays rooted at /scratch and re-seeds the live tree.
-  async function durableNewScratch(id: string): Promise<void> {
+  async function durableNewScratch(
+    id: string,
+    opts: { readonly preserveDirtySameStarter?: boolean } = {},
+  ): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
-      await newScratchIndex(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
+      await newScratchIndex(workspaceOwner().snapshotPort, id, opts).catch((err: unknown) =>
         console.error('[project-index] new scratch failed', err),
       );
     }
@@ -2371,8 +2376,9 @@ export function App(props: AppProps) {
         await paintPickedStarterUi(presetForId(id));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
+        await durableNewScratch(id, { preserveDirtySameStarter: true });
+        if (saveAffordance(storageMode).ephemeral) seedViteWorkspace(presetForId(id));
         setWorkspaceOwnerReady(true);
-        await durableNewScratch(id);
         await runVitePreset(presetForId(id), tsGate);
       }
     };
@@ -2661,8 +2667,9 @@ export function App(props: AppProps) {
         await paintPickedStarterUi(presetForId(pendingStarter));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
-        setWorkspaceOwnerReady(true);
         await durableNewScratch(pendingStarter);
+        if (saveAffordance(storageMode).ephemeral) seedViteWorkspace(presetForId(pendingStarter));
+        setWorkspaceOwnerReady(true);
         await runVitePreset(presetForId(pendingStarter), tsGate);
       };
       if (presetTransitioning()) {

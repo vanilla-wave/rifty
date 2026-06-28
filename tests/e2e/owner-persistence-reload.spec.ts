@@ -1,11 +1,31 @@
-import { expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
+import { type Page, expect, test } from '@playwright/test';
+import { clearWorkspaceOpfs, readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
 } from './helpers/playground.ts';
+
+async function setOpenEditorValue(page: Page, path: string, text: string): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          ({ p, t }) => {
+            const fn = (
+              globalThis as {
+                __riftySetEditorValue?: (path: string, text: string) => boolean;
+              }
+            ).__riftySetEditorValue;
+            return fn ? fn(p, t) : false;
+          },
+          { p: path, t: text },
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+}
 
 /**
  * Owner OPFS persistence (chromium only; ADR-0013/0072 + ADR-0143 single-store-owner).
@@ -67,5 +87,53 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     await openShellTerminal(page);
     await runTerminalLine(page, 'cat /scratch/persist.txt');
     await expectTerminalContains(page, marker, 20_000);
+  });
+
+  test('an edited starter becomes a durable scratch draft and reopens after reload', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    const marker = `draft-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+    await page.goto('/');
+    await clearWorkspaceOpfs(page);
+    await page.reload();
+    await pickStarter(page, 'project-files');
+
+    const editor = page.locator('[data-testid="editor"]');
+    await setOpenEditorValue(page, '/scratch/src/main.js', `// ${marker}\n`);
+    await expect(editor.locator('.view-lines').first()).toContainText(marker);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await expect
+      .poll(
+        async () => {
+          const index = await readWorkspaceJson<{
+            activeId: string;
+            scratch: { starter: string; dirty: boolean } | null;
+          }>(page, '/.rifty-project-index.json');
+          return index?.activeId === 'scratch' && index.scratch
+            ? `${index.scratch.starter}:${index.scratch.dirty ? 'dirty' : 'clean'}`
+            : 'missing';
+        },
+        { timeout: 60_000 },
+      )
+      .toBe('project-files:dirty');
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 60_000 })
+      .toContain(marker);
+
+    await page.reload();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 60_000 })
+      .toContain(marker);
   });
 });
