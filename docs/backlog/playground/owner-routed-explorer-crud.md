@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Owner-routed in-tree CRUD for the FileExplorer (create/rename/delete via owner RPC)
 created: 2026-06-17
 why: the explorer is a read-only viewer (owner = SSoT; the page's snapshotFs throws on write). Its disabled create/rename/delete machinery was removed (review #4) because it was wired to the throwing snapshot — a happy-path lie. A real file manager wants in-tree CRUD; this is the honest feature that routes those mutations to the owner store
@@ -33,6 +33,39 @@ on an `FsOpsTarget`, so they can target an owner-RPC fs instead of the local sna
   `snapshotFs`.
 - Reuse `glue/fs-ops` primitives unchanged; surface owner-side errors back to the page.
 - The mkdir/rename/rm/copy owner frames + handler live in the sibling items, not here.
+
+## Acceptance
+
+- E2E: right-click a folder → New File / New Folder creates it owner-side
+  (reflected in `SnapshotFs` within one publish); F2 renames; Delete (with confirm)
+  removes; EVERY mutation routes through `OwnerRpcFs` (no `SnapshotFs` write, no
+  page-local store); owner-side errors surface back to the page.
+
+## Parity cases
+
+- New File creates an empty (0-byte) file — equal to `fs.writeFileSync(path, '')`
+  over the owner VFS.
+- New Folder creates an empty dir — equal to `fs.mkdirSync(path)`; a missing parent
+  is a loud throw (not silent `mkdir -p`) unless the affordance is explicitly
+  recursive.
+- Delete of a non-empty directory removes it recursively (`rm -rf` content); delete
+  of a missing path is a loud throw, never a silent success.
+- Rename collision → loud throw (no clobber), via the atomic rename frame.
+
+## Out of scope
+
+- create/rename/delete wired to the throwing `SnapshotFs` → forbidden (the Review
+  #4 lie).
+- The owner frames + `OwnerRpcFs` themselves (sibling items).
+- Clipboard copy/paste (`explorer-clipboard-copy-paste`); drag-move / OS-upload
+  (`explorer-dnd-upload-compare`).
+
+## Decisions
+
+- Affordances only (header buttons + per-row actions + inline name input) driving
+  `OwnerRpcFs`; reuse `glue/fs-ops` primitives unchanged.
+- Delete confirms (destructive within the repo); owner errors surfaced to the page.
+- Builds on ADR-0148/0150; REVERSIBLE, CHANGELOG line, no ADR.
 
 ## Reversibility
 

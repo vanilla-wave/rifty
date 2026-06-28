@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Owner git-status change feed (debounced status() → {path,code}[] delta)
 created: 2026-06-27
 why: The git-colored tree AND the SCM Changes/Staged list are one status stream; it can only originate owner-side (page has no .git), and a naive per-save status() would jank the owner. This is the highest-leverage AND highest-blast-radius component — it drives BOTH features.
@@ -56,6 +56,34 @@ NOT a live fs watcher.
   exactly one coalesced recompute; identical results do not republish;
   `node_modules` does not flood; channel torn down + re-established on respawn; no
   owner jank under rapid saves on a cloned repo.
+
+## Parity cases
+
+- After an editor save, the `{path,code}` for that file matches `porcelainXY` of
+  the engine `status()` (tracked edit → ` M`, new file → `??`, staged add → `A `,
+  delete → ` D`).
+- A `.gitignore`'d path (`node_modules/**`) never appears in the delta (engine
+  honors ignore — no flood).
+- A burst of N saves within the debounce window coalesces to exactly ONE
+  recompute; an identical recompute does NOT republish (skip-if-unchanged).
+
+## Out of scope
+
+- Mode-change codes (exec-bit / CRLF-only diffs) → NEVER emitted; such a file is
+  CLEAN here vs MODIFIED in canonical git (mode fixed `100644`), compat ❌.
+- Live fs-watch / sub-1.5s push for an external (non-`publishSnapshot`) mutation →
+  not provided; the feed is recompute-on-mutation + the 1.5s poll, never advertised
+  as a watcher (no VFS change events exist).
+
+## Decisions
+
+- Trailing-edge debounce 150–300ms + skip-if-unchanged hash (like `FileExplorer`
+  `lastSig`); recompute ONLY off existing `publishSnapshot` triggers, never a new
+  per-write path.
+- `porcelainXY` lifted from `packages/shell/src/commands/git.ts:69` into a
+  page-shared module — the single classifier for feed + decorations + SCM panel.
+- New `OwnerBridgeKey`-keyed channel; page caches a `path→code` Map; cleared on
+  switch. CHANGELOG line, no ADR.
 
 ## Reversibility
 

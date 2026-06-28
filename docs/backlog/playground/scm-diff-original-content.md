@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: HEAD/index original-content provider → Monaco diff (gutter + Open Changes)
 created: 2026-06-27
 why: The "what did I change" loop (gutter +/-/~ and side-by-side vs HEAD) is core git UX, today only available as plain-text git diff in the terminal; rifty's diff is structured-LCS so the diff UX must be blob-vs-blob, never a patch-text surface.
@@ -43,6 +43,32 @@ this is net-new wiring, not reuse.
 - Diff editor shows byte-honest working-vs-HEAD for a modified file; gutter marks
   match; binary/large (>128KB) blobs handled via owner read. RED-check: no raw
   unified-diff text surface exists.
+
+## Parity cases
+
+- Monaco DiffEditor over (working model, `rifty-git://path?ref=HEAD` original) shows
+  byte-honest working-vs-HEAD for a modified file; the HEAD original equals
+  `show('HEAD:'+path)` bytes.
+- The dirty-diff gutter marks (+/-/~) reflect the same two FULL blobs.
+- An over-cap (`>=128KB`) HEAD blob is fetched via the owner read, never an
+  empty/placeholder original.
+
+## Out of scope
+
+- A raw unified-diff TEXT surface from `diff()`/`show()` hunks → forbidden anywhere
+  (structured-LCS labeled as git diff = a lie), compat ❌. Hard RED-check: no such
+  surface exists.
+- Diffing an over-cap (`>=128KB`) WORKING file → not available (the editor can't
+  open it as a text model); an honest limitation, not a fake/empty diff.
+- The SCM list / actions (sibling items).
+
+## Decisions
+
+- A `rifty-git://<path>?ref=HEAD|index|<sha>` Monaco original-content provider maps
+  reads to owner `show(ref+':'+path)→blob`; app-internal scheme → CHANGELOG line,
+  no ADR (not consumed beyond the playground).
+- Blob-vs-blob ONLY via Monaco; provider lifecycle bound to the git-RPC channel
+  (respawn teardown, ADR-0165).
 
 ## Reversibility
 

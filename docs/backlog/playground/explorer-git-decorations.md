@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Git status decorations on the file tree (M/U/A/D color + badge)
 created: 2026-06-27
 why: The git-colored file tree is the headline "VS Code file manager" signal; FileExplorer today renders monochrome category icons with NO color/badge/decoration layer.
@@ -39,6 +39,32 @@ presentation, zero fidelity risk in itself, zero new deps.
 - Real-screenshot `/verify` (selector e2e misses missing CSS): editing a file
   colors + badges its row within one feed tick; a new file shows the untracked
   color; staged shows the index color; folders propagate.
+
+## Parity cases
+
+- A tracked file edited → its row gets the `M` color/badge matching `porcelainXY`
+  ` M`; a new file → the untracked color (`??`); a staged file → the index/staged
+  color (`A `/`M `); a deleted file → `D`.
+- Ancestor folders of a changed file are tinted (propagation); a clean file/folder
+  carries no decoration.
+- Colors map to `gitDecoration.*ResourceForeground` theme tokens.
+
+## Out of scope
+
+- Mode-change decoration (exec-bit/CRLF) → never rendered (mode fixed `100644`);
+  such a file is CLEAN here vs MODIFIED in canonical git, compat ❌.
+- Exact-git color/letter parity → the surface is labeled `rifty-git status`, not
+  canonical-git.
+- Computing git in the explorer → forbidden; decorations read ONLY the shared feed
+  store.
+
+## Decisions
+
+- Per-row color class + M/U/A/D badge from the page `path→code` Map, refreshed on
+  each feed tick; folder propagation.
+- Presentational only; verified by real-screenshot `/verify` (selector e2e misses
+  missing CSS).
+- REVERSIBLE, CHANGELOG line, no ADR.
 
 ## Reversibility
 

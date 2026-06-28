@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: OwnerRpcFs — a page-side writable FsOpsTarget that routes mutations to the owner
 created: 2026-06-27
 why: In-tree CRUD needs a WRITABLE target, but binding fs-ops to the existing throwing SnapshotFs is the exact happy-path lie Review #4 deleted; the writable target must be DISTINCT and emit owner write frames (owner = single writer).
@@ -43,6 +43,32 @@ publishSnapshot → SnapshotFs.update → poll`) for editor saves.
 - E2E: a programmatic `OwnerRpcFs` create/rename/delete reflects in the read-only
   `SnapshotFs` view within one publish; NO page-local store is mutated (owner-SSoT
   intact); rebinds cleanly on owner respawn.
+
+## Parity cases
+
+- `OwnerRpcFs.createFile/createDir/deletePath/renamePath/copyTree` each reflect in
+  the read-only `SnapshotFs` view within ONE publish cycle
+  (publish→update→poll), matching the resulting owner tree.
+- `SnapshotFs` write methods STILL `readOnlyThrow` after this item (the read view
+  is unchanged).
+- An emit during the owner-respawn window REJECTS loudly (owner-exited guard).
+
+## Out of scope
+
+- Making `SnapshotFs` writable / any page-local file store → forbidden (the exact
+  Review #4 lie); never reintroduced.
+- Optimistic page mutation before owner ack/republish → not done; the page reflects
+  only owner-acked state.
+- A synchronous write API on `OwnerRpcFs` → not provided (mutations are async owner
+  frames).
+
+## Decisions
+
+- `OwnerRpcFs` is a NEW class DISTINCT from `SnapshotFs`; `glue/fs-ops` binds to it
+  for mutations, to `SnapshotFs` for reads.
+- Reflect-back via the existing `onVfsWrite→publishSnapshot→SnapshotFs.update→poll`
+  loop; resolve on owner ack/republish.
+- Additive page-side target → REVERSIBLE, CHANGELOG line, no ADR (ADR-0148/0150).
 
 ## Reversibility
 

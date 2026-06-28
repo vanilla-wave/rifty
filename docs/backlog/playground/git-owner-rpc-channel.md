@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Page↔owner git-RPC request/reply channel over @riftydev/git
 created: 2026-06-27
 why: The page has no .git (excluded from the snapshot) so every SCM read/action MUST be an owner RPC into the git realm; the load-bearing new code is the channel, not the view.
@@ -53,6 +53,36 @@ grandchild process; a git owner handler must CALL `makeGit` verbs itself and rep
   for a known tree; a request that outlives the owner rejects (not hangs);
   teardown leaves no live channel.
 - No UI required — this is the UI-agnostic asset both views consume.
+
+## Parity cases
+
+- Channel `status()` deep-equals owner `makeGit().status()` (the `StatusEntry`
+  list) for a known tree.
+- `show('HEAD:'+path)` returns blob bytes byte-identical to the engine `show`.
+- `add`/`unstage`/`commit`/`restore` produce the index/tree state the engine
+  produces, verified via a follow-up `status()`.
+- A request issued after owner exit REJECTS (mirrors `writeFile` "owner has
+  exited") within the per-request timeout — never hangs.
+
+## Out of scope
+
+- Remote verbs `clone`/`fetch`/`pull`/`push` over the channel → NOT dispatched;
+  `NotImplementedError` + compat ❌ (engine has smart-HTTP, but no channel/UI
+  surface yet — epic out-of-scope).
+- `merge`/`cherryPick` conflict handling → NOT wrapped; a conflict surfaces the
+  engine's loud iso-git throw verbatim (no swallow, no fabricated
+  `NotImplementedError`).
+- A page-side `.git` read → impossible by construction (page has no `.git`); never
+  a fallback path.
+
+## Decisions
+
+- App-internal owner↔page wire (`apps/playground` glue), not a public package
+  export → CHANGELOG line, no ADR (applies the ADR-0148/0150 realm split).
+- Result shapes reuse `packages/git/src/types.ts`; id-correlation/timeout/`dispose`
+  cloned from `ts-ls-client.ts`; the owner handler CALLS `makeGit` verbs (not a
+  blind relay like ts-lsp).
+- Keyed by `OwnerBridgeKey`; torn down + rebound on owner respawn (ADR-0165).
 
 ## Reversibility
 

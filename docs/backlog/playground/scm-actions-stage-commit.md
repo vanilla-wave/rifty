@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: SCM actions — stage/unstage/discard/commit from the panel (owner-acked)
 created: 2026-06-27
 why: Graphical stage/commit closes the SCM loop; commit must produce a byte-identical canonical SHA and staging is index state that lives only in the owner .git.
@@ -44,6 +44,33 @@ config → default).
 - Parity: a commit from the panel produces a SHA byte-identical to shell `git
   commit` for identical inputs; stage/unstage/discard reflect on the next feed
   tick; an action in the respawn window fails loudly.
+
+## Parity cases
+
+- A commit from the panel produces a SHA byte-identical to shell `git commit` for
+  identical inputs (tree, message, author, parents) — already engine-proven.
+- stage=`add`, unstage=`unstage`/`restore --staged`, discard=`checkout`/`restore`
+  each reflect on the next feed tick (or an immediate re-emit), matching the
+  engine's resulting `status()`.
+- Author identity resolves `GIT_AUTHOR_*` → `user.name`/`user.email` config →
+  default, matching the shell `git` builtin.
+
+## Out of scope
+
+- Conflict-resolution / 3-way merge UI → NOT built; a `merge()`/`cherryPick()`
+  conflict surfaces the engine's loud iso-git/shell-classified throw — never a
+  fabricated `NotImplementedError` and never a half-wired merge UI / swallow.
+- Remote push/pull/fetch → out (epic out-of-scope).
+- GPG-signed commits → engine ceiling, compat ❌, not offered.
+
+## Decisions
+
+- Actions are owner verbs over the git-RPC channel (request/reply ack), then refresh
+  the feed (ideally an immediate re-emit to beat the 1.5s lag).
+- Owner-acked, NOT optimistic — the page SCM model is a pure projection of
+  owner-acked state.
+- An action in the owner-respawn window fails loudly. Extends the git-RPC action
+  surface → CHANGELOG line (rides the channel's reversibility), no separate ADR.
 
 ## Reversibility
 

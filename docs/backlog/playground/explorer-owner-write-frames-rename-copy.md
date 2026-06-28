@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Atomic rename/copy frames on the owner write mailbox (extend write|mkdir|rm)
 created: 2026-06-27
 why: In-tree rename + drag-drop move need an ATOMIC owner mutation; today rename = copyTree+rm across two non-atomic frames (a crash mid-move leaves a half-copy, no undo) and there is no copy frame at all.
@@ -43,6 +43,35 @@ owner can do `copyTree`+`rm` inside ONE frame handler = atomic at the apply site
 - Unit: a `rename` frame is atomic at the owner (no observable half-state);
   collisions throw; the owner-exited path fails loudly. `pnpm check:arch` +
   `pnpm pr:check` pass.
+
+## Parity cases
+
+- A `rename` frame leaves NO observable half-state at the apply site (one handler,
+  copyTree+rm all-or-nothing); a crash/respawn cannot interleave between copy and
+  rm at the frame boundary.
+- A `copy` frame of a directory reproduces every descendant with identical bytes
+  (recursive `cp -r` content), never a shallow/empty dir.
+- A frame sent after owner exit REJECTS loudly (mirror `writeFile`), never silently
+  drops.
+
+## Out of scope
+
+- A lower-layer native `FsSync.renameSync` → NOT added (stays
+  `vfs/native-renamesync`, only if a perf gate fires); rename is copyTree+rm at the
+  apply site.
+- Silent overwrite on collision → never; a collision is a loud throw. DELIBERATELY
+  diverges from Node `fs.rename` overwrite semantics — this is the owner write
+  mailbox + file-manager safety, NOT the `fs` API programs call (which is
+  unaffected); compat-note, not a `NotImplementedError`.
+- Cross-device / cross-realm move semantics → N/A (single owner VFS).
+
+## Decisions
+
+- Add `rename` + `copy` variants to `VfsWriteFrame` + `applyVfsWriteFrame`; the
+  rename handler does copyTree+rm in ONE apply (atomic-at-apply-site).
+- Collision → loud throw (no clobber), keeping the `fs-ops` collision throw.
+- Additive over the existing mailbox, no lower-layer VFS API change → REVERSIBLE,
+  CHANGELOG line, no ADR.
 
 ## Reversibility
 

@@ -3,9 +3,9 @@ kind: epic
 status: ready
 title: Git-in-editor (SCM) + VS Code-style file manager over the owner
 created: 2026-06-27
-value: A graphical git surface (M/U/A/D-colored tree, Changes/Staged, gutter + side-by-side diff vs HEAD, stage/commit) AND in-tree file management (new/rename/delete/drag-drop/upload) — hand-rolled over the already-shipped @riftydev/git engine, no new dependency.
+value: A graphical git surface (M/U/A/D-colored tree, Changes/Staged, gutter + side-by-side diff vs HEAD, stage/commit) AND in-tree file management (new/rename/delete/drag-drop/upload/copy-paste-duplicate/download) — hand-rolled over the already-shipped @riftydev/git engine, no new dependency.
 user_story: As a developer in the rifty playground, I want graphical git + in-tree file management, but today the editor has ZERO git UI (only a GitHub hyperlink) and the FileExplorer is a read-only viewer — every git action means the terminal and every file op means the terminal or a save.
-items: [playground/git-owner-rpc-channel, playground/git-status-change-feed, playground/explorer-owner-write-frames-rename-copy, playground/explorer-owner-rpc-fs-target, playground/owner-routed-explorer-crud, playground/explorer-git-decorations, playground/explorer-dnd-upload-compare, playground/scm-readonly-panel, playground/scm-diff-original-content, playground/scm-actions-stage-commit]
+items: [playground/git-owner-rpc-channel, playground/git-status-change-feed, playground/explorer-owner-write-frames-rename-copy, playground/explorer-owner-rpc-fs-target, playground/owner-routed-explorer-crud, playground/explorer-git-decorations, playground/explorer-dnd-upload-compare, playground/explorer-clipboard-copy-paste, playground/explorer-file-download, playground/scm-readonly-panel, playground/scm-diff-original-content, playground/scm-actions-stage-commit]
 ---
 
 ## Outcome
@@ -58,9 +58,10 @@ Done when a developer, entirely in-browser:
 3. **Stages** the file, types a message, **commits** with Cmd+Enter — producing a
    commit SHA byte-identical to `git commit`; the branch chip in the status bar
    shows the current branch.
-4. **Right-clicks a folder → New File**, F2-renames, deletes-with-confirm, and
-   **drag-drops** a file to move it — every mutation applied by the owner and
-   reflected back, never a page-local edit.
+4. **Right-clicks a folder → New File**, F2-renames, deletes-with-confirm,
+   **drag-drops** a file to move it, **Ctrl+C/V copies** or **duplicates** a file,
+   and **Downloads** a file (incl. a >128KB blob) to the OS — every mutation applied
+   by the owner and reflected back, never a page-local edit.
 
 ## Items
 
@@ -83,6 +84,10 @@ File-manager projection:
 - `playground/explorer-git-decorations` — per-row M/U/A/D color+badge from the feed.
 - `playground/explorer-dnd-upload-compare` — drag-drop move, OS-upload, Copy Path,
   Compare (blob-vs-blob).
+- `playground/explorer-clipboard-copy-paste` — Copy/Cut/Paste/Duplicate; the
+  honest CONSUMER of the `copy` frame (copy→copy frame, cut→atomic rename frame).
+- `playground/explorer-file-download` — single-file download of working bytes to
+  the OS; over-cap (>128KB)/binary via a NEW general owner read frame.
 
 SCM projection:
 
@@ -104,6 +109,9 @@ SCM projection:
       two FULL blobs (HEAD blob from owner `show('HEAD:'+path)`).
 - [ ] In-tree CRUD + drag-drop move + OS-upload, all owner-routed; `SnapshotFs`
       never writable; no page-local file store.
+- [ ] Copy/Cut/Paste/Duplicate (copy via the `copy` frame, cut via the atomic
+      rename frame) + single-file Download (full bytes incl. >128KB via the new
+      owner read), all owner-routed.
 - [ ] stage/unstage/discard/commit from the panel; commit SHA byte-identical to
       shell `git commit` for identical inputs.
 - [ ] Channel + feed + `OwnerRpcFs` keyed by `OwnerBridgeKey`; project switch
@@ -137,6 +145,10 @@ SCM projection:
   deliberate follow-on, not core local working-tree state).
 - Blame, merge-conflict resolution UI, rebase/am UI, GPG, submodules — engine
   ceilings (`compat/git.md`); stay loud ❌.
+- File-op ceilings: chmod/exec-bit/symlink/permissions on ANY file op (mode fixed
+  `100644`); OS-clipboard file paste (the browser can't read OS paths — importing
+  OS files is drag-upload); folder / multi-file download (whole-tree
+  `exportArchive`). Absent or loud ❌, never a fake.
 
 ## Reversibility
 

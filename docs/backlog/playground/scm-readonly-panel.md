@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Read-only SCM panel — Changes/Staged groups, branch chip, commit history
 created: 2026-06-27
 why: A graphical "what changed" surface is the single highest-frequency git interaction; today it requires git status / git branch / git log in the terminal and there is no SCM UI in the editor.
@@ -44,6 +44,32 @@ branch chip.
 - E2E (real screenshot — selector e2e misses missing CSS): edit a file → it
   appears under Changes within one feed tick; the branch chip matches `git branch`;
   the history list matches `git log --oneline`. Audit: no stubbed blame/merge/timeline.
+
+## Parity cases
+
+- The `Staged Changes` / `Changes` split matches `porcelainXY` (staged column vs
+  worktree column) of the engine `status()`.
+- The branch chip equals `currentBranch()` (= `git branch --show-current`).
+- The commit-history list equals `log(LogOptions)` order/subjects/short-oids
+  (newest-first, matching `git log --oneline`).
+
+## Out of scope
+
+- Blame / `HEAD@{n}` reflog timeline / 3-way merge editor → omitted entirely
+  (engine ceilings, compat ❌); no control claims them.
+- Actions stage/commit (`scm-actions-stage-commit`); the diff editor
+  (`scm-diff-original-content`); tree decorations (`explorer-git-decorations`).
+  READ-ONLY here.
+- Computing git page-side → forbidden; renders only the shared feed + RPC reads.
+
+## Decisions
+
+- Hand-rolled view inside the ADR-0075 shell (activity-bar/sidebar/status-bar),
+  zero new dep; branch chip in the status bar.
+- Feeds: the shared status store (resource groups) + the git-RPC channel
+  (`currentBranch()`/`log()`).
+- Rebinds on owner respawn; clears on project switch (ADR-0165). REVERSIBLE,
+  CHANGELOG line, no ADR.
 
 ## Reversibility
 
