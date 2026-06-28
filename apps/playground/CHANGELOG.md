@@ -229,6 +229,9 @@
 - Fresh starter picks before the workspace owner exists now carry their pending
   generated baseline through instant dependency restore, keeping restored
   `package-lock.json` inside `Initial commit`.
+- Starter picks now paint the selected editor source immediately while the
+  workspace owner continues booting in the background, so the IDE no longer
+  sits empty after the launcher closes.
 - **Preset switches no longer replay stale debounced program edits.** A pending
   program-tab write is discarded before reseeding a picked starter, so an edit
   from the previous template cannot clobber the freshly seeded `/src/main.*`

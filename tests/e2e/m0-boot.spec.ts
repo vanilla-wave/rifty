@@ -39,6 +39,23 @@ test.describe('M0 — Foundation', () => {
     });
   });
 
+  test('starter pick paints editor source before the workspace owner finishes booting', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const launcher = page.locator('[data-testid="launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 30_000 });
+
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.click('[data-preset="project-files"]');
+
+    await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+    await expect(editorLines).toContainText("import project from './project.json'", {
+      timeout: 1_000,
+    });
+  });
+
   test('crossOriginIsolated is enabled', async ({ page }) => {
     await page.goto('/');
     const coi = await page.evaluate(

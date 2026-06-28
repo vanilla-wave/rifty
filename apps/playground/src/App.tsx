@@ -2037,10 +2037,20 @@ export function App(props: AppProps) {
     setTsProjectRevision((revision) => revision + 1);
   }
 
+  async function loadPresetUi(preset: Preset): Promise<void> {
+    setActivePreset(preset.id);
+    await machine.loadPreset(preset);
+    resetEditorToActiveInitialFiles();
+  }
+
+  async function paintPickedStarterUi(preset: Preset): Promise<void> {
+    await loadPresetUi(preset);
+  }
+
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
       setPresetTransitioning(true);
-      setActivePreset(preset.id);
+      await loadPresetUi(preset);
       const restartNeeded = lifecycleDevServerRunning();
       const restartSessionId = restartNeeded
         ? (devServerSessionId ?? devServerSession().id)
@@ -2055,12 +2065,10 @@ export function App(props: AppProps) {
         session = devServerSession();
         devServerSessionId = session.id;
       }
-      await machine.loadPreset(preset);
       // Drain pending editor writes BEFORE seeding: the de-specialized entry now
       // rides the ordinary debounced owner-write path, so an un-acked entry edit
       // must not fire mid-seed (seed + snapshot await span >300ms) and clobber the
-      // freshly-seeded preset entry the dev server runs (replaces the old
-      // discardPendingProgramWrite guard).
+      // freshly-seeded preset entry the dev server runs.
       await flushPendingEditorWrites();
       await seedViteWorkspace(preset);
       await waitForActiveSnapshotFrame();
@@ -2325,6 +2333,7 @@ export function App(props: AppProps) {
       if (!wasDirty) setWorkspaceOwnerReady(false);
       store.pickStarter(id);
       if (!wasDirty) {
+        await paintPickedStarterUi(presetForId(id));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(id);
@@ -2389,7 +2398,6 @@ export function App(props: AppProps) {
     const confirmed =
       globalThis.confirm?.('Delete all saved browser sandbox state and reload?') ?? false;
     if (!confirmed) return;
-    discardPendingProgramWrite();
     try {
       manager.dispose();
     } catch {
@@ -2614,6 +2622,7 @@ export function App(props: AppProps) {
       const runPendingStarter = async (): Promise<void> => {
         setWorkspaceOwnerReady(false);
         store.confirmPickStarter(pendingStarter);
+        await paintPickedStarterUi(presetForId(pendingStarter));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(pendingStarter);

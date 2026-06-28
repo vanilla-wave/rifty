@@ -147,22 +147,29 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('opens ordinary initial editor tabs only after acked seed and fresh owner snapshot', () => {
+  it('paints picked starter tabs before owner seed, then refreshes after acked snapshot', () => {
+    const loadPresetUi = source.match(
+      /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
     const runPreset = source.match(
       /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
+    expect(loadPresetUi).toBeDefined();
     expect(runPreset).toBeDefined();
     expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
     expect(source).toContain(
       'const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal',
     );
+    expect(loadPresetUi).toContain('await machine.loadPreset(preset);');
+    expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(runPreset).toMatch(
-      /await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
+      /await loadPresetUi\(preset\);[\s\S]*?await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
     );
     expect(source).not.toContain("createSignal('main.js')");
     expect(source).not.toContain("createSignal('javascript')");
+    expect(source).not.toContain('discardPendingProgramWrite');
   });
 
   it('flushes pending editor writes before seeding a picked preset (no mid-seed entry clobber)', () => {
