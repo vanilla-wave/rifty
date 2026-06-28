@@ -193,6 +193,17 @@ function terminalPromptCount(text: string): number {
   return text.match(/(?:^|\n)> /gu)?.length ?? 0;
 }
 
+async function activeTerminalRunning(page: Page): Promise<boolean> {
+  return (
+    (await page.locator('.rf-terminal-tab[data-active="true"]').getAttribute('data-running')) ===
+    'true'
+  );
+}
+
+async function waitForActiveTerminalIdle(page: Page, timeout = 30_000): Promise<void> {
+  await expect.poll(() => activeTerminalRunning(page), { timeout }).toBe(false);
+}
+
 export async function runTerminalLineSettled(
   page: Page,
   line: string,
@@ -201,11 +212,23 @@ export async function runTerminalLineSettled(
   await expect
     .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout: 30_000 })
     .toBeGreaterThan(0);
-  const before = terminalPromptCount(await terminalBuffer(page));
+  await waitForActiveTerminalIdle(page);
+  const before = await terminalBuffer(page);
   await runTerminalLine(page, line);
+  const submittedAt = Date.now();
+  let observedActivity = false;
   await expect
-    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout })
-    .toBeGreaterThan(before);
+    .poll(
+      async () => {
+        const buffer = await terminalBuffer(page);
+        const running = await activeTerminalRunning(page);
+        observedActivity =
+          observedActivity || running || buffer !== before || Date.now() - submittedAt > 250;
+        return observedActivity && !running && />\s*$/u.test(buffer);
+      },
+      { timeout },
+    )
+    .toBe(true);
 }
 
 export async function insertTerminalLineSettled(
