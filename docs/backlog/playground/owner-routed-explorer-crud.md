@@ -5,11 +5,19 @@ title: Owner-routed in-tree CRUD for the FileExplorer (create/rename/delete via 
 created: 2026-06-17
 why: the explorer is a read-only viewer (owner = SSoT; the page's snapshotFs throws on write). Its disabled create/rename/delete machinery was removed (review #4) because it was wired to the throwing snapshot — a happy-path lie. A real file manager wants in-tree CRUD; this is the honest feature that routes those mutations to the owner store
 user_story: As a dev I want to right-click a folder in the explorer to create/rename/delete files, with the mutation applied to the owner store (the single source of truth) and reflected back, not a page-local edit that diverges
-sources: [ADR-0148, ADR-0150, ADR-0075]
+epic: scm-file-manager
+blocked_by: [playground/explorer-owner-rpc-fs-target, playground/explorer-owner-write-frames-rename-copy]
+sources: [docs/backlog/epics/scm-file-manager.md, docs/backlog/playground/explorer-owner-rpc-fs-target.md, docs/backlog/playground/explorer-owner-write-frames-rename-copy.md, ADR-0148, ADR-0150, ADR-0075]
 code: [apps/playground/src/components/FileExplorer.tsx, apps/playground/src/glue/fs-ops.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/glue/pty-protocol.ts]
 ---
 
 ## Context
+
+> Under epic `scm-file-manager`. The page→owner RPC frames are split out to
+> `explorer-owner-write-frames-rename-copy` (atomic rename/copy on the write
+> mailbox) and the writable target to `explorer-owner-rpc-fs-target` (`OwnerRpcFs`).
+> This item is just the explorer AFFORDANCES driving that target; build it AFTER
+> its `blocked_by` items.
 
 Re-derived at HEAD (review #4). `FileExplorer` is now a pure viewer over the read-only
 `snapshotFs`. Today create/rename/delete reach the owner only via the editor (save →
@@ -20,11 +28,11 @@ on an `FsOpsTarget`, so they can target an owner-RPC fs instead of the local sna
 
 ## Options or Next
 
-- Add page→owner RPC frames for `mkdir`/`rename`/`rm` (mirror the existing `rifty:vfs-write`
-  / `pty:*` channel) and an owner handler that applies them to its `syncMirror`.
 - Re-introduce the explorer's create/rename/delete affordances (header buttons + per-row
-  actions + inline name input) driving an `FsOpsTarget` backed by that RPC, NOT `snapshotFs`.
+  actions + inline name input) driving `OwnerRpcFs` (`explorer-owner-rpc-fs-target`), NOT
+  `snapshotFs`.
 - Reuse `glue/fs-ops` primitives unchanged; surface owner-side errors back to the page.
+- The mkdir/rename/rm/copy owner frames + handler live in the sibling items, not here.
 
 ## Reversibility
 
