@@ -3,7 +3,7 @@ area: npm-client
 status: ready
 title: Abbreviated (corgi) packuments
 created: 2026-06-28
-why: cold install fetches FULL packuments (express ~786KB each), bloating the metadata waterfall that is ~98% of cold-install wall-time; the abbreviated format is ~10-20x smaller and carries every field rifty actually reads
+why: cold install fetches FULL packuments (express ~786KB each); the abbreviated format is ~2.5x smaller and carries every field rifty reads — a pure win on transfer bytes + JSON parse, and free to take. NOTE (measured 2026-06-28): the metadata waterfall is latency-bound, so abbreviated does NOT cut wall-time on a normal connection (only bytes); the wall-time win lives in the eddy resolver (ADR-0182), not here. Still worth doing for slow/metered links + parse cost.
 user_story: As a developer running a cold `npm install`, I want metadata fetches to transfer only install-relevant fields, but today rifty requests full packuments (READMEs, maintainers, every version's time/publisher) it never reads.
 epic: cold-npm-install-speedup
 sources: [https://github.blog/changelog/2024-07-09-leaner-npm-packument-metadata-contents/, https://www.npmjs.com/package/pacote]

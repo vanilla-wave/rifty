@@ -16,7 +16,7 @@ code: [deploy/yandex/npm-registry/Caddyfile, packages/npm-client/src/installer.t
 Three small transport levers, each preserving the determinism invariant (transport/IO only, never placement):
 
 1. Enable HTTP/3 on Caddy (`protocols h1 h2 h3`) to cut head-of-line blocking on the many parallel metadata fetches.
-2. Raise `PACKUMENT_CONCURRENCY` / `FETCH_CONCURRENCY` (`installer.ts`, both 8) IF real per-level sibling fan-out exceeds 8 — otherwise raising the cap is dead weight.
+2. ~~Raise `PACKUMENT_CONCURRENCY` / `FETCH_CONCURRENCY`~~ — DROPPED (measured 2026-06-28): the browser coalesces one origin to a SINGLE multiplexed h2 connection, so the semaphore just queues streams onto it; raising it past 8 is INERT in-browser (it only helped Node/undici's many-socket fan-out, which the client does not have). HTTP/3 is the only live lever for the single-connection ceiling.
 3. `<link rel=preconnect crossorigin>` to the registry origin in the playground `<head>` so DNS+TLS leave the critical path before `walkAndPin` (origin from `getRegistryBaseUrl`, never hardcoded — D-004).
 
 ## Open forks (resolve to reach ready)
