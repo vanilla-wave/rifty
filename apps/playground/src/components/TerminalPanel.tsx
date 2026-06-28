@@ -22,6 +22,7 @@ import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { Icon } from './icons.tsx';
+import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */
 export interface TerminalDims {
@@ -89,7 +90,6 @@ export function TerminalPanel(props: {
   let lastSubmittedLine = '';
   let completionSeq = 0;
   let busyNoticeTimer: ReturnType<typeof setTimeout> | undefined;
-  let bufferRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   const paletteItems = createMemo<readonly PaletteItem[]>(() => {
     const query = paletteQuery().trim().toLowerCase();
     const actions: PaletteItem[] = [
@@ -163,12 +163,12 @@ export function TerminalPanel(props: {
     }
   }
 
+  // Coalesce the mirror refresh, but cap the wait — a reset-on-every-write
+  // debounce starves under a streaming dev server, freezing `data-terminal-buffer`
+  // on stale content (the dev-server-ready marker flake). See terminal-buffer-scheduler.
+  const bufferRefresh = createBufferRefreshScheduler(() => refreshTerminalBuffer());
   function scheduleTerminalBufferRefresh(): void {
-    if (bufferRefreshTimer) clearTimeout(bufferRefreshTimer);
-    bufferRefreshTimer = setTimeout(() => {
-      bufferRefreshTimer = undefined;
-      refreshTerminalBuffer();
-    }, 16);
+    bufferRefresh.schedule();
   }
 
   function showBusyNotice(_event: TerminalBusyInputEvent): void {
@@ -428,7 +428,7 @@ export function TerminalPanel(props: {
 
   onCleanup(() => {
     if (busyNoticeTimer) clearTimeout(busyNoticeTimer);
-    if (bufferRefreshTimer) clearTimeout(bufferRefreshTimer);
+    bufferRefresh.cancel();
     disposeTheme?.();
     term?.dispose();
   });

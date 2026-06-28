@@ -22,6 +22,16 @@
 
 ### Fixed
 
+- **Terminal buffer mirror can no longer starve under streaming output.**
+  `data-terminal-buffer` (the serialized mirror the UI + e2e read) was refreshed
+  by a reset-on-every-write 16ms debounce: while a dev server streams output,
+  every chunk cleared the pending timer, so the mirror could freeze on stale
+  content under unbroken output. The new `createBufferRefreshScheduler` coalesces
+  tight bursts but caps the wait (`maxWaitMs`), guaranteeing a refresh even under
+  a continuous stream; the starvation case is a deterministic unit test.
+  (Robustness fix — does NOT resolve the separate CI `[vite] dev server ready`
+  marker flake, which reproduces unchanged; that marker intermittently does not
+  reach the test's terminal at all, tracked separately.)
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
