@@ -1762,12 +1762,14 @@ export function App(props: AppProps) {
   });
 
   function openFirstRunLauncher(): void {
+    autoOpenedFirstRunLauncher = true;
     store.setLauncherTab('starters');
     store.openLauncher();
   }
 
   function closeLauncher(): void {
     initialBootDecisionMade = true;
+    autoOpenedFirstRunLauncher = false;
     store.closeLauncher();
   }
 
@@ -1775,7 +1777,15 @@ export function App(props: AppProps) {
     const idx = projectIndex();
     if (!idx || initialBootDecisionMade) return;
     initialBootDecisionMade = true;
-    if (needsProjectChoiceOnBoot(idx)) openFirstRunLauncher();
+    if (needsProjectChoiceOnBoot(idx)) {
+      openFirstRunLauncher();
+      return;
+    }
+    if (autoOpenedFirstRunLauncher) {
+      autoOpenedFirstRunLauncher = false;
+      store.closeLauncher();
+    }
+    void ensureWorkspaceOwnerStarted(true);
   });
 
   // Auto-dismiss the store toast (ADR-0165 §9). The page `flashToast` self-clears,
@@ -1838,6 +1848,7 @@ export function App(props: AppProps) {
   // source of truth) — no `vite`-gated swap. Editor edits write to the owner; the
   // sync snapshot holds project-file content, the async read-port covers the rest.
   let initialBootDecisionMade = false;
+  let autoOpenedFirstRunLauncher = false;
 
   function presetForId(id: string): Preset {
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
@@ -2227,7 +2238,10 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    if (!initialBootDecisionMade) openFirstRunLauncher();
+    const timer = setTimeout(() => {
+      if (!initialBootDecisionMade) openFirstRunLauncher();
+    }, 1000);
+    onCleanup(() => clearTimeout(timer));
   });
 
   onCleanup(() => {

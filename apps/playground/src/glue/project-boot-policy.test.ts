@@ -8,13 +8,13 @@ describe('needsProjectChoiceOnBoot', () => {
     expect(needsProjectChoiceOnBoot(index)).toBe(true);
   });
 
-  it('also requires the launcher when an unsaved scratch exists but no named project exists', () => {
+  it('allows automatic boot when a scratch starter already exists', () => {
     const index: ProjectIndex = {
       activeId: 'scratch',
       scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
       projects: [],
     };
-    expect(needsProjectChoiceOnBoot(index)).toBe(true);
+    expect(needsProjectChoiceOnBoot(index)).toBe(false);
   });
 
   it('allows automatic boot only when a saved project exists', () => {

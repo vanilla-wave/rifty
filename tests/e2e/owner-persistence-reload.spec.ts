@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
-  openActiveProjectFromLauncher,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
@@ -58,11 +57,10 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     // Reload: the browser terminates the owner worker; on re-boot the owner wires
     // OPFS (initBackend) and preloads the persisted tree before serving.
     await page.reload();
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/persist.txt'), { timeout: 60_000 })
-      .toContain(marker);
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 60_000 });
-    await openActiveProjectFromLauncher(page);
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
     await expect
       .poll(() => readWorkspaceText(page, '/scratch/persist.txt'), { timeout: 60_000 })
       .toContain(marker);

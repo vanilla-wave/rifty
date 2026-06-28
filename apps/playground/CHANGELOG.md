@@ -211,6 +211,8 @@
   creates a real `/scratch` shell/file tree without choosing a starter, so the
   IDE no longer shows a fake entry file or rejects shell commands while the
   launcher waits for the user's first project choice.
+- Reloading after choosing a starter now reopens the saved scratch directly
+  instead of showing the first-run project chooser again.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
