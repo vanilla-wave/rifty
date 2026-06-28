@@ -1923,6 +1923,7 @@ export function App(props: AppProps) {
   let pendingSaveApplied: Promise<boolean> | null = null;
   let pendingSaveDurability: Promise<boolean> | null = null;
   let pendingSwitch: Promise<boolean> | null = null;
+  let pendingSaveAutoSwitchId: ActiveId | null = null;
 
   function trackSave(
     id: string,
@@ -2040,6 +2041,7 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
+    pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
     const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
@@ -2054,6 +2056,7 @@ export function App(props: AppProps) {
   // Switch active root from the launcher/chip. The store gates a dirty scratch
   // (switch dialog); an applied switch drives the real owner respawn (switchTo).
   async function onLauncherSwitch(id: ActiveId): Promise<void> {
+    pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveDurable())) return;
     const before = store.activeId();
@@ -2100,6 +2103,24 @@ export function App(props: AppProps) {
   function openSaveDialog(): void {
     setSaveName('');
     store.openDialog({ kind: 'save', defaultName: '' });
+  }
+
+  async function switchToSavedProjectAfterSave(
+    id: ActiveId,
+    saved: Promise<boolean>,
+  ): Promise<void> {
+    try {
+      if (saveAffordance(storageMode).ephemeral) return;
+      if (!(await saved)) return;
+      if (pendingAfterSave()) return;
+      if (pendingSaveAutoSwitchId !== id) return;
+      if (pendingSwitch) return;
+      if (store.activeId() !== id) return;
+      if (workspaceOwner().root === rootForId(id)) return;
+      void trackSwitch(switchTo(id));
+    } finally {
+      if (pendingSaveAutoSwitchId === id) pendingSaveAutoSwitchId = null;
+    }
   }
 
   // Confirm Save: the store flips the mirror pointer; a fresh page id is allocated
@@ -2161,6 +2182,9 @@ export function App(props: AppProps) {
     if (pending) {
       setPendingAfterSave(null);
       if (await saveWait.durable) applyPendingTarget(pending);
+    } else if (!ephemeral) {
+      pendingSaveAutoSwitchId = id;
+      void switchToSavedProjectAfterSave(id, saveWait.durable);
     }
   }
 

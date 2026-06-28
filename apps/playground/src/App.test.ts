@@ -429,6 +429,20 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain("onClick={() => selectSidebarView('scm')}");
   });
 
+  it('respawns the owner at the saved project root after a plain Save-as-project', () => {
+    expect(source).toContain('let pendingSaveAutoSwitchId: ActiveId | null = null;');
+    expect(source).toContain('function switchToSavedProjectAfterSave(');
+    expect(source).toContain('if (saveAffordance(storageMode).ephemeral) return;');
+    expect(source).toContain('if (pendingSaveAutoSwitchId !== id) return;');
+    expect(source).toContain('if (pendingSwitch) return;');
+    expect(source).toContain('if (store.activeId() !== id) return;');
+    expect(source).toContain('void trackSwitch(switchTo(id));');
+    expect(source).toContain('pendingSaveAutoSwitchId = id;');
+    expect(source).toContain('} else if (!ephemeral) {');
+    expect(source).toContain('void switchToSavedProjectAfterSave(id, saveWait.durable);');
+    expect(source).toContain('pendingSaveAutoSwitchId = null;');
+  });
+
   it('opens SCM rows as blob-vs-blob Monaco diffs from owner HEAD blobs, never raw git diff text', () => {
     expect(source).toContain('async function openWorkingHeadDiff(row: ScmResourceRow)');
     expect(source).toContain('const path = row.path;');
