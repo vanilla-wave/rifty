@@ -1356,9 +1356,9 @@ export class RiftyTerminal {
       this.insertPrintable('\n');
       return;
     }
-    this.clearSuggestion();
-    this.term.write('\r\n');
     const line = this.buffer;
+    this.clearSuggestion();
+    if (line.trim().length > 0) this.term.write('\r\n');
     const block = this.beginCommandBlock(line);
     this.buffer = '';
     this.cursorPos = 0;

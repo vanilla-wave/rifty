@@ -22,6 +22,11 @@
 
 ### Fixed
 
+- **Terminal Problems stays pinned to the left.** The Problems tab sits before
+  terminal session tabs, and empty Enter in running/idle terminals submits a
+  blank shell line without showing `terminal is busy` or extra blank prompt rows.
+  The Problems count badge now keeps its number vertically centered, and closing
+  the active idle terminal focuses the previous terminal tab.
 - **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
   and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
   non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips
@@ -56,6 +61,9 @@
   `Project files scratch`), and exposes a missing project instead of falling back
   to scratch copy; the top-bar chip now also pins the app font instead of
   inheriting the browser's button default.
+- **New terminal tabs now take keyboard focus immediately.** Creating a
+  terminal switches back to the terminal view, focuses the active xterm instance,
+  and keeps the terminal DOM renderer pinned to the JetBrains Mono metrics.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.

@@ -9,6 +9,18 @@ import {
 const terminalSessionTabs = (page: Page) =>
   page.locator('.rf-terminal-tab').filter({ hasText: /^Terminal \d+/ });
 
+async function terminalOwnsFocus(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const terminal = document.querySelector('[data-testid="terminal"]');
+    const active = document.activeElement;
+    return terminal != null && active != null && terminal.contains(active);
+  });
+}
+
+function terminalPromptCount(text: string): number {
+  return text.match(/(?:^|\n)> /gu)?.length ?? 0;
+}
+
 test.describe('M1 - terminal shell', () => {
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await page.goto('/');
@@ -58,6 +70,46 @@ test.describe('M1 - terminal shell', () => {
     expect(await terminalBuffer(page)).not.toContain('[worker ready]');
   });
 
+  test('new terminal receives keyboard focus immediately', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+
+    await openShellTerminal(page);
+
+    await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
+  });
+
+  test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    const before = await terminalBuffer(page);
+
+    await page.locator('[data-testid="terminal"]').click();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+
+    const after = await terminalBuffer(page);
+    expect(after).not.toContain('terminal is busy');
+    expect(terminalPromptCount(after)).toBe(terminalPromptCount(before) + 1);
+    expect(after).not.toMatch(/(?:^|\n)> \n\n> /u);
+  });
+
+  test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await openShellTerminal(page);
+    const before = await terminalBuffer(page);
+
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+
+    const after = await terminalBuffer(page);
+    expect(terminalPromptCount(after)).toBe(terminalPromptCount(before) + 3);
+    expect(after).not.toMatch(/(?:^|\n)> \n\n> /u);
+  });
+
   test('terminal tabs switch between their own buffers', async ({ page }) => {
     await page.goto('/');
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
@@ -98,19 +150,49 @@ test.describe('M1 - terminal shell', () => {
     await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
   });
 
-  test('new-terminal button stays attached to the console tabs', async ({ page }) => {
+  test('closing the active idle terminal focuses the previous terminal tab', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+
+    await openShellTerminal(page);
+    await page.getByRole('button', { name: 'New terminal' }).click();
+    await expect(page.getByRole('tab', { name: 'Terminal 3' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    await page.getByRole('button', { name: 'Close Terminal 3' }).click();
+
+    await expect(terminalSessionTabs(page)).toHaveCount(2);
+    await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
+  });
+
+  test('new-terminal button stays attached while Problems stays pinned left', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
 
     await openShellTerminal(page);
 
-    const lastTabBox = await page.locator('.rf-terminal-tab').last().boundingBox();
+    const firstTabBox = await terminalSessionTabs(page).first().boundingBox();
+    const lastTabBox = await terminalSessionTabs(page).last().boundingBox();
     const actionBox = await page.getByRole('button', { name: 'New terminal' }).boundingBox();
+    const problemsBox = await page.locator('[data-testid="problems-tab"]').boundingBox();
+    const tabsbarBox = await page.locator('.rf-terminal-tabsbar').boundingBox();
 
+    expect(firstTabBox).not.toBeNull();
     expect(lastTabBox).not.toBeNull();
     expect(actionBox).not.toBeNull();
+    expect(problemsBox).not.toBeNull();
+    expect(tabsbarBox).not.toBeNull();
     const gap = Math.abs((actionBox?.x ?? 0) - ((lastTabBox?.x ?? 0) + (lastTabBox?.width ?? 0)));
     expect(gap).toBeLessThanOrEqual(1);
+    expect(problemsBox?.x ?? 0).toBeLessThan(firstTabBox?.x ?? 0);
+    const leftGap = Math.abs((problemsBox?.x ?? 0) - (tabsbarBox?.x ?? 0));
+    expect(leftGap).toBeLessThanOrEqual(1);
   });
 
   test('npm run vite resolves the seeded script through the installed Vite CLI', async ({

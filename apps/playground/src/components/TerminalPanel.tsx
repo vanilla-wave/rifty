@@ -17,7 +17,7 @@ import {
   moveAutocompleteIndex,
   searchTerminalHistory,
 } from '@riftydev/terminal';
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
@@ -63,6 +63,7 @@ export function TerminalPanel(props: {
   onSignal?(): void;
   onRawInput?(data: TerminalRawInput): void;
   onLink?(uri: string, event: MouseEvent): void;
+  focusEpoch?: number;
   testId?: string;
 }) {
   let container: HTMLDivElement | undefined;
@@ -263,6 +264,10 @@ export function TerminalPanel(props: {
     closeHistory(false);
   };
 
+  const focusTerminalSoon = () => {
+    requestAnimationFrame(() => term?.focus());
+  };
+
   const choosePaletteItem = (item: PaletteItem | undefined) => {
     if (!item) return;
     if (item.action) item.action();
@@ -342,6 +347,7 @@ export function TerminalPanel(props: {
     });
     disposeTheme = watchPreferredTerminalTheme(globalThis, (theme) => term?.setTheme(theme));
     term.mount(container);
+    if ((props.focusEpoch ?? 0) > 0) focusTerminalSoon();
     scheduleTerminalBufferRefresh();
     props.attach((chunk, stream) => {
       term?.write(chunk, stream);
@@ -412,6 +418,12 @@ export function TerminalPanel(props: {
     };
     document.addEventListener('keydown', onKeyDown, { capture: true });
     onCleanup(() => document.removeEventListener('keydown', onKeyDown, { capture: true }));
+  });
+
+  createEffect(() => {
+    const epoch = props.focusEpoch ?? 0;
+    if (epoch <= 0 || !term) return;
+    focusTerminalSoon();
   });
 
   onCleanup(() => {

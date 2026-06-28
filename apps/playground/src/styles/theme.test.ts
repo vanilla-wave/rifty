@@ -53,3 +53,26 @@ describe('multi-project launcher styles (ADR-0165 §9)', () => {
     expect(block).toContain('font: inherit;');
   });
 });
+
+describe('terminal typography styles', () => {
+  it('pins the xterm DOM renderer to the shared mono metrics', () => {
+    const terminalBlock = css.slice(
+      css.indexOf('.rf-terminal {'),
+      css.indexOf('/* — terminal overlays'),
+    );
+
+    expect(terminalBlock).toContain('font-family: var(--rf-font-mono);');
+    expect(terminalBlock).toContain('font-size: 13px;');
+    expect(terminalBlock).toContain('line-height: 18px;');
+    expect(css).toContain('.rf-terminal .xterm');
+    expect(css).toContain('.rf-terminal .xterm-helper-textarea');
+  });
+
+  it('centers the Problems count inside its fixed badge circle', () => {
+    const block = css.slice(css.indexOf('.rf-console__badge'), css.indexOf('/* Problems panel'));
+
+    expect(block).toContain('min-width: 16px;');
+    expect(block).toContain('height: 16px;');
+    expect(block).toContain('line-height: 16px;');
+  });
+});

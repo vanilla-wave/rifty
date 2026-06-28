@@ -255,10 +255,14 @@ describe('RiftyTerminal — Enter and line buffering', () => {
     expect(rec.lines).toEqual(['hi']);
   });
 
-  it('handles an empty Enter (passes empty line through)', async () => {
+  it('submits an empty Enter and redraws the next prompt without a blank row', async () => {
     const { term, rec } = createTerminal();
+    const writes = tapWrites(term);
+
     await term.handleInput('\r');
+
     expect(rec.lines).toEqual(['']);
+    expect(writes.join('').match(/\r\n/gu)).toHaveLength(1);
   });
 });
 
@@ -763,8 +767,9 @@ describe('RiftyTerminal — kill ring', () => {
     await term.handleInput('foo bar');
     await term.handleInput('\x1b[H');
     await term.handleInput('\x0b');
+    await term.handleInput('x');
     await term.handleInput('\r');
-    expect(rec.lines).toEqual(['']);
+    expect(rec.lines).toEqual(['x']);
   });
 
   it('Ctrl+W kills the previous whitespace-delimited word', async () => {
@@ -1289,6 +1294,10 @@ describe('RiftyTerminal — Ctrl+C', () => {
     await term.handleInput('\x03'); // Ctrl+C mid-typing.
     await term.handleInput('\r');
     expect(rec.lines).toEqual(['']);
+
+    await term.handleInput('ok');
+    await term.handleInput('\r');
+    expect(rec.lines).toEqual(['', 'ok']);
   });
 
   it('is processed even while a command is running (busy=true)', async () => {
@@ -1306,6 +1315,7 @@ describe('RiftyTerminal — Ctrl+C', () => {
         rec.signals.push(sig);
       },
     });
+    await term.handleInput('sleep');
     // Start a "long-running" command.
     const enterPromise = term.handleInput('\r');
     // The handler is now awaiting our onInput promise, busy=true.
@@ -1329,6 +1339,7 @@ describe('RiftyTerminal — Ctrl+C', () => {
       onRawInput: (data) => raw.push(data),
     });
 
+    await term.handleInput('sleep');
     const enterPromise = term.handleInput('\r');
     await Promise.resolve();
     await term.handleInput('\x1b[<0;10;20M');
@@ -1351,6 +1362,7 @@ describe('RiftyTerminal — Ctrl+C', () => {
       },
     });
 
+    await term.handleInput('sleep');
     const enterPromise = term.handleInput('\r');
     await Promise.resolve();
     term.handleBinaryInput('M !\u0080');
@@ -1395,8 +1407,9 @@ describe('RiftyTerminal — other input', () => {
   it('writes via .write() do not get fed back as input', async () => {
     const { term, rec } = createTerminal();
     term.write('output from program\n');
+    await term.handleInput('ok');
     await term.handleInput('\r');
-    expect(rec.lines).toEqual(['']);
+    expect(rec.lines).toEqual(['ok']);
   });
 
   it('redraws an in-progress input line after async output', async () => {
@@ -1967,6 +1980,7 @@ describe('RiftyTerminal — command marker substrate', () => {
     });
     rec.resolveNextInput = () => {};
 
+    await term.handleInput('sleep');
     const pending = term.handleInput('\r');
     await term.handleInput('next command');
     rec.resolveNextInput?.();

@@ -9,7 +9,7 @@ import type {
   TerminalRewriteRule,
 } from '@riftydev/terminal';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
@@ -18,6 +18,7 @@ export function BottomPanel(props: {
   collapsed: boolean;
   sessions: readonly TerminalSessionSnapshot[];
   activeSessionId: string;
+  terminalFocusEpoch?: number;
   modeHint?: TerminalModeHint;
   onToggleCollapse(): void;
   onSelectSession(id: string): void;
@@ -56,6 +57,10 @@ export function BottomPanel(props: {
     return n;
   });
 
+  createEffect(() => {
+    if ((props.terminalFocusEpoch ?? 0) > 0) setView('terminal');
+  });
+
   return (
     <section
       class="rf-console rf-card"
@@ -76,6 +81,27 @@ export function BottomPanel(props: {
         </button>
 
         <div class="rf-terminal-tabsbar">
+          <div
+            class="rf-terminal-tab rf-terminal-tab--problems"
+            data-active={view() === 'problems'}
+            data-running={false}
+          >
+            <button
+              type="button"
+              role="tab"
+              class="rf-terminal-tab__select"
+              data-testid="problems-tab"
+              aria-selected={view() === 'problems'}
+              onClick={() => setView('problems')}
+            >
+              <span class="rf-terminal-tab__label">Problems</span>
+              <Show when={problemCount() > 0}>
+                <span class="rf-console__badge" data-testid="problems-count">
+                  {problemCount()}
+                </span>
+              </Show>
+            </button>
+          </div>
           <div class="rf-terminal-tabs" role="tablist" aria-label="Console tabs">
             <For each={sessionIds()}>
               {(id) => {
@@ -122,23 +148,6 @@ export function BottomPanel(props: {
                 );
               }}
             </For>
-            <div class="rf-terminal-tab" data-active={view() === 'problems'} data-running={false}>
-              <button
-                type="button"
-                role="tab"
-                class="rf-terminal-tab__select"
-                data-testid="problems-tab"
-                aria-selected={view() === 'problems'}
-                onClick={() => setView('problems')}
-              >
-                <span class="rf-terminal-tab__label">Problems</span>
-                <Show when={problemCount() > 0}>
-                  <span class="rf-console__badge" data-testid="problems-count">
-                    {problemCount()}
-                  </span>
-                </Show>
-              </button>
-            </div>
           </div>
           <button
             type="button"
@@ -168,6 +177,7 @@ export function BottomPanel(props: {
                   onSignal={() => props.onSignal?.(id)}
                   onRawInput={(data) => props.onRawInput?.(id, data)}
                   onLink={props.onLink}
+                  focusEpoch={id === props.activeSessionId ? props.terminalFocusEpoch : 0}
                   onLine={(line, dims) => props.onLine(id, line, dims)}
                   modeHint={props.modeHint}
                   completer={props.completer}
