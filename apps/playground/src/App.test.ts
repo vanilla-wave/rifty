@@ -48,12 +48,14 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
-  it('gates a clean first-run boot behind the project launcher instead of auto-running the default preset', () => {
+  it('gates a clean first-run boot behind the launcher while a hidden empty workspace owns the shell', () => {
     expect(source).toContain('needsProjectChoiceOnBoot');
-    expect(source).toContain('function createNoProjectSelectedOwner(): WorkspaceOwnerHandle');
-    expect(source).toMatch(
-      /createSignal<WorkspaceOwnerHandle>\(\s*createNoProjectSelectedOwner\(\),?\s*\)/,
-    );
+    expect(source).toContain('function createHiddenEmptyWorkspaceOwner(): WorkspaceOwnerHandle');
+    expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
+    expect(source).toContain('hiddenEmptyBoot: true');
+    expect(source).toContain('const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();');
+    expect(source).toMatch(/createSignal<WorkspaceOwnerHandle>\(initialOwnerHandle\)/);
+    expect(source).not.toContain('startProjectIndexOwner');
     expect(source).toContain("sources: { dev: '', realVite: '' }");
     expect(source).toContain("store.setLauncherTab('starters')");
     expect(source).toContain('store.openLauncher()');

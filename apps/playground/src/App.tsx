@@ -76,7 +76,6 @@ import { type ActiveId, type ProjectIndex, rootForId } from './glue/project-inde
 import type { PreviewPortEntry } from './glue/pty-protocol.ts';
 import {
   type WorkspaceOwnerHandle,
-  startProjectIndexOwner,
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
@@ -97,6 +96,7 @@ import {
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
+import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
@@ -171,10 +171,16 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
   };
 }
 
-function createNoProjectSelectedOwner(): WorkspaceOwnerHandle {
+function createHiddenEmptyWorkspaceOwner(): WorkspaceOwnerHandle {
   return isSabIpcSupported()
-    ? startProjectIndexOwner({
+    ? startWorkspaceOwner({
         workspaceId: loadWorkspaceId(),
+        root: '/scratch',
+        template: HIDDEN_EMPTY_TEMPLATE,
+        slug: 'scratch',
+        starter: DEFAULT_PRESET.id,
+        setup: 'instant',
+        hiddenEmptyBoot: true,
         onLog: (line) => console.info(line),
       })
     : createUnavailableOwner();
@@ -743,17 +749,16 @@ export function App(props: AppProps) {
       : createUnavailableOwner();
   }
 
-  // Workspace owner signal (ADR-0146/0148/0165): cold boot starts with an
-  // index-only chooser owner, so no project root is seeded/published until the
-  // user picks a starter/project. The full shell/dev-server owner is spawned by
-  // `ensureWorkspaceOwnerStarted()` or `switchTo()`.
+  // Workspace owner signal (ADR-0146/0148/0165): cold boot starts with a hidden
+  // empty /scratch owner. It gives the IDE a real shell + file tree before the
+  // launcher choice, but the worker suppresses starter/index scratch synthesis so
+  // no visible project is chosen until the user picks one.
   // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
   // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
   // effect reads `workspaceOwner()` so the signal swap re-runs them — that swap IS
   // the re-wire to the new owner.
-  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(
-    createNoProjectSelectedOwner(),
-  );
+  const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();
+  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(initialOwnerHandle);
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
   const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
   // A rename closes the open tabs under `from`; map each back to its path under
@@ -945,12 +950,27 @@ export function App(props: AppProps) {
       env: props.terminalPersistence.initialState.env,
     },
   });
-  let workspaceOwnerStarted = false;
+  let workspaceOwnerStarted = initialOwnerHandle.workspaceId !== 'unavailable';
   let workspaceOwnerStart: Promise<WorkspaceOwnerHandle> | null = null;
   const [workspaceOwnerReady, setWorkspaceOwnerReady] = createSignal(false);
+  void initialOwnerHandle.ready.then(
+    () => {
+      if (workspaceOwnerStarted && workspaceOwner() === initialOwnerHandle) {
+        setWorkspaceOwnerReady(true);
+      }
+    },
+    (err: unknown) => {
+      console.error('[workspace-owner] hidden empty boot failed', err);
+    },
+  );
 
   async function ensureWorkspaceOwnerStarted(markReady = true): Promise<WorkspaceOwnerHandle> {
-    if (workspaceOwnerStarted) return workspaceOwner();
+    if (workspaceOwnerStarted) {
+      const current = workspaceOwner();
+      await current.ready;
+      if (markReady) setWorkspaceOwnerReady(true);
+      return current;
+    }
     if (workspaceOwnerStart) return workspaceOwnerStart;
     const current = workspaceOwner();
     workspaceOwnerStart = (async (): Promise<WorkspaceOwnerHandle> => {

@@ -140,6 +140,18 @@ describe('vite command — real installed bin routing', () => {
     ).toBeLessThan(prepare.indexOf('seedTemplateNodeModulesFiles(devCfg);'));
   });
 
+  it('supports hidden empty boot without synthesizing a chosen scratch starter', () => {
+    expect(source).toContain("const hiddenEmptyBoot = env.RIFTY_RFV_HIDDEN_EMPTY_BOOT === '1'");
+    expect(source).toContain(
+      'if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending))',
+    );
+    expect(source).toContain(
+      'if (freshRoot && !hiddenEmptyBoot) seedStarterBaseline(starter, cfg.root)',
+    );
+    expect(source).toContain("if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/')");
+    expect(source).toContain('else reconcileOwnerIndexAtBoot(syncMirror(), starter)');
+  });
+
   it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');

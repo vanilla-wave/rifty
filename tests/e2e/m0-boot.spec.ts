@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { readWorkspaceText } from './helpers/opfs.ts';
 import {
   bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
+  terminalBuffer,
 } from './helpers/playground.ts';
 
 test.describe('M0 — Foundation', () => {
@@ -54,6 +56,26 @@ test.describe('M0 — Foundation', () => {
     await expect(editorLines).toContainText("import project from './project.json'", {
       timeout: 1_000,
     });
+  });
+
+  test('first-run hidden empty project has a real shell and entry file before a starter pick', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const launcher = page.locator('[data-testid="launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 30_000 });
+    await page.locator('.rf-launcher__close').click();
+    await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+
+    await expect
+      .poll(async () => await readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 30_000 })
+      .not.toMatch(/^MISSING:/u);
+
+    const marker = `hidden-empty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    await runTerminalLine(page, `pwd && echo ${marker}`);
+    await expectTerminalContains(page, marker, 30_000);
+    await expectTerminalContains(page, /\/scratch/u);
+    await expect.poll(() => terminalBuffer(page)).not.toContain('Choose a project before');
   });
 
   test('crossOriginIsolated is enabled', async ({ page }) => {

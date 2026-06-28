@@ -54,7 +54,7 @@ import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
-import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
+import { reconcileOwnerIndexAtBoot, recoverIndex } from '../glue/project-index.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -427,6 +427,8 @@ async function bootShellOwner(opts: {
   readonly starter: string;
   /** True when the page picked a fresh starter before this full owner existed. */
   readonly starterGeneratedBaselinePending: boolean;
+  /** Hidden first-run owner: real shell/root, but no chosen starter/index scratch. */
+  readonly hiddenEmptyBoot: boolean;
   readonly fromScratch: boolean;
   /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
   readonly kernelWorkerUrl: string;
@@ -446,6 +448,7 @@ async function bootShellOwner(opts: {
     slug,
     starter,
     starterGeneratedBaselinePending,
+    hiddenEmptyBoot,
     fromScratch,
   } = opts;
   const pendingStarterGeneratedBaseline = new Set<string>();
@@ -460,11 +463,11 @@ async function bootShellOwner(opts: {
   };
 
   const freshRoot = !syncMirror().existsSync(cfg.root);
-  if (freshRoot || starterGeneratedBaselinePending) {
+  if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending)) {
     markStarterGeneratedBaselinePending(cfg.root);
   }
   seedProject(cfg);
-  if (freshRoot) seedStarterBaseline(starter, cfg.root);
+  if (freshRoot && !hiddenEmptyBoot) seedStarterBaseline(starter, cfg.root);
   await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
   // Instant presets: pre-seed node_modules from the baked snapshot into the owner
   // store NOW, before any dev line (the full fs is already present). from-scratch
@@ -1065,7 +1068,8 @@ async function bootShellOwner(opts: {
   // the spawn STARTER when /scratch exists but the index is a cold-boot empty — so
   // the owner index is the REAL hydrate source AND saveScratchAsProject's
   // `if(!index.scratch) throw` precondition holds. See reconcileOwnerIndexAtBoot.
-  reconcileOwnerIndexAtBoot(syncMirror(), starter);
+  if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/');
+  else reconcileOwnerIndexAtBoot(syncMirror(), starter);
   // ADR-0165: the OPFS project index is worker-writable only; serve it so the page
   // launcher hydrates an in-memory mirror across owner respawns. Read against THIS
   // realm's syncMirror (the owner owns the index); base '/' = the OPFS root.
@@ -1134,6 +1138,7 @@ async function bootstrap(): Promise<void> {
   // starter id (a fresh boot before the page picks anything).
   const starter = env.RIFTY_RFV_STARTER ?? DEFAULT_PRESET.id;
   const starterGeneratedBaselinePending = env.RIFTY_RFV_STARTER_BASELINE_PENDING === '1';
+  const hiddenEmptyBoot = env.RIFTY_RFV_HIDDEN_EMPTY_BOOT === '1';
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -1221,6 +1226,7 @@ async function bootstrap(): Promise<void> {
     slug,
     starter,
     starterGeneratedBaselinePending,
+    hiddenEmptyBoot,
     fromScratch,
     kernelWorkerUrl,
     nodeEntryWorkerUrl,
