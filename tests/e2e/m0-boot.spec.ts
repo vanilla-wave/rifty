@@ -70,6 +70,7 @@ test.describe('M0 — Foundation', () => {
     await expect
       .poll(async () => await readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 30_000 })
       .not.toMatch(/^MISSING:/u);
+    await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
 
     const marker = `hidden-empty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     await runTerminalLine(page, `pwd && echo ${marker}`);

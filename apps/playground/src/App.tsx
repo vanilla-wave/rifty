@@ -953,16 +953,9 @@ export function App(props: AppProps) {
   let workspaceOwnerStarted = initialOwnerHandle.workspaceId !== 'unavailable';
   let workspaceOwnerStart: Promise<WorkspaceOwnerHandle> | null = null;
   const [workspaceOwnerReady, setWorkspaceOwnerReady] = createSignal(false);
-  void initialOwnerHandle.ready.then(
-    () => {
-      if (workspaceOwnerStarted && workspaceOwner() === initialOwnerHandle) {
-        setWorkspaceOwnerReady(true);
-      }
-    },
-    (err: unknown) => {
-      console.error('[workspace-owner] hidden empty boot failed', err);
-    },
-  );
+  void initialOwnerHandle.ready.catch((err: unknown) => {
+    console.error('[workspace-owner] hidden empty boot failed', err);
+  });
 
   async function ensureWorkspaceOwnerStarted(markReady = true): Promise<WorkspaceOwnerHandle> {
     if (workspaceOwnerStarted) {
@@ -2379,7 +2372,11 @@ export function App(props: AppProps) {
     store.requestSwitch(id);
     const prompted = store.dialog()?.kind === 'switch';
     if (!prompted && (store.activeId() !== before || ownerNeedsSwitch)) {
-      void trackSwitch(switchTo(id));
+      if (ownerNeedsSwitch) {
+        void trackSwitch(switchTo(id));
+      } else {
+        void ensureWorkspaceOwnerStarted(true);
+      }
     }
   }
 
