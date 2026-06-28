@@ -34,21 +34,17 @@ Two architecture facts force this and force the build path:
 the mission (real Node software in the browser: a credible local IDE loop —
 edit → see changes → diff → commit — entirely in-browser, no server).
 
-**Decision (settled): hand-rolled, zero new dependency, NOT monaco-vscode-api.**
-The load-bearing work (an owner git-RPC channel + a debounced status feed + an
-owner-routed write mailbox + a HEAD-blob provider) is identical under ANY UI,
-because the page can compute nothing git-related and cannot write. Adopting
-`@codingame/monaco-vscode-api` would pay an IRREVERSIBLE editor-core alias swap
-(`monaco-editor` → `@codingame/monaco-vscode-editor-api`, re-validating the shipped
-ADR-0166 ts.LanguageService Monaco-provider stack) for nothing load-bearing — and
-its batteries are precisely the parts rifty cannot honestly use: the bundled git
-extension is node-only (a browser fake), and blame / 3-way merge editor /
-byte-exact patch / a writable in-page FS are all either engine ceilings (compat ❌)
-or owner-SSoT violations. StackBlitz (the closest sibling: a real in-browser
-runtime) made the same call. The monaco-vscode-api SERVICE layer (settings /
-search / themes / extension-host) stays a SEPARATE, ADR-gated question
-(`playground/monaco-vscode-api-workbench-services-spike`) — this epic does not
-touch it.
+**Decision (settled): hand-rolled, zero new dependency.** The load-bearing work
+(an owner git-RPC channel + a debounced status feed + an owner-routed write
+mailbox + a HEAD-blob provider) is identical under ANY UI, because the page can
+compute nothing git-related and cannot write. A vendored VS Code workbench/service
+layer would be an IRREVERSIBLE editor-core swap (re-validating the shipped ADR-0166
+ts.LanguageService Monaco-provider stack) for nothing load-bearing — and its
+batteries are precisely the parts rifty cannot honestly back: a node-only bundled
+git extension (a browser fake), and blame / 3-way merge editor / byte-exact patch /
+a writable in-page FS (engine ceilings, compat ❌, or owner-SSoT violations).
+StackBlitz (the closest sibling: a real in-browser runtime) made the same call —
+Monaco + a hand-rolled shell + real engines over its runtime.
 
 ## User scenario
 
@@ -112,8 +108,8 @@ SCM projection:
       shell `git commit` for identical inputs.
 - [ ] Channel + feed + `OwnerRpcFs` keyed by `OwnerBridgeKey`; project switch
       (ADR-0165) tears down + rebinds; an action in the respawn window fails LOUDLY.
-- [ ] Zero new prod dependency; monaco-vscode-api NOT adopted; `pnpm pr:check`
-      green; real-screenshot `/verify` for the decorated tree + diff.
+- [ ] Zero new prod dependency; `pnpm pr:check` green; real-screenshot `/verify`
+      for the decorated tree + diff.
 
 ## Honesty invariants (Fidelity — every item inherits these)
 
@@ -137,8 +133,6 @@ SCM projection:
 
 ## Out of scope
 
-- monaco-vscode-api / `@codingame` adoption (separate ADR-gated track:
-  `playground/monaco-vscode-api-workbench-services-spike`).
 - Graphical clone/fetch/pull/push (engine has smart-HTTP; remote-ops UI is a
   deliberate follow-on, not core local working-tree state).
 - Blame, merge-conflict resolution UI, rebase/am UI, GPG, submodules — engine
@@ -150,5 +144,4 @@ REVERSIBLE as an epic and as each hand-rolled page-side projection (delete the
 component). IRREVERSIBLE per item at implementation: a NEW cross-realm contract
 (the git-owner-rpc channel, the git-status feed channel, the atomic rename/copy
 write frames, the `rifty-git://` scheme) is new owner/page surface → CHANGELOG line
-each, and an ADR where it mints a stable cross-package wire contract. Adopting
-monaco-vscode-api would be IRREVERSIBLE (ADR) — explicitly NOT taken here.
+each, and an ADR where it mints a stable cross-package wire contract.
