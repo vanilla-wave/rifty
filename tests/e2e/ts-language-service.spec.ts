@@ -524,10 +524,28 @@ async function pickTypeScriptStarter(page: Page): Promise<void> {
   );
 }
 
+async function fetchPreviewOk(page: Page, port: number): Promise<boolean> {
+  return page.evaluate(async (targetPort) => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 4_000);
+    try {
+      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
+      return r.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }, port);
+}
+
 async function waitForTypeScriptStarterDevServer(page: Page): Promise<void> {
   await expect
-    .poll(() => terminalBuffer(page), { timeout: 30_000 })
-    .toContain('[vite] dev server ready on port 5174');
+    .poll(() => fetchPreviewOk(page, 5174), {
+      timeout: 30_000,
+      intervals: [500, 1_000, 2_000],
+    })
+    .toBe(true);
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
