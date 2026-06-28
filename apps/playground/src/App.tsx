@@ -2371,8 +2371,8 @@ export function App(props: AppProps) {
         await paintPickedStarterUi(presetForId(id));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
-        await durableNewScratch(id);
         setWorkspaceOwnerReady(true);
+        await durableNewScratch(id);
         await runVitePreset(presetForId(id), tsGate);
       }
     };
@@ -2661,8 +2661,8 @@ export function App(props: AppProps) {
         await paintPickedStarterUi(presetForId(pendingStarter));
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
-        await durableNewScratch(pendingStarter);
         setWorkspaceOwnerReady(true);
+        await durableNewScratch(pendingStarter);
         await runVitePreset(presetForId(pendingStarter), tsGate);
       };
       if (presetTransitioning()) {

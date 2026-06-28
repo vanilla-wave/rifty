@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { clearWorkspaceOpfs } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
-  openActiveProjectFromLauncher,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
@@ -71,8 +70,10 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     // wires OPFS (initBackend) and preloads the persisted tree — node_modules + the
     // user file — before serving.
     await page.reload();
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 60_000 });
-    await openActiveProjectFromLauncher(page);
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
     await openShellTerminal(page);
 
     // EXEC after restore: the installed CLI STILL resolves + runs from the
