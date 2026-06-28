@@ -82,7 +82,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('new terminal receives keyboard focus immediately', async ({ page }) => {
     await bootProjectFiles(page);
-    await expectDefaultViteReady(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     await openShellTerminal(page, { focus: false });
 
@@ -91,7 +91,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
     await bootProjectFiles(page);
-    await expectDefaultViteReady(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     const before = await terminalBuffer(page);
 
     await page.locator('[data-testid="terminal"]').click();
@@ -106,8 +106,11 @@ test.describe('M1 - terminal shell', () => {
 
   test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
     await bootProjectFiles(page);
-    await expectDefaultViteReady(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     await openShellTerminal(page);
+    await expect
+      .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout: 5_000 })
+      .toBeGreaterThan(0);
     const before = await terminalBuffer(page);
 
     await page.keyboard.press('Enter');
