@@ -20,6 +20,11 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `workbench-controllers.md` | parked | C | lift framework-agnostic `glue/*` → `@riftydev/workbench`; playground becomes a thin binding (DD-3) |
 | `framework-bindings-kit.md` | parked | D | per-framework atoms + `<RiftyIDE/>` + react/vue bindings over the workbench (DD-4) |
 | `create-rifty-template.md` | parked | E | un-packageable host config (COOP/COEP, module-worker, sw.js build, WASM copy, Monaco) as a scaffold |
+| `readme-open-auditable-rewrite.md` | ready | open-auditable-launch | root README reframed to the open/auditable wedge (GIF + MIT + compat + vs-WC) |
+| `publish-git-and-ts-language-service.md` | ready | open-auditable-launch | publish @riftydev/git + @riftydev/ts-language-service to npm |
+| `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
+| `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview gated on exec-preview) |
+| `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 
 ## Dependency map
 
@@ -35,3 +40,14 @@ A (publish, landed) ── B (umbrella/SDK, landed) ── C (workbench) ── 
 - **Hosted IDE from a template**: +E.
 
 EPIC A landed; the A4-A8 publishing follow-ons are filed under their owning areas (playground/toolchain-build/process-meta), not here.
+
+## Promotion / GTM epics
+
+Developer-adoption epics live in `docs/backlog/epics/` (cross-area, user-value umbrellas), sourced from `docs/research/open-webcontainers-alternative-2026-06.md`:
+
+- `epics/open-auditable-launch` — the one-shot discovery Show HN led by the open/auditable wedge.
+- `epics/webcontainers-alternative-search-slot` — the verifiable `rifty.dev/compare` page + awesome-list backlinks.
+- `epics/open-bolt-ai-sandbox-demo` — an open, client-side AI-sandbox reference (bolt.diy #2008).
+- `epics/wasi-in-browser-showcase` — surface the real-WASI-guest-over-shared-VFS capability.
+
+These pull the consumption EPICs above (create-rifty-template, workbench-controllers, exec/preview, snapshot/fork) as their downstream conversion path, but do not block on them.

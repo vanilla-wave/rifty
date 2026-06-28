@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Promotion / GTM backlog — 4 epics (3 ready, 1 draft) + 9 items (8 ready, 1 draft).** New `docs/backlog/epics/` for the developer-adoption push: `open-auditable-launch` (the discovery Show HN), `webcontainers-alternative-search-slot` (the verifiable compare page), `wasi-in-browser-showcase` (the one uncontested capability) — all `ready`; and `open-bolt-ai-sandbox-demo` (open client-side AI-sandbox reference) kept `draft`, since its live-preview path needs the IRREVERSIBLE `public-api-ai-agent-exec-preview` API (no ADR yet). Each maps to the product work it needs — launch deep-link, measured cold-start/npm-install benchmark, README wedge rewrite, publish `@riftydev/git`+`@riftydev/ts-language-service`, `rifty.dev/compare`, `examples/` AI-sandbox demo (draft), clickable WASI preset, standalone WASI example, `rifty.dev/blog` — and links the existing `toolchain-build/compat-matrix-test-result-sink`. Sourced from `docs/research/open-webcontainers-alternative-2026-06.md`.
+
 ### CI
 
 - **Playwright CI worker cap follow-up recorded.** Added
