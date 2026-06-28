@@ -2367,16 +2367,13 @@ export function App(props: AppProps) {
     pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveDurable())) return;
-    const before = store.activeId();
     const ownerNeedsSwitch = workspaceOwner().root !== rootForId(id);
     store.requestSwitch(id);
     const prompted = store.dialog()?.kind === 'switch';
-    if (!prompted && (store.activeId() !== before || ownerNeedsSwitch)) {
-      if (ownerNeedsSwitch) {
-        void trackSwitch(switchTo(id));
-      } else {
-        void ensureWorkspaceOwnerStarted(true);
-      }
+    if (!prompted && ownerNeedsSwitch) {
+      void trackSwitch(switchTo(id));
+    } else if (!prompted) {
+      void ensureWorkspaceOwnerStarted(true);
     }
   }
 

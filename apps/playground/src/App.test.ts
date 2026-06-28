@@ -370,6 +370,17 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('manager.clear(session.id)');
   });
 
+  it('marks a same-root launcher open ready without respawning the hidden owner', () => {
+    const switchStart = source.indexOf('async function onLauncherSwitch(id: ActiveId)');
+    const switchEnd = source.indexOf('// Open the launcher on the REMEMBERED tab', switchStart);
+    const switchBody = source.slice(switchStart, switchEnd);
+    expect(switchStart).toBeGreaterThan(-1);
+    expect(switchEnd).toBeGreaterThan(switchStart);
+    expect(switchBody).toContain('if (!prompted && ownerNeedsSwitch)');
+    expect(switchBody).toContain('} else if (!prompted) {');
+    expect(switchBody).toContain('void ensureWorkspaceOwnerStarted(true);');
+  });
+
   it('does not restart Vite inside a hidden stale terminal session', () => {
     expect(source).toContain('function isVisibleTerminalSession(id: string): boolean');
     expect(source).toContain(
