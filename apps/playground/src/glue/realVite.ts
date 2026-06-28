@@ -246,6 +246,8 @@ export interface WorkspaceOwnerOptions {
    * starter to synthesize a scratch index entry. Defaults to the template id.
    */
   starter?: string;
+  /** Fresh starter pick before the full owner spawned; generated baseline files should amend Initial commit. */
+  starterGeneratedBaselinePending?: boolean;
   onLog?(line: string): void;
 }
 
@@ -359,6 +361,7 @@ export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): Wor
     }
   });
 
+  let closing = false;
   let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
   const closed = new Promise<number | null>((resolve) => {
@@ -367,7 +370,9 @@ export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): Wor
   worker.on('exit', (code?: unknown) => {
     exited = true;
     const exitCode = typeof code === 'number' ? code : null;
-    failReady(new Error(`project index owner exited before ready (code ${exitCode ?? 'null'})`));
+    if (!closing) {
+      failReady(new Error(`project index owner exited before ready (code ${exitCode ?? 'null'})`));
+    }
     resolveClosed(exitCode);
   });
 
@@ -399,6 +404,7 @@ export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): Wor
     sendTsLsp: () => {},
     onTsLsp: () => () => {},
     close() {
+      closing = true;
       if (!exited) handle.kill('SIGTERM');
     },
   };
@@ -429,6 +435,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const setup = opts.setup ?? 'instant';
   const slug = opts.slug ?? template.id;
   const starter = opts.starter ?? template.id;
+  const starterGeneratedBaselinePending = opts.starterGeneratedBaselinePending === true;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = ownerBridgeKey(workspaceId);
   // Keys the page's `/preview/<port>/` SW route (ADR-0148/0150 P6b): the page
@@ -460,6 +467,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_RFV_SETUP: setup,
         RIFTY_RFV_SLUG: slug,
         RIFTY_RFV_STARTER: starter,
+        RIFTY_RFV_STARTER_BASELINE_PENDING: starterGeneratedBaselinePending ? '1' : '0',
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),

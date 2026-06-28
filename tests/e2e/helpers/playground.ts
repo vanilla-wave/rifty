@@ -185,8 +185,8 @@ export async function runTerminalLine(
   await expect
     .poll(() => input.evaluate((el) => document.activeElement === el), { timeout: 5_000 })
     .toBe(true);
-  await input.pressSequentially(line);
-  await input.press('Enter');
+  await page.keyboard.insertText(line);
+  await page.keyboard.press('Enter');
 }
 
 function terminalPromptCount(text: string): number {
@@ -198,6 +198,9 @@ export async function runTerminalLineSettled(
   line: string,
   timeout = 30_000,
 ): Promise<void> {
+  await expect
+    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout: 30_000 })
+    .toBeGreaterThan(0);
   const before = terminalPromptCount(await terminalBuffer(page));
   await runTerminalLine(page, line);
   await expect

@@ -126,6 +126,20 @@ describe('vite command — real installed bin routing', () => {
     expect(restore).toContain('fs.rmSync(`${cfg.root}/package.json`');
   });
 
+  it('absorbs generated baseline files immediately after dev-config instant restore', () => {
+    const prepareStart = source.indexOf('async function prepareActiveDevConfigDeps()');
+    const prepareEnd = source.indexOf('// Co-resident dev server', prepareStart);
+    const prepare = source.slice(prepareStart, prepareEnd);
+    expect(prepareStart).toBeGreaterThan(-1);
+    expect(prepareEnd).toBeGreaterThan(prepareStart);
+    expect(prepare.indexOf('await restoreInstantDeps(devCfg, devSpec.id, devSlug);')).toBeLessThan(
+      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
+    );
+    expect(
+      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
+    ).toBeLessThan(prepare.indexOf('seedTemplateNodeModulesFiles(devCfg);'));
+  });
+
   it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');

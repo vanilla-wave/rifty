@@ -226,6 +226,11 @@
   user's edits while ignoring generated `node_modules`/build output.
 - **Preset switches no longer replay stale entry edits.** Switching starters
   resets the ordinary initial file tabs before TS/dev-server re-init, so an edit
+- Fresh starter picks before the workspace owner exists now carry their pending
+  generated baseline through instant dependency restore, keeping restored
+  `package-lock.json` inside `Initial commit`.
+- **Preset switches no longer replay stale debounced program edits.** A pending
+  program-tab write is discarded before reseeding a picked starter, so an edit
   from the previous template cannot clobber the freshly seeded `/src/main.*`
   entry after the switch.
 - **TS diagnostics refresh after project re-init.** When starter/dev-server

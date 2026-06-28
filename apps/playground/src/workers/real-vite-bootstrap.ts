@@ -425,6 +425,8 @@ async function bootShellOwner(opts: {
   readonly slug: string;
   /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
   readonly starter: string;
+  /** True when the page picked a fresh starter before this full owner existed. */
+  readonly starterGeneratedBaselinePending: boolean;
   readonly fromScratch: boolean;
   /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
   readonly kernelWorkerUrl: string;
@@ -435,7 +437,17 @@ async function bootShellOwner(opts: {
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
   readonly tsLspWorkerUrl: string;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
+  const {
+    cfg,
+    port,
+    kernelIpc,
+    publishSnapshot,
+    spec,
+    slug,
+    starter,
+    starterGeneratedBaselinePending,
+    fromScratch,
+  } = opts;
   const pendingStarterGeneratedBaseline = new Set<string>();
   const markStarterGeneratedBaselinePending = (root: string): void => {
     pendingStarterGeneratedBaseline.add(root);
@@ -448,7 +460,9 @@ async function bootShellOwner(opts: {
   };
 
   const freshRoot = !syncMirror().existsSync(cfg.root);
-  if (freshRoot) markStarterGeneratedBaselinePending(cfg.root);
+  if (freshRoot || starterGeneratedBaselinePending) {
+    markStarterGeneratedBaselinePending(cfg.root);
+  }
   seedProject(cfg);
   if (freshRoot) seedStarterBaseline(starter, cfg.root);
   await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
@@ -536,7 +550,10 @@ async function bootShellOwner(opts: {
 
   async function prepareActiveDevConfigDeps(): Promise<void> {
     try {
-      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+      if (!devFromScratch) {
+        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+        await absorbPendingStarterGeneratedBaseline(devCfg.root);
+      }
       seedTemplateNodeModulesFiles(devCfg);
       publishOwnerState();
     } catch (err) {
@@ -1116,6 +1133,7 @@ async function bootstrap(): Promise<void> {
   // page sends the real starter over RIFTY_RFV_STARTER. Fall back to the default
   // starter id (a fresh boot before the page picks anything).
   const starter = env.RIFTY_RFV_STARTER ?? DEFAULT_PRESET.id;
+  const starterGeneratedBaselinePending = env.RIFTY_RFV_STARTER_BASELINE_PENDING === '1';
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -1202,6 +1220,7 @@ async function bootstrap(): Promise<void> {
     spec,
     slug,
     starter,
+    starterGeneratedBaselinePending,
     fromScratch,
     kernelWorkerUrl,
     nodeEntryWorkerUrl,

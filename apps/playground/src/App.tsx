@@ -722,8 +722,11 @@ export function App(props: AppProps) {
     preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
 
   const activeTemplate = (): ProjectSpec => templateForPreset(presetForId(activeStarterId()));
+  let starterGeneratedBaselinePendingForNextOwner = false;
 
   function createActiveWorkspaceOwner(): WorkspaceOwnerHandle {
+    const starterGeneratedBaselinePending = starterGeneratedBaselinePendingForNextOwner;
+    starterGeneratedBaselinePendingForNextOwner = false;
     return isSabIpcSupported()
       ? startWorkspaceOwner({
           // ADR-0165 §4: root + slug follow the STORE's active id (scratch on boot,
@@ -733,6 +736,7 @@ export function App(props: AppProps) {
           template: activeTemplate(),
           slug: store.activeId(),
           starter: activeStarterId(),
+          starterGeneratedBaselinePending,
           setup: presetForId(activeStarterId()).setup,
           onLog: (line) => console.info(line),
         })
@@ -2321,6 +2325,7 @@ export function App(props: AppProps) {
       if (!wasDirty) setWorkspaceOwnerReady(false);
       store.pickStarter(id);
       if (!wasDirty) {
+        if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(id);
         setWorkspaceOwnerReady(true);
@@ -2609,6 +2614,7 @@ export function App(props: AppProps) {
       const runPendingStarter = async (): Promise<void> => {
         setWorkspaceOwnerReady(false);
         store.confirmPickStarter(pendingStarter);
+        if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(pendingStarter);
         setWorkspaceOwnerReady(true);
