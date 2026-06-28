@@ -247,6 +247,8 @@
 - **TS-LS init failures are visible in Problems.** Missing or broken workspace
   TypeScript now surfaces as an actionable Problems diagnostic instead of only a
   console warning.
+- Non-TypeScript starters no longer show the expected missing workspace
+  TypeScript init failure in Problems; TypeScript starters still surface it.
 - **TS-LS provider fallbacks stay quiet when workspace TypeScript is unavailable.**
   Monaco provider calls now return empty editor results for the same missing or
   unreadable workspace TypeScript errors that Problems already reports, so

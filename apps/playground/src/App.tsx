@@ -91,6 +91,7 @@ import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {
   clearTsLsInitDiagnostics,
+  shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
@@ -1259,7 +1260,7 @@ export function App(props: AppProps) {
       beforeRequest: waitForTsReady,
     });
 
-    async function initAndReplay(root = activeRoot()): Promise<boolean> {
+    async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
         await waitForTsRequestGate();
         if (disposed) return false;
@@ -1276,7 +1277,13 @@ export function App(props: AppProps) {
       })().catch((err: unknown) => {
         if (!disposed) {
           const message = (err as Error).message;
-          setDiagnostics((prev) => upsertTsLsInitDiagnostic(new Map(prev), root, message));
+          setDiagnostics((prev) => {
+            const next = new Map(prev);
+            if (!shouldPublishTsLsInitDiagnostic(spec, message)) {
+              return clearTsLsInitDiagnostics(next);
+            }
+            return upsertTsLsInitDiagnostic(next, root, message);
+          });
           console.warn('[ts-lsp] init', message);
         }
         return false;
@@ -1681,7 +1688,8 @@ export function App(props: AppProps) {
     createEffect(() => {
       tsProjectRevision();
       const root = activeRoot();
-      void initAndReplay(root);
+      const spec = activeTemplate();
+      void initAndReplay(root, spec);
     });
 
     onCleanup(() => {

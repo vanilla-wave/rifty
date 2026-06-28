@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceText } from './helpers/opfs.ts';
 import {
   bootProjectFiles,
@@ -8,6 +8,13 @@ import {
   runTerminalLine,
   terminalBuffer,
 } from './helpers/playground.ts';
+
+async function reinitTsLanguageService(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const fn = (globalThis as { __riftyTsReinit?: () => Promise<boolean> }).__riftyTsReinit;
+    return fn ? fn() : Promise.resolve(false);
+  });
+}
 
 test.describe('M0 — Foundation', () => {
   test('playground loads, terminal + editor are visible, and shell terminals can be opened', async ({
@@ -56,6 +63,32 @@ test.describe('M0 — Foundation', () => {
     await expect(editorLines).toContainText("import project from './project.json'", {
       timeout: 1_000,
     });
+  });
+
+  test('non-TypeScript starter does not report missing TypeScript in Problems', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await pickStarter(page, 'project-files');
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              typeof (globalThis as { __riftyTsReinit?: unknown }).__riftyTsReinit === 'function',
+          ),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    expect(await reinitTsLanguageService(page)).toBe(false);
+
+    await page.locator('[data-testid="problems-tab"]').click();
+    await expect(page.locator('[data-testid="problems-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="problem-row"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="problems-panel"]')).not.toContainText(
+      /TypeScript is not installed/i,
+    );
   });
 
   test('first-run hidden empty project has a real shell and entry file before a starter pick', async ({
