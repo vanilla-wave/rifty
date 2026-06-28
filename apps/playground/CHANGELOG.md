@@ -216,6 +216,8 @@
 - Editing a starter now persists the active scratch as a dirty draft in the
   owner project index, so reload reopens the draft instead of showing the
   chooser or reseeding the starter over the user's changes.
+- Reloading a TypeScript scratch draft no longer flashes the default
+  `src/main.js` program tab before restoring `src/main.ts`.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.

@@ -229,6 +229,7 @@ export function App(props: AppProps) {
   // stays below where the owner exists; only this SIGNAL is hoisted so the store
   // can hydrate from it.
   const [projectIndex, setProjectIndex] = createSignal<ProjectIndex | null>(null);
+  const [editorProjectContextReady, setEditorProjectContextReady] = createSignal(false);
 
   // ADR-0165 §57: DIRTY binds to a REAL owner file-write, never a UI counter. The
   // owner handle exposes no write event (writes ORIGINATE on the page through
@@ -1763,7 +1764,10 @@ export function App(props: AppProps) {
   createEffect(() => {
     const idx = projectIndex();
     if (!idx) return;
-    untrack(() => store.hydrateIndex(idx));
+    untrack(() => {
+      store.hydrateIndex(idx);
+      setEditorProjectContextReady(true);
+    });
     for (const id of pendingOnDiskDeletes) {
       if (!idx.projects.some((p) => p.id === id)) pendingOnDiskDeletes.delete(id);
     }
@@ -2374,6 +2378,7 @@ export function App(props: AppProps) {
       store.pickStarter(id);
       if (!wasDirty) {
         await paintPickedStarterUi(presetForId(id));
+        setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(id, { preserveDirtySameStarter: true });
@@ -2665,6 +2670,7 @@ export function App(props: AppProps) {
         setWorkspaceOwnerReady(false);
         store.confirmPickStarter(pendingStarter);
         await paintPickedStarterUi(presetForId(pendingStarter));
+        setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(pendingStarter);
@@ -3123,27 +3129,29 @@ export function App(props: AppProps) {
 
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
-              <EditorHost
-                initialEditorFiles={publishedInitialEditorFiles}
-                root={activeRoot}
-                vfs={snapshotFs}
-                registerApi={(api) => {
-                  editorApi = api;
-                  setEditorApiSig(() => api);
-                }}
-                onActive={(info) => {
-                  setActiveFile(info.label);
-                  setActiveLang(info.language);
-                  setActiveFilePath(info.path);
-                }}
-                onFileWritten={writeWorkspaceFile}
-                readNodeModulesFile={readNodeModulesFile()}
-                readGitOriginalText={readGitOriginalText}
-                gitStatus={gitStatusMap}
-                previewUrl={previewUrl}
-                onOpenPreviewTab={openPreviewTab}
-                onError={flashError}
-              />
+              <Show when={editorProjectContextReady()}>
+                <EditorHost
+                  initialEditorFiles={publishedInitialEditorFiles}
+                  root={activeRoot}
+                  vfs={snapshotFs}
+                  registerApi={(api) => {
+                    editorApi = api;
+                    setEditorApiSig(() => api);
+                  }}
+                  onActive={(info) => {
+                    setActiveFile(info.label);
+                    setActiveLang(info.language);
+                    setActiveFilePath(info.path);
+                  }}
+                  onFileWritten={writeWorkspaceFile}
+                  readNodeModulesFile={readNodeModulesFile()}
+                  readGitOriginalText={readGitOriginalText}
+                  gitStatus={gitStatusMap}
+                  previewUrl={previewUrl}
+                  onOpenPreviewTab={openPreviewTab}
+                  onError={flashError}
+                />
+              </Show>
 
               <Show when={hasPreview()}>
                 <Splitter

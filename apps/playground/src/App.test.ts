@@ -172,7 +172,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(pickStarter).toMatch(
-      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?void runVitePreset\(presetForId\(id\), tsGate\);/,
+      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?void runVitePreset\(presetForId\(id\), tsGate\);/,
     );
     expect(runPreset).not.toContain('await loadPresetUi(preset);');
     expect(runPreset).not.toContain('seedViteWorkspace(preset);');
@@ -965,7 +965,10 @@ describe('App wires the sequential switch + index mirror (ADR-0165 §3)', () => 
   });
 
   it('hydrates owner index without subscribing to local dirty scratch changes', () => {
-    expect(source).toContain('untrack(() => store.hydrateIndex(idx))');
+    expect(source).toMatch(
+      /untrack\(\(\) => \{[\s\S]*?store\.hydrateIndex\(idx\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?\}\);/,
+    );
+    expect(source).toContain('<Show when={editorProjectContextReady()}>');
   });
 
   it('does not label a missing active project as the scratch in the header', () => {
