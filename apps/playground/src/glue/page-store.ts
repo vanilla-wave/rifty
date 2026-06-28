@@ -106,10 +106,12 @@ export function createPageStore(): PageStore {
   const [q, setQ] = createSignal('');
   const [cat, setCat] = createSignal<string | null>(null);
   const [toast, setToast] = createSignal<Toast | null>(null);
+  let pendingScratchStarter: string | null = null;
 
   // Fresh, unedited scratch from a Starter (baseline re-seed is owner-side; the
   // page only mirrors the index shape). Closes the launcher, drops any menu/dialog.
   function createScratch(starterId: string): void {
+    pendingScratchStarter = starterId;
     setScratch({ starter: starterId, dirty: false, editedAt: 'no edits yet' });
     setActiveId('scratch');
     setLauncherOpen(false);
@@ -257,6 +259,13 @@ export function createPageStore(): PageStore {
     hydrateIndex(index) {
       const incoming = index.scratch;
       const localScratch = scratch();
+      const keepPendingScratchStarter =
+        pendingScratchStarter !== null &&
+        activeId() === 'scratch' &&
+        localScratch?.starter === pendingScratchStarter &&
+        index.activeId === 'scratch' &&
+        incoming !== null &&
+        incoming.starter !== pendingScratchStarter;
       const keepLocalDirty =
         activeId() === 'scratch' &&
         localScratch?.dirty === true &&
@@ -266,6 +275,9 @@ export function createPageStore(): PageStore {
         incoming.starter === localScratch.starter;
       setActiveId(index.activeId);
       setProjects(index.projects);
+      if (index.activeId !== 'scratch' || incoming?.starter === pendingScratchStarter) {
+        pendingScratchStarter = null;
+      }
       // ADR-0165 §4 boot-scratch: the OWNER does not model the active scratch in
       // its on-disk index until a Save (a cold-boot index is `scratch:null,
       // activeId:'scratch'`), yet `/scratch` genuinely exists on disk as the active
@@ -273,8 +285,10 @@ export function createPageStore(): PageStore {
       // scratch-active, PRESERVE the local boot scratch (seeded from DEFAULT_PRESET)
       // — the chip/banner/Save reflect the real tree. A Save flips `activeId` to the
       // project id (so this preserve no longer applies) and the owner then publishes
-      // `scratch:null` authoritatively. A published scratch always wins.
+      // `scratch:null` authoritatively. During an in-flight starter pick, ignore
+      // stale scratch publications until the owner catches up to that starter.
       if (incoming === null && index.activeId === 'scratch' && scratch() !== null) return;
+      if (keepPendingScratchStarter) return;
       if (keepLocalDirty) {
         setScratch({
           ...incoming,
