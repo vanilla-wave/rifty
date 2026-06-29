@@ -2039,6 +2039,7 @@ export function App(props: AppProps) {
       if (!saveAffordance(storageMode).ephemeral) {
         await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
       }
+      const restartDevServerSessionId = lifecycleDevServerRunning() ? devServerSessionId : null;
       const switched = await requestSwitch({
         currentOwner: workspaceOwner(),
         nextRoot: rootForId(nextActiveId),
@@ -2086,15 +2087,14 @@ export function App(props: AppProps) {
           }),
         rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
         restartDevServer: async () => {
-          const shouldRestartDevServer = lifecycleDevServerRunning();
           setDevServerStatus('stopped');
           await manager.rebindOwner(workspaceOwner());
-          if (shouldRestartDevServer && devServerSessionId) {
-            await restartDevServer(devServerSessionId);
+          if (restartDevServerSessionId) {
+            await restartDevServer(restartDevServerSessionId);
           }
         },
         clearTerminal: () => {
-          if (lifecycleDevServerRunning() && devServerSessionId) manager.clear(devServerSessionId);
+          if (restartDevServerSessionId) manager.clear(restartDevServerSessionId);
         },
       });
       if (switched) {

@@ -295,9 +295,11 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('devServerBootSessionId = targetSessionId;');
     expect(source).toContain('devServerBootSessionId = session.id;');
     expect(source).toContain('clearDevServerBootSession(sessionId);');
-    expect(source).toContain('const shouldRestartDevServer = lifecycleDevServerRunning();');
     expect(source).toContain(
-      'if (lifecycleDevServerRunning() && devServerSessionId) manager.clear(devServerSessionId);',
+      'const restartDevServerSessionId = lifecycleDevServerRunning() ? devServerSessionId : null;',
+    );
+    expect(source).toContain(
+      'if (restartDevServerSessionId) manager.clear(restartDevServerSessionId);',
     );
     expect(source).toContain(
       'const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;',
