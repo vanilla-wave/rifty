@@ -555,13 +555,19 @@ async function fetchPreviewOk(page: Page, port: number): Promise<boolean> {
   }, port);
 }
 
-async function fetchPreviewText(page: Page, port: number, path: string): Promise<string> {
+async function fetchPreviewText(
+  page: Page,
+  port: number,
+  path: string,
+  options: { readonly cacheBust?: boolean } = {},
+): Promise<string> {
   return page.evaluate(
-    async ({ targetPort, targetPath }) => {
+    async ({ targetPort, targetPath, cacheBust }) => {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 4_000);
       try {
-        const r = await fetch(`/preview/${targetPort}${targetPath}?rifty_e2e=${Date.now()}`, {
+        const suffix = cacheBust ? `?rifty_e2e=${Date.now()}` : '';
+        const r = await fetch(`/preview/${targetPort}${targetPath}${suffix}`, {
           cache: 'no-store',
           signal: ac.signal,
         });
@@ -573,7 +579,7 @@ async function fetchPreviewText(page: Page, port: number, path: string): Promise
         clearTimeout(timer);
       }
     },
-    { targetPort: port, targetPath: path },
+    { targetPort: port, targetPath: path, cacheBust: options.cacheBust ?? true },
   );
 }
 
@@ -787,7 +793,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       .poll(() => readWorkspaceText(page, mainTs), { timeout: 30_000 })
       .toContain('rifty-ts-main-ts-hot');
     await expect
-      .poll(() => fetchPreviewText(page, 5174, '/src/main.ts'), {
+      .poll(() => fetchPreviewText(page, 5174, '/src/main.ts', { cacheBust: false }), {
         timeout: 60_000,
         intervals: [500, 1_000, 2_000],
       })

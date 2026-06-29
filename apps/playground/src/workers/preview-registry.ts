@@ -7,11 +7,11 @@ export interface PreviewRegistryDeps {
   readonly send: (frame: OwnerToPageFrame) => void;
 }
 export interface PreviewRegistry {
-  setDevServer(port: number): void;
+  setDevServer(port: number, previewScope?: string): void;
   clearDevServer(): void;
-  setPreview(port: number): void;
+  setPreview(port: number, previewScope?: string): void;
   clearPreview(): void;
-  addNode(sid: string, ports: number[]): void;
+  addNode(sid: string, ports: number[], previewScope?: string): void;
   removeBySid(sid: string): void;
   /** Re-emit the current set (answers pty:preview-req). */
   publish(): void;
@@ -46,13 +46,14 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   const emit = (): void => deps.send({ type: 'pty:preview', ports: snapshot() });
 
   return {
-    setDevServer(port) {
+    setDevServer(port, previewScope) {
       dev = {
         port,
         url: `/preview/${port}/`,
         label: 'npm run dev',
         source: 'dev-server',
         sid: DEV_SID,
+        ...(previewScope === undefined ? {} : { previewScope }),
       };
       emit();
     },
@@ -60,13 +61,14 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       dev = null;
       emit();
     },
-    setPreview(port) {
+    setPreview(port, previewScope) {
       preview = {
         port,
         url: `/preview/${port}/`,
         label: 'vite preview',
         source: 'preview',
         sid: PREVIEW_SID,
+        ...(previewScope === undefined ? {} : { previewScope }),
       };
       emit();
     },
@@ -74,7 +76,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       preview = null;
       emit();
     },
-    addNode(sid, ports) {
+    addNode(sid, ports, previewScope) {
       node.set(
         sid,
         ports.map((port) => ({
@@ -83,6 +85,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
           label: `node :${port}`,
           source: 'node',
           sid,
+          ...(previewScope === undefined ? {} : { previewScope }),
         })),
       );
       emit();

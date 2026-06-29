@@ -157,6 +157,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0036 | Preview-protocol addressing in `@riftydev/io` |
 | 0040 | SW frame and routing versions split |
 | 0048 | Streaming cross-realm preview wire-frame |
+| 0183 | Scoped cross-realm preview responders |
 
 ### perf
 

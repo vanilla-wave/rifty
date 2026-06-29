@@ -195,7 +195,19 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('runViteCommand');
     expect(source).not.toContain('DevServerContext');
     // the page wires the preview SW route on the owner-reported port + token
-    expect(source).toContain('wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken)');
+    expect(source).toContain(
+      'wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken, frame.previewScope)',
+    );
+  });
+
+  it('keys non-dev preview bridges by port and preview scope', () => {
+    expect(source).toContain('function previewBridgeKey(port: number, previewScope?: string)');
+    expect(source).toContain('return JSON.stringify([port, previewScope ?? null])');
+    expect(source).toContain('const key = previewBridgeKey(p.port, p.previewScope)');
+    expect(source).toMatch(/nodePortBridges\.set\(\s*key,\s*wirePreviewBridge/s);
+    expect(source).toContain(
+      'wirePreviewBridge(p.port, workspaceOwner().previewOwnerToken, p.previewScope)',
+    );
   });
 
   it('runs npm + dev scripts in the owner (no page-side dev interception)', () => {

@@ -50,6 +50,8 @@ export type PtyDevServer = {
   status: DevServerStatus;
   /** Internal listen port — defined once `status` reaches 'running'. */
   port?: number;
+  /** Run-scoped preview bridge discriminator for the page↔worker hop. */
+  previewScope?: string;
   /** Preview URL the iframe loads — defined once 'running'. */
   url?: string;
   /** Non-fatal start failure surfaced to the page pill (`status` stays 'stopped'). */
@@ -83,6 +85,8 @@ export type PreviewPortEntry = {
   source: 'dev-server' | 'preview' | 'node';
   /** Owning session/run id (for label + teardown correlation). */
   sid: string;
+  /** Run-scoped preview bridge discriminator for the page↔worker hop. */
+  previewScope?: string;
 };
 /**
  * Owner→page snapshot of ALL live previewable ports (ADR-0155 — generalizes the

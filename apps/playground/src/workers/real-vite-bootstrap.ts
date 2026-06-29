@@ -265,6 +265,27 @@ function parsePositivePort(value: string | undefined): number | null {
   return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
 }
 
+function createPreviewScope(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
+}
+
+function previewScopeFromEnv(env: Record<string, string | undefined>): string | undefined {
+  return env.RIFTY_PREVIEW_SCOPE || undefined;
+}
+
+function withPreviewScope(
+  ctx: CommandContext,
+  previewScope = createPreviewScope(),
+): CommandContext {
+  return {
+    ...ctx,
+    env: {
+      ...ctx.env,
+      RIFTY_PREVIEW_SCOPE: previewScope,
+    },
+  };
+}
+
 function viteCliPort(args: readonly string[], fallback: number): number {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -326,11 +347,15 @@ function withViteCliEnv(
   if (binNameOf(binPath) !== 'vite') return ctx;
   const mode = viteCliMode(args);
   const userConfigPath = viteConfigArg(args);
+  const previewMode = mode === 'dev' || mode === 'preview';
   return {
     ...ctx,
     env: {
       ...ctx.env,
       RIFTY_VITE_CLI_MODE: mode,
+      ...(previewMode
+        ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
+        : {}),
       ...(mode === 'dev' && opts
         ? {
             RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
@@ -436,7 +461,8 @@ async function bootShellOwner(opts: {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
     if (frame.type === 'pty:exit') publishOwnerState();
     if (frame.type === 'pty:dev-server') {
-      if (frame.status === 'running' && frame.port !== undefined) previews.setDevServer(frame.port);
+      if (frame.status === 'running' && frame.port !== undefined)
+        previews.setDevServer(frame.port, frame.previewScope);
       else if (frame.status === 'stopped') previews.clearDevServer();
     }
   }
@@ -563,6 +589,7 @@ async function bootShellOwner(opts: {
           // from `port` (the owner's snapshot/nm/vfs-write bridge key).
           root: devCfg.root,
           devPort: devCfg.port,
+          previewScope: createPreviewScope(),
         },
         onSnapshotDirty: publishOwnerState,
         // Owner realm → real OWNER OPFS drain. The child's install writes land in
@@ -601,9 +628,10 @@ async function bootShellOwner(opts: {
     const firstPort = message.ports[0];
     if (firstPort === undefined) return;
     const mode = viteCliMode(req.args);
+    const previewScope = message.previewScope ?? previewScopeFromEnv(ctx.env);
     if (mode === 'preview') {
       vitePreviewActive = true;
-      previews.setPreview(firstPort);
+      previews.setPreview(firstPort, previewScope);
       ctx.stdout.write(`[vite] preview ready on port ${firstPort}\n`);
       return;
     }
@@ -614,6 +642,7 @@ async function bootShellOwner(opts: {
         status: 'running',
         port: firstPort,
         url: `/preview/${firstPort}/`,
+        ...(previewScope === undefined ? {} : { previewScope }),
       });
     }
   };
@@ -642,7 +671,8 @@ async function bootShellOwner(opts: {
         return;
       }
       const sid = binPreviewSids.get(req);
-      if (sid !== undefined) previews.addNode(sid, message.ports);
+      if (sid !== undefined)
+        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env));
     },
     onExit: (req) => {
       const sid = binPreviewSids.get(req);
@@ -672,7 +702,11 @@ async function bootShellOwner(opts: {
           }
         : undefined,
     );
-    return childBinExecutor(binPath, viteArgs, viteCtx);
+    return childBinExecutor(
+      binPath,
+      viteArgs,
+      binNameOf(binPath) === 'vite' ? viteCtx : withPreviewScope(viteCtx),
+    );
   };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
@@ -800,9 +834,10 @@ async function bootShellOwner(opts: {
         return Promise.resolve(1);
       }
       const sid = `node-${++nodeRunSeq}`;
-      return ownerNodeExecutor(r.path, args.slice(1), ctx, {
+      const previewScope = createPreviewScope();
+      return ownerNodeExecutor(r.path, args.slice(1), withPreviewScope(ctx, previewScope), {
         sid,
-        onListening: (id, ports) => previews.addNode(id, ports),
+        onListening: (id, ports, scope) => previews.addNode(id, ports, scope ?? previewScope),
         onExit: (id) => previews.removeBySid(id),
       });
     });

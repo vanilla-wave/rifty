@@ -28,6 +28,9 @@
 
 ### Fixed
 
+- **Cross-realm preview responders can now be scoped (ADR-0183).**
+  `bridgeCrossRealmPreview` may send a preview run scope, and scoped
+  `serveCrossRealmPreview` responders ignore requests for older same-port runs.
 - **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets enforce a
   100 MiB `maxPayload` (`0` = unlimited, matching `ws`) and close 1009 on
   oversized single frames or fragmented reassembly; malformed RFC6455 edges are

@@ -846,7 +846,7 @@ export function App(props: AppProps) {
       tearPreview?.();
       tearPreview =
         frame.status === 'running' && frame.port !== undefined
-          ? wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken)
+          ? wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken, frame.previewScope)
           : undefined;
     });
     onCleanup(() => {
@@ -866,30 +866,34 @@ export function App(props: AppProps) {
 
   // Per-port SW preview bridge for non-dev-server ports (node + vite preview). The dev-server
   // port keeps its existing bridge from the `onDevServer` path above — never
-  // double-wire it. Diff the live ports against active teardowns: wire a
+  // double-wire it. Diff the live port+scope bridges against active teardowns: wire a
   // newly-present port, tear down + drop one that left the set. `onCleanup` tears
   // down all.
-  const nodePortBridges = new Map<number, () => void>();
+  function previewBridgeKey(port: number, previewScope?: string): string {
+    return JSON.stringify([port, previewScope ?? null]);
+  }
+  const nodePortBridges = new Map<string, () => void>();
   createEffect(() => {
     // Never wire a node bridge for the ACTIVE dev-server port (ADR-0157 review C3):
     // the `onDevServer` path already owns that `/preview/<port>/` route, so a node
     // server that picked the same port must not register a second (clobbering)
     // bridge whose teardown would delete the shared route.
     const devPort = devServerRunning() ? machine.realVitePort() : null;
-    const live = new Set(
-      previewPorts()
-        .filter((p) => p.source !== 'dev-server' && p.port !== devPort)
-        .map((p) => p.port),
-    );
-    for (const port of live) {
-      if (!nodePortBridges.has(port)) {
-        nodePortBridges.set(port, wirePreviewBridge(port, workspaceOwner().previewOwnerToken));
+    const entries = previewPorts().filter((p) => p.source !== 'dev-server' && p.port !== devPort);
+    const live = new Set(entries.map((p) => previewBridgeKey(p.port, p.previewScope)));
+    for (const [key, tear] of nodePortBridges) {
+      if (!live.has(key)) {
+        tear();
+        nodePortBridges.delete(key);
       }
     }
-    for (const [port, tear] of nodePortBridges) {
-      if (!live.has(port)) {
-        tear();
-        nodePortBridges.delete(port);
+    for (const p of entries) {
+      const key = previewBridgeKey(p.port, p.previewScope);
+      if (!nodePortBridges.has(key)) {
+        nodePortBridges.set(
+          key,
+          wirePreviewBridge(p.port, workspaceOwner().previewOwnerToken, p.previewScope),
+        );
       }
     }
   });

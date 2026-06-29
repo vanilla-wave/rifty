@@ -202,6 +202,7 @@ export async function bootDevServer(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
+  readonly previewScope?: string;
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
@@ -353,8 +354,10 @@ export async function bootDevServer(opts: {
   // `pty:dev-server{running,port}` frame (ADR-0148) — the SW-direct route is
   // page-anchored (mountPlaygroundPreviewBridge). `setupPreviewBridge` no-ops in
   // any worker realm, so it is NOT called here (ADR-0150 corrected).
-  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
-    dispatchToPort(port, request),
+  const tearPreviewBridge = serveCrossRealmPreview(
+    port,
+    async (request) => dispatchToPort(port, request),
+    opts.previewScope === undefined ? {} : { scope: opts.previewScope },
   );
   log('[real-vite/worker] preview bridge ready\n');
 

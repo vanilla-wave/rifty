@@ -73,11 +73,18 @@ function createPreviewOwnerToken(): string {
  * longer spawned per dev run (it IS the persistent owner), only the page-side
  * route is (un)registered as the dev server starts/stops.
  */
-export function wirePreviewBridge(port: number, ownerToken: string): () => void {
+export function wirePreviewBridge(
+  port: number,
+  ownerToken: string,
+  previewScope?: string,
+): () => void {
   // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
   // routes through this handler over BroadcastChannel to the owner's
   // `serveCrossRealmPreview`.
-  const previewBridge = bridgeCrossRealmPreview(port);
+  const previewBridge = bridgeCrossRealmPreview(
+    port,
+    previewScope === undefined ? {} : { scope: previewScope },
+  );
   registerPort(port, previewBridge);
   // ADR-0086: typed handle → SW requests take the struct fast-path.
   // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by

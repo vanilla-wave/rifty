@@ -60,6 +60,12 @@
 
 ### Fixed
 
+- **Preview bridges now ignore stale same-port worker responders.** Playground
+  scopes each preview-producing child run and wires the page bridge with the same
+  scope, so iframe reloads cannot race an older `/preview/<port>/` responder.
+- **Real Vite editor writes now invalidate before HMR emits.** Owner-routed
+  Monaco saves synchronously clear Vite's module graph before the synthetic
+  watcher event, so immediate preview/module reads cannot reuse stale transforms.
 - **GIT Open Changes now distinguishes staged and worktree rows.** `MM`/`AD`
   states render separate Index and Working Tree rows; staged rows diff HEAD↔Index,
   while worktree rows diff Index/HEAD↔owner working bytes.

@@ -67,7 +67,7 @@ describe('vite command — real installed bin routing', () => {
 
   it('mirrors server-capable non-vite bins into the preview registry', () => {
     expect(source).toContain('const binPreviewSids = new WeakMap<object, string>()');
-    expect(source).toContain('previews.addNode(sid, message.ports)');
+    expect(source).toContain('previews.addNode(sid, message.ports, message.previewScope');
     expect(source).toContain('previews.removeBySid(sid)');
   });
 
