@@ -129,6 +129,11 @@
 - **Saved projects now re-root the workspace owner after Save.** A plain
   Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
+- **`vite preview` config honesty tightened.** Root `vite.config.*` files and
+  `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`
+  instead of being silently ignored by the browser preview bridge patch; the
+  remaining CORS/host parity item is promoted to a ready backlog contract.
+
 - **Vite 7 `vite preview` serves the production build through the real CLI.**
   The CLI source patch now adjusts Vite's preview inline config directly instead
   of loading the dev wrapper config through esbuild, binds preview to the

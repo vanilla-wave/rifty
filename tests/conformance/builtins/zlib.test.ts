@@ -101,6 +101,19 @@ describe('node:zlib — input shapes & callback contract', () => {
     });
     expect(nodeZlib.inflateSync(compressed).toString()).toBe(text);
   });
+  it('accepts one-shot flush options as no-ops — does not throw, round-trips', async () => {
+    const compressed = await new Promise<Uint8Array>((resolve, reject) => {
+      zlib.gzip(
+        text,
+        {
+          flush: zlib.constants.Z_SYNC_FLUSH,
+          finishFlush: zlib.constants.Z_FINISH,
+        },
+        (err: Error | null, out: Uint8Array) => (err ? reject(err) : resolve(out)),
+      );
+    });
+    expect(nodeZlib.gunzipSync(compressed).toString()).toBe(text);
+  });
 });
 
 describe('node:zlib — corrupt input rejects with an Error (error-first holds)', () => {

@@ -7,9 +7,9 @@
  * directions, conformance-pinned). The web API is async-only and exposes no
  * level/dictionary/windowBits control, so:
  *
- * - `*Sync`, brotli, zstd, `crc32`, remaining Transform streams, flush-opcode
- *   options, and `unzip` stay loud `NotImplementedError` ceilings (no honest
- *   browser path — see backlog runtime-js/zlib-web-compression-subset).
+ * - `*Sync`, brotli, zstd, `crc32`, remaining Transform streams, Transform
+ *   flush-opcode options, and `unzip` stay loud `NotImplementedError` ceilings
+ *   (no honest browser path — see backlog runtime-js/zlib-web-compression-subset).
  * - Size/perf options (`level`/`memLevel`/`strategy`/…) are accepted no-ops
  *   (output stays valid + round-trips). `windowBits`, `dictionary`, and a truthy
  *   `info` throw: we can't set the encoder window/dict over `CompressionStream`,
@@ -75,16 +75,20 @@ type WebFormat = 'gzip' | 'deflate' | 'deflate-raw';
 //     with, and a loud throw beats a per-format silent-lie gamble.)
 //   - `dictionary`: a preset dict changes the compressed wire bytes and needs the
 //     same dict to inflate; the stream API takes no dictionary.
-//   - `flush` / `finishFlush`: callers request zlib flush opcodes and chunking
-//     semantics that `CompressionStream` cannot expose.
+//   - `flush` / `finishFlush` on Transform streams: callers request zlib flush
+//     opcodes and chunking semantics that `CompressionStream` cannot expose.
 //   - `info` (truthy): Node returns `{ buffer, engine }` for ANY truthy `info`;
 //     there is no engine handle to return. `info: false` (the default) is a no-op.
-function assertSupportedOptions(feature: string, options: ZlibOptions | undefined): void {
+function assertSupportedOptions(
+  feature: string,
+  options: ZlibOptions | undefined,
+  opts: { readonly rejectFlushOptions?: boolean } = {},
+): void {
   if (!options) return;
-  if (options.flush !== undefined) {
+  if (opts.rejectFlushOptions && options.flush !== undefined) {
     throw new NotImplementedError(`${feature} option: flush`);
   }
-  if (options.finishFlush !== undefined) {
+  if (opts.rejectFlushOptions && options.finishFlush !== undefined) {
     throw new NotImplementedError(`${feature} option: finishFlush`);
   }
   if (options.windowBits !== undefined) {
@@ -221,7 +225,7 @@ const inflateRaw = makeAsync('zlib.inflateRaw', 'deflate-raw', 'decompress');
 
 class Gzip extends Transform {
   constructor(options?: ZlibOptions) {
-    assertSupportedOptions('zlib.createGzip', options);
+    assertSupportedOptions('zlib.createGzip', options, { rejectFlushOptions: true });
     if (typeof CompressionStream !== 'function') {
       throw new NotImplementedError(
         'zlib.createGzip',

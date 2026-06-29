@@ -35,6 +35,8 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("if (mode === 'preview')");
     expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
     expect(source).toContain("if (mode !== 'dev') return [...args]");
+    expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
+    expect(source).toContain("...(mode === 'preview' ? userConfigEnv : {})");
   });
 
   it('forwards editor writes into the active real vite CLI child', () => {

@@ -4,7 +4,7 @@ import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { viteBrowserShimFiles, viteBuildShimFiles } from '../glue/esbuild-shim.ts';
 import { viteHmrClientScript } from '../glue/hmr-bridge.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
-import { findUserViteConfig } from './vite-config-guard.ts';
+import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -240,6 +240,7 @@ export async function prepareViteCli(
   mode: ViteCliMode,
   opts: ViteCliPrepareOptions = {},
 ): Promise<void> {
+  if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
   installCliActionPatches(root, mode);
   overlayShims(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);

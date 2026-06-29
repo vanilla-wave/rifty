@@ -25,6 +25,7 @@ describe('prepareViteCli', () => {
   it('patches Vite preview inline config without loading Vite config files', () => {
     expect(source).toContain('VITE_CLI_PREVIEW_NEEDLE');
     expect(source).toContain("mode === 'preview'");
+    expect(source).toContain('assertNoUserVitePreviewConfig(root');
     expect(source).toContain('configFile: false');
     expect(source).toContain('allowedHosts: true');
     expect(source).toContain('cors: false');

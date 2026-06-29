@@ -15,16 +15,16 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | String / Buffer / TypedArray / ArrayBuffer input | ✅ | Normalised to bytes, utf-8 for strings |
 | `constants` / `codes` | ✅ | Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape) |
 | `maxOutputLength` option | ✅ | Honored — output reader aborts early and throws `RangeError [ERR_BUFFER_TOO_LARGE]` (decompression-bomb guard, matches Node) |
-| Compression `level` / `strategy` options | ⚠️ | Accepted but not applied (Web API has no level control); output stays valid and round-trips, bytes differ from Node |
+| Compression `level` / `strategy` / `flush` / `finishFlush` one-shot options | ⚠️ | Accepted but not applied (Web API has no level/flush control for one-shot calls); output stays valid and round-trips, bytes differ from Node |
 | Decompression error `code` / `errno` | ⚠️ | Corrupt input rejects with an `Error` (error-first holds), but codes are the browser stream's, not Node's `Z_DATA_ERROR` |
 | `gzipSync` / `gunzipSync` / `*Sync` | ❌ | Web compression is async-only; no honest sync path |
 | Brotli (`brotliCompress` / …) | ❌ | No Web API for brotli in the realm |
 | Zstd (`zstdCompress` / …) | ❌ | No Web API for zstd in the realm |
 | `crc32` | ❌ | Deferred — not part of the compression subset |
-| `createGzip` / `Gzip` | ⚠️ | `CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Flush-opcode options (`flush` / `finishFlush`) throw rather than pretending parity |
+| `createGzip` / `Gzip` | ⚠️ | `CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Transform flush-opcode options (`flush` / `finishFlush`) throw rather than pretending parity |
 | Other Transform streams (`createGunzip` / `createDeflate` / …) | ❌ | Remaining stream factories/classes stay loud until their own parity surface lands |
 | `unzip` (gzip/zlib auto-detect) | ❌ | Header-sniff deferred to its own parity surface |
-| `flush` / `finishFlush` / `windowBits` / `dictionary` / truthy `info` options | ❌ | Throw `NotImplementedError`. `CompressionStream` exposes no flush opcodes, emits a fixed max window, and has no dictionary/engine handle; ignoring these would fake wire bytes, chunking, or return shape. `info:false` is a no-op |
+| `windowBits` / `dictionary` / truthy `info` options | ❌ | Throw `NotImplementedError`. `CompressionStream` emits a fixed max window and has no dictionary/engine handle; ignoring these would fake wire bytes or return shape. `info:false` is a no-op |
 
 ## Test Sources
 
@@ -33,6 +33,6 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 ## Known Limitations
 
-- Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159/0178).
+- Web compression is async-only and exposes no level/window/dictionary/Transform-flush control: sync variants throw, size-only/one-shot flush knobs (`level`/`strategy`/`flush`/`finishFlush`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159/0178).
 - Brotli and zstd have no browser primitive — loud `NotImplementedError`.
 - Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options and the rest of the Transform-stream surface are still loud ceilings.

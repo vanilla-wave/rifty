@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Vite preview CORS middleware parity over the browser preview bridge
 created: 2026-06-28
 why: Vite 7 `preview` now runs through the real installed CLI, but the browser bridge serves preview traffic same-origin at `/preview/<port>/`; Vite's preview CORS middleware is disabled in the CLI source patch until that cross-origin surface is faithfully modelled.
@@ -21,6 +21,36 @@ contract it was written for.
 
 This is a tracked ceiling, not template behavior. Templates must not rely on
 the disabled middleware.
+
+## Acceptance
+
+- `vite preview` without user preview config serves `dist/` through the real
+  installed Vite CLI and registers the production preview port.
+- A project-root `vite.config.{js,ts,mjs,cjs,mts,cts}` or `vite preview --config`
+  throws `NotImplementedError('vite.preview.config-loading')` until preview
+  config/CORS semantics are modelled; no silent config ignore.
+- CORS/host header behavior through `/preview/<port>/...` is either byte-for-byte
+  equivalent to the direct Vite preview server where observable, or documented as
+  an explicit compat limitation.
+
+## Parity cases
+
+- Compare direct Node/Vite `preview` headers with rifty preview bridge headers
+  for a static asset and an HTML document.
+- Cover a user config that changes `preview.cors` / `preview.allowedHosts`; rifty
+  must either honor the same observable headers or loud-throw the config ceiling.
+
+## Out of scope
+
+- User preview config loading remains `NotImplementedError('vite.preview.config-loading')`
+  until this item lands.
+- This item does not add arbitrary external network egress; the browser preview
+  bridge stays same-origin routed.
+
+## Decisions
+
+- The current inline preview patch is allowed only for config-free preview runs.
+- Templates may use `vite preview` only through config-free flows covered by e2e.
 
 ## Done When
 

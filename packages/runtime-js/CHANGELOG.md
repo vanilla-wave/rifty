@@ -61,6 +61,11 @@
 
 ### Fixed
 
+- **`node:zlib` one-shot flush option policy restored.** `gzip` / `deflate`
+  one-shot calls once again accept `flush` and `finishFlush` as inert
+  size/chunking knobs per ADR-0159, while the new `createGzip()` Transform keeps
+  those options as loud `NotImplementedError` ceilings.
+
 - **PR #76 review gaps recorded explicitly.** Added backlog contracts and
   `TODO(backlog:)` seams for tsconfig `baseUrl` bare-specifier behavior under
   modern `moduleResolution` modes and for lazy-loading TypeScript behind

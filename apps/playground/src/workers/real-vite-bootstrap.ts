@@ -354,6 +354,10 @@ function withViteCliEnv(
   const mode = viteCliMode(args);
   const userConfigPath = viteConfigArg(args);
   const previewMode = mode === 'dev' || mode === 'preview';
+  const userConfigEnv: Record<string, string> = {};
+  if (userConfigPath !== null) {
+    userConfigEnv.RIFTY_VITE_CLI_USER_CONFIG = resolveCliPath(ctx.cwd, userConfigPath);
+  }
   return {
     ...ctx,
     env: {
@@ -366,11 +370,10 @@ function withViteCliEnv(
         ? {
             RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
             RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
-            ...(userConfigPath === null
-              ? {}
-              : { RIFTY_VITE_CLI_USER_CONFIG: resolveCliPath(ctx.cwd, userConfigPath) }),
+            ...userConfigEnv,
           }
         : {}),
+      ...(mode === 'preview' ? userConfigEnv : {}),
     },
   };
 }
