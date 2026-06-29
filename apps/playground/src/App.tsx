@@ -819,6 +819,7 @@ export function App(props: AppProps) {
   // `onDevServer` path above; this set drives the per-node-port bridges (below).
   const [previewPorts, setPreviewPorts] = createSignal<PreviewPortEntry[]>([]);
   let devServerSessionId: string | null = null;
+  let devServerBootSessionId: string | null = null;
   let devServerOwnerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
@@ -829,7 +830,14 @@ export function App(props: AppProps) {
     let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
       const wasRunning = devServerStatus() === 'running';
-      devServerOwnerSessionId = frame.status === 'stopped' ? null : (frame.sid ?? null);
+      if (frame.status === 'stopped') {
+        devServerOwnerSessionId = null;
+        if (frame.sid === undefined || frame.sid === devServerBootSessionId) {
+          devServerBootSessionId = null;
+        }
+      } else {
+        devServerOwnerSessionId = frame.sid ?? null;
+      }
       setDevServerStatus(frame.status);
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
@@ -1853,11 +1861,20 @@ export function App(props: AppProps) {
     }
   }
 
-  function lifecycleDevServerRunning(): boolean {
+  function clearDevServerBootSession(sessionId: string): void {
+    if (devServerBootSessionId === sessionId) devServerBootSessionId = null;
+  }
+
+  function lifecycleSessionRunning(sessionId: string | null): boolean {
     return (
-      terminalStatus(devServerSessionId) === 'running' ||
-      (devServerSessionId !== null && devServerOwnerSessionId === devServerSessionId)
+      sessionId !== null &&
+      devServerBootSessionId === sessionId &&
+      (terminalStatus(sessionId) === 'running' || devServerOwnerSessionId === sessionId)
     );
+  }
+
+  function lifecycleDevServerRunning(): boolean {
+    return lifecycleSessionRunning(devServerSessionId);
   }
 
   async function waitForTerminalIdle(id: string | null): Promise<void> {
@@ -1869,9 +1886,13 @@ export function App(props: AppProps) {
   async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean> {
     while (generation === devServerRestartGeneration) {
       if (devServerStatus() === 'running' && devServerOwnerSessionId === sessionId) return true;
-      if (terminalStatus(sessionId) === 'idle') return false;
+      if (terminalStatus(sessionId) === 'idle') {
+        clearDevServerBootSession(sessionId);
+        return false;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
+    clearDevServerBootSession(sessionId);
     return false;
   }
 
@@ -1882,20 +1903,23 @@ export function App(props: AppProps) {
   ): Promise<boolean> {
     if (spec.runtime === 'node-cli') {
       await waitForTerminalIdle(sessionId);
+      clearDevServerBootSession(sessionId);
       return true;
     }
     return waitForDevServerBoot(sessionId, generation);
   }
 
   async function stopDevServerSession(sessionId: string | null): Promise<void> {
-    const waitForOwnedDevServer =
-      sessionId !== null &&
-      sessionId === devServerSessionId &&
-      (terminalStatus(sessionId) === 'running' || devServerOwnerSessionId === sessionId);
-    if (sessionId) manager.stop(sessionId);
-    if (waitForOwnedDevServer) await waitForDevServerStop();
-    await waitForTerminalIdle(sessionId);
-    setPreviewPorts([]);
+    const stopLifecycleRun = lifecycleSessionRunning(sessionId);
+    if (sessionId && stopLifecycleRun) manager.stop(sessionId);
+    if (sessionId && stopLifecycleRun && devServerOwnerSessionId === sessionId) {
+      await waitForDevServerStop();
+    }
+    if (stopLifecycleRun) {
+      await waitForTerminalIdle(sessionId);
+      if (sessionId) clearDevServerBootSession(sessionId);
+      setPreviewPorts([]);
+    }
   }
 
   async function startDevServerSession(
@@ -1905,6 +1929,7 @@ export function App(props: AppProps) {
   ): Promise<boolean> {
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
+    devServerBootSessionId = targetSessionId;
     manager.clear(targetSessionId); // fresh console for the switched-in project
     void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
     return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
@@ -1978,6 +2003,7 @@ export function App(props: AppProps) {
       devServerSessionId = session.id;
       manager.clear(session.id); // fresh console for the switched-in project
       const generation = ++devServerRestartGeneration;
+      devServerBootSessionId = session.id;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
       const booted = await waitForPresetBoot(session.id, generation, templateForPreset(preset));
       if (!booted) return;
@@ -2060,12 +2086,15 @@ export function App(props: AppProps) {
           }),
         rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
         restartDevServer: async () => {
+          const shouldRestartDevServer = lifecycleDevServerRunning();
           setDevServerStatus('stopped');
           await manager.rebindOwner(workspaceOwner());
-          if (devServerSessionId) await restartDevServer(devServerSessionId);
+          if (shouldRestartDevServer && devServerSessionId) {
+            await restartDevServer(devServerSessionId);
+          }
         },
         clearTerminal: () => {
-          if (devServerSessionId) manager.clear(devServerSessionId);
+          if (lifecycleDevServerRunning() && devServerSessionId) manager.clear(devServerSessionId);
         },
       });
       if (switched) {
@@ -2394,7 +2423,7 @@ export function App(props: AppProps) {
   async function refreshActiveAfterReset(): Promise<void> {
     await waitForActiveSnapshotFrame();
     resetEditorToActiveInitialFiles();
-    if (devServerStatus() !== 'stopped' && devServerSessionId) {
+    if (lifecycleDevServerRunning() && devServerSessionId) {
       void restartDevServer(devServerSessionId);
     }
   }
@@ -2632,8 +2661,9 @@ export function App(props: AppProps) {
         run: () => openPreviewTab(),
       });
     }
-    if (devServerStatus() !== 'stopped' && devServerSessionId) {
-      const sessionId = devServerSessionId;
+    const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;
+    if (devServerStatus() !== 'stopped' && stoppableDevServerSessionId) {
+      const sessionId = stoppableDevServerSessionId;
       items.push({
         id: 'act:stop-server',
         section: 'Commands',

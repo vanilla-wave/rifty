@@ -156,8 +156,10 @@ describe('App terminal startup wiring', () => {
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
     expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
     expect(source).toContain('function lifecycleDevServerRunning(): boolean');
+    expect(source).toContain('let devServerBootSessionId: string | null = null;');
     expect(source).toContain('let devServerOwnerSessionId: string | null = null;');
-    expect(source).toContain('devServerOwnerSessionId === devServerSessionId');
+    expect(source).toContain('return lifecycleSessionRunning(devServerSessionId);');
+    expect(source).toContain('devServerBootSessionId === sessionId');
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('await seedViteWorkspace(preset);'),
     );
@@ -172,6 +174,7 @@ describe('App terminal startup wiring', () => {
     expect(runPreset).not.toContain(
       "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
     );
+    expect(source).not.toContain("terminalStatus(devServerSessionId) === 'running' ||");
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('seedViteWorkspace(preset);'),
     );
@@ -212,9 +215,12 @@ describe('App terminal startup wiring', () => {
     // start/stop + port via a structured frame (owner-tree republish handshake
     // discipline, ADR-0146) — no stdout string-match, no one-shot push.
     expect(source).toContain('workspaceOwner().onDevServer(');
-    expect(source).toContain(
-      "devServerOwnerSessionId = frame.status === 'stopped' ? null : (frame.sid ?? null);",
+    expect(source).toContain("if (frame.status === 'stopped') {");
+    expect(source).toContain('devServerOwnerSessionId = null;');
+    expect(source).toMatch(
+      /if \(frame\.sid === undefined \|\| frame\.sid === devServerBootSessionId\) \{[\s\S]*?devServerBootSessionId = null;/,
     );
+    expect(source).toContain('devServerOwnerSessionId = frame.sid ?? null;');
     expect(source).toContain('setDevServerStatus(frame.status)');
     expect(source).not.toContain('node_modules read bridge ready');
   });
@@ -265,7 +271,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toMatch(
       /devServerStatus\(\) === 'running' && devServerOwnerSessionId === sessionId[\s\S]*?return true;/,
     );
-    expect(source).toContain("if (terminalStatus(sessionId) === 'idle') return false;");
+    expect(source).toMatch(
+      /if \(terminalStatus\(sessionId\) === 'idle'\) \{[\s\S]*?clearDevServerBootSession\(sessionId\);[\s\S]*?return false;/,
+    );
     expect(source).toMatch(/const booted = await waitForPresetBoot\(/);
     expect(source).toContain('if (!booted) return;');
     expect(source).toMatch(
@@ -273,6 +281,26 @@ describe('App terminal startup wiring', () => {
     );
     expect(source).toMatch(
       /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
+    );
+  });
+
+  it('does not stop a stale dev-server terminal after its lifecycle frame stopped', () => {
+    expect(source).toContain('function lifecycleSessionRunning(sessionId: string | null): boolean');
+    expect(source).toMatch(
+      /sessionId !== null &&[\s\S]*?devServerBootSessionId === sessionId[\s\S]*?\(terminalStatus\(sessionId\) === 'running' \|\| devServerOwnerSessionId === sessionId\)/,
+    );
+    expect(source).toMatch(
+      /const stopLifecycleRun = lifecycleSessionRunning\(sessionId\);[\s\S]*?if \(sessionId && stopLifecycleRun\) manager\.stop\(sessionId\);/,
+    );
+    expect(source).toContain('devServerBootSessionId = targetSessionId;');
+    expect(source).toContain('devServerBootSessionId = session.id;');
+    expect(source).toContain('clearDevServerBootSession(sessionId);');
+    expect(source).toContain('const shouldRestartDevServer = lifecycleDevServerRunning();');
+    expect(source).toContain(
+      'if (lifecycleDevServerRunning() && devServerSessionId) manager.clear(devServerSessionId);',
+    );
+    expect(source).toContain(
+      'const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;',
     );
   });
 

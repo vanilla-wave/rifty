@@ -134,7 +134,8 @@
   no longer abort unrelated running terminal tabs. A pre-existing owner-reported
   dev server from a non-lifecycle terminal is not treated as the picked starter's
   successful boot signal; dev-server readiness is tied to the owning `pty`
-  session id.
+  session id, and a stopped lifecycle session does not make a later unrelated
+  command in that terminal stoppable by preset switching.
 
 - **`vite preview` config honesty tightened.** Root `vite.config.*` files and
   `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`
