@@ -99,13 +99,26 @@ export async function insertTerminalLineSettled(
   page: Page,
   line: string,
   timeout = 30_000,
+  targetSlot: 'active' | number = 'active',
 ): Promise<void> {
-  const before = terminalPromptCount(await terminalBuffer(page));
-  await page.locator('[data-testid="terminal"]').click();
+  const before = terminalPromptCount(await terminalBuffer(page, targetSlot));
+  if (targetSlot !== 'active') {
+    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    await expect(tab).toBeVisible();
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  const slot =
+    targetSlot === 'active'
+      ? page.locator('.rf-terminal-slot[data-active="true"]')
+      : page.locator('.rf-terminal-slot').nth(targetSlot);
+  await expect(slot).toBeVisible();
+  await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  await slot.locator('[data-testid="terminal"]').click();
   await page.keyboard.insertText(line);
   await page.keyboard.press('Enter');
   await expect
-    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout })
+    .poll(async () => terminalPromptCount(await terminalBuffer(page, targetSlot)), { timeout })
     .toBeGreaterThan(before);
 }
 

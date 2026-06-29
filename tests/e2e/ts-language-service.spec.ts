@@ -481,11 +481,18 @@ async function tsReinit(page: Page): Promise<boolean> {
  * fully parallel browser run, `keyboard.type()` can drop characters and turn a
  * valid fixture write into a later, confusing LS failure.
  */
-async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
+async function writeOwnerFile(
+  page: Page,
+  path: string,
+  content: string,
+  slot: 'active' | number = 'active',
+): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
   await insertTerminalLineSettled(
     page,
     `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`,
+    30_000,
+    slot,
   );
 }
 
@@ -956,11 +963,13 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
       `${root}/node_modules/cool-dep/package.json`,
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -971,6 +980,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         'export declare const cool: { readonly helper: (x: string) => string; readonly value: number };',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -985,6 +995,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '} as const;',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // uses-dep.ts — 1-based lines used by the position assertions below:
     //  L1 import from "cool-dep"; L2 import from "./dep.ts";
@@ -992,7 +1003,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
-    await writeOwnerFile(page, usesDep, usesDepResolvedSource);
+    await writeOwnerFile(page, usesDep, usesDepResolvedSource, shellSlot);
     await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
