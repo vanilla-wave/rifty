@@ -96,7 +96,11 @@ import {
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
-import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
+import {
+  type VfsSnapshotEntry,
+  requestVfsSnapshot,
+  subscribeVfsSnapshot,
+} from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -759,8 +763,8 @@ export function App(props: AppProps) {
   }
 
   // Workspace owner signal (ADR-0146/0148/0165): cold boot starts with a hidden
-  // empty /scratch owner. It gives the IDE a real shell + file tree before the
-  // launcher choice, but the worker suppresses starter/index scratch synthesis so
+  // empty /scratch owner. It gives the IDE a real shell before the launcher
+  // choice, but the worker suppresses starter files + index scratch synthesis so
   // no visible project is chosen until the user picks one.
   // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
   // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
@@ -1766,7 +1770,10 @@ export function App(props: AppProps) {
     if (!idx) return;
     untrack(() => {
       store.hydrateIndex(idx);
-      setEditorProjectContextReady(true);
+      const wasReady = editorProjectContextReady();
+      const ready = !needsProjectChoiceOnBoot(idx);
+      setEditorProjectContextReady(ready);
+      if (ready && !wasReady) resetEditorToActiveInitialFiles();
     });
     for (const id of pendingOnDiskDeletes) {
       if (!idx.projects.some((p) => p.id === id)) pendingOnDiskDeletes.delete(id);
@@ -1877,6 +1884,37 @@ export function App(props: AppProps) {
     const paths = activeInitialEditorFiles();
     setPublishedInitialEditorFiles(paths);
     editorApi?.openInitialFiles(paths);
+  }
+
+  function starterSnapshotEntries(preset: Preset, root: string): VfsSnapshotEntry[] {
+    const dirs = new Set<string>();
+    const files = Object.entries(seedFilesForStarter(starterById(preset.id), root)).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    for (const [path] of files) {
+      let slash = path.lastIndexOf('/');
+      while (slash > root.length) {
+        const dir = path.slice(0, slash);
+        dirs.add(dir);
+        slash = dir.lastIndexOf('/');
+      }
+    }
+    return [
+      ...[...dirs].sort().map((path) => ({ path, kind: 'dir' as const, size: 0 })),
+      ...files.map(([path, content]) => {
+        const data = ownerWriteEnc.encode(content);
+        return { path, kind: 'file' as const, size: data.byteLength, content: data };
+      }),
+    ];
+  }
+
+  function paintPickedStarterSnapshot(preset: Preset): void {
+    snapshotFs.update({
+      type: 'snapshot',
+      root: activeRoot(),
+      entries: starterSnapshotEntries(preset, activeRoot()),
+      nodeModulesPresent: false,
+    });
   }
 
   // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
@@ -2084,6 +2122,7 @@ export function App(props: AppProps) {
   async function loadPresetUi(preset: Preset): Promise<void> {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
+    paintPickedStarterSnapshot(preset);
     resetEditorToActiveInitialFiles();
   }
 

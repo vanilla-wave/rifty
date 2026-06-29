@@ -56,7 +56,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();');
     expect(source).toMatch(/createSignal<WorkspaceOwnerHandle>\(initialOwnerHandle\)/);
     expect(source).not.toContain('startProjectIndexOwner');
-    expect(source).toContain("sources: { dev: '', realVite: '' }");
+    expect(source).toContain('const machine = useMode({});');
     expect(source).toContain("store.setLauncherTab('starters')");
     expect(source).toContain('store.openLauncher()');
     expect(source).toContain('function closeLauncher(): void');
@@ -168,7 +168,10 @@ describe('App terminal startup wiring', () => {
       'const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal',
     );
     expect(loadPresetUi).toContain('await machine.loadPreset(preset);');
+    expect(loadPresetUi).toContain('paintPickedStarterSnapshot(preset);');
     expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
+    expect(source).toContain('function paintPickedStarterSnapshot(preset: Preset): void');
+    expect(source).toContain('snapshotFs.update({');
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(pickStarter).toMatch(
@@ -480,20 +483,22 @@ describe('App terminal startup wiring', () => {
     expect(pickStarter.indexOf('beginTsPresetTransition();')).toBeLessThan(
       pickStarter.indexOf('store.pickStarter(id);'),
     );
+    expect(pickStarter.indexOf('await paintPickedStarterUi(presetForId(id));')).toBeLessThan(
+      pickStarter.indexOf('await runVitePreset(presetForId(id), tsGate);'),
+    );
     expect(pickStarter).toContain('void queuePresetTransition(runPick);');
+    expect(pickStarter).toContain('await runVitePreset(presetForId(id), tsGate);');
     expect(reinit).toBeDefined();
     expect(reinit).toContain('setTsProjectRevision((revision) => revision + 1);');
     expect(reinit).not.toContain('resetEditorToActiveInitialFiles()');
     expect(runPreset).toContain('templateId: templateForPreset(preset).id,');
     expect(runPreset).toContain('await workspaceOwner().setDevConfig({');
+    expect(runPreset).not.toContain('await machine.loadPreset(preset);');
     expect(runPreset).toMatch(/finally \{[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/);
     const sessionReservation = runPreset.indexOf('session = devServerSession();');
-    const loadPreset = runPreset.indexOf('await machine.loadPreset(preset);');
     const setDevConfig = runPreset.indexOf('await workspaceOwner().setDevConfig({');
     expect(sessionReservation).toBeGreaterThan(-1);
-    expect(loadPreset).toBeGreaterThan(-1);
     expect(setDevConfig).toBeGreaterThan(-1);
-    expect(sessionReservation).toBeLessThan(loadPreset);
     expect(sessionReservation).toBeLessThan(setDevConfig);
     expect(source).toContain(
       "throw new Error('Unable to reserve an idle terminal for the dev server')",
@@ -966,7 +971,7 @@ describe('App wires the sequential switch + index mirror (ADR-0165 §3)', () => 
 
   it('hydrates owner index without subscribing to local dirty scratch changes', () => {
     expect(source).toMatch(
-      /untrack\(\(\) => \{[\s\S]*?store\.hydrateIndex\(idx\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?\}\);/,
+      /untrack\(\(\) => \{[\s\S]*?store\.hydrateIndex\(idx\);[\s\S]*?const wasReady = editorProjectContextReady\(\);[\s\S]*?const ready = !needsProjectChoiceOnBoot\(idx\);[\s\S]*?setEditorProjectContextReady\(ready\);[\s\S]*?if \(ready && !wasReady\) resetEditorToActiveInitialFiles\(\);[\s\S]*?\}\);/,
     );
     expect(source).toContain('<Show when={editorProjectContextReady()}>');
   });

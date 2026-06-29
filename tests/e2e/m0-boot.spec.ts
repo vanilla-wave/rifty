@@ -1,5 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
+import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
 import {
   bootProjectFiles,
   expectTerminalContains,
@@ -16,20 +16,47 @@ async function reinitTsLanguageService(page: Page): Promise<boolean> {
   });
 }
 
+async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __riftySawChooserProjectArtifacts?: boolean;
+    };
+    state.__riftySawChooserProjectArtifacts = false;
+    const scan = (): void => {
+      const launcherOpen = document.querySelector('[data-testid="launcher"]') !== null;
+      if (!launcherOpen) return;
+      const hasProgramTab = Array.from(document.querySelectorAll('[role="tab"]')).some((tab) =>
+        tab.textContent?.includes('src/main.js'),
+      );
+      const hasWorkspaceRows =
+        (document
+          .querySelector('[role="tree"][aria-label="Workspace files"]')
+          ?.querySelectorAll('[role="treeitem"]').length ?? 0) > 0;
+      if (hasProgramTab || hasWorkspaceRows) state.__riftySawChooserProjectArtifacts = true;
+    };
+    const start = (): void => {
+      scan();
+      new MutationObserver(scan).observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    };
+    if (document.documentElement) start();
+    else document.addEventListener('DOMContentLoaded', start, { once: true });
+  });
+}
+
 test.describe('M0 — Foundation', () => {
-  test('playground loads, terminal + editor are visible, and shell terminals can be opened', async ({
+  test('playground loads, terminal + chooser are visible, and shell terminals can be opened', async ({
     page,
   }) => {
     await page.goto('/');
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-testid="terminal"]')).toBeVisible();
-    await expect(page.locator('[data-testid="editor"]')).toBeVisible();
-    await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 30_000 },
-    );
+    await expect(page.locator('[data-testid="editor"]')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   });
 
@@ -37,15 +64,50 @@ test.describe('M0 — Foundation', () => {
     await page.goto('/');
     await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
 
-    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
-    await expect
-      .poll(async () => (await editorLines.textContent()) ?? '', { timeout: 2_000 })
-      .not.toContain("import project from './project.json'");
+    await expect(page.locator('[data-testid="editor"]')).toHaveCount(0);
 
     await pickStarter(page, 'project-files');
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
     await expect(editorLines).toContainText("import project from './project.json'", {
       timeout: 60_000,
     });
+  });
+
+  test('reset first-run chooser does not reveal starter files or the default program tab', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await clearWorkspaceOpfs(page);
+    await recordChooserProjectArtifactsOnNextDocument(page);
+    await page.reload();
+
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
+    await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.waitForTimeout(2_000);
+
+    await expect(
+      page.getByRole('tab', { name: /src\/main\.js/ }),
+      'no fallback starter tab should be visible behind the chooser',
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[role="tree"][aria-label="Workspace files"] [role="treeitem"]'),
+      'no starter workspace rows should be visible behind the chooser',
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              globalThis as typeof globalThis & {
+                __riftySawChooserProjectArtifacts?: boolean;
+              }
+            ).__riftySawChooserProjectArtifacts === true,
+        ),
+      )
+      .toBe(false);
   });
 
   test('starter pick paints editor source before the workspace owner finishes booting', async ({
@@ -91,7 +153,7 @@ test.describe('M0 — Foundation', () => {
     );
   });
 
-  test('first-run hidden empty project has a real shell and entry file before a starter pick', async ({
+  test('first-run hidden empty project has a real shell but no files before a starter pick', async ({
     page,
   }) => {
     await page.goto('/');
@@ -102,7 +164,10 @@ test.describe('M0 — Foundation', () => {
 
     await expect
       .poll(async () => await readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 30_000 })
-      .not.toMatch(/^MISSING:/u);
+      .toMatch(/^MISSING:/u);
+    await expect(
+      page.locator('[role="tree"][aria-label="Workspace files"] [role="treeitem"]'),
+    ).toHaveCount(0);
     await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
 
     const marker = `hidden-empty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;

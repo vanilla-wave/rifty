@@ -278,6 +278,10 @@ function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwn
 
 const NO_PROJECT_SELECTED_MSG = 'Choose a project before running commands.\n';
 
+function noProjectSelectedError(): Error {
+  return new Error(NO_PROJECT_SELECTED_MSG.trim());
+}
+
 /**
  * Spawn a project-index-only owner: it hydrates/serves the durable project list
  * without seeding a workspace root, publishing a file snapshot, opening ptys, or
@@ -388,6 +392,7 @@ export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): Wor
     previewOwnerToken: 'project-index-only',
     snapshotPort,
     closed,
+    isAlive: () => !exited,
     openSession: () => Promise.resolve(),
     exec: (_sid, _line, execOpts) => {
       execOpts.onChunk(NO_PROJECT_SELECTED_MSG, 'stderr');
@@ -399,8 +404,13 @@ export function startProjectIndexOwner(opts: ProjectIndexOwnerOptions = {}): Wor
     writeFile(path) {
       throw new Error(`writeFile(${path}): ${NO_PROJECT_SELECTED_MSG.trim()}`);
     },
-    exportArchive: () => Promise.reject(new Error(NO_PROJECT_SELECTED_MSG.trim())),
-    importArchive: () => Promise.reject(new Error(NO_PROJECT_SELECTED_MSG.trim())),
+    writeFrame: () => {
+      throw noProjectSelectedError();
+    },
+    writeFrameAcked: () => Promise.reject(noProjectSelectedError()),
+    exportArchive: () => Promise.reject(noProjectSelectedError()),
+    importArchive: () => Promise.reject(noProjectSelectedError()),
+    readFileBytes: () => Promise.reject(noProjectSelectedError()),
     snapshot: () => ({ cwd: '/scratch', env: {} }),
     onDevServer: () => () => {},
     onPreview: () => () => {},

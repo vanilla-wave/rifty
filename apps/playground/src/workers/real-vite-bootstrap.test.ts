@@ -145,9 +145,11 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain(
       'if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending))',
     );
-    expect(source).toContain(
-      'if (freshRoot && !hiddenEmptyBoot) seedStarterBaseline(starter, cfg.root)',
+    expect(source).toMatch(
+      /if \(hiddenEmptyBoot\) \{[\s\S]*?syncMirror\(\)\.mkdirSync\(cfg\.root, \{ recursive: true \}\);[\s\S]*?\} else \{[\s\S]*?seedProject\(cfg\);[\s\S]*?if \(freshRoot\) seedStarterBaseline\(starter, cfg\.root\);[\s\S]*?await ensureStarterInitialCommit\(ownerGitVfs\(\), cfg\.root\);[\s\S]*?\}/,
     );
+    expect(source).toContain('if (!fromScratch && !hiddenEmptyBoot)');
+    expect(source).toContain('if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);');
     expect(source).toContain("if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/')");
     expect(source).toContain('else reconcileOwnerIndexAtBoot(syncMirror(), starter)');
   });

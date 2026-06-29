@@ -218,6 +218,8 @@
   chooser or reseeding the starter over the user's changes.
 - Reloading a TypeScript scratch draft no longer flashes the default
   `src/main.js` program tab before restoring `src/main.ts`.
+- Reset/first-run project choice no longer reveals the hidden empty owner's
+  `src/main.js` scaffold or file tree behind the launcher.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.

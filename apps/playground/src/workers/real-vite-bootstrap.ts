@@ -466,17 +466,21 @@ async function bootShellOwner(opts: {
   if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending)) {
     markStarterGeneratedBaselinePending(cfg.root);
   }
-  seedProject(cfg);
-  if (freshRoot && !hiddenEmptyBoot) seedStarterBaseline(starter, cfg.root);
-  await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+  if (hiddenEmptyBoot) {
+    syncMirror().mkdirSync(cfg.root, { recursive: true });
+  } else {
+    seedProject(cfg);
+    if (freshRoot) seedStarterBaseline(starter, cfg.root);
+    await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+  }
   // Instant presets: pre-seed node_modules from the baked snapshot into the owner
   // store NOW, before any dev line (the full fs is already present). from-scratch
   // deps come from the explicit `npm install` boot step — nothing to do here.
-  if (!fromScratch) {
+  if (!fromScratch && !hiddenEmptyBoot) {
     await restoreInstantDeps(cfg, spec.id, slug);
     await absorbPendingStarterGeneratedBaseline(cfg.root);
   }
-  seedTemplateNodeModulesFiles(cfg);
+  if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);
   const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });
   const gitStatusFeed = serveGitStatusFeed(port, ownerGit);
   const publishOwnerState = (): void => {
