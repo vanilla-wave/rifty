@@ -51,6 +51,9 @@ const vfs = {
   rmSync(): void {
     throw new Error('read-only');
   },
+  renameSync(): void {
+    throw new Error('read-only');
+  },
 };
 
 const mutations = {

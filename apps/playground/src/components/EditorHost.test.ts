@@ -60,12 +60,47 @@ describe('EditorHost git diff contract', () => {
   });
 
   it('exposes a flush hook so SCM can publish pending editor writes before reading status', () => {
-    expect(source).toContain('flushPendingWrites(): void;');
-    expect(source).toContain('function flushPendingWrites(): void');
+    expect(source).toContain('flushPendingWrites(): Promise<void>;');
+    expect(source).toContain(
+      'onFileWritten?(path: string, content: string): Promise<void> | void;',
+    );
+    expect(source).toContain('async function flushPendingWrites(): Promise<void>');
+    expect(source).toContain('const inFlightWrites = new Map<string, Promise<void>>();');
+    expect(source).toContain('function flushWriteTracked(path: string): Promise<void>');
+    expect(source).toContain('for (;;) {');
+    expect(source).toContain('const inFlight = [...inFlightWrites.values()];');
     expect(source).toContain('const pending = [...writeTimers.keys()];');
     expect(source).toContain('writeTimers.delete(path);');
-    expect(source).toContain('flushWrite(path);');
+    expect(source).toContain(
+      'await Promise.all([...inFlight, ...pending.map((path) => flushWriteTracked(path))]);',
+    );
+    expect(source).toContain('if (inFlightWrites.size === 0 && writeTimers.size === 0) return;');
+    expect(source).toContain('void flushWriteTracked(path).catch(reportWriteError);');
     expect(source).toContain('flushPendingWrites,');
+  });
+
+  it('exposes non-writing close hooks for owner-side rename/delete lifecycles', () => {
+    expect(source).toContain('closePath(path: string): void;');
+    expect(source).toContain('closePathTree(path: string): void;');
+    expect(source).toContain(
+      'function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void',
+    );
+    expect(source).toContain('if (opts.flushPending !== false) {');
+    expect(source).toContain('function closeExternalPathTree(rootPath: string): void');
+    expect(source).toContain('externalWriteClosedPaths.add(path);');
+    expect(source).toContain('function setReadOnlyPath(id: string, readOnly: boolean): void');
+    expect(source).toContain('editor?.updateOptions({ readOnly });');
+    expect(source).toContain('setReadOnlyPath(PROGRAM_TAB_ID, true);');
+    expect(source).toContain(
+      'props.onError?.(`${basename(path)} was moved or deleted; program editor is read-only`);',
+    );
+    expect(source).toContain('closeFile(id, { flushPending: false });');
+    expect(source).toContain('if (externalWriteClosedPaths.has(currentProgramPath)) {');
+    expect(source).toContain('basename(currentProgramPath)');
+    expect(source).toContain('was moved or deleted; program editor is read-only');
+    expect(source).toContain('untrack(() => setReadOnlyPath(PROGRAM_TAB_ID, false));');
+    expect(source).toContain('closePath: (path) => closeExternalPathTree(path),');
+    expect(source).toContain('closePathTree: (path) => closeExternalPathTree(path),');
   });
 
   it('exposes a generic text diff API for Explorer blob-vs-blob compare', () => {

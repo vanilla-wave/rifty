@@ -55,6 +55,23 @@ describe('FileExplorer owner-routed CRUD source guards', () => {
     expect(source).toContain('setClipboard(null);');
   });
 
+  it('offers folder creation from the folder context menu, not only hover buttons', () => {
+    expect(source).toContain('readonly depth: number;');
+    expect(source).toContain('depth: row.depth,');
+    expect(source).toContain("beginCreate('create-file', menu().path, menu().depth + 1)");
+    expect(source).toContain("beginCreate('create-dir', menu().path, menu().depth + 1)");
+    expect(source).toContain('New File');
+    expect(source).toContain('New Folder');
+  });
+
+  it('remembers active file state before async rename lifecycle closes the old model', () => {
+    expect(source).toContain(
+      "const wasActive = state.rowKind === 'file' && props.activePath === state.path;",
+    );
+    expect(source).toContain('await mutations.renamePath(state.path, path);');
+    expect(source).toContain('if (wasActive) props.onOpenFile(path);');
+  });
+
   it('omits clipboard mutation menu items entirely for download-only rows', () => {
     expect(source).toContain('<Show when={menu().mutable}>');
     expect(source).not.toContain('disabled={!menu().mutable || busy()}');

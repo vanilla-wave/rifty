@@ -139,6 +139,7 @@ export function FileExplorer(props: {
     readonly path: string;
     readonly name: string;
     readonly kind: 'file' | 'dir';
+    readonly depth: number;
     readonly mutable: boolean;
     readonly downloadable: boolean;
     readonly comparable: boolean;
@@ -386,8 +387,9 @@ export function FileExplorer(props: {
         expand(path);
       } else {
         const path = targetPath(state.parent, editName());
+        const wasActive = state.rowKind === 'file' && props.activePath === state.path;
         await mutations.renamePath(state.path, path);
-        if (state.rowKind === 'file' && props.activePath === state.path) props.onOpenFile(path);
+        if (wasActive) props.onOpenFile(path);
       }
       cancelEdit();
       refresh();
@@ -433,6 +435,7 @@ export function FileExplorer(props: {
       path: row.path,
       name: row.name,
       kind: row.kind === 'dir' ? 'dir' : 'file',
+      depth: row.depth,
       mutable,
       downloadable,
       comparable,
@@ -978,6 +981,34 @@ export function FileExplorer(props: {
               style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
             >
               <Show when={menu().mutable}>
+                <Show when={menu().kind === 'dir'}>
+                  <button
+                    type="button"
+                    class="rf-rowmenu__item"
+                    role="menuitem"
+                    disabled={busy()}
+                    onClick={() => {
+                      beginCreate('create-file', menu().path, menu().depth + 1);
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Icon name="file-plus" size={13} />
+                    New File
+                  </button>
+                  <button
+                    type="button"
+                    class="rf-rowmenu__item"
+                    role="menuitem"
+                    disabled={busy()}
+                    onClick={() => {
+                      beginCreate('create-dir', menu().path, menu().depth + 1);
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Icon name="folder-plus" size={13} />
+                    New Folder
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="rf-rowmenu__item"

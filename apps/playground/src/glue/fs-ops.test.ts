@@ -101,6 +101,47 @@ class FakeFs implements FsOpsTarget {
     if (f) return { isFile: true, isDirectory: false, size: f.length };
     throw new Error(`ENOENT ${path}`);
   }
+
+  renameSync(from: string, to: string): void {
+    const parent = to.slice(0, to.lastIndexOf('/')) || '/';
+    if (!this.dirs.has(parent)) throw new Error(`ENOENT ${parent}`);
+    if (this.files.has(from)) {
+      const data = this.files.get(from)!;
+      this.files.delete(from);
+      this.files.set(to, data);
+      return;
+    }
+    if (this.dirs.has(from)) {
+      const prefix = `${from}/`;
+      this.dirs.delete(from);
+      this.dirs.add(to);
+      for (const dir of [...this.dirs]) {
+        if (!dir.startsWith(prefix)) continue;
+        this.dirs.delete(dir);
+        this.dirs.add(`${to}/${dir.slice(prefix.length)}`);
+      }
+      for (const [file, data] of [...this.files]) {
+        if (!file.startsWith(prefix)) continue;
+        this.files.delete(file);
+        this.files.set(`${to}/${file.slice(prefix.length)}`, data);
+      }
+      return;
+    }
+    throw new Error(`ENOENT ${from}`);
+  }
+}
+
+class RenameSpyFs extends FakeFs {
+  readonly renameCalls: Array<{ from: string; to: string }> = [];
+
+  override renameSync(from: string, to: string): void {
+    this.renameCalls.push({ from, to });
+    super.renameSync(from, to);
+  }
+
+  override readFileBytesSync(): Uint8Array {
+    throw new Error('renamePath must not copy bytes');
+  }
 }
 
 class AsyncFakeFs extends FakeFs implements AsyncFsOpsTarget {
@@ -189,6 +230,17 @@ describe('renamePath', () => {
     expect(readText(fs, '/b.js')).toBe('hi');
   });
 
+  it('uses FsSync.renameSync instead of copying bytes above the VFS primitive', () => {
+    const fs = new RenameSpyFs();
+    writeText(fs, '/a.js', 'hi');
+
+    renamePath(fs, '/a.js', '/b.js');
+
+    expect(fs.renameCalls).toEqual([{ from: '/a.js', to: '/b.js' }]);
+    expect(fs.existsSync('/a.js')).toBe(false);
+    expect(fs.existsSync('/b.js')).toBe(true);
+  });
+
   it('renames a directory (recursive move)', () => {
     const fs = new FakeFs();
     writeText(fs, '/old/x.js', 'X');
@@ -202,6 +254,13 @@ describe('renamePath', () => {
     writeText(fs, '/a.js', '1');
     writeText(fs, '/b.js', '2');
     expect(() => renamePath(fs, '/a.js', '/b.js')).toThrow(/already exists/);
+  });
+
+  it('does not create a missing destination parent', () => {
+    const fs = new FakeFs();
+    writeText(fs, '/a.js', '1');
+    expect(() => renamePath(fs, '/a.js', '/missing/b.js')).toThrow(/ENOENT/);
+    expect(readText(fs, '/a.js')).toBe('1');
   });
 
   it('is a no-op when from === to', () => {

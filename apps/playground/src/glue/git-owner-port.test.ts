@@ -68,6 +68,22 @@ describe('git owner RPC bridge', () => {
     expect(dec.decode(viaRpc.content)).toBe('first\n');
   });
 
+  it('returns show(:path) index blob bytes byte-identical to the owner engine', async () => {
+    const { vfs, g } = await seededRepo();
+    await vfs.writeFile('/repo/a.txt', 'staged\n');
+    await g.add('a.txt');
+    await vfs.writeFile('/repo/a.txt', 'worktree\n');
+    serve('git-show-index-parity', g);
+
+    const viaRpc = await page('git-show-index-parity').show(':a.txt');
+    const direct = await g.show(':a.txt');
+
+    expect(viaRpc).toEqual(direct);
+    expect(viaRpc.type).toBe('blob');
+    if (viaRpc.type !== 'blob') throw new Error('expected blob');
+    expect(dec.decode(viaRpc.content)).toBe('staged\n');
+  });
+
   it('routes add, commit, and restore actions through the owner engine', async () => {
     const { vfs, g } = await seededRepo();
     await vfs.writeFile('/repo/a.txt', 'edited\n');

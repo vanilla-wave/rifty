@@ -296,6 +296,15 @@ export function makeGit(opts: MakeGitOptions): Git {
     return blobs;
   };
 
+  const stageBlob = async (
+    filepath: string,
+  ): Promise<{ readonly oid: string; readonly content: Uint8Array }> => {
+    const match = (await allStageBlobs()).find((blob) => blob.filepath === filepath);
+    if (!match) throw new Error(`Could not find :${filepath}.`);
+    const { blob } = await git.readBlob({ fs, dir, oid: match.oid });
+    return { oid: match.oid, content: blob };
+  };
+
   const treeBlobsOrEmpty = async (ref: string): Promise<BlobRef[]> => {
     try {
       return await allTreeBlobs(await resolveRevision(ref));
@@ -702,6 +711,10 @@ export function makeGit(opts: MakeGitOptions): Git {
     },
     async show(rev) {
       const colon = rev.indexOf(':');
+      if (colon === 0) {
+        const { oid, content } = await stageBlob(rev.slice(1));
+        return { type: 'blob', oid, content };
+      }
       if (colon > 0) {
         const oid = await resolveRevision(rev.slice(0, colon));
         const filepath = rev.slice(colon + 1);

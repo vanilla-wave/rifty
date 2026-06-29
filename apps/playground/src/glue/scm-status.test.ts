@@ -9,20 +9,71 @@ describe('SCM status projection', () => {
         ['/workspace/src/new.ts', '??'],
         ['/workspace/src/staged.ts', 'A '],
         ['/workspace/src/both.ts', 'MM'],
+        ['/workspace/src/add-delete.ts', 'AD'],
         ['/workspace/src/deleted.ts', ' D'],
       ]),
       '/workspace',
     );
 
     expect(rows.staged).toEqual([
-      { path: '/workspace/src/staged.ts', relativePath: 'src/staged.ts', code: 'A ', badge: 'A' },
-      { path: '/workspace/src/both.ts', relativePath: 'src/both.ts', code: 'MM', badge: 'M' },
+      {
+        path: '/workspace/src/staged.ts',
+        relativePath: 'src/staged.ts',
+        code: 'A ',
+        side: 'index',
+        badge: 'A',
+      },
+      {
+        path: '/workspace/src/both.ts',
+        relativePath: 'src/both.ts',
+        code: 'MM',
+        side: 'index',
+        badge: 'M',
+      },
+      {
+        path: '/workspace/src/add-delete.ts',
+        relativePath: 'src/add-delete.ts',
+        code: 'AD',
+        side: 'index',
+        badge: 'A',
+      },
     ]);
     expect(rows.changes).toEqual([
-      { path: '/workspace/src/main.ts', relativePath: 'src/main.ts', code: ' M', badge: 'M' },
-      { path: '/workspace/src/new.ts', relativePath: 'src/new.ts', code: '??', badge: 'U' },
-      { path: '/workspace/src/both.ts', relativePath: 'src/both.ts', code: 'MM', badge: 'M' },
-      { path: '/workspace/src/deleted.ts', relativePath: 'src/deleted.ts', code: ' D', badge: 'D' },
+      {
+        path: '/workspace/src/main.ts',
+        relativePath: 'src/main.ts',
+        code: ' M',
+        side: 'worktree',
+        badge: 'M',
+      },
+      {
+        path: '/workspace/src/new.ts',
+        relativePath: 'src/new.ts',
+        code: '??',
+        side: 'worktree',
+        badge: 'U',
+      },
+      {
+        path: '/workspace/src/both.ts',
+        relativePath: 'src/both.ts',
+        code: 'MM',
+        side: 'worktree',
+        badge: 'M',
+      },
+      {
+        path: '/workspace/src/add-delete.ts',
+        relativePath: 'src/add-delete.ts',
+        code: 'AD',
+        side: 'worktree',
+        badge: 'D',
+      },
+      {
+        path: '/workspace/src/deleted.ts',
+        relativePath: 'src/deleted.ts',
+        code: ' D',
+        side: 'worktree',
+        badge: 'D',
+      },
     ]);
   });
 
@@ -40,6 +91,7 @@ describe('SCM status projection', () => {
         path: '/projects/p1/src/current.ts',
         relativePath: 'src/current.ts',
         code: ' M',
+        side: 'worktree',
         badge: 'M',
       },
     ]);

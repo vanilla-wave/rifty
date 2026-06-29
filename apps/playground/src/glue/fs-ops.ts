@@ -1,12 +1,12 @@
 /**
  * File-manager mutations over the sync VFS mirror (ADR-0075), factored out of
  * {@link ../components/FileExplorer.tsx | FileExplorer} so the tricky bits —
- * recursive `copyTree`, rename (no native `renameSync` on `FsSync`), collision
- * guards — are unit-testable against a fake target with no DOM.
+ * recursive `copyTree`, rename collision guards — are unit-testable against a
+ * fake target with no DOM.
  *
  * Every op uses the SAME sync mirror the runtime/shell read, so changes are
- * visible immediately. Collisions throw (never a silent overwrite); directory
- * rename is a real recursive copy + remove (no silent stub).
+ * visible immediately. Collisions throw (never a silent overwrite); rename uses
+ * the VFS primitive so filesystem move semantics stay in the filesystem layer.
  */
 import type { VfsDirent } from '@riftydev/vfs';
 import { dirname, joinPath } from '@riftydev/vfs';
@@ -19,6 +19,7 @@ export interface FsOpsTarget {
   readdirSync(path: string): readonly VfsDirent[];
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
+  renameSync(from: string, to: string): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
   /**
    * When true the target is a read-only view (e.g. the real-vite worker
@@ -97,10 +98,8 @@ export async function deletePathAsync(fs: AsyncFsOpsTarget, path: string): Promi
 
 /**
  * Recursively copy `from` → `to`. Files copy their bytes; directories are
- * recreated and their children copied. `FsSync` has no `renameSync`, so this is
- * the honest primitive behind {@link renamePath}.
- *
- * TODO(backlog: vfs/native-renamesync)
+ * recreated and their children copied. Rename is intentionally separate and
+ * routes to `FsSync.renameSync` below.
  */
 export function copyTree(fs: FsOpsTarget, from: string, to: string): void {
   const st = fs.statSync(from);
@@ -121,12 +120,11 @@ export async function copyTreeAsync(fs: AsyncFsOpsTarget, from: string, to: stri
   await fs.copy(from, to);
 }
 
-/** Rename/move `from` → `to` (copy then remove). Throws if `to` already exists. */
+/** Rename/move `from` → `to` via `FsSync.renameSync`. Throws if `to` already exists. */
 export function renamePath(fs: FsOpsTarget, from: string, to: string): void {
   if (from === to) return;
   if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
-  copyTree(fs, from, to);
-  fs.rmSync(from, { recursive: true, force: true });
+  fs.renameSync(from, to);
 }
 
 export async function renamePathAsync(

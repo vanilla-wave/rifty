@@ -147,6 +147,9 @@ export class SnapshotFs implements FsOpsTarget {
   rmSync(path: string, _options: { recursive?: boolean; force?: boolean }): void {
     readOnlyThrow('rmSync', path);
   }
+  renameSync(from: string, _to: string): void {
+    readOnlyThrow('renameSync', from);
+  }
 
   /** Convenience for callers building an entry list (kept for symmetry/tests). */
   entries(): VfsSnapshotEntry[] {

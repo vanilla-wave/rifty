@@ -137,6 +137,7 @@ function frameTarget(frame: VfsWriteFrame): string {
 
 function frameChangedPaths(frame: VfsWriteSingleFrame): readonly string[] {
   if (frame.type === 'write' || frame.type === 'mkdir' || frame.type === 'rm') return [frame.path];
+  if (frame.type === 'rename') return [frame.from, frame.to];
   return [frame.to];
 }
 
@@ -224,9 +225,8 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
   }
   if (frame.type === 'rename') {
     if (frame.from === frame.to) return;
-    const plan = planCopyTree(frame.from, frame.to);
-    applyCopyPlan(plan);
-    syncMirror().rmSync(frame.from, { recursive: true, force: true });
+    if (syncMirror().existsSync(frame.to)) throw new Error(`"${frame.to}" already exists`);
+    syncMirror().renameSync(frame.from, frame.to);
     opts.onWrite?.(frameChangedPaths(frame));
     return;
   }

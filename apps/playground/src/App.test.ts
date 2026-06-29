@@ -64,16 +64,22 @@ describe('App terminal startup wiring', () => {
   it('routes editor + program writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
     // The preview worker is gone; editor/program edits flow to the ONE owner so
     // the co-resident dev server HMR-updates against the same store it serves.
-    expect(source).toContain('function writeWorkspaceFile(path: string, content: string)');
+    expect(source).toContain('const ownerWriteEnc = new TextEncoder();');
+    expect(source).toContain('async function writeWorkspaceFile(path: string, content: string)');
     // ADR-0165 §3: the owner is a reassignable signal holder (respawned on switch),
     // so member access goes through the `workspaceOwner()` accessor.
-    expect(source).toContain('workspaceOwner().writeFile(path, content)');
+    expect(source).toContain(
+      "await workspaceOwner().writeFrameAcked({\n        type: 'write',\n        path,\n        data: ownerWriteEnc.encode(content),\n      });",
+    );
     // ADR-0165 §4: the program edit lands on the active template entry path.
     expect(source).toContain(
       'const programPath = programMirrorPath(activeRoot(), activeTemplate())',
     );
     expect(source).toContain('scheduleProgramWrite(programPath, next)');
-    expect(source).toContain('workspaceOwner().writeFile(pending.path, pending.content)');
+    expect(source).toContain(
+      'function writeProgramFile(path: string, content: string): Promise<void>',
+    );
+    expect(source).toContain('await writeProgramFile(pending.path, pending.content);');
     // the legacy hardcoded const is gone from the program write path
     expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
     // explorer + editor read the owner snapshot, not a vite-gated swap
@@ -390,8 +396,20 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain(
       'const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner())',
     );
+    expect(source).toContain('const explorerMutations: FileExplorerMutations = {');
+    expect(source).toContain('await flushPendingEditorWrites();');
+    expect(source).toContain(
+      'editorApi?.closePathTree(from);\n      await ownerRpcFs.renamePath(from, to);',
+    );
+    expect(source).toContain('await ownerRpcFs.renamePath(from, to);');
+    expect(source).toContain('editorApi?.closePathTree(from);');
+    expect(source).toContain(
+      'editorApi?.closePathTree(path);\n      await ownerRpcFs.deletePath(path);',
+    );
+    expect(source).toContain('await ownerRpcFs.deletePath(path);');
+    expect(source).toContain('editorApi?.closePathTree(path);');
     expect(source).toContain('vfs={snapshotFs}');
-    expect(source).toContain('mutations={ownerRpcFs}');
+    expect(source).toContain('mutations={explorerMutations}');
     expect(source).toContain('onNotify={(message, tone) => flashToast(message, tone)}');
   });
 
@@ -421,12 +439,14 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
   });
 
   it('flushes pending editor writes before opening SCM status', () => {
-    expect(source).toContain("function selectSidebarView(view: 'explorer' | 'scm'): void");
+    expect(source).toContain("async function selectSidebarView(view: 'explorer' | 'scm')");
+    expect(source).toContain('async function flushPendingEditorWrites(): Promise<void>');
+    expect(source).toContain('let inFlightProgramWrite: Promise<void> | undefined;');
+    expect(source).toContain('await inFlightProgramWrite;');
     expect(source).toContain("if (view === 'scm' && willShow) {");
-    expect(source).toContain('flushPendingProgramWrite();');
-    expect(source).toContain('editorApi?.flushPendingWrites();');
+    expect(source).toContain('await flushPendingEditorWrites();');
     expect(source).toContain('requestActiveGitStatus();');
-    expect(source).toContain("onClick={() => selectSidebarView('scm')}");
+    expect(source).toContain("onClick={() => void selectSidebarView('scm')}");
   });
 
   it('respawns the owner at the saved project root after a plain Save-as-project', () => {
@@ -443,24 +463,34 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('pendingSaveAutoSwitchId = null;');
   });
 
-  it('opens SCM rows as blob-vs-blob Monaco diffs from owner HEAD blobs, never raw git diff text', () => {
-    expect(source).toContain('async function openWorkingHeadDiff(row: ScmResourceRow)');
+  it('opens SCM rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
+    expect(source).toContain('async function openScmResourceDiff(row: ScmResourceRow)');
+    expect(source).toContain('await flushPendingEditorWrites();');
     expect(source).toContain('const path = row.path;');
+    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
     expect(source).toContain('function decodeTextBlob(label: string, bytes: Uint8Array): string');
     expect(source).toContain("new TextDecoder('utf-8', { fatal: true })");
     expect(source).toContain('if (looksBinary(bytes))');
     expect(source).toContain('is not valid UTF-8; text diff is unavailable');
     expect(source).toContain('async function readGitOriginalText(');
     expect(source).toContain('const original = await git.show(`${input.ref}:${relative}`);');
+    expect(source).toContain('const index = await git.show(`:${relative}`);');
+    expect(source).toContain("if (row.side === 'index')");
+    expect(source).toContain("modifiedTitle: 'Index'");
+    expect(source).toContain("originalTitle: rowHasIndexChange(row) ? 'Index' : 'HEAD'");
+    expect(source).toContain("modifiedTitle: 'Working Tree'");
+    expect(source).toContain(
+      "await readWorkspaceFileBytesFromOwner(owner, path, 'open SCM changes')",
+    );
+    expect(source).not.toContain("readWorkspaceFileForOwner(owner, path, 'open SCM changes')");
     expect(source).toContain('currentOwner.snapshotPort !== snapshotPort');
     expect(source).toContain("if (original.type !== 'blob')");
-    expect(source).toContain('editorApi?.openWorkingDiff({');
-    expect(source).toContain('modified: workingDiffText(row)');
-    expect(source).toContain('deleted: rowDeletesWorkingBlob(row)');
-    expect(source).toContain('hasOriginal: !rowHasNoHeadBlob(row)');
+    expect(source).toContain('editorApi?.openTextDiff({');
+    expect(source).not.toContain('modified: workingDiffText(row)');
+    expect(source).not.toContain('hasOriginal: !rowHasNoHeadBlob(row)');
     expect(source).toContain('readGitOriginalText={readGitOriginalText}');
     expect(source).toContain('gitStatus={gitStatusMap}');
-    expect(source).toContain('onOpenChange={(row) => void openWorkingHeadDiff(row)}');
+    expect(source).toContain('onOpenChange={(row) => void openScmResourceDiff(row)}');
     expect(source).not.toContain('git.diff(');
   });
 
@@ -484,6 +514,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     );
     expect(source).toContain('function assertScmOwner(owner: WorkspaceOwnerHandle): void');
     expect(source).toContain('async function runScmOwnerAction(');
+    expect(source).toContain('await flushPendingEditorWrites();');
     expect(source).toContain('requestGitStatus(owner.snapshotPort)');
     expect(source).toContain('if (opts.refreshVfs) requestVfsSnapshot(owner.snapshotPort)');
     expect(source).toContain('async function stageScmRow(row: ScmResourceRow)');

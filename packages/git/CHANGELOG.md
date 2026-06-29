@@ -18,6 +18,9 @@
 
 ### Added
 
+- `show(':path')` now returns the staged index blob for SCM Index diffs,
+  matching git's index revspec instead of forcing every UI diff through HEAD or
+  the worktree.
 - `porcelainXY(code)`: shared statusMatrix → porcelain-XY classifier for shell
   `git status --porcelain` and playground SCM status projections, keeping the
   rifty-git status labels on one public facade.

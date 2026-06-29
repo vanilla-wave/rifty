@@ -2,6 +2,7 @@ export interface ScmResourceRow {
   readonly path: string;
   readonly relativePath: string;
   readonly code: string;
+  readonly side: 'index' | 'worktree';
   readonly badge: 'M' | 'U' | 'A' | 'D';
 }
 
@@ -32,7 +33,13 @@ function hasWorktreeChange(code: string): boolean {
 }
 
 function row(path: string, root: string, code: string, side: 'index' | 'worktree'): ScmResourceRow {
-  return { path, relativePath: relativePath(root, path), code, badge: badgeForCode(code, side) };
+  return {
+    path,
+    relativePath: relativePath(root, path),
+    code,
+    side,
+    badge: badgeForCode(code, side),
+  };
 }
 
 export function scmRowsFromStatusMap(

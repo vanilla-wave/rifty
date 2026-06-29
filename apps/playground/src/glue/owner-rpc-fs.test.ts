@@ -113,6 +113,7 @@ describe('OwnerRpcFs', () => {
   it('coalesces multi-file renames and writes into one owner frame each', async () => {
     seed('/workspace/src/a.txt', 'A');
     seed('/workspace/src/b.txt', 'B');
+    syncMirror().mkdirSync('/workspace/lib', { recursive: true });
     snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
     const fs = rpc();
 

@@ -24,7 +24,7 @@ import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
 import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
-import { FileExplorer } from './components/FileExplorer.tsx';
+import { FileExplorer, type FileExplorerMutations } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { ProjectDialogs } from './components/ProjectDialogs.tsx';
@@ -99,6 +99,7 @@ const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
 const fatalDec = new TextDecoder('utf-8', { fatal: true });
+const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {
   return `ws-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
@@ -391,6 +392,17 @@ export function App(props: AppProps) {
     return bytes;
   }
 
+  async function readWorkspaceFileBytesFromOwner(
+    owner: WorkspaceOwnerHandle,
+    path: string,
+    action: string,
+  ): Promise<Uint8Array> {
+    assertWorkspaceFileOwnerAlive(owner, path, action);
+    const bytes = await owner.readFileBytes(path);
+    assertWorkspaceFileOwnerAlive(owner, path, action);
+    return bytes;
+  }
+
   async function readWorkspaceFileForDownload(path: string): Promise<Uint8Array> {
     return readWorkspaceFileForOwner(workspaceOwner(), path, 'download');
   }
@@ -502,20 +514,44 @@ export function App(props: AppProps) {
     }
   }
 
-  function rowHasNoHeadBlob(row: ScmResourceRow): boolean {
-    return row.code === '??' || row.code[0] === 'A';
+  function rowHasHeadBlob(row: ScmResourceRow): boolean {
+    return row.code !== '??' && row.code[0] !== 'A';
+  }
+
+  function rowHasIndexChange(row: ScmResourceRow): boolean {
+    const index = row.code[0] ?? ' ';
+    return index !== ' ' && index !== '?';
+  }
+
+  function rowHasIndexBlob(row: ScmResourceRow): boolean {
+    const index = row.code[0] ?? ' ';
+    return rowHasIndexChange(row) && index !== 'D';
   }
 
   function rowDeletesWorkingBlob(row: ScmResourceRow): boolean {
     return row.badge === 'D';
   }
 
-  function workingDiffText(row: ScmResourceRow): string {
-    if (rowDeletesWorkingBlob(row)) return '';
-    return decodeTextBlob(row.relativePath, snapshotFs.readFileBytesSync(row.path));
+  async function readGitIndexText(
+    git: ReturnType<typeof bridgeGitOwnerRpc>,
+    relative: string,
+  ): Promise<string> {
+    const index = await git.show(`:${relative}`);
+    if (index.type !== 'blob') throw new Error(`:${relative} is not a blob`);
+    return decodeTextBlob(`:${relative}`, index.content);
   }
 
-  async function openWorkingHeadDiff(row: ScmResourceRow): Promise<void> {
+  async function readGitHeadText(
+    git: ReturnType<typeof bridgeGitOwnerRpc>,
+    relative: string,
+  ): Promise<string> {
+    const original = await git.show(`HEAD:${relative}`);
+    if (original.type !== 'blob') throw new Error(`HEAD:${relative} is not a blob`);
+    return decodeTextBlob(`HEAD:${relative}`, original.content);
+  }
+
+  async function openScmResourceDiff(row: ScmResourceRow): Promise<void> {
+    await flushPendingEditorWrites();
     const path = row.path;
     const owner = workspaceOwner();
     const root = owner.root;
@@ -529,20 +565,53 @@ export function App(props: AppProps) {
       flashError('Open changes failed: workspace owner is unavailable');
       return;
     }
+    assertWorkspaceFileOwnerAlive(owner, path, 'open SCM changes');
+    const git = bridgeGitOwnerRpc(snapshotPort);
     try {
       const currentOwner = workspaceOwner();
       if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
         throw new Error(`workspace owner changed while opening ${relative}`);
       }
-      editorApi?.openWorkingDiff({
+      if (row.side === 'index') {
+        const original = rowHasHeadBlob(row) ? await readGitHeadText(git, relative) : '';
+        const modified = rowHasIndexBlob(row) ? await readGitIndexText(git, relative) : '';
+        editorApi?.openTextDiff({
+          id: compareDiffId(`scm-index-${row.code}`, 'HEAD', path),
+          path,
+          title: `${basename(path)} ↔ Index`,
+          originalTitle: 'HEAD',
+          modifiedTitle: 'Index',
+          original,
+          modified,
+        });
+        return;
+      }
+      const original = rowHasIndexChange(row)
+        ? rowHasIndexBlob(row)
+          ? await readGitIndexText(git, relative)
+          : ''
+        : rowHasHeadBlob(row)
+          ? await readGitHeadText(git, relative)
+          : '';
+      const modified = rowDeletesWorkingBlob(row)
+        ? ''
+        : decodeTextBlob(
+            relative,
+            await readWorkspaceFileBytesFromOwner(owner, path, 'open SCM changes'),
+          );
+      editorApi?.openTextDiff({
+        id: compareDiffId(`scm-worktree-${row.code}`, row.relativePath, path),
         path,
-        ref: 'HEAD',
-        modified: workingDiffText(row),
-        deleted: rowDeletesWorkingBlob(row),
-        hasOriginal: !rowHasNoHeadBlob(row),
+        title: `${basename(path)} ↔ Working Tree`,
+        originalTitle: rowHasIndexChange(row) ? 'Index' : 'HEAD',
+        modifiedTitle: 'Working Tree',
+        original,
+        modified,
       });
     } catch (err) {
       flashError(`Open changes failed: ${(err as Error).message}`);
+    } finally {
+      git.dispose();
     }
   }
 
@@ -565,6 +634,7 @@ export function App(props: AppProps) {
     action: (git: ReturnType<typeof bridgeGitOwnerRpc>) => Promise<void>,
     opts: { readonly refreshVfs?: boolean } = {},
   ): Promise<void> {
+    await flushPendingEditorWrites();
     const owner = workspaceOwner();
     assertScmOwner(owner);
     const git = bridgeGitOwnerRpc(owner.snapshotPort);
@@ -681,6 +751,39 @@ export function App(props: AppProps) {
   );
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
   const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
+  const explorerMutations: FileExplorerMutations = {
+    createFile: (path) => ownerRpcFs.createFile(path),
+    createDir: (path) => ownerRpcFs.createDir(path),
+    async deletePath(path) {
+      await flushPendingEditorWrites();
+      editorApi?.closePathTree(path);
+      await ownerRpcFs.deletePath(path);
+    },
+    async renamePath(from, to) {
+      await flushPendingEditorWrites();
+      editorApi?.closePathTree(from);
+      await ownerRpcFs.renamePath(from, to);
+    },
+    async renameMany(entries) {
+      await flushPendingEditorWrites();
+      for (const { from } of entries) editorApi?.closePathTree(from);
+      await ownerRpcFs.renameMany(entries);
+    },
+    async copyTree(from, to) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.copyTree(from, to);
+    },
+    async writeFile(path, data, options) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.writeFile(path, data, options);
+      editorApi?.closePath(path);
+    },
+    async writeFiles(entries) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.writeFiles(entries);
+      for (const { path } of entries) editorApi?.closePath(path);
+    },
+  };
   const [gitStatusMap, setGitStatusMap] = createSignal<ReadonlyMap<string, string>>(new Map());
   type GitScmReads = {
     readonly root: string;
@@ -1650,11 +1753,15 @@ export function App(props: AppProps) {
   // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
-  function writeWorkspaceFile(path: string, content: string): void {
+  async function writeWorkspaceFile(path: string, content: string): Promise<void> {
     // The program mirror (active template entry, ADR-0165 §4) flows through
     // onProgramChange (which owns its owner write); skip the double-write here.
     if (path !== programMirrorPath(activeRoot(), activeTemplate())) {
-      workspaceOwner().writeFile(path, content);
+      await workspaceOwner().writeFrameAcked({
+        type: 'write',
+        path,
+        data: ownerWriteEnc.encode(content),
+      });
     }
     notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
   }
@@ -1904,7 +2011,7 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    flushPendingProgramWrite();
+    void flushPendingProgramWrite();
     manager.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -1981,13 +2088,36 @@ export function App(props: AppProps) {
 
   let programWriteTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingProgramWrite: { path: string; content: string } | undefined;
+  let inFlightProgramWrite: Promise<void> | undefined;
 
-  function flushPendingProgramWrite(): void {
+  function writeProgramFile(path: string, content: string): Promise<void> {
+    const tracked = workspaceOwner()
+      .writeFrameAcked({
+        type: 'write',
+        path,
+        data: ownerWriteEnc.encode(content),
+      })
+      .then(() => {
+        notifyFileWritten(path, content); // ADR-0165 §57: REAL write → dirty
+      })
+      .finally(() => {
+        if (inFlightProgramWrite === tracked) inFlightProgramWrite = undefined;
+      });
+    inFlightProgramWrite = tracked;
+    return tracked;
+  }
+
+  async function flushPendingProgramWrite(): Promise<void> {
+    await inFlightProgramWrite;
     const pending = pendingProgramWrite;
     if (!pending) return;
     discardPendingProgramWrite();
-    workspaceOwner().writeFile(pending.path, pending.content);
-    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
+    await writeProgramFile(pending.path, pending.content);
+  }
+
+  async function flushPendingEditorWrites(): Promise<void> {
+    await flushPendingProgramWrite();
+    await editorApi?.flushPendingWrites();
   }
 
   function requestActiveGitStatus(): void {
@@ -1996,11 +2126,10 @@ export function App(props: AppProps) {
     requestGitStatus(owner.snapshotPort);
   }
 
-  function selectSidebarView(view: 'explorer' | 'scm'): void {
+  async function selectSidebarView(view: 'explorer' | 'scm'): Promise<void> {
     const willShow = layout.view() !== view || layout.sidebarCollapsed();
     if (view === 'scm' && willShow) {
-      flushPendingProgramWrite();
-      editorApi?.flushPendingWrites();
+      await flushPendingEditorWrites();
       requestActiveGitStatus();
     }
     layout.selectView(view);
@@ -2019,7 +2148,7 @@ export function App(props: AppProps) {
     if (programWriteTimer) clearTimeout(programWriteTimer);
     programWriteTimer = setTimeout(() => {
       programWriteTimer = undefined;
-      flushPendingProgramWrite();
+      void flushPendingProgramWrite().catch((err: unknown) => flashError((err as Error).message));
     }, 300);
   }
 
@@ -2660,7 +2789,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() !== 'scm'}
-                onClick={() => selectSidebarView('explorer')}
+                onClick={() => void selectSidebarView('explorer')}
               >
                 Files
               </button>
@@ -2669,7 +2798,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() === 'scm'}
-                onClick={() => selectSidebarView('scm')}
+                onClick={() => void selectSidebarView('scm')}
               >
                 SCM
               </button>
@@ -2682,7 +2811,7 @@ export function App(props: AppProps) {
                    `vite`-gated backing-store swap. */
                 <FileExplorer
                   vfs={snapshotFs}
-                  mutations={ownerRpcFs}
+                  mutations={explorerMutations}
                   root={activeRoot()}
                   nodeModules={nodeModulesProp()}
                   visible={!layout.sidebarCollapsed()}
@@ -2701,7 +2830,7 @@ export function App(props: AppProps) {
                 branch={activeGitScm().branch}
                 status={gitStatusMap()}
                 history={activeGitScm().history}
-                onOpenChange={(row) => void openWorkingHeadDiff(row)}
+                onOpenChange={(row) => void openScmResourceDiff(row)}
                 onStage={stageScmRow}
                 onUnstage={unstageScmRow}
                 onDiscard={discardScmRow}

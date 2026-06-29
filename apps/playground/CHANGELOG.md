@@ -56,6 +56,15 @@
 
 ### Fixed
 
+- **SCM Open Changes now distinguishes staged and worktree rows.** `MM`/`AD`
+  states render separate Index and Working Tree rows; staged rows diff HEAD↔Index,
+  while worktree rows diff Index/HEAD↔owner working bytes.
+- **SCM actions now wait for editor/program owner ACKs.** Source Control status,
+  diffs, stage, discard, and commit drain pending Monaco/program writes through
+  acked owner frames before reading git, including already-started debounce writes.
+- **Explorer rename/delete no longer resurrects open file paths.** File-manager
+  rename/delete closes stale editor models after flushing owner writes, and the
+  permanent program tab becomes loudly read-only if its mirrored path is moved.
 - **SCM now sees Monaco editor edits immediately.** Opening Source Control flushes
   pending editor writes before requesting owner git status, and dirty gutters can
   mark changed lines from the local buffer while the owner status feed catches up.

@@ -95,6 +95,11 @@ describe('serveVfsWrites + sendVfsWrite', () => {
       path: '/workspace/src/old.js',
       data: enc.encode('old'),
     });
+    applyVfsWriteFrame({
+      type: 'mkdir',
+      path: '/workspace/lib',
+      recursive: true,
+    });
 
     applyVfsWriteFrame(
       {
@@ -107,7 +112,7 @@ describe('serveVfsWrites + sendVfsWrite', () => {
 
     expect(syncMirror().existsSync('/workspace/src/old.js')).toBe(false);
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/lib/new.js'))).toBe('old');
-    expect(changes).toEqual([['/workspace/lib/new.js']]);
+    expect(changes).toEqual([['/workspace/src/old.js', '/workspace/lib/new.js']]);
   });
 
   it('refuses rename collisions instead of silently overwriting', () => {
@@ -186,6 +191,11 @@ describe('serveVfsWrites + sendVfsWrite', () => {
       path: '/workspace/b.txt',
       data: enc.encode('b'),
     });
+    applyVfsWriteFrame({
+      type: 'mkdir',
+      path: '/workspace/moved',
+      recursive: true,
+    });
 
     applyVfsWriteFrame(
       {
@@ -202,7 +212,9 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     expect(syncMirror().existsSync('/workspace/b.txt')).toBe(false);
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/moved/a.txt'))).toBe('a');
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/moved/b.txt'))).toBe('b');
-    expect(changes).toEqual([['/workspace/moved/a.txt', '/workspace/moved/b.txt']]);
+    expect(changes).toEqual([
+      ['/workspace/a.txt', '/workspace/moved/a.txt', '/workspace/b.txt', '/workspace/moved/b.txt'],
+    ]);
   });
 
   it('rejects copy into the source subtree before creating the destination', () => {

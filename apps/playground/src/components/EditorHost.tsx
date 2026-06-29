@@ -25,6 +25,7 @@ import {
   createSignal,
   onCleanup,
   onMount,
+  untrack,
 } from 'solid-js';
 import { type DirtyGutterChange, dirtyGutterChanges } from '../glue/dirty-gutter.ts';
 import { classifyOpen } from '../glue/editor-open.ts';
@@ -91,7 +92,9 @@ export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
   openWorkingDiff(input: EditorWorkingDiffInput): void;
   openTextDiff(input: EditorTextDiffInput): void;
-  flushPendingWrites(): void;
+  flushPendingWrites(): Promise<void>;
+  closePath(path: string): void;
+  closePathTree(path: string): void;
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
    * is the absolute VFS path (program tab -> active template entry); a no-op
@@ -146,7 +149,7 @@ export interface EditorHostProps {
   /** Editor save → the OWNER store (ADR-0148, single-store-owner model): the
    *  workspace owner is the single authoritative store; `content` is the new file
    *  text. */
-  onFileWritten?(path: string, content: string): void;
+  onFileWritten?(path: string, content: string): Promise<void> | void;
   onError?(message: string): void;
   readonly previewUrl?: Accessor<string | undefined>;
   onOpenPreviewTab?(): void;
@@ -304,6 +307,8 @@ export function EditorHost(props: EditorHostProps) {
   const modelContentDisposables = new Map<string, monaco.IDisposable>();
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const inFlightWrites = new Map<string, Promise<void>>();
+  const externalWriteClosedPaths = new Set<string>();
   const diffModels = new Map<
     string,
     {
@@ -355,6 +360,12 @@ export function EditorHost(props: EditorHostProps) {
   }
   function handleModelContentChange(id: string): void {
     if (id === PROGRAM_TAB_ID) {
+      if (externalWriteClosedPaths.has(currentProgramPath)) {
+        props.onError?.(
+          `${basename(currentProgramPath)} was moved or deleted; program editor is read-only`,
+        );
+        return;
+      }
       emitDocument(id, 'change');
       if (suppressProgramEcho || !programModel) return;
       props.onProgramChange(programModel.getValue());
@@ -498,22 +509,47 @@ export function EditorHost(props: EditorHostProps) {
   const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
   const activeTabKind = createMemo(() => tabs().find((tab) => tab.id === activeId())?.kind);
 
-  function flushWrite(path: string): void {
+  function setReadOnlyPath(id: string, readOnly: boolean): void {
+    if (readOnly) readOnlyPaths.add(id);
+    else readOnlyPaths.delete(id);
+    if (activeId() !== id) return;
+    editor?.updateOptions({ readOnly });
+    updateDirtyGutterForActive();
+  }
+
+  async function flushWrite(path: string): Promise<void> {
     const m = models.get(path);
     if (!m) return;
     // Single-store-owner (ADR-0148): the OWNER is the single authoritative store —
     // the editor writes there, not the read-only owner-snapshot `vfs` it reads from.
+    await props.onFileWritten?.(path, m.getValue());
     setTabs((t) => setDirty(t, path, false));
-    props.onFileWritten?.(path, m.getValue());
   }
 
-  function flushPendingWrites(): void {
-    const pending = [...writeTimers.keys()];
-    for (const path of pending) {
-      const timer = writeTimers.get(path);
-      if (timer) clearTimeout(timer);
-      writeTimers.delete(path);
-      flushWrite(path);
+  function reportWriteError(err: unknown): void {
+    props.onError?.((err as Error).message);
+  }
+
+  function flushWriteTracked(path: string): Promise<void> {
+    const tracked = flushWrite(path).finally(() => {
+      if (inFlightWrites.get(path) === tracked) inFlightWrites.delete(path);
+    });
+    inFlightWrites.set(path, tracked);
+    return tracked;
+  }
+
+  async function flushPendingWrites(): Promise<void> {
+    for (;;) {
+      const inFlight = [...inFlightWrites.values()];
+      const pending = [...writeTimers.keys()];
+      for (const path of pending) {
+        const timer = writeTimers.get(path);
+        if (timer) clearTimeout(timer);
+        writeTimers.delete(path);
+      }
+      if (inFlight.length === 0 && pending.length === 0) return;
+      await Promise.all([...inFlight, ...pending.map((path) => flushWriteTracked(path))]);
+      if (inFlightWrites.size === 0 && writeTimers.size === 0) return;
     }
   }
 
@@ -524,7 +560,7 @@ export function EditorHost(props: EditorHostProps) {
       path,
       setTimeout(() => {
         writeTimers.delete(path);
-        flushWrite(path);
+        void flushWriteTracked(path).catch(reportWriteError);
       }, 300),
     );
   }
@@ -841,7 +877,7 @@ export function EditorHost(props: EditorHostProps) {
     setActiveId(input.id);
   }
 
-  function closeFile(path: string): void {
+  function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void {
     const diff = diffModels.get(path);
     if (diff) {
       const next = nextActiveAfterClose(tabs(), path, activeId());
@@ -859,7 +895,9 @@ export function EditorHost(props: EditorHostProps) {
     if (timer) {
       clearTimeout(timer);
       writeTimers.delete(path);
-      flushWrite(path);
+      if (opts.flushPending !== false) {
+        void flushWriteTracked(path).catch(reportWriteError);
+      }
     }
     const next = nextActiveAfterClose(tabs(), path, activeId());
     emitDocument(path, 'close');
@@ -869,6 +907,25 @@ export function EditorHost(props: EditorHostProps) {
     setActiveId(next);
     // Dispose after the activeId effect has switched the editor off this model.
     queueMicrotask(() => m?.dispose());
+  }
+
+  function closeExternalPathTree(rootPath: string): void {
+    const normalizedRoot = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
+    const ids = [...models.keys()].filter((id) => {
+      const path = docPathForTab(id);
+      return path === normalizedRoot || path.startsWith(`${normalizedRoot}/`);
+    });
+    for (const id of ids) {
+      const path = docPathForTab(id);
+      if (id === PROGRAM_TAB_ID) {
+        externalWriteClosedPaths.add(path);
+        setReadOnlyPath(PROGRAM_TAB_ID, true);
+        props.onError?.(`${basename(path)} was moved or deleted; program editor is read-only`);
+        emitDocumentPath(path, '', 'close');
+        continue;
+      }
+      closeFile(id, { flushPending: false });
+    }
   }
 
   onMount(() => {
@@ -939,6 +996,8 @@ export function EditorHost(props: EditorHostProps) {
       openWorkingDiff,
       openTextDiff,
       flushPendingWrites,
+      closePath: (path) => closeExternalPathTree(path),
+      closePathTree: (path) => closeExternalPathTree(path),
       setMarkers(path, markers) {
         const model = models.get(tabIdForPath(path));
         if (model) monaco.editor.setModelMarkers(model, 'rifty-ts', markers);
@@ -1026,6 +1085,8 @@ export function EditorHost(props: EditorHostProps) {
       if (path === currentProgramPath) return;
       const previousPath = currentProgramPath;
       currentProgramPath = path;
+      externalWriteClosedPaths.delete(path);
+      untrack(() => setReadOnlyPath(PROGRAM_TAB_ID, false));
       dirtyGutterLocalPaths.delete(previousPath);
       if (programModel) {
         emitDocumentPath(previousPath, '', 'close');
