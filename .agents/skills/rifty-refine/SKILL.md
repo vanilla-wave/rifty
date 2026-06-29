@@ -1,6 +1,6 @@
 ---
 name: rifty-refine
-description: Refine a piece of value (epic or item) to `ready` for the rifty backlog — grill the user on scenarios until scope is sharp, deep analysis, user-value framing, a contract an implementer can't close with an approximation. Manual invocation only.
+description: Refine a backlog epic or item to `ready` — lead with the user scenario, grill scope sharp, so an implementer can't approximate it. Manual invocation only.
 disable-model-invocation: true
 ---
 
@@ -26,6 +26,6 @@ Interview the user one scenario-branch at a time (each branch = a case the user 
 - Atomic → item.
 
 ## `ready` bar — built whole: zero new decisions, zero new in-scope items, ADR already exists
-Item: **`## User scenario`** (epic-grade — the real package/program, the exact call, what they observe; mission-anchored, can't name real software → not user value) — **required as a section UNLESS the item has an `epic:` parent**, which already owns the scenario (don't duplicate; the one-line `user_story` frontmatter still carries the recall hook) · **Acceptance** (concrete, testable — an approximation fails it) · **Parity cases** (exact Node behaviors, each a failing-test-first target — enumerated, never "plus parity cases") · **Out of scope** (exact inputs/APIs that throw `NotImplementedError` + compat ❌ — named, never "…") · **Decisions** — each one YOU resolved (mechanism) or an ADR link, never a question parked for the user.
+Item: **`## User scenario`** (epic-grade — the real package/program, the exact call, what they observe; mission-anchored, can't name real software → not user value) — **required as a section UNLESS the item has an `epic:` parent**, which already owns the scenario (don't duplicate; the one-line `user_story` frontmatter still carries the recall hook) · **Acceptance** · **Parity cases** · **Out of scope** · **Decisions** — each one YOU resolved (mechanism) or an ADR link, never a question parked for the user. The four contract sections' exact shape + anti-approximation rules live in `docs/backlog/README.md` (`backlog:check` enforces them) — read there, don't restate here.
 Epic: Outcome + end-to-end User scenario + enumerated Items, each child `ready` or `draft` with a clear path. An epic-child item leans on the epic's User scenario — its contract is Acceptance/Parity/Out-of-scope/Decisions only.
-Flip `draft → ready` only when the bar is met. Shape: `docs/backlog/README.md`.
+Flip `draft → ready` only when the bar is met.
