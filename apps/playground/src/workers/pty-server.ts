@@ -74,7 +74,7 @@ export interface PtyServerDeps {
   /** Wired to the kernel fork-IPC channel by the bootstrap. */
   readonly send: (frame: OwnerToPageFrame) => void;
   /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
-  readonly makeShell: (seed?: ShellSeed) => Shell;
+  readonly makeShell: (seed: ShellSeed | undefined, sid: string) => Shell;
   /**
    * Owner re-publishes dev-server state on a page request (ADR-0148 — co-resident
    * dev server runs inside the owner). Wired by
@@ -102,6 +102,13 @@ export interface PtyServer {
 }
 
 const enc = new TextEncoder();
+const INTERNAL_ENV_KEYS = ['RIFTY_INTERNAL_PTY_SID'] as const;
+
+function publicEnv(env: Record<string, string>): Record<string, string> {
+  const out = { ...env };
+  for (const key of INTERNAL_ENV_KEYS) delete out[key];
+  return out;
+}
 
 export function createPtyServer(deps: PtyServerDeps): PtyServer {
   const sessions = new Map<string, Session>();
@@ -163,7 +170,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       rid: frame.rid,
       code,
       cwd: session.shell.cwd,
-      env: session.shell.envSnapshot(),
+      env: publicEnv(session.shell.envSnapshot()),
       ...(error === undefined ? {} : { error }),
     });
   }
@@ -173,7 +180,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       case 'pty:open': {
         if (!sessions.has(frame.sid)) {
           sessions.set(frame.sid, {
-            shell: deps.makeShell({ cwd: frame.cwd, env: frame.env }),
+            shell: deps.makeShell({ cwd: frame.cwd, env: frame.env }, frame.sid),
             runs: new Map(),
           });
         }

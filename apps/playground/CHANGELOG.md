@@ -133,7 +133,8 @@
   changes still stop the active dev/CLI boot session before reseeding files, but
   no longer abort unrelated running terminal tabs. A pre-existing owner-reported
   dev server from a non-lifecycle terminal is not treated as the picked starter's
-  successful boot signal.
+  successful boot signal; dev-server readiness is tied to the owning `pty`
+  session id.
 
 - **`vite preview` config honesty tightened.** Root `vite.config.*` files and
   `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`

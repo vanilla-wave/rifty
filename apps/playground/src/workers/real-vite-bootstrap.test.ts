@@ -83,9 +83,9 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain('const runPackageScript = async');
     expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
     expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain(
-      'const scriptShell = makeShell({ cwd: scriptCtx.cwd, env: scriptCtx.env })',
-    );
+    expect(source).toContain('const scriptShell = makeShell(');
+    expect(source).toContain('{ cwd: scriptCtx.cwd, env: scriptCtx.env }');
+    expect(source).toContain('ptySidFromContext(scriptCtx)');
     expect(source).toContain('const result = await scriptShell.run(scriptCommand');
     expect(source).not.toContain('only the dev line boots the co-resident server');
   });

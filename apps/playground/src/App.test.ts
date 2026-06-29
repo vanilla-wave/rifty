@@ -156,7 +156,8 @@ describe('App terminal startup wiring', () => {
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
     expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
     expect(source).toContain('function lifecycleDevServerRunning(): boolean');
-    expect(source).toContain("return terminalStatus(devServerSessionId) === 'running';");
+    expect(source).toContain('let devServerOwnerSessionId: string | null = null;');
+    expect(source).toContain('devServerOwnerSessionId === devServerSessionId');
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('await seedViteWorkspace(preset);'),
     );
@@ -211,6 +212,9 @@ describe('App terminal startup wiring', () => {
     // start/stop + port via a structured frame (owner-tree republish handshake
     // discipline, ADR-0146) — no stdout string-match, no one-shot push.
     expect(source).toContain('workspaceOwner().onDevServer(');
+    expect(source).toContain(
+      "devServerOwnerSessionId = frame.status === 'stopped' ? null : (frame.sid ?? null);",
+    );
     expect(source).toContain('setDevServerStatus(frame.status)');
     expect(source).not.toContain('node_modules read bridge ready');
   });
@@ -220,7 +224,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain("if (spec.runtime === 'node-cli')");
     expect(source).toContain('await waitForTerminalIdle(sessionId)');
     expect(source).toMatch(
-      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
+      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
     );
   });
 
@@ -240,13 +244,13 @@ describe('App terminal startup wiring', () => {
       'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
     );
     expect(source).toMatch(
-      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,?\s*\)/,
+      /return waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
     );
     expect(source).toContain('const restartNeeded = lifecycleDevServerRunning();');
     expect(source).not.toContain('anyTerminalRunning()');
     expect(source).toContain('if (restartNeeded)');
     expect(source).toContain('devServerSessionId = session.id');
-    expect(source).toContain("const acceptRunningStatus = devServerStatus() === 'stopped';");
+    expect(source).not.toContain('acceptRunningStatus');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.
     expect(source).toContain(
@@ -256,17 +260,19 @@ describe('App terminal startup wiring', () => {
 
   it('does not treat an already-running foreign dev server as the picked preset boot', () => {
     expect(source).toContain(
-      'async function waitForDevServerBoot(\n    sessionId: string,\n    generation: number,\n    acceptRunningStatus: boolean,',
+      'async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean>',
     );
     expect(source).toMatch(
-      /acceptRunningStatus && devServerStatus\(\) === 'running'[\s\S]*?terminalStatus\(sessionId\) === 'idle'[\s\S]*?return;/,
+      /devServerStatus\(\) === 'running' && devServerOwnerSessionId === sessionId[\s\S]*?return true;/,
     );
-    expect(source).toContain("const acceptRunningStatus = devServerStatus() === 'stopped';");
+    expect(source).toContain("if (terminalStatus(sessionId) === 'idle') return false;");
+    expect(source).toMatch(/const booted = await waitForPresetBoot\(/);
+    expect(source).toContain('if (!booted) return;');
     expect(source).toMatch(
-      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
+      /return waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
     );
     expect(source).toMatch(
-      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
+      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
     );
   });
 
@@ -400,7 +406,7 @@ describe('App terminal startup wiring', () => {
       /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
-      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
+      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?const booted = await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 

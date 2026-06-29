@@ -819,6 +819,7 @@ export function App(props: AppProps) {
   // `onDevServer` path above; this set drives the per-node-port bridges (below).
   const [previewPorts, setPreviewPorts] = createSignal<PreviewPortEntry[]>([]);
   let devServerSessionId: string | null = null;
+  let devServerOwnerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
   // Mirror the owner's dev-server state + wire the page-side preview SW route on
@@ -828,6 +829,7 @@ export function App(props: AppProps) {
     let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
       const wasRunning = devServerStatus() === 'running';
+      devServerOwnerSessionId = frame.status === 'stopped' ? null : (frame.sid ?? null);
       setDevServerStatus(frame.status);
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
@@ -1852,7 +1854,10 @@ export function App(props: AppProps) {
   }
 
   function lifecycleDevServerRunning(): boolean {
-    return terminalStatus(devServerSessionId) === 'running';
+    return (
+      terminalStatus(devServerSessionId) === 'running' ||
+      (devServerSessionId !== null && devServerOwnerSessionId === devServerSessionId)
+    );
   }
 
   async function waitForTerminalIdle(id: string | null): Promise<void> {
@@ -1861,40 +1866,32 @@ export function App(props: AppProps) {
     }
   }
 
-  async function waitForDevServerBoot(
-    sessionId: string,
-    generation: number,
-    acceptRunningStatus: boolean,
-  ): Promise<void> {
+  async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean> {
     while (generation === devServerRestartGeneration) {
-      if (
-        (acceptRunningStatus && devServerStatus() === 'running') ||
-        terminalStatus(sessionId) === 'idle'
-      ) {
-        return;
-      }
+      if (devServerStatus() === 'running' && devServerOwnerSessionId === sessionId) return true;
+      if (terminalStatus(sessionId) === 'idle') return false;
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
+    return false;
   }
 
   async function waitForPresetBoot(
     sessionId: string,
     generation: number,
     spec: ProjectSpec,
-    acceptRunningStatus: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (spec.runtime === 'node-cli') {
       await waitForTerminalIdle(sessionId);
-      return;
+      return true;
     }
-    await waitForDevServerBoot(sessionId, generation, acceptRunningStatus);
+    return waitForDevServerBoot(sessionId, generation);
   }
 
   async function stopDevServerSession(sessionId: string | null): Promise<void> {
     const waitForOwnedDevServer =
       sessionId !== null &&
       sessionId === devServerSessionId &&
-      terminalStatus(sessionId) === 'running';
+      (terminalStatus(sessionId) === 'running' || devServerOwnerSessionId === sessionId);
     if (sessionId) manager.stop(sessionId);
     if (waitForOwnedDevServer) await waitForDevServerStop();
     await waitForTerminalIdle(sessionId);
@@ -1905,18 +1902,12 @@ export function App(props: AppProps) {
     sessionId: string,
     generation: number,
     preset: Preset,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
-    const acceptRunningStatus = devServerStatus() === 'stopped';
     devServerSessionId = targetSessionId;
     manager.clear(targetSessionId); // fresh console for the switched-in project
     void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
-    await waitForPresetBoot(
-      targetSessionId,
-      generation,
-      templateForPreset(preset),
-      acceptRunningStatus,
-    );
+    return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
   }
 
   async function restartDevServer(sessionId: string): Promise<void> {
@@ -1976,7 +1967,8 @@ export function App(props: AppProps) {
       });
       if (restartNeeded) {
         if (restartSessionId && restartGeneration !== undefined) {
-          await startDevServerSession(restartSessionId, restartGeneration, preset);
+          const booted = await startDevServerSession(restartSessionId, restartGeneration, preset);
+          if (!booted) return;
         }
         reinitializeTsForPickedPreset();
         return;
@@ -1986,14 +1978,9 @@ export function App(props: AppProps) {
       devServerSessionId = session.id;
       manager.clear(session.id); // fresh console for the switched-in project
       const generation = ++devServerRestartGeneration;
-      const acceptRunningStatus = devServerStatus() === 'stopped';
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
-      await waitForPresetBoot(
-        session.id,
-        generation,
-        templateForPreset(preset),
-        acceptRunningStatus,
-      );
+      const booted = await waitForPresetBoot(session.id, generation, templateForPreset(preset));
+      if (!booted) return;
       reinitializeTsForPickedPreset();
     } finally {
       setPresetTransitioning(false);
