@@ -1043,11 +1043,6 @@
     tests + parity. The historical worker-VFS transport residual was later
     closed by the owner-worker child executor; real package CLIs now run through
     the owner store.
-    tests + parity. NOT YET working end-to-end in the browser: the spawned bin
-    worker's `syncMirror` is a separate in-worker realm that does not yet hold
-  the installed `node_modules` (after ADR-0135 `install()` runs in the
-  worker/OPFS realm) — a real CLI `ENOENT`s on its shim. Tracked in
-  `docs/backlog/shell/node-modules-bin-execution.md`.
 
 - **Playground stack-consumer templates: Hono API, Koa API, CLI report,
   Markdown SSG.** The template registry now ships four new from-scratch presets:
@@ -1062,7 +1057,9 @@
 - **`node-cli` playground project runtime.** `ProjectSpec` now distinguishes
   run-to-completion Node entries from long-running `node-server` entries. CLI
   presets still seed package.json/files and install real npm dependencies in
-  the worker realm, but exit normally instead of waiting for `listen(port)` or
+  the worker realm, but their lifecycle scripts now execute the package.json
+  command through the owner shell/bin path instead of jumping directly to the
+  template entry. They exit normally instead of waiting for `listen(port)` or
   mounting a preview iframe.
 
 - **Baked node_modules snapshots — instant presets are instant on the FIRST

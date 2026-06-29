@@ -21,10 +21,10 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Brotli (`brotliCompress` / …) | ❌ | No Web API for brotli in the realm |
 | Zstd (`zstdCompress` / …) | ❌ | No Web API for zstd in the realm |
 | `crc32` | ❌ | Deferred — not part of the compression subset |
-| `createGzip` / `Gzip` | ✅ | `CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node |
+| `createGzip` / `Gzip` | ⚠️ | `CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Flush-opcode options (`flush` / `finishFlush`) throw rather than pretending parity |
 | Other Transform streams (`createGunzip` / `createDeflate` / …) | ❌ | Remaining stream factories/classes stay loud until their own parity surface lands |
 | `unzip` (gzip/zlib auto-detect) | ❌ | Header-sniff deferred to its own parity surface |
-| `windowBits` / `dictionary` / truthy `info` options | ❌ | Throw `NotImplementedError`. `CompressionStream` emits a fixed max window — honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset `dictionary` changes the wire bytes; truthy `info` changes the return shape. `info:false` is a no-op |
+| `flush` / `finishFlush` / `windowBits` / `dictionary` / truthy `info` options | ❌ | Throw `NotImplementedError`. `CompressionStream` exposes no flush opcodes, emits a fixed max window, and has no dictionary/engine handle; ignoring these would fake wire bytes, chunking, or return shape. `info:false` is a no-op |
 
 ## Test Sources
 
@@ -33,6 +33,6 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 ## Known Limitations
 
-- Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159).
+- Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159/0178).
 - Brotli and zstd have no browser primitive — loud `NotImplementedError`.
-- Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); the rest of the Transform-stream surface is still a loud ceiling.
+- Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options and the rest of the Transform-stream surface are still loud ceilings.

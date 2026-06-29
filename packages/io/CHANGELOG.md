@@ -7,7 +7,9 @@
 - **`Readable.toWeb()` matches the rifty Readable surface more honestly.** It
   now requires a rifty `Readable` instance instead of accepting arbitrary async
   iterables as if Node's full stream coercion existed, and it preserves string
-  chunks instead of converting them to Buffers.
+  chunks instead of converting them to Buffers. It also passes the supplied Web
+  stream `strategy` through and maps web-reader `cancel()` to source
+  `destroy()`, so the static is no longer a happy-path-only bridge.
 - **`Duplex`/`Transform` honor instance `_write()` / `_final()` overrides.**
   Real package code such as `fast-glob` mutates a `PassThrough` instance's
   `_write` method after construction. The writable side now checks the owning
@@ -74,7 +76,7 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
   Guard: `writable.sync-drain.test.ts` plus `ws-package-loader.test.ts`.
 - **`Readable.toWeb()` bridges rifty `Readable` streams to Web `ReadableStream`.**
   This fills the Node stream static used by `@hono/node-server` to read HTTP
-  request bodies; byte chunks stay bytes, string chunks encode as UTF-8 bytes,
+  request bodies; byte chunks stay bytes, string chunks stay strings,
   and object-mode chunks stay objects instead of being silently stringified.
   The full WHATWG bridge surface remains unclaimed in the compat matrix.
 

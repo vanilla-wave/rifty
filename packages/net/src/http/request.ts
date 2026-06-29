@@ -124,10 +124,16 @@ async function pipeBodyStream(
 ): Promise<void> {
   if (body === null) {
     let pushedEnd = false;
+    let completed = false;
+    const complete = (): void => {
+      if (completed) return;
+      completed = true;
+      onComplete();
+    };
     const pushEnd = (): void => {
       if (pushedEnd) return;
       pushedEnd = true;
-      onComplete();
+      complete();
       target.push(null);
     };
     const onNewListener = (event: unknown): void => {
@@ -136,6 +142,7 @@ async function pipeBodyStream(
       queueMicrotask(pushEnd);
     };
     target.on('newListener', onNewListener);
+    queueMicrotask(complete);
     return;
   }
   const reader = body.getReader();
@@ -234,7 +241,6 @@ export class IncomingMessage extends Readable {
     defineLazyHeaders(this, headers, u.host);
     void pipeBodyStream(init.body ?? null, this, () => {
       this.complete = true;
-      this.socket.readable = false;
     });
   }
 }
@@ -254,7 +260,6 @@ export class IncomingMessageFromFetch extends Readable {
     defineLazyHeaders(this, response.headers);
     void pipeBodyStream(response.body, this, () => {
       this.complete = true;
-      this.socket.readable = false;
     });
   }
 }

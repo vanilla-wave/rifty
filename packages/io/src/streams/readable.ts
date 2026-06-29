@@ -32,6 +32,10 @@ export interface ReadableOptions {
   read?(this: Readable, size: number): void;
 }
 
+export interface ReadableToWebOptions {
+  strategy?: QueuingStrategy<unknown>;
+}
+
 /**
  * Single state container shared across all `Readable` instances per Node's
  * `_readableState` convention. Field names mirror Node's `internal/streams/state.js`;
@@ -232,22 +236,67 @@ interface PipeableWritable extends EventEmitter {
 }
 
 export class Readable extends EventEmitter implements AsyncIterable<unknown> {
-  static toWeb(stream: Readable): ReadableStream {
+  static toWeb(stream: Readable, options: ReadableToWebOptions = {}): ReadableStream {
     if (!(stream instanceof Readable)) {
       throw new TypeError('Readable.toWeb() expects a Readable stream');
     }
-    return new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            controller.enqueue(toWebChunk(chunk));
+    let controller: ReadableStreamDefaultController<unknown> | null = null;
+    let settled = false;
+    const cleanup = (): void => {
+      stream.off('data', onData);
+      stream.off('end', onEnd);
+      stream.off('error', onError);
+      stream.off('close', onClose);
+    };
+    const close = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      controller?.close();
+    };
+    const error = (err: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      controller?.error(err);
+    };
+    const onData = (chunk: unknown): void => {
+      if (controller === null || settled) return;
+      try {
+        controller.enqueue(toWebChunk(chunk));
+        if ((controller.desiredSize ?? 1) <= 0) stream.pause();
+      } catch (err) {
+        error(err);
+      }
+    };
+    const onEnd = (): void => close();
+    const onError = (err: unknown): void => error(err);
+    const onClose = (): void => close();
+
+    return new ReadableStream<unknown>(
+      {
+        start(c) {
+          controller = c;
+          stream.on('data', onData);
+          stream.on('end', onEnd);
+          stream.on('error', onError);
+          stream.on('close', onClose);
+          stream.resume();
+        },
+        pull() {
+          stream.resume();
+        },
+        cancel(reason) {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          if (!stream.destroyed) {
+            stream.destroy(reason instanceof Error ? reason : undefined);
           }
-          controller.close();
-        } catch (err) {
-          controller.error(err);
-        }
+        },
       },
-    });
+      options.strategy,
+    );
   }
 
   readonly _readableState: ReadableState;

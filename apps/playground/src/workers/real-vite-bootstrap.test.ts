@@ -81,18 +81,20 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain('const runPackageScript = async');
     expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
     expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
-    expect(source).toContain('const result = await scriptShell.run(command');
+    expect(source).toContain(
+      'const scriptShell = makeShell({ cwd: scriptCtx.cwd, env: scriptCtx.env })',
+    );
+    expect(source).toContain('const result = await scriptShell.run(scriptCommand');
     expect(source).not.toContain('only the dev line boots the co-resident server');
   });
 
-  it('runs node-cli lifecycle scripts to completion through the node child executor', () => {
+  it('runs node-cli lifecycle scripts by executing the package.json command', () => {
     expect(source).toContain('const runNodeCliTemplate = async');
     expect(source).toContain("devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)");
-    expect(source).toContain('ctx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
-    expect(source).toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
-    expect(source).toContain('onListening: () => {}');
-    expect(source).toContain('ctx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
+    expect(source).toContain('scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
+    expect(source).toContain('return runNodeCliTemplate(command, ctx)');
+    expect(source).not.toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
+    expect(source).toContain('scriptCtx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
   });
 
   it('waits for preset dev-config dependency restore before running the next pty command', () => {

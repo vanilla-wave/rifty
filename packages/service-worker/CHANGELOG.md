@@ -61,7 +61,7 @@
   `synthesizePreviewUrl(path, port)` now lets the SW serialise
   `http://preview.local:<port>/...`, so Node HTTP adapters deriving
   `Request.url` from `Host` see the same preview target the route matched.
-  `SW_ROUTING_VERSION` bumps to `4`.
+  `SW_ROUTING_VERSION` bumps to `5`.
 
 - **SSE bodies fail loud in no-transferable-stream realms.**
   `packSerializedResponse` now refuses to drain `text/event-stream` bodies when

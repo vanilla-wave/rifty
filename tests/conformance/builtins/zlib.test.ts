@@ -196,6 +196,18 @@ describe('node:zlib — gzip Transform stream', () => {
     expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toBe(text);
   });
 
+  it('createGzip flush option throws instead of pretending flush opcodes work', () => {
+    expect(() => zlib.createGzip({ flush: zlib.constants.Z_SYNC_FLUSH })).toThrowError(
+      notImpl('zlib.createGzip option: flush'),
+    );
+  });
+
+  it('createGzip finishFlush option throws instead of pretending flush opcodes work', () => {
+    expect(() => zlib.createGzip({ finishFlush: zlib.constants.Z_SYNC_FLUSH })).toThrowError(
+      notImpl('zlib.createGzip option: finishFlush'),
+    );
+  });
+
   it('supports Vite compression middleware shape over ServerResponse', async () => {
     const res = new ServerResponse();
     const originalEnd = res.end;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Buffer } from '../buffer.ts';
 import { Readable } from './readable.ts';
 
@@ -134,5 +134,35 @@ describe('Readable.from(iter, options?)', () => {
     };
 
     expect(() => Readable.toWeb(iterable as unknown as Readable)).toThrow(TypeError);
+  });
+
+  it('toWeb passes a supplied strategy through to the Web ReadableStream', async () => {
+    const size = vi.fn(() => 1);
+    const stream = Readable.toWeb(Readable.from(['x']), { strategy: { size } });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const reader = stream.getReader();
+
+    await expect(reader.read()).resolves.toEqual({ done: false, value: 'x' });
+    expect(size).toHaveBeenCalledWith('x');
+  });
+
+  it('toWeb destroys the source when the web reader cancels', async () => {
+    const source = new Readable({
+      read() {
+        this.push('x');
+      },
+    });
+    const closed = new Promise<void>((resolve) => {
+      source.on('close', () => resolve());
+    });
+    const stream = Readable.toWeb(source);
+    const reader = stream.getReader();
+
+    await reader.cancel('stop');
+
+    await closed;
+    expect(source.destroyed).toBe(true);
   });
 });

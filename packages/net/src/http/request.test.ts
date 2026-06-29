@@ -87,7 +87,16 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
     });
     expect(chunks.length).toBe(0);
     expect(req.complete).toBe(true);
-    expect(req.socket.readable).toBe(false);
+    expect(req.socket.readable).toBe(true);
+  });
+
+  it('zero-body request marks complete even if nobody attaches body listeners', async () => {
+    const req = new IncomingMessage(new Request('http://localhost/x'));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(req.complete).toBe(true);
+    expect(req.socket.readable).toBe(true);
   });
 
   it('zero-body request end is observable by listeners attached after handler return', async () => {
@@ -104,7 +113,7 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
 
     expect(chunks).toEqual([]);
     expect(req.complete).toBe(true);
-    expect(req.socket.readable).toBe(false);
+    expect(req.socket.readable).toBe(true);
   });
 
   it('can be consumed through Readable.toWeb() for node-server adapters', async () => {

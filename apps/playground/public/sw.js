@@ -16,7 +16,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "4";
+var SW_ROUTING_VERSION = "5";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";

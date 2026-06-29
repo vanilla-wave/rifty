@@ -745,17 +745,6 @@ async function bootShellOwner(opts: {
     }
   };
 
-  const runNodeCliTemplate = async (ctx: CommandContext): Promise<number> => {
-    ctx.stdout.write(`cli: running ${devSpec.displayName}\n`);
-    const code = await ownerNodeExecutor(devCfg.entryPath, [], ctx, {
-      sid: `node-cli-${++nodeRunSeq}`,
-      onListening: () => {},
-      onExit: () => {},
-    });
-    ctx.stdout.write(`[cli] completed with exit code ${code}\n`);
-    return code;
-  };
-
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
@@ -772,32 +761,47 @@ async function bootShellOwner(opts: {
       command: string,
       ctx: CommandContext,
     ): Promise<number> => {
+      const runScriptCommand = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        const scriptShell = makeShell({ cwd: scriptCtx.cwd, env: scriptCtx.env });
+        try {
+          const result = await scriptShell.run(scriptCommand, {
+            onChunk: (chunk, stream) => {
+              if (stream === 'stdout') scriptCtx.stdout.write(chunk);
+              else scriptCtx.stderr.write(chunk);
+            },
+            signal: scriptCtx.signal,
+            isTTY: scriptCtx.isTTY,
+            cols: scriptCtx.cols,
+            rows: scriptCtx.rows,
+            stdin: scriptCtx.stdin,
+          });
+          return result.exitCode;
+        } finally {
+          scriptShell.dispose();
+        }
+      };
+      const runNodeCliTemplate = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\n`);
+        const code = await runScriptCommand(scriptCommand, scriptCtx);
+        scriptCtx.stdout.write(`[cli] completed with exit code ${code}\n`);
+        return code;
+      };
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.
       if (devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)) {
-        return runNodeCliTemplate(ctx);
+        return runNodeCliTemplate(command, ctx);
       }
       if (devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)) {
         return runDevServer(ctx);
       }
-      const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env });
-      try {
-        const result = await scriptShell.run(command, {
-          onChunk: (chunk, stream) => {
-            if (stream === 'stdout') ctx.stdout.write(chunk);
-            else ctx.stderr.write(chunk);
-          },
-          signal: ctx.signal,
-          isTTY: ctx.isTTY,
-          cols: ctx.cols,
-          rows: ctx.rows,
-          stdin: ctx.stdin,
-        });
-        return result.exitCode;
-      } finally {
-        scriptShell.dispose();
-      }
+      return runScriptCommand(command, ctx);
     };
     const npmCommand = createNpmShellCommand({
       vfs,

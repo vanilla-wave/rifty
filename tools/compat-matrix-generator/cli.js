@@ -288,15 +288,20 @@ const matrices = [
       ['Zstd (`zstdCompress` / …)', '❌', 'No Web API for zstd in the realm'],
       ['`crc32`', '❌', 'Deferred — not part of the compression subset'],
       [
-        'Transform streams (`createGzip` / `Gzip` …)',
+        '`createGzip` / `Gzip`',
+        '⚠️',
+        "`CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Flush-opcode options (`flush` / `finishFlush`) throw rather than pretending parity",
+      ],
+      [
+        'Other Transform streams (`createGunzip` / `createDeflate` / …)',
         '❌',
-        'Bridging CompressionStream to a Node `Transform` (flush/backpressure/chunk parity) gated behind a future ADR',
+        'Remaining stream factories/classes stay loud until their own parity surface lands',
       ],
       ['`unzip` (gzip/zlib auto-detect)', '❌', 'Header-sniff deferred to its own parity surface'],
       [
-        '`windowBits` / `dictionary` / truthy `info` options',
+        '`flush` / `finishFlush` / `windowBits` / `dictionary` / truthy `info` options',
         '❌',
-        'Throw `NotImplementedError`. `CompressionStream` emits a fixed max window — honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset `dictionary` changes the wire bytes; truthy `info` changes the return shape. `info:false` is a no-op',
+        'Throw `NotImplementedError`. `CompressionStream` exposes no flush opcodes, emits a fixed max window, and has no dictionary/engine handle; ignoring these would fake wire bytes, chunking, or return shape. `info:false` is a no-op',
       ],
     ],
     tests: [
@@ -304,9 +309,9 @@ const matrices = [
       '`tools/node-parity-runner/cases/zlib/*.case.ts`',
     ],
     limitations: [
-      'Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159).',
+      'Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159/0178).',
       'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
-      'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
+      'Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options and the rest of the Transform-stream surface are still loud ceilings.',
     ],
   },
   {
@@ -783,7 +788,9 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
+- [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed \`typescript-eslint\`)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
+- [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

@@ -53,8 +53,12 @@ export type NodeProcessShim = NodeProcess;
  * `exitCode`; the kernel's worker bootstrap detects this shape and maps it to the
  * worker's exit code (see `@riftydev/kernel/src/worker-entry.ts`).
  */
-export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcess {
+export function installNodeProcessShim(
+  spec: KernelProcessSpec,
+  opts: { readonly installGlobalAlias?: boolean } = {},
+): NodeProcess {
   const shim = new NodeProcess(spec);
+  const installGlobalAlias = opts.installGlobalAlias ?? true;
   // Non-enumerable so user code can still shadow `process` if it wants.
   Object.defineProperty(globalThis, 'process', {
     value: shim,
@@ -62,12 +66,14 @@ export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcess {
     configurable: true,
     enumerable: false,
   });
-  Object.defineProperty(globalThis, 'global', {
-    value: globalThis,
-    writable: true,
-    configurable: true,
-    enumerable: false,
-  });
+  if (installGlobalAlias) {
+    Object.defineProperty(globalThis, 'global', {
+      value: globalThis,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  }
   return shim;
 }
 
@@ -82,15 +88,20 @@ export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcess {
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
 export function installNodeRuntime(spec: WorkerSpawnSpec): void {
-  installNodeProcessShim({
-    pid: spec.pid,
-    ppid: spec.ppid,
-    argv: spec.argv,
-    env: spec.env,
-    cwd: spec.cwd,
-    stdio: spec.stdio,
-  });
   const isNode = spec.env.__RIFTY_WASI_WASM_URL === undefined;
+  installNodeProcessShim(
+    {
+      pid: spec.pid,
+      ppid: spec.ppid,
+      argv: spec.argv,
+      env: spec.env,
+      cwd: spec.cwd,
+      stdio: spec.stdio,
+    },
+    {
+      installGlobalAlias: isNode,
+    },
+  );
   if (isNode) {
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;

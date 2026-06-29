@@ -74,7 +74,7 @@ export const SW_FRAME_VERSION = '1';
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '4';
+export const SW_ROUTING_VERSION = '5';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

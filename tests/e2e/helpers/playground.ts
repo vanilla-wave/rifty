@@ -153,10 +153,7 @@ export async function expectTerminalContains(
 }
 
 export function viteDevReadyPattern(port = 5174): RegExp {
-  return new RegExp(
-    `(?:\\[vite\\] dev server ready on port ${port}|VITE v[\\s\\S]*?ready in)`,
-    'u',
-  );
+  return new RegExp(`\\[vite\\] dev server ready on port ${port}`, 'u');
 }
 
 export interface CapturedPageProblems {

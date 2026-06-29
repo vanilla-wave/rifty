@@ -133,9 +133,12 @@
   `createServer({}, listener)` now registers the listener overload used by
   adapter packages; non-empty `ServerOptions` throw `NotImplementedError`
   rather than being silently ignored. `IncomingMessage` materialises `host` plus
-  Node-style `rawHeaders` from preview requests. Surfaced by the Hono playground
-  template; zero-body requests keep `end` observable for listeners attached
-  after handler return and update `complete`/`socket.readable` on body end.
+  shape-compatible `rawHeaders` from Fetch-normalised preview headers (host is
+  present; raw wire casing/order/duplicates are not claimed). Surfaced by the
+  Hono playground template; zero-body requests keep `end` observable for
+  listeners attached after handler return, mark `complete` even with no body
+  listener, and keep `socket.readable` true because no TCP socket lifecycle is
+  modeled.
   `IncomingMessage` bodies are also covered through `Readable.toWeb()`
   for `@hono/node-server` POST parsing. Guarded by `http/server.test.ts`,
   `http/request.test.ts`, and parity cases `http/create-server-options-listener.case.ts` +

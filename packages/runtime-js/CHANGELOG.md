@@ -9,7 +9,8 @@
   `CompressionStream('gzip')`, producing gzip bytes readable by Node's native
   zlib. This unblocks Vite preview compression middleware without pretending the
   whole stream surface is done: `createGunzip`, deflate/inflate stream factories,
-  unzip, brotli/zstd, and sync APIs remain loud ceilings.
+  unzip, brotli/zstd, sync APIs, and flush-opcode options (`flush` /
+  `finishFlush`) remain loud ceilings.
 
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
