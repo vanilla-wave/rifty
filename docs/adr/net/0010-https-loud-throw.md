@@ -5,6 +5,8 @@ Date: 2026-05
 
 > TL;DR: `node:https` is a loud-throw stub: imports resolve and surface mirrors `node:http`, but every method throws `NotImplementedError` (no TLS in-browser)
 
+> **Corrected 2026-06-28 (ADR-0181):** the "every method body throws" + "terminal state — no follow-up milestone" clauses (Decision bullet 2, Consequences bullet 4) are overtaken. `https.request`/`https.get` now route over host `fetch()` (the page does TLS) per ADR-0181. The rest of this ADR stands: `createServer`, `new Agent()`, and all TLS/socket options keep throwing `NotImplementedError`.
+
 ## Context
 
 `packages/net/src/register-builtins.ts` previously aliased `node:https` to `node:http`. TLS is unavailable in the browser realm, so the alias silently stripped security semantics and let callers believe they were on an encrypted transport — a "no silent stubs" violation (CLAUDE.md hard rule).
