@@ -272,9 +272,9 @@ export function App(props: AppProps) {
     return store.projects().find((p) => p.id === id)?.starter ?? activePreset();
   };
 
-  const [activeFile, setActiveFile] = createSignal('main.js');
+  const [activeFile, setActiveFile] = createSignal('');
   const [activeFilePath, setActiveFilePath] = createSignal<string | undefined>(undefined);
-  const [activeLang, setActiveLang] = createSignal('javascript');
+  const [activeLang, setActiveLang] = createSignal('plaintext');
   const [toast, setToast] = createSignal<{ message: string; tone: 'error' | 'success' } | null>(
     null,
   );
@@ -798,9 +798,7 @@ export function App(props: AppProps) {
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
-  const machine = useMode({
-    sources: { dev: DEFAULT_PRESET.source, realVite: DEFAULT_PRESET.source },
-  });
+  const machine = useMode({});
 
   // Dev-server lifecycle is OWNER-driven now (ADR-0148 co-resident dev server):
   // the `vite` / `npm run dev` line runs in the owner over the pty channel; the owner reports

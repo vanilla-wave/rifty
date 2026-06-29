@@ -30,7 +30,7 @@ export interface ServerSpec {
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
   readonly relativePath: string;
-  /** Initial entry-file contents, seeded before the editor source overwrites it. */
+  /** Template entry-file contents; presets may overwrite this path via files[]. */
   readonly content: string;
 }
 

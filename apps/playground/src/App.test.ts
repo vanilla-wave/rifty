@@ -117,6 +117,8 @@ describe('App terminal startup wiring', () => {
     expect(runPreset).toMatch(
       /await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
     );
+    expect(source).not.toContain("createSignal('main.js')");
+    expect(source).not.toContain("createSignal('javascript')");
   });
 
   it('uses preset openFiles as the complete ordered initial editor tab set', () => {

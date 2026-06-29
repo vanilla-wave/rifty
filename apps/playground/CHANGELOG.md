@@ -46,6 +46,9 @@
 
 ### Changed
 
+- Presets now seed editor-openable files only through `files[]`. The old
+  separate `source`/entry overlay is gone, so `openFiles` points at ordinary
+  preset files and no tab is privileged by the preset model.
 - Preset initial editor tabs are now ordinary file tabs. Starters/projects
   declare the ordered `openFiles` set, the first file is active, and entry files
   such as `src/main.js` use the same close/reopen/save/GIT flow as every other
@@ -561,7 +564,7 @@
   `shouldCleanForDevBoot`) now fires on a root OR template change, not template
   alone (first boot still never cleans).
 
-- Multi-project storage layer (ADR-0165): owner-side project index (`loadIndex`/`writeIndex`/`recoverIndex`/`saveScratchAsProject`/`seedScratch`/`resetScratchToStarter`, loud on corrupt JSON + un-reconcilable half-move, atomic-safe copy→flip→delete Save), Preset→Starter map (shared `.source` refs preserved), owner↔page index bridge, and the page store replacing the bare `activePreset` signal. No UI wiring yet.
+- Multi-project storage layer (ADR-0165): owner-side project index (`loadIndex`/`writeIndex`/`recoverIndex`/`saveScratchAsProject`/`seedScratch`/`resetScratchToStarter`, loud on corrupt JSON + un-reconcilable half-move, atomic-safe copy→flip→delete Save), Preset→Starter file-bundle map, owner↔page index bridge, and the page store replacing the bare `activePreset` signal. No UI wiring yet.
 
 - **Page preview bridge advertises served ports** (ADR-0160). The window-owner
   `rifty:preview:ready`/`goodbye` frames now carry the `ports` the page owns, so
@@ -1494,8 +1497,8 @@
 
 - `adapters/useMode.ts` — extracted the `repl | dev | real-vite` mode state
   machine out of `App.tsx`. The new adapter owns the `mode` signal, the
-  dev/real-vite handles, the real-vite port, and the editor source, and
-  exposes `toggleDev` / `toggleRealVite` / `setSource` transitions that
+  dev/real-vite handles and the real-vite port, and exposes
+  `toggleDev` / `toggleRealVite` transitions that
   preserve the original branch-on-`mode()` semantics byte-for-byte. App.tsx
   shrinks to JSX + wiring (315 → 259 LOC; four signals + two transition
   branches moved into the adapter). Closes the P0 finding in the 2026-05-26

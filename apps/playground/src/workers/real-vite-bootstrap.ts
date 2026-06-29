@@ -147,7 +147,7 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
 function seedProject(cfg: BootstrapConfig): void {
   const fs = syncMirror();
   fs.mkdirSync(cfg.root, { recursive: true });
-  // Idempotent: editor source overwrites the entry afterwards; an existing
+  // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
   for (const [path, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(path);
@@ -165,7 +165,7 @@ function seedProject(cfg: BootstrapConfig): void {
     fs.writeFileSync(
       readme,
       enc.encode(
-        '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
+        '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit any seeded project file from the file tree or open tabs.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
       ),
     );
   }

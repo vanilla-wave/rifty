@@ -17,7 +17,7 @@ Links `create-rifty-template` (host scaffolding) and maps to M12's AI-agent sand
 
 ## Options or Next
 
-- Project tree → Starter bundle: serialize source/files[]/openFiles[] + setup/templateId (reuse `WorkspaceArchiveV1`); register as a user Starter in the gallery.
+- Project tree → Starter bundle: serialize files[]/openFiles[] + setup/templateId (reuse `WorkspaceArchiveV1`); register as a user Starter in the gallery.
 - Share-by-link: bundle → URL-addressable artifact (host/storage decision — its own ADR; touches distribution + privacy).
 - Import: external project/archive → a new project (validate templateId resolves loud, ADR-0078).
 - Re-enable the disabled Export surfaces.

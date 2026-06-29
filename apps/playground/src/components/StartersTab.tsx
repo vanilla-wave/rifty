@@ -6,7 +6,7 @@
  * groups hidden under search/filter. Picking spins a fresh scratch (pickStarter).
  *
  * Cross-Phase Reconciliation A: the canonical `Starter` (glue/starter.ts) is the
- * seed/lifecycle entity (id/name/source/files); the gallery-display fields
+ * seed/lifecycle entity (id/name/files); the gallery-display fields
  * (label/blurb/glyph/setup/category) live on `Preset`. So the gallery renders
  * straight from `Preset[]` and derives its launcher group via
  * `GROUP_FOR_CATEGORY[preset.category]` — never a deep-copied display Starter.
