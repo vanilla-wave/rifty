@@ -46,6 +46,12 @@ describe('PreviewPanel refresh contract', () => {
     expect(source).toContain('setFrameEpoch((n) => n + 1)');
     expect(source).toContain('keyed');
   });
+
+  it('routes manual reload through the warm-up remount path', () => {
+    expect(source).toContain('function reload(): void');
+    expect(source).toContain('setRetry((n) => n + 1)');
+    expect(source).not.toContain('contentWindow?.location.reload');
+  });
 });
 
 describe('PreviewPanel port switcher (ADR-0155)', () => {

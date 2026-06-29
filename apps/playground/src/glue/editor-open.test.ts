@@ -5,7 +5,6 @@ const PROGRAM = '/workspace/src/main.js';
 
 function ctx(over: Partial<OpenContext> = {}): OpenContext {
   return {
-    programMirrorPath: PROGRAM,
     isNodeModules: false,
     present: false,
     readable: false,
@@ -15,8 +14,8 @@ function ctx(over: Partial<OpenContext> = {}): OpenContext {
 }
 
 describe('classifyOpen', () => {
-  it('routes the program-mirror path to the program tab', () => {
-    expect(classifyOpen(PROGRAM, ctx({ present: true, readable: true }))).toBe('program');
+  it('opens the project entry as an ordinary editable file', () => {
+    expect(classifyOpen(PROGRAM, ctx({ present: true, readable: true }))).toBe('sync');
   });
 
   it('routes node_modules to the view-only owner read-port', () => {

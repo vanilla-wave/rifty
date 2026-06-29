@@ -46,6 +46,10 @@
 
 ### Changed
 
+- Preset initial editor tabs are now ordinary file tabs. Starters/projects
+  declare the ordered `openFiles` set, the first file is active, and entry files
+  such as `src/main.js` use the same close/reopen/save/GIT flow as every other
+  editable file.
 - The default Vite template now installs `vite@^7.0.0` plus
   `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
   `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
@@ -59,15 +63,15 @@
 - **GIT Open Changes now distinguishes staged and worktree rows.** `MM`/`AD`
   states render separate Index and Working Tree rows; staged rows diff HEAD↔Index,
   while worktree rows diff Index/HEAD↔owner working bytes.
-- **GIT actions now wait for editor/program owner ACKs.** GIT status,
-  diffs, stage, discard, and commit drain pending Monaco/program writes through
-  acked owner frames before reading git, including already-started debounce writes.
+- **GIT actions now wait for editor owner ACKs.** GIT status, diffs, stage,
+  discard, and commit drain pending Monaco writes through acked owner frames
+  before reading git, including already-started debounce writes.
 - **The `src/main.js` tab now behaves like a file tab.** It can be closed,
   re-opened from Files, marks dirty while the owner write is pending, and still
   appears in Files/GIT after edits through the owner status feed.
 - **Explorer rename/delete no longer resurrects open file paths.** File-manager
-  rename/delete closes stale editor models after flushing owner writes, and the
-  permanent program tab becomes loudly read-only if its mirrored path is moved.
+  rename/delete closes stale editor models after flushing owner writes, including
+  the active entry file path.
 - **GIT now sees Monaco editor edits immediately.** Opening GIT flushes
   pending editor writes before requesting owner git status, and dirty gutters can
   mark changed lines from the local buffer while the owner status feed catches up.
@@ -88,8 +92,8 @@
   `.gitignore`, and starter-generated `package-lock.json` is folded into that
   baseline, so terminal `git status` starts clean and later reports only the
   user's edits while ignoring generated `node_modules`/build output.
-- **Preset switches no longer replay stale debounced program edits.** A pending
-  program-tab write is discarded before reseeding a picked starter, so an edit
+- **Preset switches no longer replay stale entry edits.** Switching starters
+  resets the ordinary initial file tabs before TS/dev-server re-init, so an edit
   from the previous template cannot clobber the freshly seeded `/src/main.*`
   entry after the switch.
 - **TS diagnostics refresh after project re-init.** When starter/dev-server
@@ -127,9 +131,9 @@
   install deps in lockstep with the shared Vite snapshot, so `vite` no longer
   starts without `node_modules` after a starter pick.
 - **TS-LS Monaco providers no longer recurse through Solid path accessors.**
-  `EditorHost` resolves provider model paths through its cached current program
-  path, so program-tab edits can produce fresh rifty-TS markers instead of
-  `Maximum call stack size exceeded`.
+  `EditorHost` resolves provider model paths through absolute file-tab paths, so
+  entry/file edits can produce fresh rifty-TS markers instead of `Maximum call
+  stack size exceeded`.
 - **TypeScript go-to-definition activates declaration tabs.** Monaco's real
   `F12`/go-to-definition action now routes through `EditorHost` tab selection,
   so starter declarations such as `@rifty/example-types/index.d.ts` open as the
@@ -253,7 +257,7 @@
   are globally monotonic across client instances, starter-owned declaration packages
   under `node_modules` are re-seeded in the owner/dev-server after install snapshot
   restore, the LS reinitializes once the owner reports the dev server running, and
-  program-tab writes are debounced so Monaco edits do not flood the terminal with
+  ordinary file-tab writes are debounced so Monaco edits do not flood the terminal with
   one Vite HMR line per content event.
 - **Starter picks now seed boot-critical template files before Vite starts without
   clobbering installed deps.** A mid-session switch to the TS starter could update
@@ -397,22 +401,15 @@
   was visible but the next typed command was routed as stale stdin.
 - **TS diagnostics now appear on a slow (2-core CI) cold boot** (ADR-0166; fixes the chromium e2e `ts-language-service.spec.ts` timeout where the type-error marker never rendered). The page LS client's per-request timeout was 15s, but the LS endpoint serializes every frame behind the first `ts:init` — which on a constrained CI runner co-resident with the dev-server child takes tens of seconds (TS engine + ~3 MB lib over the relay + tsconfig over fs.* sync-RPC). So the `lsp-check.ts` open/diagnostics frames rejected at 15s before the service finished building, and the page never re-sent → no marker. Raised the default to 60s (warm requests still resolve in <1s, so the ceiling only bites a genuinely dropped frame, which then rejects loud). The endpoint-side serialization + out-of-program-honest-empty fixes live in `@riftydev/ts-language-service`.
 - **Express `res.json`/`res.send` no longer crash with `TypeError: argument entity must be string, Buffer, or fs.Stats`** (express + sqlite preset, PROD build only). Each `?worker&url` child entry is self-contained, so it carries its OWN `@riftydev/io` `Buffer` copy; the kernel pre-entry hook had set `globalThis.Buffer` from the kernel-worker-entry copy, so `etag` (reads the global) rejected a buffer express built via `require('buffer')` (the child copy). The `kind:'url'` child bootstraps (dev-server-child, node-entry, real-vite owner) now call `installBundleLocalBuffer()` to pin the global to THIS bundle's copy — mirrors `runtime-js/worker-entry.ts`. DEV was unaffected (one shared ESM module instance), which is why the dev e2e never caught it; new PROD-build guard `tests/e2e-prod/buffer-realm-identity.spec.ts` + unit `bundle-local-buffer.test.ts`. Root (shared runtime classes duplicated per worker bundle) tracked in backlog/toolchain-build/worker-bundle-shared-runtime-dedup.
-- **Editor program mirror + entry re-seed follow the active root and template entry (ADR-0165 §4).**
-  `PROGRAM_MIRROR_PATH` was hardcoded `/workspace/src/main.js`; after ADR-0165 moved
-  roots to `/scratch`|`/projects/<id>`, the editor program write + live HMR landed on
-  a dead `/workspace` path the dev server never reads, and a starter pick that changed
-  the template (Vite → an express/socket node-server) kept the prior `<root>/src/main.js`
-  — so a node-server starter ran the STALE browser entry → `document is not defined`.
-  The path is now derived from the active root plus the active template entry via
-  `programMirrorPath(root, template)` (new solid-free `glue/program-path.ts`), threaded
-  reactively into `EditorHost` (program-tab focus + the active program path it reports)
-  and App's program write / seed / HMR. A TypeScript starter now edits
-  `<root>/src/main.ts`, while a JS starter still edits `<root>/src/main.js`. A page
-  `writeFile` is a non-idempotent OVERWRITE (unlike the owner's idempotent
-  `seedProject`), so `seedWorkspaceOwner` re-seeds the entry with the picked starter's
-  source on a template switch — the dev server runs the NEW server entry, not the stale
-  browser one. Un-blocked `fullstack-demo.spec.ts` / `socket-lab.spec.ts` (node-server
-  starters now boot their real server).
+- **Editor entry files + initial tabs follow the active root and template entry (ADR-0165 §4).**
+  The old special entry path was hardcoded around `/workspace/src/main.js`; after
+  ADR-0165 moved roots to `/scratch`|`/projects/<id>`, entry writes and live HMR could
+  land on a dead path the dev server never reads. Entry files are now ordinary
+  root-relative file tabs derived from the active starter/template and preset
+  `openFiles`; TypeScript starters open `<root>/src/main.ts`, while JS starters
+  open `<root>/src/main.js`. `seedWorkspaceOwner` re-seeds the picked starter's
+  entry before boot so node-server starters run their real server entry, not a
+  stale browser file.
 
 - **Page store is the single source of truth for the active id/root (ADR-0165 §4).**
   `App.tsx` derived `activeRoot()` from the interim `activePreset` signal
@@ -938,7 +935,7 @@
   structured `pty:dev-server` frame + the P3 request handshake (no stdout
   log-match). The owner becomes the SINGLE SOURCE OF TRUTH: the editor + explorer
   always read the owner snapshot (the `activeVfs`/`snapshotFs` `vite`-gated swap is
-  retired), editor + program edits write to the owner (HMR against the same store
+  retired), editor edits write to the owner (HMR against the same store
   it serves), and the `node_modules` read-port is widened to a general workspace
   read-port whose consumer is the editor opening owner-only files. New
   `dev-server-controller` (single-active guard + dev-server frame emit + HMR
@@ -1421,11 +1418,10 @@
   events). New pure modules under `src/glue` (`file-tree`, `fs-ops`,
   `editor-tabs`, `layout-store`, `splitter-size`) with unit tests.
 - **Multi-model editor tabs (ADR-0075).** One Monaco model per tab (`setModel`
-  on switch — no spurious writes); a permanent **program tab** stays bound to
-  `machine.source`/`setSource` (initial JS runner + dev/real-vite HMR unchanged)
-  under a single `suppressProgramEcho` guard; files opened from the explorer get
-  their own model with debounced VFS write-back. `monaco-env` gains the json /
-  css / html language workers.
+  on switch — no spurious writes); starter/project initial tabs are ordinary
+  file tabs keyed by absolute path, and files opened from the explorer reuse the
+  same model with debounced owner write-back. `monaco-env` gains the json / css /
+  html language workers.
 - **Preset gallery — click-to-run examples (ADR-0073).** New `src/presets.ts`
   + `src/components/PresetGallery.tsx`: a category-grouped left rail of
   example programs (Welcome, Event-loop order, Node core modules, Virtual

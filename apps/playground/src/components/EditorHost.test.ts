@@ -6,31 +6,25 @@ const source = readFileSync(fileURLToPath(new URL('./EditorHost.tsx', import.met
 const workingDiffInput =
   source.match(/export interface EditorWorkingDiffInput \{[\s\S]*?\n\}/)?.[0] ?? '';
 
-describe('EditorHost program sync contract', () => {
-  it('always clears the programmatic echo guard after program model writes', () => {
-    expect(source).toContain(`try {
-          suppressProgramEcho = true;
-          programModel.setValue(next);
-        } finally {
-          suppressProgramEcho = false;
-        }`);
+describe('EditorHost ordinary initial tabs contract', () => {
+  it('has no special program model or program-only props', () => {
+    expect(source).not.toContain('PROGRAM_TAB_ID');
+    expect(source).not.toContain('programModel');
+    expect(source).not.toContain('programValue');
+    expect(source).not.toContain('programPath');
+    expect(source).not.toContain('programTitle');
+    expect(source).not.toContain('onProgramChange');
+    expect(source).not.toContain('suppressProgramEcho');
   });
 
-  it('syncs external program source into the program model, not the active editor model', () => {
-    expect(source).toContain('programModel.setValue(next)');
-    expect(source).not.toContain('editor.getModel()?.setValue(next)');
-    expect(source).not.toContain('editor.getModel().setValue(next)');
-  });
-
-  it('maps the program model through a reactive path and language', () => {
-    expect(source).toContain('readonly programPath: Accessor<string>;');
-    expect(source).toContain('return id === PROGRAM_TAB_ID ? currentProgramPath : id;');
-    expect(source).toContain('return path === currentProgramPath ? PROGRAM_TAB_ID : path;');
-    expect(source).not.toContain('return id === PROGRAM_TAB_ID ? props.programPath() : id;');
-    expect(source).not.toContain('return path === props.programPath() ? PROGRAM_TAB_ID : path;');
-    expect(source).toContain(
-      'monaco.editor.setModelLanguage(programModel, languageForPath(path));',
-    );
+  it('can replace the visible editor set from ordinary initial file paths', () => {
+    expect(source).toContain('openInitialFiles(paths: readonly string[]): void;');
+    expect(source).toContain('function openInitialFiles(paths: readonly string[]): void');
+    expect(source).toContain('resetOpenFileTabs(paths);');
+    expect(source).toContain('function titleForFilePath(path: string): string');
+    expect(source).toContain('openFileTab(t, path, titleForFilePath(path))');
+    expect(source).toContain('editor = monaco.editor.create(container, {');
+    expect(source).toContain('model: null,');
   });
 });
 
@@ -59,7 +53,7 @@ describe('EditorHost git diff contract', () => {
     expect(source).toContain('props.gitStatus?.()');
   });
 
-  it('exposes a flush hook so SCM can publish pending editor writes before reading status', () => {
+  it('exposes a flush hook so GIT can publish pending editor writes before reading status', () => {
     expect(source).toContain('flushPendingWrites(): Promise<void>;');
     expect(source).toContain(
       'onFileWritten?(path: string, content: string): Promise<void> | void;',
@@ -89,26 +83,10 @@ describe('EditorHost git diff contract', () => {
     expect(source).toContain('function closeExternalPathTree(rootPath: string): void');
     expect(source).toContain('const NO_ACTIVE_TAB_ID = ');
     expect(source).toContain('function closeVisibleTab(id: string): void');
-    expect(source).toContain('unregisterModel(PROGRAM_TAB_ID);');
     expect(source).toContain('editor?.setModel(null);');
     expect(source).toContain('const tab = tabs().find((candidate) => candidate.id === id);');
-    expect(source).toContain(
-      'const model = models.get(id) ?? (id === PROGRAM_TAB_ID ? programModel : undefined);',
-    );
-    expect(source).toContain('if (programModel && !models.has(PROGRAM_TAB_ID)) {');
-    expect(source).toContain("emitDocument(PROGRAM_TAB_ID, 'open');");
-    expect(source).toContain('externalWriteClosedPaths.add(path);');
-    expect(source).toContain('function setReadOnlyPath(id: string, readOnly: boolean): void');
-    expect(source).toContain('editor?.updateOptions({ readOnly });');
-    expect(source).toContain('setReadOnlyPath(PROGRAM_TAB_ID, true);');
-    expect(source).toContain(
-      'props.onError?.(`${basename(path)} was moved or deleted; program editor is read-only`);',
-    );
+    expect(source).toContain('editor.updateOptions({ readOnly: readOnlyPaths.has(id) });');
     expect(source).toContain('closeFile(id, { flushPending: false });');
-    expect(source).toContain('if (externalWriteClosedPaths.has(currentProgramPath)) {');
-    expect(source).toContain('basename(currentProgramPath)');
-    expect(source).toContain('was moved or deleted; program editor is read-only');
-    expect(source).toContain('untrack(() => setReadOnlyPath(PROGRAM_TAB_ID, false));');
     expect(source).toContain('closePath: (path) => closeExternalPathTree(path),');
     expect(source).toContain('closePathTree: (path) => closeExternalPathTree(path),');
   });

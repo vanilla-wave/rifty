@@ -17,19 +17,57 @@ export async function terminalBuffer(
   return stripTerminal((await locator.getAttribute('data-terminal-buffer')) ?? '');
 }
 
-export async function openShellTerminal(page: Page): Promise<void> {
+export async function openShellTerminal(
+  page: Page,
+  options: { readonly focus?: boolean } = {},
+): Promise<number> {
+  const focus = options.focus ?? true;
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
+  await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
+  const slotCountBefore = await page.locator('.rf-terminal-slot').count();
   await page.getByRole('button', { name: 'New terminal' }).click();
-  await expect(page.getByRole('tab', { name: /Terminal 2/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  const tab = page.getByRole('tab', { name: /Terminal \d+/ }).last();
+  await expect(tab).toBeVisible();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  const slot = page.locator('.rf-terminal-slot').nth(slotCountBefore);
+  await expect(slot).toHaveAttribute('data-active', 'true');
+  await expect
+    .poll(() => terminalBuffer(page, slotCountBefore), { timeout: 30_000 })
+    .toMatch(/^\s*>\s*$/u);
+  if (!focus) return slotCountBefore;
+  await slot.locator('[data-testid="terminal"]').click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const terminal = document.querySelector('[data-testid="terminal"]');
+          const active = document.activeElement;
+          return terminal != null && active != null && terminal.contains(active);
+        }),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+  return slotCountBefore;
 }
 
-export async function runTerminalLine(page: Page, line: string): Promise<void> {
-  const slot = page.locator('.rf-terminal-slot[data-active="true"]');
+export async function runTerminalLine(
+  page: Page,
+  line: string,
+  targetSlot: 'active' | number = 'active',
+): Promise<void> {
+  if (targetSlot !== 'active') {
+    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    await expect(tab).toBeVisible();
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  const slot =
+    targetSlot === 'active'
+      ? page.locator('.rf-terminal-slot[data-active="true"]')
+      : page.locator('.rf-terminal-slot').nth(targetSlot);
   await expect(slot).toBeVisible();
-  await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
   await slot.locator('[data-testid="terminal"]').click();
   const input = slot.locator('textarea.xterm-helper-textarea, textarea').first();
   await expect(input).toBeAttached();

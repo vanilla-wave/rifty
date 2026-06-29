@@ -1,7 +1,7 @@
 /**
  * Page ↔ owner git RPC bridge.
  *
- * The page snapshot deliberately excludes `.git`, so every SCM read/action must
+ * The page snapshot deliberately excludes `.git`, so every GIT read/action must
  * call @riftydev/git in the owner realm. This bridge is playground-local glue:
  * request/reply frames are keyed by OwnerBridgeKey, correlated by request id,
  * and rejected on timeout/dispose instead of hanging.

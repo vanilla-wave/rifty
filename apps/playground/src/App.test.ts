@@ -61,26 +61,21 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
-  it('routes editor + program writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
-    // The preview worker is gone; editor/program edits flow to the ONE owner so
+  it('routes editor writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
+    // The preview worker is gone; editor edits flow to the ONE owner so
     // the co-resident dev server HMR-updates against the same store it serves.
     expect(source).toContain('const ownerWriteEnc = new TextEncoder();');
     expect(source).toContain('async function writeWorkspaceFile(path: string, content: string)');
     // ADR-0165 §3: the owner is a reassignable signal holder (respawned on switch),
     // so member access goes through the `workspaceOwner()` accessor.
-    expect(source).toContain(
-      "await workspaceOwner().writeFrameAcked({\n        type: 'write',\n        path,\n        data: ownerWriteEnc.encode(content),\n      });",
+    expect(source).toMatch(
+      /await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),\s*\}\);/,
     );
-    // ADR-0165 §4: the program edit lands on the active template entry path.
-    expect(source).toContain(
-      'const programPath = programMirrorPath(activeRoot(), activeTemplate())',
-    );
-    expect(source).toContain('scheduleProgramWrite(programPath, next)');
-    expect(source).toContain(
-      'function writeProgramFile(path: string, content: string): Promise<void>',
-    );
-    expect(source).toContain('await writeProgramFile(pending.path, pending.content);');
-    // the legacy hardcoded const is gone from the program write path
+    expect(source).not.toContain('function writeProgramFile');
+    expect(source).not.toContain('scheduleProgramWrite');
+    expect(source).not.toContain('pendingProgramWrite');
+    expect(source).not.toContain('programMirrorPath');
+    expect(source).not.toContain('onProgramChange');
     expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
     // explorer + editor read the owner snapshot, not a vite-gated swap
     expect(source).not.toContain('const activeVfs');
@@ -96,32 +91,45 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
     expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
     expect(source).toContain('if (path === rootPackageJsonPath) continue;');
+    expect(source).toContain('async function seedWorkspaceOwner(preset: Preset): Promise<void>');
     expect(source).toMatch(
-      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*workspaceOwner\(\)\.writeFile\(path, content\);/s,
+      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),\s*\}\);/s,
     );
-    // the program path follows the active root, threaded into EditorHost too
+    // initial editor tabs follow preset data under the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
-    // skip-double-write guard derives the same root-relative path (no const)
-    expect(source).toContain('if (path !== programMirrorPath(activeRoot(), activeTemplate()))');
+    expect(source).toContain('initialEditorFiles={publishedInitialEditorFiles}');
+    expect(source).toContain(
+      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
+    );
   });
 
-  it('drops a debounced program write before reseeding a picked starter', () => {
+  it('opens ordinary initial editor tabs only after acked seed and fresh owner snapshot', () => {
     const runPreset = source.match(
       /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
-    expect(source).toContain('function discardPendingProgramWrite(): void');
-    expect(source).toMatch(
-      /function discardPendingProgramWrite\(\): void \{[\s\S]*?clearTimeout\(programWriteTimer\);[\s\S]*?pendingProgramWrite = undefined;[\s\S]*?\}/,
+    expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
+    expect(source).toContain(
+      'const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal',
     );
-    expect(runPreset).toMatch(/discardPendingProgramWrite\(\);\s*seedViteWorkspace\(preset\);/);
+    expect(source).toContain('setPublishedInitialEditorFiles(paths);');
+    expect(source).toContain('editorApi?.openInitialFiles(paths)');
+    expect(runPreset).toMatch(
+      /await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
+    );
   });
 
-  it('opens configured preset files as inactive editor tabs', () => {
-    expect(source).toContain('function openPresetEditorTabs(preset: Preset): void');
-    expect(source).toContain('for (const path of preset.openFiles ?? [])');
-    expect(source).toContain('editorApi?.openFile(workspacePresetPath(path), { activate: false })');
-    expect(source).toContain('openPresetEditorTabs(preset);');
+  it('uses preset openFiles as the complete ordered initial editor tab set', () => {
+    expect(source).toContain(
+      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
+    );
+    expect(source).toContain(
+      'initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot())',
+    );
+    expect(source).not.toContain('push(templateForPreset(preset).entry.relativePath)');
+    expect(source).not.toContain(
+      'editorApi?.openFile(workspacePresetPath(path), { activate: false })',
+    );
   });
 
   it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
@@ -241,7 +249,7 @@ describe('App terminal startup wiring', () => {
     const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
     const pickStarter = source.slice(pickStarterStart, pickStarterEnd);
     const reinit = source.match(
-      /function reinitializeTsForPickedPreset\(preset: Preset\): void \{[\s\S]*?\n {2}\}/,
+      /function reinitializeTsForPickedPreset\(\): void \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPresetStart).toBeGreaterThan(-1);
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
@@ -254,18 +262,30 @@ describe('App terminal startup wiring', () => {
     );
     expect(pickStarter).toContain('void runVitePreset(presetForId(id), tsGate);');
     expect(reinit).toBeDefined();
-    expect(reinit).toMatch(/openPresetEditorTabs\(preset\);[\s\S]*setTsProjectRevision/);
+    expect(reinit).toContain('setTsProjectRevision((revision) => revision + 1);');
+    expect(reinit).not.toContain('resetEditorToActiveInitialFiles()');
     expect(runPreset).toContain('templateId: templateForPreset(preset).id,');
     expect(runPreset).toContain('await workspaceOwner().setDevConfig({');
     expect(runPreset).toMatch(/finally \{[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/);
-    expect(runPreset.indexOf('const session = devServerSession();')).toBeLessThan(
-      runPreset.indexOf('await workspaceOwner().setDevConfig({'),
+    const sessionReservation = runPreset.indexOf('session = devServerSession();');
+    const loadPreset = runPreset.indexOf('await machine.loadPreset(preset);');
+    const setDevConfig = runPreset.indexOf('await workspaceOwner().setDevConfig({');
+    expect(sessionReservation).toBeGreaterThan(-1);
+    expect(loadPreset).toBeGreaterThan(-1);
+    expect(setDevConfig).toBeGreaterThan(-1);
+    expect(sessionReservation).toBeLessThan(loadPreset);
+    expect(sessionReservation).toBeLessThan(setDevConfig);
+    expect(source).toContain(
+      "throw new Error('Unable to reserve an idle terminal for the dev server')",
     );
     expect(runPreset).toMatch(
-      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await restartDevServer\(restartSessionId\);[\s\S]*?reinitializeTsForPickedPreset\(preset\);[\s\S]*?return;/,
+      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.clear\(session\.id\);/,
     );
     expect(runPreset).toMatch(
-      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForDevServerBoot\(session\.id, generation\);[\s\S]*?reinitializeTsForPickedPreset\(preset\);/,
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await restartDevServer\(restartSessionId\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
+    );
+    expect(runPreset).toMatch(
+      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForDevServerBoot\(session\.id, generation\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 
@@ -384,7 +404,12 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('root={activeRoot()}'); // FileExplorer prop
     // node_modules prop + preset-path seeding read the dynamic root
     expect(source).toContain('root: activeRoot()');
-    expect(source).toContain('normalizePath(`${activeRoot()}/');
+    expect(source).toContain(
+      'initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot())',
+    );
+    expect(source).toContain(
+      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
+    );
     // no lingering WORKSPACE references on any surface
     expect(source).not.toContain('WORKSPACE)');
     expect(source).not.toContain('${WORKSPACE}');
@@ -413,6 +438,25 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('onNotify={(message, tone) => flashToast(message, tone)}');
   });
 
+  it('waits for owner reset and a fresh snapshot before reopening active initial tabs', () => {
+    const resetStart = source.indexOf('function onConfirmReset(): void');
+    const resetEnd = source.indexOf('  // Dialog-derived strings', resetStart);
+    const resetBlock = source.slice(resetStart, resetEnd);
+    expect(resetStart).toBeGreaterThan(-1);
+    expect(resetEnd).toBeGreaterThan(resetStart);
+    expect(source).toContain('async function waitForActiveSnapshotFrame(): Promise<void>');
+    expect(source).toMatch(
+      /async function refreshActiveAfterReset\(\): Promise<void> \{[\s\S]*?await waitForActiveSnapshotFrame\(\);[\s\S]*?resetEditorToActiveInitialFiles\(\);/,
+    );
+    expect(resetBlock).toMatch(
+      /await flushPendingEditorWrites\(\);[\s\S]*?await resetScratchIndex\(workspaceOwner\(\)\.snapshotPort, activeStarterId\(\)\);/,
+    );
+    expect(resetBlock).toContain('await resetProjectIndex(workspaceOwner().snapshotPort, id);');
+    expect(resetBlock).toMatch(
+      /store\.confirmReset\(\);[\s\S]*?if \(activeReset\) await refreshActiveAfterReset\(\);/,
+    );
+  });
+
   it('subscribes to the owner git-status feed and threads it into FileExplorer', () => {
     expect(source).toContain(
       "import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';",
@@ -423,7 +467,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('gitStatus={gitStatusMap()}');
   });
 
-  it('wires the read-only SCM panel to the shared status feed and owner git RPC reads', () => {
+  it('wires the GIT panel to the shared status feed and owner git RPC reads', () => {
     expect(source).toContain("import { ScmPanel } from './components/ScmPanel.tsx';");
     expect(source).toContain("import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';");
     expect(source).toContain('const [gitScmReads, setGitScmReads] = createSignal');
@@ -438,11 +482,11 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('gitBranch={activeGitScm().branch}');
   });
 
-  it('flushes pending editor writes before opening SCM status', () => {
+  it('flushes pending editor writes before opening GIT status', () => {
     expect(source).toContain("async function selectSidebarView(view: 'explorer' | 'scm')");
     expect(source).toContain('async function flushPendingEditorWrites(): Promise<void>');
-    expect(source).toContain('let inFlightProgramWrite: Promise<void> | undefined;');
-    expect(source).toContain('await inFlightProgramWrite;');
+    expect(source).not.toContain('inFlightProgramWrite');
+    expect(source).toContain('await editorApi?.flushPendingWrites();');
     expect(source).toContain("if (view === 'scm' && willShow) {");
     expect(source).toContain('await flushPendingEditorWrites();');
     expect(source).toContain('requestActiveGitStatus();');
@@ -461,6 +505,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('} else if (!ephemeral) {');
     expect(source).toContain('void switchToSavedProjectAfterSave(id, saveWait.durable);');
     expect(source).toContain('pendingSaveAutoSwitchId = null;');
+    expect(source).toMatch(
+      /const switched = await requestSwitch\([\s\S]*?if \(switched\) \{\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);\s*\}/,
+    );
   });
 
   it('opens GIT rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
@@ -508,7 +555,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('onCompareWithHead={(path) => void openWorkingHeadCompare(path)}');
   });
 
-  it('wires SCM actions through owner git RPC and refreshes owner status after ack', () => {
+  it('wires GIT actions through owner git RPC and refreshes owner status after ack', () => {
     expect(source).toContain(
       "import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';",
     );
@@ -535,11 +582,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('onCommit={commitScm}');
   });
 
-  it('clears program tab dirty state only after the owner write ack', () => {
-    expect(source).toContain('markPathClean(path)');
-    expect(source).toMatch(
-      /\.then\(\(\) => \{\s*notifyFileWritten\(path, content\);[\s\S]*?editorApi\?\.markPathClean\(path\);[\s\S]*?\}\)/,
-    );
+  it('does not use an App-level clean hook for ordinary editor file writes', () => {
+    expect(source).not.toContain('markPathClean(path)');
+    expect(source).not.toContain('editorApi?.markPathClean');
   });
 });
 

@@ -15,6 +15,14 @@ function presetText(preset: Preset): string {
   return [preset.source, ...(preset.files ?? []).map((file) => file.content)].join('\n');
 }
 
+function openablePaths(preset: Preset): Set<string> {
+  const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+  return new Set([
+    spec.entry.relativePath.replace(/^\/+/, ''),
+    ...(preset.files ?? []).map((file) => file.path),
+  ]);
+}
+
 describe('playground presets', () => {
   it('offers file-oriented project examples alongside the full real npm project demo', () => {
     expect(PRESETS.length).toBeGreaterThanOrEqual(3);
@@ -24,8 +32,7 @@ describe('playground presets', () => {
     expect(filePresets.every((preset) => (preset.files?.length ?? 0) >= 2)).toBe(true);
     expect(filePresets.every((preset) => (preset.openFiles?.length ?? 0) >= 2)).toBe(true);
     for (const preset of filePresets) {
-      const filePaths = new Set((preset.files ?? []).map((file) => file.path));
-      expect(preset.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+      expect(preset.openFiles?.every((path) => openablePaths(preset).has(path))).toBe(true);
     }
     const projectFiles = PRESETS.find((preset) => preset.id === 'project-files');
     expect(projectFiles?.source).toContain("import project from './project.json'");
@@ -47,6 +54,7 @@ describe('playground presets', () => {
     expect(demo.templateId).toBe(TYPESCRIPT_TEMPLATE.id);
     expect(demo.source).toBe(TYPESCRIPT_TEMPLATE.entry.content);
     expect(demo.glyph?.text).toBe('TS');
+    expect(demo.openFiles?.[0]).toBe('src/main.ts');
 
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(TYPESCRIPT_TEMPLATE.extraFiles)) {
@@ -116,8 +124,9 @@ describe('playground presets', () => {
     expect(demo.mode).toBe('real-vite');
     expect(demo.category).toBe('Live preview');
 
-    // the editor program tab IS the template's server entry (single source)
+    // the initially active editor tab is the template's server entry (single source)
     expect(demo.source).toBe(EXPRESS_SQLITE_TEMPLATE.entry.content);
+    expect(demo.openFiles?.[0]).toBe('src/main.js');
 
     // the page-side explorer shows the same files the worker seeds, in lockstep
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
@@ -129,7 +138,7 @@ describe('playground presets', () => {
     }
 
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+    expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
   });
 
   it('ships Vite 8 as an opt-in instant preset distinct from default Vite 7', () => {
@@ -150,6 +159,7 @@ describe('playground presets', () => {
     expect(demo.mode).toBe('real-vite');
     expect(demo.category).toBe('Live preview');
     expect(demo.source).toBe(SOCKET_LAB_TEMPLATE.entry.content);
+    expect(demo.openFiles?.[0]).toBe('src/main.js');
 
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(SOCKET_LAB_TEMPLATE.extraFiles)) {
@@ -158,7 +168,7 @@ describe('playground presets', () => {
     for (const file of demo.files ?? []) {
       expect(SOCKET_LAB_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
-    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+    expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
 
     const text = presetText(demo);
     const scenarioIds = [

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { scmRowsFromStatusMap } from './scm-status.ts';
 
-describe('SCM status projection', () => {
+describe('GIT status projection', () => {
   it('splits porcelain XY entries into staged and changes groups', () => {
     const rows = scmRowsFromStatusMap(
       new Map([

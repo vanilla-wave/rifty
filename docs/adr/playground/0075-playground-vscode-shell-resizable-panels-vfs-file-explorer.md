@@ -2,6 +2,7 @@
 
 Status: Accepted (2026-06-04)
 Date: 2026-06-04
+Corrected: 2026-06-29
 Relates to: ADR-0073 (terminal-luxe design system — built on it), ADR-0013/ADR-0014/ADR-0072 (VFS backend, split sync/async, OPFS write-through — explorer reads/writes the sync mirror), ADR-0002/D-001 (cross-origin isolation), D-002 (solid-js isolated to `apps/playground`).
 
 > TL;DR: `apps/playground` gets a zero-dep VSCode-style shell: bottom console, CSS-var `<Splitter>` panels, `syncMirror()` VFS explorer, multi-model Monaco tabs
@@ -24,7 +25,11 @@ Two facts (verified live + in source) shaped the design:
 
 Spans many files / >100 lines and alters the editor's internal contract (single `{value,onChange}` → multi-model tabs), so by the reversibility checklist (rules 2/4) it is **IRREVERSIBLE**, ratified inline (ADR-0063). **No** new npm dependency; **no** cross-package public-API change.
 
-Design came from a 3-proposal panel (VSCode-faithful / terminal-luxe-native / minimal-risk) with adversarial judges; this ADR synthesizes VSCode-faithful base + terminal-luxe visuals + minimal-risk discipline. The judges' unanimous concern (programmatic-`setValue` re-save guard) and the same-path dual-writer hazard are resolved below.
+Design came from a 3-proposal panel (VSCode-faithful / terminal-luxe-native / minimal-risk) with adversarial judges; this ADR synthesizes VSCode-faithful base + terminal-luxe visuals + minimal-risk discipline. The same-path dual-writer hazard is resolved below by the one-model-per-absolute-path invariant.
+
+## Correction (2026-06-29)
+
+The original Decision-4 permanent program tab was wrong after the owner-backed file-manager/Git work: it made `src/main.js` a special editor path that could not close or participate in Files/GIT like every other file. Initial editor tabs are now ordinary file tabs declared by the selected `Preset.openFiles` / project data, ordered as displayed, first active. File tabs are keyed by absolute VFS path. Opening the same path from initial tabs, Explorer, GIT, LS, or direct navigation reuses the same Monaco model. There is no permanent program tab, `PROGRAM_TAB_ID`, program model, `programMirrorPath`, or `onProgramChange`; the entry file is saved through the same owner-backed file path as every other editable file. Rename/delete closes the old path model so stale old-path writes are forbidden instead of preserved as a read-only special tab.
 
 ## Decision
 
@@ -36,15 +41,13 @@ A hand-rolled (zero new deps) VSCode-style **workbench shell** for `apps/playgro
 
 3. **VFS file explorer (#4).** Lazy-expand tree of `/workspace` over main-thread `syncMirror()`. Actions: open, new file, new folder, rename (files + dirs via real `copyTree`+`rm`, not a stub), delete (with confirm). No VFS change events exist, so refresh = action-triggered nonce + a light 1.5 s poll of *expanded* dirs while Explorer is visible (gated on `document.visibilityState`). On mount ensures `/workspace` exists and seeds starter files.
 
-4. **Multi-model editor tabs.** Editor host owns one Monaco instance and **one `ITextModel` per tab** (`editor.setModel()` on switch — emits no content event, so tab switches never spuriously write). A permanent, non-closable **"program" tab** (index 0) stays bound to `machine.source()` / `machine.setSource()` — the exact ADR-0073 path — so REPL Run, dev/real-vite `updateEntry`, and the m10 HMR textarea path are unchanged. Explorer-opened files are extra tabs with debounced (≈300 ms) VFS write-back. Outer `<div data-testid="editor">` unchanged.
-   - **Re-save guard (judges' flagged point), one mechanism:** external program-source changes (preset/mode transitions) write the program model under an explicit `suppressProgramEcho` flag that the single `onDidChangeModelContent` listener checks-and-clears before routing to `machine.setSource`. `setModel` (tab switch) needs no guard. This is the *only* programmatic write to a live model.
-   - **Dual-writer guard:** the program tab is the **sole** editor for `/workspace/src/main.js`; opening that exact path from the explorer focuses the program tab instead of creating a second model. Program edits mirror one-way into that file so the explorer shows it honestly.
+4. **Multi-model editor tabs (corrected 2026-06-29).** Editor host owns one Monaco instance and **one `ITextModel` per open absolute-path file tab** (`editor.setModel()` on switch — emits no content event, so tab switches never spuriously write). The selected Starter/Project declares initial ordinary file tabs via `openFiles`; the ordered first file is active. File tabs are keyed by absolute VFS path and are closable. Opening the same path from initial tabs, Explorer, GIT, LS, or direct navigation focuses/reuses the same model. The entry file is not special: editor saves flow through the same owner-backed file write path as every other editable file, and rename/delete closes the old path model so stale writes cannot recreate it. Outer `<div data-testid="editor">` unchanged.
 
 5. **Status bar + activity bar.** `[data-storage-badge]` **moves verbatim** (same attributes, `data-tone`, `title`) into the new status bar (mode chip, active file, language, COI dot). The activity bar is a lime "alive spine" toggling the sidebar between **Explorer** and **Presets** (existing `PresetGallery`, reused unchanged). Run/Reset/Dev/Real-Vite stay in the titlebar with byte-identical `data-action` attributes and the same `mode==='repl'` gate.
 
 6. **Monaco language workers.** `monaco-env.ts` gains standard `json` / `css` / `html` workers (Vite `?worker`) so opening non-JS files gets real language services, not a generic-worker error.
 
-**E2E preserved by construction:** every load-bearing selector keeps working — `data-testid=editor` (program model boot-active), `data-testid=terminal` (always mounted, console open by default), `data-action=run/reset/dev-mode/real-vite` (titlebar untouched), `data-storage-badge` (relocated, same attrs, always-rendered status bar), `data-testid=preview` (same `PreviewPanel`, same mode `<Show>`), `data-testid=gallery`/`data-preset` (same `PresetGallery`; no spec needs it at boot). Pure logic (clamp math, tree builder, tab reducer, layout store) is unit-tested test-first (TDD); layout is guarded by the existing e2e suite + live browser verification.
+**E2E preserved by construction:** every load-bearing selector keeps working — `data-testid=editor` (the first initial file tab is active), `data-testid=terminal` (always mounted, console open by default), `data-action=run/reset/dev-mode/real-vite` (titlebar untouched), `data-storage-badge` (relocated, same attrs, always-rendered status bar), `data-testid=preview` (same `PreviewPanel`, same mode `<Show>`), `data-testid=gallery`/`data-preset` (same `PresetGallery`; no spec needs it at boot). Pure logic (clamp math, tree builder, tab reducer, layout store) is unit-tested test-first (TDD); layout is guarded by the existing e2e suite + live browser verification.
 
 ## Alternatives considered
 
@@ -59,6 +62,6 @@ A hand-rolled (zero new deps) VSCode-style **workbench shell** for `apps/playgro
 - (+) All four asks met: console at the bottom, VSCode ergonomics (activity bar / sidebar / editor tabs / bottom panel / status bar), resizable + collapsible panels with persisted sizes, a real VFS file explorer.
 - (+) No new dependency, no cross-package API change; solid-js stays inside `apps/playground`.
 - (+) Per-file undo/cursor via multi-model; opening arbitrary VFS files; explorer reflects terminal `npm install`.
-- (−) Explorer operates on the **main-thread** VFS, a *different* store from the worker realms running REPL/dev/real-vite (split VFS, ADR-0014). A file created in the explorer is not visible to REPL `require('fs')` (worker-side). Pre-existing architectural reality, surfaced honestly (the program tab, not an explorer file, drives execution); unifying them is future work.
+- (−) Explorer operates on the **main-thread** VFS, a *different* store from the worker realms running REPL/dev/real-vite (split VFS, ADR-0014). A file created in the explorer is not visible to REPL `require('fs')` (worker-side). Pre-existing architectural reality, surfaced honestly; unifying them is future work. Later owner-backed bridges make ordinary editor file saves converge on the owner store (ADR-0148/0180).
 - (−) Refresh is a bounded poll (no VFS events); dir-rename copies subtrees; binary files open read-only via a NUL-byte sniff — all provisional, logged in `OPEN_QUESTIONS`.
-- (−) Larger UI surface; correctness rests on the program-model echo guard and the never-auto-open-a-file-tab invariant, both covered by unit tests + live browser verification.
+- (−) Larger UI surface; correctness rests on the one-model-per-absolute-path invariant, covered by unit tests + live browser verification.

@@ -1,6 +1,5 @@
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
-import { PROGRAM_TAB_ID } from '../glue/editor-tabs.ts';
 import { EditorTabs } from './EditorTabs.tsx';
 
 describe('EditorTabs', () => {
@@ -8,8 +7,16 @@ describe('EditorTabs', () => {
     const onOpenPreviewTab = vi.fn();
     const html = renderToString(() =>
       EditorTabs({
-        tabs: [{ id: PROGRAM_TAB_ID, kind: 'program', title: 'src/main.js', dirty: false }],
-        activeId: PROGRAM_TAB_ID,
+        tabs: [
+          {
+            id: '/workspace/src/main.js',
+            kind: 'file',
+            title: 'src/main.js',
+            path: '/workspace/src/main.js',
+            dirty: false,
+          },
+        ],
+        activeId: '/workspace/src/main.js',
         onSelect: () => {},
         onClose: () => {},
         previewUrl: '/preview/3000/',
@@ -21,11 +28,19 @@ describe('EditorTabs', () => {
     expect(html).toContain('Preview');
   });
 
-  it('renders the program mirror tab with normal close and dirty affordances', () => {
+  it('renders an initially-open entry file with normal close and dirty affordances', () => {
     const html = renderToString(() =>
       EditorTabs({
-        tabs: [{ id: PROGRAM_TAB_ID, kind: 'program', title: 'src/main.js', dirty: true }],
-        activeId: PROGRAM_TAB_ID,
+        tabs: [
+          {
+            id: '/workspace/src/main.js',
+            kind: 'file',
+            title: 'src/main.js',
+            path: '/workspace/src/main.js',
+            dirty: true,
+          },
+        ],
+        activeId: '/workspace/src/main.js',
         onSelect: () => {},
         onClose: () => {},
       }),
@@ -39,7 +54,13 @@ describe('EditorTabs', () => {
     const html = renderToString(() =>
       EditorTabs({
         tabs: [
-          { id: PROGRAM_TAB_ID, kind: 'program', title: 'src/main.js', dirty: false },
+          {
+            id: '/workspace/src/main.js',
+            kind: 'file',
+            title: 'src/main.js',
+            path: '/workspace/src/main.js',
+            dirty: false,
+          },
           {
             id: 'diff:HEAD:/workspace/src/main.ts',
             kind: 'diff',

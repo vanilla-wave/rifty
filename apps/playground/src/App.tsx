@@ -8,7 +8,7 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import { basename, joinPath, normalizePath } from '@riftydev/vfs';
+import { basename, joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
@@ -46,11 +46,11 @@ import { readChildren } from './glue/file-tree.ts';
 import { looksBinary } from './glue/fs-ops.ts';
 import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';
 import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';
+import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/launcher-prefs.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
-import { programMirrorPath } from './glue/program-path.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -202,10 +202,10 @@ export function App(props: AppProps) {
   const [projectIndex, setProjectIndex] = createSignal<ProjectIndex | null>(null);
 
   // ADR-0165 §57: DIRTY binds to a REAL owner file-write, never a UI counter. The
-  // owner handle exposes no write event (writes ORIGINATE on the page —
-  // editor/program edits flow out through `writeWorkspaceFile`/`onProgramChange`),
-  // so the page IS the write source: a tiny notifier the write paths fire and the
-  // store subscribes to. This is the honest signal — a write actually happened.
+  // owner handle exposes no write event (writes ORIGINATE on the page through
+  // `writeWorkspaceFile`), so the page IS the write source: a tiny notifier the
+  // write path fires and the store subscribes to. This is the honest signal — a
+  // write actually happened.
   const fileWriteListeners = new Set<(path: string, content: string) => void>();
   function notifyFileWritten(path: string, content: string): void {
     for (const cb of fileWriteListeners) cb(path, content);
@@ -1736,33 +1736,28 @@ export function App(props: AppProps) {
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
   }
 
-  function workspacePresetPath(path: string): string {
-    const normalized = normalizePath(`${activeRoot()}/${path.replace(/^\/+/, '')}`);
-    if (normalized === activeRoot() || !normalized.startsWith(`${activeRoot()}/`)) {
-      throw new Error(`Preset file escapes workspace: ${path}`);
-    }
-    return normalized;
-  }
+  const activeInitialEditorFiles = createMemo(() =>
+    initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot()),
+  );
+  const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal<
+    readonly string[]
+  >(activeInitialEditorFiles());
 
-  function openPresetEditorTabs(preset: Preset): void {
-    for (const path of preset.openFiles ?? []) {
-      editorApi?.openFile(workspacePresetPath(path), { activate: false });
-    }
+  function resetEditorToActiveInitialFiles(): void {
+    const paths = activeInitialEditorFiles();
+    setPublishedInitialEditorFiles(paths);
+    editorApi?.openInitialFiles(paths);
   }
 
   // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
   async function writeWorkspaceFile(path: string, content: string): Promise<void> {
-    // The program mirror (active template entry, ADR-0165 §4) flows through
-    // onProgramChange (which owns its owner write); skip the double-write here.
-    if (path !== programMirrorPath(activeRoot(), activeTemplate())) {
-      await workspaceOwner().writeFrameAcked({
-        type: 'write',
-        path,
-        data: ownerWriteEnc.encode(content),
-      });
-    }
+    await workspaceOwner().writeFrameAcked({
+      type: 'write',
+      path,
+      data: ownerWriteEnc.encode(content),
+    });
     notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
   }
 
@@ -1770,10 +1765,10 @@ export function App(props: AppProps) {
    * Push starter files into the persistent owner realm (ADR-0146
    * owner-resident shell; the owner is the single authoritative store owner and
    * the page holds no authoritative fs). This mirrors the durable owner reset for
-   * boot-critical files, but runs synchronously before the dev-server boot line so
-   * template files like index.html cannot lag a mid-session starter pick.
+   * boot-critical files, but is acked before editor tabs reopen so template files
+   * like index.html cannot lag a mid-session starter pick.
    */
-  function seedWorkspaceOwner(preset: Preset): void {
+  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -1782,13 +1777,17 @@ export function App(props: AppProps) {
       // package.json is install-owned after boot; rewriting it here drops
       // npm-installed deps on reload while the owner/index reset already seeds it.
       if (path === rootPackageJsonPath) continue;
-      workspaceOwner().writeFile(path, content);
+      await workspaceOwner().writeFrameAcked({
+        type: 'write',
+        path,
+        data: ownerWriteEnc.encode(content),
+      });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  function seedViteWorkspace(preset: Preset): void {
-    seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset): Promise<void> {
+    await seedWorkspaceOwner(preset);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -1809,6 +1808,29 @@ export function App(props: AppProps) {
       return idle;
     }
     return createSession();
+  }
+
+  function usableDevServerSession(id: string): TerminalSessionSnapshot | undefined {
+    try {
+      const session = manager.snapshot(id);
+      return session.status === 'idle' && !hiddenSessionIds.has(session.id) ? session : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function ensureReservedDevServerSession(
+    session: TerminalSessionSnapshot,
+  ): Promise<TerminalSessionSnapshot> {
+    const reserved = usableDevServerSession(session.id);
+    if (reserved) return reserved;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const replacement = createSession();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      const usable = usableDevServerSession(replacement.id);
+      if (usable) return usable;
+    }
+    throw new Error('Unable to reserve an idle terminal for the dev server');
   }
 
   function isVisibleTerminalSession(id: string): boolean {
@@ -1869,17 +1891,13 @@ export function App(props: AppProps) {
     await waitForDevServerBoot(targetSessionId, generation);
   }
 
-  function reinitializeTsForPickedPreset(preset: Preset): void {
-    openPresetEditorTabs(preset);
+  function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
 
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
       setActivePreset(preset.id);
-      await machine.loadPreset(preset);
-      discardPendingProgramWrite();
-      seedViteWorkspace(preset);
       const restartNeeded =
         devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running';
       const restartSessionId = devServerSessionId;
@@ -1888,6 +1906,10 @@ export function App(props: AppProps) {
         session = devServerSession();
         devServerSessionId = session.id;
       }
+      await machine.loadPreset(preset);
+      await seedViteWorkspace(preset);
+      await waitForActiveSnapshotFrame();
+      resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
       // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
       // must update the runtime before the dev line runs. `slug` keys the install
@@ -1901,16 +1923,17 @@ export function App(props: AppProps) {
       });
       if (restartNeeded) {
         if (restartSessionId) await restartDevServer(restartSessionId);
-        reinitializeTsForPickedPreset(preset);
+        reinitializeTsForPickedPreset();
         return;
       }
       if (!session) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      session = await ensureReservedDevServerSession(session);
+      devServerSessionId = session.id;
       manager.clear(session.id); // fresh console for the switched-in project
       const generation = ++devServerRestartGeneration;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
       await waitForDevServerBoot(session.id, generation);
-      reinitializeTsForPickedPreset(preset);
+      reinitializeTsForPickedPreset();
     } finally {
       tsGate?.resolve();
     }
@@ -1939,7 +1962,7 @@ export function App(props: AppProps) {
     if (!saveAffordance(storageMode).ephemeral) {
       await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
     }
-    return await requestSwitch({
+    const switched = await requestSwitch({
       currentOwner: workspaceOwner(),
       nextRoot: rootForId(nextActiveId),
       nextSlug: nextActiveId,
@@ -1993,16 +2016,19 @@ export function App(props: AppProps) {
         if (devServerSessionId) manager.clear(devServerSessionId);
       },
     });
+    if (switched) {
+      await waitForActiveSnapshotFrame();
+      resetEditorToActiveInitialFiles();
+    }
+    return switched;
   }
 
   onMount(() => {
     // Seed the owner workspace (idempotent). The default README is seeded
     // owner-side in `seedProject` (single store owner — no page store to write).
-    try {
-      seedViteWorkspace(DEFAULT_PRESET);
-    } catch {
+    void seedViteWorkspace(DEFAULT_PRESET).catch(() => {
       /* best-effort seeding */
-    }
+    });
     initialRunTimer = setTimeout(() => {
       void runVitePreset(DEFAULT_PRESET);
     }, 0);
@@ -2011,7 +2037,7 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    void flushPendingProgramWrite();
+    void flushPendingEditorWrites();
     manager.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -2086,38 +2112,7 @@ export function App(props: AppProps) {
     return (await pendingSwitch) ?? true;
   }
 
-  let programWriteTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingProgramWrite: { path: string; content: string } | undefined;
-  let inFlightProgramWrite: Promise<void> | undefined;
-
-  function writeProgramFile(path: string, content: string): Promise<void> {
-    const tracked = workspaceOwner()
-      .writeFrameAcked({
-        type: 'write',
-        path,
-        data: ownerWriteEnc.encode(content),
-      })
-      .then(() => {
-        notifyFileWritten(path, content); // ADR-0165 §57: REAL write → dirty
-        editorApi?.markPathClean(path);
-      })
-      .finally(() => {
-        if (inFlightProgramWrite === tracked) inFlightProgramWrite = undefined;
-      });
-    inFlightProgramWrite = tracked;
-    return tracked;
-  }
-
-  async function flushPendingProgramWrite(): Promise<void> {
-    await inFlightProgramWrite;
-    const pending = pendingProgramWrite;
-    if (!pending) return;
-    discardPendingProgramWrite();
-    await writeProgramFile(pending.path, pending.content);
-  }
-
   async function flushPendingEditorWrites(): Promise<void> {
-    await flushPendingProgramWrite();
     await editorApi?.flushPendingWrites();
   }
 
@@ -2134,23 +2129,6 @@ export function App(props: AppProps) {
       requestActiveGitStatus();
     }
     layout.selectView(view);
-  }
-
-  function discardPendingProgramWrite(): void {
-    if (programWriteTimer) {
-      clearTimeout(programWriteTimer);
-      programWriteTimer = undefined;
-    }
-    pendingProgramWrite = undefined;
-  }
-
-  function scheduleProgramWrite(path: string, content: string): void {
-    pendingProgramWrite = { path, content };
-    if (programWriteTimer) clearTimeout(programWriteTimer);
-    programWriteTimer = setTimeout(() => {
-      programWriteTimer = undefined;
-      void flushPendingProgramWrite().catch((err: unknown) => flashError((err as Error).message));
-    }, 300);
   }
 
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
@@ -2334,16 +2312,33 @@ export function App(props: AppProps) {
     store.confirmRename(renameName());
   }
 
-  // Re-seed the live editor program + restart the dev server after the OWNER
+  // Re-seed visible editor tabs + restart the dev server after the OWNER
   // re-seeded the ACTIVE root (ADR-0165 §6). The owner already republished the
   // file snapshot (reset-refresh hook), so the explorer is fresh; here the page
-  // resets the program tab to the clean starter source (echo-suppressed in
-  // EditorHost → no re-dirty) and reboots the dev server so the preview reflects
-  // the restored tree (node_modules was wiped → the boot re-installs).
-  function refreshActiveAfterReset(): void {
-    const preset = presetForId(activeStarterId());
-    machine.setSource(preset.source);
-    openPresetEditorTabs(preset);
+  // reopens the preset's initial files and reboots the dev server so the preview
+  // reflects the restored tree (node_modules was wiped → the boot re-installs).
+  async function waitForActiveSnapshotFrame(): Promise<void> {
+    const owner = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let unsubscribe: () => void = () => {};
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finish, 2000);
+      unsubscribe = snapshotFs.subscribe(finish);
+      requestVfsSnapshot(owner.snapshotPort);
+    });
+  }
+
+  async function refreshActiveAfterReset(): Promise<void> {
+    await waitForActiveSnapshotFrame();
+    resetEditorToActiveInitialFiles();
     if (devServerStatus() !== 'stopped' && devServerSessionId) {
       void restartDevServer(devServerSessionId);
     }
@@ -2358,15 +2353,19 @@ export function App(props: AppProps) {
   function onConfirmReset(): void {
     const d = store.dialog();
     const id = d && d.kind === 'reset' ? d.id : null;
-    if (id && !saveAffordance(storageMode).ephemeral) {
-      const reset =
-        id === 'scratch'
-          ? resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId())
-          : resetProjectIndex(workspaceOwner().snapshotPort, id);
-      void reset.catch((err: unknown) => console.error('[project-index] reset failed', err));
-    }
-    store.confirmReset();
-    if (id && id === store.activeId()) refreshActiveAfterReset();
+    const activeReset = id === store.activeId();
+    void (async (): Promise<void> => {
+      await flushPendingEditorWrites();
+      if (id && !saveAffordance(storageMode).ephemeral) {
+        if (id === 'scratch') {
+          await resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId());
+        } else {
+          await resetProjectIndex(workspaceOwner().snapshotPort, id);
+        }
+      }
+      store.confirmReset();
+      if (activeReset) await refreshActiveAfterReset();
+    })().catch((err: unknown) => console.error('[project-index] reset failed', err));
   }
 
   // Dialog-derived strings (ADR-0165 §9 ProjectDialogs contract).
@@ -2467,18 +2466,6 @@ export function App(props: AppProps) {
   </body>
 </html>`);
     previewWindow.document.close();
-  }
-
-  function onProgramChange(next: string): void {
-    machine.setSource(next);
-    // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
-    // authoritative fs): push the program edit to the OWNER (the single store) so
-    // the co-resident dev server HMR-updates and the archive sees it. The path is
-    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches the active template entry.
-    // Debounced like ordinary file tabs: Monaco emits one content event per
-    // keystroke, and writing each one floods Vite with duplicate HMR updates.
-    const programPath = programMirrorPath(activeRoot(), activeTemplate());
-    scheduleProgramWrite(programPath, next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -2703,7 +2690,6 @@ export function App(props: AppProps) {
     label: 'Shell',
     detail: `Commands run in ${activeRoot()}; running programs own stdin.`,
   });
-  const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
   // Mount the preview when the dev server is up/starting OR any node server
   // registered a port (ADR-0155 §3 / ADR-0157 review C1): a `node server.js` with
   // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
@@ -2856,11 +2842,8 @@ export function App(props: AppProps) {
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
               <EditorHost
-                programValue={machine.source}
-                programPath={() => programMirrorPath(activeRoot(), activeTemplate())}
-                programTitle={programTitle}
+                initialEditorFiles={publishedInitialEditorFiles}
                 root={activeRoot}
-                onProgramChange={onProgramChange}
                 vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;

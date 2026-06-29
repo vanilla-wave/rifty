@@ -4,17 +4,9 @@
  * never spuriously write.
  *
  * E2E-load-bearing invariants:
- *  - the permanent program tab is active at boot and is the ONLY tab bound to
- *    `machine.source`/`setSource` — the m10 HMR textarea path
- *    (`[data-testid="editor"] textarea`) stays byte-for-byte unchanged;
- *  - preset tabs may auto-open inactive, but the bare editor textarea still
- *    hosts the program model until the user explicitly switches tabs;
- *  - external program-source changes (presets / mode transitions) write the
- *    program model under the single `suppressProgramEcho` flag the change
- *    listener checks-and-clears, so they can't echo back into `setSource`;
- *  - opening the program-mirror path (active template entry, ADR-0165 §4)
- *    from the explorer focuses the program tab instead of creating a second
- *    model (no dual writer to that path).
+ *  - initial editor tabs are ordinary file tabs supplied by preset/project data;
+ *  - opening the same path from Explorer, GIT, LS navigation, or initial tabs
+ *    reuses the same model (no dual writer to that path).
  */
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
@@ -31,14 +23,12 @@ import { type DirtyGutterChange, dirtyGutterChanges } from '../glue/dirty-gutter
 import { classifyOpen } from '../glue/editor-open.ts';
 import {
   type EditorTab,
-  PROGRAM_TAB_ID,
   closeTab,
   initialTabs,
   nextActiveAfterClose,
   openDiffTab,
   openFileTab,
   setDirty,
-  setProgramTitle,
 } from '../glue/editor-tabs.ts';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
@@ -80,7 +70,7 @@ export interface EditorGitOriginalTextInput {
 
 /** A model open/change/close event the page LS client reacts to (ADR-0166 P1.9b). */
 export interface EditorDocumentEvent {
-  /** Absolute VFS path (the program tab maps to the active template entry). */
+  /** Absolute VFS path for an ordinary editor file tab. */
   readonly path: string;
   /** Current model text (empty on `close`). */
   readonly text: string;
@@ -90,15 +80,15 @@ export interface EditorDocumentEvent {
 /** Imperative handle handed to the App so the explorer can open files. */
 export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
+  openInitialFiles(paths: readonly string[]): void;
   openWorkingDiff(input: EditorWorkingDiffInput): void;
   openTextDiff(input: EditorTextDiffInput): void;
   flushPendingWrites(): Promise<void>;
-  markPathClean(path: string): void;
   closePath(path: string): void;
   closePathTree(path: string): void;
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
-   * is the absolute VFS path (program tab -> active template entry); a no-op
+   * is the absolute VFS path; a no-op
    * if no model is open for it. Owns the `'rifty-ts'` marker owner so it never
    * clobbers Monaco's own markers (which are disabled anyway).
    */
@@ -106,13 +96,13 @@ export interface EditorApi {
   /**
    * Subscribe to model open/change/close (ADR-0166 P1.9b) so the page can push
    * `ts:open`/`ts:update`/`ts:close` and request diagnostics. Returns an
-   * unsubscribe. The program tab reports the active template entry path.
+   * unsubscribe.
    */
   onDocument(cb: (ev: EditorDocumentEvent) => void): () => void;
   /**
    * VFS path for an open Monaco model (ADR-0166 phase 2): the inverse of the
    * private model map, so an LS provider handed a `model` can query the service
-   * by path (the program tab's model maps back to the active template entry).
+   * by path.
    * `undefined` if the model is not one of ours (e.g. a foreign/disposed model).
    */
   pathForModel(model: monaco.editor.ITextModel): string | undefined;
@@ -136,14 +126,8 @@ export interface EditorApi {
 }
 
 export interface EditorHostProps {
-  readonly programValue: Accessor<string>;
-  readonly programPath: Accessor<string>;
-  readonly programTitle: Accessor<string>;
-  /** Active root (ADR-0165 §4): the program-mirror path is `<root>/src/main.js`,
-   *  read reactively so a project switch re-keys which path focuses the program
-   *  tab + which path the active program tab reports to the explorer. */
+  readonly initialEditorFiles: Accessor<readonly string[]>;
   readonly root: Accessor<string>;
-  onProgramChange(value: string): void;
   readonly vfs: FsOpsTarget;
   registerApi(api: EditorApi): void;
   onActive(info: { label: string; language: string; path?: string }): void;
@@ -292,10 +276,6 @@ export function EditorHost(props: EditorHostProps) {
   let diffEditor: monaco.editor.IStandaloneDiffEditor | undefined;
   let dirtyGutterDecorations: monaco.editor.IEditorDecorationsCollection | undefined;
   let editorOpenerDisposable: monaco.IDisposable | undefined;
-  let programModel: monaco.editor.ITextModel | undefined;
-  let currentProgramPath = props.programPath();
-  let programTabDirty = false;
-  let suppressProgramEcho = false;
   // A reveal queued by `openFile({reveal})` (ADR-0166 P1.9c Problems jump),
   // applied once the target tab is the editor's active model (the activeId effect
   // runs after the signal write). {tabId, line, column} — 1-based Monaco coords.
@@ -311,7 +291,6 @@ export function EditorHost(props: EditorHostProps) {
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const inFlightWrites = new Map<string, Promise<void>>();
-  const externalWriteClosedPaths = new Set<string>();
   const diffModels = new Map<
     string,
     {
@@ -332,15 +311,13 @@ export function EditorHost(props: EditorHostProps) {
   // Page LS-client subscribers (ADR-0166 P1.9b): notified on model open/change/close.
   const documentListeners = new Set<(ev: EditorDocumentEvent) => void>();
 
-  /** Tab id → absolute VFS path: the program tab mirrors `currentProgramPath`;
-   *  every other tab id IS its
-   *  absolute path (file-explorer / preset opens key by path). */
+  /** Tab id → absolute VFS path. File tab ids are absolute paths. */
   function docPathForTab(id: string): string {
-    return id === PROGRAM_TAB_ID ? currentProgramPath : id;
+    return id;
   }
   /** Inverse of {@link docPathForTab} — the model key for a VFS path. */
   function tabIdForPath(path: string): string {
-    return path === currentProgramPath ? PROGRAM_TAB_ID : path;
+    return path;
   }
   /** Track a model under its tab id + index its uri (keeps `modelUriToTabId` in sync). */
   function registerModel(id: string, model: monaco.editor.ITextModel): void {
@@ -362,22 +339,6 @@ export function EditorHost(props: EditorHostProps) {
     return model;
   }
   function handleModelContentChange(id: string): void {
-    if (id === PROGRAM_TAB_ID) {
-      if (externalWriteClosedPaths.has(currentProgramPath)) {
-        props.onError?.(
-          `${basename(currentProgramPath)} was moved or deleted; program editor is read-only`,
-        );
-        return;
-      }
-      emitDocument(id, 'change');
-      if (suppressProgramEcho || !programModel) return;
-      props.onProgramChange(programModel.getValue());
-      programTabDirty = true;
-      setTabs((t) => setDirty(t, PROGRAM_TAB_ID, true));
-      dirtyGutterLocalPaths.add(docPathForTab(id));
-      if (id === activeId()) updateDirtyGutterForActive();
-      return;
-    }
     if (readOnlyPaths.has(id)) return;
     emitDocument(id, 'change');
     setTabs((t) => setDirty(t, id, true));
@@ -501,53 +462,27 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function publishActiveInfo(id: string): void {
-    const model = models.get(id) ?? programModel;
+    const model = models.get(id);
     if (!model) return;
     props.onActive({
-      label: id === PROGRAM_TAB_ID ? basename(currentProgramPath) : basename(id),
+      label: basename(id),
       language: model.getLanguageId(),
-      path: id === PROGRAM_TAB_ID ? currentProgramPath : id,
+      path: id,
     });
   }
 
-  const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
-  const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
+  const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs());
+  const [activeId, setActiveId] = createSignal<string>(NO_ACTIVE_TAB_ID);
   const activeTabKind = createMemo(() => tabs().find((tab) => tab.id === activeId())?.kind);
-
-  function ensureProgramTab(): void {
-    if (programModel && !models.has(PROGRAM_TAB_ID)) {
-      registerModel(PROGRAM_TAB_ID, programModel);
-      emitDocument(PROGRAM_TAB_ID, 'open');
-    }
-    setTabs((current) =>
-      current.some((tab) => tab.id === PROGRAM_TAB_ID)
-        ? current
-        : [
-            {
-              id: PROGRAM_TAB_ID,
-              kind: 'program',
-              title: props.programTitle(),
-              dirty: programTabDirty,
-            },
-            ...current,
-          ],
-    );
-  }
 
   function closeVisibleTab(id: string): void {
     const before = tabs();
     const next = nextActiveAfterClose(before, id, activeId());
     const after = closeTab(before, id);
     setTabs(after);
-    setActiveId(after.some((tab) => tab.id === next) ? next : (after[0]?.id ?? NO_ACTIVE_TAB_ID));
-  }
-
-  function setReadOnlyPath(id: string, readOnly: boolean): void {
-    if (readOnly) readOnlyPaths.add(id);
-    else readOnlyPaths.delete(id);
-    if (activeId() !== id) return;
-    editor?.updateOptions({ readOnly });
-    updateDirtyGutterForActive();
+    setActiveId(
+      next && after.some((tab) => tab.id === next) ? next : (after[0]?.id ?? NO_ACTIVE_TAB_ID),
+    );
   }
 
   async function flushWrite(path: string): Promise<void> {
@@ -622,7 +557,7 @@ export function EditorHost(props: EditorHostProps) {
     readOnlyPaths.add(path);
     const model = monaco.editor.createModel('// loading…', languageForPath(path));
     registerModel(path, model);
-    setTabs((t) => openFileTab(t, path, basename(path)));
+    setTabs((t) => openFileTab(t, path, titleForFilePath(path)));
     if (shouldActivate) setActiveId(path);
     read(path).then(
       (res) => {
@@ -663,7 +598,7 @@ export function EditorHost(props: EditorHostProps) {
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
     }
     registerModel(path, model);
-    setTabs((t) => openFileTab(t, path, basename(path)));
+    setTabs((t) => openFileTab(t, path, titleForFilePath(path)));
     if (shouldActivate) setActiveId(path);
     emitDocument(path, 'open');
   }
@@ -676,7 +611,7 @@ export function EditorHost(props: EditorHostProps) {
     }
     const model = monaco.editor.createModel('', languageForPath(path));
     registerModel(path, model);
-    setTabs((t) => openFileTab(t, path, basename(path)));
+    setTabs((t) => openFileTab(t, path, titleForFilePath(path)));
     if (shouldActivate) setActiveId(path);
     emitDocument(path, 'open');
     return model.uri;
@@ -692,15 +627,12 @@ export function EditorHost(props: EditorHostProps) {
       // classifyOpen below needs only the readable boolean.
     }
     const kind = classifyOpen(path, {
-      programMirrorPath: currentProgramPath,
       isNodeModules: isNodeModulesPath(path),
       present: props.vfs.existsSync(path),
       readable: bytes !== undefined,
       hasRemotePort: Boolean(props.readNodeModulesFile),
     });
     switch (kind) {
-      case 'program':
-        return true;
       case 'remote':
         return props.readNodeModulesFile !== undefined;
       case 'sync':
@@ -771,7 +703,6 @@ export function EditorHost(props: EditorHostProps) {
     }
     switch (
       classifyOpen(path, {
-        programMirrorPath: currentProgramPath,
         isNodeModules: isNodeModulesPath(path),
         // present-but-over-cap (exists, no inlined bytes) stays view-only-remote,
         // distinct from a racing seed (absent → await the publish).
@@ -780,10 +711,6 @@ export function EditorHost(props: EditorHostProps) {
         hasRemotePort: Boolean(readRemote),
       })
     ) {
-      case 'program':
-        ensureProgramTab();
-        if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
-        return;
       case 'remote':
         // 'remote' is only returned when a node_modules path has a read-port.
         if (readRemote) openRemoteFile(path, readRemote, options);
@@ -912,12 +839,6 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void {
-    if (path === PROGRAM_TAB_ID) {
-      emitDocument(PROGRAM_TAB_ID, 'close');
-      unregisterModel(PROGRAM_TAB_ID);
-      closeVisibleTab(PROGRAM_TAB_ID);
-      return;
-    }
     const diff = diffModels.get(path);
     if (diff) {
       diffModels.delete(path);
@@ -947,34 +868,66 @@ export function EditorHost(props: EditorHostProps) {
 
   function closeExternalPathTree(rootPath: string): void {
     const normalizedRoot = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
-    const ids = [...models.keys()].filter((id) => {
+    const ids = new Set([
+      ...models.keys(),
+      ...tabs()
+        .filter((tab) => tab.kind === 'file')
+        .map((tab) => tab.id),
+    ]);
+    const matchingIds = [...ids].filter((id) => {
       const path = docPathForTab(id);
       return path === normalizedRoot || path.startsWith(`${normalizedRoot}/`);
     });
-    for (const id of ids) {
-      const path = docPathForTab(id);
-      if (id === PROGRAM_TAB_ID) {
-        externalWriteClosedPaths.add(path);
-        setReadOnlyPath(PROGRAM_TAB_ID, true);
-        props.onError?.(`${basename(path)} was moved or deleted; program editor is read-only`);
-        emitDocumentPath(path, '', 'close');
-        continue;
-      }
-      closeFile(id, { flushPending: false });
+    for (const id of matchingIds) closeFile(id, { flushPending: false });
+  }
+
+  function titleForFilePath(path: string): string {
+    const root = props.root();
+    return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : basename(path);
+  }
+
+  function disposeAllOpenModels(): void {
+    for (const timer of writeTimers.values()) clearTimeout(timer);
+    writeTimers.clear();
+    inFlightWrites.clear();
+    for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
+    snapshotAwaits.clear();
+    for (const diff of diffModels.values()) {
+      diff.original.dispose();
+      if (diff.disposeModified) diff.modified.dispose();
     }
+    diffModels.clear();
+    diffEditor?.setModel(null);
+    for (const id of [...models.keys()]) {
+      emitDocument(id, 'close');
+      unregisterModel(id)?.dispose();
+    }
+    readOnlyPaths.clear();
+    dirtyGutterLocalPaths.clear();
+    clearDirtyGutter();
+    modelUriToTabId.clear();
+  }
+
+  function resetOpenFileTabs(paths: readonly string[]): void {
+    const uniquePaths = [...new Set(paths)];
+    disposeAllOpenModels();
+    setTabs(initialTabs(uniquePaths.map((path) => ({ path, title: titleForFilePath(path) }))));
+    setActiveId(uniquePaths[0] ?? NO_ACTIVE_TAB_ID);
+    for (const [index, path] of uniquePaths.entries()) {
+      openFile(path, { activate: index === 0 });
+    }
+  }
+
+  function openInitialFiles(paths: readonly string[]): void {
+    resetOpenFileTabs(paths);
   }
 
   onMount(() => {
     if (!container) return;
     ensureTheme();
     retireBuiltinTsIntelligence();
-    programModel = monaco.editor.createModel(
-      props.programValue(),
-      languageForPath(currentProgramPath),
-    );
-    registerModel(PROGRAM_TAB_ID, programModel);
     editor = monaco.editor.create(container, {
-      model: programModel,
+      model: null,
       theme: 'rifty-dark',
       automaticLayout: true,
       minimap: { enabled: false },
@@ -1029,13 +982,10 @@ export function EditorHost(props: EditorHostProps) {
 
     props.registerApi({
       openFile,
+      openInitialFiles,
       openWorkingDiff,
       openTextDiff,
       flushPendingWrites,
-      markPathClean(path) {
-        if (tabIdForPath(path) === PROGRAM_TAB_ID) programTabDirty = false;
-        setTabs((t) => setDirty(t, tabIdForPath(path), false));
-      },
       closePath: (path) => closeExternalPathTree(path),
       closePathTree: (path) => closeExternalPathTree(path),
       setMarkers(path, markers) {
@@ -1044,9 +994,9 @@ export function EditorHost(props: EditorHostProps) {
       },
       onDocument(cb) {
         documentListeners.add(cb);
-        // Replay already-open models to the new subscriber (ADR-0166 P1.9b): the
-        // program tab is open at boot, often before the App wires its LS client.
-        // An ordering-free 'open' replay means a late subscriber still opens every
+        // Replay already-open models to the new subscriber (ADR-0166 P1.9b):
+        // initial file tabs can open before the App wires its LS client. An
+        // ordering-free 'open' replay means a late subscriber still opens every
         // live buffer — no missed-before-listener gap.
         for (const [id, model] of models) {
           cb({ path: docPathForTab(id), text: model.getValue(), kind: 'open' });
@@ -1063,8 +1013,8 @@ export function EditorHost(props: EditorHostProps) {
         if (existing) return existing.uri;
         if (options?.isNewFile === true) return openNewEditableFile(path, false);
         // Not open yet: open it WITHOUT activating (a go-to-def target the user
-        // didn't pick). The sync/remote/program branches create the model
-        // synchronously; only `await-snapshot` (a racing seed) defers — that path
+        // didn't pick). The sync/remote branches create the model synchronously;
+        // only `await-snapshot` (a racing seed) defers — that path
         // returns no model now, so the jump simply can't resolve this tick rather
         // than fake one. node_modules `.d.ts` go through the read-port (read-only).
         openFile(path, { activate: false });
@@ -1105,34 +1055,13 @@ export function EditorHost(props: EditorHostProps) {
       };
     }
 
-    // External program-source sync (presets / mode transitions): the one guarded
-    // programmatic write; the change listener skips the echo.
+    let initialFilesKey = '';
     createEffect(() => {
-      const next = props.programValue();
-      if (programModel && programModel.getValue() !== next) {
-        try {
-          suppressProgramEcho = true;
-          programModel.setValue(next);
-        } finally {
-          suppressProgramEcho = false;
-        }
-      }
-    });
-
-    createEffect(() => {
-      const path = props.programPath();
-      if (programModel) monaco.editor.setModelLanguage(programModel, languageForPath(path));
-      if (path === currentProgramPath) return;
-      const previousPath = currentProgramPath;
-      currentProgramPath = path;
-      externalWriteClosedPaths.delete(path);
-      untrack(() => setReadOnlyPath(PROGRAM_TAB_ID, false));
-      dirtyGutterLocalPaths.delete(previousPath);
-      if (programModel && models.has(PROGRAM_TAB_ID)) {
-        emitDocumentPath(previousPath, '', 'close');
-        emitDocumentPath(path, programModel.getValue(), 'open');
-      }
-      if (activeId() === PROGRAM_TAB_ID) publishActiveInfo(PROGRAM_TAB_ID);
+      const paths = props.initialEditorFiles();
+      const key = paths.join('\0');
+      if (key === initialFilesKey) return;
+      initialFilesKey = key;
+      untrack(() => openInitialFiles(paths));
     });
 
     let diffRoot = props.root();
@@ -1148,7 +1077,7 @@ export function EditorHost(props: EditorHostProps) {
         diffModels.delete(id);
       }
       setTabs((t) => t.filter((tab) => tab.kind !== 'diff'));
-      if (ids.includes(activeId())) setActiveId(PROGRAM_TAB_ID);
+      if (ids.includes(activeId())) setActiveId(tabs()[0]?.id ?? NO_ACTIVE_TAB_ID);
     }
 
     createEffect(() => {
@@ -1165,11 +1094,6 @@ export function EditorHost(props: EditorHostProps) {
       props.gitStatus?.();
       gitOriginalTextCache.clear();
       updateDirtyGutterForActive();
-    });
-
-    createEffect(() => {
-      const title = props.programTitle();
-      setTabs((t) => setProgramTitle(t, title));
     });
 
     createEffect(() => {
@@ -1193,7 +1117,7 @@ export function EditorHost(props: EditorHostProps) {
         clearDirtyGutter();
         return;
       }
-      const model = models.get(id) ?? (id === PROGRAM_TAB_ID ? programModel : undefined);
+      const model = models.get(id);
       if (!editor || !model) return;
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });

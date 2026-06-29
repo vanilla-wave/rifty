@@ -54,7 +54,7 @@ export interface Preset {
   readonly source: string;
   /** Additional project files written into /workspace for this preset. */
   readonly files?: readonly PresetFile[];
-  /** Workspace-relative files opened as inactive editor tabs when this preset loads. */
+  /** Workspace-relative files opened as editor tabs when this preset loads; first is active. */
   readonly openFiles?: readonly string[];
 }
 
@@ -333,7 +333,7 @@ const PROJECT_FILES_PRESET: Preset = {
   glyph: { text: 'JS', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
   source: PROJECT_FILES_SOURCE,
-  openFiles: ['src/project-summary.js', 'src/project.json'],
+  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json'],
   files: [
     { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
     { path: 'src/project.json', content: PROJECT_JSON_SOURCE },
@@ -354,7 +354,7 @@ const NODE_WORKER_PRESET: Preset = {
   glyph: { text: 'N', color: '#9BD060' },
   tag: { text: 'instant', tone: 'live' },
   source: NODE_WORKER_SOURCE,
-  openFiles: ['src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
+  openFiles: ['src/main.js', 'src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
   files: [
     { path: 'src/runtime-notes.js', content: RUNTIME_NOTES_SOURCE },
     { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },
@@ -375,7 +375,7 @@ const TYPESCRIPT_LS_PRESET: Preset = {
   glyph: { text: 'TS', color: '#7FB5FF' },
   tag: { text: 'instant', tone: 'live' },
   source: TYPESCRIPT_TEMPLATE.entry.content,
-  openFiles: ['tsconfig.json', 'src/model.ts', 'src/math.ts'],
+  openFiles: ['src/main.ts', 'tsconfig.json', 'src/model.ts', 'src/math.ts'],
   files: Object.entries(TYPESCRIPT_TEMPLATE.extraFiles).map(([path, content]) => ({
     path: path.replace(/^\/+/, ''),
     content,
@@ -394,6 +394,7 @@ const REAL_VITE_PRESET: Preset = {
   glyph: { text: 'V', color: '#5FCE96' },
   tag: { text: 'npm install', tone: 'slow' },
   source: REAL_VITE_SOURCE,
+  openFiles: ['src/main.js'],
 };
 
 const VITE8_PRESET: Preset = {
@@ -408,6 +409,7 @@ const VITE8_PRESET: Preset = {
   glyph: { text: 'V8', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
   source: REAL_VITE_SOURCE,
+  openFiles: ['src/main.js'],
 };
 
 /**
@@ -427,7 +429,7 @@ const EXPRESS_SQLITE_PRESET: Preset = {
   glyph: { text: 'EX', color: '#7FB7E8' },
   tag: { text: 'npm install', tone: 'slow' },
   source: EXPRESS_SQLITE_SERVER_SOURCE,
-  openFiles: ['public/index.html', 'public/client.js'],
+  openFiles: ['src/main.js', 'public/index.html', 'public/client.js'],
   files: Object.entries(EXPRESS_SQLITE_TEMPLATE.extraFiles).map(([path, content]) => ({
     path: path.replace(/^\/+/, ''),
     content,
@@ -451,7 +453,7 @@ const SOCKET_LAB_PRESET: Preset = {
   glyph: { text: 'SO', color: '#80C7FF' },
   tag: { text: 'npm install', tone: 'slow' },
   source: SOCKET_LAB_SERVER_SOURCE,
-  openFiles: ['public/client.js', 'README.md'],
+  openFiles: ['src/main.js', 'public/client.js', 'README.md'],
   files: Object.entries(SOCKET_LAB_TEMPLATE.extraFiles).map(([path, content]) => ({
     path: path.replace(/^\/+/, ''),
     content,

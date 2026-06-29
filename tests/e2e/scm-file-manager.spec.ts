@@ -54,6 +54,15 @@ async function bootScmFileManager(page: Page): Promise<void> {
   await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
 }
 
+async function pickStarter(page: Page, id: string): Promise<void> {
+  await page.click('[data-action="open-launcher"]');
+  await page.getByRole('button', { name: 'Starters', exact: true }).click();
+  await page.click(`[data-preset="${id}"]`);
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_DURABLE_TIMEOUT,
+  });
+}
+
 function explorerRow(page: Page, name: string, kind?: 'file' | 'dir') {
   const selector =
     kind === undefined
@@ -62,9 +71,9 @@ function explorerRow(page: Page, name: string, kind?: 'file' | 'dir') {
   return page.locator(selector, { hasText: name }).first();
 }
 
-async function openSrcFolder(page: Page): Promise<void> {
+async function openSrcFolder(page: Page, timeout = 30_000): Promise<void> {
   const srcRow = explorerRow(page, 'src', 'dir');
-  await expect(srcRow).toBeVisible({ timeout: 30_000 });
+  await expect(srcRow).toBeVisible({ timeout });
   if ((await srcRow.getAttribute('aria-expanded')) !== 'true') await srcRow.click({ force: true });
 }
 
@@ -208,7 +217,7 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await openSrcFolder(page);
+    await openSrcFolder(page, OWNER_DURABLE_TIMEOUT);
 
     const seq = Date.now().toString(36);
     const file = `ctx-${seq}.txt`;
@@ -293,7 +302,7 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await openSrcFolder(page);
+    await openSrcFolder(page, OWNER_DURABLE_TIMEOUT);
 
     const seq = Date.now().toString(36);
     const file = `clip-${seq}.txt`;
@@ -502,7 +511,7 @@ test.describe('GIT file manager', () => {
       .toContain(`delete-ok-${seq}`);
   });
 
-  test('renaming the program mirror path does not silently recreate src/main.js', async ({
+  test('renaming an open entry file does not silently recreate src/main.js', async ({
     page,
     browserName,
   }) => {
@@ -514,11 +523,7 @@ test.describe('GIT file manager', () => {
 
     const seq = Date.now().toString(36);
     const renamed = `main-renamed-${seq}.js`;
-    await setOpenEditorValue(
-      page,
-      '/scratch/src/main.js',
-      `console.log("program-before-${seq}");\n`,
-    );
+    await setOpenEditorValue(page, '/scratch/src/main.js', `console.log("entry-before-${seq}");\n`);
     const mainRow = explorerRow(page, 'main.js', 'file');
     await expect(mainRow).toBeVisible({ timeout: 30_000 });
     await mainRow.focus();
@@ -527,21 +532,28 @@ test.describe('GIT file manager', () => {
     await page.locator('.rf-row__input').press('Enter');
     await expect(explorerRow(page, renamed, 'file')).toBeVisible({ timeout: 30_000 });
 
+    await expect(
+      trySetOpenEditorValue(
+        page,
+        '/scratch/src/main.js',
+        `console.log("should-not-recreate-${seq}");\n`,
+      ),
+    ).resolves.toBe(false);
     await setOpenEditorValue(
       page,
-      '/scratch/src/main.js',
-      `console.log("should-not-recreate-${seq}");\n`,
+      `/scratch/src/${renamed}`,
+      `console.log("entry-after-rename-${seq}");\n`,
     );
 
     await openShellTerminal(page);
     await runTerminalLineSettled(
       page,
-      `node -e "const fs=require('fs'); if (fs.existsSync('src/main.js')) process.exit(1); const text=fs.readFileSync('src/${renamed}','utf8'); if (!text.includes('program-before-${seq}')) process.exit(2); if (text.includes('should-not-recreate-${seq}')) process.exit(3); console.log('program-mirror-ok-${seq}')"`,
+      `node -e "const fs=require('fs'); if (fs.existsSync('src/main.js')) process.exit(1); const text=fs.readFileSync('src/${renamed}','utf8'); if (!text.includes('entry-after-rename-${seq}')) process.exit(2); if (text.includes('should-not-recreate-${seq}')) process.exit(3); console.log('entry-rename-ok-${seq}')"`,
       60_000,
     );
     await expect
       .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`program-mirror-ok-${seq}`);
+      .toContain(`entry-rename-ok-${seq}`);
 
     const projectName = `Program Mirror Reset ${seq}`;
     const projectId = await saveScratchAs(page, projectName);
@@ -630,7 +642,7 @@ test.describe('GIT file manager', () => {
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
   });
 
-  test('program editor writes appear in GIT and mark changed lines', async ({
+  test('entry file editor writes appear in GIT and mark changed lines', async ({
     page,
     browserName,
   }) => {
@@ -648,7 +660,7 @@ test.describe('GIT file manager', () => {
       { timeout: 30_000 },
     );
 
-    const marker = `scm-program-${Date.now().toString(36)}`;
+    const marker = `git-entry-${Date.now().toString(36)}`;
     const editor = page.locator('[data-testid="editor"]');
     const editorInput = editor.locator('textarea.inputarea').first();
     const editorLines = editor.locator('.view-lines').first();
@@ -744,7 +756,7 @@ test.describe('GIT file manager', () => {
     await expect(gitRow).toHaveAttribute('data-code', 'M');
   });
 
-  test('program editor autosave updates already-open GIT and then Files', async ({
+  test('entry file autosave updates already-open GIT and then Files', async ({
     page,
     browserName,
   }) => {
@@ -765,7 +777,7 @@ test.describe('GIT file manager', () => {
     await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
     await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
 
-    const marker = `scm-open-${Date.now().toString(36)}`;
+    const marker = `git-open-${Date.now().toString(36)}`;
     const editor = page.locator('[data-testid="editor"]');
     const editorInput = editor.locator('textarea.inputarea').first();
     const editorLines = editor.locator('.view-lines').first();
@@ -798,7 +810,40 @@ test.describe('GIT file manager', () => {
     await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
   });
 
-  test('saved project program edits appear in GIT and Files under the project root', async ({
+  test('same-path starter switch reopens entry tab from the fresh owner snapshot', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
+    test.setTimeout(180_000);
+
+    await bootScmFileManager(page);
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+    await expect(editorLines).toContainText("import project from './project.json'", {
+      timeout: 30_000,
+    });
+
+    await pickStarter(page, 'node-worker');
+    await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toContainText(
+      'Node worker map',
+      { timeout: OWNER_DURABLE_TIMEOUT },
+    );
+    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+      { timeout: 30_000 },
+    );
+    await expect(editorLines).toContainText("const notesUrl = new URL('src/runtime-notes.js'", {
+      timeout: 30_000,
+    });
+    await expect(editorLines).not.toContainText("import project from './project.json'");
+
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, `grep "const notesUrl" src/main.js`, 60_000);
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('const notesUrl');
+  });
+
+  test('saved project entry-file edits appear in GIT and Files under the project root', async ({
     page,
     browserName,
   }) => {
@@ -822,9 +867,12 @@ test.describe('GIT file manager', () => {
         { timeout: OWNER_DURABLE_TIMEOUT },
       )
       .toBe(projectId);
-    await expect(
-      page.locator('.rf-row[role="treeitem"][data-kind="dir"]', { hasText: 'src' }).first(),
-    ).toBeVisible({ timeout: OWNER_DURABLE_TIMEOUT });
+    await openSrcFolder(page, OWNER_DURABLE_TIMEOUT);
+    const activeSavedMainRow = explorerRow(page, 'main.js', 'file');
+    await expect(activeSavedMainRow).toBeVisible({ timeout: OWNER_DURABLE_TIMEOUT });
+    await expect(activeSavedMainRow).toHaveAttribute('data-active', 'true', {
+      timeout: OWNER_DURABLE_TIMEOUT,
+    });
 
     const marker = `scm-project-${Date.now().toString(36)}`;
     const editor = page.locator('[data-testid="editor"]');

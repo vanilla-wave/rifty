@@ -2,22 +2,11 @@
  * Pure tab/document reducer for the multi-model editor (ADR-0075).
  *
  * Solid-free so the invariants e2e selectors depend on are unit-testable:
- *  - the program tab ({@link PROGRAM_TAB_ID}) is always index 0 when open
- *    — it stays bound to `machine.source`/`setSource`, keeping the
- *    real-vite HMR textarea path unchanged;
  *  - file tabs are keyed by absolute VFS path; opening the same path twice is
  *    idempotent (re-activates), preventing two models over one path.
  */
 
-export type TabKind = 'program' | 'file' | 'diff';
-
-export interface ProgramEditorTab {
-  /** Stable id: `__program__` for the program tab. */
-  readonly id: string;
-  readonly kind: 'program';
-  readonly title: string;
-  readonly dirty: boolean;
-}
+export type TabKind = 'file' | 'diff';
 
 export interface FileEditorTab {
   /** Stable id: absolute VFS path. */
@@ -43,20 +32,24 @@ export interface DiffEditorTab {
   readonly dirty: false;
 }
 
-export type EditorTab = ProgramEditorTab | FileEditorTab | DiffEditorTab;
+export type EditorTab = FileEditorTab | DiffEditorTab;
+export interface InitialFileTabInput {
+  readonly path: string;
+  readonly title: string;
+}
 export type DiffEditorTabInput = Omit<DiffEditorTab, 'kind' | 'dirty'> &
   Partial<Pick<DiffEditorTab, 'kind' | 'dirty'>>;
 
-export const PROGRAM_TAB_ID = '__program__';
-
-/** Starting tab list: just the program tab. */
-export function initialTabs(programTitle: string): EditorTab[] {
-  return [{ id: PROGRAM_TAB_ID, kind: 'program', title: programTitle, dirty: false }];
+/** Starting tab list: ordered ordinary file tabs. */
+export function initialTabs(files: readonly InitialFileTabInput[] = []): EditorTab[] {
+  let tabs: EditorTab[] = [];
+  for (const file of files) tabs = openFileTab(tabs, file.path, file.title);
+  return tabs;
 }
 
 /**
  * Add a file tab for `path`. Idempotent — unchanged if a tab for that path
- * exists. File tabs sort after the program tab.
+ * exists.
  */
 export function openFileTab(tabs: readonly EditorTab[], path: string, title: string): EditorTab[] {
   if (tabs.some((t) => t.id === path)) return [...tabs];
@@ -68,7 +61,7 @@ export function openDiffTab(tabs: readonly EditorTab[], tab: DiffEditorTabInput)
   return [...tabs, { ...tab, kind: 'diff', dirty: false }];
 }
 
-/** Close a tab from the visible strip. The program model remains owner-bound. */
+/** Close a tab from the visible strip. */
 export function closeTab(tabs: readonly EditorTab[], id: string): EditorTab[] {
   return tabs.filter((t) => t.id !== id);
 }
@@ -76,27 +69,22 @@ export function closeTab(tabs: readonly EditorTab[], id: string): EditorTab[] {
 /**
  * Active tab after `closingId` is removed. Closing an inactive tab keeps the
  * active one; closing the active tab falls to its right neighbour, else left,
- * else the program tab.
+ * else no active tab.
  */
 export function nextActiveAfterClose(
   tabs: readonly EditorTab[],
   closingId: string,
   activeId: string,
-): string {
+): string | undefined {
   if (closingId !== activeId) return activeId;
   const idx = tabs.findIndex((t) => t.id === closingId);
   if (idx === -1) return activeId;
   const right = tabs[idx + 1];
   const left = tabs[idx - 1];
-  return (right ?? left)?.id ?? PROGRAM_TAB_ID;
+  return (right ?? left)?.id;
 }
 
 /** Set the dirty flag on editable tabs (diff tabs are read-only). */
 export function setDirty(tabs: readonly EditorTab[], id: string, dirty: boolean): EditorTab[] {
-  return tabs.map((t) => (t.id === id && t.kind !== 'diff' ? { ...t, dirty } : t));
-}
-
-/** Update the program tab's label (mode/preset entry name). */
-export function setProgramTitle(tabs: readonly EditorTab[], title: string): EditorTab[] {
-  return tabs.map((t) => (t.id === PROGRAM_TAB_ID ? { ...t, title } : t));
+  return tabs.map((t) => (t.id === id && t.kind === 'file' ? { ...t, dirty } : t));
 }
