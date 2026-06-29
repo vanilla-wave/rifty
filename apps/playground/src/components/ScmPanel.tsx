@@ -145,9 +145,9 @@ export function ScmPanel(props: {
   }
 
   return (
-    <div class="rf-scm" aria-label="Source Control">
+    <div class="rf-scm" aria-label="Git">
       <div class="rf-explorer__head">
-        <span class="rf-explorer__title">Source Control</span>
+        <span class="rf-explorer__title">GIT</span>
         <Show when={props.branch}>
           {(branch) => <span class="rf-scm__branch">{branch()}</span>}
         </Show>

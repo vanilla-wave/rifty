@@ -463,7 +463,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('pendingSaveAutoSwitchId = null;');
   });
 
-  it('opens SCM rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
+  it('opens GIT rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
     expect(source).toContain('async function openScmResourceDiff(row: ScmResourceRow)');
     expect(source).toContain('await flushPendingEditorWrites();');
     expect(source).toContain('const path = row.path;');
@@ -480,9 +480,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain("originalTitle: rowHasIndexChange(row) ? 'Index' : 'HEAD'");
     expect(source).toContain("modifiedTitle: 'Working Tree'");
     expect(source).toContain(
-      "await readWorkspaceFileBytesFromOwner(owner, path, 'open SCM changes')",
+      "await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes')",
     );
-    expect(source).not.toContain("readWorkspaceFileForOwner(owner, path, 'open SCM changes')");
+    expect(source).not.toContain("readWorkspaceFileForOwner(owner, path, 'open Git changes')");
     expect(source).toContain('currentOwner.snapshotPort !== snapshotPort');
     expect(source).toContain("if (original.type !== 'blob')");
     expect(source).toContain('editorApi?.openTextDiff({');
@@ -533,6 +533,13 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('onUnstage={unstageScmRow}');
     expect(source).toContain('onDiscard={discardScmRow}');
     expect(source).toContain('onCommit={commitScm}');
+  });
+
+  it('clears program tab dirty state only after the owner write ack', () => {
+    expect(source).toContain('markPathClean(path)');
+    expect(source).toMatch(
+      /\.then\(\(\) => \{\s*notifyFileWritten\(path, content\);[\s\S]*?editorApi\?\.markPathClean\(path\);[\s\S]*?\}\)/,
+    );
   });
 });
 

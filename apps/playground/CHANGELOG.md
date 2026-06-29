@@ -10,28 +10,28 @@
 - **Explorer rows now support copy, cut, paste, and duplicate.** The file tree
   keeps an ephemeral page clipboard, but every paste/duplicate mutation routes
   through owner `copy` or atomic `rename` frames with VS Code-style copy names.
-- **Source Control can now stage, unstage, discard, and commit through the owner.**
-  SCM actions call the owner git RPC, resolve commit identity in the owner, and
+- **GIT can now stage, unstage, discard, and commit through the owner.**
+  GIT actions call the owner git RPC, resolve commit identity in the owner, and
   refresh the owner status feed after ack instead of mutating rows optimistically.
 - **Explorer file rows can now download exact working bytes.** The playground
   serves a full-byte owner read bridge for single-file downloads, so over-cap and
   binary files save from the owner instead of the capped page snapshot.
 - **Explorer rows now show rifty-git decorations.** The playground subscribes to
-  the owner-pushed SCM status feed and tints changed files/folders with honest
+  the owner-pushed GIT status feed and tints changed files/folders with honest
   M/U/A/D badges without reading `.git` from the page snapshot.
-- **Source Control has a read-only rifty-git panel.** The sidebar can show
+- **GIT has a read-only rifty-git panel.** The sidebar can show
   Staged/Changes groups from the shared owner status feed plus branch and commit
   history read through the owner git RPC channel.
-- **Source Control rows now open blob-vs-blob Monaco diffs.** The page fetches
+- **GIT rows now open blob-vs-blob Monaco diffs.** The page fetches
   `HEAD:<path>` blobs through the owner git RPC channel and compares them with
   the live working model, avoiding raw structured-LCS diff text.
 - **Explorer mutations now have an owner-routed writable VFS target.** `OwnerRpcFs`
   sends async create, rename, copy, and delete frames to the workspace owner and
   resolves only after the read-only snapshot reflects the owner result.
-- **Playground SCM now has an owner-pushed rifty-git status feed.** The owner
+- **Playground GIT now has an owner-pushed rifty-git status feed.** The owner
   debounces status recomputes from existing snapshot mutation triggers, skips
   unchanged deltas, serves late subscribers, and exposes a page path→code cache.
-- **Playground SCM can now call git in the workspace owner.** A keyed
+- **Playground GIT can now call git in the workspace owner.** A keyed
   page↔owner `rifty:git` RPC bridge exposes real `@riftydev/git` status, show,
   diff, log, branch, add, unstage, commit, restore, and reset operations without
   reading `.git` from the page snapshot.
@@ -56,20 +56,23 @@
 
 ### Fixed
 
-- **SCM Open Changes now distinguishes staged and worktree rows.** `MM`/`AD`
+- **GIT Open Changes now distinguishes staged and worktree rows.** `MM`/`AD`
   states render separate Index and Working Tree rows; staged rows diff HEAD↔Index,
   while worktree rows diff Index/HEAD↔owner working bytes.
-- **SCM actions now wait for editor/program owner ACKs.** Source Control status,
+- **GIT actions now wait for editor/program owner ACKs.** GIT status,
   diffs, stage, discard, and commit drain pending Monaco/program writes through
   acked owner frames before reading git, including already-started debounce writes.
+- **The `src/main.js` tab now behaves like a file tab.** It can be closed,
+  re-opened from Files, marks dirty while the owner write is pending, and still
+  appears in Files/GIT after edits through the owner status feed.
 - **Explorer rename/delete no longer resurrects open file paths.** File-manager
   rename/delete closes stale editor models after flushing owner writes, and the
   permanent program tab becomes loudly read-only if its mirrored path is moved.
-- **SCM now sees Monaco editor edits immediately.** Opening Source Control flushes
+- **GIT now sees Monaco editor edits immediately.** Opening GIT flushes
   pending editor writes before requesting owner git status, and dirty gutters can
   mark changed lines from the local buffer while the owner status feed catches up.
 - **Saved projects now re-root the workspace owner after Save.** A plain
-  Save-as-project respawns the owner at `/projects/<id>`, so Explorer, SCM, git
+  Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a

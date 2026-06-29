@@ -87,6 +87,16 @@ describe('EditorHost git diff contract', () => {
     );
     expect(source).toContain('if (opts.flushPending !== false) {');
     expect(source).toContain('function closeExternalPathTree(rootPath: string): void');
+    expect(source).toContain('const NO_ACTIVE_TAB_ID = ');
+    expect(source).toContain('function closeVisibleTab(id: string): void');
+    expect(source).toContain('unregisterModel(PROGRAM_TAB_ID);');
+    expect(source).toContain('editor?.setModel(null);');
+    expect(source).toContain('const tab = tabs().find((candidate) => candidate.id === id);');
+    expect(source).toContain(
+      'const model = models.get(id) ?? (id === PROGRAM_TAB_ID ? programModel : undefined);',
+    );
+    expect(source).toContain('if (programModel && !models.has(PROGRAM_TAB_ID)) {');
+    expect(source).toContain("emitDocument(PROGRAM_TAB_ID, 'open');");
     expect(source).toContain('externalWriteClosedPaths.add(path);');
     expect(source).toContain('function setReadOnlyPath(id: string, readOnly: boolean): void');
     expect(source).toContain('editor?.updateOptions({ readOnly });');

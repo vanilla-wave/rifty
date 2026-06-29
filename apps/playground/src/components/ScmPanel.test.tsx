@@ -40,7 +40,8 @@ describe('ScmPanel', () => {
       }),
     );
 
-    expect(html).toContain('Source Control');
+    expect(html).toContain('GIT');
+    expect(html).toContain('aria-label="Git"');
     expect(html).toContain('main');
     expect(html).toContain('Staged Changes');
     expect(html).toContain('Changes');

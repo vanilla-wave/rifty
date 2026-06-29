@@ -2,7 +2,7 @@
  * Pure tab/document reducer for the multi-model editor (ADR-0075).
  *
  * Solid-free so the invariants e2e selectors depend on are unit-testable:
- *  - the program tab ({@link PROGRAM_TAB_ID}) is always index 0 and non-closable
+ *  - the program tab ({@link PROGRAM_TAB_ID}) is always index 0 when open
  *    — it stays bound to `machine.source`/`setSource`, keeping the
  *    real-vite HMR textarea path unchanged;
  *  - file tabs are keyed by absolute VFS path; opening the same path twice is
@@ -16,7 +16,7 @@ export interface ProgramEditorTab {
   readonly id: string;
   readonly kind: 'program';
   readonly title: string;
-  readonly dirty: false;
+  readonly dirty: boolean;
 }
 
 export interface FileEditorTab {
@@ -68,9 +68,8 @@ export function openDiffTab(tabs: readonly EditorTab[], tab: DiffEditorTabInput)
   return [...tabs, { ...tab, kind: 'diff', dirty: false }];
 }
 
-/** Close a tab. The program tab is non-closable (returns the list unchanged). */
+/** Close a tab from the visible strip. The program model remains owner-bound. */
 export function closeTab(tabs: readonly EditorTab[], id: string): EditorTab[] {
-  if (id === PROGRAM_TAB_ID) return [...tabs];
   return tabs.filter((t) => t.id !== id);
 }
 
@@ -92,9 +91,9 @@ export function nextActiveAfterClose(
   return (right ?? left)?.id ?? PROGRAM_TAB_ID;
 }
 
-/** Set the dirty flag on a file tab (program tab is never dirty-tracked). */
+/** Set the dirty flag on editable tabs (diff tabs are read-only). */
 export function setDirty(tabs: readonly EditorTab[], id: string, dirty: boolean): EditorTab[] {
-  return tabs.map((t) => (t.id === id && t.kind === 'file' ? { ...t, dirty } : t));
+  return tabs.map((t) => (t.id === id && t.kind !== 'diff' ? { ...t, dirty } : t));
 }
 
 /** Update the program tab's label (mode/preset entry name). */

@@ -93,6 +93,7 @@ export interface EditorApi {
   openWorkingDiff(input: EditorWorkingDiffInput): void;
   openTextDiff(input: EditorTextDiffInput): void;
   flushPendingWrites(): Promise<void>;
+  markPathClean(path: string): void;
   closePath(path: string): void;
   closePathTree(path: string): void;
   /**
@@ -273,6 +274,7 @@ function languageForPath(path: string): string {
 }
 
 const dec = new TextDecoder();
+const NO_ACTIVE_TAB_ID = '__no_active__';
 
 function riftyGitOriginalUri(path: string, ref: string): monaco.Uri {
   return monaco.Uri.from({
@@ -292,6 +294,7 @@ export function EditorHost(props: EditorHostProps) {
   let editorOpenerDisposable: monaco.IDisposable | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
   let currentProgramPath = props.programPath();
+  let programTabDirty = false;
   let suppressProgramEcho = false;
   // A reveal queued by `openFile({reveal})` (ADR-0166 P1.9c Problems jump),
   // applied once the target tab is the editor's active model (the activeId effect
@@ -369,6 +372,8 @@ export function EditorHost(props: EditorHostProps) {
       emitDocument(id, 'change');
       if (suppressProgramEcho || !programModel) return;
       props.onProgramChange(programModel.getValue());
+      programTabDirty = true;
+      setTabs((t) => setDirty(t, PROGRAM_TAB_ID, true));
       dirtyGutterLocalPaths.add(docPathForTab(id));
       if (id === activeId()) updateDirtyGutterForActive();
       return;
@@ -508,6 +513,34 @@ export function EditorHost(props: EditorHostProps) {
   const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
   const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
   const activeTabKind = createMemo(() => tabs().find((tab) => tab.id === activeId())?.kind);
+
+  function ensureProgramTab(): void {
+    if (programModel && !models.has(PROGRAM_TAB_ID)) {
+      registerModel(PROGRAM_TAB_ID, programModel);
+      emitDocument(PROGRAM_TAB_ID, 'open');
+    }
+    setTabs((current) =>
+      current.some((tab) => tab.id === PROGRAM_TAB_ID)
+        ? current
+        : [
+            {
+              id: PROGRAM_TAB_ID,
+              kind: 'program',
+              title: props.programTitle(),
+              dirty: programTabDirty,
+            },
+            ...current,
+          ],
+    );
+  }
+
+  function closeVisibleTab(id: string): void {
+    const before = tabs();
+    const next = nextActiveAfterClose(before, id, activeId());
+    const after = closeTab(before, id);
+    setTabs(after);
+    setActiveId(after.some((tab) => tab.id === next) ? next : (after[0]?.id ?? NO_ACTIVE_TAB_ID));
+  }
 
   function setReadOnlyPath(id: string, readOnly: boolean): void {
     if (readOnly) readOnlyPaths.add(id);
@@ -748,6 +781,7 @@ export function EditorHost(props: EditorHostProps) {
       })
     ) {
       case 'program':
+        ensureProgramTab();
         if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
         return;
       case 'remote':
@@ -878,12 +912,16 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void {
+    if (path === PROGRAM_TAB_ID) {
+      emitDocument(PROGRAM_TAB_ID, 'close');
+      unregisterModel(PROGRAM_TAB_ID);
+      closeVisibleTab(PROGRAM_TAB_ID);
+      return;
+    }
     const diff = diffModels.get(path);
     if (diff) {
-      const next = nextActiveAfterClose(tabs(), path, activeId());
-      setTabs((t) => closeTab(t, path));
       diffModels.delete(path);
-      setActiveId(next);
+      closeVisibleTab(path);
       queueMicrotask(() => {
         diff.original.dispose();
         if (diff.disposeModified) diff.modified.dispose();
@@ -899,12 +937,10 @@ export function EditorHost(props: EditorHostProps) {
         void flushWriteTracked(path).catch(reportWriteError);
       }
     }
-    const next = nextActiveAfterClose(tabs(), path, activeId());
     emitDocument(path, 'close');
-    setTabs((t) => closeTab(t, path));
     const m = unregisterModel(path);
     readOnlyPaths.delete(path);
-    setActiveId(next);
+    closeVisibleTab(path);
     // Dispose after the activeId effect has switched the editor off this model.
     queueMicrotask(() => m?.dispose());
   }
@@ -996,6 +1032,10 @@ export function EditorHost(props: EditorHostProps) {
       openWorkingDiff,
       openTextDiff,
       flushPendingWrites,
+      markPathClean(path) {
+        if (tabIdForPath(path) === PROGRAM_TAB_ID) programTabDirty = false;
+        setTabs((t) => setDirty(t, tabIdForPath(path), false));
+      },
       closePath: (path) => closeExternalPathTree(path),
       closePathTree: (path) => closeExternalPathTree(path),
       setMarkers(path, markers) {
@@ -1088,7 +1128,7 @@ export function EditorHost(props: EditorHostProps) {
       externalWriteClosedPaths.delete(path);
       untrack(() => setReadOnlyPath(PROGRAM_TAB_ID, false));
       dirtyGutterLocalPaths.delete(previousPath);
-      if (programModel) {
+      if (programModel && models.has(PROGRAM_TAB_ID)) {
         emitDocumentPath(previousPath, '', 'close');
         emitDocumentPath(path, programModel.getValue(), 'open');
       }
@@ -1146,7 +1186,14 @@ export function EditorHost(props: EditorHostProps) {
         return;
       }
       diffEditor?.setModel(null);
-      const model = models.get(id) ?? programModel;
+      const tab = tabs().find((candidate) => candidate.id === id);
+      if (!tab) {
+        editor?.setModel(null);
+        props.onActive({ label: '', language: 'plaintext' });
+        clearDirtyGutter();
+        return;
+      }
+      const model = models.get(id) ?? (id === PROGRAM_TAB_ID ? programModel : undefined);
       if (!editor || !model) return;
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });

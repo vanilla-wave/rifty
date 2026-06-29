@@ -64,9 +64,9 @@ describe('closeTab', () => {
     expect(closeTab(tabs, '/workspace/a.js')).toHaveLength(1);
   });
 
-  it('never closes the program tab', () => {
+  it('closes the program tab from the visible tab strip', () => {
     const tabs = initialTabs('p');
-    expect(closeTab(tabs, PROGRAM_TAB_ID)).toHaveLength(1);
+    expect(closeTab(tabs, PROGRAM_TAB_ID)).toHaveLength(0);
   });
 });
 
@@ -98,9 +98,9 @@ describe('setDirty', () => {
     expect(setDirty(setDirty(tabs, '/a.js', true), '/a.js', false)[1]?.dirty).toBe(false);
   });
 
-  it('never marks the program tab dirty', () => {
+  it('marks the program tab dirty like the file it mirrors', () => {
     const tabs = setDirty(initialTabs('p'), PROGRAM_TAB_ID, true);
-    expect(tabs[0]?.dirty).toBe(false);
+    expect(tabs[0]?.dirty).toBe(true);
   });
 
   it('never marks a diff tab dirty', () => {

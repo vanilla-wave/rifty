@@ -131,8 +131,8 @@ async function dropExplorerPathOnDir(
   await target.dispatchEvent('drop', { dataTransfer });
 }
 
-async function setOpenEditorValue(page: Page, path: string, text: string): Promise<void> {
-  const ok = await page.evaluate(
+async function trySetOpenEditorValue(page: Page, path: string, text: string): Promise<boolean> {
+  return await page.evaluate(
     ({ path: targetPath, text: targetText }) => {
       const fn = (globalThis as { __riftySetEditorValue?: (path: string, text: string) => boolean })
         .__riftySetEditorValue;
@@ -140,11 +140,15 @@ async function setOpenEditorValue(page: Page, path: string, text: string): Promi
     },
     { path, text },
   );
+}
+
+async function setOpenEditorValue(page: Page, path: string, text: string): Promise<void> {
+  const ok = await trySetOpenEditorValue(page, path, text);
   expect(ok).toBe(true);
 }
 
-test.describe('SCM file manager', () => {
-  test('shows owner git decorations and opens an SCM diff from real owner content', async ({
+test.describe('GIT file manager', () => {
+  test('shows owner git decorations and opens a GIT diff from real owner content', async ({
     page,
     browserName,
   }, testInfo) => {
@@ -176,8 +180,8 @@ test.describe('SCM file manager', () => {
       contentType: 'image/png',
     });
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
-    await expect(page.getByLabel('Source Control')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
@@ -232,7 +236,7 @@ test.describe('SCM file manager', () => {
       .toContain(`context-crud-ok-${seq}`);
   });
 
-  test('SCM stage uses the latest pending editor bytes', async ({ page, browserName }) => {
+  test('GIT stage uses the latest pending editor bytes', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
@@ -260,7 +264,7 @@ test.describe('SCM file manager', () => {
     await page.keyboard.insertText(`${marker}\n`);
     await expect(editor.locator('.view-lines').first()).toContainText(marker);
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await scmRow.getByLabel('Stage README.md').click();
@@ -367,7 +371,7 @@ test.describe('SCM file manager', () => {
       .toContain(`upload-move-ok-${seq}`);
   });
 
-  test('SCM splits staged and worktree rows for MM and AD states', async ({
+  test('GIT splits staged and worktree rows for MM and AD states', async ({
     page,
     browserName,
   }) => {
@@ -385,8 +389,8 @@ test.describe('SCM file manager', () => {
       60_000,
     );
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
-    await expect(page.getByLabel('Source Control')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
     const stagedGroup = page.locator('.rf-scm__group').nth(0);
     const changesGroup = page.locator('.rf-scm__group').nth(1);
     await changesGroup
@@ -572,7 +576,7 @@ test.describe('SCM file manager', () => {
       .toContain(resetMarker);
   });
 
-  test('editor writes appear in SCM and mark changed editor lines', async ({
+  test('editor writes appear in GIT and mark changed editor lines', async ({
     page,
     browserName,
   }) => {
@@ -613,7 +617,7 @@ test.describe('SCM file manager', () => {
     await expect(readmeRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
     await expect(readmeRow.locator('.rf-row__gitbadge')).toHaveText('M');
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
@@ -626,7 +630,7 @@ test.describe('SCM file manager', () => {
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
   });
 
-  test('program editor writes appear in SCM and mark changed lines', async ({
+  test('program editor writes appear in GIT and mark changed lines', async ({
     page,
     browserName,
   }) => {
@@ -673,7 +677,7 @@ test.describe('SCM file manager', () => {
     await expect(mainRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
     await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
@@ -686,7 +690,61 @@ test.describe('SCM file manager', () => {
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
   });
 
-  test('program editor autosave updates already-open SCM and then Files', async ({
+  test('main.js can close, reopen from Files, and appear in GIT after edits', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
+    test.setTimeout(180_000);
+
+    await bootScmFileManager(page);
+    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+      { timeout: 30_000 },
+    );
+
+    await page.getByLabel('Close src/main.js').click();
+    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveCount(0);
+    await expect(
+      trySetOpenEditorValue(page, '/scratch/src/main.js', 'console.log("hidden write");\n'),
+    ).resolves.toBe(false);
+
+    await openSrcFolder(page);
+    await explorerRow(page, 'main.js', 'file').click();
+    const mainTab = page.getByRole('tab', { name: 'src/main.js' });
+    await expect(mainTab).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
+
+    const marker = `git-main-reopen-${Date.now().toString(36)}`;
+    const editor = page.locator('[data-testid="editor"]');
+    const editorInput = editor.locator('textarea.inputarea').first();
+    await editor
+      .locator('.view-line')
+      .first()
+      .click({ position: { x: 0, y: 8 } });
+    await editorInput.click({ force: true });
+    await expect(editorInput).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.insertText(`// ${marker}\n`);
+    await expect(editor.locator('.view-lines').first()).toContainText(marker);
+    await expect(page.locator('.rf-tab', { hasText: 'src/main.js' })).toHaveAttribute(
+      'data-dirty',
+      'true',
+    );
+
+    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    const mainRow = explorerRow(page, 'main.js', 'file');
+    await expect(mainRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
+    await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
+
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
+    const gitRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
+    await expect(gitRow).toBeVisible({ timeout: 30_000 });
+    await expect(gitRow).toHaveAttribute('data-code', 'M');
+  });
+
+  test('program editor autosave updates already-open GIT and then Files', async ({
     page,
     browserName,
   }) => {
@@ -704,8 +762,8 @@ test.describe('SCM file manager', () => {
       { timeout: 30_000 },
     );
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
-    await expect(page.getByLabel('Source Control')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     const marker = `scm-open-${Date.now().toString(36)}`;
     const editor = page.locator('[data-testid="editor"]');
@@ -740,7 +798,7 @@ test.describe('SCM file manager', () => {
     await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
   });
 
-  test('saved project program edits appear in SCM and Files under the project root', async ({
+  test('saved project program edits appear in GIT and Files under the project root', async ({
     page,
     browserName,
   }) => {
@@ -753,7 +811,7 @@ test.describe('SCM file manager', () => {
     await page.goto('/');
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
 
-    const projectName = `SCM Project ${Date.now().toString(36)}`;
+    const projectName = `GIT Project ${Date.now().toString(36)}`;
     const projectId = await saveScratchAs(page, projectName);
     await expect
       .poll(
@@ -783,7 +841,7 @@ test.describe('SCM file manager', () => {
     await expect(editorLines).toContainText(marker);
     await expect(page.locator('.rf-dirty-gutter--added').first()).toBeVisible({ timeout: 30_000 });
 
-    await page.getByRole('tab', { name: 'SCM' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');

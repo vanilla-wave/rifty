@@ -565,7 +565,7 @@ export function App(props: AppProps) {
       flashError('Open changes failed: workspace owner is unavailable');
       return;
     }
-    assertWorkspaceFileOwnerAlive(owner, path, 'open SCM changes');
+    assertWorkspaceFileOwnerAlive(owner, path, 'open Git changes');
     const git = bridgeGitOwnerRpc(snapshotPort);
     try {
       const currentOwner = workspaceOwner();
@@ -597,7 +597,7 @@ export function App(props: AppProps) {
         ? ''
         : decodeTextBlob(
             relative,
-            await readWorkspaceFileBytesFromOwner(owner, path, 'open SCM changes'),
+            await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes'),
           );
       editorApi?.openTextDiff({
         id: compareDiffId(`scm-worktree-${row.code}`, row.relativePath, path),
@@ -625,7 +625,7 @@ export function App(props: AppProps) {
       current.root !== owner.root ||
       current.snapshotPort !== owner.snapshotPort
     ) {
-      throw new Error('workspace owner changed while applying Source Control action');
+      throw new Error('workspace owner changed while applying Git action');
     }
   }
 
@@ -2099,6 +2099,7 @@ export function App(props: AppProps) {
       })
       .then(() => {
         notifyFileWritten(path, content); // ADR-0165 §57: REAL write → dirty
+        editorApi?.markPathClean(path);
       })
       .finally(() => {
         if (inFlightProgramWrite === tracked) inFlightProgramWrite = undefined;
@@ -2800,7 +2801,7 @@ export function App(props: AppProps) {
                 aria-selected={layout.view() === 'scm'}
                 onClick={() => void selectSidebarView('scm')}
               >
-                SCM
+                GIT
               </button>
             </div>
             <Show

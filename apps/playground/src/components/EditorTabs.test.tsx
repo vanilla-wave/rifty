@@ -21,6 +21,20 @@ describe('EditorTabs', () => {
     expect(html).toContain('Preview');
   });
 
+  it('renders the program mirror tab with normal close and dirty affordances', () => {
+    const html = renderToString(() =>
+      EditorTabs({
+        tabs: [{ id: PROGRAM_TAB_ID, kind: 'program', title: 'src/main.js', dirty: true }],
+        activeId: PROGRAM_TAB_ID,
+        onSelect: () => {},
+        onClose: () => {},
+      }),
+    );
+
+    expect(html).toContain('data-dirty="true"');
+    expect(html).toContain('aria-label="Close src/main.js"');
+  });
+
   it('renders diff tabs as closable open editors', () => {
     const html = renderToString(() =>
       EditorTabs({
