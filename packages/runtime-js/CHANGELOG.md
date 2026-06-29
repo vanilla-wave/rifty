@@ -9,8 +9,9 @@
   `CompressionStream('gzip')`, producing gzip bytes readable by Node's native
   zlib. This unblocks Vite preview compression middleware without pretending the
   whole stream surface is done: `createGunzip`, deflate/inflate stream factories,
-  unzip, brotli/zstd, sync APIs, and flush-opcode options (`flush` /
-  `finishFlush`) remain loud ceilings.
+  unzip, brotli/zstd, sync APIs, flush-opcode options (`flush` /
+  `finishFlush`), and unsupported instance APIs such as `bytesWritten` remain
+  loud ceilings.
 
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
@@ -65,8 +66,8 @@
   throw `NotImplementedError` on one-shot calls as well as the gzip Transform:
   real Node can use `finishFlush` to change truncated decompression outcomes,
   so Web Compression cannot honestly ignore it. `Gzip` instances also expose
-  directed loud ceilings for unsupported `flush`, `params`, `reset`, and `close`
-  methods instead of leaking plain `TypeError`s.
+  directed loud ceilings for unsupported `flush`, `params`, `reset`, `close`,
+  and `bytesWritten` instead of leaking plain `TypeError`s or fake counters.
 
 - **PR #76 review gaps recorded explicitly.** Added backlog contracts and
   `TODO(backlog:)` seams for tsconfig `baseUrl` bare-specifier behavior under

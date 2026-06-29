@@ -24,7 +24,8 @@ This item now tracks the surface DELIBERATELY deferred from those PRs.
 - **Remaining Transform streams** (`createGunzip`/`createDeflate`/`createInflate`/
   `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gunzip`/`Deflate`/…
   classes): bridge `CompressionStream`/`DecompressionStream` ↔ Node `Transform`
-  (flush opcodes/methods, params/reset/close, backpressure, chunk-boundary + error-code parity). `createGzip`
+  (flush opcodes/methods, params/reset/close, bytesWritten timing,
+  backpressure, chunk-boundary + error-code parity). `createGzip`
   / `Gzip` is landed under ADR-0178; do not infer the rest of the surface from it.
 - **`unzip`/`unzipSync`** (auto-detect gzip vs zlib): header-sniff (0x1f8b → gzip,
   else zlib-deflate) is small but has its own parity surface; add when a consumer

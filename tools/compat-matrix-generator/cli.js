@@ -290,7 +290,7 @@ const matrices = [
       [
         '`createGzip` / `Gzip`',
         '⚠️',
-        "`CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Flush-opcode options (`flush` / `finishFlush`) throw rather than pretending parity",
+        "`CompressionStream('gzip')` bridged to a Node-shaped `Transform`; gzip bytes are readable by real Node. Flush-opcode options (`flush` / `finishFlush`) and unsupported instance APIs (`flush`, `params`, `reset`, `close`, `bytesWritten`) throw rather than pretending parity",
       ],
       [
         'Other Transform streams (`createGunzip` / `createDeflate` / …)',
@@ -311,7 +311,7 @@ const matrices = [
     limitations: [
       'Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159 correction 2026-06-29 / ADR-0178).',
       'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
-      'Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options and the rest of the Transform-stream surface are still loud ceilings.',
+      'Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options, unsupported instance APIs such as `bytesWritten`, and the rest of the Transform-stream surface are still loud ceilings.',
     ],
   },
   {

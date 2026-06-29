@@ -219,6 +219,7 @@ describe('node:zlib — gzip Transform stream', () => {
 
   it('unsupported zlib stream instance APIs throw directed NotImplementedError', () => {
     const stream = zlib.createGzip() as ReturnType<(typeof zlib)['createGzip']> & {
+      readonly bytesWritten: number;
       flush(kind?: number, cb?: () => void): void;
       params(level: number, strategy: number, cb?: () => void): void;
       reset(): void;
@@ -233,7 +234,7 @@ describe('node:zlib — gzip Transform stream', () => {
     );
     expect(() => stream.reset()).toThrowError(notImpl('zlib.Gzip.reset'));
     expect(() => stream.close()).toThrowError(notImpl('zlib.Gzip.close'));
-    expect(stream.bytesWritten).toBe(0);
+    expect(() => stream.bytesWritten).toThrowError(notImpl('zlib.Gzip.bytesWritten'));
   });
 
   it('supports Vite compression middleware shape over ServerResponse', async () => {

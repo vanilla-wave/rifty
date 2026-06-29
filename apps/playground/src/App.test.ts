@@ -155,6 +155,8 @@ describe('App terminal startup wiring', () => {
     expect(runPresetStart).toBeGreaterThan(-1);
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
     expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
+    expect(source).toContain('function lifecycleDevServerRunning(): boolean');
+    expect(source).toContain("return terminalStatus(devServerSessionId) === 'running';");
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('await seedViteWorkspace(preset);'),
     );
@@ -165,6 +167,10 @@ describe('App terminal startup wiring', () => {
     );
     expect(source).not.toContain('async function stopRunningTerminalSessions(): Promise<void>');
     expect(source).not.toContain('function anyTerminalRunning(): boolean');
+    expect(runPreset).toContain('const restartNeeded = lifecycleDevServerRunning();');
+    expect(runPreset).not.toContain(
+      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
+    );
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('seedViteWorkspace(preset);'),
     );
@@ -213,8 +219,8 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('async function waitForPresetBoot(');
     expect(source).toContain("if (spec.runtime === 'node-cli')");
     expect(source).toContain('await waitForTerminalIdle(sessionId)');
-    expect(source).toContain(
-      'await waitForPresetBoot(session.id, generation, templateForPreset(preset))',
+    expect(source).toMatch(
+      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
     );
   });
 
@@ -234,18 +240,33 @@ describe('App terminal startup wiring', () => {
       'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
     );
     expect(source).toMatch(
-      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
+      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,?\s*\)/,
     );
-    expect(source).toContain(
-      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
-    );
+    expect(source).toContain('const restartNeeded = lifecycleDevServerRunning();');
     expect(source).not.toContain('anyTerminalRunning()');
     expect(source).toContain('if (restartNeeded)');
     expect(source).toContain('devServerSessionId = session.id');
+    expect(source).toContain("const acceptRunningStatus = devServerStatus() === 'stopped';");
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.
     expect(source).toContain(
       'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
+    );
+  });
+
+  it('does not treat an already-running foreign dev server as the picked preset boot', () => {
+    expect(source).toContain(
+      'async function waitForDevServerBoot(\n    sessionId: string,\n    generation: number,\n    acceptRunningStatus: boolean,',
+    );
+    expect(source).toMatch(
+      /acceptRunningStatus && devServerStatus\(\) === 'running'[\s\S]*?terminalStatus\(sessionId\) === 'idle'[\s\S]*?return;/,
+    );
+    expect(source).toContain("const acceptRunningStatus = devServerStatus() === 'stopped';");
+    expect(source).toMatch(
+      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
+    );
+    expect(source).toMatch(
+      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\)/,
     );
   });
 
@@ -379,7 +400,7 @@ describe('App terminal startup wiring', () => {
       /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
-      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForPresetBoot\(session\.id, generation, templateForPreset\(preset\)\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
+      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\),\s*acceptRunningStatus,\s*\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 

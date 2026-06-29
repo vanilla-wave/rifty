@@ -221,8 +221,6 @@ const deflateRaw = makeAsync('zlib.deflateRaw', 'deflate-raw', 'compress');
 const inflateRaw = makeAsync('zlib.inflateRaw', 'deflate-raw', 'decompress');
 
 class Gzip extends Transform {
-  bytesWritten = 0;
-
   constructor(options?: ZlibOptions) {
     assertSupportedOptions('zlib.createGzip', options);
     if (typeof CompressionStream !== 'function') {
@@ -247,7 +245,6 @@ class Gzip extends Transform {
           cb(new Error('zlib.createGzip writer not initialized'));
           return;
         }
-        (this as Gzip).bytesWritten += bytes.byteLength;
         const writeDone = writer.write(bytes);
         pendingWrites.add(writeDone);
         void writeDone.then(
@@ -275,6 +272,10 @@ class Gzip extends Transform {
     const stream = new CompressionStream('gzip');
     writer = stream.writable.getWriter();
     drainDone = this.drainCompressed(stream.readable as ReadableStream<Uint8Array>);
+  }
+
+  get bytesWritten(): never {
+    throw new NotImplementedError('zlib.Gzip.bytesWritten');
   }
 
   flush(..._args: unknown[]): never {

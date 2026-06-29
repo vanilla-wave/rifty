@@ -19,7 +19,7 @@ The browser still has no native zlib engine and no sync compression primitive.
 The only honest implementation path is the WHATWG `CompressionStream` already
 used for ADR-0159. That primitive is async and streaming, and can faithfully
 emit gzip wire bytes, but it does not expose Node's flush opcodes, zlib params,
-or the rest of the zlib stream family.
+`bytesWritten` timing, or the rest of the zlib stream family.
 
 ## Decision
 
@@ -41,7 +41,8 @@ Do not implement or fake the rest of the stream surface in this PR:
 - `Gunzip`, `Deflate`, `Inflate`, raw variants, brotli, and zstd classes stay
   loud.
 - Flush-opcode parity, zlib parameter APIs, exact backpressure parity, and
-  decompression-stream error-code parity remain out of scope.
+  `bytesWritten` timing, and decompression-stream error-code parity remain out
+  of scope.
 
 ## Consequences
 

@@ -131,7 +131,9 @@
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
 - **Preset switching stops only the lifecycle-owned terminal session.** Starter
   changes still stop the active dev/CLI boot session before reseeding files, but
-  no longer abort unrelated running terminal tabs.
+  no longer abort unrelated running terminal tabs. A pre-existing owner-reported
+  dev server from a non-lifecycle terminal is not treated as the picked starter's
+  successful boot signal.
 
 - **`vite preview` config honesty tightened.** Root `vite.config.*` files and
   `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`
