@@ -163,11 +163,12 @@ describe('App terminal startup wiring', () => {
         'await startDevServerSession(restartSessionId, restartGeneration, preset);',
       ),
     );
-    expect(source).toContain('async function stopRunningTerminalSessions(): Promise<void>');
+    expect(source).not.toContain('async function stopRunningTerminalSessions(): Promise<void>');
+    expect(source).not.toContain('function anyTerminalRunning(): boolean');
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
       runPreset.indexOf('seedViteWorkspace(preset);'),
     );
-    expect(source).toContain('await stopRunningTerminalSessions();');
+    expect(source).not.toContain('await stopRunningTerminalSessions();');
     expect(source).toContain('setPreviewPorts([])');
   });
 
@@ -236,8 +237,9 @@ describe('App terminal startup wiring', () => {
       /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
     );
     expect(source).toContain(
-      "devServerStatus() !== 'stopped' ||\n        terminalStatus(devServerSessionId) === 'running' ||\n        anyTerminalRunning()",
+      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
     );
+    expect(source).not.toContain('anyTerminalRunning()');
     expect(source).toContain('if (restartNeeded)');
     expect(source).toContain('devServerSessionId = session.id');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the

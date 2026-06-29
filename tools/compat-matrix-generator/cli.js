@@ -301,7 +301,7 @@ const matrices = [
       [
         '`flush` / `finishFlush` / `windowBits` / `dictionary` / truthy `info` options',
         '❌',
-        'Throw `NotImplementedError`. `CompressionStream` exposes no flush opcodes, emits a fixed max window, and has no dictionary/engine handle; ignoring these would fake wire bytes, chunking, or return shape. `info:false` is a no-op',
+        'Throw `NotImplementedError`. `CompressionStream` exposes no flush opcodes, emits a fixed max window, and has no dictionary/engine handle; ignoring these would fake wire bytes, chunking, decompression finalization, or return shape. `info:false` is a no-op',
       ],
     ],
     tests: [
@@ -309,7 +309,7 @@ const matrices = [
       '`tools/node-parity-runner/cases/zlib/*.case.ts`',
     ],
     limitations: [
-      'Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159/0178).',
+      'Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159 correction 2026-06-29 / ADR-0178).',
       'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
       'Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options and the rest of the Transform-stream surface are still loud ceilings.',
     ],

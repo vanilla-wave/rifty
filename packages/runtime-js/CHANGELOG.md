@@ -61,10 +61,12 @@
 
 ### Fixed
 
-- **`node:zlib` one-shot flush option policy restored.** `gzip` / `deflate`
-  one-shot calls once again accept `flush` and `finishFlush` as inert
-  size/chunking knobs per ADR-0159, while the new `createGzip()` Transform keeps
-  those options as loud `NotImplementedError` ceilings.
+- **`node:zlib` flush-option honesty restored.** `flush` / `finishFlush` now
+  throw `NotImplementedError` on one-shot calls as well as the gzip Transform:
+  real Node can use `finishFlush` to change truncated decompression outcomes,
+  so Web Compression cannot honestly ignore it. `Gzip` instances also expose
+  directed loud ceilings for unsupported `flush`, `params`, `reset`, and `close`
+  methods instead of leaking plain `TypeError`s.
 
 - **PR #76 review gaps recorded explicitly.** Added backlog contracts and
   `TODO(backlog:)` seams for tsconfig `baseUrl` bare-specifier behavior under

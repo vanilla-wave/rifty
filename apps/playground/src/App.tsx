@@ -1857,20 +1857,6 @@ export function App(props: AppProps) {
     }
   }
 
-  function anyTerminalRunning(): boolean {
-    return manager.sessions().some((session) => session.status === 'running');
-  }
-
-  async function stopRunningTerminalSessions(): Promise<void> {
-    const runningIds = manager
-      .sessions()
-      .filter((session) => session.status === 'running')
-      .map((session) => session.id);
-    for (const id of runningIds) manager.stop(id);
-    await Promise.all(runningIds.map((id) => waitForTerminalIdle(id)));
-    refreshTerminalState();
-  }
-
   async function waitForDevServerBoot(sessionId: string, generation: number): Promise<void> {
     while (generation === devServerRestartGeneration) {
       if (devServerStatus() === 'running' || terminalStatus(sessionId) === 'idle') return;
@@ -1892,7 +1878,6 @@ export function App(props: AppProps) {
 
   async function stopDevServerSession(sessionId: string | null): Promise<void> {
     if (sessionId) manager.stop(sessionId);
-    await stopRunningTerminalSessions();
     await waitForDevServerStop();
     await waitForTerminalIdle(sessionId);
     setPreviewPorts([]);
@@ -1931,9 +1916,7 @@ export function App(props: AppProps) {
       setPresetTransitioning(true);
       setActivePreset(preset.id);
       const restartNeeded =
-        devServerStatus() !== 'stopped' ||
-        terminalStatus(devServerSessionId) === 'running' ||
-        anyTerminalRunning();
+        devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running';
       const restartSessionId = restartNeeded
         ? (devServerSessionId ?? devServerSession().id)
         : undefined;

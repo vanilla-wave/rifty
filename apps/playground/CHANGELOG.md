@@ -129,6 +129,10 @@
 - **Saved projects now re-root the workspace owner after Save.** A plain
   Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
+- **Preset switching stops only the lifecycle-owned terminal session.** Starter
+  changes still stop the active dev/CLI boot session before reseeding files, but
+  no longer abort unrelated running terminal tabs.
+
 - **`vite preview` config honesty tightened.** Root `vite.config.*` files and
   `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`
   instead of being silently ignored by the browser preview bridge patch; the

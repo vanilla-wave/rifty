@@ -5,7 +5,7 @@ title: WebSocket chat template needs preview-page WebSocket reachability
 created: 2026-06-14
 why: A chat template needs an iframe client to connect to a Worker-hosted WebSocket server over normal app-surface `WebSocket`; Socket Lab shows real `ws` local server/client support, but a plain preview page native WebSocket still does not reach the Worker port without bridge injection.
 user_story: As a developer trying a WebSocket chat starter in the playground, I want the iframe client and Worker server to talk over the normal WebSocket API, but today the honest app-surface path is still a known ceiling.
-sources: [docs/backlog/playground/templates-as-stack-consumers.md, docs/adr/net/0147-default-cross-realm-websocket-bridge.md, docs/adr/net/0151-http-websocket-upgrade-over-bridge.md, apps/playground/src/templates/socket-lab.ts]
+sources: [docs/adr/net/0147-default-cross-realm-websocket-bridge.md, docs/adr/net/0151-http-websocket-upgrade-over-bridge.md, apps/playground/src/templates/socket-lab.ts]
 code: [packages/net/src/ws, apps/playground/src/glue/hmr-bridge.ts]
 ---
 ## Context

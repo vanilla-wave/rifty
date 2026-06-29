@@ -15,6 +15,8 @@ LANDED (ADR-0159 + ADR-0178, `docs/public/compat/zlib.md`): async one-shot
 `CompressionStream`/`DecompressionStream`, wire-compatible with real Node both
 directions, plus the narrow `createGzip()` / `Gzip` Transform subset needed by
 Vite preview compression middleware. The all-throwing `node:zlib` stub is gone.
+One-shot `flush` / `finishFlush` options stay loud per ADR-0159 correction
+2026-06-29; Web Compression cannot expose zlib flush/finalization semantics.
 This item now tracks the surface DELIBERATELY deferred from those PRs.
 
 ## Options or Next
@@ -22,7 +24,7 @@ This item now tracks the surface DELIBERATELY deferred from those PRs.
 - **Remaining Transform streams** (`createGunzip`/`createDeflate`/`createInflate`/
   `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gunzip`/`Deflate`/…
   classes): bridge `CompressionStream`/`DecompressionStream` ↔ Node `Transform`
-  (flush opcodes, backpressure, chunk-boundary + error-code parity). `createGzip`
+  (flush opcodes/methods, params/reset/close, backpressure, chunk-boundary + error-code parity). `createGzip`
   / `Gzip` is landed under ADR-0178; do not infer the rest of the surface from it.
 - **`unzip`/`unzipSync`** (auto-detect gzip vs zlib): header-sniff (0x1f8b → gzip,
   else zlib-deflate) is small but has its own parity surface; add when a consumer

@@ -101,19 +101,6 @@ describe('node:zlib — input shapes & callback contract', () => {
     });
     expect(nodeZlib.inflateSync(compressed).toString()).toBe(text);
   });
-  it('accepts one-shot flush options as no-ops — does not throw, round-trips', async () => {
-    const compressed = await new Promise<Uint8Array>((resolve, reject) => {
-      zlib.gzip(
-        text,
-        {
-          flush: zlib.constants.Z_SYNC_FLUSH,
-          finishFlush: zlib.constants.Z_FINISH,
-        },
-        (err: Error | null, out: Uint8Array) => (err ? reject(err) : resolve(out)),
-      );
-    });
-    expect(nodeZlib.gunzipSync(compressed).toString()).toBe(text);
-  });
 });
 
 describe('node:zlib — corrupt input rejects with an Error (error-first holds)', () => {
@@ -123,6 +110,15 @@ describe('node:zlib — corrupt input rejects with an Error (error-first holds)'
 });
 
 describe('node:zlib — wire/shape-affecting options throw (no silent lie)', () => {
+  it('one-shot flush options throw because CompressionStream cannot honor flush opcodes', () => {
+    expect(() => zlib.gzip(text, { flush: zlib.constants.Z_SYNC_FLUSH }, () => {})).toThrowError(
+      notImpl('zlib.gzip option: flush'),
+    );
+    expect(() =>
+      zlib.gunzip(Buffer.from([1, 2, 3]), { finishFlush: zlib.constants.Z_SYNC_FLUSH }, () => {}),
+    ).toThrowError(notImpl('zlib.gunzip option: finishFlush'));
+  });
+
   it('windowBits throws (CompressionStream emits a fixed max window; honoring a smaller request would emit window-15 bytes a strict zlib consumer rejects with Z_DATA_ERROR)', () => {
     expect(() => zlib.gzip(text, { windowBits: 9 }, () => {})).toThrowError(
       notImpl('zlib.gzip option: windowBits'),
@@ -219,6 +215,25 @@ describe('node:zlib — gzip Transform stream', () => {
     expect(() => zlib.createGzip({ finishFlush: zlib.constants.Z_SYNC_FLUSH })).toThrowError(
       notImpl('zlib.createGzip option: finishFlush'),
     );
+  });
+
+  it('unsupported zlib stream instance APIs throw directed NotImplementedError', () => {
+    const stream = zlib.createGzip() as ReturnType<(typeof zlib)['createGzip']> & {
+      flush(kind?: number, cb?: () => void): void;
+      params(level: number, strategy: number, cb?: () => void): void;
+      reset(): void;
+      close(cb?: () => void): void;
+    };
+
+    expect(() => stream.flush(zlib.constants.Z_SYNC_FLUSH)).toThrowError(
+      notImpl('zlib.Gzip.flush'),
+    );
+    expect(() => stream.params(1, zlib.constants.Z_DEFAULT_STRATEGY)).toThrowError(
+      notImpl('zlib.Gzip.params'),
+    );
+    expect(() => stream.reset()).toThrowError(notImpl('zlib.Gzip.reset'));
+    expect(() => stream.close()).toThrowError(notImpl('zlib.Gzip.close'));
+    expect(stream.bytesWritten).toBe(0);
   });
 
   it('supports Vite compression middleware shape over ServerResponse', async () => {
