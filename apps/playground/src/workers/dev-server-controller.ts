@@ -44,7 +44,7 @@ export interface DevServerController {
    * aborts, then stops the server and emits stopped. A second concurrent run
    * throws (single active server per owner). `log` streams boot progress.
    */
-  run(signal: AbortSignal, log?: (chunk: string) => void): Promise<void>;
+  run(signal: AbortSignal, log?: (chunk: string) => void, sid?: string): Promise<void>;
   /** Re-emit current state — answers the `pty:dev-server-req` handshake. */
   publish(): void;
   /** Forward an editor write to the running server's HMR (no-op when stopped). */
@@ -62,18 +62,24 @@ function onceAborted(signal: AbortSignal): Promise<void> {
 export function createDevServerController(deps: DevServerControllerDeps): DevServerController {
   let status: DevServerStatus = 'stopped';
   let active: DevServerHandle | null = null;
+  let activeSid: string | undefined;
 
   function frame(): OwnerToPageFrame {
     if (status === 'running' && active) {
       return {
         type: 'pty:dev-server',
         status,
+        ...(activeSid === undefined ? {} : { sid: activeSid }),
         port: active.port,
         url: `/preview/${active.port}/`,
         ...(active.previewScope === undefined ? {} : { previewScope: active.previewScope }),
       };
     }
-    return { type: 'pty:dev-server', status };
+    return {
+      type: 'pty:dev-server',
+      status,
+      ...(activeSid === undefined ? {} : { sid: activeSid }),
+    };
   }
   function emit(): void {
     deps.send(frame());
@@ -89,8 +95,13 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
     notifyFileChanged(path: string): void {
       if (status === 'running' && active) active.onFileChanged?.(path);
     },
-    async run(signal: AbortSignal, log: (chunk: string) => void = () => {}): Promise<void> {
+    async run(
+      signal: AbortSignal,
+      log: (chunk: string) => void = () => {},
+      sid?: string,
+    ): Promise<void> {
       if (status !== 'stopped') throw new Error('dev server already running');
+      activeSid = sid;
       status = 'starting';
       emit();
       try {
@@ -104,8 +115,10 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
         deps.send({
           type: 'pty:dev-server',
           status,
+          ...(activeSid === undefined ? {} : { sid: activeSid }),
           error: err instanceof Error ? err.message : String(err),
         });
+        activeSid = undefined;
         throw err;
       } finally {
         if (active) {
@@ -114,6 +127,7 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
           status = 'stopped';
           await handle.stop();
           emit();
+          activeSid = undefined;
         }
       }
     },

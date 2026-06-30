@@ -91,7 +91,7 @@ per-field semantics.
 
 `SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
 `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
-`synthesizePreviewUrl`, `parsePreviewPath`), (b) the preview-frame port
+`synthesizePreviewUrl` return shape, `parsePreviewPath`), (b) the preview-frame port
 context that routes root-relative iframe requests to the same preview port
 by iframe `clientId` or same-origin `/preview/<port>/` request referrer, and
 (c) the owner-fallback and owner-scoping rules in the

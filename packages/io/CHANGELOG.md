@@ -4,6 +4,22 @@
 
 ### Fixed
 
+- **`Readable.toWeb()` end-of-life fidelity (matches Node's `finished()`).** A
+  source already ended or destroyed before conversion now settles the web stream
+  on the next microtask instead of hanging forever; a `destroy()` without an
+  error surfaces a premature-close `AbortError` on the web reader instead of a
+  clean EOF (no more "truncated stream reported as complete" lie); and a
+  web-reader `cancel(reason)` forwards the reason to the source `'error'` (an
+  `AbortError` when none is given), matching Node. Regression-tested against real
+  Node semantics.
+- **`Readable.toWeb()` matches the rifty Readable surface more honestly.** It
+  now requires a rifty `Readable` instance instead of accepting arbitrary async
+  iterables as if Node's full stream coercion existed, and it preserves string
+  chunks instead of converting them to Buffers. It also preserves emitted
+  `ArrayBuffer`/typed-array/DataView chunk identity and type instead of
+  rewrapping them as `Uint8Array`. It passes the supplied Web stream `strategy`
+  through and maps web-reader `cancel()` to source `destroy()`, so the static is
+  no longer a happy-path-only bridge.
 - **`Duplex`/`Transform` honor instance `_write()` / `_final()` overrides.**
   Real package code such as `fast-glob` mutates a `PassThrough` instance's
   `_write` method after construction. The writable side now checks the owning
@@ -68,6 +84,12 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
   rifty previously drained the chunk through the default no-op path, so the real
   `ws` package opened but never emitted `'message'` inside the module loader.
   Guard: `writable.sync-drain.test.ts` plus `ws-package-loader.test.ts`.
+- **`Readable.toWeb()` bridges rifty `Readable` streams to Web `ReadableStream`.**
+  This fills the Node stream static used by `@hono/node-server` to read HTTP
+  request bodies; byte chunks stay bytes, string chunks stay strings,
+  and object-mode chunks stay objects instead of being silently stringified.
+  The full WHATWG bridge surface remains unclaimed in the compat matrix.
+
 - **`Buffer.toString('ascii')` masks bytes >= 0x80 to 7-bit (`& 0x7f`).** Node's ascii decode is 7-bit (0x80→U+0000, 0xFF→U+007F); rifty previously emitted the raw byte. `latin1`/`binary` stay unmasked (full 0-255); ascii ENCODE is unchanged (Node does not 7-bit-mask on encode). Also corrects `setEncoding('ascii')` streaming decode (routes through `Buffer.toString('ascii')`). Parity: `buffer/tostring-ascii-mask.case.ts`.
 
 ### Added

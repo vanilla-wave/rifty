@@ -19,16 +19,34 @@ import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts
 export type StarterGroup = 'frontend' | 'server' | 'wasm';
 
 /**
- * preset.category → launcher group. Today every preset is a Vite/front-end
- * bundle, so both registered categories map to `frontend`; SERVER/WASM groups
- * exist for the next starter families. The launcher derives a Starter's group
- * via `GROUP_FOR_CATEGORY[starter-category]` (no `group` field is stored on the
- * Starter — it's a pure lookup off the preset category).
+ * preset.category → launcher group, for Vite/front-end presets. Node-runtime
+ * presets (node-server / node-cli) are grouped by their resolved runtime in
+ * {@link groupForPreset} instead — the display category alone can't distinguish
+ * them (a node-server and a Vite app can both be `'Live preview'`).
  */
 export const GROUP_FOR_CATEGORY: Readonly<Record<string, StarterGroup>> = {
   'Files + modules': 'frontend',
   'Live preview': 'frontend',
 };
+
+/**
+ * Launcher gallery group for a preset. Node-runtime templates land under SERVER
+ * (a `node-server` HTTP app or a `node-cli` run-to-completion program is NOT a
+ * Vite dev server); everything else maps off the display category. Derived from
+ * the resolved template runtime — the single source of truth — so the group can
+ * never drift from what the preset actually runs.
+ */
+export function groupForPreset(preset: Preset): StarterGroup {
+  if (preset.templateId !== undefined) {
+    try {
+      const runtime = resolveProjectSpec(preset.templateId).runtime;
+      if (runtime === 'node-server' || runtime === 'node-cli') return 'server';
+    } catch {
+      // Unknown template id — fall back to the category map below.
+    }
+  }
+  return GROUP_FOR_CATEGORY[preset.category] ?? 'frontend';
+}
 
 export interface Starter {
   readonly id: string;

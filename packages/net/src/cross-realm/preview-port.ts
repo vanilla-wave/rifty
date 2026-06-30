@@ -190,7 +190,10 @@ export function serveCrossRealmPreview(
     const requestId = frame.requestId;
     const wantsStream = frame.v === PREVIEW_PORT_FRAME_VERSION;
 
-    const requestInit: RequestInit = { method: frame.method, headers: frame.headers };
+    const headers = Object.fromEntries(
+      Object.entries(frame.headers).filter(([key]) => key !== 'accept-encoding'),
+    );
+    const requestInit: RequestInit = { method: frame.method, headers };
     if (frame.body !== null && frame.method !== 'GET' && frame.method !== 'HEAD') {
       const copy = new ArrayBuffer(frame.body.byteLength);
       new Uint8Array(copy).set(frame.body);

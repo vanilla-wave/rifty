@@ -36,6 +36,33 @@ describe('createDevServerController', () => {
     expect(ctrl.status).toBe('stopped');
   });
 
+  it('tags lifecycle frames with the owning pty session id when provided', async () => {
+    const frames: OwnerToPageFrame[] = [];
+    const { boot } = fakeBoot(5174);
+    const ctrl = createDevServerController({ send: (f) => frames.push(f), boot });
+    const ac = new AbortController();
+    const run = ctrl.run(ac.signal, undefined, 'terminal-7');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(frames.filter((f) => f.type === 'pty:dev-server')).toEqual([
+      { type: 'pty:dev-server', status: 'starting', sid: 'terminal-7' },
+      {
+        type: 'pty:dev-server',
+        status: 'running',
+        sid: 'terminal-7',
+        port: 5174,
+        url: '/preview/5174/',
+      },
+    ]);
+    ac.abort();
+    await run;
+    expect(frames.at(-1)).toEqual({
+      type: 'pty:dev-server',
+      status: 'stopped',
+      sid: 'terminal-7',
+    });
+  });
+
   it('single-active guard: a second run while active throws and does not double-boot', async () => {
     let boots = 0;
     const ctrl = createDevServerController({

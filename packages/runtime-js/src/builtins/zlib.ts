@@ -7,21 +7,22 @@
  * directions, conformance-pinned). The web API is async-only and exposes no
  * level/dictionary/windowBits control, so:
  *
- * - `*Sync`, brotli, zstd, `crc32`, the Transform-stream surface, and `unzip`
- *   stay loud `NotImplementedError` ceilings (no honest browser path; streams
- *   gated behind a future ADR — see backlog runtime-js/zlib-web-compression-subset).
+ * - `*Sync`, brotli, zstd, `crc32`, remaining Transform streams, Transform
+ *   flush-opcode options, and `unzip` stay loud `NotImplementedError` ceilings
+ *   (no honest browser path — see backlog runtime-js/zlib-web-compression-subset).
  * - Size/perf options (`level`/`memLevel`/`strategy`/…) are accepted no-ops
  *   (output stays valid + round-trips). `windowBits`, `dictionary`, and a truthy
- *   `info` throw: we can't set the encoder window/dict over `CompressionStream`,
- *   so silently ignoring `windowBits` would emit a max-window (window-15) zlib
- *   stream that a strict small-window consumer rejects (`Z_DATA_ERROR`), and a
- *   truthy `info` would fake the `{buffer,engine}` return shape. `info:false`
- *   (the default) is a no-op, matching Node.
+ *   `info` throw: we can't set the encoder window/dict/flush mode over
+ *   `CompressionStream`, so silently ignoring `windowBits` would emit a
+ *   max-window (window-15) zlib stream that a strict small-window consumer rejects
+ *   (`Z_DATA_ERROR`), `finishFlush` can change truncated decompression outcomes,
+ *   and a truthy `info` would fake the `{buffer,engine}` return shape.
+ *   `info:false` (the default) is a no-op, matching Node.
  *
  * `constants`/`codes` are the real Node table (`./zlib-constants.ts`); Node also
  * mirrors every non-`BROTLI_` constant onto the module top level (legacy shape).
  */
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Transform } from '@riftydev/io';
 import { Buffer } from './buffer.ts';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.ts';
 
@@ -75,10 +76,18 @@ type WebFormat = 'gzip' | 'deflate' | 'deflate-raw';
 //     with, and a loud throw beats a per-format silent-lie gamble.)
 //   - `dictionary`: a preset dict changes the compressed wire bytes and needs the
 //     same dict to inflate; the stream API takes no dictionary.
+//   - `flush` / `finishFlush`: callers request zlib flush opcodes and chunking /
+//     decompression-finalization semantics that `CompressionStream` cannot expose.
 //   - `info` (truthy): Node returns `{ buffer, engine }` for ANY truthy `info`;
 //     there is no engine handle to return. `info: false` (the default) is a no-op.
 function assertSupportedOptions(feature: string, options: ZlibOptions | undefined): void {
   if (!options) return;
+  if (options.flush !== undefined) {
+    throw new NotImplementedError(`${feature} option: flush`);
+  }
+  if (options.finishFlush !== undefined) {
+    throw new NotImplementedError(`${feature} option: finishFlush`);
+  }
   if (options.windowBits !== undefined) {
     throw new NotImplementedError(`${feature} option: windowBits`);
   }
@@ -89,8 +98,12 @@ function assertSupportedOptions(feature: string, options: ZlibOptions | undefine
 }
 
 function toBytes(input: ZlibInput): Uint8Array<ArrayBuffer> {
+  return toBytesWithEncoding(input, 'utf8');
+}
+
+function toBytesWithEncoding(input: unknown, encoding: string): Uint8Array<ArrayBuffer> {
   let view: Uint8Array;
-  if (typeof input === 'string') view = new TextEncoder().encode(input);
+  if (typeof input === 'string') view = Buffer.from(input, encoding as BufferEncoding);
   else if (input instanceof Uint8Array) view = input;
   else if (input instanceof ArrayBuffer) view = new Uint8Array(input);
   else if (ArrayBuffer.isView(input)) {
@@ -106,6 +119,10 @@ function toBytes(input: ZlibInput): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(view.byteLength);
   out.set(view);
   return out;
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function parseArgs(
@@ -203,6 +220,119 @@ const inflate = makeAsync('zlib.inflate', 'deflate', 'decompress');
 const deflateRaw = makeAsync('zlib.deflateRaw', 'deflate-raw', 'compress');
 const inflateRaw = makeAsync('zlib.inflateRaw', 'deflate-raw', 'decompress');
 
+class Gzip extends Transform {
+  /** The CompressionStream writer, kept so destroy() can abort it (else
+   *  drainCompressed's reader.read() awaits forever — a per-realm leak). */
+  private compressionWriter: WritableStreamDefaultWriter<BufferSource> | null = null;
+
+  constructor(options?: ZlibOptions) {
+    assertSupportedOptions('zlib.createGzip', options);
+    if (typeof CompressionStream !== 'function') {
+      throw new NotImplementedError(
+        'zlib.createGzip',
+        'CompressionStream unavailable in this realm',
+      );
+    }
+    let writer: WritableStreamDefaultWriter<BufferSource> | null = null;
+    let drainDone: Promise<void> | null = null;
+    const pendingWrites = new Set<Promise<void>>();
+    super({
+      transform(chunk, encoding, cb): void {
+        let bytes: Uint8Array<ArrayBuffer>;
+        try {
+          bytes = toBytesWithEncoding(chunk, encoding);
+        } catch (err) {
+          cb(toError(err));
+          return;
+        }
+        if (writer === null) {
+          cb(new Error('zlib.createGzip writer not initialized'));
+          return;
+        }
+        const writeDone = writer.write(bytes);
+        pendingWrites.add(writeDone);
+        void writeDone.then(
+          () => pendingWrites.delete(writeDone),
+          () => pendingWrites.delete(writeDone),
+        );
+        void writeDone.catch(() => {});
+        cb();
+      },
+      flush(cb): void {
+        const currentWriter = writer;
+        if (currentWriter === null) {
+          cb(new Error('zlib.createGzip writer not initialized'));
+          return;
+        }
+        void Promise.all([...pendingWrites])
+          .then(() => currentWriter.close())
+          .then(() => drainDone)
+          .then(
+            () => cb(),
+            (err: unknown) => cb(toError(err)),
+          );
+      },
+    });
+    const stream = new CompressionStream('gzip');
+    writer = stream.writable.getWriter();
+    this.compressionWriter = writer;
+    drainDone = this.drainCompressed(stream.readable as ReadableStream<Uint8Array>);
+  }
+
+  /** Tear down the underlying CompressionStream on destroy: abort the writer so
+   *  drainCompressed's reader.read() rejects and releases its lock instead of
+   *  awaiting forever (the writer/reader + CompressionStream would otherwise
+   *  leak for the realm lifetime — e.g. an HTTP client aborting mid-response). */
+  override destroy(err?: Error): this {
+    void this.compressionWriter?.abort().catch(() => {});
+    this.compressionWriter = null;
+    return super.destroy(err);
+  }
+
+  get bytesWritten(): never {
+    throw new NotImplementedError('zlib.Gzip.bytesWritten');
+  }
+
+  flush(..._args: unknown[]): never {
+    throw new NotImplementedError('zlib.Gzip.flush');
+  }
+
+  params(..._args: unknown[]): never {
+    throw new NotImplementedError('zlib.Gzip.params');
+  }
+
+  reset(..._args: unknown[]): never {
+    throw new NotImplementedError('zlib.Gzip.reset');
+  }
+
+  close(..._args: unknown[]): never {
+    throw new NotImplementedError('zlib.Gzip.close');
+  }
+
+  private async drainCompressed(readable: ReadableStream<Uint8Array>): Promise<void> {
+    const reader = readable.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        if (value && value.byteLength > 0) {
+          this.push(Buffer.from(value));
+        }
+      }
+    } catch {
+      // The compressed readable only rejects when the writable side is aborted
+      // (destroy() teardown). Nothing left to drain; let destroy()/flush()
+      // settle. A normal close() ends with done:true and never lands here.
+    } finally {
+      reader.releaseLock();
+    }
+  }
+}
+
+function createGzip(options?: ZlibOptions): Gzip {
+  return new Gzip(options);
+}
+
 // Node mirrors every non-`BROTLI_` constant onto the module top level (legacy,
 // deprecated) as a NON-enumerable, read-only data property — defined below so
 // `Object.keys(zlib)` / `for…in` match Node, which excludes these aliases.
@@ -246,10 +376,10 @@ const zlibModule = {
   // CRC-32 — deferred (not part of the compression subset).
   crc32: notImpl('zlib.crc32'),
 
-  // Transform-stream surface — bridging CompressionStream to a Node Transform
-  // (flush opcodes, backpressure, chunk-boundary parity) is gated behind a
-  // future ADR (recorded in backlog runtime-js/zlib-web-compression-subset).
-  createGzip: notImpl('zlib.createGzip'),
+  // Gzip Transform stream — enough for compression middleware such as Vite
+  // preview's sirv path. Flush-opcode variants and the remaining factories stay
+  // loud ceilings until their own parity surface lands.
+  createGzip,
   createGunzip: notImpl('zlib.createGunzip'),
   createDeflate: notImpl('zlib.createDeflate'),
   createInflate: notImpl('zlib.createInflate'),
@@ -262,7 +392,7 @@ const zlibModule = {
   createZstdDecompress: notImpl('zlib.createZstdDecompress'),
 
   // Stream classes — throw on construct (same ceiling as the create* factories).
-  Gzip: unsupportedClass('zlib.Gzip'),
+  Gzip,
   Gunzip: unsupportedClass('zlib.Gunzip'),
   Deflate: unsupportedClass('zlib.Deflate'),
   Inflate: unsupportedClass('zlib.Inflate'),

@@ -90,6 +90,8 @@ describe('node-server runtime branch', () => {
   it('dispatches on the bootstrap config runtime discriminant', () => {
     expect(source).toContain("cfg.runtime === 'node-server'");
     expect(source).toContain("cfg.runtime === 'vite'");
+    expect(source).toContain("cfg.runtime === 'node-cli'");
+    expect(source).toContain('node-cli templates run through the owner node executor');
   });
 
   it('brings the node:sqlite WASM engine up from a same-origin asset', () => {

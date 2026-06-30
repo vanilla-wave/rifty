@@ -54,6 +54,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0162 | Vite 8 Rolldown WASI browser-boot runtime surface |
 | 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0171 | Function constructor dynamic import routing |
+| 0178 | node:zlib gzip Transform stream subset |
 
 ### runtime-wasi
 
@@ -252,6 +253,8 @@ superseded.
 | 0143 pre-ADR backlog reference | 0143 note 2026-06-23 | pre-ADR analysis backlog file retired after shell `.bin` transport closure; ADR-0143 remains the historical record |
 | 0144 owner CLI in-realm phrase | 0144 note 2026-06-23 | `.bin` commands now run in supervised child workers over owner remote-fs; `execSync` node-entry residual remains separate |
 | 0146 P2 wholesale owner-shell target | 0146 note 2026-06-23 | delivered package-tooling slice closes `.bin` via owner-worker child execution; `execSync` node-entry residual remains separate |
+| 0159 Transform-stream deferral | 0178 | `createGzip()` / `Gzip` landed for the Vite preview compression consumer; the rest stays loud |
+| 0159 one-shot flush knobs | 0159 note 2026-06-29 | `flush` / `finishFlush` are behavior-affecting and now throw instead of being accepted no-ops |
 
 ## Appendix A — Q→ADR provenance
 

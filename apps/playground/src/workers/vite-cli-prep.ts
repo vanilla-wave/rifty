@@ -4,7 +4,7 @@ import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { viteBrowserShimFiles, viteBuildShimFiles } from '../glue/esbuild-shim.ts';
 import { viteHmrClientScript } from '../glue/hmr-bridge.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
-import { findUserViteConfig } from './vite-config-guard.ts';
+import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -15,6 +15,32 @@ const VITE_CLI_KEEPALIVE_PATCH = `var __riftyAction = this.runMatchedCommand();
       if (__riftyAction && typeof __riftyAction.then === "function" && globalThis.__riftyTrackCliPromise) {
         globalThis.__riftyTrackCliPromise(__riftyAction);
       }`;
+const VITE_CLI_PREVIEW_NEEDLE = `configFile: options.config,
+			configLoader: options.configLoader,
+			logLevel: options.logLevel,
+			mode: options.mode,
+			build: { outDir: options.outDir },
+			preview: {
+				port: options.port,
+				strictPort: options.strictPort,
+				host: options.host,
+				open: options.open
+			}`;
+const VITE_CLI_PREVIEW_PATCH = `configFile: false,
+			configLoader: options.configLoader,
+			logLevel: options.logLevel,
+			mode: options.mode,
+			build: { outDir: options.outDir },
+			preview: {
+				port: options.port,
+				strictPort: options.strictPort,
+				host: options.host,
+				open: options.open,
+				allowedHosts: true,
+				// TODO(backlog: playground/vite-preview-cors-middleware-parity)
+				cors: false
+			}`;
+const VITE_CLI_PREVIEW_PATCH_MARKER = 'configFile: false,';
 
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'run';
 
@@ -48,20 +74,28 @@ function overlayShims(root: string, mode: ViteCliMode): void {
   }
 }
 
-function installCliActionKeepalive(root: string): void {
+function installCliActionPatches(root: string, mode: ViteCliMode): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
   const path = normalizePath(`${root}/node_modules/vite/dist/node/cli.js`);
   if (!fs.existsSync(path)) return;
-  const source = dec.decode(fs.readFileBytesSync(path));
-  if (source.includes('__riftyTrackCliPromise')) return;
-  if (!source.includes(VITE_CLI_KEEPALIVE_NEEDLE)) {
-    throw new Error('vite CLI keepalive patch failed: runMatchedCommand call shape not found');
+  let source = dec.decode(fs.readFileBytesSync(path));
+  let changed = false;
+  if (!source.includes('__riftyTrackCliPromise')) {
+    if (!source.includes(VITE_CLI_KEEPALIVE_NEEDLE)) {
+      throw new Error('vite CLI keepalive patch failed: runMatchedCommand call shape not found');
+    }
+    source = source.replace(VITE_CLI_KEEPALIVE_NEEDLE, VITE_CLI_KEEPALIVE_PATCH);
+    changed = true;
   }
-  fs.writeFileSync(
-    path,
-    enc.encode(source.replace(VITE_CLI_KEEPALIVE_NEEDLE, VITE_CLI_KEEPALIVE_PATCH)),
-  );
+  if (mode === 'preview' && !source.includes(VITE_CLI_PREVIEW_PATCH_MARKER)) {
+    if (!source.includes(VITE_CLI_PREVIEW_NEEDLE)) {
+      throw new Error('vite CLI preview patch failed: preview inline config shape not found');
+    }
+    source = source.replace(VITE_CLI_PREVIEW_NEEDLE, VITE_CLI_PREVIEW_PATCH);
+    changed = true;
+  }
+  if (changed) fs.writeFileSync(path, enc.encode(source));
 }
 
 function wrapperConfigPath(root: string): string {
@@ -206,7 +240,8 @@ export async function prepareViteCli(
   mode: ViteCliMode,
   opts: ViteCliPrepareOptions = {},
 ): Promise<void> {
-  installCliActionKeepalive(root);
+  if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
+  installCliActionPatches(root, mode);
   overlayShims(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
   if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
