@@ -53,12 +53,25 @@ export interface DuplexInternalOptions {
   [INTERNAL_WRITABLE_SIDE]?: (opts: ReadableOptions & WritableOptions, owner: Duplex) => Writable;
 }
 
+/** The `allowHalfOpen` option (and the WHATWG-pair shape) layered onto Duplex. */
+export interface DuplexOptions extends ReadableOptions, WritableOptions {
+  /**
+   * When `false`, the readable side ending auto-ends the writable side (Node's
+   * socket-like coupling). Defaults to `true` for a bare `new Duplex()` (Node
+   * parity); `Duplex.fromWeb` deliberately defaults it to `false`.
+   */
+  allowHalfOpen?: boolean;
+}
+
 export class Duplex extends Readable {
   /** Internal `Writable` side. Exposed for tests/debugging only — drive the duplex via `d.write`/`d.end`. */
   readonly writableSide: Writable;
+  /** Node's `allowHalfOpen` — see {@link DuplexOptions}. */
+  readonly allowHalfOpen: boolean;
 
-  constructor(opts: ReadableOptions & WritableOptions = {}) {
+  constructor(opts: DuplexOptions = {}) {
     super(opts);
+    this.allowHalfOpen = opts.allowHalfOpen ?? true;
     // Symbol-keyed factory is the only override path; public callers can't reach
     // the Symbol. `Transform` injects it via `super({...})` — see `transform.ts`.
     const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
@@ -102,6 +115,14 @@ export class Duplex extends Readable {
     this.writableSide.on('drain', () => {
       this.emit('drain');
     });
+    // Half-open coupling (Node parity): when `allowHalfOpen` is false, the
+    // readable side ending auto-ends the writable side — a socket-shaped Duplex
+    // and `Duplex.fromWeb` rely on this (a closed web-readable ends the writer).
+    if (!this.allowHalfOpen) {
+      this.once('end', () => {
+        if (!this.writableSide.writableEnded) this.writableSide.end();
+      });
+    }
   }
 
   /**
@@ -165,5 +186,95 @@ export class Duplex extends Readable {
     this.writableSide.destroy(err);
     super.destroy(err);
     return this;
+  }
+
+  /**
+   * Convert this Duplex into a WHATWG `{ readable, writable }` pair (Node's
+   * `Duplex.toWeb`, v17): the readable side becomes a `ReadableStream` and the
+   * writable side a `WritableStream`, reusing `Readable.toWeb` / `Writable.toWeb`.
+   */
+  static toWeb(duplex: Duplex): { readable: ReadableStream<unknown>; writable: WritableStream<unknown> } {
+    return {
+      readable: Readable.toWeb(duplex),
+      writable: Writable.toWeb(duplex),
+    };
+  }
+
+  /**
+   * Compose a Node `Duplex` over a WHATWG `{ readable, writable }` pair (Node's
+   * `Duplex.fromWeb`, v17). The Duplex's readable side is fed by reading the web
+   * `readable`; its writable side pumps into the web `writable`'s writer (with
+   * backpressure via the write callback), `_final` → `writer.close`,
+   * `destroy(reason)` → `writer.abort` + reader cancel.
+   *
+   * Defaults `allowHalfOpen` to `false` — deliberately the OPPOSITE of a bare
+   * `new Duplex()` (Node parity); `{ allowHalfOpen: true }` is honored. A
+   * non-WHATWG pair throws a synchronous `TypeError` (`ERR_INVALID_ARG_TYPE`).
+   */
+  static fromWeb(
+    pair: { readable: ReadableStream<unknown>; writable: WritableStream<unknown> },
+    options: DuplexOptions = {},
+  ): Duplex {
+    if (
+      pair === null ||
+      typeof pair !== 'object' ||
+      typeof (pair.readable as { getReader?: unknown } | undefined)?.getReader !== 'function' ||
+      typeof (pair.writable as { getWriter?: unknown } | undefined)?.getWriter !== 'function'
+    ) {
+      throw new TypeError(
+        'The "pair.readable"/"pair.writable" arguments must be of type ReadableStream/WritableStream',
+      ) as TypeError & { code?: string };
+    }
+    const reader = pair.readable.getReader();
+    const writer = pair.writable.getWriter();
+    let writeAborted = false;
+
+    const d = new Duplex({
+      ...options,
+      // fromWeb's deliberate default is the OPPOSITE of a bare Duplex.
+      allowHalfOpen: options.allowHalfOpen ?? false,
+      read(): void {
+        reader.read().then(
+          ({ done, value }) => {
+            if (done) {
+              d.push(null);
+              return;
+            }
+            if (value !== undefined) d.push(value);
+          },
+          (err) => {
+            if (!d.destroyed) d.destroy(err as Error);
+          },
+        );
+      },
+      write(chunk, _encoding, cb): void {
+        writer.write(chunk).then(
+          () => cb(),
+          (err) => cb(err as Error),
+        );
+      },
+      final(cb): void {
+        writer.close().then(
+          () => cb(),
+          (err) => cb(err as Error),
+        );
+      },
+    });
+    // Web write-side erroring (`controller.error`) rejects the writer's `closed`;
+    // mirror it onto the Duplex.
+    writer.closed.catch((err: unknown) => {
+      writeAborted = true;
+      if (!d.destroyed) d.destroy(err instanceof Error ? err : new Error(String(err)));
+    });
+    // destroy → tear down BOTH web sides (abort the writer with the reason,
+    // cancel the reader), guarding against a double-abort from the closed-catch.
+    d.on('close', () => {
+      if (!writeAborted) {
+        writeAborted = true;
+        void writer.abort(d._writableState.errored ?? undefined).catch(() => {});
+      }
+      void reader.cancel().catch(() => {});
+    });
+    return d;
   }
 }

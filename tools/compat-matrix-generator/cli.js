@@ -137,9 +137,9 @@ const matrices = [
         'Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested)',
       ],
       [
-        '`Writable.toWeb` / `Writable.fromWeb`',
-        '❌',
-        'Writable/Duplex WHATWG bridge not yet claimed',
+        '`Writable.toWeb` / `Writable.fromWeb` / `Duplex.toWeb` / `Duplex.fromWeb`',
+        '✅',
+        'Writable/Duplex WHATWG bridge: `toWeb` drain-gated backpressure, `fromWeb` error propagation both ways; `Duplex` carries `allowHalfOpen` (bare default `true`, `fromWeb` default `false`); non-WHATWG arg → sync TypeError (parity-tested)',
       ],
       [
         '`isReadable` / `isWritable` / `isErrored` / `isDisturbed`',
@@ -168,6 +168,10 @@ const matrices = [
       '`tests/conformance/builtins/stream-consumers.test.ts`',
       '`packages/io/src/streams/readable.from.test.ts`',
       '`packages/io/src/streams/readable.to-web.test.ts`',
+      '`packages/io/src/streams/writable.to-web.test.ts`',
+      '`packages/io/src/streams/duplex.web-bridge.test.ts`',
+      '`packages/io/src/streams/readable.async-iter-helpers.test.ts`',
+      '`packages/io/src/streams/compose-wrap-from.test.ts`',
       '`packages/io/src/streams/predicates-and-defaults.test.ts`',
       '`packages/io/src/streams/writable.cork-writev.test.ts`',
       '`packages/net/src/http/response.test.ts`',

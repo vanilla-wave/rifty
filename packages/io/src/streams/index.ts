@@ -14,7 +14,7 @@ import { Writable, type WritableState } from './writable.ts';
 
 export { Readable, type ReadableFromWebOptions, type ReadableOptions } from './readable.ts';
 export { Writable, type WritableOptions, type WriteChunk } from './writable.ts';
-export { Duplex } from './duplex.ts';
+export { Duplex, type DuplexOptions } from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';
 export { PassThrough } from './pass-through.ts';
 export { pipeline, finished } from './pipeline.ts';

@@ -42,6 +42,7 @@ export {
   type ReadableOptions,
   type WritableOptions,
   type WriteChunk,
+  type DuplexOptions,
   type TransformOptions,
 } from '@riftydev/io';
 

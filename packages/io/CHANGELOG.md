@@ -4,6 +4,25 @@
 
 ### Added
 
+- **`Writable.toWeb` / `Writable.fromWeb` + `Duplex.toWeb` / `Duplex.fromWeb`**
+  (Node v17) — the write/duplex half of the Node↔WHATWG bridge (pure-JS over
+  Chromium `WritableStream`), completing the read half (`Readable.toWeb`/
+  `fromWeb`). `Writable.toWeb(w)`: each web `write(chunk)` calls `w.write` and
+  AWAITS `'drain'` when it returns false (serialized, drain-gated backpressure —
+  the next chunk's `_write` is not reached until the prior completes); `close` →
+  `w.end` + await `'finish'`; `abort(reason)` → `w.destroy(reason)`; `w` erroring
+  rejects the writer's `closed`. `Writable.fromWeb(ws)`: `_write` pumps to a held
+  web writer (its promise is the backpressure), `_final` → `writer.close`,
+  `destroy(reason)` → sink `abort(reason)` (same error object); a web-side
+  `controller.error(err)` destroys the Node writable (emits `'error'(err)`,
+  `destroyed`). `Duplex.toWeb(d)` → `{ readable, writable }` (reusing both
+  `toWeb`s); `Duplex.fromWeb(pair)` composes them into one `Duplex`. `Duplex`
+  now carries `allowHalfOpen` (default `true` for a bare Duplex, Node parity):
+  with `false`, the readable side ending auto-ends the writable side —
+  `Duplex.fromWeb` deliberately defaults it to `false` (the OPPOSITE), honoring
+  `{ allowHalfOpen: true }`. Non-WHATWG args throw a synchronous `TypeError`
+  (`ERR_INVALID_ARG_TYPE`). All parity-proven vs real Node v24.
+
 - **`Writable` `cork()` / `uncork()` + real `_writev` batching.** `cork()` defers
   buffered writes (no `_write`/`_writev` while corked); `uncork()` flushes them —
   in ONE `_writev(chunks, cb)` call (Node's `[{chunk, encoding}, …]` shape) when

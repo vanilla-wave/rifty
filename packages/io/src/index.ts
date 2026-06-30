@@ -51,6 +51,7 @@ export {
   type ReadableFromWebOptions,
   type WritableOptions,
   type WriteChunk,
+  type DuplexOptions,
   type TransformOptions,
 } from './streams/index.ts';
 export {

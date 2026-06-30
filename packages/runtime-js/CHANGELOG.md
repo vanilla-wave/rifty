@@ -4,6 +4,12 @@
 
 ### Added
 
+- **`node:stream` exposes the Writable/Duplex WHATWG bridge** —
+  `Writable.toWeb`/`Writable.fromWeb` and `Duplex.toWeb`/`Duplex.fromWeb` (Node
+  v17, owned by `@riftydev/io`) — so `require('node:stream').Writable.toWeb(w)`
+  etc. resolve, completing the read-half bridge already shipped. `Duplex` now
+  also exposes `allowHalfOpen`.
+
 - **`execSync('node <script>')` routes its child through the node-entry module
   loader** (ADR-0137/0143/0150), like `child_process.spawn('node', …)` already
   does — so a `#!` shebang is STRIPPED (not a `SyntaxError`), relative

@@ -448,6 +448,10 @@ export class Writable extends EventEmitter {
     if (state.destroyed) return this;
     state.destroyed = true;
     if (err) state.errored = err;
+    // Subclass-style hook (used by `Writable.fromWeb`): abort the underlying web
+    // writer with the destroy reason BEFORE the queued callbacks error, so the
+    // web sink's `abort(reason)` sees the same error object.
+    this.onDestroy?.(err);
     // Error queued writes' callbacks. Can't cancel the chunk currently in
     // `_write` (already running on the user's stack), but its `done` closure
     // checks `state.destroyed` before emitting drain/finish.
@@ -462,5 +466,144 @@ export class Writable extends EventEmitter {
       this.emit('close');
     });
     return this;
+  }
+
+  /**
+   * Optional teardown hook invoked synchronously by {@link destroy} before the
+   * queued callbacks error. `Writable.fromWeb` assigns it to abort the held web
+   * writer; the base class leaves it unset (Node's `_destroy`, minus the public
+   * surface we don't yet claim). NOT a public override point outside this
+   * package — it's only wired internally.
+   */
+  protected onDestroy?: (err?: Error) => void;
+
+  /**
+   * Convert a WHATWG `WritableStream` into this Node-shape `Writable`
+   * (Node's `Writable.fromWeb`, v17).
+   *
+   * `_write` pumps each chunk to a held web writer and awaits its promise (so a
+   * slow web sink applies backpressure through the Node write callback); `_final`
+   * → `writer.close()`; `destroy(reason)` → `writer.abort(reason)` (the sink's
+   * `abort` sees the SAME reason). An error from the web side (`controller.error`
+   * → the writer's `closed` rejects) destroys this Node writable with that error
+   * (emitting `'error'`). Verified vs real Node v24.
+   */
+  static fromWeb(stream: WritableStream<unknown>, options: WritableOptions = {}): Writable {
+    if (!stream || typeof (stream as { getWriter?: unknown }).getWriter !== 'function') {
+      throw new TypeError(
+        'The "writableStream" argument must be an instance of WritableStream',
+      ) as TypeError & { code?: string };
+    }
+    const writer = stream.getWriter();
+    let aborted = false;
+    const w = new Writable({
+      ...options,
+      write(chunk, _encoding, cb): void {
+        writer.write(chunk).then(
+          () => cb(),
+          (err) => cb(err as Error),
+        );
+      },
+      final(cb): void {
+        writer.close().then(
+          () => cb(),
+          (err) => cb(err as Error),
+        );
+      },
+    });
+    // destroy(reason) → abort the web sink with that reason (its `abort` sees the
+    // same object). Guard `aborted` so a web-side error (which also lands here
+    // via destroy) doesn't double-abort an already-closing writer.
+    w.onDestroy = (err?: Error): void => {
+      if (aborted) return;
+      aborted = true;
+      void writer.abort(err).catch(() => {});
+    };
+    // Web side erroring (`controller.error`) rejects the writer's `closed`. Mirror
+    // it onto the Node writable: destroy with that error so `'error'` fires and
+    // `destroyed` flips. The abort hook is short-circuited via `aborted`.
+    writer.closed.catch((err: unknown) => {
+      aborted = true;
+      if (!w.destroyed) w.destroy(err instanceof Error ? err : new Error(String(err)));
+    });
+    return w;
+  }
+
+  /**
+   * Convert this Node-shape `Writable` into a WHATWG `WritableStream`
+   * (Node's `Writable.toWeb`, v17).
+   *
+   * Each web `write(chunk)` calls `w.write(chunk)` and, when that returns `false`
+   * (HWM hit), AWAITS the next `'drain'` before resolving — so the web writer's
+   * promise stays pending (and the next chunk's `_write` is not reached) until
+   * the Node side has capacity. `close()` → `w.end()` then await `'finish'`;
+   * `abort(reason)` → `w.destroy(reason)`. `w` erroring → `controller.error(err)`
+   * (the writer's `closed` rejects). Verified vs real Node v24.
+   */
+  static toWeb(streamWritable: Writable): WritableStream<unknown> {
+    const w = streamWritable;
+    let errored: Error | null = null;
+    let controllerRef: WritableStreamDefaultController | null = null;
+    // `w` erroring at any time errors the WHATWG controller (rejecting the
+    // writer's `closed`). Wired once; a pre-existing error is replayed in start.
+    w.on('error', (err: unknown) => {
+      const e = err instanceof Error ? err : new Error(String(err));
+      errored = e;
+      controllerRef?.error(e);
+    });
+
+    return new WritableStream<unknown>({
+      start(controller): void {
+        controllerRef = controller;
+        if (errored) controller.error(errored);
+      },
+      write(chunk): Promise<void> | void {
+        if (errored) return Promise.reject(errored);
+        // Drain-gated: resolve immediately on a `true` return; otherwise await the
+        // next `'drain'` (or an `'error'`) so the writer's promise serializes
+        // exactly one chunk's worth of backpressure.
+        const ok = w.write(chunk);
+        if (ok) return;
+        return new Promise<void>((resolve, reject) => {
+          const onDrain = (): void => {
+            cleanup();
+            resolve();
+          };
+          const onError = (err: unknown): void => {
+            cleanup();
+            reject(err);
+          };
+          const cleanup = (): void => {
+            w.off('drain', onDrain);
+            w.off('error', onError);
+          };
+          w.on('drain', onDrain);
+          w.on('error', onError);
+        });
+      },
+      close(): Promise<void> | void {
+        if (errored) return Promise.reject(errored);
+        return new Promise<void>((resolve, reject) => {
+          const onFinish = (): void => {
+            cleanup();
+            resolve();
+          };
+          const onError = (err: unknown): void => {
+            cleanup();
+            reject(err);
+          };
+          const cleanup = (): void => {
+            w.off('finish', onFinish);
+            w.off('error', onError);
+          };
+          w.on('finish', onFinish);
+          w.on('error', onError);
+          w.end();
+        });
+      },
+      abort(reason): void {
+        w.destroy(reason instanceof Error ? reason : new Error(String(reason)));
+      },
+    });
   }
 }
