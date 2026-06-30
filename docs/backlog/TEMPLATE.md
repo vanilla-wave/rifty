@@ -18,6 +18,12 @@ code: []
 <!-- A `draft` can stop here. To reach `ready`, fill the contract below (use the rifty-refine skill).
      `ready` ⇒ an implementer builds it whole: zero new decisions, zero new in-scope items, the ADR (if any) already exists. -->
 
+## User scenario
+
+<!-- Required ONLY when this item has no `epic:` (an epic child inherits the scenario from its epic — delete this section then).
+     Epic-grade + concrete: the real npm package / Node program the user runs, the exact call, what they observe.
+     Mission-anchored — can't name the real software it unblocks? Not user value (off-mission or process-meta debt). -->
+
 ## Acceptance
 
 <Concrete, testable done-definition. An approximation must fail it.>

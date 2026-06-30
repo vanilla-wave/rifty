@@ -27,6 +27,7 @@ Optional: `epic` (parent epic slug) · `blocked_by` (`[<area>/<slug>, …]`) · 
 
 A `ready` item MUST carry (enforced by `backlog:check`):
 
+- `## User scenario` — **required only when the item has no `epic:`** (an epic child inherits the scenario from its epic — don't duplicate). The epic-grade concrete scenario: the real npm package / Node program the user runs, the exact call, what they observe; mission-anchored (can't name real software it unblocks → not user value).
 - `## Acceptance` — concrete, testable done-definition; an approximation fails it.
 - `## Parity cases` — the exact Node behaviors to pin, each a failing-test-first target (enumerated, never "plus parity cases").
 - `## Out of scope` — the exact inputs/APIs that throw `NotImplementedError` + compat ❌ (named, never "…").
