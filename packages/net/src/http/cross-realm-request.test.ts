@@ -44,7 +44,12 @@ function drain(req: ClientRequest): Promise<ClientResult> {
         chunks.push(decoder.decode(chunk));
       });
       msg.on('end', () =>
-        resolve({ statusCode: msg.statusCode, headers: msg.headers, body: chunks.join(''), dataEvents }),
+        resolve({
+          statusCode: msg.statusCode,
+          headers: msg.headers,
+          body: chunks.join(''),
+          dataEvents,
+        }),
       );
       msg.on('error', reject);
     });
@@ -91,16 +96,21 @@ describe('http cross-realm loopback via the preview broker (ADR-0180)', () => {
       .spyOn(globalThis, 'fetch')
       .mockRejectedValue(new Error('must not hit fetch'));
 
-    const err = await new Promise<Error & { code?: string; errno?: number; syscall?: string; port?: number }>(
-      (resolve) => {
-        const req = request({ hostname: 'localhost', port: 7002, path: '/x' });
-        req.on('response', () => resolve(new Error('expected ECONNREFUSED, got a response')));
-        req.on('error', (e) => resolve(e as Error & { code?: string }));
-        req.end();
-      },
-    );
+    const err = await new Promise<
+      Error & { code?: string; errno?: number; syscall?: string; port?: number }
+    >((resolve) => {
+      const req = request({ hostname: 'localhost', port: 7002, path: '/x' });
+      req.on('response', () => resolve(new Error('expected ECONNREFUSED, got a response')));
+      req.on('error', (e) => resolve(e as Error & { code?: string }));
+      req.end();
+    });
 
-    expect(err).toMatchObject({ code: 'ECONNREFUSED', errno: -111, syscall: 'connect', port: 7002 });
+    expect(err).toMatchObject({
+      code: 'ECONNREFUSED',
+      errno: -111,
+      syscall: 'connect',
+      port: 7002,
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -118,7 +128,10 @@ describe('http cross-realm loopback via the preview broker (ADR-0180)', () => {
           controller.enqueue(new TextEncoder().encode(`data: ${i++}\n\n`));
         },
       });
-      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     });
 
     const res = await drain(get('http://localhost:7003/events'));

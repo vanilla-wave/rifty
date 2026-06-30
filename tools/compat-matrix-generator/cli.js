@@ -180,6 +180,11 @@ const matrices = [
       ['Missing port dispatch', '✅', 'Returns 502 through registry dispatch'],
       ['`http.get` loopback', '✅', 'Client request to own registered port'],
       [
+        'Cross-realm `http.request` loopback',
+        '✅',
+        'A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180)',
+      ],
+      [
         'External WebSocket client egress',
         '✅',
         'Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive',
@@ -228,8 +233,10 @@ const matrices = [
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/net/src/http/client.test.ts`',
+      '`packages/net/src/http/cross-realm-request.test.ts`',
       '`packages/service-worker/src/body-transport.test.ts`',
       '`packages/net/src/cross-realm/preview-port.test.ts`',
+      '`packages/net/src/cross-realm/cross-realm-loopback.test.ts`',
     ],
     limitations: [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',

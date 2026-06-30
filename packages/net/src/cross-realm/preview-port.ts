@@ -691,19 +691,18 @@ export function dispatchCrossRealmLoopback(
     let settled = false;
     let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
     let nextSeq = 0;
-    let probeTimer: ReturnType<typeof setTimeout> | undefined;
-    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    // One timer across two phases: the bounded ownership probe (no accept →
+    // refuse) and, once accepted, the no-progress idle timer (re-armed per frame).
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const teardown = (): void => {
-      clearTimeout(probeTimer);
-      clearTimeout(idleTimer);
+      if (timer) clearTimeout(timer);
       channel.removeEventListener('message', onMessage as unknown as EventListener);
       channel.close();
     };
     const settleWith = (value: Response | null): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(probeTimer);
       resolve(value);
     };
     // No-progress timer (ADR-0048 D4): re-armed on accept + every stream frame,
@@ -711,8 +710,8 @@ export function dispatchCrossRealmLoopback(
     // reaped. Mid-stream death errors the open body; a stall before any reply
     // surfaces a 502 (owner accepted but produced nothing).
     const armIdle = (): void => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
         if (streamController) {
           streamController.error(new Error('cross-realm loopback stream stalled'));
           streamController = null;
@@ -730,7 +729,7 @@ export function dispatchCrossRealmLoopback(
 
       switch (frame.type) {
         case 'accept':
-          clearTimeout(probeTimer);
+          // Owner confirmed — switch the probe timer to the no-progress idle timer.
           armIdle();
           return;
         case 'reply': {
@@ -813,7 +812,7 @@ export function dispatchCrossRealmLoopback(
     };
 
     channel.addEventListener('message', onMessage as unknown as EventListener);
-    probeTimer = setTimeout(() => {
+    timer = setTimeout(() => {
       settleWith(null);
       teardown();
     }, probeTimeoutMs);

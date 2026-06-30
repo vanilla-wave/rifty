@@ -19,6 +19,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `listen(0)` / `listen({ port: 0 })` ephemeral | ✅ | Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
+| Cross-realm `http.request` loopback | ✅ | A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180) |
 | External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
@@ -41,8 +42,10 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`
+- `packages/net/src/http/cross-realm-request.test.ts`
 - `packages/service-worker/src/body-transport.test.ts`
 - `packages/net/src/cross-realm/preview-port.test.ts`
+- `packages/net/src/cross-realm/cross-realm-loopback.test.ts`
 
 ## Known Limitations
 

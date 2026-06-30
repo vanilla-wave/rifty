@@ -7,17 +7,19 @@
  * code).
  *
  * Client: `http.request()` loops back through the registry for registered local
- * ports; loopback ports with no listener fail with Node-shaped `ECONNREFUSED`;
- * everything else (external hosts, non-http protocols) issues through the host
- * `fetch`. The returned emitter carries `'response'` with an
+ * ports; a loopback port with no LOCAL handler is probed across sibling Worker
+ * realms via the preview broker (ADR-0180) before failing with Node-shaped
+ * `ECONNREFUSED`; everything else (external hosts, non-http protocols) issues
+ * through the host `fetch`. The returned emitter carries `'response'` with an
  * `IncomingMessageFromFetch`.
  *
- * Scope gotcha: the port registry is realm-local (per Worker process). A server
- * listening in another Worker is NOT reachable via loopback here — see
- * docs/backlog/net/cross-realm-http-loopback.
+ * Scope: the port registry is realm-local (per Worker process); cross-realm
+ * loopback bridges realms over the per-port preview `BroadcastChannel`
+ * (`cross-realm/preview-port.ts`, ADR-0180).
  */
 
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
+import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import {
   addrInUseError,
   allocateEphemeralPort,
@@ -27,7 +29,6 @@ import {
   registerPort,
   unregisterPort,
 } from '../registry.ts';
-import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
 import { METHODS, maxHeaderSize } from './methods.ts';

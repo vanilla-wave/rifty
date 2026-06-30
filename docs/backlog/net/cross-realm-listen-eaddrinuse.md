@@ -5,7 +5,6 @@ title: Cross-realm EADDRINUSE — two sandbox processes can't bind the same loop
 created: 2026-06-28
 why: cross-realm loopback (ADR-0180) makes a port owned by ≥2 realms ambiguous (first-acker-wins); Node refuses the second cross-process bind with EADDRINUSE, but rifty's realm-local registries silently let both bind
 user_story: As a developer running two sandbox node processes that both `listen(3000)`, I want the second to fail with EADDRINUSE like Node (so a port-conflict bug surfaces), but today each realm has its own registry so both bind and a client reaching :3000 is first-acker-wins (ADR-0180 D5).
-blocked_by: [net/cross-realm-http-loopback]
 sources: [ADR-0180, ADR-0157, ADR-0043, ADR-0048]
 code: [packages/net/src/registry.ts, packages/net/src/http/server.ts]
 ---
