@@ -24,7 +24,7 @@ code: [services/eddy/package.json, services/eddy/tsup.config.ts, deploy/yandex/e
 
 ## Parity cases
 
-N/A — packaging/infra item, no Node-observable behavior. The resolver's behavioral parity is owned by `npm-client/eddy-resolver-service`; the client's by `npm-client/eddy-client-opt-in`.
+N/A — packaging/infra item, no Node-observable behavior. The resolver's + client's behavioral parity were owned by the now-delivered engine + client-opt-in items (their parity tests live in `services/eddy/tests/` + `packages/npm-client`).
 
 ## Out of scope
 
