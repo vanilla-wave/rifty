@@ -8,6 +8,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
+// Build-time inject (tsup `define`); absent in dev/test (non-bundled), where the
+// runtime resolve below finds the real on-disk package.
+declare const __EDDY_NPM_CLIENT_VERSION__: string | undefined;
+
 let cached: string | undefined;
 
 export function readNpmClientVersion(): string {
@@ -17,6 +21,9 @@ export function readNpmClientVersion(): string {
 }
 
 function locate(): string {
+  // Self-contained bundle: npm-client is inlined, not resolvable on disk, so the
+  // version is injected at build time instead.
+  if (typeof __EDDY_NPM_CLIENT_VERSION__ !== 'undefined') return __EDDY_NPM_CLIENT_VERSION__;
   try {
     const require = createRequire(import.meta.url);
     let dir = dirname(require.resolve('@riftydev/npm-client'));

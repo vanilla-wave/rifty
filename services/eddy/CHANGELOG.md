@@ -40,6 +40,17 @@
   service account; a root `.dockerignore` keeps host `node_modules`/`.git` out
   of the build context. The image was verified to build + serve (CORS preflight
   204) from a clean `docker build` + `docker run`.
+- **Deployed at `https://eddy.rifty.dev`** (Yandex COI VM + Caddy TLS; image
+  `cr.yandex/<reg>/eddy:0.1.0`, linux/amd64). `VITE_RIFTY_RESOLVER_URL` wired
+  into the playground prod build (`netlify.toml`); `tools/eddy/smoke-eddy.mjs`
+  guards it in CI (`netlify.yml`); resources recorded in
+  `docs/public/hosting-yandex.md`. Live smoke: POST → 200 bundle (debug→ms
+  diamond) with CORS + `x-eddy-*`.
+- **Skew-audit version fix.** The self-contained bundle inlines
+  `@riftydev/npm-client`, so the runtime `require.resolve` for the
+  `x-eddy-npm-client-version` header always returned `unknown`; tsup now injects
+  the version at build time (`define`), with the runtime resolve as the dev
+  fallback.
 - **Publish-set wiring.** eddy joins `build:libs` (so its `dist/` builds in the
   publish pipeline) and `first-publish.sh`, which gains a `--only <filter>` mode
   to bootstrap a single new name (`--only @riftydev/eddy`) without re-publishing

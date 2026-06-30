@@ -1,4 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'tsup';
+
+// The @riftydev/npm-client version eddy bundles, injected at build time. The
+// self-contained bundle inlines npm-client (no on-disk package to `require.
+// resolve`), so the runtime lookup in src/npm-client-version.ts can't find it;
+// this `define` feeds it the real version for the skew-audit header (ADR-0182).
+const npmClientVersion = (
+  JSON.parse(
+    readFileSync(new URL('../../packages/npm-client/package.json', import.meta.url), 'utf8'),
+  ) as { version: string }
+).version;
 
 // Hand-authored: eddy is a Node service, not part of the packages/* publish
 // generator (tools/publishing/sync-publish-config.mjs). It is STANDALONE, so we
@@ -21,4 +32,5 @@ export default defineConfig({
   target: 'es2022',
   noExternal: [/^@riftydev\//],
   external: [/^node:/],
+  define: { __EDDY_NPM_CLIENT_VERSION__: JSON.stringify(npmClientVersion) },
 });

@@ -9,7 +9,7 @@
 | `play.rifty.dev` | Netlify (`rifty-playground`) | Cross-origin-isolated playground |
 | `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
 | `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
-| `eddy.rifty.dev` | Yandex Cloud (planned) | Opt-in fast-install resolver (ADR-0182); deploy is confirm-first |
+| `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182) |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for
@@ -25,6 +25,7 @@ www.rifty.dev.   CNAME  rifty-landing.netlify.app.
 play.rifty.dev.  CNAME  rifty-playground.netlify.app.
 registry.rifty.dev.  CNAME  409f80b3d8827091.topology.gslb.yccdn.ru.
 registry-origin.rifty.dev.  A  93.77.177.79
+eddy.rifty.dev.  A  89.169.128.66
 ```
 
 The playground production build uses
