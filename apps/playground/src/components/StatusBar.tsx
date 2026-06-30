@@ -28,6 +28,7 @@ export function StatusBar(props: {
   exportDisabled?: boolean;
   /** Tooltip explaining what Export does / why it is disabled. */
   exportTitle?: string;
+  gitBranch?: string;
 }) {
   const memory = (): boolean => props.storageMode === 'memory' || !props.isOpfs;
   const storageLabel = (): string => {
@@ -68,6 +69,13 @@ export function StatusBar(props: {
       <span class="rf-status__item rf-status__file" title={props.activeFile}>
         {props.activeFile}
       </span>
+      <Show when={props.gitBranch}>
+        {(branch) => (
+          <span class="rf-status__item rf-status__branch" title="rifty-git branch">
+            {branch()}
+          </span>
+        )}
+      </Show>
 
       <span class="rf-status__spacer" />
 

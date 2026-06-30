@@ -11,7 +11,7 @@ code: [apps/playground/src/templates, apps/playground/src/glue/workspace-archive
 
 ## Context
 
-ADR-0165 fixed reset as a one-shot whole-workspace re-seed from the Starter bundle (baseline = the registry definition, re-derived by `starter` id — no per-project stored baseline). That covers "reset everything" but not per-file revert, because per-file revert needs to know, per file, the Starter's original bytes AND whether the live file is a user edit vs untouched. The bundle gives the original bytes (Starter source/files[]), but there's no live-vs-baseline diff to drive a "modified" badge or a single-file restore.
+ADR-0165 fixed reset as a one-shot whole-workspace re-seed from the Starter bundle (baseline = the registry definition, re-derived by `starter` id — no per-project stored baseline). That covers "reset everything" but not per-file revert, because per-file revert needs to know, per file, the Starter's original bytes AND whether the live file is a user edit vs untouched. The bundle gives the original bytes (Starter files[]), but there's no live-vs-baseline diff to drive a "modified" badge or a single-file restore.
 
 This is the remaining open half of `template-edit-provenance-reset` (whole-workspace reset folded into ADR-0165; provenance/per-file revert stays here).
 

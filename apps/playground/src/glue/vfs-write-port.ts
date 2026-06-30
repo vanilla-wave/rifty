@@ -26,7 +26,7 @@
  */
 
 import { channelNameFor } from '@riftydev/net';
-import { dirname, syncMirror } from '@riftydev/vfs';
+import { dirname, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /**
@@ -42,17 +42,19 @@ function vfsWritePortChannelUrl(key: OwnerBridgeKey): string {
  * Wire frames exchanged on the VFS write channel. Mkdir is a separate
  * frame so a caller can pre-create a directory (the Real Vite adapter's
  * seeding step does this for the initial project tree); a write also
- * `mkdir -p`s its parent implicitly on the receiving side.
+ * `mkdir -p`s its parent implicitly on the receiving side unless
+ * `recursive:false` asks for file-manager-style loud missing-parent errors.
  */
 export interface VfsWriteServerOptions {
-  onWrite?(path: string): void;
+  onWrite?(paths: readonly string[]): void;
 }
 
-export type VfsWriteFrame =
+export type VfsWriteSingleFrame =
   | {
       readonly type: 'write';
       readonly path: string;
       readonly data: Uint8Array;
+      readonly recursive?: boolean;
     }
   | {
       readonly type: 'mkdir';
@@ -67,13 +69,197 @@ export type VfsWriteFrame =
       readonly path: string;
       readonly recursive: boolean;
       readonly force: boolean;
+    }
+  | {
+      readonly type: 'rename';
+      readonly from: string;
+      readonly to: string;
+    }
+  | {
+      readonly type: 'copy';
+      readonly from: string;
+      readonly to: string;
     };
 
+export type VfsWriteFrame =
+  | VfsWriteSingleFrame
+  | {
+      readonly type: 'batch';
+      readonly frames: readonly VfsWriteSingleFrame[];
+    };
+
+export interface VfsWriteIpcMessage {
+  readonly type: 'rifty:vfs-write';
+  readonly opId?: string;
+  readonly frame: VfsWriteFrame;
+}
+
+export type VfsWriteAckMessage =
+  | { readonly type: 'rifty:vfs-write-ack'; readonly opId: string; readonly ok: true }
+  | {
+      readonly type: 'rifty:vfs-write-ack';
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: { readonly name: string; readonly message: string };
+    };
+
+export function isVfsWriteAckMessage(message: unknown): message is VfsWriteAckMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as {
+    readonly type?: unknown;
+    readonly opId?: unknown;
+    readonly ok?: unknown;
+  };
+  return (
+    candidate.type === 'rifty:vfs-write-ack' &&
+    typeof candidate.opId === 'string' &&
+    typeof candidate.ok === 'boolean'
+  );
+}
+
+export interface GuardedVfsWriteOptions {
+  readonly key: OwnerBridgeKey;
+  readonly frame: VfsWriteFrame;
+  readonly exited: boolean;
+  readonly sendIpc: (message: VfsWriteIpcMessage) => boolean;
+  readonly fallback?: (key: OwnerBridgeKey, frame: VfsWriteFrame) => void;
+}
+
+type CopyPlanEntry =
+  | { readonly kind: 'dir'; readonly path: string }
+  | { readonly kind: 'file'; readonly path: string; readonly data: Uint8Array };
+
+function frameTarget(frame: VfsWriteFrame): string {
+  if (frame.type === 'batch') return frame.frames.map(frameTarget).join(',');
+  if (frame.type === 'write' || frame.type === 'mkdir' || frame.type === 'rm') return frame.path;
+  return `${frame.from} -> ${frame.to}`;
+}
+
+function frameChangedPaths(frame: VfsWriteSingleFrame): readonly string[] {
+  if (frame.type === 'write' || frame.type === 'mkdir' || frame.type === 'rm') return [frame.path];
+  if (frame.type === 'rename') return [frame.from, frame.to];
+  return [frame.to];
+}
+
+function isSelfOrSubtree(from: string, to: string): boolean {
+  const src = normalizePath(from);
+  const dst = normalizePath(to);
+  return src === dst || dst.startsWith(`${src}/`);
+}
+
+function planCopyTree(from: string, to: string): CopyPlanEntry[] {
+  const fs = syncMirror();
+  if (isSelfOrSubtree(from, to)) {
+    throw new Error(`EINVAL: cannot copy "${from}" into itself at "${to}"`);
+  }
+  if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
+  const st = fs.statSync(from);
+  if (st.isDirectory) {
+    const plan: CopyPlanEntry[] = [{ kind: 'dir', path: to }];
+    for (const child of fs.readdirSync(from)) {
+      plan.push(...planCopyTree(joinPath(from, child.name), joinPath(to, child.name)));
+    }
+    return plan;
+  }
+  const data = fs.readFileBytesSync(from);
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return [{ kind: 'file', path: to, data: copy }];
+}
+
+function applyCopyPlan(plan: readonly CopyPlanEntry[]): void {
+  const fs = syncMirror();
+  for (const entry of plan) {
+    if (entry.kind === 'dir') {
+      fs.mkdirSync(entry.path, { recursive: true });
+    } else {
+      fs.mkdirSync(dirname(entry.path), { recursive: true });
+      fs.writeFileSync(entry.path, entry.data);
+    }
+  }
+}
+
+function validateVfsWriteFrame(frame: VfsWriteSingleFrame): void {
+  const fs = syncMirror();
+  if (frame.type === 'write') {
+    const parent = dirname(frame.path);
+    if (fs.existsSync(parent)) {
+      const st = fs.statSync(parent);
+      if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    } else if (frame.recursive === false) {
+      fs.statSync(parent);
+    }
+    return;
+  }
+  if (frame.type === 'mkdir') {
+    if (fs.existsSync(frame.path)) {
+      const st = fs.statSync(frame.path);
+      if (!frame.recursive || !st.isDirectory) {
+        throw new Error(`"${frame.path}" already exists`);
+      }
+    }
+    if (!frame.recursive) {
+      const parent = dirname(frame.path);
+      const st = fs.statSync(parent);
+      if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    }
+    return;
+  }
+  if (frame.type === 'rm') {
+    if (!frame.force) fs.statSync(frame.path);
+    return;
+  }
+  if (frame.type === 'rename') {
+    if (frame.from === frame.to) return;
+    if (isSelfOrSubtree(frame.from, frame.to)) {
+      throw new Error(`EINVAL: cannot rename "${frame.from}" into itself at "${frame.to}"`);
+    }
+    fs.statSync(frame.from);
+    if (fs.existsSync(frame.to)) throw new Error(`"${frame.to}" already exists`);
+    const parent = dirname(frame.to);
+    const st = fs.statSync(parent);
+    if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    return;
+  }
+  planCopyTree(frame.from, frame.to);
+}
+
+function assertBatchFramesIndependent(frames: readonly VfsWriteSingleFrame[]): void {
+  const touched: string[] = [];
+  for (const frame of frames) {
+    for (const path of frameChangedPaths(frame).map(normalizePath)) {
+      const conflict = touched.find(
+        (prev) => path === prev || path.startsWith(`${prev}/`) || prev.startsWith(`${path}/`),
+      );
+      if (conflict) {
+        throw new Error(`EINVAL: batch path conflict "${path}" overlaps "${conflict}"`);
+      }
+      touched.push(path);
+    }
+  }
+}
+
 export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
+  if (frame.type === 'batch') {
+    assertBatchFramesIndependent(frame.frames);
+    for (const child of frame.frames) validateVfsWriteFrame(child);
+    const changed: string[] = [];
+    for (const child of frame.frames) {
+      applyVfsWriteFrame(child);
+      changed.push(...frameChangedPaths(child));
+    }
+    opts.onWrite?.(changed);
+    return;
+  }
   if (frame.type === 'write') {
     const fs = syncMirror();
     const parent = dirname(frame.path);
-    fs.mkdirSync(parent, { recursive: true });
+    if (frame.recursive ?? true) {
+      fs.mkdirSync(parent, { recursive: true });
+    } else {
+      const st = fs.statSync(parent);
+      if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    }
     // BroadcastChannel hands us a structured-cloned `Uint8Array`; copy
     // into a fresh ArrayBuffer so downstream consumers don't share the
     // backing memory with the structured-clone allocator. IPC sends also
@@ -81,18 +267,44 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
     const copy = new Uint8Array(frame.data.byteLength);
     copy.set(frame.data);
     fs.writeFileSync(frame.path, copy);
-    opts.onWrite?.(frame.path);
+    opts.onWrite?.(frameChangedPaths(frame));
     return;
   }
   if (frame.type === 'mkdir') {
     syncMirror().mkdirSync(frame.path, { recursive: frame.recursive });
-    opts.onWrite?.(frame.path);
+    opts.onWrite?.(frameChangedPaths(frame));
     return;
   }
   if (frame.type === 'rm') {
     syncMirror().rmSync(frame.path, { recursive: frame.recursive, force: frame.force });
-    opts.onWrite?.(frame.path);
+    opts.onWrite?.(frameChangedPaths(frame));
     return;
+  }
+  if (frame.type === 'rename') {
+    if (frame.from === frame.to) return;
+    if (syncMirror().existsSync(frame.to)) throw new Error(`"${frame.to}" already exists`);
+    syncMirror().renameSync(frame.from, frame.to);
+    opts.onWrite?.(frameChangedPaths(frame));
+    return;
+  }
+  if (frame.type === 'copy') {
+    const plan = planCopyTree(frame.from, frame.to);
+    applyCopyPlan(plan);
+    opts.onWrite?.(frameChangedPaths(frame));
+    return;
+  }
+}
+
+export function sendGuardedVfsWrite(opts: GuardedVfsWriteOptions): void {
+  if (opts.exited) {
+    throw new Error(
+      `${opts.frame.type}(${frameTarget(
+        opts.frame,
+      )}): workspace owner has exited — write not applied. Reload to respawn the owner.`,
+    );
+  }
+  if (!opts.sendIpc({ type: 'rifty:vfs-write', frame: opts.frame })) {
+    (opts.fallback ?? sendVfsWrite)(opts.key, opts.frame);
   }
 }
 

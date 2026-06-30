@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-06
+Corrected: 2026-06-29
 
 > TL;DR: Two user entities over the single owner — **Starter** (=today's `Preset`, immutable gallery bundle) and **Project** (named, autosaved, in OPFS) — plus one unnamed **Scratch** draft. On-disk: `/scratch` + `/projects/<id>/` + a project index. Exactly one active root/dev-server. **Switching tears down and respawns the owner** with a new `RIFTY_RFV_ROOT` (the env is spawn-time-only — there is no live re-point). Save CONVERTS scratch→project (tree move, index-pointer flipped last). Reset re-seeds scratch from its Starter bundle (baseline = the registry definition, re-derived, not stored). `ProjectSpec` stays internal plumbing.
 
@@ -17,7 +18,7 @@ Load-bearing code constraints (verified, not assumed):
 
 ## Decision
 
-1. **Two user entities + internal runtime.** **Starter** = today's `Preset` (immutable bundle: id/label/category/icon/glyph+color/setup/templateId/source/files[]/openFiles[] + baked snapshot) — the user-facing gallery item. **Project** = `{id, name, starter, editedAt}`, named, autosaved, in OPFS. **Scratch** = `{starter, dirty, editedAt} | null`, at most one, the current unnamed draft. `ProjectSpec` (vite / node-server) stays INTERNAL plumbing, not a UI entity; only `templateId` crosses the realm boundary (env), each realm re-resolves via `resolveProjectSpec` (throws on unknown — ADR-0078, no silent fallback).
+1. **Two user entities + internal runtime (corrected 2026-06-29).** **Starter** = today's `Preset` (immutable bundle: id/label/category/icon/glyph+color/setup/templateId/files[]/openFiles[] + baked snapshot) — the user-facing gallery item. `files[]` is the complete ordinary file bundle for editor-openable preset content and MUST include the template entry path; `openFiles[]` is only the initial tab order. **Project** = `{id, name, starter, editedAt}`, named, autosaved, in OPFS. **Scratch** = `{starter, dirty, editedAt} | null`, at most one, the current unnamed draft. `ProjectSpec` (vite / node-server) stays INTERNAL plumbing, not a UI entity; only `templateId` crosses the realm boundary (env), each realm re-resolves via `resolveProjectSpec` (throws on unknown — ADR-0078, no silent fallback).
 
 2. **On-disk OPFS layout** evolves from single `/workspace` to: `/scratch/<tree>` (active unnamed draft) + `/projects/<id>/<tree>` (named) + a **project index** file (`[{id,name,starter,editedAt}]` + `scratch` pointer + `activeId`). The active root is derived state `rootForId(activeId)` = `/scratch` or `/projects/<id>/`. The `WORKSPACE='/workspace'` constant is DELETED.
 

@@ -91,14 +91,24 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     closeSession(sid: string): void {
       closed.push(sid);
     },
+    isAlive(): boolean {
+      return true;
+    },
     writeFile(path: string, content: string): void {
       writes.push({ path, content });
+    },
+    writeFrame(): void {},
+    writeFrameAcked(): Promise<void> {
+      return Promise.resolve();
     },
     exportArchive(): Promise<string> {
       return Promise.resolve('{"version":1,"root":"/workspace","files":[]}');
     },
     importArchive(): Promise<void> {
       return Promise.resolve();
+    },
+    readFileBytes(): Promise<Uint8Array> {
+      return Promise.resolve(new Uint8Array());
     },
     snapshot(sid: string): PtySessionSnapshot {
       return snapshots.get(sid) ?? { cwd: root, env: {} };

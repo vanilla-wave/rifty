@@ -11,11 +11,18 @@ describe('preview-registry', () => {
   it('emits a snapshot on add and remove', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('s1', [3000]);
+    reg.addNode('s1', [3000], 'scope-node-1');
     expect(sent.at(-1)).toEqual({
       type: 'pty:preview',
       ports: [
-        { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node', sid: 's1' },
+        {
+          port: 3000,
+          url: '/preview/3000/',
+          label: 'node :3000',
+          source: 'node',
+          sid: 's1',
+          previewScope: 'scope-node-1',
+        },
       ],
     });
     reg.removeBySid('s1');
@@ -25,8 +32,8 @@ describe('preview-registry', () => {
   it('dev-server is a single replace-by-source slot', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.setDevServer(5174);
-    reg.setDevServer(5175);
+    reg.setDevServer(5174, 'scope-dev-1');
+    reg.setDevServer(5175, 'scope-dev-2');
     expect(
       (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.filter(
         (p) => p.source === 'dev-server',
@@ -38,6 +45,7 @@ describe('preview-registry', () => {
         label: 'npm run dev',
         source: 'dev-server',
         sid: 'dev-server',
+        previewScope: 'scope-dev-2',
       },
     ]);
     reg.clearDevServer();
@@ -47,9 +55,9 @@ describe('preview-registry', () => {
   it('production preview is a single replace-by-source slot distinct from dev-server', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.setDevServer(5174);
-    reg.setPreview(4173);
-    reg.setPreview(4174);
+    reg.setDevServer(5174, 'scope-dev');
+    reg.setPreview(4173, 'scope-preview-1');
+    reg.setPreview(4174, 'scope-preview-2');
     expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports).toEqual([
       {
         port: 5174,
@@ -57,6 +65,7 @@ describe('preview-registry', () => {
         label: 'npm run dev',
         source: 'dev-server',
         sid: 'dev-server',
+        previewScope: 'scope-dev',
       },
       {
         port: 4174,
@@ -64,6 +73,7 @@ describe('preview-registry', () => {
         label: 'vite preview',
         source: 'preview',
         sid: 'preview',
+        previewScope: 'scope-preview-2',
       },
     ]);
     reg.clearPreview();
@@ -77,7 +87,7 @@ describe('preview-registry', () => {
   it('publish() re-emits the current set (handshake)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('s1', [3000]);
+    reg.addNode('s1', [3000], 'scope-node');
     sent.length = 0;
     reg.publish();
     expect(sent).toHaveLength(1);
@@ -87,9 +97,9 @@ describe('preview-registry', () => {
   it('multiple node ports + dev-server coexist in order', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.setDevServer(5174);
-    reg.addNode('s1', [3000]);
-    reg.addNode('s2', [8080, 8081]);
+    reg.setDevServer(5174, 'scope-dev');
+    reg.addNode('s1', [3000], 'scope-node-1');
+    reg.addNode('s2', [8080, 8081], 'scope-node-2');
     expect(
       (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.map((p) => p.port),
     ).toEqual([5174, 3000, 8080, 8081]);
@@ -98,12 +108,12 @@ describe('preview-registry', () => {
   it('dedups a node port that collides with the dev-server port — dev wins (C3)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.setDevServer(5174);
+    reg.setDevServer(5174, 'scope-dev');
     // A `node server.js` that picked the SAME port (no PORT injection, ADR-0155 §4)
     // must NOT be double-listed: the SW routes one /preview/5174/, so two entries
     // would make the page wire two clobbering bridges whose teardown deletes the
     // shared route. The dev slot wins; the distinct node port stays.
-    reg.addNode('s1', [5174, 4001]);
+    reg.addNode('s1', [5174, 4001], 'scope-node');
     const ports = (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports;
     expect(ports.map((p) => p.port)).toEqual([5174, 4001]);
     expect(ports.find((p) => p.port === 5174)?.source).toBe('dev-server');

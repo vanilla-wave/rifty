@@ -11,10 +11,13 @@
  * {@link porcelainXY}.
  */
 import {
+  EMPTY_COMMIT_MESSAGE_ERROR,
   type StatusEntry,
   assertSupportedTransport,
+  commitRefusal,
   makeGit,
   pathspecMatch,
+  porcelainXY,
   vfsToGitFs,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
@@ -48,48 +51,6 @@ const DEFAULT_AUTHOR_EMAIL = 'rifty@localhost';
 /** Short (7-char) oid, git's default abbreviation length. */
 function short(oid: string): string {
   return oid.slice(0, 7);
-}
-
-/**
- * isomorphic-git statusMatrix code (`${head}${workdir}${stage}`) → git
- * porcelain-v1 `XY` (X = staged/index column, Y = worktree column). Codes
- * verified against real git 2.50.1:
- *   020 untracked              → `??`
- *   022 staged-new (added)     → `A `
- *   003 staged-new then rm'd   → `AD`
- *   111 unchanged              → (omitted)
- *   121 modified, unstaged     → ` M`
- *   122 modified, staged       → `M `
- *   123 staged then modified   → `MM`
- *   101 deleted, unstaged      → ` D`
- *   100 deleted, staged        → `D `
- * Any unmapped code falls through to a best-effort `??`-style raw so a gap is
- * visible, never silently dropped.
- */
-function porcelainXY(code: string): string | null {
-  switch (code) {
-    case '111': // HEAD==WORKDIR==STAGE — unchanged, nothing to report
-      return null;
-    case '020': // untracked
-      return '??';
-    case '022': // staged new (added to index, no HEAD)
-      return 'A ';
-    case '003': // staged new then deleted from workdir
-      return 'AD';
-    case '121': // modified, unstaged
-      return ' M';
-    case '122': // modified, staged
-      return 'M ';
-    case '123': // staged then modified again
-      return 'MM';
-    case '101': // deleted, unstaged
-      return ' D';
-    case '100': // deleted, staged
-      return 'D ';
-    default:
-      // Unknown matrix code — surface the raw code rather than hide a gap.
-      return code;
-  }
 }
 
 /** Render `git status --porcelain` v1: one `XY filepath` line per changed file. */
@@ -270,34 +231,6 @@ function parseCommit(args: string[]): CommitPlan {
     }
   }
   return { amend, all, messages };
-}
-
-/**
- * Real git refuses to fabricate an empty commit (exit 1). Returns the exact
- * stdout summary line for the current state, or `null` when there IS a staged
- * change to commit. Mirrors git 2.50.1's wording for the common porcelain states.
- */
-async function nothingToCommit(g: Git): Promise<string | null> {
-  const entries = await g.status();
-  const hasStaged = entries.some((e) => {
-    const head = e.status[0];
-    const stage = e.status[2];
-    return stage !== '1' && !(head === '0' && stage === '0');
-  });
-  if (hasStaged) return null;
-  const hasUnstagedTracked = entries.some(
-    (e) => e.status[0] === '1' && e.status[2] === '1' && e.status[1] !== '1',
-  );
-  if (hasUnstagedTracked)
-    return 'no changes added to commit (use "git add" and/or "git commit -a")';
-  if (entries.some((e) => e.status === '020'))
-    return 'nothing added to commit but untracked files present (use "git add" to track)';
-  const unborn = await g
-    .resolveRef('HEAD')
-    .then(() => false)
-    .catch(() => true);
-  if (unborn) return 'nothing to commit (create/copy files and use "git add" to track)';
-  return 'nothing to commit, working tree clean';
 }
 
 async function doStatus(g: Git, args: string[], ctx: CommandContext): Promise<number> {
@@ -561,7 +494,7 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
   // message.` (exit 1) — not a leaked iso-git MissingParameterError. `--amend`
   // with an empty `-m` still aborts; with no `-m` it reuses the prior message.
   if (message === '' && !plan.amend) {
-    ctx.stderr.write('Aborting commit due to empty commit message.\n');
+    ctx.stderr.write(`${EMPTY_COMMIT_MESSAGE_ERROR}\n`);
     return 1;
   }
   if (plan.amend) {
@@ -574,14 +507,14 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
       return 128;
     }
     if (message === '') {
-      ctx.stderr.write('Aborting commit due to empty commit message.\n');
+      ctx.stderr.write(`${EMPTY_COMMIT_MESSAGE_ERROR}\n`);
       return 1;
     }
     // `--amend` with no `-m` reuses the previous commit's message.
     if (message === null) message = prior.message;
   } else {
     // Never fabricate an empty commit — real git refuses (exit 1, summary to stdout).
-    const refusal = await nothingToCommit(g);
+    const refusal = await commitRefusal(g);
     if (refusal !== null) {
       ctx.stdout.write(`${refusal}\n`);
       return 1;
