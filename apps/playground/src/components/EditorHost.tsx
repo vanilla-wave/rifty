@@ -301,6 +301,16 @@ export function EditorHost(props: EditorHostProps) {
       title: string;
     }
   >();
+  const pendingDiffOpens = new Map<
+    string,
+    {
+      token: number;
+      modified: monaco.editor.ITextModel;
+      disposeModified: boolean;
+      path: string;
+    }
+  >();
+  let diffOpenSeq = 0;
   const gitOriginalTextCache = new Map<string, Promise<string>>();
   const dirtyGutterLocalPaths = new Set<string>();
   let dirtyGutterSeq = 0;
@@ -495,6 +505,7 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function disposeDiffTab(id: string): void {
+    cancelPendingDiffOpen(id);
     const diff = diffModels.get(id);
     if (!diff) return;
     diffModels.delete(id);
@@ -505,10 +516,32 @@ export function EditorHost(props: EditorHostProps) {
     });
   }
 
+  function cancelPendingDiffOpen(id: string): void {
+    const pending = pendingDiffOpens.get(id);
+    if (!pending) return;
+    pendingDiffOpens.delete(id);
+    if (pending.disposeModified) pending.modified.dispose();
+  }
+
+  function cancelPendingDiffOpensForPathTree(
+    rootPath: string,
+    opts: { readonly liveModelOnly?: boolean } = {},
+  ): void {
+    const ids = [...pendingDiffOpens.entries()]
+      .filter(
+        ([, pending]) =>
+          pathIsInTree(pending.path, rootPath) &&
+          (opts.liveModelOnly !== true || pending.disposeModified === false),
+      )
+      .map(([id]) => id);
+    for (const id of ids) cancelPendingDiffOpen(id);
+  }
+
   function closeDiffTabsForPathTree(
     rootPath: string,
     opts: { readonly liveModelOnly?: boolean } = {},
   ): void {
+    cancelPendingDiffOpensForPathTree(rootPath, opts);
     const ids = [...diffModels.entries()]
       .filter(
         ([, diff]) =>
@@ -793,12 +826,20 @@ export function EditorHost(props: EditorHostProps) {
       return;
     }
     const id = `diff:${input.ref}:${path}`;
+    const previousPending = pendingDiffOpens.get(id);
+    if (previousPending?.disposeModified) previousPending.modified.dispose();
+    diffOpenSeq += 1;
+    const token = diffOpenSeq;
+    pendingDiffOpens.set(id, { token, modified, disposeModified, path });
     const originalText =
       input.hasOriginal === false
         ? Promise.resolve('')
         : readGitOriginalTextCached(path, input.ref);
     originalText.then(
       (text) => {
+        const pending = pendingDiffOpens.get(id);
+        if (!pending || pending.token !== token) return;
+        pendingDiffOpens.delete(id);
         const previous = diffModels.get(id);
         previous?.original.dispose();
         if (previous?.disposeModified) previous.modified.dispose();
@@ -823,6 +864,9 @@ export function EditorHost(props: EditorHostProps) {
         setActiveId(id);
       },
       (err: unknown) => {
+        const pending = pendingDiffOpens.get(id);
+        if (!pending || pending.token !== token) return;
+        pendingDiffOpens.delete(id);
         if (disposeModified) modified.dispose();
         props.onError?.((err as Error).message);
       },
@@ -923,6 +967,7 @@ export function EditorHost(props: EditorHostProps) {
     inFlightWrites.clear();
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
+    for (const id of [...pendingDiffOpens.keys()]) cancelPendingDiffOpen(id);
     for (const diff of diffModels.values()) {
       diff.original.dispose();
       if (diff.disposeModified) diff.modified.dispose();
@@ -1097,6 +1142,7 @@ export function EditorHost(props: EditorHostProps) {
 
     let diffRoot = props.root();
     function clearGitDiffTabs(): void {
+      for (const id of [...pendingDiffOpens.keys()]) cancelPendingDiffOpen(id);
       const ids = [...diffModels.keys()];
       if (ids.length === 0) return;
       diffEditor?.setModel(null);
@@ -1168,6 +1214,7 @@ export function EditorHost(props: EditorHostProps) {
     dirtyGutterDecorations?.clear();
     diffEditor?.dispose();
     editor?.dispose();
+    for (const id of [...pendingDiffOpens.keys()]) cancelPendingDiffOpen(id);
     for (const diff of diffModels.values()) {
       diff.original.dispose();
       if (diff.disposeModified) diff.modified.dispose();

@@ -44,7 +44,9 @@ describe('FileExplorer owner-routed CRUD source guards', () => {
   it('routes clipboard copy/cut/paste/duplicate through owner copy and rename mutations', () => {
     expect(source).toContain('planClipboardPaste(vfs, state, targetDir)');
     expect(source).toContain('await mutations.copyTree(action.from, action.to)');
-    expect(source).toContain('await mutations.renamePath(action.from, action.to)');
+    expect(source).toMatch(
+      /await mutations\.renameMany\(\s*plan\.actions\.map\(\(action\) => \(\{ from: action\.from, to: action\.to \}\)\),\s*\);/,
+    );
     expect(source).toContain("setClipboard({ paths: selectedMutablePathsFor(row), mode: 'copy' })");
     expect(source).toContain("setClipboard({ paths: selectedMutablePathsFor(row), mode: 'cut' })");
     expect(source).toContain("if (key === 'c')");

@@ -224,8 +224,24 @@ function validateVfsWriteFrame(frame: VfsWriteSingleFrame): void {
   planCopyTree(frame.from, frame.to);
 }
 
+function assertBatchFramesIndependent(frames: readonly VfsWriteSingleFrame[]): void {
+  const touched: string[] = [];
+  for (const frame of frames) {
+    for (const path of frameChangedPaths(frame).map(normalizePath)) {
+      const conflict = touched.find(
+        (prev) => path === prev || path.startsWith(`${prev}/`) || prev.startsWith(`${path}/`),
+      );
+      if (conflict) {
+        throw new Error(`EINVAL: batch path conflict "${path}" overlaps "${conflict}"`);
+      }
+      touched.push(path);
+    }
+  }
+}
+
 export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
   if (frame.type === 'batch') {
+    assertBatchFramesIndependent(frame.frames);
     for (const child of frame.frames) validateVfsWriteFrame(child);
     const changed: string[] = [];
     for (const child of frame.frames) {

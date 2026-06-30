@@ -80,6 +80,9 @@ describe('EditorHost git diff contract', () => {
       'function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void',
     );
     expect(source).toContain('function disposeDiffTab(id: string): void');
+    expect(source).toContain('const pendingDiffOpens = new Map');
+    expect(source).toContain('function cancelPendingDiffOpen(id: string): void');
+    expect(source).toContain('function cancelPendingDiffOpensForPathTree(');
     expect(source).toContain('function closeDiffTabsForPathTree(');
     expect(source).toContain('closeDiffTabsForPathTree(path, { liveModelOnly: true });');
     expect(source).toContain('if (opts.flushPending !== false) {');
@@ -114,7 +117,14 @@ describe('EditorHost git diff contract', () => {
     expect(source).toContain(
       'let modified = input.deleted === true ? undefined : models.get(tabId);',
     );
+    expect(source).toContain(
+      'pendingDiffOpens.set(id, { token, modified, disposeModified, path });',
+    );
+    expect(source).toContain('if (!pending || pending.token !== token) return;');
     expect(source).toContain('function clearGitDiffTabs(): void');
+    expect(source).toContain(
+      'for (const id of [...pendingDiffOpens.keys()]) cancelPendingDiffOpen(id);',
+    );
     expect(source).toContain('const root = props.root();');
     expect(source).toContain("setTabs((t) => t.filter((tab) => tab.kind !== 'diff'))");
   });

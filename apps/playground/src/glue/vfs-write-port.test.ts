@@ -255,6 +255,43 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     expect(changes).toEqual([]);
   });
 
+  it('rejects conflicting batch destinations before applying any child mutation', () => {
+    const changes: (readonly string[])[] = [];
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/a.txt',
+      data: enc.encode('a'),
+    });
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/b.txt',
+      data: enc.encode('b'),
+    });
+    applyVfsWriteFrame({
+      type: 'mkdir',
+      path: '/workspace/moved',
+      recursive: true,
+    });
+
+    expect(() =>
+      applyVfsWriteFrame(
+        {
+          type: 'batch',
+          frames: [
+            { type: 'rename', from: '/workspace/a.txt', to: '/workspace/moved/same.txt' },
+            { type: 'rename', from: '/workspace/b.txt', to: '/workspace/moved/same.txt' },
+          ],
+        },
+        { onWrite: (paths) => changes.push(paths) },
+      ),
+    ).toThrow(/batch path conflict/);
+
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/a.txt'))).toBe('a');
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/b.txt'))).toBe('b');
+    expect(syncMirror().existsSync('/workspace/moved/same.txt')).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
   it('rejects copy into the source subtree before creating the destination', () => {
     applyVfsWriteFrame({
       type: 'write',

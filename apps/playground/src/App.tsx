@@ -1,4 +1,4 @@
-import type { LogEntry } from '@riftydev/git';
+import { type LogEntry, porcelainXY } from '@riftydev/git';
 import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
@@ -486,11 +486,10 @@ export function App(props: AppProps) {
       }
       assertWorkspaceFileOwnerAlive(owner, path, 'compare');
       const working = await readWorkspaceFileBytesFromOwner(owner, path, 'compare');
-      const code = gitStatusMap().get(path);
       editorApi?.openWorkingDiff({
         path,
         ref: 'HEAD',
-        hasOriginal: statusCodeHasHeadBlob(code),
+        hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),
         modified: decodeTextBlob(relative, working),
       });
     } catch (err) {
@@ -503,7 +502,26 @@ export function App(props: AppProps) {
   }
 
   function statusCodeHasHeadBlob(code: string | undefined): boolean {
+    if (code === undefined) return true;
+    if (/^[0-3]{3}$/.test(code)) return code[0] !== '0';
     return code !== '??' && code?.[0] !== 'A';
+  }
+
+  async function headBlobExistsForCurrentStatus(
+    owner: WorkspaceOwnerHandle,
+    path: string,
+    relative: string,
+  ): Promise<boolean> {
+    assertWorkspaceFileOwnerAlive(owner, path, 'compare');
+    const git = bridgeGitOwnerRpc(owner.snapshotPort);
+    try {
+      const status = await git.status();
+      assertWorkspaceFileOwnerAlive(owner, path, 'compare');
+      const entry = status.find((candidate) => candidate.filepath === relative);
+      return statusCodeHasHeadBlob(entry ? (porcelainXY(entry.status) ?? undefined) : undefined);
+    } finally {
+      git.dispose();
+    }
   }
 
   function rowHasIndexChange(row: ScmResourceRow): boolean {

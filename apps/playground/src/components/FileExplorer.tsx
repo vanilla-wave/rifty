@@ -481,9 +481,12 @@ export function FileExplorer(props: {
     }
     setBusy(true);
     try {
-      for (const action of plan.actions) {
-        if (action.kind === 'copy') await mutations.copyTree(action.from, action.to);
-        else await mutations.renamePath(action.from, action.to);
+      if (state.mode === 'cut') {
+        await mutations.renameMany(
+          plan.actions.map((action) => ({ from: action.from, to: action.to })),
+        );
+      } else {
+        for (const action of plan.actions) await mutations.copyTree(action.from, action.to);
       }
       if (plan.clearAfter) setClipboard(null);
       setContextMenu(null);

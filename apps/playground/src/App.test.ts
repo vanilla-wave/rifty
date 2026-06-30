@@ -581,9 +581,15 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(headBlock).toContain('await flushPendingEditorWrites();');
     expect(headBlock).toContain("readWorkspaceFileBytesFromOwner(owner, path, 'compare')");
     expect(headBlock).toContain("ref: 'HEAD'");
-    expect(headBlock).toContain('const code = gitStatusMap().get(path);');
-    expect(headBlock).toContain('hasOriginal: statusCodeHasHeadBlob(code),');
+    expect(headBlock).toContain(
+      'hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),',
+    );
+    expect(headBlock).not.toContain('const code = gitStatusMap().get(path);');
     expect(source).toContain('function statusCodeHasHeadBlob(code: string | undefined): boolean');
+    expect(source).toContain("if (/^[0-3]{3}$/.test(code)) return code[0] !== '0';");
+    expect(source).toContain('async function headBlobExistsForCurrentStatus(');
+    expect(source).toContain('const status = await git.status();');
+    expect(source).toContain('porcelainXY(entry.status)');
     expect(source).toContain(
       'onCompareFiles={(left, right) => void openWorkingFileCompare(left, right)}',
     );
