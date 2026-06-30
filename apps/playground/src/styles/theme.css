@@ -950,9 +950,9 @@ body {
 .rf-row[data-git="untracked"] .rf-row__ico {
   color: #73c991;
 }
-.rf-row[data-git="staged"] .rf-row__name,
-.rf-row[data-git="staged"] .rf-row__ico {
-  color: #4fc1ff;
+.rf-row[data-git="added"] .rf-row__name,
+.rf-row[data-git="added"] .rf-row__ico {
+  color: #73c991;
 }
 .rf-row[data-git="deleted"] .rf-row__name,
 .rf-row[data-git="deleted"] .rf-row__ico {
@@ -1011,10 +1011,10 @@ body {
   border-color: rgba(115, 201, 145, 0.38);
   background: rgba(115, 201, 145, 0.12);
 }
-.rf-row[data-git="staged"] .rf-row__gitbadge {
-  color: #8bd8ff;
-  border-color: rgba(79, 193, 255, 0.38);
-  background: rgba(79, 193, 255, 0.12);
+.rf-row[data-git="added"] .rf-row__gitbadge {
+  color: #98e6b7;
+  border-color: rgba(115, 201, 145, 0.38);
+  background: rgba(115, 201, 145, 0.12);
 }
 .rf-row[data-git="deleted"] .rf-row__gitbadge {
   color: #ffb0a0;

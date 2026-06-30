@@ -86,6 +86,8 @@ export interface EditorApi {
   flushPendingWrites(): Promise<void>;
   closePath(path: string): void;
   closePathTree(path: string): void;
+  /** Absolute paths of open file tabs at or under `path` (a file or a dir). */
+  openPathsUnder(path: string): readonly string[];
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
    * is the absolute VFS path; a no-op
@@ -940,19 +942,24 @@ export function EditorHost(props: EditorHostProps) {
     queueMicrotask(() => m?.dispose());
   }
 
-  function closeExternalPathTree(rootPath: string): void {
+  /** Absolute paths of open file tabs at or under `rootPath` (a file or a dir). */
+  function openDocPathsUnder(rootPath: string): readonly string[] {
     const normalizedRoot = normalizeTreeRoot(rootPath);
-    closeDiffTabsForPathTree(normalizedRoot);
     const ids = new Set([
       ...models.keys(),
       ...tabs()
         .filter((tab) => tab.kind === 'file')
         .map((tab) => tab.id),
     ]);
-    const matchingIds = [...ids].filter((id) => {
-      const path = docPathForTab(id);
-      return path === normalizedRoot || path.startsWith(`${normalizedRoot}/`);
-    });
+    return [...ids]
+      .map((id) => docPathForTab(id))
+      .filter((path) => path === normalizedRoot || path.startsWith(`${normalizedRoot}/`));
+  }
+
+  function closeExternalPathTree(rootPath: string): void {
+    const normalizedRoot = normalizeTreeRoot(rootPath);
+    closeDiffTabsForPathTree(normalizedRoot);
+    const matchingIds = openDocPathsUnder(normalizedRoot).map((path) => tabIdForPath(path));
     for (const id of matchingIds) closeFile(id, { flushPending: false });
   }
 
@@ -1064,6 +1071,7 @@ export function EditorHost(props: EditorHostProps) {
       flushPendingWrites,
       closePath: (path) => closeExternalPathTree(path),
       closePathTree: (path) => closeExternalPathTree(path),
+      openPathsUnder: (path) => openDocPathsUnder(path),
       setMarkers(path, markers) {
         const model = models.get(tabIdForPath(path));
         if (model) monaco.editor.setModelMarkers(model, 'rifty-ts', markers);

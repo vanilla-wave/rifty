@@ -57,6 +57,13 @@ describe('FileExplorer owner-routed CRUD source guards', () => {
     expect(source).toContain('setClipboard(null);');
   });
 
+  it('offers rename and delete as first-class context-menu items (VS Code parity)', () => {
+    expect(source).toContain('Rename');
+    expect(source).toContain('Delete');
+    expect(source).toMatch(/beginRename\(\{\s*path: menu\(\)\.path,/);
+    expect(source).toMatch(/deleteRow\(\{\s*path: menu\(\)\.path,/);
+  });
+
   it('offers folder creation from the folder context menu, not only hover buttons', () => {
     expect(source).toContain('readonly depth: number;');
     expect(source).toContain('depth: row.depth,');

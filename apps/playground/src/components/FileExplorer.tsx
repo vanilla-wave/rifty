@@ -1067,6 +1067,42 @@ export function FileExplorer(props: {
                   <Icon name="copy" size={13} />
                   Duplicate
                 </button>
+                <button
+                  type="button"
+                  class="rf-rowmenu__item"
+                  role="menuitem"
+                  disabled={busy()}
+                  onClick={() => {
+                    beginRename({
+                      path: menu().path,
+                      name: menu().name,
+                      kind: menu().kind,
+                      depth: menu().depth,
+                    });
+                    setContextMenu(null);
+                  }}
+                >
+                  <Icon name="pencil-to-square" size={13} />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  class="rf-rowmenu__item"
+                  role="menuitem"
+                  disabled={busy()}
+                  onClick={() => {
+                    setContextMenu(null);
+                    void deleteRow({
+                      path: menu().path,
+                      name: menu().name,
+                      kind: menu().kind,
+                      depth: menu().depth,
+                    });
+                  }}
+                >
+                  <Icon name="trash-bin" size={13} />
+                  Delete
+                </button>
               </Show>
               <button
                 type="button"

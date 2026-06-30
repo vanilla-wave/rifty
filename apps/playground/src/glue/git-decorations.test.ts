@@ -8,12 +8,22 @@ import {
 describe('git status explorer decorations', () => {
   it('classifies rifty-git porcelain codes into honest M/U/A/D decorations', () => {
     expect(gitDecorationKind(' M')).toBe('modified');
-    expect(gitDecorationKind('M ')).toBe('staged');
-    expect(gitDecorationKind('A ')).toBe('staged');
+    expect(gitDecorationKind('M ')).toBe('modified');
+    expect(gitDecorationKind('A ')).toBe('added');
     expect(gitDecorationKind('??')).toBe('untracked');
     expect(gitDecorationKind(' D')).toBe('deleted');
     expect(gitDecorationKind('D ')).toBe('deleted');
     expect(gitDecorationKind('R ')).toBeNull();
+  });
+
+  it('does not hide the worktree side of staged+worktree combos (VS Code parity)', () => {
+    // Added-then-edited reads as added (green), not blue "staged".
+    expect(gitDecorationKind('AM')).toBe('added');
+    // Staged-then-re-edited stays modified (orange), not blue "staged".
+    expect(gitDecorationKind('MM')).toBe('modified');
+    // Staged-modified-then-deleted-on-disk is deleted (red), never clean/null.
+    expect(gitDecorationKind('MD')).toBe('deleted');
+    expect(gitDecorationKind('AD')).toBe('deleted');
   });
 
   it('propagates changed descendants to ancestor folders without inventing badges', () => {
@@ -36,7 +46,7 @@ describe('git status explorer decorations', () => {
     });
     expect(decorationForPath(maps, '/workspace/README.md')).toMatchObject({
       badge: 'A',
-      kind: 'staged',
+      kind: 'added',
     });
     expect(decorationForPath(maps, '/workspace/src')).toEqual({
       badge: undefined,

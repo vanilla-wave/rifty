@@ -1,4 +1,5 @@
 import { basename, dirname, extname, joinPath } from '@riftydev/vfs';
+import { isSelfOrSubtreePath } from './file-manager-dnd.ts';
 import type { FsOpsTarget } from './fs-ops.ts';
 
 export type FileManagerClipboardMode = 'copy' | 'cut';
@@ -48,6 +49,12 @@ function destinationPath(
   const name = basename(source);
   const direct = joinPath(targetDir, name);
   if (mode === 'cut' && direct === source) return null;
+  // A cut is an atomic rename; moving a folder into itself or a descendant is
+  // EINVAL on the owner. Refuse proactively with the same message as drag-move,
+  // not a raw owner error. (Copy into a subtree is fine — it duplicates.)
+  if (mode === 'cut' && isSelfOrSubtreePath(source, targetDir)) {
+    throw new Error(`cannot move "${source}" into itself at "${targetDir}"`);
+  }
   if (!fs.existsSync(direct) && !reserved.has(direct)) return direct;
   return nextAvailableCopyPath(fs, targetDir, name, reserved);
 }

@@ -63,4 +63,17 @@ describe('file manager clipboard paste planning', () => {
       planClipboardPaste(fs, { paths: ['/workspace/src/a.ts'], mode: 'cut' }, '/workspace/src'),
     ).toEqual({ actions: [], clearAfter: true });
   });
+
+  it('refuses cut-paste of a folder into its own subtree before hitting the owner', () => {
+    const fs = new FakeFs(['/workspace/src', '/workspace/src/util']);
+
+    expect(() =>
+      planClipboardPaste(fs, { paths: ['/workspace/src'], mode: 'cut' }, '/workspace/src/util'),
+    ).toThrow(/into itself/);
+    // Copy into a subtree is allowed (it duplicates, not moves).
+    expect(
+      planClipboardPaste(fs, { paths: ['/workspace/src'], mode: 'copy' }, '/workspace/src/util')
+        .actions,
+    ).toEqual([{ kind: 'copy', from: '/workspace/src', to: '/workspace/src/util/src' }]);
+  });
 });

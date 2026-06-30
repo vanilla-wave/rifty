@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **SCM decorations no longer lie on staged+worktree combos.** A staged-then-
+  edited file (`AM`) now shows a green added badge (not blue, never clean), a
+  staged-then-deleted file (`MD`) shows a red deleted badge (was rendered clean),
+  and a staged-then-re-edited file (`MM`) is orange/modified (was blue) — matching
+  VS Code's green=added, orange=modified, red=deleted. The added-file dirty gutter
+  no longer fires a spurious `HEAD:<newfile>` not-found error. Roots in
+  `@riftydev/git` `porcelainXY` completing the reachable code set.
+- **Discard now drops the open editor model.** `git restore` from the SCM panel
+  closes the open tab for the path, so the discarded buffer can't be re-flushed to
+  the owner on the next keystroke (silently resurrecting the change).
+- **Renames now carry open editors to the new path.** Renaming a file — or a
+  directory containing open files — reopens those tabs at their new paths instead
+  of leaving them closed.
+- **Explorer context menu offers Rename and Delete** as first-class items (VS Code
+  parity), not only hover buttons / F2 + Delete keys.
+- **Unstage and Discard now use distinct icons** (minus vs revert-arrow) so a
+  staged row's unstage no longer reads as a destructive discard.
+- **Cut-paste of a folder into its own subtree is refused on the page** with the
+  same message as drag-move, instead of surfacing a raw owner `EINVAL`.
+
+### Changed
+
+- Byte-honest SCM diff blob selection moved out of `App` into a tested
+  `scm-diff-plan` module (`scm-diff-plan.test.ts`) so the blob-vs-blob choice for
+  every status code is covered behaviorally, not by source-text guards.
+
 ### Added
 
 - **Explorer now supports drag/drop upload, drag-move, path copy, and compare.**

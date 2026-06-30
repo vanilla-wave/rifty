@@ -82,7 +82,7 @@ function ResourceGroup(props: {
                       disabled={props.pendingKey !== undefined}
                       onClick={() => props.runAction('unstage', row)}
                     >
-                      <Icon name="arrow-rotate-left" size={12} />
+                      <Icon name="minus" size={12} />
                     </button>
                   </Show>
                 </span>

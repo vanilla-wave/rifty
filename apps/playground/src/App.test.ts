@@ -539,10 +539,13 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('async function readGitOriginalText(');
     expect(source).toContain('const original = await git.show(`${input.ref}:${relative}`);');
     expect(source).toContain('const index = await git.show(`:${relative}`);');
-    expect(source).toContain("if (row.side === 'index')");
-    expect(source).toContain("modifiedTitle: 'Index'");
-    expect(source).toContain("originalTitle: rowHasIndexChange(row) ? 'Index' : 'HEAD'");
-    expect(source).toContain("modifiedTitle: 'Working Tree'");
+    // Blob selection is delegated to the tested scm-diff-plan planner, not
+    // re-derived inline (covered behaviorally by scm-diff-plan.test.ts).
+    expect(source).toContain('const plan = scmDiffPlan(row);');
+    expect(source).toContain("plan.original === 'head'");
+    expect(source).toContain("plan.modified === 'index'");
+    expect(source).toContain('originalTitle: plan.originalTitle,');
+    expect(source).toContain('modifiedTitle: plan.modifiedTitle,');
     expect(source).toContain(
       "await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes')",
     );
@@ -565,7 +568,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     const compareEnd = source.indexOf('  async function openWorkingHeadCompare', compareStart);
     const compareBlock = source.slice(compareStart, compareEnd);
     const headStart = source.indexOf('async function openWorkingHeadCompare(path: string)');
-    const headEnd = source.indexOf('  function rowHasHeadBlob', headStart);
+    const headEnd = source.indexOf('  async function headBlobExistsForCurrentStatus', headStart);
     const headBlock = source.slice(headStart, headEnd);
     expect(compareStart).toBeGreaterThan(-1);
     expect(compareEnd).toBeGreaterThan(compareStart);
@@ -585,8 +588,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
       'hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),',
     );
     expect(headBlock).not.toContain('const code = gitStatusMap().get(path);');
-    expect(source).toContain('function statusCodeHasHeadBlob(code: string | undefined): boolean');
-    expect(source).toContain("if (/^[0-3]{3}$/.test(code)) return code[0] !== '0';");
+    expect(source).toContain(
+      "import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts'",
+    );
     expect(source).toContain('async function headBlobExistsForCurrentStatus(');
     expect(source).toContain('const status = await git.status();');
     expect(source).toContain('porcelainXY(entry.status)');
@@ -619,6 +623,11 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     );
     expect(source).toContain('if (!confirmed) return;');
     expect(source).toContain('await git.restore([row.relativePath]);');
+    // Discard must drop the open editor model so the discarded buffer can't be
+    // re-flushed to the owner on the next edit, resurrecting the change.
+    expect(source).toMatch(
+      /await git\.restore\(\[row\.relativePath\]\);[\s\S]*?editorApi\?\.closePath\(row\.path\);/,
+    );
     expect(source).toContain('async function commitScm(message: string)');
     expect(source).toContain('await git.commitResolvedIdentity({ message })');
     expect(source).toContain('onStage={stageScmRow}');

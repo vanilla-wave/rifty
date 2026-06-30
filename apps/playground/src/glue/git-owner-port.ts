@@ -20,6 +20,7 @@ import type {
   StatusEntry,
   makeGit,
 } from '@riftydev/git';
+import { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import { channelNameFor } from '@riftydev/net';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
@@ -127,6 +128,9 @@ export interface GitOwnerClient {
   dispose(): void;
 }
 
+// TODO(backlog: playground/correlated-broadcast-bridge-helper) — the
+// nextRequestId + pending Map + per-request timeout + dispose-reject scaffold
+// below is the 4th/5th copy across cross-realm bridges; factor into one helper.
 interface Waiter {
   resolve(value: GitOwnerResult): void;
   reject(err: Error): void;
@@ -203,29 +207,6 @@ function committerFrom(env: Record<string, string>, author: GitIdentity): GitIde
   return { name, email, timestamp, timezoneOffset: 0 };
 }
 
-async function nothingToCommit(git: Git): Promise<string | null> {
-  const entries = await git.status();
-  const hasStaged = entries.some((entry) => {
-    const head = entry.status[0];
-    const stage = entry.status[2];
-    return stage !== '1' && !(head === '0' && stage === '0');
-  });
-  if (hasStaged) return null;
-  const hasUnstagedTracked = entries.some(
-    (entry) => entry.status[0] === '1' && entry.status[2] === '1' && entry.status[1] !== '1',
-  );
-  if (hasUnstagedTracked)
-    return 'no changes added to commit (use "git add" and/or "git commit -a")';
-  if (entries.some((entry) => entry.status === '020'))
-    return 'nothing added to commit but untracked files present (use "git add" to track)';
-  const unborn = await git
-    .resolveRef('HEAD')
-    .then(() => false)
-    .catch(() => true);
-  if (unborn) return 'nothing to commit (create/copy files and use "git add" to track)';
-  return 'nothing to commit, working tree clean';
-}
-
 async function dispatchGitOwnerRequest(
   git: Git,
   request: GitOwnerRequest,
@@ -261,9 +242,9 @@ async function dispatchGitOwnerRequest(
         ...(request.amend !== undefined ? { amend: request.amend } : {}),
       });
     case 'commitResolvedIdentity': {
-      if (request.message === '') throw new Error('Aborting commit due to empty commit message.');
+      if (request.message === '') throw new Error(EMPTY_COMMIT_MESSAGE_ERROR);
       if (!request.amend) {
-        const refusal = await nothingToCommit(git);
+        const refusal = await commitRefusal(git);
         if (refusal !== null) throw new Error(refusal);
       }
       const env = ownerEnv();

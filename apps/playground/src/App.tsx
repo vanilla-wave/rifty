@@ -69,6 +69,7 @@ import {
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
+import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts';
 import type { ScmResourceRow } from './glue/scm-status.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
@@ -497,16 +498,6 @@ export function App(props: AppProps) {
     }
   }
 
-  function rowHasHeadBlob(row: ScmResourceRow): boolean {
-    return statusCodeHasHeadBlob(row.code);
-  }
-
-  function statusCodeHasHeadBlob(code: string | undefined): boolean {
-    if (code === undefined) return true;
-    if (/^[0-3]{3}$/.test(code)) return code[0] !== '0';
-    return code !== '??' && code?.[0] !== 'A';
-  }
-
   async function headBlobExistsForCurrentStatus(
     owner: WorkspaceOwnerHandle,
     path: string,
@@ -522,20 +513,6 @@ export function App(props: AppProps) {
     } finally {
       git.dispose();
     }
-  }
-
-  function rowHasIndexChange(row: ScmResourceRow): boolean {
-    const index = row.code[0] ?? ' ';
-    return index !== ' ' && index !== '?';
-  }
-
-  function rowHasIndexBlob(row: ScmResourceRow): boolean {
-    const index = row.code[0] ?? ' ';
-    return rowHasIndexChange(row) && index !== 'D';
-  }
-
-  function rowDeletesWorkingBlob(row: ScmResourceRow): boolean {
-    return row.badge === 'D';
   }
 
   async function readGitIndexText(
@@ -578,39 +555,29 @@ export function App(props: AppProps) {
       if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
         throw new Error(`workspace owner changed while opening ${relative}`);
       }
-      if (row.side === 'index') {
-        const original = rowHasHeadBlob(row) ? await readGitHeadText(git, relative) : '';
-        const modified = rowHasIndexBlob(row) ? await readGitIndexText(git, relative) : '';
-        editorApi?.openTextDiff({
-          id: compareDiffId(`scm-index-${row.code}`, 'HEAD', path),
-          path,
-          title: `${basename(path)} ↔ Index`,
-          originalTitle: 'HEAD',
-          modifiedTitle: 'Index',
-          original,
-          modified,
-        });
-        return;
-      }
-      const original = rowHasIndexChange(row)
-        ? rowHasIndexBlob(row)
-          ? await readGitIndexText(git, relative)
-          : ''
-        : rowHasHeadBlob(row)
+      const plan = scmDiffPlan(row);
+      const original =
+        plan.original === 'head'
           ? await readGitHeadText(git, relative)
-          : '';
-      const modified = rowDeletesWorkingBlob(row)
-        ? ''
-        : decodeTextBlob(
-            relative,
-            await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes'),
-          );
+          : plan.original === 'index'
+            ? await readGitIndexText(git, relative)
+            : '';
+      const modified =
+        plan.modified === 'index'
+          ? await readGitIndexText(git, relative)
+          : plan.modified === 'working'
+            ? decodeTextBlob(
+                relative,
+                await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes'),
+              )
+            : '';
+      const idScope = row.side === 'index' ? `scm-index-${row.code}` : `scm-worktree-${row.code}`;
       editorApi?.openTextDiff({
-        id: compareDiffId(`scm-worktree-${row.code}`, row.relativePath, path),
+        id: compareDiffId(idScope, row.side === 'index' ? 'HEAD' : row.relativePath, path),
         path,
-        title: `${basename(path)} ↔ Working Tree`,
-        originalTitle: rowHasIndexChange(row) ? 'Index' : 'HEAD',
-        modifiedTitle: 'Working Tree',
+        title: `${basename(path)} ↔ ${plan.modifiedTitle}`,
+        originalTitle: plan.originalTitle,
+        modifiedTitle: plan.modifiedTitle,
         original,
         modified,
       });
@@ -690,6 +657,10 @@ export function App(props: AppProps) {
       },
       { refreshVfs: true },
     );
+    // The owner working file is now back at HEAD. Drop any open editor model so
+    // its (discarded) buffer cannot be re-flushed to the owner on the next edit,
+    // silently resurrecting the change. Re-open reads the restored owner bytes.
+    editorApi?.closePath(row.path);
   }
 
   async function commitScm(message: string): Promise<void> {
@@ -761,6 +732,12 @@ export function App(props: AppProps) {
   );
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
   const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
+  // A rename closes the open tabs under `from`; map each back to its path under
+  // `to` so open editors follow the move (a file, or every file under a renamed
+  // dir) instead of silently vanishing.
+  function reopenTargetsForRename(from: string, to: string): readonly string[] {
+    return (editorApi?.openPathsUnder(from) ?? []).map((path) => `${to}${path.slice(from.length)}`);
+  }
   const explorerMutations: FileExplorerMutations = {
     createFile: (path) => ownerRpcFs.createFile(path),
     createDir: (path) => ownerRpcFs.createDir(path),
@@ -771,13 +748,17 @@ export function App(props: AppProps) {
     },
     async renamePath(from, to) {
       await flushPendingEditorWrites();
+      const reopen = reopenTargetsForRename(from, to);
       editorApi?.closePathTree(from);
       await ownerRpcFs.renamePath(from, to);
+      for (const path of reopen) editorApi?.openFile(path);
     },
     async renameMany(entries) {
       await flushPendingEditorWrites();
+      const reopen = entries.flatMap(({ from, to }) => reopenTargetsForRename(from, to));
       for (const { from } of entries) editorApi?.closePathTree(from);
       await ownerRpcFs.renameMany(entries);
+      for (const path of reopen) editorApi?.openFile(path);
     },
     async copyTree(from, to) {
       await flushPendingEditorWrites();

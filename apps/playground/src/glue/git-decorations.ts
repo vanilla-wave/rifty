@@ -1,6 +1,6 @@
 import { dirname } from '@riftydev/vfs';
 
-export type GitDecorationKind = 'modified' | 'untracked' | 'staged' | 'deleted';
+export type GitDecorationKind = 'modified' | 'untracked' | 'added' | 'deleted';
 
 export interface GitDecoration {
   readonly kind: GitDecorationKind;
@@ -15,32 +15,44 @@ export interface GitDecorationMaps {
 
 const FOLDER_PRIORITY: Record<GitDecorationKind, number> = {
   modified: 4,
-  staged: 3,
-  untracked: 2,
-  deleted: 1,
+  deleted: 3,
+  added: 2,
+  untracked: 1,
 };
 
+const BADGE_FOR_KIND: Record<GitDecorationKind, NonNullable<GitDecoration['badge']>> = {
+  untracked: 'U',
+  added: 'A',
+  modified: 'M',
+  deleted: 'D',
+};
+
+/**
+ * rifty-git porcelain `XY` → one VS Code-style file decoration kind. A worktree
+ * deletion (`Y=D`, incl. `MD`/`AD`) dominates as deleted; an index addition
+ * (`X=A`, incl. `AM`) reads as added (green); any other M (`MM`/`M `/` M`) is
+ * modified (orange). Mirrors VS Code's green=added/untracked, orange=modified,
+ * red=deleted, instead of a "staged is blue" rule that hides the worktree side.
+ */
 export function gitDecorationKind(code: string): GitDecorationKind | null {
   const index = code[0] ?? ' ';
   const worktree = code[1] ?? ' ';
   if (index === '?' && worktree === '?') return 'untracked';
-  if (index === 'D' || worktree === 'D') return 'deleted';
-  if (index === 'M' || index === 'A') return 'staged';
-  if (worktree === 'M') return 'modified';
+  if (worktree === 'D') return 'deleted';
+  if (index === 'A') return 'added';
+  if (index === 'M' || worktree === 'M') return 'modified';
+  if (index === 'D') return 'deleted';
   return null;
 }
 
-function badgeForCode(kind: GitDecorationKind, code: string): GitDecoration['badge'] {
-  if (kind === 'modified') return 'M';
-  if (kind === 'untracked') return 'U';
-  if (kind === 'deleted') return 'D';
-  return code[0] === 'A' ? 'A' : 'M';
+function badgeForCode(kind: GitDecorationKind): GitDecoration['badge'] {
+  return BADGE_FOR_KIND[kind];
 }
 
 function fileDecoration(code: string): GitDecoration | null {
   const kind = gitDecorationKind(code);
   if (!kind) return null;
-  const badge = badgeForCode(kind, code);
+  const badge = badgeForCode(kind);
   return { kind, badge, title: `rifty-git status: ${badge} ${kind}` };
 }
 
