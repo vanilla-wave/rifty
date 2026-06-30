@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   VITE_CONFIG_FILENAMES,
   assertNoUserViteConfig,
+  assertNoUserVitePreviewConfig,
   findUserViteConfig,
 } from './vite-config-guard.ts';
 
@@ -39,6 +40,17 @@ describe('findUserViteConfig', () => {
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'vite.config-loading',
+      }),
+    );
+  });
+
+  it('throws a preview-specific NotImplementedError when vite preview would ignore config', () => {
+    expect(() =>
+      assertNoUserVitePreviewConfig('/scratch', (path) => path === '/scratch/vite.config.mjs'),
+    ).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'vite.preview.config-loading',
       }),
     );
   });

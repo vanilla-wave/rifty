@@ -43,6 +43,12 @@ describe('synthesizePreviewUrl', () => {
     expect(synthesizePreviewUrl('/')).toBe('http://preview.local/');
     expect(synthesizePreviewUrl('')).toBe('http://preview.local');
   });
+
+  it('preserves the preview port when supplied', () => {
+    expect(synthesizePreviewUrl('/api/messages', 3321)).toBe(
+      'http://preview.local:3321/api/messages',
+    );
+  });
 });
 
 describe('exported constants', () => {

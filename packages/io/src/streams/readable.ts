@@ -32,6 +32,10 @@ export interface ReadableOptions {
   read?(this: Readable, size: number): void;
 }
 
+export interface ReadableToWebOptions {
+  strategy?: QueuingStrategy<unknown>;
+}
+
 /**
  * Single state container shared across all `Readable` instances per Node's
  * `_readableState` convention. Field names mirror Node's `internal/streams/state.js`;
@@ -222,7 +226,122 @@ interface PipeableWritable extends EventEmitter {
   emit: EventEmitter['emit'];
 }
 
+/** Node's `AbortError` shape (`name`/`code`), used when a web cancel carries no
+ *  reason and to wrap a premature source close — mirrors `Readable.toWeb`. */
+function abortError(cause?: unknown): Error {
+  const err = new Error('The operation was aborted') as Error & { code?: string; cause?: unknown };
+  err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
+  if (cause !== undefined) err.cause = cause;
+  return err;
+}
+
+/** A source `destroy()`d before its natural end is a premature close; Node's
+ *  `Readable.toWeb` surfaces it on the web stream as an `AbortError`. */
+function prematureCloseError(): Error {
+  const cause = new Error('Premature close') as Error & { code?: string };
+  cause.code = 'ERR_STREAM_PREMATURE_CLOSE';
+  return abortError(cause);
+}
+
 export class Readable extends EventEmitter implements AsyncIterable<unknown> {
+  static toWeb(stream: Readable, options: ReadableToWebOptions = {}): ReadableStream {
+    if (!(stream instanceof Readable)) {
+      throw new TypeError('Readable.toWeb() expects a Readable stream');
+    }
+    let controller: ReadableStreamDefaultController<unknown> | null = null;
+    let settled = false;
+    // `cleanup({ keepErrorSink })` — drop the data/end/close listeners; the
+    // 'error' listener is kept on cancel so the source `destroy()` below (which
+    // Node makes emit 'error') never throws unhandled (rifty EventEmitter, like
+    // Node, throws on an unhandled 'error').
+    const cleanup = (keepErrorSink = false): void => {
+      stream.off('data', onData);
+      stream.off('end', onEnd);
+      stream.off('close', onClose);
+      if (!keepErrorSink) stream.off('error', onError);
+    };
+    const close = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      controller?.close();
+    };
+    const fail = (err: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      controller?.error(err);
+    };
+    const onData = (chunk: unknown): void => {
+      if (controller === null || settled) return;
+      try {
+        controller.enqueue(chunk);
+        if ((controller.desiredSize ?? 1) <= 0) stream.pause();
+      } catch (err) {
+        fail(err);
+      }
+    };
+    const onEnd = (): void => close();
+    const onError = (err: unknown): void => fail(err);
+    // 'close' fires only from `destroy()` (a natural end emits 'end', not
+    // 'close'). Destroyed AFTER the end → clean EOF; destroyed BEFORE → the
+    // source was torn down early, which Node reports as a premature close.
+    const onClose = (): void => {
+      if (settled) return;
+      if (stream._readableState.endEmitted) close();
+      else fail(prematureCloseError());
+    };
+    // A source whose terminal event already fired before `toWeb` was called
+    // never re-fires it — settle from the current state on a microtask instead
+    // of waiting forever (Node's `finished()` reports it the same tick).
+    const settleFromTerminalState = (): void => {
+      const st = stream._readableState;
+      if (st.errored) fail(st.errored);
+      else if (st.endEmitted) close();
+      else if (st.destroyed) fail(prematureCloseError());
+    };
+
+    return new ReadableStream<unknown>(
+      {
+        start(c) {
+          controller = c;
+          const st = stream._readableState;
+          if (st.errored || st.endEmitted || st.destroyed) {
+            // Already terminal: keep only the 'error' sink (for a possible
+            // cancel) and settle from state.
+            stream.on('error', onError);
+            queueMicrotask(settleFromTerminalState);
+            return;
+          }
+          stream.on('data', onData);
+          stream.on('end', onEnd);
+          stream.on('error', onError);
+          stream.on('close', onClose);
+          stream.resume();
+        },
+        pull() {
+          if (!settled) stream.resume();
+        },
+        cancel(reason) {
+          if (settled) return;
+          settled = true;
+          cleanup(true); // keep the 'error' sink across the destroy below
+          if (!stream.destroyed) {
+            // Node forwards the cancel reason to the source's `destroy()`: a
+            // null/undefined reason becomes an `AbortError`, any other reason
+            // passes through and surfaces on the source's 'error' (cast: a
+            // non-Error reason is intentionally forwarded verbatim, as Node does).
+            stream.destroy(
+              reason === undefined || reason === null ? abortError() : (reason as Error),
+            );
+          }
+        },
+      },
+      options.strategy,
+    );
+  }
+
   readonly _readableState: ReadableState;
   private readImpl?: (this: Readable, size: number) => void;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
@@ -992,10 +1111,4 @@ function waitForReadableDemand(r: Readable): Promise<void> {
     r.on('error', onError);
     queueMicrotask(onProgress);
   });
-}
-
-function abortError(): Error {
-  const err = new Error('The operation was aborted');
-  err.name = 'AbortError';
-  return err;
 }

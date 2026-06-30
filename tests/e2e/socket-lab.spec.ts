@@ -56,7 +56,7 @@ test.describe('Socket Lab preset — honest socket capability gate', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, 'starting dev server on port', 15_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 15_000);
 
     // ADR-0165 §9: the gallery lives in the launcher modal now — open the chip,
     // switch to the Starters tab, pick the card. The launcher closes on pick and

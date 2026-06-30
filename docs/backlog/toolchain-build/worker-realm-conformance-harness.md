@@ -16,7 +16,7 @@ One harness, every builtin gets both-realm coverage:
 - Playwright spec boots a harness page → kernel worker; worker executes a tagged subset of conformance cases through the rifty loader; results postMessage'd out, asserted in the spec.
 - Case-format cost (the real work): conformance cases are vitest files (`describe`/`expect`) — not directly loadable in a worker. Fork: (a) thin runner-agnostic case format (code + expected, parity-style) shared by vitest and the worker harness; (b) vitest browser-mode (runs in *page* realm — closer, but still not the kernel worker; partial credit only); (c) re-exec selected case source through the loader with a minimal assert shim. Provisional pick to be made when taken up — recorded here.
 - Start with the realm-sensitive set: sqlite, fs/OPFS, process globals/cwd, timers/event-loop order; grow by tagging.
-- Pairs with playground/templates-as-stack-consumers: templates give the harness live load.
+- Pairs with playground templates: shipped presets give the harness live load.
 
 ## Reversibility
 REVERSIBLE — test infra only. Case-format choice is the provisional judgment call this item records.

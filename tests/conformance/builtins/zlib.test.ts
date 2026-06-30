@@ -11,6 +11,7 @@
 import { promisify } from 'node:util';
 import nodeZlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { ServerResponse } from '../../../packages/net/src/http/response.ts';
 import { Buffer } from '../../../packages/runtime-js/src/builtins/buffer.ts';
 import zlib from '../../../packages/runtime-js/src/builtins/zlib.ts';
 
@@ -109,6 +110,15 @@ describe('node:zlib — corrupt input rejects with an Error (error-first holds)'
 });
 
 describe('node:zlib — wire/shape-affecting options throw (no silent lie)', () => {
+  it('one-shot flush options throw because CompressionStream cannot honor flush opcodes', () => {
+    expect(() => zlib.gzip(text, { flush: zlib.constants.Z_SYNC_FLUSH }, () => {})).toThrowError(
+      notImpl('zlib.gzip option: flush'),
+    );
+    expect(() =>
+      zlib.gunzip(Buffer.from([1, 2, 3]), { finishFlush: zlib.constants.Z_SYNC_FLUSH }, () => {}),
+    ).toThrowError(notImpl('zlib.gunzip option: finishFlush'));
+  });
+
   it('windowBits throws (CompressionStream emits a fixed max window; honoring a smaller request would emit window-15 bytes a strict zlib consumer rejects with Z_DATA_ERROR)', () => {
     expect(() => zlib.gzip(text, { windowBits: 9 }, () => {})).toThrowError(
       notImpl('zlib.gzip option: windowBits'),
@@ -150,14 +160,163 @@ describe('node:zlib — loud ceilings (sync / brotli / streams / unzip)', () => 
       notImpl('zlib.brotliDecompressSync'),
     );
   });
-  it('createGzip throws NotImplementedError (streams deferred)', () => {
-    expect(() => zlib.createGzip()).toThrowError(notImpl('zlib.createGzip'));
-  });
-  it('Gzip class throws on construct', () => {
-    expect(() => new zlib.Gzip()).toThrowError(notImpl('zlib.Gzip'));
+  it('remaining stream factories throw NotImplementedError', () => {
+    expect(() => zlib.createGunzip()).toThrowError(notImpl('zlib.createGunzip'));
+    expect(() => zlib.createDeflate()).toThrowError(notImpl('zlib.createDeflate'));
   });
   it('unzip throws NotImplementedError (auto-detect deferred)', () => {
     expect(() => zlib.unzip(Buffer.from(text), () => {})).toThrowError(notImpl('zlib.unzip'));
+  });
+});
+
+describe('node:zlib — gzip Transform stream', () => {
+  async function collect(stream: {
+    on(event: 'data', cb: (chunk: Uint8Array) => void): unknown;
+    on(event: 'end', cb: () => void): unknown;
+    on(event: 'error', cb: (err: Error) => void): unknown;
+  }): Promise<Buffer> {
+    const chunks: Uint8Array[] = [];
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+    return Buffer.concat(chunks);
+  }
+
+  it('createGzip emits gzip bytes readable by real Node zlib', async () => {
+    const stream = zlib.createGzip();
+    const output = collect(stream);
+
+    stream.write(Buffer.from('hello '));
+    stream.end('stream');
+
+    const compressed = await output;
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toBe('hello stream');
+  });
+
+  it('Gzip class is constructible and has the same stream behavior', async () => {
+    const stream = new zlib.Gzip();
+    const output = collect(stream);
+
+    stream.end(text);
+
+    const compressed = await output;
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toBe(text);
+  });
+
+  it('createGzip flush option throws instead of pretending flush opcodes work', () => {
+    expect(() => zlib.createGzip({ flush: zlib.constants.Z_SYNC_FLUSH })).toThrowError(
+      notImpl('zlib.createGzip option: flush'),
+    );
+  });
+
+  it('createGzip finishFlush option throws instead of pretending flush opcodes work', () => {
+    expect(() => zlib.createGzip({ finishFlush: zlib.constants.Z_SYNC_FLUSH })).toThrowError(
+      notImpl('zlib.createGzip option: finishFlush'),
+    );
+  });
+
+  it('unsupported zlib stream instance APIs throw directed NotImplementedError', () => {
+    const stream = zlib.createGzip() as ReturnType<(typeof zlib)['createGzip']> & {
+      readonly bytesWritten: number;
+      flush(kind?: number, cb?: () => void): void;
+      params(level: number, strategy: number, cb?: () => void): void;
+      reset(): void;
+      close(cb?: () => void): void;
+    };
+
+    expect(() => stream.flush(zlib.constants.Z_SYNC_FLUSH)).toThrowError(
+      notImpl('zlib.Gzip.flush'),
+    );
+    expect(() => stream.params(1, zlib.constants.Z_DEFAULT_STRATEGY)).toThrowError(
+      notImpl('zlib.Gzip.params'),
+    );
+    expect(() => stream.reset()).toThrowError(notImpl('zlib.Gzip.reset'));
+    expect(() => stream.close()).toThrowError(notImpl('zlib.Gzip.close'));
+    expect(() => stream.bytesWritten).toThrowError(notImpl('zlib.Gzip.bytesWritten'));
+  });
+
+  it('destroy() mid-stream tears down the CompressionStream (releases the reader lock — no leak)', async () => {
+    // Capture the CompressionStream the Gzip creates so we can observe its
+    // readable lock. On destroy(), the writer must be aborted so drainCompressed's
+    // reader.read() rejects and releaseLock() runs; without that teardown the
+    // reader awaits forever and the lock (+ CompressionStream) leak.
+    const RealCompressionStream = globalThis.CompressionStream;
+    let captured: CompressionStream | undefined;
+    // Must be a `new`-able function (the Gzip ctor does `new CompressionStream`);
+    // an arrow function is not constructable, so it stays a function expression.
+    // biome-ignore lint/complexity/useArrowFunction: constructed with `new`
+    (globalThis as { CompressionStream: unknown }).CompressionStream = function (
+      format: string,
+    ): CompressionStream {
+      captured = new RealCompressionStream(format as 'gzip');
+      return captured;
+    };
+    try {
+      const stream = zlib.createGzip();
+      stream.on('error', () => {}); // absorb the destroy error
+      stream.write(Buffer.from('hello '));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      stream.destroy(new Error('client aborted mid-response'));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(captured).toBeDefined();
+      expect((captured as CompressionStream).readable.locked).toBe(false);
+    } finally {
+      (globalThis as { CompressionStream: unknown }).CompressionStream = RealCompressionStream;
+    }
+  });
+
+  it('supports Vite compression middleware shape over ServerResponse', async () => {
+    const res = new ServerResponse();
+    const originalEnd = res.end;
+    const originalWrite = res.write;
+    const originalOn = res.on;
+    const originalWriteHead = res.writeHead;
+    let pendingStatus = 0;
+    let started = false;
+    let gzipStream: ReturnType<(typeof zlib)['createGzip']> | undefined;
+
+    const start = (): void => {
+      started = true;
+      gzipStream = zlib.createGzip();
+      res.setHeader('Content-Encoding', 'gzip');
+      gzipStream.on('data', (chunk: Uint8Array) => {
+        originalWrite.call(res, chunk);
+      });
+      gzipStream.on('end', () => {
+        originalEnd.call(res);
+      });
+      originalOn.call(res, 'drain', () => gzipStream?.resume());
+      originalWriteHead.call(res, pendingStatus || res.statusCode);
+    };
+
+    res.writeHead = function writeHead(status, reasonOrHeaders, maybeHeaders) {
+      const headers = typeof reasonOrHeaders === 'string' ? maybeHeaders : reasonOrHeaders;
+      if (headers) for (const key in headers) res.setHeader(key, headers[key]!);
+      pendingStatus = status;
+      return this;
+    };
+    res.write = function write(...args) {
+      if (!started) start();
+      if (!gzipStream) return originalWrite.call(this, ...args);
+      return gzipStream.write.call(gzipStream, ...args);
+    };
+    res.end = function end(...args) {
+      if (!started) start();
+      if (!gzipStream) return originalEnd.call(this, ...args);
+      return gzipStream.end.call(gzipStream, ...args);
+    };
+
+    res.setHeader('Content-Type', 'text/html');
+    res.end(`<!doctype html>${'x'.repeat(2048)}`);
+
+    const response = await res.toResponse();
+    const compressed = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get('content-encoding')).toBe('gzip');
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toContain('x'.repeat(2048));
   });
 });
 

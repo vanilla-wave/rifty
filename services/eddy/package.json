@@ -1,0 +1,52 @@
+{
+  "name": "@riftydev/eddy",
+  "version": "0.1.0",
+  "description": "Opt-in fast npm-install resolver service for rifty: runs rifty's own resolution server-side and returns one EddyBundleV1 (lockfile + compressed tarballs). ADR-0182.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "services/eddy"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "npm", "install", "resolver", "service"],
+  "sideEffects": false,
+  "bin": {
+    "eddy": "./dist/bin.js"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["dist", "CHANGELOG.md", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:run": "cd ../.. && vitest run --project unit services/eddy",
+    "build": "tsup"
+  },
+  "devDependencies": {
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "typescript": "*",
+    "vitest": "*"
+  }
+}

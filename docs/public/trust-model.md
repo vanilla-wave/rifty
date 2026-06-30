@@ -38,6 +38,32 @@ control over browser-local workers, not hostile-code containment.
 If a product needs to execute arbitrary hostile code, put a real containment boundary outside the
 browser runtime.
 
+## Eddy fast-install resolver (mirror-grade)
+
+The opt-in `@riftydev/eddy` fast install (ADR-0182) adds a second, narrower trust surface —
+a server-side resolver, not the browser runtime. It is OFF unless an operator sets a resolver
+URL via env-config (D-004); standard `npm install` is untouched and is the always-on fallback.
+
+- **What is verified.** The client checks every tarball's bytes against the integrity carried in
+  eddy's bundle (catches corruption/transport tampering; non-disableable). This is the same
+  `EINTEGRITY` check the standard install runs.
+- **What is NOT verified.** The bundle is NOT re-checked against npm's source-of-truth packument —
+  doing so would re-introduce the metadata waterfall eddy exists to remove. Fast mode therefore
+  trusts the eddy operator **exactly as you already trust a registry mirror / proxy** (the
+  ADR-0163 boundary). A dishonest eddy could serve a different-but-internally-consistent closure;
+  it cannot serve corrupted bytes (integrity catches that), and it cannot make an install silently
+  wrong-and-undetected any more than a malicious registry mirror could.
+- **Fail-soft.** Unreachable, HTTP error, malformed bundle, integrity mismatch, lockfile-coverage
+  gap, or a typed `unsupported` decline → the client warns and runs the standard verifying
+  install. A user never gets a wrong or failed install because the fast path was down.
+- **Bounded staleness, visible.** Every bundle carries an as-of stamp (resolution timestamp,
+  upstream registry, closure hash). `prefer: 'online'` forces a fresh recompute; the resolution
+  TTL is operator-configurable (including 0). Staleness is auditable, never hidden.
+- **Provenance.** `InstallResult.source` reports whether the eddy path or the standard path ran.
+
+Run your own eddy (npm or Docker) to keep the speedup a property of the open, auditable,
+self-hostable stack rather than a closed vendor turbo button.
+
 ## Follow-up
 
 Hard resource enforcement is tracked separately in

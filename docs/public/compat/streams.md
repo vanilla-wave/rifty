@@ -20,8 +20,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
 | `Readable.fromWeb` | ✅ | WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested |
+| `Readable.toWeb` | ✅ | Node Readable → WHATWG ReadableStream; preserves emitted chunk identity/type, forwards strategy, cancel destroys source |
 | `node:stream/web` export | ❌ | WHATWG stream interop tracked separately |
-| `Readable.toWeb` / `Writable.toWeb` | ❌ | Full WHATWG bridge surface is not claimed |
+| `Writable.toWeb` | ❌ | Writable bridge remains unclaimed |
 
 ## Test Sources
 
@@ -34,5 +35,5 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 ## Known Limitations
 
-- The Node stream subset is package-compat focused; complete WHATWG bridge APIs are not yet claimed.
+- The Node stream subset is package-compat focused; `Writable.toWeb` and complete `node:stream/web` APIs are not yet claimed.
 - Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.

@@ -228,7 +228,7 @@ test.describe('M1 - terminal shell', () => {
   }) => {
     await page.goto('/');
     // ADR-0148: the default preset boots its dev server in the owner — wait up.
-    await expectTerminalContains(page, 'starting dev server on port', 15_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 15_000);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');

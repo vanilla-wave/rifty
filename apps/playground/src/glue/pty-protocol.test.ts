@@ -36,6 +36,7 @@ describe('pty-protocol', () => {
     const f: PtyFrame = {
       type: 'pty:dev-server',
       status: 'running',
+      sid: 'terminal-1',
       port: 5174,
       url: '/preview/5174/',
     };

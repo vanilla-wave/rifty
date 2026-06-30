@@ -1,0 +1,48 @@
+# The rifty.dev (Yandex Container-Optimized-Image VM) compose. COI PULLS images —
+# it can't build the `build:` context — so this references the eddy image by
+# `image:` (built + pushed to the registry; see docs/public/hosting-yandex.md).
+# Identical otherwise to docker-compose.yml: Caddy terminates TLS for
+# eddy.rifty.dev and reverse-proxies to eddy:8788; eddy sets its own cross-origin
+# headers so they pass through.
+services:
+  eddy:
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.1.0
+    container_name: rifty-eddy
+    restart: unless-stopped
+    expose:
+      - "8788"
+    environment:
+      REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
+      PORT: "8788"
+      EDDY_TTL_SECONDS: "1800"
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: rifty-eddy-caddy
+    restart: unless-stopped
+    depends_on:
+      - eddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat >/etc/caddy/Caddyfile <<'CADDY'
+        {
+        	admin off
+        }
+
+        eddy.rifty.dev {
+        	reverse_proxy eddy:8788
+        }
+        CADDY
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+volumes:
+  caddy_data:
+  caddy_config:

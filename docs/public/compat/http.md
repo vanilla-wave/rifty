@@ -23,6 +23,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
 | Header reassignment / status codes | ✅ | Pinned by parity cases |
+| Request headers / `rawHeaders` | ⚠️ | Shape-compatible request headers, but `rawHeaders` is derived from Fetch-normalized headers; raw casing/order/duplicates are not claimed |
 | Response header introspection | ✅ | `getHeaders` (null-proto, value types preserved), `getHeaderNames`, `hasHeader`, `appendHeader` (array-merge); post-send `ERR_HTTP_HEADERS_SENT` (parity-pinned) |
 | `http.METHODS` | ✅ | Static verb list beside `STATUS_CODES` for per-verb routers |
 | `http.maxHeaderSize` | ⚠️ | Exposes the 16384 default but ADVISORY ONLY — header framing is the SW/fetch bridge’s, never enforced from this value |

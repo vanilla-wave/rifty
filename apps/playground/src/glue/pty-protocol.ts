@@ -43,11 +43,13 @@ export type PtyExit = {
   error?: string;
 };
 
-/** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner): not tied to a run/`rid`. */
+/** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner). */
 export type DevServerStatus = 'starting' | 'running' | 'stopped';
 export type PtyDevServer = {
   type: 'pty:dev-server';
   status: DevServerStatus;
+  /** Owning terminal session. Present for lifecycle frames emitted by a pty run. */
+  sid?: string;
   /** Internal listen port — defined once `status` reaches 'running'. */
   port?: number;
   /** Run-scoped preview bridge discriminator for the page↔worker hop. */
