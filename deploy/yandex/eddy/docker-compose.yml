@@ -6,15 +6,15 @@
 # needs (services/eddy/src/server.ts); Caddy only terminates TLS + reverse-
 # proxies, so those headers pass through unchanged (no duplication).
 #
-# Deploy mirrors the proxy recipe (docs/public/hosting-yandex.md): hand the
-# compose file to a Yandex Container-Optimized-Image VM. Caddy's automatic TLS
-# needs the eddy.rifty.dev A record to resolve to the VM + ingress 80 (ACME
-# HTTP-01) and 443 open BEFORE first boot. The actual deploy is a confirm-first
-# step (operator-owned infra) — see
+# This `build:` compose is for LOCAL self-host (`docker compose up` builds the
+# image on the spot). A Yandex Container-Optimized-Image VM PULLS images — it
+# does NOT build — so the rifty.dev deploy builds + pushes the image to a
+# registry and swaps `build:` for `image: cr.yandex/<reg>/eddy:<tag>`; full
+# procedure + the VM service-account (puller role) in docs/public/hosting-
+# eddy.md. Caddy's automatic TLS needs the eddy.rifty.dev A record to resolve to
+# the VM + ingress 80 (ACME HTTP-01) and 443 open BEFORE first boot. The actual
+# deploy is a confirm-first step (operator-owned infra) — see
 # docs/backlog/distribution/eddy-package-and-deploy.md.
-#
-# Local testing without TLS uses `docker run -p 8788:8788 ... riftydev-eddy`
-# (docs/public/hosting-eddy.md); this compose is the production/VM shape.
 services:
   eddy:
     build:

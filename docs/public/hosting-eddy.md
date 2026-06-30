@@ -69,28 +69,54 @@ You should see `eddy-bundle.json`, `package-lock.json`, and `tarballs/*.tgz`.
 
 ## Deploy to rifty.dev
 
-A **confirm-first**, operator-owned step (spend + shared infra). The compose
-mirrors the ADR-0163 registry proxy (`docs/public/hosting-yandex.md`): a Caddy
-sidecar terminates TLS for `eddy.rifty.dev` and reverse-proxies to eddy on
-`:8788`. eddy sets the cross-origin headers (CORS + CORP) itself, so they pass
-through. Caddy's automatic TLS does an ACME HTTP-01 challenge on first boot, so
-the DNS record + open ports must exist **first**:
+A **confirm-first**, operator-owned step (spend + shared infra). Unlike the
+ADR-0163 proxy (a public `caddy` image), eddy ships a CUSTOM image, and a Yandex
+Container-Optimized-Image VM **pulls** images — it does NOT build — so the image
+is built + pushed to a registry and the COI compose references it by `image:`
+(not the `build:` the local `docker compose up` self-host uses). eddy sets the
+cross-origin headers itself; a Caddy sidecar only terminates TLS for
+`eddy.rifty.dev`. Caddy's ACME HTTP-01 runs on first boot, so DNS + ports exist
+first.
 
-1. Reserve a static IP and a security group with ingress `80/tcp` + `443/tcp`.
-2. Add `eddy.rifty.dev. A <reserved-ip>` in the `rifty` zone
+1. Build + push the image to Yandex Container Registry:
+
+   ```bash
+   docker build -f deploy/yandex/eddy/Dockerfile -t rifty-eddy:0.1.0 .
+   yc container registry create --name rifty            # once
+   yc container registry configure-docker
+   REG=$(yc container registry get --name rifty --format json | jq -r .id)
+   docker tag rifty-eddy:0.1.0 cr.yandex/$REG/eddy:0.1.0
+   docker push cr.yandex/$REG/eddy:0.1.0
+   ```
+
+2. A service account the VM uses to pull (COI uses the VM's SA):
+
+   ```bash
+   yc iam service-account create --name rifty-eddy-vm
+   yc container registry add-access-binding --name rifty \
+     --role container-registry.images.puller \
+     --service-account-name rifty-eddy-vm
+   ```
+
+3. Reserve a static IP, reuse the proxy's `rifty-registry-proxy` security group
+   (ingress `80/tcp` + `443/tcp`), and add the DNS record **first**:
+   `eddy.rifty.dev. A <reserved-ip>` in the `rifty` zone
    (`docs/public/hosting-domains.md`).
-3. Create the VM from the compose (mirrors the proxy create shape):
+
+4. A COI compose = `deploy/yandex/eddy/docker-compose.yml` with eddy's `build:`
+   replaced by `image: cr.yandex/$REG/eddy:0.1.0` (Caddy unchanged). Create the
+   VM with that service account (mirrors the proxy specs):
 
    ```bash
    yc compute instance create-with-container rifty-eddy \
-     --zone ru-central1-a \
-     --cores 2 --core-fraction 20 --memory 1G \
+     --zone ru-central1-a --cores 2 --core-fraction 20 --memory 1G \
      --create-boot-disk type=network-hdd,size=16G,auto-delete=true \
-     --network-interface subnet-name=default-ru-central1-a,nat-address=<reserved-ip>,security-group-ids=<eddy-sg-id> \
-     --docker-compose-file deploy/yandex/eddy/docker-compose.yml
+     --service-account-name rifty-eddy-vm \
+     --network-interface subnet-name=default-ru-central1-a,nat-address=<reserved-ip>,security-group-ids=<sg-id> \
+     --docker-compose-file <coi-compose>
    ```
 
-4. Once TLS is issued, smoke `https://eddy.rifty.dev` (the POST form above over
+5. Once TLS is issued, smoke `https://eddy.rifty.dev` (the POST form above over
    https). Then set `VITE_RIFTY_RESOLVER_URL=https://eddy.rifty.dev` in the
    playground prod build (`netlify.toml`) so from-scratch presets resolve via
    eddy.

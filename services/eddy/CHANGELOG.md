@@ -34,6 +34,12 @@
   externalized `@riftydev/*` resolved to its TS source and crashed at runtime.
   The Dockerfile drops `pnpm deploy` (copies just `dist`) and skips the
   Playwright browser download.
+- **COI deploy documented + `.dockerignore`.** A Container-Optimized-Image VM
+  PULLS images (it can't build the compose `build:` context), so
+  `docs/public/hosting-eddy.md` covers build+push to a registry + the VM puller
+  service account; a root `.dockerignore` keeps host `node_modules`/`.git` out
+  of the build context. The image was verified to build + serve (CORS preflight
+  204) from a clean `docker build` + `docker run`.
 - **Publish-set wiring.** eddy joins `build:libs` (so its `dist/` builds in the
   publish pipeline) and `first-publish.sh`, which gains a `--only <filter>` mode
   to bootstrap a single new name (`--only @riftydev/eddy`) without re-publishing
