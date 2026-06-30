@@ -129,6 +129,10 @@
 - **Saved projects now re-root the workspace owner after Save.** A plain
   Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
+- **Rapid starter picks are serialized through the full preset transition.**
+  A second launcher pick now waits for the prior boot before mutating the
+  scratch starter, durable index, and dev-server lifecycle, so files, active
+  starter UI, and preview ownership cannot split across two presets.
 - **Preset switching stops only the lifecycle-owned terminal session.** Starter
   changes still stop the active dev/CLI boot session before reseeding files, but
   no longer abort unrelated running terminal tabs. A pre-existing owner-reported

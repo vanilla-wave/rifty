@@ -14,6 +14,23 @@ const bootstrapSrc = readFileSync(
   fileURLToPath(new URL('./workers/real-vite-bootstrap.ts', import.meta.url)),
   'utf8',
 );
+const streamsCompatSrc = readFileSync(
+  fileURLToPath(new URL('../../../docs/public/compat/streams.md', import.meta.url)),
+  'utf8',
+);
+const httpCompatSrc = readFileSync(
+  fileURLToPath(new URL('../../../docs/public/compat/http.md', import.meta.url)),
+  'utf8',
+);
+const streamInteropAdrSrc = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../../../docs/adr/net/0154-http-stream-interop-and-drain-contract.md',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+);
 
 describe('App terminal startup wiring', () => {
   // Revised pins (ADR-0135, prev. node-server template ADR): boot lines are
@@ -411,7 +428,7 @@ describe('App terminal startup wiring', () => {
     expect(pickStarter.indexOf('beginTsPresetTransition();')).toBeLessThan(
       pickStarter.indexOf('store.pickStarter(id);'),
     );
-    expect(pickStarter).toContain('void runVitePreset(presetForId(id), tsGate);');
+    expect(pickStarter).toContain('void queuePresetTransition(runPick);');
     expect(reinit).toBeDefined();
     expect(reinit).toContain('setTsProjectRevision((revision) => revision + 1);');
     expect(reinit).not.toContain('resetEditorToActiveInitialFiles()');
@@ -438,6 +455,23 @@ describe('App terminal startup wiring', () => {
     expect(runPreset).toMatch(
       /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?const booted = await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
+  });
+
+  it('serializes starter picks while a preset boot is transitioning', () => {
+    const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
+    const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
+    const pickStarter = source.slice(pickStarterStart, pickStarterEnd);
+    expect(source).toContain('let presetTransitionChain: Promise<void> = Promise.resolve();');
+    expect(source).toContain('function queuePresetTransition(');
+    expect(pickStarter).toContain('const runPick = async (): Promise<void> => {');
+    expect(pickStarter).toMatch(
+      /store\.pickStarter\(id\);[\s\S]*?durableNewScratch\(id\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
+    );
+    expect(pickStarter).toMatch(
+      /if \(presetTransitioning\(\)\) \{[\s\S]*?await queuePresetTransition\(runPick\);[\s\S]*?return;/,
+    );
+    expect(pickStarter).toContain('void queuePresetTransition(runPick);');
+    expect(pickStarter).not.toContain('void runVitePreset(presetForId(id), tsGate);');
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
@@ -507,6 +541,24 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<PreviewPanel');
     expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
+  });
+});
+
+describe('stream compat docs', () => {
+  it('claims Readable.toWeb separately from still-unclaimed Writable.toWeb', () => {
+    expect(streamsCompatSrc).toContain('| `Readable.toWeb` | ✅ |');
+    expect(streamsCompatSrc).toContain('| `Writable.toWeb` | ❌ |');
+    expect(streamsCompatSrc).not.toContain('| `Readable.toWeb` / `Writable.toWeb` | ❌ |');
+    expect(streamInteropAdrSrc).toContain('Correction 2026-06-29');
+    expect(streamInteropAdrSrc).toContain('Readable.toWeb()');
+  });
+});
+
+describe('http compat docs', () => {
+  it('caveats rawHeaders as fetch-normalized rather than Node-raw', () => {
+    expect(httpCompatSrc).toContain('| Request headers / `rawHeaders` | ⚠️ |');
+    expect(httpCompatSrc).toContain('derived from Fetch-normalized headers');
+    expect(httpCompatSrc).toContain('raw casing/order/duplicates are not claimed');
   });
 });
 

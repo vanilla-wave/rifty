@@ -126,8 +126,13 @@ const matrices = [
         '✅',
         'WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested',
       ],
+      [
+        '`Readable.toWeb`',
+        '✅',
+        'Node Readable → WHATWG ReadableStream; preserves emitted chunk identity/type, forwards strategy, cancel destroys source',
+      ],
       ['`node:stream/web` export', '❌', 'WHATWG stream interop tracked separately'],
-      ['`Readable.toWeb` / `Writable.toWeb`', '❌', 'Full WHATWG bridge surface is not claimed'],
+      ['`Writable.toWeb`', '❌', 'Writable bridge remains unclaimed'],
     ],
     tests: [
       '`tests/conformance/builtins/stream.test.ts`',
@@ -138,7 +143,7 @@ const matrices = [
       '`tools/node-parity-runner/cases/stream/*.case.ts`',
     ],
     limitations: [
-      'The Node stream subset is package-compat focused; complete WHATWG bridge APIs are not yet claimed.',
+      'The Node stream subset is package-compat focused; `Writable.toWeb` and complete `node:stream/web` APIs are not yet claimed.',
       'Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.',
     ],
   },
@@ -191,6 +196,11 @@ const matrices = [
         'Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies',
       ],
       ['Header reassignment / status codes', '✅', 'Pinned by parity cases'],
+      [
+        'Request headers / `rawHeaders`',
+        '⚠️',
+        'Shape-compatible request headers, but `rawHeaders` is derived from Fetch-normalized headers; raw casing/order/duplicates are not claimed',
+      ],
       [
         'Response header introspection',
         '✅',

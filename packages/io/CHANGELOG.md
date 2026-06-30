@@ -7,9 +7,11 @@
 - **`Readable.toWeb()` matches the rifty Readable surface more honestly.** It
   now requires a rifty `Readable` instance instead of accepting arbitrary async
   iterables as if Node's full stream coercion existed, and it preserves string
-  chunks instead of converting them to Buffers. It also passes the supplied Web
-  stream `strategy` through and maps web-reader `cancel()` to source
-  `destroy()`, so the static is no longer a happy-path-only bridge.
+  chunks instead of converting them to Buffers. It also preserves emitted
+  `ArrayBuffer`/typed-array/DataView chunk identity and type instead of
+  rewrapping them as `Uint8Array`. It passes the supplied Web stream `strategy`
+  through and maps web-reader `cancel()` to source `destroy()`, so the static is
+  no longer a happy-path-only bridge.
 - **`Duplex`/`Transform` honor instance `_write()` / `_final()` overrides.**
   Real package code such as `fast-glob` mutates a `PassThrough` instance's
   `_write` method after construction. The writable side now checks the owning

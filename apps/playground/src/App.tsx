@@ -799,6 +799,7 @@ export function App(props: AppProps) {
     'stopped',
   );
   const [presetTransitioning, setPresetTransitioning] = createSignal(false);
+  let presetTransitionChain: Promise<void> = Promise.resolve();
   const devServerRunning = (): boolean => devServerStatus() === 'running';
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
   interface TsPresetTransitionGate {
@@ -811,6 +812,13 @@ export function App(props: AppProps) {
       resolve = done;
     });
     return { resolve };
+  }
+  function queuePresetTransition(run: () => Promise<void>): Promise<void> {
+    const queued = presetTransitionChain.then(run, run);
+    presetTransitionChain = queued.catch((err: unknown) => {
+      console.error('[preset-transition] failed', err);
+    });
+    return presetTransitionChain;
   }
 
   // ALL live previewable ports (ADR-0155): the dev-server port + each `node
@@ -2114,7 +2122,7 @@ export function App(props: AppProps) {
       /* best-effort seeding */
     });
     initialRunTimer = setTimeout(() => {
-      void runVitePreset(DEFAULT_PRESET);
+      void queuePresetTransition(() => runVitePreset(DEFAULT_PRESET));
     }, 0);
   });
 
@@ -2236,13 +2244,20 @@ export function App(props: AppProps) {
     pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
-    const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
-    const tsGate = wasDirty ? undefined : beginTsPresetTransition();
-    store.pickStarter(id);
-    if (!wasDirty) {
-      durableNewScratch(id);
-      void runVitePreset(presetForId(id), tsGate);
+    const runPick = async (): Promise<void> => {
+      const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
+      const tsGate = wasDirty ? undefined : beginTsPresetTransition();
+      store.pickStarter(id);
+      if (!wasDirty) {
+        durableNewScratch(id);
+        await runVitePreset(presetForId(id), tsGate);
+      }
+    };
+    if (presetTransitioning()) {
+      await queuePresetTransition(runPick);
+      return;
     }
+    void queuePresetTransition(runPick);
   }
 
   // Switch active root from the launcher/chip. The store gates a dirty scratch
@@ -2487,11 +2502,12 @@ export function App(props: AppProps) {
   // a still-dirty scratch would re-open the switch dialog and never flip activeId,
   // so the owner would respawn at the new root with the OLD template/starter.
   function applyPendingTarget(target: { pendingStarter?: string; pendingId?: string }): void {
-    if (target.pendingStarter) {
+    const pendingStarter = target.pendingStarter;
+    if (pendingStarter) {
       const tsGate = beginTsPresetTransition();
-      store.confirmPickStarter(target.pendingStarter);
-      durableNewScratch(target.pendingStarter);
-      void runVitePreset(presetForId(target.pendingStarter), tsGate);
+      store.confirmPickStarter(pendingStarter);
+      durableNewScratch(pendingStarter);
+      void queuePresetTransition(() => runVitePreset(presetForId(pendingStarter), tsGate));
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void trackSwitch(switchTo(target.pendingId));

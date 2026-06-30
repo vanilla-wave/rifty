@@ -126,6 +126,17 @@ describe('Readable.from(iter, options?)', () => {
     await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
   });
 
+  it('toWeb preserves object-mode typed chunks by identity', async () => {
+    const typed = new Uint16Array([258, 772]);
+    const view = new DataView(new ArrayBuffer(4));
+    const stream = Readable.toWeb(Readable.from([typed, view], { objectMode: true }));
+    const reader = stream.getReader();
+
+    await expect(reader.read()).resolves.toEqual({ done: false, value: typed });
+    await expect(reader.read()).resolves.toEqual({ done: false, value: view });
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
   it('toWeb rejects arbitrary async iterables instead of widening the Node surface', () => {
     const iterable = {
       async *[Symbol.asyncIterator]() {

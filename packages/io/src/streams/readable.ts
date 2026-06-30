@@ -80,15 +80,6 @@ export function chunkSize(chunk: unknown): number {
   return 1;
 }
 
-function toWebChunk(chunk: unknown): unknown {
-  if (chunk instanceof Uint8Array) return chunk;
-  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
-  if (ArrayBuffer.isView(chunk)) {
-    return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-  }
-  return chunk;
-}
-
 /**
  * Per-instance decode state set by `setEncoding(enc)`. The text encodings that
  * `TextDecoder` covers are decoded with a single persistent decoder in
@@ -263,7 +254,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const onData = (chunk: unknown): void => {
       if (controller === null || settled) return;
       try {
-        controller.enqueue(toWebChunk(chunk));
+        controller.enqueue(chunk);
         if ((controller.desiredSize ?? 1) <= 0) stream.pause();
       } catch (err) {
         error(err);
