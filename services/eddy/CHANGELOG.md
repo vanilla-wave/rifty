@@ -27,6 +27,13 @@
   docker-compose.yml` adds a Caddy sidecar terminating TLS for `eddy.rifty.dev`
   → `eddy:8788`, mirroring the ADR-0163 proxy; eddy's cross-origin headers pass
   through. See `docs/public/hosting-eddy.md`.
+- **Self-contained build.** `tsup` now bundles the `@riftydev/*` deps INTO
+  `dist` (they move to `devDependencies`), so `node dist/bin.js` — the Docker
+  image and `npx @riftydev/eddy` — needs no `node_modules`. This removes a
+  broken-deploy hazard: `pnpm deploy` does not apply `publishConfig`, so an
+  externalized `@riftydev/*` resolved to its TS source and crashed at runtime.
+  The Dockerfile drops `pnpm deploy` (copies just `dist`) and skips the
+  Playwright browser download.
 - **Publish-set wiring.** eddy joins `build:libs` (so its `dist/` builds in the
   publish pipeline) and `first-publish.sh`, which gains a `--only <filter>` mode
   to bootstrap a single new name (`--only @riftydev/eddy`) without re-publishing

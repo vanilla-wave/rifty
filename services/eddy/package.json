@@ -43,11 +43,9 @@
     "test:run": "cd ../.. && vitest run --project unit services/eddy",
     "build": "tsup"
   },
-  "dependencies": {
-    "@riftydev/npm-client": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
-  },
   "devDependencies": {
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
     "typescript": "*",
     "vitest": "*"
   }

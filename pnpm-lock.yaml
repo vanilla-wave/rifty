@@ -356,14 +356,13 @@ importers:
         version: 2.1.9(@types/node@22.19.19)
 
   services/eddy:
-    dependencies:
+    devDependencies:
       '@riftydev/npm-client':
         specifier: workspace:*
         version: link:../../packages/npm-client
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
-    devDependencies:
       typescript:
         specifier: '*'
         version: 5.9.3
