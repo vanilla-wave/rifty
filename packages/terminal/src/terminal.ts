@@ -485,6 +485,13 @@ export interface RiftyTerminalOptions {
   ghostSuggestion?: TerminalGhostSuggestionProvider;
   /** Host-owned fish-style abbreviations/snippets. */
   rewriteRules?: readonly TerminalRewriteRule[];
+  /**
+   * Content-agnostic onboarding banner printed ONCE on the first {@link mount},
+   * before the first prompt. The host owns the copy (and any ANSI styling /
+   * `\r\n` line breaks); this package ships none. Not reprinted on `clear`; a
+   * fresh terminal instance reprints it.
+   */
+  banner?: string;
   /** Called when xterm scrolls the viewport. */
   onViewportChange?(line: number): void;
   /** Called when command block markers are added or updated. */
@@ -538,6 +545,8 @@ export interface RiftyTerminalOptions {
 export class RiftyTerminal {
   private readonly term: Terminal;
   private fit: FitAddon | null = null;
+  /** Set once the onboarding banner has printed (first mount); never reprinted. */
+  private bannerPrinted = false;
   private readonly opts: RiftyTerminalOptions;
   private readonly clipboard?: { writeText(text: string): void | Promise<void> };
   private readonly disposables: IDisposable[] = [];
@@ -642,6 +651,13 @@ export class RiftyTerminal {
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.fit?.fit());
       this.resizeObserver.observe(element);
+    }
+    // Onboarding banner once, before the first prompt (host owns the copy). Not
+    // reprinted on `clear`; a fresh instance reprints. writePrompt's leading
+    // `\r\n` separates it from the prompt, so the banner carries no trailing one.
+    if (this.opts.banner && !this.bannerPrinted) {
+      this.term.write(this.opts.banner);
+      this.bannerPrinted = true;
     }
     this.writePrompt();
   }

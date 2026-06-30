@@ -4,6 +4,10 @@
 
 ### Added
 
+- `RiftyTerminalOptions.banner` — optional content-agnostic onboarding banner
+  printed ONCE on the first `mount()`, before the first prompt. The host owns
+  the copy (and any ANSI styling / `\r\n`); this package ships none. Not
+  reprinted on `clear`; a fresh terminal instance reprints.
 - `RiftyTerminalOptions.lineHeight` — optional xterm line-height multiplier
   forwarded to the renderer (defaults to 1). Lets hosts match designed
   terminal type scales (e.g. 12px/19px).

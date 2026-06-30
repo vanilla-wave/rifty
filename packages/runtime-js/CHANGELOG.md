@@ -4,7 +4,7 @@
 
 ### Added
 
-- **`NODE_PROCESS_IDENTITY` is now a public export.** The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is re-exported from the package root so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v`), instead of a drifting hardcode.
+- **`NODE_PROCESS_IDENTITY` is now a public export** (package root + `@riftydev/runtime-js/builtins/process-identity` for a side-effect-free page import). The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is exposed so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v` and the terminal welcome banner), instead of a drifting hardcode.
 
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is

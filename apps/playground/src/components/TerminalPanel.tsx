@@ -20,6 +20,7 @@ import {
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
+import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { Icon } from './icons.tsx';
 
@@ -314,6 +315,7 @@ export function TerminalPanel(props: {
   onMount(() => {
     if (!container) return;
     term = new RiftyTerminal({
+      banner: terminalWelcomeBanner,
       onInput: (line) => {
         lastSubmittedLine = line;
         stderrTail = '';
