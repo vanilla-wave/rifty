@@ -21,7 +21,7 @@ The "Program-tab safety" clause depended on ADR-0075's permanent program tab, wh
 
 ADR-0075's explorer reads the **main-thread** `syncMirror()` — honest for REPL/Dev Mode. But Real Vite runs in a kernel-spawned **Worker** realm (ADR-0043) with its *own* `syncMirror()`: the npm install, seeded project (`index.html`, `package.json`, `src/main.js`), and Vite's output live there, not on the page. So switching to the Real Vite demo left the explorer on the page's `/workspace` and never entered the Vite filesystem. (Reported bug: "switching to the Vite demo, the file manager does not move into Vite's filesystem.")
 
-The original cross-realm channel was `vfs-write-port.ts`: a one-way page→worker mailbox. After ADR-0148/0180, the persistent workspace owner is the source of truth and the same frame semantics are applied through owner ACKs. Mirroring owner files into a writable page store would offer CRUD on copies whose edits never reach the owner — a silent fake (CLAUDE.md hard rule). ACKed owner mutations are neither bi-directional sync nor a silent copy.
+The original cross-realm channel was `vfs-write-port.ts`: a one-way page→worker mailbox. After ADR-0148/0185, the persistent workspace owner is the source of truth and the same frame semantics are applied through owner ACKs. Mirroring owner files into a writable page store would offer CRUD on copies whose edits never reach the owner — a silent fake (CLAUDE.md hard rule). ACKed owner mutations are neither bi-directional sync nor a silent copy.
 
 The 2026-06-04 library-fit review confirmed no third-party VFS library helps: rifty's signature is sync-over-persistent-OPFS-without-SAB, and the worker-realm visibility problem is rifty-specific — keep custom.
 

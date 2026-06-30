@@ -1,4 +1,4 @@
-# ADR 0180: Owner-backed SCM and file-manager bridges
+# ADR 0185: Owner-backed SCM and file-manager bridges
 
 Status: Active
 Date: 2026-06

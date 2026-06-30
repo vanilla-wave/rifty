@@ -135,8 +135,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0173 | Vite 7 production build and preview |
 | 0174 | Run vite through installed bin |
 | 0179 | Expose git status classifier from git facade |
-| 0180 | Owner-backed SCM and file-manager bridges |
 | 0184 | Hoist commit-refusal classifier to git facade |
+| 0185 | Owner-backed SCM and file-manager bridges |
 
 ### toolchain-build
 
@@ -245,7 +245,7 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
-| 0090 H1/checklist drift | 0180 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
+| 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0137 backlog path / follow-up status | 0137 note 2026-06-23 | shell `.bin` execution backlog file retired after owner-worker child path + non-dev `npm run` routing landed; `execSync` node-entry residual remains separate |
