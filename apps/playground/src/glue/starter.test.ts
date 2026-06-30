@@ -9,6 +9,7 @@ import {
   GROUP_FOR_CATEGORY,
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
+  groupForPreset,
   seedFilesForStarter,
   starterById,
   starterFromPreset,
@@ -72,6 +73,20 @@ describe('starterFromPreset shared refs + GROUP_FOR_CATEGORY (ADR-0165 §1)', ()
     expect(GROUP_FOR_CATEGORY['Live preview']).toBe('frontend');
     expect(GROUP_FOR_CATEGORY['Files + modules']).toBe('frontend');
     expect(GROUP_FOR_CATEGORY[presetById('express-sqlite').category]).toBe('frontend');
+  });
+
+  it('groupForPreset routes node-runtime starters to SERVER, Vite apps to FRONT-END', () => {
+    // Derived from the resolved template runtime, not the display category — so
+    // a node-server / node-cli starter is never mislabelled under the Vite group.
+    expect(groupForPreset(presetById('hono-api'))).toBe('server'); // node-server
+    expect(groupForPreset(presetById('koa-api'))).toBe('server');
+    expect(groupForPreset(presetById('markdown-ssg'))).toBe('server');
+    expect(groupForPreset(presetById('cli-report'))).toBe('server'); // node-cli
+    expect(groupForPreset(presetById('express-sqlite'))).toBe('server'); // Express is a node server
+    expect(groupForPreset(presetById('socket-lab'))).toBe('server');
+    // Vite/front-end presets stay on FRONT-END.
+    expect(groupForPreset(presetById('real-vite'))).toBe('frontend');
+    expect(groupForPreset(presetById('project-files'))).toBe('frontend');
   });
 });
 

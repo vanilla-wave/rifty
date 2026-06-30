@@ -176,4 +176,86 @@ describe('Readable.from(iter, options?)', () => {
     await closed;
     expect(source.destroyed).toBe(true);
   });
+
+  // A read that never settles is the bug being guarded — race a timeout so the
+  // assertion fails fast (and visibly) instead of hanging the suite.
+  const settle = <T>(p: Promise<T>, label: string): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`toWeb never settled: ${label}`)), 1_000),
+      ),
+    ]);
+
+  it('toWeb of an already-ended source closes the web stream (does not hang)', async () => {
+    const source = Readable.from(['a', 'b']);
+    await new Promise<void>((resolve) => {
+      source.on('data', () => {});
+      source.on('end', () => resolve());
+    });
+    expect(source.readableEnded).toBe(true);
+
+    const reader = Readable.toWeb(source).getReader();
+    await expect(settle(reader.read(), 'already-ended')).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  it('toWeb of an already-destroyed (no error) source aborts the web stream (does not hang)', async () => {
+    const source = new Readable({ read() {} });
+    source.on('error', () => {}); // absorb the destroy 'error' on the source
+    source.destroy();
+    expect(source.destroyed).toBe(true);
+
+    const reader = Readable.toWeb(source).getReader();
+    await expect(settle(reader.read(), 'already-destroyed')).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('toWeb aborts the web stream when the source is destroyed without an error mid-stream (no clean-EOF lie)', async () => {
+    const source = new Readable({ read() {} });
+    source.on('error', () => {});
+    const reader = Readable.toWeb(source).getReader();
+    source.push('partial');
+    await expect(reader.read()).resolves.toEqual({
+      done: false,
+      value: expect.anything(),
+    });
+
+    source.destroy(); // premature close — NOT a clean end
+    await expect(settle(reader.read(), 'destroy-mid-stream')).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('toWeb surfaces a source error on the web stream', async () => {
+    const source = new Readable({ read() {} });
+    const boom = new Error('boom');
+    const reader = Readable.toWeb(source).getReader();
+    source.destroy(boom);
+    await expect(settle(reader.read(), 'source-error')).rejects.toBe(boom);
+  });
+
+  it('web cancel with no reason destroys the source with an AbortError (Node parity)', async () => {
+    const source = new Readable({ read() {} });
+    const errored = new Promise<unknown>((resolve) => source.on('error', resolve));
+    const reader = Readable.toWeb(source).getReader();
+
+    await reader.cancel(); // no reason
+
+    await expect(errored).resolves.toMatchObject({ name: 'AbortError' });
+    expect(source.destroyed).toBe(true);
+  });
+
+  it('web cancel forwards a string reason to the source error (reason is not dropped)', async () => {
+    const source = new Readable({ read() {} });
+    const errored = new Promise<unknown>((resolve) => source.on('error', resolve));
+    const reader = Readable.toWeb(source).getReader();
+
+    await reader.cancel('stop-reason');
+
+    await expect(errored).resolves.toBe('stop-reason');
+  });
 });

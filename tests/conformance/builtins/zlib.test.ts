@@ -237,6 +237,38 @@ describe('node:zlib — gzip Transform stream', () => {
     expect(() => stream.bytesWritten).toThrowError(notImpl('zlib.Gzip.bytesWritten'));
   });
 
+  it('destroy() mid-stream tears down the CompressionStream (releases the reader lock — no leak)', async () => {
+    // Capture the CompressionStream the Gzip creates so we can observe its
+    // readable lock. On destroy(), the writer must be aborted so drainCompressed's
+    // reader.read() rejects and releaseLock() runs; without that teardown the
+    // reader awaits forever and the lock (+ CompressionStream) leak.
+    const RealCompressionStream = globalThis.CompressionStream;
+    let captured: CompressionStream | undefined;
+    // Must be a `new`-able function (the Gzip ctor does `new CompressionStream`);
+    // an arrow function is not constructable, so it stays a function expression.
+    // biome-ignore lint/complexity/useArrowFunction: constructed with `new`
+    (globalThis as { CompressionStream: unknown }).CompressionStream = function (
+      format: string,
+    ): CompressionStream {
+      captured = new RealCompressionStream(format as 'gzip');
+      return captured;
+    };
+    try {
+      const stream = zlib.createGzip();
+      stream.on('error', () => {}); // absorb the destroy error
+      stream.write(Buffer.from('hello '));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      stream.destroy(new Error('client aborted mid-response'));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(captured).toBeDefined();
+      expect((captured as CompressionStream).readable.locked).toBe(false);
+    } finally {
+      (globalThis as { CompressionStream: unknown }).CompressionStream = RealCompressionStream;
+    }
+  });
+
   it('supports Vite compression middleware shape over ServerResponse', async () => {
     const res = new ServerResponse();
     const originalEnd = res.end;

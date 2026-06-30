@@ -221,6 +221,10 @@ const deflateRaw = makeAsync('zlib.deflateRaw', 'deflate-raw', 'compress');
 const inflateRaw = makeAsync('zlib.inflateRaw', 'deflate-raw', 'decompress');
 
 class Gzip extends Transform {
+  /** The CompressionStream writer, kept so destroy() can abort it (else
+   *  drainCompressed's reader.read() awaits forever — a per-realm leak). */
+  private compressionWriter: WritableStreamDefaultWriter<BufferSource> | null = null;
+
   constructor(options?: ZlibOptions) {
     assertSupportedOptions('zlib.createGzip', options);
     if (typeof CompressionStream !== 'function') {
@@ -271,7 +275,18 @@ class Gzip extends Transform {
     });
     const stream = new CompressionStream('gzip');
     writer = stream.writable.getWriter();
+    this.compressionWriter = writer;
     drainDone = this.drainCompressed(stream.readable as ReadableStream<Uint8Array>);
+  }
+
+  /** Tear down the underlying CompressionStream on destroy: abort the writer so
+   *  drainCompressed's reader.read() rejects and releases its lock instead of
+   *  awaiting forever (the writer/reader + CompressionStream would otherwise
+   *  leak for the realm lifetime — e.g. an HTTP client aborting mid-response). */
+  override destroy(err?: Error): this {
+    void this.compressionWriter?.abort().catch(() => {});
+    this.compressionWriter = null;
+    return super.destroy(err);
   }
 
   get bytesWritten(): never {
@@ -304,6 +319,10 @@ class Gzip extends Transform {
           this.push(Buffer.from(value));
         }
       }
+    } catch {
+      // The compressed readable only rejects when the writable side is aborted
+      // (destroy() teardown). Nothing left to drain; let destroy()/flush()
+      // settle. A normal close() ends with done:true and never lands here.
     } finally {
       reader.releaseLock();
     }

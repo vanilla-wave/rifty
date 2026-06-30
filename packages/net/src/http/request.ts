@@ -136,12 +136,21 @@ async function pipeBodyStream(
       complete();
       target.push(null);
     };
-    const onNewListener = (event: unknown): void => {
-      if (event !== 'data' && event !== 'readable' && event !== 'end') return;
+    const armEnd = (): void => {
       target.off('newListener', onNewListener);
+      target.off('resume', onResume);
       queueMicrotask(pushEnd);
     };
+    const onNewListener = (event: unknown): void => {
+      if (event !== 'data' && event !== 'readable' && event !== 'end') return;
+      armEnd();
+    };
+    // `req.resume()` (the canonical "discard an unread body" idiom) attaches no
+    // data/readable/end listener, so it must also drive EOF — else 'end' never
+    // fires and a consumer that drains-without-listening hangs (Node ends).
+    const onResume = (): void => armEnd();
     target.on('newListener', onNewListener);
+    target.on('resume', onResume);
     queueMicrotask(complete);
     return;
   }

@@ -62,6 +62,18 @@
 
 ### Fixed
 
+- **`zlib.Gzip.destroy()` no longer leaks the `CompressionStream`.** Destroying
+  a gzip Transform mid-stream (e.g. an HTTP client aborting a compressed
+  response) now aborts the underlying `CompressionStream` writer, so the
+  internal drain reader rejects and releases its lock instead of awaiting
+  forever — the writer/reader + `CompressionStream` previously leaked for the
+  realm lifetime. Conformance-tested.
+- **Node `global` realm alias uses Node's descriptor (enumerable own property).**
+  The `globalThis.global` alias installed by the kernel pre-entry process shim
+  and `installProcessGlobals()` is now an enumerable, writable, configurable own
+  data property (single-sourced through `installGlobalAlias`) instead of a hidden
+  non-enumerable alias — so `Object.keys(globalThis)` / `for…in` see `global`,
+  matching real Node. Removes the divergent duplicate installer.
 - **`node:zlib` flush-option honesty restored.** `flush` / `finishFlush` now
   throw `NotImplementedError` on one-shot calls as well as the gzip Transform:
   real Node can use `finishFlush` to change truncated decompression outcomes,

@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **`Readable.toWeb()` end-of-life fidelity (matches Node's `finished()`).** A
+  source already ended or destroyed before conversion now settles the web stream
+  on the next microtask instead of hanging forever; a `destroy()` without an
+  error surfaces a premature-close `AbortError` on the web reader instead of a
+  clean EOF (no more "truncated stream reported as complete" lie); and a
+  web-reader `cancel(reason)` forwards the reason to the source `'error'` (an
+  `AbortError` when none is given), matching Node. Regression-tested against real
+  Node semantics.
 - **`Readable.toWeb()` matches the rifty Readable surface more honestly.** It
   now requires a rifty `Readable` instance instead of accepting arbitrary async
   iterables as if Node's full stream coercion existed, and it preserves string

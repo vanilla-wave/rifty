@@ -116,6 +116,20 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
     expect(req.socket.readable).toBe(true);
   });
 
+  it('zero-body request that is only resume()d (no data/end listener) still reaches EOF', async () => {
+    // The canonical "discard an unread body" idiom: resume() with no
+    // data/readable/end listener. Node fires 'end' and sets readableEnded;
+    // the deferred-EOF path must honour resume(), not only listener attach.
+    const req = new IncomingMessage(new Request('http://localhost/x'));
+    expect(req.readableEnded).toBe(false);
+
+    req.resume();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(req.readableEnded).toBe(true);
+    expect(req.complete).toBe(true);
+  });
+
   it('can be consumed through Readable.toWeb() for node-server adapters', async () => {
     const body = JSON.stringify({ author: 'e2e', text: 'hello from hono' });
     const req = new IncomingMessage(

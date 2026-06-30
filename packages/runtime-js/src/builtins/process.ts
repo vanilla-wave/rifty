@@ -19,6 +19,7 @@
  */
 import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
@@ -533,12 +534,9 @@ export function installProcessGlobals(): void {
   if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
-  Object.defineProperty(globalThis, 'global', {
-    value: globalThis,
-    writable: true,
-    configurable: true,
-    enumerable: false,
-  });
+  // `global === globalThis` via the single helper — Node's descriptor
+  // (writable+enumerable+configurable), not a private non-enumerable alias.
+  installGlobalAlias();
 }
 
 /**

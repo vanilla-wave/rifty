@@ -69,12 +69,16 @@ form.onsubmit = async (event) => {
   event.preventDefault();
   const payload = { topic: topic.value, text: text.value };
   text.value = '';
-  await api('api/notes', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  await refresh();
+  try {
+    await api('api/notes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    await refresh();
+  } catch (err) {
+    visits.textContent = String(err.message ?? err);
+  }
 };
 
 refresh().catch((err) => {

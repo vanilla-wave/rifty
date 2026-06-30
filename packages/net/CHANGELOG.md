@@ -28,6 +28,12 @@
 
 ### Fixed
 
+- **Empty-body `IncomingMessage` reaches EOF for the `req.resume()` discard
+  idiom.** The deferred end-of-stream path (which avoids a late-listener missing
+  `'end'`) now also fires when the request is `resume()`d with no
+  `data`/`readable`/`end` listener — the canonical "drain an unread body" idiom.
+  Previously such a request never emitted `'end'` (its `readableEnded` stayed
+  `false`), diverging from Node; now it ends like Node. Regression-tested.
 - **Cross-realm preview responders can now be scoped (ADR-0183).**
   `bridgeCrossRealmPreview` may send a preview run scope, and scoped
   `serveCrossRealmPreview` responders ignore requests for older same-port runs.

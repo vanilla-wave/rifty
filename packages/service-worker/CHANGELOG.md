@@ -14,6 +14,10 @@
 
 ### Fixed
 
+- **Doc drift:** the `rifty:preview:ready` example frame in
+  `owner-binding-worker.ts` now shows `routingVersion: '5'`, matching the bumped
+  `SW_ROUTING_VERSION` constant (the runtime path was already correct; only the
+  illustrative comment was stale).
 - **ADR-0160:** port-scoped page bridges now refuse cross-port requests end to
   end. The SW no longer falls back to a ready window that advertised other
   ports, and `setupPreviewBridge({ ports })` ignores `rifty:preview:request`

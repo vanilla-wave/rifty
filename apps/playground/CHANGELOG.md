@@ -4,6 +4,16 @@
 
 ### Fixed
 
+- **Launcher groups node-runtime starters under SERVER, not "Vite dev server".**
+  The gallery group is now derived from the resolved template runtime
+  (`groupForPreset`) instead of the display category, so every `node-server` /
+  `node-cli` starter (Express + SQLite, Socket Lab, Hono, Koa, Markdown SSG, and
+  the CLI report) renders under the **SERVER / Node runtime** header rather than
+  being mislabelled under the Vite **FRONT-END** group. Vite apps still group
+  under FRONT-END.
+- **Koa API starter surfaces a failed POST in the UI** instead of an unhandled
+  promise rejection — the client submit handler now wraps the request in
+  `try/catch` and writes the error to the status line, matching the Hono starter.
 - **Picking a starter no longer races a pending entry edit into the seed.** Now
   that the template entry (`main.js`/`main.ts`) is an ordinary debounced
   owner-write tab, `runVitePreset` drains pending editor writes _before_ seeding —

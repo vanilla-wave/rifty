@@ -34,7 +34,7 @@ import {
 import { Buffer } from '../builtins/buffer.ts';
 import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
-import { installWorkerRealmCompat } from './worker-realm-compat.ts';
+import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /**
  * The `process` shim installed for kernel-spawned children. Alias of the unified
@@ -58,7 +58,7 @@ export function installNodeProcessShim(
   opts: { readonly installGlobalAlias?: boolean } = {},
 ): NodeProcess {
   const shim = new NodeProcess(spec);
-  const installGlobalAlias = opts.installGlobalAlias ?? true;
+  const withGlobalAlias = opts.installGlobalAlias ?? true;
   // Non-enumerable so user code can still shadow `process` if it wants.
   Object.defineProperty(globalThis, 'process', {
     value: shim,
@@ -66,14 +66,9 @@ export function installNodeProcessShim(
     configurable: true,
     enumerable: false,
   });
-  if (installGlobalAlias) {
-    Object.defineProperty(globalThis, 'global', {
-      value: globalThis,
-      writable: true,
-      configurable: true,
-      enumerable: false,
-    });
-  }
+  // `global === globalThis` via the single helper (Node's `global` descriptor:
+  // writable+enumerable+configurable — NOT a private non-enumerable alias).
+  if (withGlobalAlias) installGlobalAlias();
   return shim;
 }
 
