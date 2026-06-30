@@ -93,14 +93,7 @@ function tarHeader(name: string, size: number, typeflag: '0' | 'L'): Uint8Array 
   h[264] = 0x30;
   let sum = 0;
   for (let i = 0; i < 512; i++) sum += h[i] ?? 0;
-  writeStr(
-    sum
-      .toString(8)
-      .padStart(6, '0')
-      .slice(-6),
-    148,
-    6,
-  );
+  writeStr(sum.toString(8).padStart(6, '0').slice(-6), 148, 6);
   h[154] = 0; // checksum NUL
   h[155] = 0x20; // checksum trailing space
   return h;
