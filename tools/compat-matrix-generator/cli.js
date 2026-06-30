@@ -208,9 +208,14 @@ const matrices = [
         'Interim 100/103 + trailers are unmodelable over the single-status fetch/SW Response bridge — throw `NotImplementedError` (never fake-ack)',
       ],
       [
-        '`https` module surface',
+        '`https.request` / `https.get` client',
+        '✅',
+        'Client `request`/`get` over a normal `https:` URL route through the browser-validated `fetch` (reuses the `node:http` external-`https` path); POST body, `drain` backpressure, 3-arg merge, 204/304 null-body; `globalAgent` is a readable config object (ADR-0181)',
+      ],
+      [
+        '`https` TLS server / socket surface',
         '❌',
-        'Import resolves, but `createServer`, `request`, `get`, and `Agent` throw `NotImplementedError`',
+        '`createServer`, `new Agent()`, TLS/socket options (`cert`/`key`/`ca`/`rejectUnauthorized:false`/custom `agent`), and loopback `https:` throw `NotImplementedError` — no in-browser TLS server/socket layer (ADR-0010 ceiling, ADR-0181)',
       ],
       ['Real OS sockets', '❌', 'Browser runtime uses port registry, not kernel TCP sockets'],
       ['HTTP/2 implementation', '❌', '`node:http2` is only a loud surface stub today'],
@@ -219,6 +224,7 @@ const matrices = [
       '`tests/conformance/builtins/http.test.ts`',
       '`tests/conformance/builtins/http-incoming-body.test.ts`',
       '`tests/conformance/builtins/https.test.ts`',
+      '`packages/net/src/https.test.ts`',
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/net/src/http/client.test.ts`',
@@ -229,7 +235,7 @@ const matrices = [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',
       'Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.',
       'Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.',
-      '`node:https` cannot promise real TLS egress inside the local runtime without host integration.',
+      '`node:https` client `request`/`get` egress runs over the browser-validated `fetch`; TLS server/socket controls (`createServer`/`Agent`/cert material/`rejectUnauthorized:false`) and loopback `https:` remain out of reach and throw.',
     ],
   },
   {

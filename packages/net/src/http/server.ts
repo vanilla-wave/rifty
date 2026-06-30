@@ -234,7 +234,7 @@ export function createServer(
   return new HttpServer(handler);
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: string;
   host?: string;
   hostname?: string;
@@ -256,7 +256,9 @@ export type ClientResponse = IncomingMessageFromFetch;
 const LOOPBACK_HOSTS = new Set(['localhost', '0.0.0.0', '::1', '[::1]']);
 
 // Whole 127.0.0.0/8 block is loopback (Node connects any 127.x.y.z locally).
-function isLoopbackHost(hostname: string): boolean {
+// Exported so `https.ts` refuses loopback `https:` against the SAME definition
+// (no in-browser TLS server) instead of duplicating the predicate.
+export function isLoopbackHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (LOOPBACK_HOSTS.has(lower)) return true;
   return /^127(\.\d{1,3}){3}$/.test(lower);

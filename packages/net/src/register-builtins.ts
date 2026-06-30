@@ -19,7 +19,9 @@ export function registerNetBuiltins(): void {
 
   registerBuiltin('net', () => net);
   registerBuiltin('http', () => http);
-  // `https` is a loud-throw stub — see ADR 0010. Imports succeed; calls throw.
+  // `https` client `request`/`get` route over the page fetch (ADR-0181); the
+  // TLS server/socket surface (`createServer`/`Agent`/TLS opts) still throws —
+  // ADR-0010 ceiling. Imports always resolve.
   registerBuiltin('https', () => https);
 }
 

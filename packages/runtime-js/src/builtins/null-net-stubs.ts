@@ -3,7 +3,8 @@
  * has a localhost lookup subset; `node:readline` has the line-oriented CLI
  * subset plus cursor helpers that real package CLIs reach. Unsupported members
  * still throw NotImplementedError rather than silently corrupting behaviour.
- * `node:https` lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub);
+ * `node:https` lives in `@riftydev/net/https.ts` (ADR-0181: client request/get
+ * over the page fetch; TLS server/socket surface still throws — ADR-0010);
  * `node:zlib` is a real web-compression-backed subset in `./zlib.ts` (ADR-0159).
  */
 import { NotImplementedError } from '@riftydev/io';
