@@ -216,6 +216,47 @@ describe('tokenize — single vs double quotes', () => {
   });
 });
 
+describe('Shell — command substitution / backticks are loud (not silent literal)', () => {
+  it('unquoted $(...) throws (was a silent literal pass-through, a Fidelity bug)', () => {
+    expect(() => tokenize('echo $(date)')).toThrow(/command substitution/i);
+  });
+
+  it('double-quoted "$(...)" throws — bash substitutes inside double quotes', () => {
+    expect(() => tokenize('echo "$(date)"')).toThrow(/command substitution/i);
+  });
+
+  it('unquoted backticks throw', () => {
+    expect(() => tokenize('echo `pwd`')).toThrow(/command substitution/i);
+  });
+
+  it('double-quoted backticks throw', () => {
+    expect(() => tokenize('echo "`pwd`"')).toThrow(/command substitution/i);
+  });
+
+  it('arithmetic $((...)) is also loud (caught by the same $( guard)', () => {
+    expect(() => tokenize('echo $((1+1))')).toThrow(/command substitution/i);
+  });
+
+  it('the throw is a NotImplementedError carrying the feature name', () => {
+    expect(() => tokenize('echo $(date)')).toThrow(NotImplementedError);
+    expect(() => tokenize('echo $(date)')).toThrow(
+      expect.objectContaining({ feature: 'shell.command-substitution' }),
+    );
+  });
+
+  it('single-quoted $(...) stays LITERAL — no throw (bash suppresses in single quotes)', () => {
+    expect(vals(tokenize("echo '$(date)'"))).toEqual(['echo', '$(date)']);
+  });
+
+  it('single-quoted backticks stay literal', () => {
+    expect(vals(tokenize("echo '`pwd`'"))).toEqual(['echo', '`pwd`']);
+  });
+
+  it('an escaped \\$( in double quotes is literal (no substitution attempted)', () => {
+    expect(vals(tokenize('echo "\\$(date)"'))).toEqual(['echo', '$(date)']);
+  });
+});
+
 describe('Shell — input redirect is loud', () => {
   it('throws NotImplementedError when < appears in a command line', async () => {
     const sh = new Shell();
