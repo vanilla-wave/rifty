@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`Readable.toWeb(r)`** (Node v17) — converts a Node `Readable` into a real
+  WHATWG `ReadableStream`. Pull-driven (NOT buffer-the-whole-stream): the
+  underlying source pulls exactly one chunk per WHATWG `pull()`, so a slow web
+  consumer holds the source paused at its `highWaterMark`. `r` ending → stream
+  close; `r` erroring → stream error with the SAME error; `reader.cancel(reason)`
+  → `r.destroy()`. Mirrors the existing `Readable.fromWeb`. Parity-proven vs real
+  Node (order/close, error propagation, cancel→destroy, backpressure, object
+  mode); exported from `streams/index.ts`.
+
 ### Fixed
 
 - **`Duplex`/`Transform` honor instance `_write()` / `_final()` overrides.**

@@ -947,6 +947,101 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     })();
     return r;
   }
+
+  /**
+   * Convert this Node-shape `Readable` into a WHATWG `ReadableStream`
+   * (Node's `Readable.toWeb`, v17).
+   *
+   * Pull-driven (NOT buffer-the-whole-stream): the underlying source pulls
+   * exactly one Node chunk per WHATWG `pull()` call, so the WHATWG queue's
+   * desiredSize gates how far the source is read — a slow web consumer holds
+   * the source paused at its `highWaterMark`. `r` ending → `controller.close()`;
+   * `r` erroring → `controller.error(sameError)`; `reader.cancel(reason)` →
+   * `r.destroy()`.
+   *
+   * The source is paused up-front and resumed for a single chunk per pull so
+   * the event-driven Node stream maps onto WHATWG's request/response pull
+   * protocol without an unbounded internal buffer.
+   */
+  static toWeb(streamReadable: Readable): ReadableStream<unknown> {
+    const r = streamReadable;
+    // Park the source; each `pull` resumes it for exactly one chunk. Without
+    // this the source would flow eagerly and buffer the whole stream — the
+    // approximation the item explicitly forbids.
+    r.pause();
+
+    let cancelled = false;
+    /** Resolver for the in-flight single-chunk pull; null when none pending. */
+    let resolvePull: (() => void) | null = null;
+
+    const settlePull = (): void => {
+      if (resolvePull) {
+        const resolve = resolvePull;
+        resolvePull = null;
+        resolve();
+      }
+    };
+
+    return new ReadableStream<unknown>({
+      start(controller): void {
+        // 'end'/'error' can fire between pulls (e.g. an already-ended source, or
+        // an error while the WHATWG queue is full). Wire them once at start so
+        // close/error are observed regardless of pull timing.
+        r.on('end', () => {
+          if (!cancelled) {
+            try {
+              controller.close();
+            } catch {
+              /* already closed/errored */
+            }
+          }
+          settlePull();
+        });
+        r.on('error', (err: unknown) => {
+          if (!cancelled) controller.error(err);
+          settlePull();
+        });
+      },
+      pull(controller): Promise<void> | void {
+        if (cancelled) return;
+        // A chunk may already be buffered (the source was pushed before the
+        // reader attached, or '_read' enqueued synchronously). Take it without
+        // resuming so we never over-read past one chunk per pull.
+        const buffered = r.read();
+        if (buffered !== null) {
+          controller.enqueue(buffered);
+          return;
+        }
+        if (r.readableEnded) {
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
+          return;
+        }
+        // Resume for exactly one chunk: grab the first 'data', re-pause, resolve
+        // the pull. 'end'/'error' (wired in start) resolve the pull too so a
+        // pull awaiting a chunk on an ending/erroring source does not hang.
+        return new Promise<void>((resolve) => {
+          resolvePull = resolve;
+          const onData = (chunk: unknown): void => {
+            r.off('data', onData);
+            r.pause();
+            controller.enqueue(chunk);
+            settlePull();
+          };
+          r.on('data', onData);
+          r.resume();
+        });
+      },
+      cancel(): void {
+        cancelled = true;
+        settlePull();
+        r.destroy();
+      },
+    });
+  }
 }
 
 export interface ReadableFromWebOptions extends ReadableOptions {

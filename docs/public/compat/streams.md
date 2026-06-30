@@ -20,8 +20,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
 | `Readable.fromWeb` | ✅ | WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested |
-| `node:stream/web` export | ❌ | WHATWG stream interop tracked separately |
-| `Readable.toWeb` / `Writable.toWeb` | ❌ | Full WHATWG bridge surface is not claimed |
+| `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
+| `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |
+| `Writable.toWeb` / `Writable.fromWeb` | ❌ | Writable/Duplex WHATWG bridge not yet claimed |
 
 ## Test Sources
 

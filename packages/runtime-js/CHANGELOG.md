@@ -4,6 +4,15 @@
 
 ### Added
 
+- **`node:stream/web` module registered** in the builtin registry beside
+  `stream`/`stream/promises`/`stream/consumers`. Re-exports the host (Chromium)
+  WHATWG globals — Node's own implementation IS the WHATWG API — so each named
+  export (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/
+  `TextEncoderStream`/`TextDecoderStream`) is `=== globalThis.<Name>`. A
+  genuinely-absent host member is a loud `NotImplementedError('stream/web.<Name>')`
+  at access, never an `undefined`-export lie. Parity-proven (module keys +
+  identities) vs real Node.
+
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
   supplied, the resolver uses TypeScript's real config parser over the VFS to
