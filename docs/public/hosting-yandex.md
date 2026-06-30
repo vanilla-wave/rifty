@@ -55,3 +55,50 @@ node tools/registry/smoke-npm-registry.mjs https://registry.rifty.dev
 After VM recreation, update only the `registry-origin.rifty.dev` A record to the
 new public IP and wait for Caddy to issue/renew origin TLS. Keep
 `registry.rifty.dev` pointed at the CDN CNAME unless rolling CDN back to the VM.
+
+## eddy fast-install resolver
+
+`eddy.rifty.dev` is the opt-in fast-install resolver (ADR-0182) on a
+Container-Optimized-Image VM with a Caddy TLS sidecar. Unlike the proxy (a
+public `caddy` image), eddy ships a CUSTOM image, so it is built + pushed to a
+Yandex Container Registry and the COI compose references it by `image:` (COI
+pulls, it can't build the `build:` context). Source:
+
+```text
+deploy/yandex/eddy/Dockerfile
+deploy/yandex/eddy/docker-compose.yml       # build: — local self-host only
+deploy/yandex/eddy/docker-compose.coi.yml   # image: — the rifty.dev VM
+tools/eddy/smoke-eddy.mjs
+```
+
+Current resources (folder `b1g7flke7mgq94dklalu`):
+
+- Registry: `rifty` (`crpo6kvhb4o7gv41g0s4`); image
+  `cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.1.0` (linux/amd64 — the VM is x86_64).
+- VM: `rifty-eddy`, `ru-central1-a`; reuses the `rifty-registry-proxy` security
+  group (`enp064boa7v26die0el1`, ingress 80/443).
+- Public IPv4: `89.169.128.66` (`rifty-eddy-ip`, `e9bbnd8mhba48o4vq5kn`).
+- VM service account: `rifty-eddy-vm` (`ajeknkij3plg4dua0g1u`) with
+  `container-registry.images.puller` on the registry (COI pulls via the VM SA).
+- DNS: `eddy.rifty.dev. 600 A 89.169.128.66` in zone `rifty`.
+- Upstream: `REGISTRY_BASE_URL=https://registry.rifty.dev/npm-registry` (eddy +
+  proxy share one upstream and trust boundary, ADR-0163).
+
+Build + push the image (amd64), then create the VM:
+
+```bash
+REG=crpo6kvhb4o7gv41g0s4
+docker build --platform linux/amd64 -f deploy/yandex/eddy/Dockerfile -t cr.yandex/$REG/eddy:0.1.0 .
+yc container registry configure-docker && docker push cr.yandex/$REG/eddy:0.1.0
+yc compute instance create-with-container rifty-eddy \
+  --zone ru-central1-a --cores 2 --core-fraction 20 --memory 1G \
+  --create-boot-disk type=network-hdd,size=16G,auto-delete=true \
+  --service-account-id ajeknkij3plg4dua0g1u \
+  --network-interface subnet-name=default-ru-central1-a,nat-address=89.169.128.66,security-group-ids=enp064boa7v26die0el1 \
+  --docker-compose-file deploy/yandex/eddy/docker-compose.coi.yml
+node tools/eddy/smoke-eddy.mjs https://eddy.rifty.dev
+```
+
+Same image tag → **recreate** the VM to force a fresh pull (COI won't re-pull a
+cached tag). DNS + ingress 80/443 must exist before first boot so Caddy's ACME
+HTTP-01 succeeds.

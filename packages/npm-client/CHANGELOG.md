@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in eddy fast install (`InstallOptions.resolverUrl` / `prefer`, ADR-0182).** When
+  `resolverUrl` is set (env-config only, default OFF) and no covering lockfile already gives the
+  zero-network fast path, `install()` POSTs the dep-set to the resolver, verifies the returned
+  `EddyBundleV1` (each tarball's bytes against the bundle's integrity — non-disableable,
+  mirror-grade trust), pre-seeds the `VfsTarballCache` + writes the lockfile, then the existing
+  ADR-0023 fast path installs with **zero packument network**. `prefer: 'online'` is forwarded to
+  force a fresh server-side recompute. ANY failure (unreachable, HTTP error, malformed bundle,
+  integrity mismatch, lockfile-coverage gap, or a typed `unsupported` decline) → the standard
+  verifying install runs (warns, never throws-because-fast-path-down). `InstallResult.source`
+  (`'eddy' | 'standard'`) reports which path ran. The determinism walk (`walkAndPin`) is untouched.
+- **`EddyBundleV1` codec (`packEddyBundle` / `unpackEddyBundle`) + `parseTarEntries`.** The wire
+  format `@riftydev/eddy` produces and the client consumes — a store tar of the manifest +
+  lockfile + each original gzip tarball. One format definition, both directions.
+
 ### Fixed
 
 - **Registry client retries transient failures (429 / 5xx / network).** `RegistryClient`

@@ -42,6 +42,13 @@
 
 ### Added
 
+- **Opt-in eddy fast install for the visible `npm install` (ADR-0182).** A new
+  env-config `VITE_RIFTY_RESOLVER_URL` (`glue/resolver-config.ts`, default OFF,
+  D-004) threads a `resolverUrl` into the playground's `install()`; when set,
+  from-scratch presets (and user-authored `package.json`) install via eddy's
+  bundle with auto-fallback, and the terminal line reports `via eddy (fast)`.
+  Inert/byte-identical when unset; instant (baked-snapshot) presets untouched.
+
 - **Explorer now supports drag/drop upload, drag-move, path copy, and compare.**
   Dropped files write exact owner bytes, in-tree drags use owner rename frames,
   and compares open Monaco blob-vs-blob text diffs instead of raw git diff text.

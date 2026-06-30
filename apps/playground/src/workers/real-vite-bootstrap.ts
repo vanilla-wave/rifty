@@ -62,6 +62,7 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
+import { getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import {
   amendStarterGeneratedBaseline,
@@ -789,6 +790,10 @@ async function bootShellOwner(opts: {
       // dropping the user's `npm install` (ADR-0135).
       projectSlug: () => devSlug,
       runScript: runPackageScript,
+      // ADR-0182 opt-in fast install — env-config only (default OFF). When a
+      // resolver URL is configured the visible `npm install` uses eddy's bundle
+      // + auto-fallback; inert (byte-identical) when unset.
+      resolverUrl: getResolverUrl(),
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =

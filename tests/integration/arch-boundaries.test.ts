@@ -108,7 +108,7 @@ describe('check:arch layer boundaries', () => {
   });
 
   it('the real codebase passes check:arch', () => {
-    const viol = runArch(['packages', 'apps', 'tools']).summary.violations;
+    const viol = runArch(['packages', 'apps', 'tools', 'services']).summary.violations;
     expect(viol.map((v) => `${v.rule.name} ${v.from}→${v.to}`)).toEqual([]);
   });
 });
