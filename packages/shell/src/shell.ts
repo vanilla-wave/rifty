@@ -104,6 +104,39 @@ const ABORTED = Symbol('shell.aborted');
 /** Exit code for a command interrupted by SIGINT (128 + SIGINT(2)). */
 const SIGINT_EXIT = 130;
 
+/**
+ * Known external tools whose names fuzzy-match a builtin (npx→npm, cut→cat,
+ * sed→seq, tree→true, code→node, cls→ls, …). Suppressing the suggestion stops a
+ * confidently-WRONG one-click `Run <builtin>` that would run an unrelated tool.
+ */
+const SUGGESTION_DENYLIST = new Set([
+  'npx',
+  'yarn',
+  'pnpm',
+  'bun',
+  'sed',
+  'awk',
+  'cut',
+  'tree',
+  'code',
+  'vim',
+  'nano',
+  'python',
+  'cls',
+  'curl',
+  'wget',
+]);
+
+/** Package managers that get a directed npm nudge instead of `command not found`. */
+const PACKAGE_MANAGERS = new Set(['npx', 'yarn', 'pnpm', 'bun']);
+
+/** Directed nudge for a recognized package manager (rifty wires only npm). */
+function packageManagerNudge(cmd: string): string | null {
+  return PACKAGE_MANAGERS.has(cmd)
+    ? `${cmd}: not available — rifty wires npm (try: npm install …)\n`
+    : null;
+}
+
 function damerauLevenshtein(a: string, b: string): number {
   const rows = a.length + 1;
   const cols = b.length + 1;
@@ -219,6 +252,9 @@ export class Shell {
   }
 
   private suggestCommand(cmd: string): string | null {
+    // A known external tool fuzzy-matching a builtin is a wrong suggestion, not
+    // a typo — never offer it (the harm is a confidently-wrong one-click action).
+    if (SUGGESTION_DENYLIST.has(cmd)) return null;
     let best: { name: string; distance: number } | null = null;
     for (const name of this.commands.keys()) {
       const distance = damerauLevenshtein(cmd, name);
@@ -634,6 +670,13 @@ export class Shell {
     if (!handler) {
       const binPath = resolveBin(this._cwd, cmd);
       if (binPath === null) {
+        // A recognized package manager → a directed npm nudge INSTEAD of the
+        // generic miss + a wrong `Did you mean 'npm'?`.
+        const nudge = packageManagerNudge(cmd);
+        if (nudge) {
+          emit(nudge, 'stderr');
+          return { exitCode: 127, stdout, stderr };
+        }
         emit(`${cmd}: command not found\n`, 'stderr');
         const suggestion = this.suggestCommand(cmd);
         if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');

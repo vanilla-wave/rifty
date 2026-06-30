@@ -127,6 +127,36 @@ describe('Shell — builtins', () => {
     expect(r.exitCode).toBe(127);
     expect(r.stderr).toBe('zzzzzzzz: command not found\n');
   });
+
+  it('suppresses the fuzzy suggestion for denylisted external tools', async () => {
+    const sh = new Shell();
+    // Each of these is edit-distance ≤ threshold to a builtin (cut→cat, sed→seq,
+    // tree→true, cls→ls) and would otherwise produce a confidently-wrong Run.
+    for (const tool of ['cut', 'sed', 'tree', 'cls']) {
+      const r = await sh.run(tool);
+      expect(r.exitCode).toBe(127);
+      expect(r.stderr).toContain(`${tool}: command not found`);
+      expect(r.stderr).not.toContain('Did you mean');
+    }
+  });
+
+  it('nudges recognized package managers toward npm (not a wrong Run target)', async () => {
+    const sh = new Shell();
+    for (const pm of ['npx', 'yarn', 'pnpm', 'bun']) {
+      const r = await sh.run(`${pm} install left-pad`);
+      expect(r.exitCode).toBe(127);
+      expect(r.stderr).toContain(`${pm}: not available`);
+      expect(r.stderr).toContain('npm');
+      expect(r.stderr).not.toContain('Did you mean');
+      expect(r.stderr).not.toContain('command not found');
+    }
+  });
+
+  it('still suggests a genuine typo of a real builtin (within threshold)', async () => {
+    const sh = new Shell();
+    expect((await sh.run('gerp x')).stderr).toContain("Did you mean 'grep'?");
+    expect((await sh.run('ehco hi')).stderr).toContain("Did you mean 'echo'?");
+  });
 });
 
 describe('Shell — custom command registration', () => {
