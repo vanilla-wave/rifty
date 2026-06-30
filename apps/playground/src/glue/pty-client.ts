@@ -51,7 +51,18 @@ type PendingDevConfig = {
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
-type SessionState = { cwd: string; env: Record<string, string>; readyResolvers: (() => void)[] };
+type SessionState = {
+  cwd: string;
+  env: Record<string, string>;
+  readyResolvers: (() => void)[];
+  /**
+   * The most recent run's `onChunk`, kept so a `pty:chunk` that arrives AFTER its
+   * run's `pty:exit` (the owner emitting late — e.g. the dev-server readiness
+   * marker from an async `listen()` message that lands after a restart aborted
+   * the run) still reaches the session's terminal instead of being dropped.
+   */
+  trailingSink?: ExecOptions['onChunk'];
+};
 
 export interface PtyClientDeps {
   /** Posts a page→owner frame over the kernel IPC channel (wired by realVite). */
@@ -149,6 +160,9 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       const rid = `r${++ridCounter}`;
       return new Promise((resolve, reject) => {
         runs.set(rid, { sid, resolve, onChunk: opts.onChunk });
+        // Remember this run's sink so late chunks (owner output racing past
+        // pty:exit) still land in this session's terminal (see trailingSink).
+        session(sid).trailingSink = opts.onChunk;
         opts.onStart?.(rid);
         try {
           deps.send({
@@ -214,17 +228,20 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         }
         case 'pty:chunk': {
           const __t = dec.decode(frame.data);
-          const __tracked = runs.has(frame.rid);
+          const __run = runs.get(frame.rid);
+          // Active run → its onChunk. Run already exited (late owner output) →
+          // the session's trailing sink, so the chunk still reaches the terminal.
+          const __sink = __run?.onChunk ?? sessions.get(frame.sid)?.trailingSink;
           if (/dev server ready|VITE v|is listening|starting dev server/.test(__t)) {
             console.log(
-              `[DEBUG-mk] page recv pty:chunk rid=${frame.rid} tracked=${__tracked} ${JSON.stringify(__t.slice(0, 60))}`,
+              `[DEBUG-mk] page recv pty:chunk rid=${frame.rid} tracked=${!!__run} rescued=${!__run && !!__sink} ${JSON.stringify(__t.slice(0, 60))}`,
             );
-          } else if (!__tracked) {
+          } else if (!__run && __sink) {
             console.log(
-              `[DEBUG-mk] page DROP-untracked rid=${frame.rid} ${JSON.stringify(__t.slice(0, 60))}`,
+              `[DEBUG-mk] page rescued trailing rid=${frame.rid} ${JSON.stringify(__t.slice(0, 50))}`,
             );
           }
-          runs.get(frame.rid)?.onChunk(__t, frame.stream);
+          __sink?.(__t, frame.stream);
           return;
         }
         case 'pty:exit': {
