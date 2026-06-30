@@ -9,6 +9,7 @@
 | `play.rifty.dev` | Netlify (`rifty-playground`) | Cross-origin-isolated playground |
 | `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
 | `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
+| `eddy.rifty.dev` | Yandex Cloud (planned) | Opt-in fast-install resolver (ADR-0182); deploy is confirm-first |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for

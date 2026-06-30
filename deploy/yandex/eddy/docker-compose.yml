@@ -1,0 +1,27 @@
+# @riftydev/eddy fast-install resolver (ADR-0182), deployed alongside the
+# ADR-0163 registry proxy. Unlike the proxy (a stock Caddy image + inline
+# config), eddy ships its own code, so this builds the image from source.
+#
+# Deploy mirrors the proxy recipe (docs/public/hosting-yandex.md): hand the
+# compose file to a Yandex Container-Optimized-Image VM. The actual deploy is a
+# confirm-first step (operator-owned infra) — see
+# docs/backlog/distribution/eddy-package-and-deploy.md.
+services:
+  eddy:
+    build:
+      # Build context is the repo root so the monorepo source is available.
+      context: ../../..
+      dockerfile: deploy/yandex/eddy/Dockerfile
+    container_name: rifty-eddy
+    restart: unless-stopped
+    ports:
+      - "8788:8788"
+    environment:
+      # Upstream registry eddy resolves against (D-004 env-config at the
+      # server boundary). Point at the registry proxy so eddy + the proxy share
+      # one upstream and the same trust boundary (ADR-0163).
+      REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
+      PORT: "8788"
+      # Mutable-tier TTL (seconds); 0 = always recompute. Immutable artifacts are
+      # served Cache-Control: immutable for the CDN to hold.
+      EDDY_TTL_SECONDS: "1800"
