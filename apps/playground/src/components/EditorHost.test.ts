@@ -26,6 +26,20 @@ describe('EditorHost ordinary initial tabs contract', () => {
     expect(source).toContain('editor = monaco.editor.create(container, {');
     expect(source).toContain('model: null,');
   });
+
+  it('shares one dedup key between the reactive effect and the imperative reset (no double reset)', () => {
+    // resetEditorToActiveInitialFiles (App) writes the initialEditorFiles signal AND
+    // imperatively calls openInitialFiles; a shared, component-scoped key lets the
+    // signal effect skip the duplicate full reset (disposeAllOpenModels + reopen).
+    const openInitial = source.match(
+      /function openInitialFiles\(paths: readonly string\[\]\): void \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(openInitial).toBeDefined();
+    expect(openInitial).toContain("initialFilesKey = paths.join('\\0');");
+    // one declaration at component scope — NOT re-declared local to the effect
+    expect(source.match(/let initialFilesKey = '';/g)?.length).toBe(1);
+    expect(source).toContain('if (key === initialFilesKey) return;');
+  });
 });
 
 describe('EditorHost git diff contract', () => {

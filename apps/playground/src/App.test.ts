@@ -121,6 +121,20 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("createSignal('javascript')");
   });
 
+  it('flushes pending editor writes before seeding a picked preset (no mid-seed entry clobber)', () => {
+    const runPreset = source.match(
+      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(runPreset).toBeDefined();
+    // The de-specialized entry rides the ordinary debounced owner-write path; a
+    // pending write must be drained before the (async) seed + snapshot await so it
+    // can't fire mid-seed and overwrite the freshly-seeded preset entry the dev
+    // server runs (replaces the old discardPendingProgramWrite guard).
+    expect(runPreset).toMatch(
+      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);/,
+    );
+  });
+
   it('uses preset openFiles as the complete ordered initial editor tab set', () => {
     expect(source).toContain(
       "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",

@@ -1900,6 +1900,12 @@ export function App(props: AppProps) {
         devServerSessionId = session.id;
       }
       await machine.loadPreset(preset);
+      // Drain pending editor writes BEFORE seeding: the de-specialized entry now
+      // rides the ordinary debounced owner-write path, so an un-acked entry edit
+      // must not fire mid-seed (seed + snapshot await span >300ms) and clobber the
+      // freshly-seeded preset entry the dev server runs (replaces the old
+      // discardPendingProgramWrite guard).
+      await flushPendingEditorWrites();
       await seedViteWorkspace(preset);
       await waitForActiveSnapshotFrame();
       resetEditorToActiveInitialFiles();

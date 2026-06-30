@@ -991,6 +991,9 @@ export function EditorHost(props: EditorHostProps) {
     modelUriToTabId.clear();
   }
 
+  // Dedup key for the reactive initial-files effect. Component-scoped (not effect-
+  // local) so the imperative openInitialFiles path shares it — see openInitialFiles.
+  let initialFilesKey = '';
   function resetOpenFileTabs(paths: readonly string[]): void {
     const uniquePaths = [...new Set(paths)];
     disposeAllOpenModels();
@@ -1002,6 +1005,10 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function openInitialFiles(paths: readonly string[]): void {
+    // Sync the reactive dedup key (below) so the imperative App reset — which ALSO
+    // writes the initialEditorFiles signal — does not trigger a SECOND full reset
+    // when that signal effect fires.
+    initialFilesKey = paths.join('\0');
     resetOpenFileTabs(paths);
   }
 
@@ -1139,12 +1146,10 @@ export function EditorHost(props: EditorHostProps) {
       };
     }
 
-    let initialFilesKey = '';
     createEffect(() => {
       const paths = props.initialEditorFiles();
       const key = paths.join('\0');
       if (key === initialFilesKey) return;
-      initialFilesKey = key;
       untrack(() => openInitialFiles(paths));
     });
 

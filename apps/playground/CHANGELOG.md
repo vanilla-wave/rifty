@@ -4,6 +4,16 @@
 
 ### Fixed
 
+- **Picking a starter no longer races a pending entry edit into the seed.** Now
+  that the template entry (`main.js`/`main.ts`) is an ordinary debounced
+  owner-write tab, `runVitePreset` drains pending editor writes _before_ seeding —
+  an un-acked entry edit can no longer fire mid-seed (the seed + snapshot await
+  spans >300ms) and clobber the freshly-seeded preset entry the dev server runs.
+  Restores the guard the de-specialization dropped with `discardPendingProgramWrite`.
+- **Project switch / starter pick no longer resets the editor twice.** The
+  initial-files reactive effect and the imperative `openInitialFiles` reset now
+  share one dedup key, so a switch fires a single `disposeAllOpenModels` + reopen
+  (one LS close→open cycle, no flicker) instead of two.
 - **SCM decorations no longer lie on staged+worktree combos.** A staged-then-
   edited file (`AM`) now shows a green added badge (not blue, never clean), a
   staged-then-deleted file (`MD`) shows a red deleted badge (was rendered clean),
