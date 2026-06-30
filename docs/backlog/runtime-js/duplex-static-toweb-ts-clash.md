@@ -5,7 +5,6 @@ title: Duplex.toWeb static-side TS clash with inherited Readable.toWeb
 created: 2026-07-01
 why: Duplex.toWeb returns a {readable,writable} pair while the inherited Readable.toWeb returns a bare ReadableStream — TS's class-static-side assignability check (TS2417) forbids the divergence, so one `@ts-expect-error` carries it
 user_story: As a rifty maintainer, I want the `Duplex.toWeb` static typed without a suppression, but TS cannot model a derived class whose same-named static intentionally returns a different shape than the base (mirrors Node's real API divergence).
-epic: whatwg-stream-bridge
 sources: [packages/io/src/streams/duplex.ts]
 code: [packages/io/src/streams/duplex.ts, packages/io/src/streams/readable.ts]
 ---

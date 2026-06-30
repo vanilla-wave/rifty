@@ -80,6 +80,16 @@ declare global {
 async function installHttpMode(): Promise<() => void> {
   await import('@riftydev/net/register-builtins');
   const { dispatchToPort, listPorts, unregisterPort } = await import('@riftydev/net/registry');
+  // The cross-realm bind-claim (ADR-0185) defers `listen()`'s `'listening'`/cb by
+  // a window so a sibling realm can deny. The parity harness is single-realm (no
+  // denier), and these cases issue the request INSIDE the listen callback — run
+  // the claim at 0 so the cb fires within the harness host-timer grace instead of
+  // after `__riftyHttpRequest` is cleared. Restored on teardown.
+  const { getDefaultClaimWindowMs, setDefaultClaimWindowMs, releasePort } = await import(
+    '@riftydev/net'
+  );
+  const prevClaimWindow = getDefaultClaimWindowMs();
+  setDefaultClaimWindowMs(0);
   globalThis.__riftyHttpRequest = async (port, path, init) => {
     const resp = await dispatchToPort(
       port,
@@ -93,7 +103,13 @@ async function installHttpMode(): Promise<() => void> {
     };
   };
   return () => {
-    for (const p of listPorts()) unregisterPort(p);
+    // Mirror close(): release the bind-claim AND unregister, so the owner-answerer
+    // does not linger and falsely deny a later case that reuses the port.
+    for (const p of listPorts()) {
+      releasePort(p);
+      unregisterPort(p);
+    }
+    setDefaultClaimWindowMs(prevClaimWindow);
     globalThis.__riftyHttpRequest = undefined;
   };
 }
