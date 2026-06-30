@@ -75,6 +75,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0147 | Default cross-realm WebSocket bridge |
 | 0151 | HTTP WebSocket upgrade over bridge |
 | 0154 | HTTP stream interop and drain contract |
+| 0180 | Cross-realm http.request loopback via the preview broker |
+| 0181 | Client node:https request and get over browser fetch |
 
 ### service-worker
 
@@ -223,6 +225,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
