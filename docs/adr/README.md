@@ -133,6 +133,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0174 | Run vite through installed bin |
 | 0179 | Expose git status classifier from git facade |
 | 0180 | Owner-backed SCM and file-manager bridges |
+| 0184 | Hoist commit-refusal classifier to git facade |
 
 ### toolchain-build
 

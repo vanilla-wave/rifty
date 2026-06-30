@@ -7,6 +7,7 @@ export {
   mapGitNetworkError,
   PathspecError,
 } from './errors.ts';
+export { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from './commit-refusal.ts';
 export { type GitFs, type GitStat, vfsToGitFs } from './fs-adapter.ts';
 export { makeGit, pathspecMatch } from './git.ts';
 export { porcelainXY } from './status.ts';

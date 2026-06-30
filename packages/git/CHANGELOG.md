@@ -23,7 +23,13 @@
   the worktree.
 - `porcelainXY(code)`: shared statusMatrix → porcelain-XY classifier for shell
   `git status --porcelain` and playground SCM status projections, keeping the
-  rifty-git status labels on one public facade.
+  rifty-git status labels on one public facade. Now covers the reachable
+  staged+worktree combos `023`→`AM`, `103`→`MD`, `113`→`MM` (stage-then-edit,
+  stage-then-delete, stage-then-revert) instead of dropping them to a raw 3-char
+  code that SCM consumers rendered as garbage or a clean-looking row.
+- `commitRefusal(git)` + `EMPTY_COMMIT_MESSAGE_ERROR`: the empty/no-op commit
+  refusal classifier hoisted from the shell builtin so shell `git commit` and the
+  playground SCM owner RPC refuse identically (ADR-0184).
 - **Git porcelain hard-ceil expansion.** `makeGit()` now exposes parent revspec
   resolution (`HEAD~n`, `^`), tree-selecting `diff()` modes (unstaged, staged,
   HEAD↔worktree, ref↔ref), `reset` soft/mixed/hard, `show`, tag CRUD, remote
