@@ -4,6 +4,11 @@
 
 ### Added
 
+- **`node:stream` exposes the modern statics** `isReadable`/`isWritable`/
+  `isErrored`/`isDisturbed`, `getDefaultHighWaterMark`/`setDefaultHighWaterMark`,
+  and `addAbortSignal` (re-exported from `@riftydev/io`, which owns them) — so
+  `require('node:stream').isReadable(x)` etc. resolve.
+
 - **`node:stream/web` module registered** in the builtin registry beside
   `stream`/`stream/promises`/`stream/consumers`. Re-exports the host (Chromium)
   WHATWG globals — Node's own implementation IS the WHATWG API — so each named

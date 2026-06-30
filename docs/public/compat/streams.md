@@ -23,6 +23,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
 | `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |
 | `Writable.toWeb` / `Writable.fromWeb` | ❌ | Writable/Duplex WHATWG bridge not yet claimed |
+| `isReadable` / `isWritable` / `isErrored` / `isDisturbed` | ✅ | Predicates over the existing state machine; `isDisturbed` backed by an explicit bit; non-stream input never throws (parity-tested truth tables) |
+| `getDefaultHighWaterMark` / `setDefaultHighWaterMark` | ✅ | Module-level default HWM read by the Readable/Writable ctors (explicit `{ highWaterMark }` still wins); parity-tested |
+| `addAbortSignal` | ✅ | Aborting the signal destroys the stream with an `AbortError` (`code:ABORT_ERR`); already-aborted destroys immediately (parity-tested) |
 
 ## Test Sources
 
@@ -30,6 +33,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/stream-legacy.test.ts`
 - `tests/conformance/builtins/stream-consumers.test.ts`
 - `packages/io/src/streams/readable.from.test.ts`
+- `packages/io/src/streams/readable.to-web.test.ts`
+- `packages/io/src/streams/predicates-and-defaults.test.ts`
 - `packages/net/src/http/response.test.ts`
 - `tools/node-parity-runner/cases/stream/*.case.ts`
 

@@ -4,6 +4,23 @@
 
 ### Added
 
+- **Stream predicates + default-HWM accessors + `addAbortSignal`.**
+  `isReadable`/`isWritable`/`isErrored`/`isDisturbed` (Node v16.14/v17.3) read the
+  existing `_readableState`/`_writableState`; `isDisturbed` is backed by an
+  EXPLICIT `disturbed` bit (set on first chunk-consumed or destroy), never
+  inferred. Return shapes match REAL Node exactly: `isReadable`/`isWritable` →
+  `null` for a non-stream (or wrong half), `isErrored`/`isDisturbed` → `false`;
+  a non-stream input never throws. `getDefaultHighWaterMark(objectMode)` /
+  `setDefaultHighWaterMark(objectMode, n)` (Node v19.9) — the default HWM is now a
+  single module-level source of truth (65536 bytes / 16 objects, matching current
+  Node; the ctors' hardcoded `?? 16*1024` is gone) read by the Readable/Writable
+  constructors when no explicit `highWaterMark` is passed (an explicit option
+  still wins). `addAbortSignal(signal, stream)` (Node v15.4) is now a standalone
+  export, extracted from `Readable.fromWeb`'s inline abort wiring (which reuses
+  it): aborting destroys the stream with an `AbortError` (`code:'ABORT_ERR'`),
+  and an already-aborted signal destroys immediately. All parity-proven vs real
+  Node.
+
 - **`Readable.toWeb(r)`** (Node v17) — converts a Node `Readable` into a real
   WHATWG `ReadableStream`. Pull-driven (NOT buffer-the-whole-stream): the
   underlying source pulls exactly one chunk per WHATWG `pull()`, so a slow web

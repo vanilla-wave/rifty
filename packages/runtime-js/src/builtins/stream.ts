@@ -12,8 +12,15 @@ import {
   Stream,
   Transform,
   Writable,
+  addAbortSignal,
   finished,
+  getDefaultHighWaterMark,
+  isDisturbed,
+  isErrored,
+  isReadable,
+  isWritable,
   pipeline,
+  setDefaultHighWaterMark,
 } from '@riftydev/io';
 
 export {
@@ -25,6 +32,13 @@ export {
   Stream,
   pipeline,
   finished,
+  addAbortSignal,
+  getDefaultHighWaterMark,
+  setDefaultHighWaterMark,
+  isReadable,
+  isWritable,
+  isErrored,
+  isDisturbed,
   type ReadableOptions,
   type WritableOptions,
   type TransformOptions,
@@ -42,6 +56,13 @@ const stream = Object.assign(Stream, {
   pipeline,
   finished,
   Stream,
+  addAbortSignal,
+  getDefaultHighWaterMark,
+  setDefaultHighWaterMark,
+  isReadable,
+  isWritable,
+  isErrored,
+  isDisturbed,
 });
 export default stream;
 

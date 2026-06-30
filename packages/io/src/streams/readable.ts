@@ -24,6 +24,7 @@
 
 import { Buffer } from '../buffer.ts';
 import { EventEmitter } from '../event-emitter.ts';
+import { getDefaultHighWaterMark } from './default-highwatermark.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -61,6 +62,13 @@ export interface ReadableState {
   destroyed: boolean;
   /** Error from `destroy(err)` if any. */
   errored: Error | null;
+  /**
+   * Explicit "disturbed" bit (Node's `kIsDisturbed`) backing `isDisturbed`.
+   * Set `true` once data has actually been consumed (a `read()` returning a
+   * chunk, or a `'data'` emit in flowing mode) OR the stream is destroyed.
+   * Fidelity: an EXPLICIT bit, never inferred from other state.
+   */
+  disturbed: boolean;
   /**
    * Coalescing flag: at most one `flow()` microtask is pending. A burst of
    * push() calls in one tick schedules one flow turn, not one per push (flow()
@@ -238,17 +246,19 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
   constructor(opts: ReadableOptions = {}) {
     super();
+    const objectMode = opts.objectMode ?? false;
     this._readableState = {
       buffer: [],
       length: 0,
-      highWaterMark: opts.highWaterMark ?? 16 * 1024,
-      objectMode: opts.objectMode ?? false,
+      highWaterMark: opts.highWaterMark ?? getDefaultHighWaterMark(objectMode),
+      objectMode,
       flowing: null,
       ended: false,
       endEmitted: false,
       reading: false,
       destroyed: false,
       errored: null,
+      disturbed: false,
       flowScheduled: false,
     };
     this.readImpl = opts.read;
@@ -408,6 +418,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         return null;
       }
       const all = takeAll(state);
+      state.disturbed = true;
       if (!state.ended) this.maybeRead();
       else if (state.length === 0 && !state.endEmitted) {
         state.endEmitted = true;
@@ -428,6 +439,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
       const v = state.buffer.shift();
       state.length -= 1;
+      state.disturbed = true;
       if (!state.ended && state.length < state.highWaterMark) this.maybeRead();
       return v ?? null;
     }
@@ -441,6 +453,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         if (state.ended) {
           if (state.length > 0) {
             const partial = takeAll(state);
+            state.disturbed = true;
             if (!state.endEmitted) {
               state.endEmitted = true;
               queueMicrotask(() => this.emit('end'));
@@ -458,6 +471,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     }
     const slice = sliceBuffer(state, n);
+    state.disturbed = true;
     if (state.length === 0 && state.ended && !state.endEmitted) {
       state.endEmitted = true;
       // Final `readable` so the consumer observes EOF before `end` fires.
@@ -511,7 +525,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       const out = this.applyEncoding(chunk);
       // A streaming decoder returns '' while it buffers an incomplete multi-byte
       // sequence — Node does not surface an empty `'data'` in that case.
-      if (out !== '') this.emit('data', out);
+      if (out !== '') {
+        // Delivering a chunk disturbs the stream (flowing-mode consumption).
+        state.disturbed = true;
+        this.emit('data', out);
+      }
     }
     this.finishIfDone();
     if (
@@ -656,6 +674,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const state = this._readableState;
     if (state.destroyed) return this;
     state.destroyed = true;
+    // Destroying disturbs the stream (Node: a destroyed stream is disturbed
+    // even if never read from).
+    state.disturbed = true;
     if (err) state.errored = err;
     // Emit on next tick so synchronous chained `destroy(err)` calls can attach
     // listeners before the event fires (matches Node's `process.nextTick`).
@@ -910,15 +931,13 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const r = new Readable(options);
     let closed = false;
 
-    const abort = (): void => {
-      r.destroy(abortError());
-    };
-    options.signal?.addEventListener('abort', abort, { once: true });
+    // Abort→destroy wiring shared with `stream.addAbortSignal` (its `'close'`/
+    // `'end'` cleanup detaches the listener; the pump no longer removes it).
+    if (options.signal) addAbortSignal(options.signal, r);
 
     r.once('close', () => {
       if (closed) return;
       closed = true;
-      options.signal?.removeEventListener('abort', abort);
       void reader.cancel().catch(() => {});
     });
 
@@ -931,12 +950,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           if (!r.push(value)) await waitForReadableDemand(r);
         }
         closed = true;
-        options.signal?.removeEventListener('abort', abort);
         reader.releaseLock();
         r.push(null);
       } catch (err) {
         closed = true;
-        options.signal?.removeEventListener('abort', abort);
         try {
           reader.releaseLock();
         } catch {
@@ -1090,7 +1107,46 @@ function waitForReadableDemand(r: Readable): Promise<void> {
 }
 
 function abortError(): Error {
-  const err = new Error('The operation was aborted');
+  // Node's abort error carries `code:'ABORT_ERR'` (verified vs real Node for
+  // both `addAbortSignal` and `fromWeb`'s signal-abort path). Adding the code
+  // here is a fidelity improvement shared by both — no observable contract of
+  // `fromWeb` changes (abort still destroys with an AbortError).
+  const err = new Error('The operation was aborted') as Error & { code?: string };
   err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
   return err;
+}
+
+/** Minimal shape `addAbortSignal` drives: anything with Node's `destroy(err)`. */
+interface AbortableStream {
+  destroy(err?: Error): unknown;
+  once(event: 'close' | 'end', listener: () => void): unknown;
+  off(event: 'close' | 'end', listener: () => void): unknown;
+}
+
+/**
+ * `stream.addAbortSignal(signal, stream)` (Node v15.4) — destroy `stream` with
+ * an `AbortError` (`code:'ABORT_ERR'`) when `signal` aborts; an already-aborted
+ * signal destroys on the next microtask (so a synchronous `.on('error')` after
+ * this call still catches it, matching Node's `process.nextTick` deferral).
+ * Returns `stream`. The abort listener is detached when the stream finishes
+ * (`'close'` or `'end'`) so it does not leak.
+ *
+ * Extracted from `Readable.fromWeb`'s inline abort wiring (which now reuses it).
+ */
+export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, stream: T): T {
+  if (signal.aborted) {
+    queueMicrotask(() => stream.destroy(abortError()));
+    return stream;
+  }
+  const onAbort = (): void => {
+    stream.destroy(abortError());
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  const cleanup = (): void => {
+    signal.removeEventListener('abort', onAbort);
+  };
+  stream.once('close', cleanup);
+  stream.once('end', cleanup);
+  return stream;
 }

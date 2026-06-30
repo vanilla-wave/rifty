@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from '../event-emitter.ts';
+import { getDefaultHighWaterMark } from './default-highwatermark.ts';
 import { chunkSize } from './readable.ts';
 
 export interface WritableOptions {
@@ -77,11 +78,12 @@ export class Writable extends EventEmitter {
 
   constructor(opts: WritableOptions = {}) {
     super();
+    const objectMode = opts.objectMode ?? false;
     this._writableState = {
       buffered: [],
       length: 0,
-      highWaterMark: opts.highWaterMark ?? 16 * 1024,
-      objectMode: opts.objectMode ?? false,
+      highWaterMark: opts.highWaterMark ?? getDefaultHighWaterMark(objectMode),
+      objectMode,
       writing: false,
       ending: false,
       finished: false,
