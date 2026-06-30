@@ -88,10 +88,27 @@ describe('StatusBar project surface', () => {
   it('hides the badge when clean', () => {
     expect(renderToString(() => StatusBar({ ...base, dirty: false }))).not.toContain('UNSAVED');
   });
-  it('renders Export · soon disabled', () => {
-    const html = renderToString(() => StatusBar({ ...base }));
+  it('renders Export as a real button, not a dead "soon" teaser', () => {
+    const html = renderToString(() =>
+      StatusBar({ ...base, exportTitle: 'Download the editable workspace as a .json archive' }),
+    );
     expect(html).toContain('Export');
-    expect(html).toContain('soon');
+    expect(html).not.toContain('soon');
+    expect(html).toMatch(/<button[^>]*rf-status__export/);
+    expect(html).toContain('Download the editable workspace');
+    expect(html).not.toContain('disabled');
+  });
+
+  it('disables Export with an explanatory title when archiving is blocked', () => {
+    const html = renderToString(() =>
+      StatusBar({
+        ...base,
+        exportDisabled: true,
+        exportTitle: 'Stop the dev server to archive the editable workspace',
+      }),
+    );
+    expect(html).toMatch(/<button[^>]*disabled/);
+    expect(html).toContain('Stop the dev server to archive');
   });
 });
 

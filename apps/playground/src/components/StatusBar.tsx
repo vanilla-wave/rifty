@@ -22,6 +22,12 @@ export function StatusBar(props: {
   activeName?: string;
   activeStarter?: string;
   dirty?: boolean;
+  /** Click handler for the Export button (downloads the workspace archive). */
+  onExport?: () => void;
+  /** Disable Export (e.g. while the dev server is running). */
+  exportDisabled?: boolean;
+  /** Tooltip explaining what Export does / why it is disabled. */
+  exportTitle?: string;
 }) {
   const memory = (): boolean => props.storageMode === 'memory' || !props.isOpfs;
   const storageLabel = (): string => {
@@ -66,9 +72,15 @@ export function StatusBar(props: {
       <span class="rf-status__spacer" />
 
       <span class="rf-status__item">{props.language}</span>
-      <span class="rf-status__item rf-status__export" data-disabled="true" aria-disabled="true">
-        Export <span class="rf-pill rf-pill--soon">soon</span>
-      </span>
+      <button
+        type="button"
+        class="rf-status__item rf-status__export"
+        onClick={() => props.onExport?.()}
+        disabled={props.exportDisabled}
+        title={props.exportTitle}
+      >
+        Export
+      </button>
       <span
         class="rf-status__item rf-status__badge"
         data-storage-badge

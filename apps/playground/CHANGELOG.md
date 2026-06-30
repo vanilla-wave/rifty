@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **UI affordance honesty — the dead "Export soon" chip works, the Share toast stops over-claiming.** The status-bar `Export` control is now a real button wired to the already-shipped whole-workspace archive download (`downloadWorkspaceArchive`), disabled only while the dev server is running (with a title explaining why) — no more dead `soon` teaser next to a feature that already exists. The Share success toast now reads `Link copied — opens this playground` instead of implying the user's edits travel with the copied URL (it encodes none; real share-by-link is the M13 item). Guards: `StatusBar.test.tsx`, `App.test.ts`.
+
 ### Added
 
 - **Terminal welcome banner.** On a cold load the terminal greets with a two-line dim banner before the first prompt: `rifty · node v24.0.0 · npm in your browser` (version from the live runtime identity, so it can't drift or over-claim) and `try:  node -v   ·   npm install chalk   ·   help`. Prints once per terminal session (not after `clear`); supplied via the new content-agnostic `RiftyTerminalOptions.banner`. Guards: `terminal-welcome-banner.test.ts`, curious-first-15-min e2e.

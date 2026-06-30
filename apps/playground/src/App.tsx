@@ -289,7 +289,9 @@ export function App(props: AppProps) {
   async function share(): Promise<void> {
     const url = globalThis.location?.href ?? '';
     const copied = await copyToClipboard(url);
-    if (copied) flashToast(`Link copied — ${globalThis.location?.host ?? url}`, 'success');
+    // The link encodes none of the user's edits (real share-by-link is the M13
+    // item) — the toast must not imply the project travels with it.
+    if (copied) flashToast('Link copied — opens this playground', 'success');
     else flashToast('Could not copy the link to the clipboard', 'error');
   }
 
@@ -2433,6 +2435,13 @@ export function App(props: AppProps) {
           activeName={activeName()}
           activeStarter={activeGlyph().label}
           dirty={store.dirty()}
+          onExport={() => void downloadWorkspaceArchive()}
+          exportDisabled={workspaceArchiveBlocked()}
+          exportTitle={
+            workspaceArchiveBlocked()
+              ? 'Stop the dev server to archive the editable workspace'
+              : 'Download the editable workspace as a .json archive'
+          }
         />
       </Show>
 

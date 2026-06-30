@@ -305,6 +305,20 @@ describe('App terminal startup wiring', () => {
   });
 });
 
+describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
+  it('wires the status-bar Export button to the real archive download', () => {
+    expect(source).toContain('onExport={() => void downloadWorkspaceArchive()}');
+    expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
+  });
+
+  it('the Share toast no longer implies the user edits travel with the link', () => {
+    // share() copies only location.href (no encoded workspace) — the toast must
+    // not claim it shares the project. Real share-by-link is the M13 item.
+    expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
+    expect(source).not.toContain('Link copied — ${globalThis.location?.host');
+  });
+});
+
 describe('owner dev-boot clean wiring (ADR-0165 §5)', () => {
   it('owner dev-boot clean is gated on shouldCleanForDevBoot (root OR template change)', () => {
     const src = readFileSync(
