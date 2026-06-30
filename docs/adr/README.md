@@ -134,6 +134,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0165 | Multi-project management with durable scratch |
 | 0173 | Vite 7 production build and preview |
 | 0174 | Run vite through installed bin |
+| 0179 | Expose git status classifier from git facade |
+| 0184 | Hoist commit-refusal classifier to git facade |
+| 0185 | Owner-backed SCM and file-manager bridges |
 
 ### toolchain-build
 
@@ -158,6 +161,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0036 | Preview-protocol addressing in `@riftydev/io` |
 | 0040 | SW frame and routing versions split |
 | 0048 | Streaming cross-realm preview wire-frame |
+| 0183 | Scoped cross-realm preview responders |
 
 ### perf
 
@@ -233,6 +237,7 @@ superseded.
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
+| 0165 Starter bundle shape | 0165 note 2026-06-29 | preset `source` overlay removed; `files[]` is the ordinary file bundle and must include the template entry |
 | 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
 | 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
@@ -240,6 +245,9 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
+| 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
+| 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
+| 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0137 backlog path / follow-up status | 0137 note 2026-06-23 | shell `.bin` execution backlog file retired after owner-worker child path + non-dev `npm run` routing landed; `execSync` node-entry residual remains separate |
 | 0143 pre-ADR backlog reference | 0143 note 2026-06-23 | pre-ADR analysis backlog file retired after shell `.bin` transport closure; ADR-0143 remains the historical record |
 | 0144 owner CLI in-realm phrase | 0144 note 2026-06-23 | `.bin` commands now run in supervised child workers over owner remote-fs; `execSync` node-entry residual remains separate |

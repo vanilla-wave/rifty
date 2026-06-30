@@ -7,8 +7,9 @@ const source = readFileSync(fileURLToPath(new URL('./realVite.ts', import.meta.u
 describe('real Vite page-to-owner updates (ADR-0148: co-resident dev server runs inside the owner)', () => {
   it('sends VFS updates over kernel worker IPC before falling back to BroadcastChannel', () => {
     // The page seeds/writes the OWNER store via the owner handle's writeFile.
-    expect(source).toContain("worker.send({ type: 'rifty:vfs-write', frame })");
-    expect(source).toContain('sendVfsWrite(snapshotPort, frame)');
+    expect(source).toContain("worker.send({ type: 'rifty:vfs-write', opId, frame })");
+    expect(source).toContain('sendGuardedVfsWrite({');
+    expect(source).toContain('fallback: sendVfsWrite');
   });
 
   it('keys the page-side preview bridge on a generated owner token', () => {

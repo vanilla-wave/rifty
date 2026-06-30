@@ -57,7 +57,8 @@ describe('dev-server boot preview routing', () => {
     // ADR-0150 P6b corrected: the child owns listen() + serveCrossRealmPreview;
     // setupPreviewBridge no-ops in any worker realm so it is NOT called here (the
     // SW-direct route is page-anchored via mountPlaygroundPreviewBridge).
-    expect(source).toContain('serveCrossRealmPreview(port');
+    expect(source).toContain('serveCrossRealmPreview(');
+    expect(source).toContain('opts.previewScope === undefined ? {} : { scope: opts.previewScope }');
     expect(source).not.toContain('setupPreviewBridge(');
   });
 

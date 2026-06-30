@@ -17,6 +17,7 @@ export interface DevServerChildConfig {
   readonly root: string;
   readonly slug: string;
   readonly fromScratch: boolean;
+  readonly previewScope?: string;
 }
 
 function required(env: Record<string, string | undefined>, key: string): string {
@@ -48,5 +49,6 @@ export function resolveDevServerChildConfig(
     root,
     slug: required(env, 'RIFTY_RFV_SLUG'),
     fromScratch: env.RIFTY_RFV_SETUP === 'from-scratch',
+    ...(env.RIFTY_PREVIEW_SCOPE ? { previewScope: env.RIFTY_PREVIEW_SCOPE } : {}),
   };
 }

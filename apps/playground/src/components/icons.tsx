@@ -44,6 +44,7 @@ export type IconName =
   | 'check'
   | 'users'
   | 'plus'
+  | 'minus'
   | 'file-plus'
   | 'folder-plus'
   | 'ellipsis'
@@ -97,6 +98,7 @@ const PATHS: Record<IconName, string> = {
   users:
     'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
   plus: 'M5 12h14 M12 5v14',
+  minus: 'M5 12h14',
   'file-plus':
     'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M9 15h6 M12 12v6',
   'folder-plus':

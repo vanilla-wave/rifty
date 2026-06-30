@@ -61,4 +61,5 @@ export {
 export type {
   CrossRealmPortHandler,
   PreviewDispatchStruct,
+  PreviewPortScopeOptions,
 } from './cross-realm/preview-port.ts';

@@ -4,7 +4,7 @@ import { PRESETS } from '../presets.ts';
 import { StartersTab } from './StartersTab.tsx';
 
 // Cross-Phase Reconciliation A: the canonical Starter (glue/starter.ts) is the
-// seed/lifecycle entity (id/name/source/files), NOT a gallery-display shape — the
+// seed/lifecycle entity (id/name/files), NOT a gallery-display shape — the
 // display fields (label/blurb/glyph/setup/category) live on `Preset`. The gallery
 // therefore renders from `Preset[]` directly (exactly as the moved TemplateSwitcher
 // did) and groups by `GROUP_FOR_CATEGORY[preset.category]`.

@@ -206,6 +206,60 @@ describe('cross-realm preview port — ADR-0086 dispatchStruct fast-path', () =>
     expect(await response.text()).toBe('worker-was-here');
   });
 
+  it('dispatchStruct ignores stale responders from a different preview scope', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5305, async () => new Response('stale-worker', { status: 200 }), {
+        scope: 'old-run',
+      }),
+    );
+    cleanup.add(
+      serveCrossRealmPreview(5305, async () => new Response('current-worker', { status: 200 }), {
+        scope: 'current-run',
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5305, { scope: 'current-run', timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/hello',
+      method: 'GET',
+      headers: {},
+      body: null,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('current-worker');
+  });
+
+  it('dispatchStruct ignores unscoped stale responders for scoped requests', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(
+        5306,
+        async () => new Response('unscoped-stale-worker', { status: 200 }),
+      ),
+    );
+    cleanup.add(
+      serveCrossRealmPreview(
+        5306,
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return new Response('current-worker', { status: 200 });
+        },
+        { scope: 'current-run' },
+      ),
+    );
+    const handler = bridgeCrossRealmPreview(5306, { scope: 'current-run', timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/hello',
+      method: 'GET',
+      headers: {},
+      body: null,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('current-worker');
+  });
+
   it('dispatchStruct after dispose → 502', async () => {
     const handler = bridgeCrossRealmPreview(5303);
     handler.dispose();

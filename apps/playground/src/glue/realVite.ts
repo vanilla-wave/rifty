@@ -39,11 +39,21 @@ import {
   isPtyIpcMessage,
 } from './pty-protocol.ts';
 import { stampTsLspOwner, tsLspOwnerMatches } from './ts-lsp-owner-scope.ts';
-import { sendVfsWrite } from './vfs-write-port.ts';
+import {
+  type VfsWriteFrame,
+  isVfsWriteAckMessage,
+  sendGuardedVfsWrite,
+  sendVfsWrite,
+} from './vfs-write-port.ts';
 import { type WorkspaceArchiveBridge, bridgeWorkspaceArchive } from './workspace-archive-port.ts';
+import {
+  type WorkspaceFileReadBridge,
+  bridgeWorkspaceFileReads,
+} from './workspace-file-read-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+const VFS_WRITE_ACK_TIMEOUT_MS = 5_000;
 
 function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
@@ -63,11 +73,18 @@ function createPreviewOwnerToken(): string {
  * longer spawned per dev run (it IS the persistent owner), only the page-side
  * route is (un)registered as the dev server starts/stops.
  */
-export function wirePreviewBridge(port: number, ownerToken: string): () => void {
+export function wirePreviewBridge(
+  port: number,
+  ownerToken: string,
+  previewScope?: string,
+): () => void {
   // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
   // routes through this handler over BroadcastChannel to the owner's
   // `serveCrossRealmPreview`.
-  const previewBridge = bridgeCrossRealmPreview(port);
+  const previewBridge = bridgeCrossRealmPreview(
+    port,
+    previewScope === undefined ? {} : { scope: previewScope },
+  );
   registerPort(port, previewBridge);
   // ADR-0086: typed handle → SW requests take the struct fast-path.
   // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
@@ -111,6 +128,8 @@ export interface WorkspaceOwnerHandle {
    */
   readonly snapshotPort: OwnerBridgeKey;
   readonly closed: Promise<number | null>;
+  /** True while the backing owner worker is still alive. */
+  isAlive(): boolean;
   /**
    * Open a pty session in the owner; resolves on `pty:ready`. An optional `seed`
    * (persisted cwd/env) restores terminal state into the owner shell on reload.
@@ -131,6 +150,18 @@ export interface WorkspaceOwnerHandle {
    */
   writeFile(path: string, content: string): void;
   /**
+   * Apply one owner-side VFS mutation frame. Explorer write operations route
+   * here so rename/copy/delete cannot fall back to a stale page-side channel
+   * after the workspace owner exits.
+   */
+  writeFrame(frame: VfsWriteFrame): void;
+  /**
+   * Apply one owner-side VFS mutation frame and wait for the owner's apply
+   * result. File-manager operations use this so collision/stale-state errors
+   * surface as the actual owner error, not as a generic reflect timeout.
+   */
+  writeFrameAcked(frame: VfsWriteFrame): Promise<void>;
+  /**
    * Download: ask the owner to serialize its whole source tree to a workspace
    * archive JSON (single-store-owner model: the PAGE keeps no authoritative store
    * and reads the owner's tree through ports, so the archive reads the owner's
@@ -139,6 +170,8 @@ export interface WorkspaceOwnerHandle {
   exportArchive(): Promise<string>;
   /** Upload: hand the owner an archive JSON to apply to its tree. */
   importArchive(archiveJson: string): Promise<void>;
+  /** Read one working-tree file from the owner with full bytes (no snapshot cap). */
+  readFileBytes(path: string): Promise<Uint8Array>;
   /** Cached cwd/env for a session (from the latest `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /**
@@ -327,6 +360,14 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // ADR-0166 P1.9a: `rifty:ts-lsp` RESPONSE envelopes the owner relays back from
   // its LS child. The page LS client subscribes and correlates by `id`.
   const tsLspListeners = new Set<(message: unknown) => void>();
+  const pendingVfsWrites = new Map<
+    string,
+    {
+      readonly resolve: () => void;
+      readonly reject: (err: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   let readySettled = false;
   let resolveReady: () => void = () => {};
   let rejectReady: (err: Error) => void = () => {};
@@ -380,6 +421,20 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       settleReady();
       return;
     }
+    if (isVfsWriteAckMessage(message)) {
+      const pending = pendingVfsWrites.get(message.opId);
+      if (!pending) return;
+      pendingVfsWrites.delete(message.opId);
+      clearTimeout(pending.timer);
+      if (message.ok) {
+        pending.resolve();
+      } else {
+        const err = new Error(message.error.message);
+        err.name = message.error.name;
+        pending.reject(err);
+      }
+      return;
+    }
     if (isPtyIpcMessage(message)) {
       // Only owner→page frames are actionable here; drop any echoed page→owner.
       if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
@@ -415,6 +470,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     const exitCode = typeof code === 'number' ? code : null;
     failReady(new Error(`workspace owner exited before ready (code ${exitCode ?? 'null'})`));
     client.disconnect(); // resolve in-flight runs nonzero — never hang
+    for (const [opId, pending] of pendingVfsWrites) {
+      pendingVfsWrites.delete(opId);
+      clearTimeout(pending.timer);
+      pending.reject(new Error(`workspace owner exited before VFS write ack (${opId})`));
+    }
     // Owner died → the co-resident dev server is gone. Synthesize a stopped
     // frame to the page so its LIVE pill leaves 'running' (Bug #4: the exit
     // path used to only resolve `closed`, leaving the UI stale). `error` is
@@ -439,6 +499,53 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // workspace against its OWN syncMirror, so the page never needs an
   // authoritative store to download/upload a workspace.
   const archiveBridge: WorkspaceArchiveBridge = bridgeWorkspaceArchive(snapshotPort);
+  const fileReadBridge: WorkspaceFileReadBridge = bridgeWorkspaceFileReads(snapshotPort);
+  const writeFrame = (frame: VfsWriteFrame): void => {
+    sendGuardedVfsWrite({
+      key: snapshotPort,
+      frame,
+      exited,
+      sendIpc: (message) => worker.send(message),
+      fallback: sendVfsWrite,
+    });
+  };
+  const writeFrameAcked = (frame: VfsWriteFrame): Promise<void> => {
+    if (exited) {
+      return Promise.reject(
+        new Error(
+          `${frame.type}: workspace owner has exited — write not applied. Reload to respawn the owner.`,
+        ),
+      );
+    }
+    const opId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingVfsWrites.delete(opId);
+        reject(new Error(`owner VFS write ack timed out (${opId})`));
+      }, VFS_WRITE_ACK_TIMEOUT_MS);
+      pendingVfsWrites.set(opId, { resolve, reject, timer });
+      if (!worker.send({ type: 'rifty:vfs-write', opId, frame })) {
+        pendingVfsWrites.delete(opId);
+        clearTimeout(timer);
+        reject(new Error(`owner VFS write send failed (${opId})`));
+      }
+    });
+  };
+  const readFileBytes = (path: string): Promise<Uint8Array> => {
+    if (exited) {
+      return Promise.reject(
+        new Error(`workspace owner has exited — cannot read ${path}. Reload to respawn the owner.`),
+      );
+    }
+    return Promise.race([
+      fileReadBridge.readFileBytes(path),
+      closed.then(() => {
+        throw new Error(
+          `workspace owner exited while reading ${path}. Reload to respawn the owner.`,
+        );
+      }),
+    ]);
+  };
 
   return {
     workspaceId,
@@ -458,25 +565,15 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
     signal: (sid, rid) => client.signal(sid, rid),
     closeSession: (sid) => client.closeSession(sid),
+    isAlive: () => !exited,
     writeFile(path, content) {
-      // Owner dead → a `worker.send` would return false and fall through to the
-      // snapshot-port channel, which SILENTLY DROPS with no worker listening
-      // (vfs-write-port.ts). Bug #4: post-crash edits must FAIL LOUDLY, not
-      // vanish. The fallback below stays for the pre-handler boot window only.
-      if (exited) {
-        throw new Error(
-          `writeFile(${path}): workspace owner has exited — write not applied. Reload to respawn the owner.`,
-        );
-      }
-      const frame = { type: 'write' as const, path, data: enc.encode(content) };
-      // IPC first (the owner's onMessage applies it to syncMirror); the
-      // shim buffers frames sent before the slow entry registers its handler.
-      if (!worker.send({ type: 'rifty:vfs-write', frame })) {
-        sendVfsWrite(snapshotPort, frame);
-      }
+      writeFrame({ type: 'write', path, data: enc.encode(content) });
     },
+    writeFrame,
+    writeFrameAcked,
     exportArchive: () => archiveBridge.export(),
     importArchive: (archiveJson) => archiveBridge.import(archiveJson),
+    readFileBytes,
     snapshot: (sid) => client.snapshot(sid),
     onDevServer(cb) {
       devServerListeners.add(cb);
@@ -513,6 +610,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     },
     close() {
       archiveBridge.dispose();
+      fileReadBridge.dispose();
       if (!exited) handle.kill('SIGTERM');
     },
   };

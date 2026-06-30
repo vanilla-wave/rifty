@@ -14,12 +14,14 @@ test.describe('owner shell runs real Prettier and ESLint package tooling', () =>
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(300_000);
     await page.goto('/');
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
     await openShellTerminal(page);
 
     await runTerminalLine(
       page,
       [
         'mkdir -p src',
+        'rm -f package-lock.json',
         `echo '{"name":"tooling-demo","version":"0.0.0","private":true,"type":"module","scripts":{"format":"prettier --write src/bad.ts","format:check":"prettier --check src/bad.ts","lint":"eslint src/lint.js","lint:ts":"eslint src/typed.ts"},"dependencies":{"prettier":"3.8.3","eslint":"10.4.1","typescript":"6.0.3","typescript-eslint":"8.61.0"}}' > package.json`,
         `echo 'const   label : string = "ok"; const   answer : number =  42' > src/bad.ts`,
         `echo 'var answer = 1' > src/lint.js`,
