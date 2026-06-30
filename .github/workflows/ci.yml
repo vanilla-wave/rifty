@@ -54,6 +54,15 @@ jobs:
 
   e2e-chromium:
     runs-on: ubuntu-latest
+    # Run the three lanes as PARALLEL matrix jobs (separate runners), not
+    # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
+    # the sum. Separate runners also remove heavy<->light contention entirely
+    # (the reason the old global workers=1 / same-job lane-split existed), so each
+    # lane gets a dedicated machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [heavy, light, prod]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -84,18 +93,13 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      # Two lanes against the same suite, run as separate steps so a heavy
-      # cold-boot never contends with the parallel light lane (replaces the old
-      # global workers=1 that serialized the whole suite). Heavy = serialized
-      # TS-LS/fullstack specs; light = the rest in parallel.
-      - run: pnpm test:e2e:heavy
-      - run: pnpm test:e2e:light
-      # Prod-artifact smoke: builds the app + serves it with `pnpm preview`
-      # (Netlify COI headers) and asserts the owner boots. Catches prod-only
-      # regressions the dev-server e2e above can't (green-checks-but-broken-deploy).
-      - run: pnpm test:e2e:prod
+      # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
+      # (--workers=1); light = the rest in parallel; prod = prod-artifact smoke
+      # (builds the app + `pnpm preview` with Netlify COI headers, asserts the
+      # owner boots — catches prod-only regressions the dev-server e2e can't).
+      - run: pnpm test:e2e:${{ matrix.lane }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.lane }}
           path: playwright-report

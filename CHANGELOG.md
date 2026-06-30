@@ -12,6 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### CI
 
+- **e2e lanes run as parallel matrix jobs, not sequential steps.** `e2e-chromium`
+  is now a `matrix: lane: [heavy, light, prod]` (separate runners) instead of one
+  job running the three lanes back-to-back. e2e wall-clock becomes `max(lane)`
+  instead of the sum; separate runners also remove heavy↔light contention
+  entirely (each lane gets a dedicated machine). `fail-fast: false` so one red
+  lane doesn't cancel the others; report artifacts are per-lane
+  (`playwright-report-<lane>`).
 - **Scoped Playwright CI serialization to the heavy specs — light lane runs in
   parallel again.** Replaced the global `workers: CI ? 1` (which serialized the
   whole e2e suite) with two chromium lanes: `chromium-heavy` (TS-LS / fullstack
