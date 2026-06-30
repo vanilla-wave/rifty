@@ -271,7 +271,7 @@ describe('Shell — input redirect is loud', () => {
   });
 });
 
-describe('Shell — pipe is loud', () => {
+describe('Shell — pipes', () => {
   it('tokenises | as its own token (not glued to an argument)', () => {
     // Without dedicated tokenisation `cat a | grep b` would silently become
     // ['cat', 'a', '|', 'grep', 'b'] only by accident if whitespace is right;
@@ -280,14 +280,11 @@ describe('Shell — pipe is loud', () => {
     expect(vals(tokenize('cat a|grep b'))).toEqual(['cat', 'a', '|', 'grep', 'b']);
   });
 
-  it('throws NotImplementedError when | appears in a command line', async () => {
-    const sh = new Shell();
-    await expect(sh.run('cat a | grep b')).rejects.toBeInstanceOf(NotImplementedError);
-  });
+  // Foreground pipe execution + the filters' stdin draining are covered in pipes.test.ts.
 
-  it('the NotImplementedError for pipe carries the documented feature name', async () => {
+  it('a piped BACKGROUND job (`a | b &`) stays loud (out of scope)', async () => {
     const sh = new Shell();
-    await expect(sh.run('cat a | grep b')).rejects.toMatchObject({
+    await expect(sh.run('echo a | echo b &')).rejects.toMatchObject({
       feature: 'shell.pipe',
     });
   });

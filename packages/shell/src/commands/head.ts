@@ -10,7 +10,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve } from './_shared.ts';
+import { dec, readAllStdin, resolve } from './_shared.ts';
 
 const NL = 0x0a; // '\n'
 
@@ -129,35 +129,41 @@ export const head: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  if (files.length === 0) {
-    // No stdin support yet. Clean stderr + exit 1, consistent with cat/tail/wc
-    // (not a throw — that surfaced as a dispatcher diagnostic, an odd outlier).
+  // No FILE → read stdin if connected; a `-` operand also reads stdin (GNU).
+  // Neither a FILE nor a connected stdin → usage error (unchanged).
+  const sources = files.length > 0 ? files : ctx.stdin ? ['-'] : [];
+  if (sources.length === 0) {
     ctx.stderr.write('head: reading from standard input is not implemented; use a file\n');
     return 1;
   }
 
   const fs = syncMirror();
-  const showHeaders = opts.headers === 'force' || (opts.headers === 'auto' && files.length > 1);
+  const showHeaders = opts.headers === 'force' || (opts.headers === 'auto' && sources.length > 1);
   let status = 0;
   let printed = 0; // files actually emitted, for blank-line separators
+  let stdinBytes: Uint8Array | null = null; // drained once, shared by every `-`
 
-  for (const file of files) {
-    const path = resolve(ctx.cwd, file);
+  for (const file of sources) {
     let buf: Uint8Array;
-    try {
-      buf = fs.readFileBytesSync(path);
-    } catch (e) {
-      const msg =
-        e instanceof VfsError && e.code === 'EISDIR'
-          ? `head: error reading '${file}': Is a directory\n`
-          : `head: cannot open '${file}' for reading: No such file or directory\n`;
-      ctx.stderr.write(msg);
-      status = 1;
-      continue;
+    if (file === '-') {
+      if (stdinBytes === null) stdinBytes = await readAllStdin(ctx);
+      buf = stdinBytes;
+    } else {
+      try {
+        buf = fs.readFileBytesSync(resolve(ctx.cwd, file));
+      } catch (e) {
+        const msg =
+          e instanceof VfsError && e.code === 'EISDIR'
+            ? `head: error reading '${file}': Is a directory\n`
+            : `head: cannot open '${file}' for reading: No such file or directory\n`;
+        ctx.stderr.write(msg);
+        status = 1;
+        continue;
+      }
     }
     if (showHeaders) {
       if (printed > 0) ctx.stdout.write('\n');
-      ctx.stdout.write(`==> ${file} <==\n`);
+      ctx.stdout.write(`==> ${file === '-' ? 'standard input' : file} <==\n`);
     }
     ctx.stdout.write(dec.decode(slice(buf, opts)));
     printed++;

@@ -11,7 +11,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve } from './_shared.ts';
+import { dec, readAllStdin, resolve } from './_shared.ts';
 
 type Unit = 'lines' | 'bytes';
 /** `from > 0` ⇒ start at 1-based index `from` (the `+N` form); else take last `count`. */
@@ -152,29 +152,36 @@ export const tail: ShellCommand = async (args, ctx) => {
   const showHeaders = parsed.verbose || (!parsed.quiet && files.length > 1);
   let status = 0;
   let printed = 0;
+  let stdinBytes: Uint8Array | null = null; // drained once, shared by every `-`
 
   for (const name of files) {
-    if (name === '-') {
-      // No stdin tail without buffering all input + a follow loop; keep loud.
-      ctx.stderr.write('tail: reading from standard input is not implemented; use a file\n');
-      status = 1;
-      continue;
-    }
     let data: Uint8Array;
-    try {
-      data = readFile(fs, resolve(ctx.cwd, name));
-    } catch (e) {
-      const code = (e as { code?: string }).code;
-      const reason =
-        code === 'EISDIR'
-          ? `error reading '${name}': Is a directory`
-          : `cannot open '${name}' for reading: No such file or directory`;
-      ctx.stderr.write(`tail: ${reason}\n`);
-      status = 1;
-      continue;
+    if (name === '-') {
+      // `-` (or the no-FILE default) reads stdin if connected (pipe RHS / `< f`);
+      // otherwise keep the loud usage error (no follow loop here either).
+      if (!ctx.stdin) {
+        ctx.stderr.write('tail: reading from standard input is not implemented; use a file\n');
+        status = 1;
+        continue;
+      }
+      if (stdinBytes === null) stdinBytes = await readAllStdin(ctx);
+      data = stdinBytes;
+    } else {
+      try {
+        data = readFile(fs, resolve(ctx.cwd, name));
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        const reason =
+          code === 'EISDIR'
+            ? `error reading '${name}': Is a directory`
+            : `cannot open '${name}' for reading: No such file or directory`;
+        ctx.stderr.write(`tail: ${reason}\n`);
+        status = 1;
+        continue;
+      }
     }
     if (showHeaders) {
-      ctx.stdout.write(`${printed > 0 ? '\n' : ''}==> ${name} <==\n`);
+      ctx.stdout.write(`${printed > 0 ? '\n' : ''}==> ${name === '-' ? 'standard input' : name} <==\n`);
     }
     const slice =
       parsed.count.unit === 'bytes' ? tailBytes(data, parsed.count) : tailLines(data, parsed.count);

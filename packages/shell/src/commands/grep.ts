@@ -2,7 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 import { osc8FileLink } from './_osc8.ts';
-import { dec, escapeRegExp, resolve, strerror } from './_shared.ts';
+import { dec, escapeRegExp, readAllStdin, resolve, strerror } from './_shared.ts';
 import { walk } from './_walk.ts';
 
 interface Opts {
@@ -95,16 +95,13 @@ function joinAsGiven(startPath: string, rel: string): string {
   return base === '' ? `/${rel}` : `${base}/${rel}`;
 }
 
-/** One file's bytes -> matched lines. `show` is the printed prefix; `read` is opened. */
-function grepFile(
-  t: Target,
+/** Match `text`'s lines against `re`; `linePrefix(n)` builds each kept line's prefix. */
+function grepText(
+  text: string,
   re: RegExp,
   opts: Opts,
-  showName: boolean,
-  ctx: CommandContext,
+  linePrefix: (lineNo: number) => string,
 ): { count: number; lines: string[] } {
-  const fs = syncMirror();
-  const text = dec.decode(fs.readFileBytesSync(t.read));
   // Split on '\n'; a trailing newline yields a final empty segment grep ignores.
   const segments = text.split('\n');
   if (text.endsWith('\n')) segments.pop();
@@ -117,11 +114,22 @@ function grepFile(
     if (!matched) continue;
     count++;
     if (opts.countOnly || opts.filesWithMatch) continue; // suppress the line itself
-    const name = showName ? `${osc8FileLink(t.read, t.show, ctx)}:` : '';
-    const prefix = `${name}${opts.lineNo ? `${i + 1}:` : ''}`;
-    lines.push(`${prefix}${line}`);
+    lines.push(`${linePrefix(i + 1)}${line}`);
   }
   return { count, lines };
+}
+
+/** One file's bytes -> matched lines. `show` is the printed prefix; `read` is opened. */
+function grepFile(
+  t: Target,
+  re: RegExp,
+  opts: Opts,
+  showName: boolean,
+  ctx: CommandContext,
+): { count: number; lines: string[] } {
+  const text = dec.decode(syncMirror().readFileBytesSync(t.read));
+  const name = showName ? `${osc8FileLink(t.read, t.show, ctx)}:` : '';
+  return grepText(text, re, opts, (lineNo) => `${name}${opts.lineNo ? `${lineNo}:` : ''}`);
 }
 
 /**
@@ -149,6 +157,23 @@ export const grep: ShellCommand = async (args, ctx) => {
   } catch {
     ctx.stderr.write(`grep: invalid pattern: ${pattern}\n`);
     return 2;
+  }
+
+  // No FILE (non-recursive) + connected stdin → filter stdin (pipe RHS / `< f`).
+  // No filename prefix in stdin mode (GNU). Exit 0 if any match, else 1.
+  if (!opts.recursive && files.length === 0 && ctx.stdin) {
+    const text = dec.decode(await readAllStdin(ctx));
+    const { count, lines } = grepText(text, re, opts, (lineNo) =>
+      opts.lineNo ? `${lineNo}:` : '',
+    );
+    if (opts.filesWithMatch) {
+      if (count > 0) ctx.stdout.write('(standard input)\n');
+    } else if (opts.countOnly) {
+      ctx.stdout.write(`${count}\n`);
+    } else {
+      for (const line of lines) ctx.stdout.write(`${line}\n`);
+    }
+    return count > 0 ? 0 : 1;
   }
 
   // Build the file worklist. -r: each dir arg (default '.') expands via walk() to

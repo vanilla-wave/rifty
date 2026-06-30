@@ -23,7 +23,7 @@ import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
-import type { CommandContext, ShellCommand } from './types.ts';
+import type { CommandContext, ShellCommand, StdinReader } from './types.ts';
 
 /**
  * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
@@ -400,7 +400,7 @@ export class Shell {
       if (token.op === '|') {
         throw new NotImplementedError(
           'shell.pipe',
-          'pipe operator not yet supported — M12 work item',
+          'pipes in a background job (`a | b &`) are not supported — run the pipeline in the foreground',
         );
       }
       if (token.op === '<') {
@@ -474,17 +474,60 @@ export class Shell {
   ): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
+    // Split into pipeline stages on `|`. One stage is the common path; a
+    // multi-stage pipeline BUFFERS each stage's stdout into the next's stdin.
+    const stages = splitOnPipe(segmentTokens);
+    if (stages.length === 1) {
+      return this.runSimpleCommand(stages[0]!, options.stdin, true, options, signal, abortPromise);
+    }
+
+    let pipeStdin = options.stdin;
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    for (let s = 0; s < stages.length; s++) {
+      const isLast = s === stages.length - 1;
+      // Only the final stage streams stdout to the terminal; every stage's
+      // stderr passes through (bash does not pipe stderr). Pipeline exit = the
+      // last stage's exit (POSIX; no pipefail).
+      const res = await this.runSimpleCommand(
+        stages[s]!,
+        pipeStdin,
+        isLast,
+        options,
+        signal,
+        abortPromise,
+      );
+      stderr += res.stderr;
+      exitCode = res.exitCode;
+      if (signal.aborted) break; // SIGINT cancels the whole pipeline
+      if (isLast) stdout = res.stdout;
+      else pipeStdin = bufferStdin(encoder.encode(res.stdout));
+    }
+    return { exitCode, stdout, stderr };
+  }
+
+  /**
+   * Run one simple command (a single pipeline stage): input-redirect guard,
+   * env-prefix popping, trailing `>`/`>>` redirect extraction, command lookup
+   * and execution. `stdin` feeds `ctx.stdin`; `streamStdout` gates whether
+   * stdout chunks reach `onChunk` — false for a non-final pipe stage, whose
+   * stdout is captured for the next stage rather than shown.
+   */
+  private async runSimpleCommand(
+    segmentTokens: Token[],
+    stdin: StdinReader | undefined,
+    streamStdout: boolean,
+    options: RunOptions,
+    signal: AbortSignal,
+    abortPromise: Promise<typeof ABORTED>,
+  ): Promise<RunResult> {
+    if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+
     if (segmentTokens.some((t) => isOp(t) && t.op === '<')) {
       throw new NotImplementedError(
         'shell.input-redirect',
         'use bash via wasi for < input redirect — M12 work item',
-      );
-    }
-
-    if (segmentTokens.some((t) => isOp(t) && t.op === '|')) {
-      throw new NotImplementedError(
-        'shell.pipe',
-        'pipe operator not yet supported — M12 work item',
       );
     }
 
@@ -536,8 +579,10 @@ export class Shell {
     const emit = (chunk: string, stream: ChunkStream): void => {
       // onChunk first so the terminal sees the chunk before it lands in the blob.
       // Fires even for redirected-stdout writes (diverted to a file later) — by
-      // design, so semantics stay composable; the caller decides what to do.
-      options.onChunk?.(chunk, stream);
+      // design, so semantics stay composable. A non-final pipe stage
+      // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
+      // not the terminal; stderr always streams (bash never pipes stderr).
+      if (stream === 'stderr' || streamStdout) options.onChunk?.(chunk, stream);
       if (stream === 'stdout') stdout += chunk;
       else stderr += chunk;
     };
@@ -554,12 +599,12 @@ export class Shell {
           emit(c, 'stderr');
         },
       },
-      // A redirected (and future piped) sink is never a TTY (ADR-0089): force
-      // isTTY false so `ls --color=auto > f` writes no SGR bytes into the file.
-      isTTY: redirectTo ? false : (options.isTTY ?? false),
+      // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
+      // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
+      isTTY: redirectTo || !streamStdout ? false : (options.isTTY ?? false),
       cols: options.cols,
       rows: options.rows,
-      stdin: options.stdin,
+      stdin,
       signal,
     };
 
@@ -723,6 +768,38 @@ function splitOnJoiners(tokens: readonly Token[]): Segment[] {
   }
   segments.push({ tokens: current, joiner: null });
   return segments;
+}
+
+/** Split a segment's tokens on `|` into pipeline stages (each a `Token[]`). */
+function splitOnPipe(tokens: readonly Token[]): Token[][] {
+  const stages: Token[][] = [];
+  let current: Token[] = [];
+  for (const t of tokens) {
+    if (isOp(t) && t.op === '|') {
+      stages.push(current);
+      current = [];
+    } else {
+      current.push(t);
+    }
+  }
+  stages.push(current);
+  return stages;
+}
+
+/**
+ * One-shot {@link StdinReader} over `bytes`: yields the buffer once, then EOF
+ * (`null`); empty input reads EOF immediately. This is the buffered pipe
+ * hand-off — a stage's captured stdout becomes the next stage's stdin.
+ */
+function bufferStdin(bytes: Uint8Array): StdinReader {
+  let done = false;
+  return {
+    read(): Promise<Uint8Array | null> {
+      if (done) return Promise.resolve(null);
+      done = true;
+      return Promise.resolve(bytes.length > 0 ? bytes : null);
+    },
+  };
 }
 
 function isJoiner(op: string): op is Exclude<Joiner, null> {
