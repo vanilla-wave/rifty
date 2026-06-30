@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Opt-in eddy fast install for the visible `npm install` (ADR-0182).** A new
+  env-config `VITE_RIFTY_RESOLVER_URL` (`glue/resolver-config.ts`, default OFF,
+  D-004) threads a `resolverUrl` into the playground's `install()`; when set,
+  from-scratch presets (and user-authored `package.json`) install via eddy's
+  bundle with auto-fallback, and the terminal line reports `via eddy (fast)`.
+  Inert/byte-identical when unset; instant (baked-snapshot) presets untouched.
+
 - **Vite 7 production build/preview (ADR-0173).** The default Vite template now
   supports `vite build` -> real hashed/minified `dist/` and `vite preview` ->
   `/preview/4173/` serving that built bundle through the existing SW bridge.
