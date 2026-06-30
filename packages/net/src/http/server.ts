@@ -270,7 +270,7 @@ function bracketIpv6Host(host: string): string {
   return colonCount > 1 ? `[${host}]` : host;
 }
 
-function buildRequestUrl(opts: RequestOptions): string {
+export function buildRequestUrl(opts: RequestOptions): string {
   const protocol = opts.protocol ?? 'http:';
   const path = opts.path ?? '/';
   if (opts.hostname !== undefined) {
@@ -857,7 +857,7 @@ function isValidWebSocketKey(key: string | undefined): key is string {
   }
 }
 
-function optionsFromUrl(url: string): RequestOptions {
+export function optionsFromUrl(url: string): RequestOptions {
   try {
     const parsed = new URL(url);
     return {

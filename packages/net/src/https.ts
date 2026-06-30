@@ -16,9 +16,11 @@ import {
   type ClientRequest,
   type ClientResponse,
   type RequestOptions,
+  buildRequestUrl,
   get as httpGet,
   request as httpRequest,
   isLoopbackHost,
+  optionsFromUrl,
 } from './http/server.ts';
 
 type HttpsCallback = (res: ClientResponse) => void;
@@ -109,39 +111,21 @@ function guardTlsAndSocketOptions(opts: HttpsRequestOptions): void {
   }
 }
 
-function hostWithoutPort(host: string): string {
-  if (host.startsWith('[')) {
-    const close = host.indexOf(']');
-    return close === -1 ? host : host.slice(0, close + 1);
-  }
-  const colon = host.indexOf(':');
-  return colon === -1 ? host : host.slice(0, colon);
-}
-
 /**
- * The host an `https` call would target. Mirrors how the http client resolves
- * a host (override > base hostname > base host > default localhost) so loopback
- * detection sees exactly what would be dispatched.
+ * Refuse a dispatch URL whose host canonicalises to loopback. Parsing with
+ * `new URL()` mirrors `routeClientRequest` exactly, so non-canonical IPv4
+ * (`2130706433`, `127.1`, `0177.0.0.1`) and compressed/bracketed IPv6 reach the
+ * SAME loopback verdict the http client uses — never leaking to the real
+ * loopback, never falsely refusing an external host (the guard sees the exact
+ * URL that would be dispatched, built by `buildRequestUrl`).
  */
-function effectiveHost(
-  urlOrOpts: string | HttpsRequestOptions,
-  overrides?: RequestOptions,
-): string {
-  if (overrides?.hostname != null) return overrides.hostname;
-  if (overrides?.host != null) return hostWithoutPort(overrides.host);
-  if (typeof urlOrOpts === 'string') {
-    try {
-      return new URL(urlOrOpts).hostname;
-    } catch {
-      return 'localhost';
-    }
+function guardLoopback(dispatchUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(dispatchUrl).hostname;
+  } catch {
+    return; // unparseable target — fetch will surface its own error, not ours
   }
-  if (urlOrOpts.hostname != null) return urlOrOpts.hostname;
-  if (urlOrOpts.host != null) return hostWithoutPort(urlOrOpts.host);
-  return 'localhost';
-}
-
-function guardLoopback(host: string): void {
   if (isLoopbackHost(host)) {
     tlsCeiling(
       'loopback',
@@ -181,16 +165,23 @@ function dispatchHttps(
 
   if (typeof urlOrOpts === 'object' && urlOrOpts !== null) guardTlsAndSocketOptions(urlOrOpts);
   if (overrides) guardTlsAndSocketOptions(overrides);
-  guardLoopback(effectiveHost(urlOrOpts, overrides));
 
+  // Build the EXACT url the http client will dispatch, refuse it if it
+  // canonicalises to loopback, then hand off with `protocol: 'https:'` forced.
   if (typeof urlOrOpts === 'string') {
-    // With overrides, route through the http 3-arg merge with protocol forced.
-    // Without, force the protocol on the URL itself so auth/fragment survive.
-    return overrides
-      ? impl(urlOrOpts, { ...overrides, protocol: 'https:' }, cb)
-      : impl(forceHttpsUrl(urlOrOpts), cb);
+    if (overrides) {
+      const forced = { ...overrides, protocol: 'https:' };
+      guardLoopback(buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...forced }));
+      return impl(urlOrOpts, forced, cb);
+    }
+    // No overrides: force the protocol on the URL itself so auth/fragment survive.
+    const url = forceHttpsUrl(urlOrOpts);
+    guardLoopback(url);
+    return impl(url, cb);
   }
-  return impl({ ...urlOrOpts, protocol: 'https:' }, cb);
+  const forced = { ...urlOrOpts, protocol: 'https:' };
+  guardLoopback(buildRequestUrl(forced));
+  return impl(forced, cb);
 }
 
 export function request(

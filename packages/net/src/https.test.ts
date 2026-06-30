@@ -178,6 +178,23 @@ describe('node:https client request/get over the page fetch (ADR-0181)', () => {
     expect(statusCode).toBe(204);
     expect(dataChunks).toBe(0);
   });
+
+  it('forces an http: string URL up to https: egress', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('ok', { status: 200 }));
+
+    await new Promise<void>((resolve, reject) => {
+      const req = https.get('http://example.com/x', (res) => {
+        res.on('data', () => {});
+        res.on('end', () => resolve());
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+    });
+
+    expect(new URL(String(fetchSpy.mock.calls[0]![0])).protocol).toBe('https:');
+  });
 });
 
 describe('node:https TLS/socket controls throw, never silently honored (ADR-0181 D3)', () => {
@@ -280,13 +297,34 @@ describe('loopback https has no in-browser TLS server (pairs with ADR-0180 D4)',
     );
   });
 
-  it('does not call fetch for a loopback https target', () => {
+  it.each(['2130706433', '0177.0.0.1', '127.1'])(
+    'refuses a non-canonical IPv4 loopback encoding (%s → 127.0.0.1)',
+    (hostname) => {
+      expect(() => https.request({ hostname, port: 8443, path: '/' })).toThrow(
+        /loopback https targets have no in-browser TLS server/,
+      );
+    },
+  );
+
+  it('refuses an unbracketed IPv6 loopback host option', () => {
+    expect(() =>
+      https.request({ host: '::1', port: 8443, path: '/' } as Record<string, unknown>),
+    ).toThrow(/loopback https targets have no in-browser TLS server/);
+  });
+
+  it('does NOT refuse an external hostname when a host override is loopback (dispatch precedence)', () => {
+    // `buildRequestUrl` gives `hostname` precedence over `host`, so this request
+    // dispatches to api.example.com — the loopback guard must agree, not refuse.
+    expect(() =>
+      https.request('https://api.example.com/x', { host: 'localhost' } as Record<string, unknown>),
+    ).not.toThrow();
+  });
+
+  it('does not call fetch for a loopback https target, even after the dispatch tick', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('leak'));
-    try {
-      https.get('https://localhost:8443/x');
-    } catch {
-      /* expected throw */
-    }
+    expect(() => https.get('https://localhost:8443/x')).toThrow();
+    // Drain the deferred-dispatch microtask: a leak would issue the fetch here.
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
