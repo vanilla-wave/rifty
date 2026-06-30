@@ -156,16 +156,24 @@ export function TerminalPanel(props: {
   }
 
   function refreshTerminalBuffer(): void {
-    try {
-      setTerminalBuffer(term?.snapshotBuffer({ excludeModes: true }) ?? '');
-    } catch {
+    const t = term;
+    if (!t) {
       setTerminalBuffer('');
+      return;
     }
+    // xterm parses writes on a deferred macrotask; serialize only once they have
+    // landed, else a final dev-server-ready line (no trailing output to trigger a
+    // later refresh) is missed — the CI-only `data-terminal-buffer` marker flake.
+    void t
+      .snapshotBufferSettled({ excludeModes: true })
+      .then((text) => setTerminalBuffer(text))
+      .catch(() => setTerminalBuffer(''));
   }
 
-  // Coalesce the mirror refresh, but cap the wait — a reset-on-every-write
-  // debounce starves under a streaming dev server, freezing `data-terminal-buffer`
-  // on stale content (the dev-server-ready marker flake). See terminal-buffer-scheduler.
+  // Coalesce the mirror refresh, but cap the wait so a reset-on-every-write
+  // debounce can't starve `data-terminal-buffer` under a streaming dev server.
+  // See terminal-buffer-scheduler. (Marker-flush correctness is handled by
+  // `snapshotBufferSettled` above, not the debounce.)
   const bufferRefresh = createBufferRefreshScheduler(() => refreshTerminalBuffer());
   function scheduleTerminalBufferRefresh(): void {
     bufferRefresh.schedule();

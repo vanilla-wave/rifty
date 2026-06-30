@@ -4,15 +4,17 @@
  *
  * A plain reset-on-every-write debounce STARVES under continuous output: each
  * output chunk clears the pending timer, so while a dev server streams the
- * mirror never refreshes — it freezes on whatever was last quiescent. The
- * dev-server-ready marker (written mid-burst) then never lands in the mirror,
- * which is the root of the CI-only "[vite] dev server ready never appears"
- * flake (and the sibling stale-buffer flakes on other terminal assertions).
- *
- * This coalesces tight bursts (debounce) BUT caps the wait: the mirror is
- * guaranteed to refresh within `maxWaitMs` of the first pending write even under
- * unbroken output. Timer + clock are injectable so the starvation guard is a
+ * mirror never refreshes — it freezes on whatever was last quiescent. This
+ * coalesces tight bursts (debounce) BUT caps the wait: the mirror is guaranteed
+ * to refresh within `maxWaitMs` of the first pending write even under unbroken
+ * output. Timer + clock are injectable so the starvation guard is a
  * deterministic unit test.
+ *
+ * NOTE: this is a perf/coalescing guard, NOT the marker-flush fix. The CI-only
+ * "[vite] dev server ready never appears" flake is the *final* write being
+ * serialized before xterm parsed it (xterm `write()` parses on a deferred
+ * macrotask); the fix is `RiftyTerminal.snapshotBufferSettled` (settle barrier),
+ * which the refresh callback uses — see TerminalPanel.refreshTerminalBuffer.
  */
 export interface BufferRefreshScheduler {
   /** Request a refresh — coalesced, but never starved past `maxWaitMs`. */

@@ -22,6 +22,18 @@
 
 ### Fixed
 
+- **CI-only "[vite] dev server ready never appears" e2e flake — root cause.**
+  The `data-terminal-buffer` mirror was serialized *synchronously* after writing
+  to xterm, but `xterm.write()` parses on a deferred macrotask. A final
+  dev-server-ready line (no trailing output to trigger a later refresh) was
+  serialized before xterm parsed it, so it never reached the mirror; under CI
+  load xterm's chunked drain lagged the refresh deadline, and being the last
+  write nothing re-triggered the serialize. `TerminalPanel.refreshTerminalBuffer`
+  now serializes via `RiftyTerminal.snapshotBufferSettled` (an xterm empty-write
+  settle barrier), so the mirror always reflects the final write. Deterministic
+  regression test in `@riftydev/terminal`; the native Vite banner appeared while
+  the marker vanished precisely because the banner had trailing output and the
+  marker did not.
 - **Terminal buffer mirror can no longer starve under streaming output.**
   `data-terminal-buffer` (the serialized mirror the UI + e2e read) was refreshed
   by a reset-on-every-write 16ms debounce: while a dev server streams output,
@@ -29,9 +41,8 @@
   content under unbroken output. The new `createBufferRefreshScheduler` coalesces
   tight bursts but caps the wait (`maxWaitMs`), guaranteeing a refresh even under
   a continuous stream; the starvation case is a deterministic unit test.
-  (Robustness fix — does NOT resolve the separate CI `[vite] dev server ready`
-  marker flake, which reproduces unchanged; that marker intermittently does not
-  reach the test's terminal at all, tracked separately.)
+  (Perf/coalescing guard — the marker flake itself is fixed by the settle barrier
+  above, not the debounce cap.)
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
