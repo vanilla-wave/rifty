@@ -4,6 +4,7 @@
 
 ### Added
 
+- **`node` CLI flags — `-v/--version`, `-e/-p`, and `bad option`.** The `node` command now parses a leading flag before resolving an entry path: `node -v`/`--version` prints `v24.0.0` (the live `process.version`) exit 0; `node -e "<src>"`/`--eval` runs the source through the real module-loader realm (a temp `.cjs` in cwd → CJS `require` faithful, never `new Function`); `node -p "<expr>"`/`--print` prints `util.inspect(result)`; any other leading-`-` arg → `node: bad option: <flag>` exit 9. Previously `node --version` and every `node -e …` threw `Cannot find module '/workspace/--version'` because `args[0]` was absolutized blindly. Bare `node` (REPL) stays the documented ceiling. Guards: `node-entry-resolve.test.ts`, curious-first-15-min e2e.
 - **Vite 7 production build/preview (ADR-0173).** The default Vite template now
   supports `vite build` -> real hashed/minified `dist/` and `vite preview` ->
   `/preview/4173/` serving that built bundle through the existing SW bridge.

@@ -4,6 +4,8 @@
 
 ### Added
 
+- **`NODE_PROCESS_IDENTITY` is now a public export.** The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is re-exported from the package root so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v`), instead of a drifting hardcode.
+
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
   supplied, the resolver uses TypeScript's real config parser over the VFS to
