@@ -27,6 +27,7 @@ import {
   registerPort,
   unregisterPort,
 } from '../registry.ts';
+import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
 import { METHODS, maxHeaderSize } from './methods.ts';
@@ -254,6 +255,13 @@ export type ClientRequest = EventEmitter & {
 export type ClientResponse = IncomingMessageFromFetch;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '0.0.0.0', '::1', '[::1]']);
+
+// Bounded ownership-probe window for a cross-realm loopback miss (ADR-0180): an
+// owning realm's `accept` is one BroadcastChannel round-trip away (single-digit
+// ms), so this is generous headroom; no `accept` within it → ECONNREFUSED. The
+// no-listener case pays this latency vs Node's instant refuse (ADR-0180 accepts
+// it — loopback-only, in-browser).
+const CROSS_REALM_PROBE_MS = 500;
 
 // Whole 127.0.0.0/8 block is loopback (Node connects any 127.x.y.z locally).
 // Exported so `https.ts` refuses loopback `https:` against the SAME definition
@@ -510,7 +518,34 @@ export function request(
         init.duplex = 'half';
       }
       if (route.kind === 'refused') {
-        emitter.emit('error', connRefusedError(route.address, route.port));
+        // Loopback miss in THIS realm. Probe sibling realms via the preview
+        // broker before refusing (ADR-0180): an owning realm serves the reply
+        // (streamed bodies stay live, chunk-by-chunk); no owner within the probe
+        // window → Node-shaped ECONNREFUSED. The local registry was already
+        // consulted first (routeClientRequest returns 'local'), so this never
+        // shadows a same-realm server.
+        try {
+          const bodyBytes =
+            requestBody === null
+              ? null
+              : new Uint8Array(
+                  await new Response(requestBody as unknown as BodyInit).arrayBuffer(),
+                );
+          const crossRealm = await dispatchCrossRealmLoopback(
+            route.port,
+            { url, method, headers, body: bodyBytes },
+            { probeTimeoutMs: CROSS_REALM_PROBE_MS },
+          );
+          if (crossRealm === null) {
+            emitter.emit('error', connRefusedError(route.address, route.port));
+            return;
+          }
+          const incoming = new IncomingMessageFromFetch(crossRealm);
+          cb?.(incoming);
+          emitter.emit('response', incoming);
+        } catch (err) {
+          emitter.emit('error', err);
+        }
         return;
       }
       try {
