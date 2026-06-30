@@ -625,11 +625,6 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Generous: the FIRST LS request cold-boots the workspace `typescript` engine
     // and loads its lib.d.ts files over the relay (one-time). 150s headroom.
     test.setTimeout(150_000);
-    // [DEBUG-mk] TEMP marker-flake probe: surface page+owner console.
-    page.on('console', (m) => {
-      const t = m.text();
-      if (t.includes('[DEBUG-mk]')) console.log(t);
-    });
     await page.goto('/');
     await pickTypeScriptStarter(page);
 

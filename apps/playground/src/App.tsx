@@ -1865,9 +1865,6 @@ export function App(props: AppProps) {
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
-    console.log(
-      `[DEBUG-mk] restartDevServer begin gen=${generation} stopSession=${devServerSessionId} reqSession=${sessionId}`,
-    );
     // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
     // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
     if (devServerSessionId) manager.stop(devServerSessionId);
@@ -1876,9 +1873,6 @@ export function App(props: AppProps) {
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
-    console.log(
-      `[DEBUG-mk] restartDevServer reboot gen=${generation} target=${targetSessionId} clear+rerun`,
-    );
     manager.clear(targetSessionId); // fresh console for the switched-in project
     // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
     // switch the store has re-pointed to the destination project's starter, so a

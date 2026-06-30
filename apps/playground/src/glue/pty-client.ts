@@ -227,25 +227,19 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           return;
         }
         case 'pty:chunk': {
-          const __t = dec.decode(frame.data);
-          const __run = runs.get(frame.rid);
-          // Active run → its onChunk. Run already exited (late owner output) →
-          // the session's trailing sink, so the chunk still reaches the terminal.
-          const __sink = __run?.onChunk ?? sessions.get(frame.sid)?.trailingSink;
-          if (/dev server ready|VITE v|is listening|starting dev server/.test(__t)) {
-            console.log(
-              `[DEBUG-mk] page recv pty:chunk rid=${frame.rid} tracked=${!!__run} rescued=${!__run && !!__sink} ${JSON.stringify(__t.slice(0, 60))}`,
-            );
-          } else if (!__run && __sink) {
-            console.log(
-              `[DEBUG-mk] page rescued trailing rid=${frame.rid} ${JSON.stringify(__t.slice(0, 50))}`,
-            );
-          }
-          __sink?.(__t, frame.stream);
+          const run = runs.get(frame.rid);
+          // Active run → its onChunk. A chunk that arrives AFTER its run's
+          // pty:exit (late owner output — the dev-server readiness marker from an
+          // async listen() message racing past a restart-abort) → the session's
+          // trailing sink, so it still reaches the terminal instead of vanishing
+          // (the CI marker flake: `[vite] dev server ready` dropped at this seam).
+          (run?.onChunk ?? sessions.get(frame.sid)?.trailingSink)?.(
+            dec.decode(frame.data),
+            frame.stream,
+          );
           return;
         }
         case 'pty:exit': {
-          console.log(`[DEBUG-mk] page recv pty:exit rid=${frame.rid} code=${frame.code}`);
           const s = session(frame.sid);
           s.cwd = frame.cwd;
           s.env = frame.env;
