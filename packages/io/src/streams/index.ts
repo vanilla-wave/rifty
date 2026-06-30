@@ -13,7 +13,7 @@ import { Transform } from './transform.ts';
 import { Writable, type WritableState } from './writable.ts';
 
 export { Readable, type ReadableFromWebOptions, type ReadableOptions } from './readable.ts';
-export { Writable, type WritableOptions } from './writable.ts';
+export { Writable, type WritableOptions, type WriteChunk } from './writable.ts';
 export { Duplex } from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';
 export { PassThrough } from './pass-through.ts';

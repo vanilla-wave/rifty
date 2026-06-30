@@ -5,7 +5,7 @@ title: node:stream WHATWG bridge + modern statics
 created: 2026-06-28
 value: Libraries that `import 'node:stream/web'` or call Readable.toWeb / .map() / stream.compose / cork-uncork work in the browser, over Chromium's WHATWG streams + the existing EventEmitter lifecycle — no network, no new dependency.
 user_story: As a dev running a lib that bridges Node↔Web streams (reads a fetch body via Readable.fromWeb, transforms with .map()/.filter(), re-exposes via Readable.toWeb) or imports `node:stream/web`, I want it to work, but today the module is unregistered and the modern statics (toWeb, predicates, async-iter helpers, compose/wrap, cork/uncork, default-HWM) throw or are absent.
-items: [runtime-js/stream-writable-duplex-web-bridge, runtime-js/stream-async-iterator-helpers, runtime-js/stream-cork-uncork-writev-batching, runtime-js/stream-compose-wrap-duplex-from]
+items: [runtime-js/stream-writable-duplex-web-bridge, runtime-js/stream-async-iterator-helpers, runtime-js/stream-compose-wrap-duplex-from]
 ---
 
 ## Outcome
@@ -42,9 +42,6 @@ Each behavior is parity-proven (real Node vs rifty) before its compat ❌ flips.
 
 Build order (high-reach + cheap first; each independently promotable to compat ✅):
 
-- `runtime-js/stream-cork-uncork-writev-batching` (**ready**) — `cork`/`uncork`
-  deferred drain + real `_writev`; re-adds the (correctly-removed) `writev?`
-  option, wired for real.
 - `runtime-js/stream-writable-duplex-web-bridge` (**draft**, clear path) —
   `Writable.toWeb`/`fromWeb`, `Duplex.toWeb`/`fromWeb`. Backpressure/error-
   direction forks resolved at refine.

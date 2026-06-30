@@ -156,6 +156,11 @@ const matrices = [
         '✅',
         'Aborting the signal destroys the stream with an `AbortError` (`code:ABORT_ERR`); already-aborted destroys immediately (parity-tested)',
       ],
+      [
+        '`Writable` `cork` / `uncork` / `_writev`',
+        '✅',
+        'Cork defers writes (nested counter); uncork flushes the batch in ONE `_writev` (Node `{chunk,encoding}` shape) — real `writev` option, sequential `_write` fallback, backpressure + `drain` preserved (parity-tested)',
+      ],
     ],
     tests: [
       '`tests/conformance/builtins/stream.test.ts`',
@@ -164,6 +169,7 @@ const matrices = [
       '`packages/io/src/streams/readable.from.test.ts`',
       '`packages/io/src/streams/readable.to-web.test.ts`',
       '`packages/io/src/streams/predicates-and-defaults.test.ts`',
+      '`packages/io/src/streams/writable.cork-writev.test.ts`',
       '`packages/net/src/http/response.test.ts`',
       '`tools/node-parity-runner/cases/stream/*.case.ts`',
     ],

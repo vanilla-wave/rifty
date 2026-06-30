@@ -41,6 +41,7 @@ export {
   isDisturbed,
   type ReadableOptions,
   type WritableOptions,
+  type WriteChunk,
   type TransformOptions,
 } from '@riftydev/io';
 

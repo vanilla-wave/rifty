@@ -4,6 +4,19 @@
 
 ### Added
 
+- **`Writable` `cork()` / `uncork()` + real `_writev` batching.** `cork()` defers
+  buffered writes (no `_write`/`_writev` while corked); `uncork()` flushes them —
+  in ONE `_writev(chunks, cb)` call (Node's `[{chunk, encoding}, …]` shape) when
+  2+ chunks are pending and a `_writev` exists, else sequential `_write` (order
+  preserved). Nested cork is a counter (`writableCorked`); the buffer drains only
+  when it returns to 0, and `end()` clears it (implicit uncork). A corked stream
+  still reports backpressure (`write()` → `false` past HWM) and emits `'drain'`
+  after the flush. The `writev?` option (and a subclass `_writev` override) is
+  **re-added WIRED FOR REAL** — the previously-removed type-only placeholder lied
+  (it did nothing); it is accepted now ONLY because it is honored. A `_writev`
+  error errors every batched callback and destroys the stream. All parity-proven
+  vs real Node.
+
 - **Stream predicates + default-HWM accessors + `addAbortSignal`.**
   `isReadable`/`isWritable`/`isErrored`/`isDisturbed` (Node v16.14/v17.3) read the
   existing `_readableState`/`_writableState`; `isDisturbed` is backed by an
