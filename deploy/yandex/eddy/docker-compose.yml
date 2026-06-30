@@ -1,11 +1,20 @@
 # @riftydev/eddy fast-install resolver (ADR-0182), deployed alongside the
 # ADR-0163 registry proxy. Unlike the proxy (a stock Caddy image + inline
-# config), eddy ships its own code, so this builds the image from source.
+# config), eddy ships its own code, so this builds the image from source AND
+# fronts it with Caddy for automatic HTTPS on eddy.rifty.dev (the proxy gets TLS
+# the same way). eddy itself sets the cross-origin headers the browser client
+# needs (services/eddy/src/server.ts); Caddy only terminates TLS + reverse-
+# proxies, so those headers pass through unchanged (no duplication).
 #
 # Deploy mirrors the proxy recipe (docs/public/hosting-yandex.md): hand the
-# compose file to a Yandex Container-Optimized-Image VM. The actual deploy is a
-# confirm-first step (operator-owned infra) — see
+# compose file to a Yandex Container-Optimized-Image VM. Caddy's automatic TLS
+# needs the eddy.rifty.dev A record to resolve to the VM + ingress 80 (ACME
+# HTTP-01) and 443 open BEFORE first boot. The actual deploy is a confirm-first
+# step (operator-owned infra) — see
 # docs/backlog/distribution/eddy-package-and-deploy.md.
+#
+# Local testing without TLS uses `docker run -p 8788:8788 ... riftydev-eddy`
+# (docs/public/hosting-eddy.md); this compose is the production/VM shape.
 services:
   eddy:
     build:
@@ -14,8 +23,10 @@ services:
       dockerfile: deploy/yandex/eddy/Dockerfile
     container_name: rifty-eddy
     restart: unless-stopped
-    ports:
-      - "8788:8788"
+    # No public port: only Caddy is exposed. Caddy reaches eddy as `eddy:8788`
+    # on the compose network.
+    expose:
+      - "8788"
     environment:
       # Upstream registry eddy resolves against (D-004 env-config at the
       # server boundary). Point at the registry proxy so eddy + the proxy share
@@ -25,3 +36,37 @@ services:
       # Mutable-tier TTL (seconds); 0 = always recompute. Immutable artifacts are
       # served Cache-Control: immutable for the CDN to hold.
       EDDY_TTL_SECONDS: "1800"
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: rifty-eddy-caddy
+    restart: unless-stopped
+    depends_on:
+      - eddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat >/etc/caddy/Caddyfile <<'CADDY'
+        {
+        	admin off
+        }
+
+        eddy.rifty.dev {
+        	# eddy (server.ts) sets the CORS + Cross-Origin-Resource-Policy headers
+        	# the cross-origin browser client needs; Caddy only terminates TLS and
+        	# reverse-proxies, so those headers pass through unchanged.
+        	reverse_proxy eddy:8788
+        }
+        CADDY
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+volumes:
+  caddy_data:
+  caddy_config:

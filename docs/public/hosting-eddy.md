@@ -69,6 +69,30 @@ You should see `eddy-bundle.json`, `package-lock.json`, and `tarballs/*.tgz`.
 
 ## Deploy to rifty.dev
 
-The actual rifty.dev deployment is a separate **confirm-first** step
-(operator-owned infra) — the recipe lives here; the deploy is tracked in
-`docs/backlog/distribution/eddy-package-and-deploy.md`.
+A **confirm-first**, operator-owned step (spend + shared infra). The compose
+mirrors the ADR-0163 registry proxy (`docs/public/hosting-yandex.md`): a Caddy
+sidecar terminates TLS for `eddy.rifty.dev` and reverse-proxies to eddy on
+`:8788`. eddy sets the cross-origin headers (CORS + CORP) itself, so they pass
+through. Caddy's automatic TLS does an ACME HTTP-01 challenge on first boot, so
+the DNS record + open ports must exist **first**:
+
+1. Reserve a static IP and a security group with ingress `80/tcp` + `443/tcp`.
+2. Add `eddy.rifty.dev. A <reserved-ip>` in the `rifty` zone
+   (`docs/public/hosting-domains.md`).
+3. Create the VM from the compose (mirrors the proxy create shape):
+
+   ```bash
+   yc compute instance create-with-container rifty-eddy \
+     --zone ru-central1-a \
+     --cores 2 --core-fraction 20 --memory 1G \
+     --create-boot-disk type=network-hdd,size=16G,auto-delete=true \
+     --network-interface subnet-name=default-ru-central1-a,nat-address=<reserved-ip>,security-group-ids=<eddy-sg-id> \
+     --docker-compose-file deploy/yandex/eddy/docker-compose.yml
+   ```
+
+4. Once TLS is issued, smoke `https://eddy.rifty.dev` (the POST form above over
+   https). Then set `VITE_RIFTY_RESOLVER_URL=https://eddy.rifty.dev` in the
+   playground prod build (`netlify.toml`) so from-scratch presets resolve via
+   eddy.
+
+Tracked in `docs/backlog/distribution/eddy-package-and-deploy.md`.

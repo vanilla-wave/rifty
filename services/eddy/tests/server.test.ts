@@ -62,6 +62,46 @@ describe('eddy HTTP server', () => {
     expect(res.status).toBe(405);
   });
 
+  // The playground fetches eddy CROSS-ORIGIN from a COEP-isolated Worker; the
+  // JSON POST is preflighted. Without an OPTIONS handler + permissive CORS the
+  // browser blocks the request and the fast path never runs (ADR-0182).
+  it('OPTIONS preflight → 204 with permissive CORS', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://play.rifty.dev',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-methods')).toMatch(/POST/);
+    expect(res.headers.get('access-control-allow-headers')).toMatch(/content-type/i);
+  });
+
+  it('200 bundle carries CORS + CORP so a cross-origin COEP page can read it', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: { debug: '^4.4.1' } }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+    expect(res.headers.get('access-control-expose-headers')).toMatch(/x-eddy-closure-hash/);
+  });
+
+  it('422 decline is also CORS-readable cross-origin', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: { x: 'file:./y' } }),
+    });
+    expect(res.status).toBe(422);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
   it('POST malformed JSON → 400', async () => {
     const res = await fetch(baseUrl, {
       method: 'POST',

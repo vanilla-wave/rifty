@@ -55,6 +55,13 @@ export function createEddyServer(opts: EddyServerOptions): EddyServer {
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCache): Promise<void> {
+  if (req.method === 'OPTIONS') {
+    // CORS preflight: the JSON POST is non-simple, so a cross-origin browser
+    // client sends OPTIONS first. Answer it before the 405 method gate.
+    res.writeHead(204, corsHeaders());
+    res.end();
+    return;
+  }
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: 'method not allowed — POST a dep-set as JSON' });
     return;
@@ -92,6 +99,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     'x-eddy-resolved-at': result.manifest.asOf.resolvedAt,
     'x-eddy-closure-hash': result.manifest.asOf.closureHash,
     'x-eddy-npm-client-version': result.manifest.npmClientVersion,
+    ...corsHeaders(),
   });
   res.end(Buffer.from(result.bytes));
 }
@@ -139,6 +147,25 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json' });
+  res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders() });
   res.end(JSON.stringify(body));
+}
+
+/**
+ * Permissive CORS + cross-origin-resource-policy so the browser client (a
+ * COEP-isolated Worker on a DIFFERENT origin, e.g. play.rifty.dev) can preflight
+ * and read the bundle. The JSON POST is non-simple, so the browser sends an
+ * OPTIONS preflight first (handled in `handle`). `x-eddy-*` are exposed so a
+ * client may read the as-of stamp. ADR-0182.
+ */
+function corsHeaders(): Record<string, string> {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '86400',
+    'access-control-expose-headers':
+      'x-eddy-resolved-at, x-eddy-closure-hash, x-eddy-npm-client-version',
+    'cross-origin-resource-policy': 'cross-origin',
+  };
 }
