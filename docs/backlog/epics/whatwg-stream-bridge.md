@@ -42,15 +42,15 @@ Each behavior is parity-proven (real Node vs rifty) before its compat ❌ flips.
 
 Build order (high-reach + cheap first; each independently promotable to compat ✅):
 
-- `runtime-js/stream-writable-duplex-web-bridge` (**draft**, clear path) —
+- `runtime-js/stream-writable-duplex-web-bridge` (**ready**) —
   `Writable.toWeb`/`fromWeb`, `Duplex.toWeb`/`fromWeb`. Backpressure/error-
-  direction forks resolved at refine.
-- `runtime-js/stream-async-iterator-helpers` (**draft**, clear path) — `map`/
+  direction forks resolved (Node-pinned).
+- `runtime-js/stream-async-iterator-helpers` (**ready**) — `map`/
   `filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/
-  `find`/`iterator`. Concurrency + signal option semantics resolved at refine.
-- `runtime-js/stream-compose-wrap-duplex-from` (**draft**, clear path) —
+  `find`/`iterator`. Concurrency (input-order) + signal semantics resolved (Node-pinned).
+- `runtime-js/stream-compose-wrap-duplex-from` (**ready**) —
   `stream.compose`, `Readable.wrap`, `Duplex.from`. Legacy-streams1 + compose
-  error-propagation edge cases resolved at refine.
+  error-propagation resolved (Node-pinned).
 
 ## Reversibility
 

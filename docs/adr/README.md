@@ -77,6 +77,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0154 | HTTP stream interop and drain contract |
 | 0180 | Cross-realm http.request loopback via the preview broker |
 | 0181 | Client node:https request and get over browser fetch |
+| 0185 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 
 ### service-worker
 
