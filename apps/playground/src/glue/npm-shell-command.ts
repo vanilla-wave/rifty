@@ -96,7 +96,14 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
     }
-    ctx.stderr.write(`npm: unknown subcommand '${sub}' (supported: install, i, add, run)\n`);
+    // Lifecycle aliases: real npm runs `npm test/start/stop/restart` as the
+    // matching script (the `node server.js` default for `start` is out of scope).
+    if (sub === 'test' || sub === 'start' || sub === 'stop' || sub === 'restart') {
+      return runPackageScript([sub, ...args.slice(1)], ctx, deps);
+    }
+    ctx.stderr.write(
+      `npm: unknown subcommand '${sub}' (supported: install, i, add, run, test, start, stop, restart)\n`,
+    );
     return 1;
   };
 }
@@ -295,54 +302,93 @@ function quoteShellWord(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/** Classify a leading-`-` install flag: which dep map it targets (or global). */
+function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'unknown' {
+  if (flag === '-D' || flag === '--save-dev') return 'dev';
+  if (flag === '-S' || flag === '--save' || flag === '-E' || flag === '--save-exact') return 'prod';
+  if (flag === '-g' || flag === '--global') return 'global';
+  return 'unknown';
+}
+
 async function runInstall(
   specs: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
 ): Promise<number> {
-  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
-  const dependencies = { ...pkg.dependencies };
-
+  // Partition argv into save-flags vs package specs; the flags pick the target
+  // dep map. `-g` is a directed loud throw (no global store in the sandbox).
+  let target: 'dependencies' | 'devDependencies' = 'dependencies';
+  const pkgSpecs: string[] = [];
   for (const spec of specs) {
     if (spec.startsWith('-')) {
-      ctx.stderr.write(`npm: flag '${spec}' not supported (M9 scope)\n`);
-      return 1;
+      const kind = installFlagKind(spec);
+      if (kind === 'global') {
+        ctx.stderr.write(
+          "npm: global installs aren't supported in the browser sandbox — install into the project instead\n",
+        );
+        return 1;
+      }
+      if (kind === 'dev') target = 'devDependencies';
+      else if (kind === 'unknown') {
+        ctx.stderr.write(`npm: flag '${spec}' not supported (M9 scope)\n`);
+        return 1;
+      }
+      // `prod` (-S/--save default, -E/--save-exact) is otherwise a no-op.
+      continue;
     }
+    pkgSpecs.push(spec);
+  }
+
+  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
+  const dependencies = { ...pkg.dependencies };
+  const devDependencies = { ...pkg.devDependencies };
+  const targetMap = target === 'devDependencies' ? devDependencies : dependencies;
+
+  for (const spec of pkgSpecs) {
     const { name, range } = parseSpec(spec);
     if (!name) {
       ctx.stderr.write(`npm: malformed package spec '${spec}'\n`);
       return 1;
     }
-    dependencies[name] = range;
+    targetMap[name] = range;
   }
 
-  if (Object.keys(dependencies).length === 0) {
-    const hasPackageJsonDeps =
-      Object.keys(pkg.devDependencies).length > 0 ||
-      Object.keys(pkg.optionalDependencies).length > 0;
-    if (specs.length === 0 && !hasPackageJsonDeps && !hasRootLifecycleScript(pkg.scripts)) {
-      ctx.stdout.write('npm: no dependencies to install\n');
-      return 0;
-    }
+  const nothingToInstall =
+    pkgSpecs.length === 0 &&
+    Object.keys(dependencies).length === 0 &&
+    Object.keys(devDependencies).length === 0 &&
+    Object.keys(pkg.optionalDependencies).length === 0 &&
+    !hasRootLifecycleScript(pkg.scripts);
+  if (nothingToInstall) {
+    ctx.stdout.write('npm: no dependencies to install\n');
+    return 0;
   }
 
   const packageJsonPath = `${ctx.cwd}/package.json`;
   const hadPackageJson = await deps.vfs.exists(packageJsonPath);
   const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
-  if (specs.length > 0) {
+  if (pkgSpecs.length > 0) {
+    // Emit a dep map only when it has entries OR was already present (no spurious `{}`).
+    const nextRaw: Record<string, unknown> = { ...pkg.raw };
+    if (Object.keys(dependencies).length > 0 || 'dependencies' in pkg.raw) {
+      nextRaw.dependencies = dependencies;
+    }
+    if (Object.keys(devDependencies).length > 0 || 'devDependencies' in pkg.raw) {
+      nextRaw.devDependencies = devDependencies;
+    }
     const next: ProjectPackageJson = {
-      raw: { ...pkg.raw, dependencies },
+      raw: nextRaw,
       name: pkg.name,
       version: pkg.version,
       scripts: pkg.scripts,
       dependencies,
-      devDependencies: pkg.devDependencies,
+      devDependencies,
       optionalDependencies: pkg.optionalDependencies,
     };
     await writePackageJson(deps.vfs, ctx.cwd, next);
   }
 
-  const requested = specs.length > 0 ? specs.join(' ') : 'all from package.json';
+  const requested = pkgSpecs.length > 0 ? pkgSpecs.join(' ') : 'all from package.json';
   ctx.stdout.write(`npm: installing ${requested}…\n`);
   const start = performance.now();
 
@@ -364,7 +410,7 @@ async function runInstall(
     ctx.stdout.write(`npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms\n`);
     return 0;
   } catch (err) {
-    if (specs.length > 0) {
+    if (pkgSpecs.length > 0) {
       if (previousPackageJson) {
         await deps.vfs.writeFile(packageJsonPath, previousPackageJson);
       } else {
