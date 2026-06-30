@@ -25,30 +25,38 @@ export async function openShellTerminal(
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
   await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
-  const terminalTabs = page.getByRole('tab', { name: /Terminal \d+/ });
   const terminalSlots = page.locator('.rf-terminal-slot');
-  const tabCountBefore = await terminalTabs.count();
   const slotCountBefore = await terminalSlots.count();
+  const slotIdsBefore = await terminalSlots.evaluateAll((slots) =>
+    slots.map((slot) => slot.getAttribute('data-session-id')).filter((id) => id != null),
+  );
   await page.getByRole('button', { name: 'New terminal' }).click();
-  await expect
-    .poll(() => terminalTabs.count(), { timeout: 10_000 })
-    .toBeGreaterThan(tabCountBefore);
   await expect
     .poll(() => terminalSlots.count(), { timeout: 10_000 })
     .toBeGreaterThan(slotCountBefore);
-  const tab = terminalTabs.last();
+  const newSessionId = async () =>
+    terminalSlots.evaluateAll(
+      (slots, before) =>
+        slots
+          .map((slot) => slot.getAttribute('data-session-id'))
+          .find((id): id is string => id != null && !before.includes(id)) ?? '',
+      slotIdsBefore,
+    );
+  await expect.poll(newSessionId, { timeout: 10_000 }).not.toBe('');
+  const sessionId = await newSessionId();
+  if (sessionId.length === 0) throw new Error('new terminal did not expose a session id');
+  const tab = page.locator(`.rf-terminal-tab__select[data-session-id="${sessionId}"]`);
   await expect(tab).toBeVisible();
-  await tab.click();
+  if (focus) await tab.click();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toHaveCount(1);
-  const slotIndex = await terminalSlots.evaluateAll((slots) =>
-    slots.findIndex((slot) => slot.getAttribute('data-active') === 'true'),
+  const slot = page.locator(`.rf-terminal-slot[data-session-id="${sessionId}"]`);
+  await expect(slot).toHaveAttribute('data-active', 'true');
+  const slotIndex = await terminalSlots.evaluateAll(
+    (slots, id) => slots.findIndex((slot) => slot.getAttribute('data-session-id') === id),
+    sessionId,
   );
   if (slotIndex < 0) throw new Error('new terminal did not activate a terminal slot');
-  const slot = terminalSlots.nth(slotIndex);
-  await expect
-    .poll(() => terminalBuffer(page, slotIndex), { timeout: 30_000 })
-    .toMatch(/^\s*>\s*$/u);
+  await expect.poll(() => terminalBuffer(page, slotIndex), { timeout: 30_000 }).toMatch(/>\s*$/u);
   if (!focus) return slotIndex;
   await slot.locator('[data-testid="terminal"]').click();
   await expect
