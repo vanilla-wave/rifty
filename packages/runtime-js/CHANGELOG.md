@@ -4,6 +4,20 @@
 
 ### Added
 
+- **`execSync('node <script>')` routes its child through the node-entry module
+  loader** (ADR-0137/0143/0150), like `child_process.spawn('node', …)` already
+  does — so a `#!` shebang is STRIPPED (not a `SyntaxError`), relative
+  `import`/`require` RESOLVE against the store, and a sibling `fs.readFileSync`
+  reads it. The recursive runner (its browser-vs-Node injection seam) owns the
+  entry-kind decision: a realm that serves `fs.*` (the owner) spawns a node-entry
+  child `kind:'url'` with `RIFTY_REMOTE_FS=1` reading the owner store over the
+  P6a `fs.*` sync-RPC; a Node-hosted conformance run loader-runs the source
+  in-process. The handler stops embedding the script BYTES — it passes the path.
+  Non-UTF-8 stdout stays byte-exact (ADR-0084 #23) and a failed child's stderr is
+  now surfaced on the thrown error (Node parity). (Previously execSync's child
+  ran the raw bytes through `new AsyncFunction`, choking on a shebang, unable to
+  resolve relatives, reading an empty realm mirror.)
+
 - **`node:stream` exposes the modern statics** `isReadable`/`isWritable`/
   `isErrored`/`isDisturbed`, `getDefaultHighWaterMark`/`setDefaultHighWaterMark`,
   and `addAbortSignal` (re-exported from `@riftydev/io`, which owns them) — so

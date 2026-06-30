@@ -30,6 +30,8 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
+import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
+import { getNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import { syncMirror } from '@riftydev/vfs';
 
@@ -37,18 +39,40 @@ const dec = new TextDecoder();
 
 /** Child writing raw non-UTF-8 bytes (0xff 0xfe 0x00). A correct v2 binary frame
  *  carries them byte-exact → hex 'fffe00'; a broken frame mangles to U+FFFD →
- *  'efbfbd...'. `Uint8Array` (not Buffer) because a kind:'source' child has no
- *  Buffer global — only the kernel `process` shim. */
+ *  'efbfbd...'. ADR-0137: the child now runs through the node-entry bootstrap
+ *  (`kind:'url'` + RIFTY_REMOTE_FS), so it has a Buffer global — but Uint8Array
+ *  keeps the byte-exact write unambiguous. */
 const CHILD_BINARY_SCRIPT = 'globalThis.process.stdout.write(new Uint8Array([0xff, 0xfe, 0x00]));';
 
 /** Child writing a plain ASCII marker — proves the blocking round-trip returns
  *  the child's captured stdout. */
 const CHILD_BLOCKED_SCRIPT = "globalThis.process.stdout.write('blocked-result');";
 
+// ADR-0137 acceptance — `execSync('node /scripts/build.js')` where build.js (a)
+// starts with a `#!` shebang (must be STRIPPED — not a SyntaxError, not echoed),
+// (b) does a relative `import './config.js'` (must RESOLVE against the owner
+// store), and (c) does `fs.readFileSync('./pkg.json')` (must READ the owner
+// store, not an empty realm mirror → ENOENT). The child runs through the
+// node-entry bootstrap reading the page (owner) mirror over `fs.*` sync-RPC.
+const ACCEPTANCE_BUILD_SCRIPT = `#!/usr/bin/env node
+import { tag } from './config.js';
+import { readFileSync } from 'node:fs';
+const pkg = JSON.parse(readFileSync(new URL('./pkg.json', import.meta.url), 'utf8'));
+globalThis.process.stdout.write(\`\${tag}:\${pkg.name}\`);
+`;
+const ACCEPTANCE_CONFIG_SCRIPT = "export const tag = 'built';\n";
+const ACCEPTANCE_PKG_JSON = '{"name":"demo-pkg"}';
+// `type:module` scope so the `.js` entry + `config.js` are ESM (the real
+// workspace shape; a `.js` outside a module scope is CJS and a top-level
+// `import` is a parse error — the loader's `detectKind`).
+const ACCEPTANCE_PACKAGE_JSON = '{"type":"module"}';
+
 interface HarnessResult {
   readonly status: 'pass' | 'fail';
   readonly hex: string;
   readonly blocked: string;
+  /** ADR-0137 loader acceptance result (`built:demo-pkg`), or '' on miss. */
+  readonly loader: string;
   readonly detail: string;
 }
 
@@ -69,6 +93,7 @@ function paint(result: HarnessResult): void {
   root.appendChild(mk('execsync-status', 'status', result.status));
   root.appendChild(mk('execsync-hex', 'hex', result.hex));
   root.appendChild(mk('execsync-blocked', 'blocked', result.blocked));
+  root.appendChild(mk('execsync-loader', 'loader', result.loader));
   root.appendChild(mk('execsync-detail', 'detail', result.detail));
 
   document.body.innerHTML = '';
@@ -92,17 +117,40 @@ export async function runExecSyncHarness(): Promise<void> {
     if (kernelWorkerUrl === null) {
       throw new Error('getKernelWorkerUrl() is null — main.tsx must call setKernelWorkerUrl first');
     }
+    // ADR-0137: the recursive `execSync` child now spawns a node-entry `kind:'url'`
+    // child (shebang strip + relative imports), so the page realm must have the
+    // node-entry bootstrap URL wired (main.tsx setNodeEntryWorkerUrl).
+    if (getNodeEntryWorkerUrl() === null) {
+      throw new Error(
+        'getNodeEntryWorkerUrl() is null — main.tsx must call setNodeEntryWorkerUrl first',
+      );
+    }
 
-    // Seed the child scripts into the PAGE mirror — the handler's resolver reads
-    // them here when the guest runs `execSync('node /child.js')`.
+    // Seed the child scripts into the PAGE mirror — the execSync child reads them
+    // from this (owner) mirror over `fs.*` sync-RPC. `/scripts/build.js` is the
+    // ADR-0137 acceptance entry (shebang + relative import + sibling readFileSync).
     const mirror = syncMirror();
     const enc = new TextEncoder();
     mirror.writeFileSync('/child.js', enc.encode(CHILD_BINARY_SCRIPT));
     mirror.writeFileSync('/blocked.js', enc.encode(CHILD_BLOCKED_SCRIPT));
+    mirror.mkdirSync('/scripts', { recursive: true });
+    mirror.writeFileSync('/scripts/package.json', enc.encode(ACCEPTANCE_PACKAGE_JSON));
+    mirror.writeFileSync('/scripts/build.js', enc.encode(ACCEPTANCE_BUILD_SCRIPT));
+    mirror.writeFileSync('/scripts/config.js', enc.encode(ACCEPTANCE_CONFIG_SCRIPT));
+    mirror.writeFileSync('/scripts/pkg.json', enc.encode(ACCEPTANCE_PKG_JSON));
+
+    // The execSync child (a node-entry `kind:'url'` worker, RIFTY_REMOTE_FS=1)
+    // reads its entry + relative imports + sibling files from the PAGE (owner)
+    // mirror over `fs.*` sync-RPC — so the page dispatcher must serve `fs.*`
+    // (ADR-0150). Without this, the child reads its own empty realm mirror →
+    // ENOENT. This is the owner's role the real workspace owner plays.
+    installRuntimeJsFsHandlers(getKernelDispatcher(), () => mirror);
 
     // Register the runtime-js 'execSync' handler on the PAGE dispatcher. Resolver
-    // reads the page mirror; null for a missing script → the handler surfaces a
-    // proper ENOENT (matches the runtime-js builtin's own resolver).
+    // is an ENOENT pre-check over the page mirror; null for a missing script →
+    // the handler surfaces a proper ENOENT (matches the runtime-js builtin's own
+    // resolver). The runner (default makeRecursiveRunner) reads the real source
+    // through the node-entry child + module loader.
     installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
       if (!mirror.existsSync(path)) return null;
       return mirror.readFileBytesSync(path);
@@ -147,15 +195,21 @@ export async function runExecSyncHarness(): Promise<void> {
 
     const hex = matchLine(stdout, 'HEX');
     const blocked = matchLine(stdout, 'BLOCKED');
+    const loader = matchLine(stdout, 'LOADER');
     const guestErr = matchLine(stdout, 'ERROR');
 
-    const ok = exitCode === 0 && hex === 'fffe00' && blocked === 'blocked-result';
+    const ok =
+      exitCode === 0 &&
+      hex === 'fffe00' &&
+      blocked === 'blocked-result' &&
+      loader === 'built:demo-pkg';
     paint({
       status: ok ? 'pass' : 'fail',
       hex,
       blocked,
+      loader,
       detail: ok
-        ? 'real SAB + Atomics.waitAsync + v2 binary frame round-trip'
+        ? 'real SAB + Atomics.waitAsync + v2 binary frame + node-entry loader round-trip'
         : `exit=${exitCode} guestErr=${guestErr} stderr=${stderr.trim().slice(0, 400)}`,
     });
   } catch (err) {
@@ -163,6 +217,7 @@ export async function runExecSyncHarness(): Promise<void> {
       status: 'fail',
       hex: '',
       blocked: '',
+      loader: '',
       detail: err instanceof Error ? (err.stack ?? err.message) : String(err),
     });
   }

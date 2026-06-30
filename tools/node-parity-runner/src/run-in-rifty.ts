@@ -118,23 +118,38 @@ async function installSqliteMode(): Promise<void> {
 }
 
 /**
- * Install the opt-in `kind: 'exec-sync'` mode (ADR-0084 #23). `execSync` is
- * SAB-only by design (ADR-0011 removed the in-realm fallback as a silent stub),
- * so the default loader path throws `NotImplementedError`. To exercise the v2
- * binary-frame round-trip head-to-head against real Node's byte-exact `execSync`,
- * this wires a REAL kernel `SabRing` + the genuine encode/decodeReply framing
- * and a synchronous in-realm child runner that captures stdout BYTES, then
- * publishes the `__riftyKernelSyncCall` shim the runtime-js `execSync` reads.
+ * Install the opt-in `kind: 'exec-sync'` mode (ADR-0084 #23, ADR-0137).
+ * `execSync` is SAB-only by design (ADR-0011 removed the in-realm fallback as a
+ * silent stub), so the default loader path throws `NotImplementedError`. To
+ * exercise the v2 binary-frame round-trip head-to-head against real Node's
+ * byte-exact `execSync`, this wires a REAL kernel `SabRing` + the genuine
+ * encode/decodeReply framing and a SYNCHRONOUS in-realm child runner that
+ * captures stdout BYTES, then publishes the `__riftyKernelSyncCall` shim the
+ * runtime-js `execSync` reads.
  *
- * Node main-thread `Atomics.wait` does not throw, and the reply is written
- * synchronously by the (synchronous) handler before `waitReply` runs, so the
- * whole round-trip completes without yielding — matching `execSync`'s
- * synchronous contract. Returns a teardown that clears the published shim and
- * the host-capability stubs.
+ * The child runner LOADER-RUNS the script through the REAL rifty module loader
+ * (ADR-0137) — `loader.require` for a CJS entry — so the child's `#!` shebang is
+ * stripped (the resolver's strip, `resolver.ts`), its relative `require('./x')`
+ * resolves against the sync mirror, and a sibling `fs.readFileSync('./y')` reads
+ * the mirror (the rifty `node:fs` builtin). This is the same loader path the
+ * browser `kind:'url'` child uses — the OLD `new Function` runner could do NONE
+ * of these (it threw on `#!`, could not resolve relatives), so it silently
+ * diverged from real Node for any shebang'd / relative-import child. Closing
+ * that is the whole point of this item (Fidelity).
+ *
+ * Synchronous by design: `execSync`'s `api.call(...)` must return without
+ * yielding (it is the synchronous child-execution contract). `loader.require`
+ * runs a CJS entry to completion synchronously, so `pumpOnce` services the
+ * request and `waitReply` finds the reply immediately — matching the OLD mock's
+ * synchronous shape, now over the loader instead of `new Function`. (An ESM
+ * execSync child is async-only; the in-process-runner unit test + the browser
+ * e2e cover the ESM/`kind:'url'` paths — this synchronous parity mock pins the
+ * CJS shebang/relative/sibling-read behaviors head-to-head against Node.)
+ * Returns a teardown that clears the published shim + the host-capability stubs.
  */
 async function installExecSyncMode(): Promise<() => void> {
   // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
-  // kernel, io and the runtime-js sync-mirror are not workspace deps of the runner.
+  // kernel and the runtime-js loader are not workspace deps of the runner.
   const {
     SabRing,
     createSabRing,
@@ -147,7 +162,11 @@ async function installExecSyncMode(): Promise<() => void> {
   const { syncMirror } = await import(
     '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts'
   );
-  const { Buffer } = await import('../../../packages/io/src/index.ts');
+  const { createModuleLoader } = await import(
+    '../../../packages/runtime-js/src/module-loader/loader.ts'
+  );
+  const { riftyProcess } = await import('../../../packages/runtime-js/src/builtins/process.ts');
+  const { isAbsolute, joinPath, normalizePath } = await import('@riftydev/vfs');
 
   // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
   // Atomics already exist in Node; only `crossOriginIsolated` is missing.
@@ -155,29 +174,59 @@ async function installExecSyncMode(): Promise<() => void> {
   const hadCOI = 'crossOriginIsolated' in g ? g.crossOriginIsolated : undefined;
   Object.defineProperty(g, 'crossOriginIsolated', { value: true, configurable: true });
   setKernelWorkerUrl('parity://exec-sync');
+  // Untyped view for swapping the ambient `process` to `riftyProcess` during a
+  // child run (Node's `Process` type rejects the `NodeProcess` shim assignment).
+  const procHost = globalThis as { process?: unknown };
 
-  // Synchronous in-realm child runner: eval the child source with a `process`
-  // shim whose `stdout.write` captures Buffer/Uint8Array bytes verbatim (the
-  // byte-exact path real rifty uses via the Worker stdout MessagePort).
-  function runChildSync(scriptPath: string): { stdout: Uint8Array; exitCode: number } {
-    const sourceBytes = syncMirror().readFileBytesSync(scriptPath);
-    const code = Buffer.from(sourceBytes).toString();
+  /**
+   * Synchronous loader-run child runner (ADR-0137). Loads the CJS entry through
+   * the REAL rifty loader against the sync mirror — shebang stripped, relative
+   * `require` + sibling `fs.readFileSync` resolved — capturing the child's
+   * `process.stdout.write(...)` bytes verbatim (byte-exact, ADR-0084 #23). The
+   * loader reads the ambient global `process`; we install `riftyProcess` with a
+   * capturing `stdout` for the run (the Worker realm shape, scoped) and restore.
+   */
+  function runChildSync(
+    scriptPath: string,
+    cwd: string,
+  ): {
+    stdout: Uint8Array;
+    exitCode: number;
+  } {
     const chunks: Uint8Array[] = [];
-    const write = (chunk: unknown): boolean => {
-      if (chunk instanceof Uint8Array) chunks.push(chunk);
-      else chunks.push(new TextEncoder().encode(String(chunk)));
-      return true;
+    const enc = new TextEncoder();
+    const capture = {
+      write(chunk: unknown): boolean {
+        if (chunk instanceof Uint8Array) chunks.push(new Uint8Array(chunk));
+        else chunks.push(enc.encode(String(chunk)));
+        return true;
+      },
+      isTTY: false,
+      fd: 1,
     };
-    const proc = { stdout: { write }, stderr: { write() {} }, argv: ['rifty', scriptPath] };
-    const fn = new Function('process', 'Buffer', `${code}\n//# sourceURL=${scriptPath}`) as (
-      p: unknown,
-      b: unknown,
-    ) => void;
+    const prevGlobalProcess = procHost.process;
+    const prevStdout = riftyProcess.stdout;
+    const prevExitCode = riftyProcess.exitCode;
+    (riftyProcess as { stdout: unknown }).stdout = capture;
+    riftyProcess.exitCode = 0;
+    procHost.process = riftyProcess;
     let exitCode = 0;
     try {
-      fn(proc, Buffer);
+      const loader = createModuleLoader(syncMirror(), { cwd });
+      // Absolutize the entry against cwd (the loader treats bare `build.js` as a
+      // package specifier — Node-faithful), mirroring the handler's
+      // `resolveNodeEntry`; real Node runs the child in the case tmpdir cwd.
+      const entryAbs = normalizePath(
+        isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
+      );
+      loader.require(entryAbs, entryAbs);
+      exitCode = riftyProcess.exitCode;
     } catch {
-      exitCode = 1;
+      exitCode = riftyProcess.exitCode || 1;
+    } finally {
+      procHost.process = prevGlobalProcess;
+      (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+      riftyProcess.exitCode = prevExitCode;
     }
     let total = 0;
     for (const c of chunks) total += c.byteLength;
@@ -195,14 +244,14 @@ async function installExecSyncMode(): Promise<() => void> {
   // #23), so the value round-trips byte-exact.
   const dispatcher = new SyncRpcDispatcher();
   dispatcher.register('execSync', (rawPayload) => {
-    const payload = rawPayload as { cmd: string };
+    const payload = rawPayload as { cmd: string; opts?: { cwd?: string } };
     const tokens = payload.cmd.split(/\s+/).filter(Boolean);
     if (tokens[0] !== 'node' || tokens.length < 2) {
       throw Object.assign(new Error(`execSync only supports 'node <script>': ${payload.cmd}`), {
         code: 'EUNSUPPORTED',
       });
     }
-    const result = runChildSync(tokens[1] ?? '');
+    const result = runChildSync(tokens[1] ?? '', payload.opts?.cwd ?? '/');
     if (result.exitCode !== 0) {
       throw Object.assign(new Error(`Command failed: ${payload.cmd}`), {
         code: 'ECHILDFAILED',
