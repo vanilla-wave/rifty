@@ -113,6 +113,11 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     chunk: string,
     stream: PtyStream,
   ): void {
+    if (/dev server ready|VITE v|is listening|starting dev server/.test(chunk)) {
+      console.log(
+        `[DEBUG-mk] owner emitChunk sid=${sid} rid=${rid} inRuns=${sessions.get(sid)?.runs.has(rid)} ${JSON.stringify(chunk.slice(0, 60))}`,
+      );
+    }
     deps.send({ type: 'pty:chunk', sid, rid, stream, seq: run.seq++, data: enc.encode(chunk) });
   }
 
@@ -154,6 +159,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       code = 1;
       error = err instanceof Error ? err.message : String(err);
     } finally {
+      console.log(`[DEBUG-mk] owner exec finally rid=${frame.rid} line=${JSON.stringify(frame.line.slice(0, 30))} -> delete+pty:exit`);
       session.runs.delete(frame.rid);
       run.stdin.close();
     }

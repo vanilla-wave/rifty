@@ -213,10 +213,22 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           return;
         }
         case 'pty:chunk': {
-          runs.get(frame.rid)?.onChunk(dec.decode(frame.data), frame.stream);
+          const __t = dec.decode(frame.data);
+          const __tracked = runs.has(frame.rid);
+          if (/dev server ready|VITE v|is listening|starting dev server/.test(__t)) {
+            console.log(
+              `[DEBUG-mk] page recv pty:chunk rid=${frame.rid} tracked=${__tracked} ${JSON.stringify(__t.slice(0, 60))}`,
+            );
+          } else if (!__tracked) {
+            console.log(
+              `[DEBUG-mk] page DROP-untracked rid=${frame.rid} ${JSON.stringify(__t.slice(0, 60))}`,
+            );
+          }
+          runs.get(frame.rid)?.onChunk(__t, frame.stream);
           return;
         }
         case 'pty:exit': {
+          console.log(`[DEBUG-mk] page recv pty:exit rid=${frame.rid} code=${frame.code}`);
           const s = session(frame.sid);
           s.cwd = frame.cwd;
           s.env = frame.env;

@@ -98,7 +98,7 @@ jobs:
       # (builds the app + `pnpm preview` with Netlify COI headers, asserts the
       # owner boots — catches prod-only regressions the dev-server e2e can't).
       - run: pnpm test:e2e:${{ matrix.lane }}
-      - if: failure()
+      - if: always() # DEBUG-mk: keep flaky-but-green traces too (marker-flake probe)
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.lane }}
