@@ -2166,6 +2166,25 @@ export function App(props: AppProps) {
         togglePalette();
         return;
       }
+      // Cmd/Ctrl+S: kill the browser "Save page" dialog; flush the debounced
+      // editor writes and pulse a transient "Saved" ack (edits already persist).
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 's' || e.code === 'KeyS')) {
+        e.preventDefault();
+        e.stopPropagation();
+        editorApi?.flushPendingWrites();
+        flashToast('Saved', 'success');
+        return;
+      }
+      // Cmd/Ctrl+W: close the ACTIVE editor tab, not the browser tab. With no
+      // closable editor tab the browser default is left alone (beforeunload then
+      // guards an in-memory dirty session).
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.code === 'KeyW')) {
+        if (editorApi?.closeActiveTab()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       // Escape closes the topmost project overlay (ADR-0165 §9 a11y): a project
       // dialog first (drop any stashed Save-then pending), else the launcher modal.
       // The command palette owns its own Escape, so leave it alone.
@@ -2182,6 +2201,18 @@ export function App(props: AppProps) {
     };
     globalThis.window?.addEventListener('keydown', onKey, true);
     onCleanup(() => globalThis.window?.removeEventListener('keydown', onKey, true));
+
+    // Guard a reflexive Cmd+R / tab close from silently nuking in-memory work:
+    // prompt ONLY when storage is memory-backed (no reload persistence) AND there
+    // are unsaved/just-debounced edits. OPFS persists, so it never prompts.
+    const onBeforeUnload = (e: BeforeUnloadEvent): void => {
+      if (storageMode === 'memory' && store.dirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    globalThis.window?.addEventListener('beforeunload', onBeforeUnload);
+    onCleanup(() => globalThis.window?.removeEventListener('beforeunload', onBeforeUnload));
   });
 
   const livePillLabel = (): string =>

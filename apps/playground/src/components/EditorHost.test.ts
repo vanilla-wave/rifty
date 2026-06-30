@@ -31,3 +31,15 @@ describe('EditorHost program sync contract', () => {
     );
   });
 });
+
+describe('EditorHost session-guard API (frictionless-first-poke)', () => {
+  it('exposes closeActiveTab — closes a closable tab, never the program tab', () => {
+    expect(source).toContain('closeActiveTab(): boolean;');
+    expect(source).toContain('if (id === PROGRAM_TAB_ID) return false;');
+  });
+
+  it('exposes flushPendingWrites — flushes every pending debounced write', () => {
+    expect(source).toContain('flushPendingWrites(): void;');
+    expect(source).toContain('for (const [path, timer] of [...writeTimers]) {');
+  });
+});

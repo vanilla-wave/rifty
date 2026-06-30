@@ -319,6 +319,25 @@ describe('UI affordance honesty — Export button + Share toast (frictionless-fi
   });
 });
 
+describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-first-poke)', () => {
+  it('Cmd/Ctrl+S kills the save-page dialog, flushes debounced writes + acks', () => {
+    expect(source).toContain("(e.key === 's' || e.code === 'KeyS')");
+    expect(source).toContain('editorApi?.flushPendingWrites();');
+    expect(source).toContain("flashToast('Saved', 'success');");
+  });
+
+  it('Cmd/Ctrl+W closes the active editor tab, not the browser tab', () => {
+    expect(source).toContain("(e.key === 'w' || e.code === 'KeyW')");
+    expect(source).toContain('if (editorApi?.closeActiveTab()) {');
+  });
+
+  it('beforeunload prompts ONLY in memory mode with dirty edits (OPFS never prompts)', () => {
+    expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
+    expect(source).toContain("e.returnValue = '';");
+    expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
+  });
+});
+
 describe('owner dev-boot clean wiring (ADR-0165 §5)', () => {
   it('owner dev-boot clean is gated on shouldCleanForDevBoot (root OR template change)', () => {
     const src = readFileSync(

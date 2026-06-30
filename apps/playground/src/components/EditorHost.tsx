@@ -94,6 +94,17 @@ export interface EditorApi {
    * before any editor-visible side effect.
    */
   canEnsureModel(path: string, options?: { readonly isNewFile?: boolean }): boolean;
+  /**
+   * Close the active editor tab if it is a closable (non-program) tab; returns
+   * whether it closed one. Wired to Cmd/Ctrl+W so the shortcut closes a tab, not
+   * the browser tab. The tab's pending debounced write is flushed first.
+   */
+  closeActiveTab(): boolean;
+  /**
+   * Flush every pending debounced editor write immediately (Cmd/Ctrl+S). A no-op
+   * when nothing is pending.
+   */
+  flushPendingWrites(): void;
 }
 
 export interface EditorHostProps {
@@ -685,6 +696,20 @@ export function EditorHost(props: EditorHostProps) {
       canEnsureModel(path, options) {
         if (options?.isNewFile === true) return true;
         return canOpenExistingModel(path);
+      },
+      closeActiveTab() {
+        const id = activeId();
+        if (id === PROGRAM_TAB_ID) return false; // the program tab is not closable
+        closeFile(id); // id === path for a file tab; flushes its pending write
+        return true;
+      },
+      flushPendingWrites() {
+        // Snapshot first — flushWrite (via the timer cb) mutates writeTimers.
+        for (const [path, timer] of [...writeTimers]) {
+          clearTimeout(timer);
+          writeTimers.delete(path);
+          flushWrite(path);
+        }
       },
     });
 
