@@ -19,6 +19,7 @@
  */
 
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
+import { claimPort, releasePort } from '../cross-realm/port-claim.ts';
 import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import {
   addrInUseError,
@@ -127,9 +128,34 @@ export class HttpServer extends EventEmitter {
       return res.toResponse();
     });
     this.listenForWebSocketUpgrades(port);
-    queueMicrotask(() => {
-      this.emit('listening');
-      callback?.();
+    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0185 D5) — fire
+    // `'listening'` on the next microtask, as before, with no claim.
+    if (requested === 0) {
+      queueMicrotask(() => {
+        this.emit('listening');
+        callback?.();
+      });
+      return this;
+    }
+    // Explicit port: a cross-realm bind-claim (ADR-0185) gates `'listening'`.
+    // The port is already registered synchronously (above) so the intra-realm
+    // fast-path + immediate same-realm dispatch are unchanged; the claim only
+    // decides whether THIS realm keeps it. Win → `'listening'`; a sibling realm
+    // already owns it → unregister + async `'error'` EADDRINUSE (no `'listening'`).
+    void claimPort(port).then((won) => {
+      if (this.port !== port) {
+        // Closed during the claim window — undo any ownership the claim acquired.
+        if (won) releasePort(port);
+        return;
+      }
+      if (won) {
+        this.emit('listening');
+        callback?.();
+      } else {
+        unregisterPort(port);
+        this.port = null;
+        this.emit('error', addrInUseError('127.0.0.1', port));
+      }
     });
     return this;
   }
@@ -140,6 +166,7 @@ export class HttpServer extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.port !== null) {
+      releasePort(this.port); // stop answering cross-realm claims (ADR-0185 D4)
       unregisterPort(this.port);
       this.port = null;
     }

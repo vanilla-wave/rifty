@@ -206,7 +206,7 @@ const matrices = [
       [
         '`listen` on a bound port',
         '✅',
-        'Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157)',
+        'Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`. Catches an intra-realm double-listen (ADR-0157) AND a cross-realm one (ADR-0185): a bind-claim broadcast over the per-port BroadcastChannel refuses a port a sibling Worker realm already owns',
       ],
       [
         '`listen(0)` / `listen({ port: 0 })` ephemeral',
@@ -219,6 +219,11 @@ const matrices = [
         'Cross-realm `http.request` loopback',
         '✅',
         'A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180)',
+      ],
+      [
+        'Cross-realm `EADDRINUSE` at `listen()`',
+        '✅',
+        'Two supervised-child realms cannot silently double-bind a port: `listen(port)` broadcasts a bind-claim on the per-port BroadcastChannel and the existing owner (or a lower-id concurrent claimant) wins, the loser gets Node-shaped `EADDRINUSE` (ADR-0185). Explicit ports only — ephemeral `listen(0)` and non-`listen` owners (the Vite preview) stay unclaimed',
       ],
       [
         'External WebSocket client egress',
@@ -273,6 +278,8 @@ const matrices = [
       '`packages/service-worker/src/body-transport.test.ts`',
       '`packages/net/src/cross-realm/preview-port.test.ts`',
       '`packages/net/src/cross-realm/cross-realm-loopback.test.ts`',
+      '`packages/net/src/cross-realm/port-claim.test.ts`',
+      '`packages/net/src/cross-realm/listen-eaddrinuse.test.ts`',
     ],
     limitations: [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',

@@ -15,6 +15,7 @@
  */
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
+import { claimPort, releasePort } from './cross-realm/port-claim.ts';
 import {
   addrInUseError,
   allocateEphemeralPort,
@@ -197,9 +198,30 @@ export class Server extends EventEmitter {
         });
       });
     });
-    queueMicrotask(() => {
-      this.emit('listening');
-      callback?.();
+    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0185 D5).
+    if (requested === 0) {
+      queueMicrotask(() => {
+        this.emit('listening');
+        callback?.();
+      });
+      return this;
+    }
+    // Explicit port: a cross-realm bind-claim (ADR-0185) gates `'listening'`.
+    // The port is registered synchronously (above) — the claim only decides
+    // whether THIS realm keeps it; a sibling owner → unregister + EADDRINUSE.
+    void claimPort(resolvedPort).then((won) => {
+      if (this.listenedPort !== resolvedPort) {
+        if (won) releasePort(resolvedPort); // closed during the window
+        return;
+      }
+      if (won) {
+        this.emit('listening');
+        callback?.();
+      } else {
+        unregisterPort(resolvedPort);
+        this.listenedPort = null;
+        this.emit('error', addrInUseError('127.0.0.1', resolvedPort));
+      }
     });
     return this;
   }
@@ -210,6 +232,7 @@ export class Server extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.listenedPort !== null) {
+      releasePort(this.listenedPort); // stop answering cross-realm claims (ADR-0185 D4)
       unregisterPort(this.listenedPort);
       this.listenedPort = null;
     }

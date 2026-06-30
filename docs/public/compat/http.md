@@ -15,11 +15,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
 | Length-less bodied request framing | ✅ | Adds Node-shaped body framing for body parsers |
 | `server.close()` | ✅ | Unregisters port and callback fires |
-| `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157) |
+| `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`. Catches an intra-realm double-listen (ADR-0157) AND a cross-realm one (ADR-0185): a bind-claim broadcast over the per-port BroadcastChannel refuses a port a sibling Worker realm already owns |
 | `listen(0)` / `listen({ port: 0 })` ephemeral | ✅ | Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
 | Cross-realm `http.request` loopback | ✅ | A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180) |
+| Cross-realm `EADDRINUSE` at `listen()` | ✅ | Two supervised-child realms cannot silently double-bind a port: `listen(port)` broadcasts a bind-claim on the per-port BroadcastChannel and the existing owner (or a lower-id concurrent claimant) wins, the loser gets Node-shaped `EADDRINUSE` (ADR-0185). Explicit ports only — ephemeral `listen(0)` and non-`listen` owners (the Vite preview) stay unclaimed |
 | External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
@@ -46,6 +47,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `packages/service-worker/src/body-transport.test.ts`
 - `packages/net/src/cross-realm/preview-port.test.ts`
 - `packages/net/src/cross-realm/cross-realm-loopback.test.ts`
+- `packages/net/src/cross-realm/port-claim.test.ts`
+- `packages/net/src/cross-realm/listen-eaddrinuse.test.ts`
 
 ## Known Limitations
 

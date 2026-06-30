@@ -116,12 +116,13 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.on('listening', () => {
       listened = true;
     });
-    s.listen({ port: 4097 }, () => {});
-    // `listening` + the callback fire on a queued microtask; await past it.
-    await Promise.resolve();
-    await Promise.resolve();
+    // The port registers synchronously (intra-realm fast-path is unchanged); the
+    // callback/`'listening'` are gated on the cross-realm bind-claim (ADR-0185),
+    // so await the callback rather than a fixed microtask count.
+    await new Promise<void>((resolve) => s.listen({ port: 4097 }, () => resolve()));
     expect(listPorts()).toContain(4097);
     expect(listened).toBe(true);
+    s.close();
   });
 
   it('listen(port) bare-number form is unchanged', async () => {
@@ -130,11 +131,10 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.on('listening', () => {
       listened = true;
     });
-    s.listen(4098, () => {});
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => s.listen(4098, () => resolve()));
     expect(listPorts()).toContain(4098);
     expect(listened).toBe(true);
+    s.close();
   });
 
   it('address() reflects the numeric port from the options form', () => {

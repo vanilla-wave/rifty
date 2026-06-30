@@ -76,7 +76,7 @@ export function previewPortChannelUrl(port: number): string {
  * `BroadcastChannel` structured-clones and `Headers` isn't cloneable
  * everywhere.
  */
-type PreviewPortFrame =
+export type PreviewPortFrame =
   | {
       readonly type: 'request';
       readonly v?: string;
@@ -98,6 +98,25 @@ type PreviewPortFrame =
       readonly type: 'accept';
       readonly v: string;
       readonly requestId: string;
+    }
+  | {
+      // ADR-0185: cross-realm bind-claim. A realm broadcasts this at `listen(port)`
+      // before registering; an existing owner replies `claim-deny`, a concurrent
+      // claimant tie-breaks by `id` (lower wins). Additive (ADR-0031): a pre-0185
+      // peer never sends/answers it, so it just never participates. `id` is a
+      // per-claim, lexicographically-orderable unique string.
+      readonly type: 'claim';
+      readonly v: string;
+      readonly port: number;
+      readonly id: string;
+    }
+  | {
+      // ADR-0185: the owner's (or a winning concurrent claimant's) refusal of a
+      // `claim`, echoing the loser's `id` so only that claimant backs off.
+      readonly type: 'claim-deny';
+      readonly v: string;
+      readonly port: number;
+      readonly id: string;
     }
   | {
       readonly type: 'reply';
@@ -495,7 +514,9 @@ export function bridgeCrossRealmPreview(
 
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as PreviewPortFrame;
-    if (frame.type === 'request') return; // not ours
+    // `request` is inbound to the worker; `claim`/`claim-deny` are the bind-claim
+    // protocol (ADR-0185) on the same channel — none is a reply this bridge awaits.
+    if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
     const waiter = pending.get(frame.requestId);
     if (!waiter) return; // unknown/late frame, or another bridge instance's
 
@@ -724,7 +745,9 @@ export function dispatchCrossRealmLoopback(
 
     const onMessage = (event: MessageEvent): void => {
       const frame = event.data as PreviewPortFrame;
-      if (frame.type === 'request') return; // not ours
+      // `request` is the outbound probe; `claim`/`claim-deny` belong to the
+      // bind-claim protocol (ADR-0185) on the same channel — neither is ours.
+      if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
       if (frame.requestId !== requestId) return; // another request / bridge instance
 
       switch (frame.type) {
