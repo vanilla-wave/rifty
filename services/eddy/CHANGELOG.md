@@ -20,3 +20,8 @@
   dep-set → a streamed `EddyBundleV1` with the as-of stamp in `x-eddy-*`
   headers, or a `422` typed decline for unsupported specs. Config via env
   (`PORT`, `REGISTRY_BASE_URL`, `EDDY_TTL_SECONDS`).
+- **Publish-set wiring.** eddy joins `build:libs` (so its `dist/` builds in the
+  publish pipeline) and `first-publish.sh`, which gains a `--only <filter>` mode
+  to bootstrap a single new name (`--only @riftydev/eddy`) without re-publishing
+  the existing 12. `release.yml`'s automated set adds eddy after that bootstrap
+  (OIDC can't create a name) — see `docs/public/publishing.md`.

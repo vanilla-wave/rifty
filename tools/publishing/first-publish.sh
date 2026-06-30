@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of all 12 rifty packages with a token.
+# One-time FIRST publish of the rifty packages with a token (13: the 12 libs +
+# the @riftydev/eddy service). Pass --only <filter> to bootstrap a single new
+# name later (e.g. --only @riftydev/eddy) without re-publishing the rest.
 #
 # Why a token (just this once): npm OIDC trusted publishing cannot create a
 # package name that does not exist yet (npm/cli#8544). After this initial
@@ -8,13 +10,15 @@
 # (see docs/PUBLISHING.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`) plus
-# @riftydev/shadow-registry. apps/playground + test fixtures stay private and are
-# never matched by the filter.
+# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`),
+# @riftydev/shadow-registry, and the @riftydev/eddy service (services/eddy).
+# apps/playground + test fixtures stay private and are never matched by the
+# filter.
 #
 # Usage:
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run
+#   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/eddy
 #
 # The token needs publish rights to the @riftydev scope. Since these names don't
 # exist yet, a granular token can't pre-select them — create it with
@@ -27,16 +31,27 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 DRY=""
-if [ "${1:-}" = "--dry-run" ]; then
-  DRY="--dry-run"
-  echo "▶ DRY RUN — packs every package, contacts no registry, publishes nothing."
-fi
+ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      DRY="--dry-run"
+      echo "▶ DRY RUN — packs, contacts no registry, publishes nothing." ;;
+    --only)
+      shift
+      ONLY="${1:-}"
+      [ -n "$ONLY" ] || { echo "✗ --only needs a package filter, e.g. --only @riftydev/eddy" >&2; exit 2; } ;;
+    *)
+      echo "✗ unknown argument: $1 (expected --dry-run and/or --only <filter>)" >&2; exit 2 ;;
+  esac
+  shift
+done
 
 echo "▶ building libraries (tsup → dist/)…"
 pnpm build:libs
 
 echo "▶ bundling LICENSE into each package…"
-for d in packages/*/ tools/shadow-registry/; do
+for d in packages/*/ tools/shadow-registry/ services/eddy/; do
   cp LICENSE "$d/LICENSE"
 done
 
@@ -46,22 +61,28 @@ done
 NPMRC="$(mktemp)"
 # Clean up the temp auth file AND the LICENSE copies (they exist only to ride
 # along in each tarball; the source of truth is the repo-root ./LICENSE).
-trap 'rm -f "$NPMRC" packages/*/LICENSE tools/shadow-registry/LICENSE' EXIT
+trap 'rm -f "$NPMRC" packages/*/LICENSE tools/shadow-registry/LICENSE services/eddy/LICENSE' EXIT
 {
   echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}'
   echo '@riftydev:registry=https://registry.npmjs.org/'
 } >"$NPMRC"
 
-echo "▶ publishing @riftydev/* (incl. the @riftydev/sdk umbrella, access public)…"
+if [ -n "$ONLY" ]; then
+  FILTERS=(--filter "$ONLY")
+  echo "▶ publishing ONLY $ONLY (access public)…"
+else
+  FILTERS=(--filter "./packages/*" --filter "@riftydev/shadow-registry" --filter "@riftydev/eddy")
+  echo "▶ publishing @riftydev/* (incl. the @riftydev/sdk umbrella + eddy, access public)…"
+fi
 NPM_CONFIG_USERCONFIG="$NPMRC" \
-  pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
+  pnpm -r "${FILTERS[@]}" \
   publish --access public --no-git-checks $DRY
 
 if [ -n "$DRY" ]; then
-  echo "✓ dry run complete — all 12 packages packed cleanly."
+  echo "✓ dry run complete — packed cleanly."
 else
   echo "✓ published. Next: on npmjs.com add a GitHub Actions trusted publisher to"
-  echo "  each of the 12 packages (owner=vanilla-wave, repo=rifty,"
-  echo "  workflow=release.yml). Then 'git tag vX.Y.Z && git push origin vX.Y.Z'"
-  echo "  publishes tokenlessly. Revoke this token once that is verified."
+  echo "  each published name (owner=vanilla-wave, repo=rifty, workflow=release.yml)."
+  echo "  Then 'git tag vX.Y.Z && git push origin vX.Y.Z' publishes tokenlessly."
+  echo "  Revoke this token once that is verified."
 fi
