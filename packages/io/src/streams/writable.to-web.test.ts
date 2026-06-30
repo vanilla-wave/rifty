@@ -17,7 +17,12 @@ const tick = (ms = 10): Promise<void> => new Promise((res) => setTimeout(res, ms
  */
 describe('Writable.toWeb', () => {
   it('returns a real WHATWG WritableStream', () => {
-    const w = new Writable({ objectMode: true, write(_c, _e, cb) { cb(); } });
+    const w = new Writable({
+      objectMode: true,
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     const web = Writable.toWeb(w);
     expect(web).toBeInstanceOf(WritableStream);
     expect(typeof web.getWriter).toBe('function');
@@ -42,13 +47,16 @@ describe('Writable.toWeb', () => {
 
   it('serializes writes with backpressure: a withheld _write cb holds the next write pending', async () => {
     const order: string[] = [];
-    let firstCb: ((err?: Error | null) => void) | null = null;
+    // Holder (not a bare `let`): TS's control-flow narrows a `let` assigned only
+    // inside the `write` closure to `never` at the call site below.
+    const held: { cb: ((err?: Error | null) => void) | null } = { cb: null };
     const w = new Writable({
       objectMode: true,
       highWaterMark: 1,
       write(chunk, _e, cb) {
         order.push(`write:${chunk}`);
-        if (chunk === 'a') firstCb = cb; // withhold
+        if (chunk === 'a')
+          held.cb = cb; // withhold
         else cb();
       },
     });
@@ -63,7 +71,7 @@ describe('Writable.toWeb', () => {
     // Node's _write('b') must NOT be called yet, and p2 must be pending.
     expect(order.filter((x) => x.startsWith('write:'))).toEqual(['write:a']);
     expect(p2settled).toBe(false);
-    firstCb?.();
+    held.cb?.();
     await p1;
     await p2;
     expect(order).toEqual(['write:a', 'write:b']);
@@ -71,7 +79,12 @@ describe('Writable.toWeb', () => {
 
   it('rejects the writer.closed when the Node writable is destroyed with an error', async () => {
     const err = new Error('toweb-destroy');
-    const w = new Writable({ objectMode: true, write(_c, _e, cb) { cb(); } });
+    const w = new Writable({
+      objectMode: true,
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     const writer = Writable.toWeb(w).getWriter();
     const closedRejection = writer.closed.then(
       () => 'resolved',
@@ -84,7 +97,12 @@ describe('Writable.toWeb', () => {
   it('web writer.abort(reason) destroys the Node writable with that reason', async () => {
     const reason = new Error('toweb-abort');
     let errEvt: unknown = null;
-    const w = new Writable({ objectMode: true, write(_c, _e, cb) { cb(); } });
+    const w = new Writable({
+      objectMode: true,
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     w.on('error', (e) => {
       errEvt = e;
     });

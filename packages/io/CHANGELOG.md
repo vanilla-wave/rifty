@@ -4,6 +4,19 @@
 
 ### Added
 
+- **`stream.compose` + `Readable.prototype.wrap` + `Duplex.from`** (Node v16) —
+  `compose(...stages)` builds a `Duplex` (write→stage0→stageN→read) wired through
+  the shipped `pipeline`, so an error in any stage destroys EVERY stage; stages
+  may be `Duplex`/`Transform` instances or async-generator-function bodies
+  `(source) => asyncIterable`. `Duplex.from(src)` builds a Duplex from a
+  `{ readable, writable }` pair, a body function, or any iterable/async-iterable/
+  string/Promise (readable-driven), and throws `ERR_INVALID_ARG_TYPE` on an
+  unknown shape (no silent coercion). `Readable.prototype.wrap(legacyStream)`
+  adapts a streams1 `'data'`/`'end'` source with `pause()`/`resume()`
+  backpressure and returns the Readable. All return an `instanceof Duplex`;
+  Node's internal `Duplexify` class NAME is deliberately NOT replicated (out of
+  scope). All parity-proven vs real Node v24.
+
 - **`Readable.prototype` async-iterator helpers** (v17→v22) —
   `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/
   `every`/`find`/`iterator`, lazy transforms over the base

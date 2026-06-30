@@ -4,6 +4,10 @@
 
 ### Added
 
+- **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —
+  `require('node:stream').compose(a, b)`, `Duplex.from(src)`, and
+  `readable.wrap(legacyStream)` (Node v16, owned by `@riftydev/io`) now resolve.
+
 - **`node:stream` Readable carries the async-iterator helpers** —
   `readable.map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/
   `some`/`every`/`find`/`iterator` (v17→v22, owned by `@riftydev/io`), so

@@ -123,6 +123,11 @@ const matrices = [
       ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
       ['`pipeline`', '✅', 'Promise/callback chaining, multi-stage, destroy-on-error parity'],
       ['`finished`', '✅', 'Resolves on readable end and cleanup cases'],
+      [
+        '`compose` / `Duplex.from` / `Readable.wrap`',
+        '✅',
+        '`compose(...stages)` → a `Duplex` wired via `pipeline` (Transform/Duplex or async-gen-function stages; error destroys every stage); `Duplex.from(src)` over `{readable,writable}`/body-fn/iterable/async-iterable/string/Promise (unknown shape → `ERR_INVALID_ARG_TYPE`); `Readable.wrap(legacy)` adapts a streams1 source. Returns `instanceof Duplex` (`Duplexify` NAME out of scope) — parity-tested',
+      ],
       ['`destroy` / cleanup', '✅', 'Writable destroy and async-iterator cleanup parity'],
       ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
       ['Legacy pipe/unpipe', '✅', 'Pipe/unpipe and backpressure parity cases'],

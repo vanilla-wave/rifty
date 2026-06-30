@@ -16,7 +16,12 @@ const tick = (ms = 30): Promise<void> => new Promise((res) => setTimeout(res, ms
  */
 describe('Duplex allowHalfOpen', () => {
   it('defaults allowHalfOpen to true for a bare Duplex (Node parity)', () => {
-    const d = new Duplex({ read() {}, write(_c, _e, cb) { cb(); } });
+    const d = new Duplex({
+      read() {},
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     expect(d.allowHalfOpen).toBe(true);
   });
 
@@ -63,7 +68,12 @@ describe('Duplex allowHalfOpen', () => {
 
 describe('Duplex.toWeb', () => {
   it('returns an object with both a readable ReadableStream and writable WritableStream', () => {
-    const d = new Transform({ objectMode: true, transform(c, _e, cb) { cb(null, `T:${c}`); } });
+    const d = new Transform({
+      objectMode: true,
+      transform(c, _e, cb) {
+        cb(null, `T:${c}`);
+      },
+    });
     const pair = Duplex.toWeb(d);
     expect(Object.keys(pair).sort()).toEqual(['readable', 'writable']);
     expect(pair.readable).toBeInstanceOf(ReadableStream);
@@ -71,7 +81,12 @@ describe('Duplex.toWeb', () => {
   });
 
   it('round-trips: writing to the web writable drains out of the web readable', async () => {
-    const d = new Transform({ objectMode: true, transform(c, _e, cb) { cb(null, `T:${c}`); } });
+    const d = new Transform({
+      objectMode: true,
+      transform(c, _e, cb) {
+        cb(null, `T:${c}`);
+      },
+    });
     const pair = Duplex.toWeb(d);
     const writer = pair.writable.getWriter();
     const reader = pair.readable.getReader();
@@ -140,9 +155,9 @@ describe('Duplex.fromWeb', () => {
   });
 
   it('throws a synchronous TypeError for a non-WHATWG argument', () => {
-    expect(() => Duplex.fromWeb(42 as unknown as { readable: ReadableStream; writable: WritableStream })).toThrow(
-      TypeError,
-    );
+    expect(() =>
+      Duplex.fromWeb(42 as unknown as { readable: ReadableStream; writable: WritableStream }),
+    ).toThrow(TypeError);
     expect(() =>
       Duplex.fromWeb({ readable: {}, writable: {} } as unknown as {
         readable: ReadableStream;

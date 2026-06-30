@@ -3,6 +3,7 @@
  * adapter pulls its `default` export (object shape) from here.
  */
 
+import { compose } from './compose.ts';
 import { getDefaultHighWaterMark, setDefaultHighWaterMark } from './default-highwatermark.ts';
 import { Duplex } from './duplex.ts';
 import { Stream } from './legacy-stream.ts';
@@ -19,10 +20,11 @@ export {
   type AsyncHelperOptions,
 } from './readable.ts';
 export { Writable, type WritableOptions, type WriteChunk } from './writable.ts';
-export { Duplex, type DuplexOptions } from './duplex.ts';
+export { Duplex, type DuplexOptions, type DuplexWebPair } from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';
 export { PassThrough } from './pass-through.ts';
 export { pipeline, finished } from './pipeline.ts';
+export { compose } from './compose.ts';
 export { Stream } from './legacy-stream.ts';
 export { addAbortSignal } from './readable.ts';
 export {
@@ -102,6 +104,7 @@ const stream = {
   PassThrough,
   pipeline,
   finished,
+  compose,
   Stream,
   addAbortSignal,
   getDefaultHighWaterMark,

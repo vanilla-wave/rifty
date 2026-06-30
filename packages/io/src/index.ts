@@ -40,6 +40,7 @@ export {
   Stream,
   pipeline,
   finished,
+  compose,
   addAbortSignal,
   getDefaultHighWaterMark,
   setDefaultHighWaterMark,

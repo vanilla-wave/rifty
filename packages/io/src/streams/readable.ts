@@ -838,22 +838,60 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     return this.createAsyncIterator(options.destroyOnReturn ?? true);
   }
 
+  /**
+   * `readable.wrap(stream)` (Node's streams1 adapter) — subscribe a legacy
+   * (`'data'`/`'end'`) source and `push()` its chunks, honoring backpressure via
+   * the legacy `pause()`/`resume()` (when `push()` reports the buffer is full we
+   * pause the source; a drain or a `read()` resumes it). `'error'` on the legacy
+   * source destroys this Readable. Returns `this`. Verified vs real Node v24.
+   */
+  wrap(stream: LegacyStreamSource): this {
+    let paused = false;
+    const resumeLegacy = (): void => {
+      if (paused && typeof stream.resume === 'function') {
+        paused = false;
+        stream.resume();
+      }
+    };
+    const onData = (chunk: unknown): void => {
+      const more = this.push(chunk);
+      if (more === false && !paused && typeof stream.pause === 'function') {
+        paused = true;
+        stream.pause();
+      }
+    };
+    const onEnd = (): void => {
+      this.push(null);
+    };
+    const onError = (err: unknown): void => {
+      if (!this._readableState.destroyed) this.destroy(err as Error);
+    };
+    // A drain on our side (buffer fell below HWM in flowing mode) resumes the
+    // legacy source.
+    this.on('data', () => {
+      if (this._readableState.length < this._readableState.highWaterMark) resumeLegacy();
+    });
+    // Install a `_read` so a paused-mode consumer's `read()` resumes the legacy
+    // source (Node's wrap installs a `_read` that calls `stream.resume()`).
+    this.readImpl = (): void => {
+      resumeLegacy();
+    };
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    return this;
+  }
+
   /** `readable.map(fn, opts?)` → object-mode Readable of mapped values (concurrency/signal aware). */
-  map(
-    fn: (value: unknown, index: number) => unknown,
-    options?: AsyncHelperOptions,
-  ): Readable {
-    assertHelperFn(fn, 'map');
+  map(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     return Readable.from(mappedGenerator(this, fn, opts), { objectMode: true });
   }
 
   /** `readable.filter(fn, opts?)` → object-mode Readable keeping values where `fn` is truthy. */
-  filter(
-    fn: (value: unknown, index: number) => unknown,
-    options?: AsyncHelperOptions,
-  ): Readable {
-    assertHelperFn(fn, 'filter');
+  filter(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     const KEEP = filterSentinel;
     const gen = mappedGenerator(
@@ -865,18 +903,15 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   /** `readable.flatMap(fn, opts?)` → object-mode Readable flattening each mapped iterable. */
-  flatMap(
-    fn: (value: unknown, index: number) => unknown,
-    options?: AsyncHelperOptions,
-  ): Readable {
-    assertHelperFn(fn, 'flatMap');
+  flatMap(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     return Readable.from(flatMappedGenerator(this, fn, opts), { objectMode: true });
   }
 
   /** `readable.take(n)` → object-mode Readable of the first `n` values. */
   take(count: number): Readable {
-    assertCount(count, 'take');
+    assertCount(count);
     const source = this;
     async function* gen(): AsyncGenerator<unknown> {
       if (count <= 0) {
@@ -896,7 +931,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
   /** `readable.drop(n)` → object-mode Readable skipping the first `n` values. */
   drop(count: number): Readable {
-    assertCount(count, 'drop');
+    assertCount(count);
     const source = this;
     async function* gen(): AsyncGenerator<unknown> {
       let dropped = 0;
@@ -916,7 +951,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     fn: (value: unknown, index: number) => unknown,
     options?: AsyncHelperOptions,
   ): Promise<void> {
-    assertHelperFn(fn, 'forEach');
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     // Drive the same ordered engine; discard outputs.
     for await (const _ of mappedGenerator(this, fn, opts)) {
@@ -943,14 +978,17 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   async reduce(
     fn: (accumulator: unknown, value: unknown, index: number) => unknown,
-    initial?: unknown,
+    // Default to the `NO_INITIAL` sentinel (not `undefined`) so a caller passing
+    // an explicit `undefined` initial is distinguished from omitting it — without
+    // reading `arguments` (Node distinguishes the two).
+    initial: unknown = noInitial,
     options?: { signal?: AbortSignal },
   ): Promise<unknown> {
-    assertHelperFn(fn, 'reduce');
+    assertHelperFn(fn);
     const signal = options?.signal;
     throwIfAborted(signal);
-    const hasInitial = arguments.length >= 2;
-    let acc = initial;
+    const hasInitial = initial !== noInitial;
+    let acc = hasInitial ? initial : undefined;
     let seeded = hasInitial;
     let index = 0;
     for await (const value of this) {
@@ -978,7 +1016,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     fn: (value: unknown, index: number) => unknown,
     options?: AsyncHelperOptions,
   ): Promise<boolean> {
-    assertHelperFn(fn, 'some');
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     // A hit (truthy predicate) → `true`; no hit (sentinel) → `false`. Compare
     // against the sentinel, NOT `find`'s output (which maps the sentinel away).
@@ -990,7 +1028,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     fn: (value: unknown, index: number) => unknown,
     options?: AsyncHelperOptions,
   ): Promise<boolean> {
-    assertHelperFn(fn, 'every');
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     // `every(fn)` is `!some(!fn)`; reuse the ordered short-circuit engine.
     const failed = await firstMatch(this, async (v, i) => !(await fn(v, i)), opts);
@@ -1005,7 +1043,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     fn: (value: unknown, index: number) => unknown,
     options?: AsyncHelperOptions,
   ): Promise<unknown> {
-    assertHelperFn(fn, 'find');
+    assertHelperFn(fn);
     const opts = validateHelperOptions(options);
     const hit = await firstMatch(this, fn, opts);
     return hit === undefinedSentinel ? undefined : hit;
@@ -1273,6 +1311,17 @@ export interface ReadableFromWebOptions extends ReadableOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Minimal legacy (streams1) source shape `Readable.wrap` adapts: an event
+ * emitter that emits `'data'`/`'end'`/`'error'` and (optionally) supports
+ * `pause()`/`resume()` for backpressure.
+ */
+export interface LegacyStreamSource {
+  on(event: 'data' | 'end' | 'error', listener: (...args: unknown[]) => void): unknown;
+  pause?(): unknown;
+  resume?(): unknown;
+}
+
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   return (
     value !== null &&
@@ -1384,9 +1433,11 @@ interface ResolvedHelperOptions {
  */
 const filterSentinel: unique symbol = Symbol('rifty/io:filtered-out');
 const undefinedSentinel: unique symbol = Symbol('rifty/io:no-match');
+/** `reduce`'s "no initial value provided" marker (distinct from `undefined`). */
+const noInitial: unique symbol = Symbol('rifty/io:no-initial');
 
 /** Node's `ERR_INVALID_ARG_TYPE` for a non-function helper callback (sync throw). */
-function assertHelperFn(fn: unknown, name: string): asserts fn is (...args: never[]) => unknown {
+function assertHelperFn(fn: unknown): asserts fn is (...args: never[]) => unknown {
   if (typeof fn !== 'function') {
     const err = new TypeError(
       `The "fn" argument must be of type function. Received ${fn === null ? 'null' : typeof fn}`,
@@ -1397,7 +1448,7 @@ function assertHelperFn(fn: unknown, name: string): asserts fn is (...args: neve
 }
 
 /** Node's `ERR_OUT_OF_RANGE` (RangeError) for a bad `take`/`drop` count (sync throw). */
-function assertCount(count: number, name: string): void {
+function assertCount(count: number): void {
   if (typeof count !== 'number' || Number.isNaN(count) || count < 0) {
     const err = new RangeError(
       `The value of "number" is out of range. It must be a non-negative number. Received ${String(count)}`,

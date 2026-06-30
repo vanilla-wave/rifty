@@ -47,16 +47,24 @@ describe('Readable async-iterator helpers — placement + return types', () => {
 
 describe('Readable async-iterator helpers — outputs', () => {
   it('map doubles', async () => {
-    expect(await Readable.from([1, 2, 3]).map((x) => (x as number) * 2).toArray()).toEqual([2, 4, 6]);
+    expect(
+      await Readable.from([1, 2, 3])
+        .map((x) => (x as number) * 2)
+        .toArray(),
+    ).toEqual([2, 4, 6]);
   });
   it('filter keeps evens', async () => {
     expect(
-      await Readable.from([1, 2, 3, 4]).filter((x) => (x as number) % 2 === 0).toArray(),
+      await Readable.from([1, 2, 3, 4])
+        .filter((x) => (x as number) % 2 === 0)
+        .toArray(),
     ).toEqual([2, 4]);
   });
   it('flatMap expands', async () => {
     expect(
-      await Readable.from([1, 2]).flatMap((x) => [x, (x as number) * 10]).toArray(),
+      await Readable.from([1, 2])
+        .flatMap((x) => [x, (x as number) * 10])
+        .toArray(),
     ).toEqual([1, 10, 2, 20]);
   });
   it('take limits and clamps', async () => {
@@ -69,7 +77,9 @@ describe('Readable async-iterator helpers — outputs', () => {
     expect(await Readable.from([1, 2, 3]).drop(10).toArray()).toEqual([]);
   });
   it('reduce with and without an initial value', async () => {
-    expect(await Readable.from([1, 2, 3]).reduce((a, b) => (a as number) + (b as number), 0)).toBe(6);
+    expect(await Readable.from([1, 2, 3]).reduce((a, b) => (a as number) + (b as number), 0)).toBe(
+      6,
+    );
     expect(await Readable.from([1, 2, 3]).reduce((a, b) => (a as number) + (b as number))).toBe(6);
   });
   it('some / every / find / forEach', async () => {
@@ -78,11 +88,15 @@ describe('Readable async-iterator helpers — outputs', () => {
     expect(await Readable.from([1, 2, 3]).every((x) => (x as number) > 0)).toBe(true);
     expect(await Readable.from([1, 2, 3]).find((x) => (x as number) > 1)).toBe(2);
     expect(await Readable.from([1, 2, 3]).find((x) => (x as number) > 10)).toBeUndefined();
+    // biome-ignore lint/complexity/noForEach: this IS the stream's `forEach` helper under test, not Array.forEach.
     expect(await Readable.from([1, 2, 3]).forEach(() => {})).toBeUndefined();
   });
   it('chains map().filter()', async () => {
     expect(
-      await Readable.from([1, 2, 3, 4]).map((x) => (x as number) * 2).filter((x) => (x as number) > 4).toArray(),
+      await Readable.from([1, 2, 3, 4])
+        .map((x) => (x as number) * 2)
+        .filter((x) => (x as number) > 4)
+        .toArray(),
     ).toEqual([6, 8]);
   });
 });
@@ -98,10 +112,12 @@ describe('Readable async-iterator helpers — validation + errors', () => {
   });
 
   it('reduce on an EMPTY stream with no initial value rejects ERR_MISSING_ARGS (TypeError)', async () => {
-    const err = await Readable.from([]).reduce((a, b) => a).then(
-      () => null,
-      (e) => e,
-    );
+    const err = await Readable.from([])
+      .reduce((a) => a)
+      .then(
+        () => null,
+        (e) => e,
+      );
     expect(err).toBeInstanceOf(TypeError);
     expect((err as { code?: string }).code).toBe('ERR_MISSING_ARGS');
   });
@@ -172,7 +188,11 @@ describe('Readable async-iterator helpers — concurrency', () => {
       );
       expect((err as { code?: string }).code).toBe('ERR_OUT_OF_RANGE');
     }
-    expect(await Readable.from([1, 2]).map((x) => x, { concurrency: 1.5 }).toArray()).toEqual([1, 2]);
+    expect(
+      await Readable.from([1, 2])
+        .map((x) => x, { concurrency: 1.5 })
+        .toArray(),
+    ).toEqual([1, 2]);
   });
 });
 

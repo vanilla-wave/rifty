@@ -35,6 +35,21 @@ export interface WriteChunk {
   encoding: string;
 }
 
+/**
+ * Structural Writable shape `Writable.toWeb` drives — anything with Node's
+ * `write`/`end`/`destroy` + the `'drain'`/`'finish'`/`'error'` event surface. A
+ * `Duplex` qualifies (it delegates those to its writable side) without being an
+ * `instanceof Writable`, so `Duplex.toWeb` can reuse `Writable.toWeb(d)`.
+ */
+export interface WritableLike {
+  write(chunk: unknown, ...rest: unknown[]): boolean;
+  end(...args: unknown[]): unknown;
+  destroy(err?: Error): unknown;
+  on(event: string, listener: (...args: unknown[]) => void): unknown;
+  off(event: string, listener: (...args: unknown[]) => void): unknown;
+  readonly destroyed: boolean;
+}
+
 interface BufferedWrite {
   chunk: unknown;
   encoding: string;
@@ -540,7 +555,7 @@ export class Writable extends EventEmitter {
    * `abort(reason)` → `w.destroy(reason)`. `w` erroring → `controller.error(err)`
    * (the writer's `closed` rejects). Verified vs real Node v24.
    */
-  static toWeb(streamWritable: Writable): WritableStream<unknown> {
+  static toWeb(streamWritable: WritableLike): WritableStream<unknown> {
     const w = streamWritable;
     let errored: Error | null = null;
     let controllerRef: WritableStreamDefaultController | null = null;
