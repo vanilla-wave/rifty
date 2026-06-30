@@ -42,8 +42,14 @@ export interface TerminalManager {
   createSession(title?: string): TerminalSessionSnapshot;
   select(id: string): void;
   attachWriter(id: string, writer: TerminalWriter): void;
-  /** Wipe the session's screen + scrollback (e.g. when switching projects). */
+  /** Wipe the session's screen + scrollback (e.g. a user `clear`). */
   clear(id: string): void;
+  /**
+   * Fresh console for a (re)booting project: wipe screen + scrollback, then
+   * re-emit the onboarding `banner` so the boot terminal still greets — the
+   * boot's first clear would otherwise erase the banner printed at mount.
+   */
+  freshConsole(id: string, banner?: string): void;
   writeStdin(id: string, data: TerminalRawInput): void;
   runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number>;
   runSequence(id: string, lines: readonly string[], dims?: TerminalRunDimensions): Promise<number>;
@@ -215,6 +221,10 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       // ANSI: erase display (2J) + scrollback (3J) + cursor home (H). A no-op
       // when no writer is attached yet (the boot's first clear may race mount).
       write(getSession(id), '\x1b[2J\x1b[3J\x1b[H');
+    },
+    freshConsole(id: string, banner?: string): void {
+      // Clear, then re-greet: the banner survives the boot's fresh-console wipe.
+      write(getSession(id), `\x1b[2J\x1b[3J\x1b[H${banner ? `${banner}\r\n` : ''}`);
     },
     writeStdin(id: string, data: TerminalRawInput): void {
       const session = getSession(id);

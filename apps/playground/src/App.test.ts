@@ -155,13 +155,13 @@ describe('App terminal startup wiring', () => {
 
   it('tags the worker with the project slug and clears the console on a project switch', () => {
     // slug → worker install-stamp reuse key keyed to the ACTIVE ROOT/id (ADR-0165
-    // §4: store.activeId — 'scratch' on boot, a projectId after switch); clear →
-    // fresh console for the switched-in project.
+    // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
+    // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
     expect(source).toContain("setDevServerStatus('stopped')");
     expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
-    expect(source).toContain('manager.clear(targetSessionId)');
-    expect(source).toContain('manager.clear(session.id)');
+    expect(source).toContain('manager.freshConsole(targetSessionId, terminalWelcomeBanner)');
+    expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
   });
 
   it('does not restart Vite inside a hidden stale terminal session', () => {
@@ -335,6 +335,10 @@ describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-
     expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
     expect(source).toContain("e.returnValue = '';");
     expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
+  });
+
+  it('a rejected terminal run writes its diagnostic to the terminal, not just the console', () => {
+    expect(source).toContain("terminalWriters.get(id)?.(`${message}\\n`, 'stderr')");
   });
 });
 

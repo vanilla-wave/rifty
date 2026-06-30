@@ -35,6 +35,7 @@ import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
+import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
 import {
   degradedBannerVisible,
   saveAffordance,
@@ -624,6 +625,11 @@ export function App(props: AppProps) {
       exitCode = await run;
       return exitCode;
     } catch (err) {
+      // A rejected run is a real error (e.g. a tokenizer loud-throw: command
+      // substitution `$(…)`, `${VAR:-x}`). Surface the directed diagnostic in the
+      // terminal, not just the console — a silent non-zero exit reads as broken.
+      const message = err instanceof Error ? err.message : String(err);
+      terminalWriters.get(id)?.(`${message}\n`, 'stderr');
       console.error(err);
       exitCode = 1;
       return exitCode;
@@ -1422,7 +1428,7 @@ export function App(props: AppProps) {
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
-    manager.clear(targetSessionId); // fresh console for the switched-in project
+    manager.freshConsole(targetSessionId, terminalWelcomeBanner); // fresh console + greeting
     // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
     // switch the store has re-pointed to the destination project's starter, so a
     // restart boots ITS template — never the stale picked-preset starter.
@@ -1470,7 +1476,7 @@ export function App(props: AppProps) {
       }
       if (!session) return;
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      manager.clear(session.id); // fresh console for the switched-in project
+      manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
       const generation = ++devServerRestartGeneration;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
       await waitForDevServerBoot(session.id, generation);
