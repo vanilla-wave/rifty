@@ -30,6 +30,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { unpackEddyBundle } from './eddy-bundle.ts';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,
@@ -46,7 +47,12 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
-import { type TarballCache, VfsTarballCache } from './tarball-cache.ts';
+import {
+  type TarballCache,
+  VfsTarballCache,
+  computeIntegrity,
+  parseIntegrityAlgorithm,
+} from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
 import { Semaphore } from './utils/semaphore.ts';
 
@@ -72,6 +78,23 @@ export interface InstallOptions {
    * install.
    */
   onPackage?: (event: InstallProgressEvent) => void;
+  /**
+   * Opt-in eddy fast path (ADR-0182). When set, and no covering lockfile
+   * already gives the zero-network fast path, the client POSTs the dep-set to
+   * this resolver, verifies the returned `EddyBundleV1` (bytes vs the bundle's
+   * integrity — non-disableable, mirror-grade trust), pre-seeds the tarball
+   * cache + writes the lockfile, then the existing lockfile fast path installs
+   * with zero packument network. Default OFF; the URL comes only from explicit
+   * env-config (D-004), never a baked default. ANY failure → standard verifying
+   * install (warn, never throw-because-fast-path-down). See `InstallResult.source`.
+   */
+  resolverUrl?: string;
+  /**
+   * Forwarded to the resolver: `'online'` forces a fresh server-side recompute
+   * (npm `--prefer-online` analogue); `'cached'` (default) uses eddy's bounded
+   * resolution cache (`--prefer-offline` analogue). Inert without `resolverUrl`.
+   */
+  prefer?: 'cached' | 'online';
 }
 
 /** Payload for {@link InstallOptions.onPackage}. */
@@ -103,6 +126,14 @@ export interface InstallResult {
   lockfile: Lockfile;
   /** Retained for shape compat; always empty since M11 nests conflicts (ADR-0042). */
   conflicts: { name: string; firstVersion: string; secondVersion: string }[];
+  /**
+   * Which path produced this install (ADR-0182 provenance). `'eddy'` when the
+   * opt-in fast path seeded the cache + lockfile; `'standard'` otherwise
+   * (resolver off, or it declined/failed and the verifying install ran).
+   * Always set by {@link install}; optional only so pre-ADR-0182 result literals
+   * (test fakes) stay valid — read it as `result.source ?? 'standard'`.
+   */
+  source?: 'eddy' | 'standard';
 }
 
 /**
@@ -206,7 +237,33 @@ export async function install(
     getTarball: (url) => opts.registry.getTarball(url),
   };
 
-  const existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+  let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+
+  // ADR-0182 opt-in fast path: when a resolver is configured AND no covering
+  // lockfile already gives the zero-network fast path, fetch + verify eddy's
+  // bundle, then seed the cache + write the lockfile so the existing fast path
+  // below runs with zero packument network. Pre-seeding the (already
+  // integrity-verified) tarballs and writing the lockfile happen ONLY after
+  // every check passes, so any failure leaves the pre-existing lockfile
+  // untouched and the standard verifying install runs (warn, never throw).
+  let source: 'eddy' | 'standard' = 'standard';
+  if (
+    opts.resolverUrl &&
+    !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
+  ) {
+    const seeded = await tryEddyFastPath(
+      opts,
+      rootName,
+      dependencies,
+      optionalDependencies,
+      tarballCache,
+    );
+    if (seeded) {
+      source = 'eddy';
+      existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+    }
+  }
+
   const plan = chooseSource(existingLockfile, dependencies, optionalDependencies, rootName, opts);
 
   const resolved = await walkAndPin(
@@ -226,7 +283,7 @@ export async function install(
   const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return { packages, lockfile, conflicts: [] };
+  return { packages, lockfile, conflicts: [], source };
 }
 
 async function normalizeInstallArgs(
@@ -417,6 +474,105 @@ function assertNoLifecycleScripts(
     if (scripts[name] === undefined) continue;
     throw new NotImplementedError(`npm-client.lifecycle.${name}`);
   }
+}
+
+/**
+ * Would {@link chooseSource} take the zero-network lockfile fast path for this
+ * request? Used to skip the eddy round-trip when a covering lockfile already
+ * exists (eddy is the COLD-install optimizer). Mirrors chooseSource's
+ * lockfile-path condition exactly — keep the two in sync.
+ */
+function hasLockfileFastPath(
+  existingLockfile: Lockfile | null,
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  rootName: string,
+  opts: InstallOptions,
+): boolean {
+  if (!existingLockfile) return false;
+  const request = {
+    ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
+    ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
+  };
+  const pins = lockfileCovers(existingLockfile, request);
+  return !!pins && subgraphFreeOfOverrideDivergence(existingLockfile, pins, opts.overrides);
+}
+
+/**
+ * ADR-0182 opt-in fast path. POST the dep-set to the resolver, verify the
+ * returned `EddyBundleV1` (bytes vs the bundle integrity — NON-disableable,
+ * mirror-grade trust), check the bundle lockfile covers the request, then —
+ * only after every check passes — pre-seed the tarball cache + write the
+ * lockfile. Returns `true` on success (the existing fast path then runs with
+ * zero packument network); on ANY failure mode (unreachable, HTTP error,
+ * malformed bundle, integrity mismatch, coverage gap, typed `unsupported`
+ * decline) it warns and returns `false`, leaving the pre-existing lockfile
+ * untouched so the standard verifying install runs. Never throws.
+ */
+async function tryEddyFastPath(
+  opts: InstallOptions,
+  rootName: string,
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  tarballCache: TarballCache,
+): Promise<boolean> {
+  const url = opts.resolverUrl;
+  if (!url) return false;
+  try {
+    const requestBody: Record<string, unknown> = { dependencies, optionalDependencies };
+    if (opts.overrides) requestBody.overrides = opts.overrides;
+    if (opts.prefer) requestBody.prefer = opts.prefer;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      const decline = (await response.json().catch(() => null)) as { feature?: string } | null;
+      return declineEddy(`resolver declined (${decline?.feature ?? 'unsupported'})`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const { lockfileText, tarballs } = unpackEddyBundle(bytes);
+    const lockfile = JSON.parse(lockfileText) as Lockfile;
+
+    // Mirror-grade trust (ADR-0182 §5): verify each tarball's bytes against the
+    // integrity the BUNDLE carries (not npm source-of-truth). Non-disableable.
+    for (const { entry, bytes: tgz } of tarballs) {
+      const algorithm = parseIntegrityAlgorithm(entry.integrity);
+      if (!algorithm) {
+        return declineEddy(`unparseable integrity for ${entry.name}@${entry.version}`);
+      }
+      if ((await computeIntegrity(tgz, algorithm)) !== entry.integrity) {
+        return declineEddy(`integrity mismatch for ${entry.name}@${entry.version}`);
+      }
+    }
+
+    // Coverage gap → fallback (no partial install). Same condition the fast
+    // path uses, so a pass here guarantees `chooseSource` takes the fast path.
+    const effectiveRequest = {
+      ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
+      ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
+    };
+    if (!lockfileCovers(lockfile, effectiveRequest)) {
+      return declineEddy('bundle lockfile does not cover the requested dependencies');
+    }
+
+    for (const { entry, bytes: tgz } of tarballs) {
+      await tarballCache.put(entry.name, entry.version, entry.integrity, tgz);
+    }
+    await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
+    return true;
+  } catch (err) {
+    return declineEddy(err instanceof Error ? err.message : String(err));
+  }
+}
+
+function declineEddy(reason: string): false {
+  console.warn(`npm: fast install (eddy) unavailable, using standard install — ${reason}`);
+  return false;
 }
 
 /**
