@@ -21,11 +21,11 @@
  * worker isn't serving can't eat the whole budget); the overall deadline spans
  * an npm install, else the panel showed a false `unavailable` before Vite came up.
  *
- * Manual Reload uses `frame.contentWindow.location.reload()`. When HMR is enabled
- * (ADR-0126) file edits are refreshed by the iframe HMR client itself, not by
- * parent snapshot updates. On the Vite 8 template HMR is OFF (ADR-0161): an editor
- * save re-transforms on the next fetch but pushes nothing, and non-editor file
- * changes aren't watched — so seeing an edit needs a manual Reload here.
+ * Manual Reload reuses the warm-up/remount path. When HMR is enabled (ADR-0126)
+ * file edits are refreshed by the iframe HMR client itself, not by parent
+ * snapshot updates. On the Vite 8 template HMR is OFF (ADR-0161): an editor save
+ * re-transforms on the next fetch but pushes nothing, and non-editor file changes
+ * aren't watched — so seeing an edit needs a manual Reload here.
  */
 import {
   type Accessor,
@@ -101,11 +101,7 @@ export function PreviewPanel(props: {
   }
 
   function reload(): void {
-    if (phase() === 'live') {
-      frame?.contentWindow?.location.reload();
-    } else {
-      setRetry((n) => n + 1); // Reload doubles as retry before we're live.
-    }
+    setRetry((n) => n + 1); // Reload doubles as retry before we're live.
   }
 
   function remountFrame(): void {

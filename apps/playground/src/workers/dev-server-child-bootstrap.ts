@@ -109,9 +109,14 @@ async function bootstrapDevServerChild(): Promise<void> {
       previewHandle = await bootPreview({
         root: c.root,
         port: c.port,
+        previewScope: c.previewScope,
         log: (chunk) => proc.stdout.write(chunk),
       });
-      send({ type: 'rifty:preview-ready', port: previewHandle.port });
+      send({
+        type: 'rifty:preview-ready',
+        port: previewHandle.port,
+        ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
+      });
       return;
     }
     handle = await bootDevServer({
@@ -121,10 +126,15 @@ async function bootstrapDevServerChild(): Promise<void> {
       spec: c.spec,
       slug: c.slug,
       fromScratch: c.fromScratch,
+      previewScope: c.previewScope,
       publishSnapshot: () => send({ type: 'rifty:dev-snapshot' }),
       log: (chunk) => proc.stdout.write(chunk),
     });
-    send({ type: 'rifty:dev-ready', port: handle.port });
+    send({
+      type: 'rifty:dev-ready',
+      port: handle.port,
+      ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     proc.stderr.write(`${err instanceof Error && err.stack ? err.stack : message}\n`);

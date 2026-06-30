@@ -55,7 +55,7 @@ export interface NodeChildHandle {
 export interface NodeRunHooks {
   /** Stable id for this run (registry key + label). */
   readonly sid: string;
-  readonly onListening: (sid: string, ports: number[]) => void;
+  readonly onListening: (sid: string, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
 export type OwnerNodeExecutor = (
@@ -91,7 +91,7 @@ export function createOwnerChildNodeExecutor(
     // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
     return runForegroundChild(handle, ctx, {
       onMessage: (m) => {
-        if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports);
+        if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
       },
       onExit: () => hooks.onExit(hooks.sid),
     });

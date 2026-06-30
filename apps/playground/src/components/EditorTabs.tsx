@@ -1,10 +1,9 @@
 /**
- * Editor tab strip (ADR-0075). Presentational: the permanent program tab
- * (◆, non-closable) first, then file tabs with a dirty dot + close affordance.
- * State lives in {@link EditorHost.tsx}; this only renders + emits intent.
+ * Editor tab strip (ADR-0075). Presentational: editor tabs render a dirty dot +
+ * close affordance; state lives in {@link EditorHost.tsx}.
  */
 import { For } from 'solid-js';
-import { type EditorTab, PROGRAM_TAB_ID } from '../glue/editor-tabs.ts';
+import type { EditorTab } from '../glue/editor-tabs.ts';
 import { Icon } from './icons.tsx';
 
 export function EditorTabs(props: {
@@ -26,8 +25,9 @@ export function EditorTabs(props: {
               class="rf-tab"
               role="tab"
               tabIndex={0}
-              data-tab={tab.id === PROGRAM_TAB_ID ? 'program' : 'file'}
+              data-tab={tab.kind}
               data-active={props.activeId === tab.id}
+              data-dirty={tab.dirty}
               aria-selected={props.activeId === tab.id}
               onClick={() => props.onSelect(tab.id)}
               onKeyDown={(e) => {
@@ -37,32 +37,26 @@ export function EditorTabs(props: {
                 }
               }}
               onAuxClick={(e) => {
-                // Middle-click closes file tabs (VSCode parity).
-                if (e.button === 1 && tab.kind === 'file') {
+                // Middle-click closes editor tabs (VSCode parity).
+                if (e.button === 1) {
                   e.preventDefault();
                   props.onClose(tab.id);
                 }
               }}
             >
-              {tab.kind === 'program' ? (
-                <span class="rf-tab__mark" aria-hidden="true" />
-              ) : (
-                <span class="rf-tab__dot" data-dirty={tab.dirty} aria-hidden="true" />
-              )}
+              <span class="rf-tab__dot" data-dirty={tab.dirty} aria-hidden="true" />
               <span class="rf-tab__label">{tab.title}</span>
-              {tab.kind === 'file' && (
-                <button
-                  type="button"
-                  class="rf-tab__close"
-                  aria-label={`Close ${tab.title}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onClose(tab.id);
-                  }}
-                >
-                  ✕
-                </button>
-              )}
+              <button
+                type="button"
+                class="rf-tab__close"
+                aria-label={`Close ${tab.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onClose(tab.id);
+                }}
+              >
+                ✕
+              </button>
             </div>
           )}
         </For>

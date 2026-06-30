@@ -54,6 +54,15 @@ const MAX_CHUNK_BYTES = 64 * 1024;
 const DEFAULT_STREAM_DRAIN_TIMEOUT_MS = 30_000;
 const STREAM_DRAIN_TIMEOUT = Symbol('preview-port-stream-drain-timeout');
 
+export interface PreviewPortScopeOptions {
+  /**
+   * Optional run-scoped discriminator. A page bridge only talks to worker
+   * responders carrying the same scope, preventing stale same-port dev-server
+   * workers from racing replies on the shared BroadcastChannel.
+   */
+  readonly scope?: string;
+}
+
 /**
  * Synthetic URL used as the keyed input to {@link channelNameFor} for the
  * preview-port bridge. The dev-server port number is embedded so multiple
@@ -85,6 +94,7 @@ type PreviewPortFrame =
       readonly url: string;
       readonly headers: Readonly<Record<string, string>>;
       readonly body: Uint8Array | null;
+      readonly scope?: string;
     }
   | {
       readonly type: 'reply';
@@ -166,7 +176,7 @@ function nextRequestId(): string {
 export function serveCrossRealmPreview(
   port: number,
   dispatch: (request: Request) => Promise<Response>,
-  opts: { readonly streamDrainTimeoutMs?: number } = {},
+  opts: PreviewPortScopeOptions & { readonly streamDrainTimeoutMs?: number } = {},
 ): () => void {
   const channelName = channelNameFor(previewPortChannelUrl(port));
   const channel = new BroadcastChannel(channelName);
@@ -175,6 +185,8 @@ export function serveCrossRealmPreview(
   const onMessage = async (event: MessageEvent): Promise<void> => {
     const frame = event.data as PreviewPortFrame;
     if (frame.type !== 'request') return;
+    if ((opts.scope !== undefined || frame.scope !== undefined) && frame.scope !== opts.scope)
+      return;
     const requestId = frame.requestId;
     const wantsStream = frame.v === PREVIEW_PORT_FRAME_VERSION;
 
@@ -428,7 +440,7 @@ interface Waiter {
 
 export function bridgeCrossRealmPreview(
   port: number,
-  opts: { readonly timeoutMs?: number } = {},
+  opts: PreviewPortScopeOptions & { readonly timeoutMs?: number } = {},
 ): CrossRealmPortHandler {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const channelName = channelNameFor(previewPortChannelUrl(port));
@@ -571,6 +583,7 @@ export function bridgeCrossRealmPreview(
       url,
       headers,
       body: bodyBytes,
+      ...(opts.scope === undefined ? {} : { scope: opts.scope }),
     };
     const promise = new Promise<Response>((resolve) => {
       const timer = setTimeout(() => {

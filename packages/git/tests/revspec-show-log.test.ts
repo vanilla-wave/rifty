@@ -87,3 +87,16 @@ it('show REV:path returns the selected blob oid, not the commit oid', async () =
   if (object.type !== 'blob') throw new Error('expected blob');
   expect(object.oid).toBe(await g.hashBlob('second\n'));
 });
+
+it('show :path returns the staged index blob, matching real git index revspecs', async () => {
+  const { g, vfs } = await seededGit();
+  await vfs.writeFile('/repo/a.txt', 'staged\n');
+  await g.add('a.txt');
+  await vfs.writeFile('/repo/a.txt', 'worktree\n');
+
+  const object = await g.show(':a.txt');
+
+  expect(object.type).toBe('blob');
+  if (object.type !== 'blob') throw new Error('expected blob');
+  expect(object.oid).toBe(await g.hashBlob('staged\n'));
+});

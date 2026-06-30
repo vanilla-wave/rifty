@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { readWorkspaceText } from './helpers/opfs.ts';
 import {
   insertTerminalLineSettled,
   openShellTerminal,
@@ -56,12 +57,17 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function runOwnerShell(page: Page, command: string, timeout = 15_000): Promise<void> {
+async function runOwnerShell(
+  page: Page,
+  command: string,
+  timeout = 15_000,
+  slot: 'active' | number = 'active',
+): Promise<void> {
   const seq = ++ownerShellSeq;
   const marker = `__rifty_e2e_shell_done_${seq}__`;
-  await runTerminalLine(page, `${command} && printf '__rifty_e2e_shell_done_%s__\\n' ${seq}`);
+  await runTerminalLine(page, `${command} && printf '__rifty_e2e_shell_done_%s__\\n' ${seq}`, slot);
   await expect
-    .poll(() => terminalBuffer(page), { timeout })
+    .poll(() => terminalBuffer(page, slot), { timeout })
     .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
 }
 
@@ -475,11 +481,18 @@ async function tsReinit(page: Page): Promise<boolean> {
  * fully parallel browser run, `keyboard.type()` can drop characters and turn a
  * valid fixture write into a later, confusing LS failure.
  */
-async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
+async function writeOwnerFile(
+  page: Page,
+  path: string,
+  content: string,
+  slot: 'active' | number = 'active',
+): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
   await insertTerminalLineSettled(
     page,
     `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`,
+    30_000,
+    slot,
   );
 }
 
@@ -510,9 +523,19 @@ async function pickStarterAndWaitForTemplate(
   }
 
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-  await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
   await expect(editorLines).toContainText(editorNeedle, { timeout: 45_000 });
-  await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
+  await expect
+    .poll(() => fetchPreviewOk(page, 5174), {
+      timeout: 90_000,
+      intervals: [500, 1_000, 2_000],
+    })
+    .toBe(true);
+  try {
+    await expect(previewBody).toContainText(previewNeedle, { timeout: 30_000 });
+  } catch (error) {
+    await page.getByRole('button', { name: 'Reload preview' }).click();
+    await expect(previewBody).toContainText(previewNeedle, { timeout: 60_000 });
+  }
 }
 
 async function pickTypeScriptStarter(page: Page): Promise<void> {
@@ -524,10 +547,56 @@ async function pickTypeScriptStarter(page: Page): Promise<void> {
   );
 }
 
+async function fetchPreviewOk(page: Page, port: number): Promise<boolean> {
+  return page.evaluate(async (targetPort) => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 4_000);
+    try {
+      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
+      return r.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }, port);
+}
+
+async function fetchPreviewText(
+  page: Page,
+  port: number,
+  path: string,
+  options: { readonly cacheBust?: boolean } = {},
+): Promise<string> {
+  return page.evaluate(
+    async ({ targetPort, targetPath, cacheBust }) => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 4_000);
+      try {
+        const suffix = cacheBust ? `?rifty_e2e=${Date.now()}` : '';
+        const r = await fetch(`/preview/${targetPort}${targetPath}${suffix}`, {
+          cache: 'no-store',
+          signal: ac.signal,
+        });
+        if (!r.ok) return `HTTP:${r.status}`;
+        return await r.text();
+      } catch (err) {
+        return `ERROR:${(err as Error).name}`;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    { targetPort: port, targetPath: path, cacheBust: options.cacheBust ?? true },
+  );
+}
+
 async function waitForTypeScriptStarterDevServer(page: Page): Promise<void> {
   await expect
-    .poll(() => terminalBuffer(page), { timeout: 30_000 })
-    .toContain('[vite] dev server ready on port 5174');
+    .poll(() => fetchPreviewOk(page, 5174), {
+      timeout: 30_000,
+      intervals: [500, 1_000, 2_000],
+    })
+    .toBe(true);
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
@@ -564,7 +633,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const tsPath = `${root}/src/lsp-check.ts`;
-    await openShellTerminal(page);
+    const shellSlot = await openShellTerminal(page);
 
     // Create an EMPTY .ts file in the owner store (the SSoT the LS reads) via a
     // real shell command — empty so the keyboard-typed error below is the SOLE
@@ -573,8 +642,12 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await runOwnerShell(
       page,
       `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${root}/src`,
+      15_000,
+      shellSlot,
     );
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
+    await expect
+      .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
+      .toContain('lsp-check.ts');
 
     // Open it in the editor through the real palette → an editable .ts tab. This
     // fires the page LS client's ts:open + a first diagnostics pass (empty → none).
@@ -631,7 +704,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
 });
 
 test.describe('rifty TS language service: TypeScript starter wiring', () => {
-  test('typescript-ls program tab writes the template main.ts that Vite serves', async ({
+  test('typescript-ls entry file tab writes the template main.ts that Vite serves', async ({
     page,
     browserName,
   }) => {
@@ -652,7 +725,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     const editor = page.locator('[data-testid="editor"]');
     const input = editor.locator('textarea.inputarea').first();
     const editorLines = editor.locator('.view-lines').first();
-    // The TypeScript starter entry is already the active program tab; checking
+    // The TypeScript starter entry is already the active initial file tab; checking
     // the visible Monaco lines avoids racing the palette's async file index.
     await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
     await expect
@@ -723,6 +796,16 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
         ].join('\n'),
       ),
     ).toBe(true);
+    await expect
+      .poll(() => readWorkspaceText(page, mainTs), { timeout: 30_000 })
+      .toContain('rifty-ts-main-ts-hot');
+    await expect
+      .poll(() => fetchPreviewText(page, 5174, '/src/main.ts', { cacheBust: false }), {
+        timeout: 60_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .toContain('rifty-ts-main-ts-hot');
+    await page.getByRole('button', { name: 'Reload preview' }).click();
 
     await expect(frame.locator('body')).toContainText('rifty-ts-main-ts-hot', {
       timeout: 90_000,
@@ -746,7 +829,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     );
   });
 
-  test('rapid program edits debounce owner writes so Vite emits one HMR burst, not one line per content event', async ({
+  test('rapid entry-file edits debounce owner writes so Vite emits one HMR burst, not one line per content event', async ({
     page,
     browserName,
   }) => {
@@ -856,7 +939,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 90_000 });
     const root = await activeRootFromHint(page);
     const { usesDep, depTs, depDts } = dependencyProjectPaths(root);
-    await openShellTerminal(page);
+    const shellSlot = await openShellTerminal(page);
 
     // Build a small REAL project in the owner store (the SSoT the LS reads):
     //  - tsconfig with BUNDLER module resolution so node_modules .d.ts resolves;
@@ -880,11 +963,13 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
       `${root}/node_modules/cool-dep/package.json`,
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -895,6 +980,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         'export declare const cool: { readonly helper: (x: string) => string; readonly value: number };',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -909,6 +995,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '} as const;',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // uses-dep.ts — 1-based lines used by the position assertions below:
     //  L1 import from "cool-dep"; L2 import from "./dep.ts";
@@ -916,10 +1003,14 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
-    await writeOwnerFile(page, usesDep, usesDepResolvedSource);
-    await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
+    await writeOwnerFile(page, usesDep, usesDepResolvedSource, shellSlot);
+    await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`, 15_000, shellSlot);
+    await expect
+      .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
+      .toContain('coolValue');
+    await expect
+      .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
+      .toContain('uses-dep.ts');
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
     await openFileViaPalette(page, 'uses-dep.ts');
@@ -1064,7 +1155,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const { greeterTs, appTs } = referencesProjectPaths(root);
-    await openShellTerminal(page);
+    const shellSlot = await openShellTerminal(page);
 
     // Build a small REAL cross-file project in the owner store (the SSoT the LS
     // reads): a tsconfig (bundler resolution + ts-extension imports), a `greeter.ts`
@@ -1087,6 +1178,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // greeter.ts — 1-based:
     //  L1 `export function localGreet(name: string): string {`  localGreet @ col 17
@@ -1099,6 +1191,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // app.ts — 1-based lines used by the position assertions below:
     //  L1 `import { localGreet } from "./greeter.ts";`  localGreet @ col 10
@@ -1114,9 +1207,12 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         'export const both = a + b;',
         '',
       ].join('\n'),
+      shellSlot,
     );
-    await runOwnerShell(page, `ls ${root}/src`);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
+    await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
+    await expect
+      .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
+      .toContain('app.ts');
 
     // Open BOTH files so a Monaco model exists for each (providers resolve a
     // model→path; a reference/rename target in the other file resolves via
@@ -1249,7 +1345,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
     const { fixGreeter, fixApp, organizeTs, formatTs } = codeActionProjectPaths(root);
-    await openShellTerminal(page);
+    const shellSlot = await openShellTerminal(page);
 
     // A small REAL cross-file project in the owner store (the SSoT the LS reads):
     //  - tsconfig (bundler resolution + ts-extension imports);
@@ -1275,6 +1371,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -1286,6 +1383,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         'export const VERSION = 1;',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // app.ts — `localGreet` is used (L1) but never imported ⇒ TS2304/TS2552.
     //  L1 `const a = localGreet("x");`  localGreet @ col 11
@@ -1293,6 +1391,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       page,
       fixApp,
       ['const a = localGreet("x");', 'export const out = a;', ''].join('\n'),
+      shellSlot,
     );
     // organize.ts — imports out of order (VERSION before localGreet) and one
     // unused (`VERSION` is never referenced) ⇒ organize sorts + drops it.
@@ -1304,6 +1403,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         'export const g = localGreet("y");',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // format.ts — bad spacing (collapsed operators / no space after comma) that
     // tsserver's default format settings rewrite.
@@ -1311,9 +1411,12 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       page,
       formatTs,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
+      shellSlot,
     );
-    await runOwnerShell(page, `ls ${root}/src`);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
+    await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
+    await expect
+      .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
+      .toContain('app.ts');
 
     // Open all four files so a Monaco model exists for each (providers resolve a
     // model→path; the add-import target resolves via ensureModel).

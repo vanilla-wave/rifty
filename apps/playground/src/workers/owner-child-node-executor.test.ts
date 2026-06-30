@@ -81,8 +81,27 @@ describe('owner-child-node-executor', () => {
     fake.emit('exit', 0);
     expect(await p).toBe(0);
     expect(stdout.join('')).toBe('hi\n');
-    expect(onListening).toHaveBeenCalledWith('s1', [3000]);
+    expect(onListening).toHaveBeenCalledWith('s1', [3000], undefined);
     expect(onExit).toHaveBeenCalledWith('s1');
+  });
+
+  it('threads the child preview scope with listened ports', async () => {
+    const fake = fakeHandle();
+    const onListening = vi.fn();
+    const exec = createOwnerChildNodeExecutor('URL', () => fake.h);
+    const p = exec('/w/server.js', [], makeCtx(), {
+      sid: 's1',
+      onListening,
+      onExit: () => {},
+    });
+    fake.emit('message', {
+      type: 'rifty:node-listening',
+      ports: [3000],
+      previewScope: 'node-run-scope',
+    });
+    fake.emit('exit', 0);
+    expect(await p).toBe(0);
+    expect(onListening).toHaveBeenCalledWith('s1', [3000], 'node-run-scope');
   });
 
   it('Ctrl-C kills the child and mutes trailing output', async () => {
