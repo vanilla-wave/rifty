@@ -95,10 +95,10 @@ test.describe('cross-realm http loopback between two node realms (ADR-0180)', ()
     await runLineConfirmed(page, `echo '${CLIENT_SRC}' > /scratch/client.js`);
     await runLineConfirmed(page, 'node client.js');
 
-    // The api's JSON came back across the realm hop (body contains "ada").
-    await expectTerminalContains(page, /XREALM-GOT:.*"name":"ada"/, 60_000);
-    // It must NOT be the error branch.
-    expect(await terminalBuffer(page)).not.toMatch(/XREALM-ERR/);
+    // The api's JSON came back across the realm hop, decoded utf8 (the gateway's
+    // canonical `b += chunk` read) — proving the success branch (which then
+    // process.exit(0)s). The error branch would print `XREALM-ERR:<msg>` instead.
+    await expectTerminalContains(page, /XREALM-GOT:\[\{"id":1,"name":"ada"\}\]/, 60_000);
 
     // A port no realm owns → Node ECONNREFUSED (not a hang, not a host fetch leak).
     await runLineConfirmed(page, `echo '${REFUSED_SRC}' > /scratch/refused.js`);

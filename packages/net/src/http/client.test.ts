@@ -53,6 +53,32 @@ describe('http.request — local registered port loopback', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it('delivers response body chunks as Buffers so the canonical `b += chunk` idiom yields utf8 (Node parity)', async () => {
+    const port = 4320;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('loopback must not hit fetch'));
+    createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('héllo wörld'); // multi-byte utf8 — a Uint8Array would stringify to CSV bytes
+    }).listen(port);
+
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = get(`http://localhost:${port}/`, (res) => {
+        let b = '';
+        // The canonical Node http-client idiom: concatenate chunks with `+=`, no
+        // explicit decode. It yields utf8 only because chunks are Buffers (whose
+        // toString is utf8) — a raw Uint8Array stringifies to CSV byte values.
+        res.on('data', (chunk) => {
+          b += String(chunk);
+        });
+        res.on('end', () => resolve(b));
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+    });
+
+    expect(body).toBe('héllo wörld');
+  });
+
   it('routes loopback option requests for 127.0.0.1 and 0.0.0.0', async () => {
     const port = 4302;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));

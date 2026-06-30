@@ -9,7 +9,7 @@
  * pushed individually so chunked uploads work end-to-end.
  */
 
-import { Readable } from '@riftydev/io';
+import { Buffer, Readable } from '@riftydev/io';
 
 /**
  * Install `headers` as a lazy, WRITABLE data property (#9, gate G2).
@@ -101,7 +101,11 @@ async function pipeBodyStream(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value && value.byteLength > 0 && !target.push(value)) {
+      // Push a `Buffer`, not the raw `Uint8Array`: Node delivers `IncomingMessage`
+      // body chunks as `Buffer`s, so the canonical `let b=''; res.on('data', c => b
+      // += c)` client idiom decodes utf8 — a bare `Uint8Array` would stringify to
+      // CSV byte values. `Buffer.from` over the chunk (a fresh per-read view) is safe.
+      if (value && value.byteLength > 0 && !target.push(Buffer.from(value))) {
         await waitForReadableDemand(target);
       }
     }
