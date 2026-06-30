@@ -406,7 +406,7 @@ export class Shell {
       if (token.op === '<') {
         throw new NotImplementedError(
           'shell.input-redirect',
-          'use bash via wasi for < input redirect — M12 work item',
+          'input redirect in a background job (`cmd < file &`) is not supported — run it in the foreground',
         );
       }
     }
@@ -508,11 +508,11 @@ export class Shell {
   }
 
   /**
-   * Run one simple command (a single pipeline stage): input-redirect guard,
-   * env-prefix popping, trailing `>`/`>>` redirect extraction, command lookup
-   * and execution. `stdin` feeds `ctx.stdin`; `streamStdout` gates whether
-   * stdout chunks reach `onChunk` — false for a non-final pipe stage, whose
-   * stdout is captured for the next stage rather than shown.
+   * Run one simple command (a single pipeline stage): env-prefix popping,
+   * `< file` input redirect + trailing `>`/`>>` output redirect extraction,
+   * command lookup and execution. `stdin` feeds `ctx.stdin` (a `< file` overrides
+   * it); `streamStdout` gates whether stdout chunks reach `onChunk` — false for a
+   * non-final pipe stage, whose stdout is captured for the next stage.
    */
   private async runSimpleCommand(
     segmentTokens: Token[],
@@ -523,13 +523,6 @@ export class Shell {
     abortPromise: Promise<typeof ABORTED>,
   ): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
-
-    if (segmentTokens.some((t) => isOp(t) && t.op === '<')) {
-      throw new NotImplementedError(
-        'shell.input-redirect',
-        'use bash via wasi for < input redirect — M12 work item',
-      );
-    }
 
     // Pop leading KEY=value env assignments (an operator ends the run).
     let i = 0;
@@ -566,6 +559,18 @@ export class Shell {
       rest.splice(k, 2);
     }
 
+    // Symmetric `< path` input redirect: same right-to-left scan, rightmost wins.
+    // Reads the file as the stage's stdin (overriding any inherited pipe stdin).
+    let redirectFrom: string | null = null;
+    for (let k = rest.length - 1; k >= 0; k--) {
+      const op = rest[k];
+      if (!op || !isOp(op) || op.op !== '<') continue;
+      const target = rest[k + 1];
+      if (!target || isOp(target)) continue; // dangling `<` with no target — leave as-is
+      if (redirectFrom === null) redirectFrom = target.value;
+      rest.splice(k, 2);
+    }
+
     const cmdTok = rest[0];
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
     // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
@@ -586,6 +591,24 @@ export class Shell {
       if (stream === 'stdout') stdout += chunk;
       else stderr += chunk;
     };
+
+    // `< file` reads the file as stdin (overrides inherited pipe stdin). A miss
+    // is a clean exit-1 diagnostic and the command does NOT run (bash).
+    let stageStdin = stdin;
+    if (redirectFrom !== null) {
+      try {
+        const inPath = normalizePath(
+          isAbsolute(redirectFrom) ? redirectFrom : joinPath(this._cwd, redirectFrom),
+        );
+        stageStdin = bufferStdin(syncMirror().readFileBytesSync(inPath));
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        const reason = code === 'EISDIR' ? 'Is a directory' : 'No such file or directory';
+        emit(`${cmd}: ${redirectFrom}: ${reason}\n`, 'stderr');
+        return { exitCode: 1, stdout, stderr };
+      }
+    }
+
     const ctx: CommandContext = {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
@@ -604,7 +627,7 @@ export class Shell {
       isTTY: redirectTo || !streamStdout ? false : (options.isTTY ?? false),
       cols: options.cols,
       rows: options.rows,
-      stdin,
+      stdin: stageStdin,
       signal,
     };
 

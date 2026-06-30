@@ -257,15 +257,11 @@ describe('Shell — command substitution / backticks are loud (not silent litera
   });
 });
 
-describe('Shell — input redirect is loud', () => {
-  it('throws NotImplementedError when < appears in a command line', async () => {
+describe('Shell — input redirect', () => {
+  // Foreground `cmd < file` is covered in input-redirect.test.ts.
+  it('input redirect in a BACKGROUND job (`cmd < file &`) stays loud (out of scope)', async () => {
     const sh = new Shell();
-    await expect(sh.run('cat < /etc/hostname')).rejects.toBeInstanceOf(NotImplementedError);
-  });
-
-  it('the NotImplementedError carries the documented feature name', async () => {
-    const sh = new Shell();
-    await expect(sh.run('cat < /etc/hostname')).rejects.toMatchObject({
+    await expect(sh.run('cat < /etc/hostname &')).rejects.toMatchObject({
       feature: 'shell.input-redirect',
     });
   });
