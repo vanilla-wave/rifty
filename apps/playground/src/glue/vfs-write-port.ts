@@ -179,17 +179,58 @@ function applyCopyPlan(plan: readonly CopyPlanEntry[]): void {
   }
 }
 
+function validateVfsWriteFrame(frame: VfsWriteSingleFrame): void {
+  const fs = syncMirror();
+  if (frame.type === 'write') {
+    const parent = dirname(frame.path);
+    if (fs.existsSync(parent)) {
+      const st = fs.statSync(parent);
+      if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    } else if (frame.recursive === false) {
+      fs.statSync(parent);
+    }
+    return;
+  }
+  if (frame.type === 'mkdir') {
+    if (fs.existsSync(frame.path)) {
+      const st = fs.statSync(frame.path);
+      if (!frame.recursive || !st.isDirectory) {
+        throw new Error(`"${frame.path}" already exists`);
+      }
+    }
+    if (!frame.recursive) {
+      const parent = dirname(frame.path);
+      const st = fs.statSync(parent);
+      if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    }
+    return;
+  }
+  if (frame.type === 'rm') {
+    if (!frame.force) fs.statSync(frame.path);
+    return;
+  }
+  if (frame.type === 'rename') {
+    if (frame.from === frame.to) return;
+    if (isSelfOrSubtree(frame.from, frame.to)) {
+      throw new Error(`EINVAL: cannot rename "${frame.from}" into itself at "${frame.to}"`);
+    }
+    fs.statSync(frame.from);
+    if (fs.existsSync(frame.to)) throw new Error(`"${frame.to}" already exists`);
+    const parent = dirname(frame.to);
+    const st = fs.statSync(parent);
+    if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
+    return;
+  }
+  planCopyTree(frame.from, frame.to);
+}
+
 export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
   if (frame.type === 'batch') {
+    for (const child of frame.frames) validateVfsWriteFrame(child);
     const changed: string[] = [];
-    try {
-      for (const child of frame.frames) {
-        applyVfsWriteFrame(child);
-        changed.push(...frameChangedPaths(child));
-      }
-    } catch (err) {
-      if (changed.length > 0) opts.onWrite?.(changed);
-      throw err;
+    for (const child of frame.frames) {
+      applyVfsWriteFrame(child);
+      changed.push(...frameChangedPaths(child));
     }
     opts.onWrite?.(changed);
     return;

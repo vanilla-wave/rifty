@@ -79,8 +79,12 @@ describe('EditorHost git diff contract', () => {
     expect(source).toContain(
       'function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void',
     );
+    expect(source).toContain('function disposeDiffTab(id: string): void');
+    expect(source).toContain('function closeDiffTabsForPathTree(');
+    expect(source).toContain('closeDiffTabsForPathTree(path, { liveModelOnly: true });');
     expect(source).toContain('if (opts.flushPending !== false) {');
     expect(source).toContain('function closeExternalPathTree(rootPath: string): void');
+    expect(source).toContain('closeDiffTabsForPathTree(normalizedRoot);');
     expect(source).toContain('const NO_ACTIVE_TAB_ID = ');
     expect(source).toContain('function closeVisibleTab(id: string): void');
     expect(source).toContain('editor?.setModel(null);');

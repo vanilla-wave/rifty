@@ -10,6 +10,14 @@ import {
 import type { SnapshotFs } from './snapshot-fs.ts';
 import type { VfsWriteFrame } from './vfs-write-port.ts';
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let i = 0; i < left.byteLength; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
 export interface OwnerRpcFsWriter {
   writeFrameAcked(frame: VfsWriteFrame): Promise<void>;
 }
@@ -79,7 +87,7 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
 
   writeFile(path: string, data: Uint8Array, options: { recursive?: boolean } = {}): Promise<void> {
     return this.#sendAndWait({ type: 'write', path, data, recursive: options.recursive }, () =>
-      this.#isFileWithSize(path, data.byteLength),
+      this.#isFileWithData(path, data),
     );
   }
 
@@ -105,7 +113,7 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
           recursive: entry.recursive,
         })),
       },
-      () => entries.every((entry) => this.#isFileWithSize(entry.path, entry.data.byteLength)),
+      () => entries.every((entry) => this.#isFileWithData(entry.path, entry.data)),
     );
   }
 
@@ -200,10 +208,15 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
     });
   }
 
-  #isFileWithSize(path: string, size: number): boolean {
+  #isFileWithData(path: string, data: Uint8Array): boolean {
     try {
       const st = this.statSync(path);
-      return st.isFile && st.size === size;
+      if (!st.isFile || st.size !== data.byteLength) return false;
+      try {
+        return bytesEqual(this.readFileBytesSync(path), data);
+      } catch {
+        return true;
+      }
     } catch {
       return false;
     }

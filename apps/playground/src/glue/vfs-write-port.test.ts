@@ -217,6 +217,44 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     ]);
   });
 
+  it('preflights batch frames before applying any child mutation', () => {
+    const changes: (readonly string[])[] = [];
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/a.txt',
+      data: enc.encode('a'),
+    });
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/b.txt',
+      data: enc.encode('b'),
+    });
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/moved/b.txt',
+      data: enc.encode('existing'),
+    });
+
+    expect(() =>
+      applyVfsWriteFrame(
+        {
+          type: 'batch',
+          frames: [
+            { type: 'rename', from: '/workspace/a.txt', to: '/workspace/moved/a.txt' },
+            { type: 'rename', from: '/workspace/b.txt', to: '/workspace/moved/b.txt' },
+          ],
+        },
+        { onWrite: (paths) => changes.push(paths) },
+      ),
+    ).toThrow(/already exists/);
+
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/a.txt'))).toBe('a');
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/b.txt'))).toBe('b');
+    expect(syncMirror().existsSync('/workspace/moved/a.txt')).toBe(false);
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/moved/b.txt'))).toBe('existing');
+    expect(changes).toEqual([]);
+  });
+
   it('rejects copy into the source subtree before creating the destination', () => {
     applyVfsWriteFrame({
       type: 'write',

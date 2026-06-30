@@ -63,6 +63,10 @@
 
 ### Fixed
 
+- **Explorer/SCM file actions now use fresh owner state.** Download and compare
+  drain pending editor writes before owner reads, new files compare against an
+  empty HEAD side, SCM discard asks for confirmation, and owner batch/write
+  reflection avoids stale or partial results.
 - **Preview bridges now ignore stale same-port worker responders.** Playground
   scopes each preview-producing child run and wires the page bridge with the same
   scope, so iframe reloads cannot race an older `/preview/<port>/` responder.

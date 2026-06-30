@@ -371,27 +371,6 @@ export function App(props: AppProps) {
     }
   }
 
-  async function readWorkspaceFileForOwner(
-    owner: WorkspaceOwnerHandle,
-    path: string,
-    action: string,
-  ): Promise<Uint8Array> {
-    assertWorkspaceFileOwnerAlive(owner, path, action);
-    try {
-      const bytes = snapshotFs.readFileBytesSync(path);
-      if (!looksBinary(bytes)) {
-        assertWorkspaceFileOwnerAlive(owner, path, action);
-        return bytes;
-      }
-    } catch {
-      // Missing/over-cap/excluded from the page snapshot: read from the owner below.
-    }
-    assertWorkspaceFileOwnerAlive(owner, path, action);
-    const bytes = await owner.readFileBytes(path);
-    assertWorkspaceFileOwnerAlive(owner, path, action);
-    return bytes;
-  }
-
   async function readWorkspaceFileBytesFromOwner(
     owner: WorkspaceOwnerHandle,
     path: string,
@@ -404,11 +383,12 @@ export function App(props: AppProps) {
   }
 
   async function readWorkspaceFileForDownload(path: string): Promise<Uint8Array> {
-    return readWorkspaceFileForOwner(workspaceOwner(), path, 'download');
+    return readWorkspaceFileBytesFromOwner(workspaceOwner(), path, 'download');
   }
 
   async function downloadWorkspaceFile(path: string): Promise<void> {
     try {
+      await flushPendingEditorWrites();
       const bytes = await readWorkspaceFileForDownload(path);
       const doc = globalThis.document;
       if (!doc) throw new Error('file download is unavailable without a document');
@@ -468,11 +448,12 @@ export function App(props: AppProps) {
   }
 
   async function openWorkingFileCompare(leftPath: string, rightPath: string): Promise<void> {
-    const owner = workspaceOwner();
     try {
+      await flushPendingEditorWrites();
+      const owner = workspaceOwner();
       const [leftBytes, rightBytes] = await Promise.all([
-        readWorkspaceFileForOwner(owner, leftPath, 'compare'),
-        readWorkspaceFileForOwner(owner, rightPath, 'compare'),
+        readWorkspaceFileBytesFromOwner(owner, leftPath, 'compare'),
+        readWorkspaceFileBytesFromOwner(owner, rightPath, 'compare'),
       ]);
       editorApi?.openTextDiff({
         id: compareDiffId('working', leftPath, rightPath),
@@ -489,24 +470,27 @@ export function App(props: AppProps) {
   }
 
   async function openWorkingHeadCompare(path: string): Promise<void> {
-    const owner = workspaceOwner();
-    const root = owner.root;
-    const snapshotPort = owner.snapshotPort;
-    const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
-    if (!relative) {
-      flashError(`Cannot compare outside ${root}`);
-      return;
-    }
-    if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
-      flashError('Compare failed: workspace owner is unavailable');
-      return;
-    }
     try {
+      await flushPendingEditorWrites();
+      const owner = workspaceOwner();
+      const root = owner.root;
+      const snapshotPort = owner.snapshotPort;
+      const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
+      if (!relative) {
+        flashError(`Cannot compare outside ${root}`);
+        return;
+      }
+      if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
+        flashError('Compare failed: workspace owner is unavailable');
+        return;
+      }
       assertWorkspaceFileOwnerAlive(owner, path, 'compare');
-      const working = await readWorkspaceFileForOwner(owner, path, 'compare');
+      const working = await readWorkspaceFileBytesFromOwner(owner, path, 'compare');
+      const code = gitStatusMap().get(path);
       editorApi?.openWorkingDiff({
         path,
         ref: 'HEAD',
+        hasOriginal: statusCodeHasHeadBlob(code),
         modified: decodeTextBlob(relative, working),
       });
     } catch (err) {
@@ -515,7 +499,11 @@ export function App(props: AppProps) {
   }
 
   function rowHasHeadBlob(row: ScmResourceRow): boolean {
-    return row.code !== '??' && row.code[0] !== 'A';
+    return statusCodeHasHeadBlob(row.code);
+  }
+
+  function statusCodeHasHeadBlob(code: string | undefined): boolean {
+    return code !== '??' && code?.[0] !== 'A';
   }
 
   function rowHasIndexChange(row: ScmResourceRow): boolean {
@@ -673,6 +661,10 @@ export function App(props: AppProps) {
       flashError(`Discard ${row.relativePath} failed: ${error.message}`);
       throw error;
     }
+    const confirmed =
+      globalThis.confirm?.(`Discard changes in ${row.relativePath}? This cannot be undone.`) ??
+      false;
+    if (!confirmed) return;
     await runScmOwnerAction(
       `Discard ${row.relativePath}`,
       async (git) => {

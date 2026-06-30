@@ -236,6 +236,10 @@ describe('OwnerRpcFs', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(dec.decode(snapshot.readFileBytesSync('/workspace/src/same.txt'))).toBe('old');
+    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(dec.decode(snapshot.readFileBytesSync('/workspace/src/same.txt'))).toBe('old');
     publish();
     await written;
     expect(settled).toBe(true);

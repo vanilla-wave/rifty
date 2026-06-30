@@ -485,6 +485,40 @@ export function EditorHost(props: EditorHostProps) {
     );
   }
 
+  function normalizeTreeRoot(path: string): string {
+    return path !== '/' && path.endsWith('/') ? path.slice(0, -1) : path;
+  }
+
+  function pathIsInTree(path: string, rootPath: string): boolean {
+    const normalizedRoot = normalizeTreeRoot(rootPath);
+    return path === normalizedRoot || path.startsWith(`${normalizedRoot}/`);
+  }
+
+  function disposeDiffTab(id: string): void {
+    const diff = diffModels.get(id);
+    if (!diff) return;
+    diffModels.delete(id);
+    closeVisibleTab(id);
+    queueMicrotask(() => {
+      diff.original.dispose();
+      if (diff.disposeModified) diff.modified.dispose();
+    });
+  }
+
+  function closeDiffTabsForPathTree(
+    rootPath: string,
+    opts: { readonly liveModelOnly?: boolean } = {},
+  ): void {
+    const ids = [...diffModels.entries()]
+      .filter(
+        ([, diff]) =>
+          pathIsInTree(diff.path, rootPath) &&
+          (opts.liveModelOnly !== true || diff.disposeModified === false),
+      )
+      .map(([id]) => id);
+    for (const id of ids) disposeDiffTab(id);
+  }
+
   async function flushWrite(path: string): Promise<void> {
     const m = models.get(path);
     if (!m) return;
@@ -841,14 +875,10 @@ export function EditorHost(props: EditorHostProps) {
   function closeFile(path: string, opts: { readonly flushPending?: boolean } = {}): void {
     const diff = diffModels.get(path);
     if (diff) {
-      diffModels.delete(path);
-      closeVisibleTab(path);
-      queueMicrotask(() => {
-        diff.original.dispose();
-        if (diff.disposeModified) diff.modified.dispose();
-      });
+      disposeDiffTab(path);
       return;
     }
+    closeDiffTabsForPathTree(path, { liveModelOnly: true });
     clearAwait(path);
     const timer = writeTimers.get(path);
     if (timer) {
@@ -867,7 +897,8 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   function closeExternalPathTree(rootPath: string): void {
-    const normalizedRoot = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
+    const normalizedRoot = normalizeTreeRoot(rootPath);
+    closeDiffTabsForPathTree(normalizedRoot);
     const ids = new Set([
       ...models.keys(),
       ...tabs()

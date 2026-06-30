@@ -316,24 +316,27 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('Stop the dev server to archive the editable workspace');
   });
 
-  it('routes single-file downloads through snapshot bytes or full owner bytes', () => {
+  it('routes single-file downloads through fresh owner bytes after pending editor writes', () => {
+    const downloadStart = source.indexOf('async function downloadWorkspaceFile(path: string)');
+    const downloadEnd = source.indexOf('  function decodeTextBlob', downloadStart);
+    const downloadBlock = source.slice(downloadStart, downloadEnd);
+    expect(downloadStart).toBeGreaterThan(-1);
+    expect(downloadEnd).toBeGreaterThan(downloadStart);
     expect(source).toContain('function assertWorkspaceFileOwnerAlive(');
     expect(source).toContain('!owner.isAlive()');
     expect(source).toContain('current !== owner');
-    expect(source).toContain('async function readWorkspaceFileForOwner(');
+    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
     expect(source).toContain('async function readWorkspaceFileForDownload(path: string)');
     expect(source).toContain(
-      "return readWorkspaceFileForOwner(workspaceOwner(), path, 'download')",
+      "return readWorkspaceFileBytesFromOwner(workspaceOwner(), path, 'download')",
     );
-    expect(source).toContain('snapshotFs.readFileBytesSync(path)');
-    expect(source).toContain('if (!looksBinary(bytes)) {');
-    expect(source).toContain(`assertWorkspaceFileOwnerAlive(owner, path, action);
-        return bytes;`);
+    expect(source).not.toContain('async function readWorkspaceFileForOwner(');
     expect(source).toContain('const bytes = await owner.readFileBytes(path);');
     expect(source).toMatch(
       /const bytes = await owner\.readFileBytes\(path\);\s+assertWorkspaceFileOwnerAlive\(owner, path, action\);\s+return bytes;/,
     );
-    expect(source).toContain('async function downloadWorkspaceFile(path: string)');
+    expect(downloadBlock).toContain('await flushPendingEditorWrites();');
+    expect(downloadBlock).toContain('const bytes = await readWorkspaceFileForDownload(path);');
     expect(source).toContain('const blobBuffer = new ArrayBuffer(bytes.byteLength);');
     expect(source).toContain('new Uint8Array(blobBuffer).set(bytes);');
     expect(source).toContain('new Blob([blobBuffer], { type:');
@@ -556,13 +559,31 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
   });
 
   it('wires Explorer compare/upload affordances to owner bytes and generic Monaco text diffs', () => {
+    const compareStart = source.indexOf(
+      'async function openWorkingFileCompare(leftPath: string, rightPath: string)',
+    );
+    const compareEnd = source.indexOf('  async function openWorkingHeadCompare', compareStart);
+    const compareBlock = source.slice(compareStart, compareEnd);
+    const headStart = source.indexOf('async function openWorkingHeadCompare(path: string)');
+    const headEnd = source.indexOf('  function rowHasHeadBlob', headStart);
+    const headBlock = source.slice(headStart, headEnd);
+    expect(compareStart).toBeGreaterThan(-1);
+    expect(compareEnd).toBeGreaterThan(compareStart);
+    expect(headStart).toBeGreaterThan(-1);
+    expect(headEnd).toBeGreaterThan(headStart);
     expect(source).toContain('function assertWorkspaceFileOwnerAlive(');
-    expect(source).toContain('async function readWorkspaceFileForOwner(');
-    expect(source).toContain("readWorkspaceFileForOwner(owner, leftPath, 'compare')");
+    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
+    expect(compareBlock).toContain('await flushPendingEditorWrites();');
+    expect(compareBlock).toContain("readWorkspaceFileBytesFromOwner(owner, leftPath, 'compare')");
+    expect(compareBlock).toContain("readWorkspaceFileBytesFromOwner(owner, rightPath, 'compare')");
     expect(source).toContain('editorApi?.openTextDiff({');
     expect(source).toContain("id: compareDiffId('working', leftPath, rightPath)");
-    expect(source).toContain('async function openWorkingHeadCompare(path: string)');
-    expect(source).toContain("ref: 'HEAD'");
+    expect(headBlock).toContain('await flushPendingEditorWrites();');
+    expect(headBlock).toContain("readWorkspaceFileBytesFromOwner(owner, path, 'compare')");
+    expect(headBlock).toContain("ref: 'HEAD'");
+    expect(headBlock).toContain('const code = gitStatusMap().get(path);');
+    expect(headBlock).toContain('hasOriginal: statusCodeHasHeadBlob(code),');
+    expect(source).toContain('function statusCodeHasHeadBlob(code: string | undefined): boolean');
     expect(source).toContain(
       'onCompareFiles={(left, right) => void openWorkingFileCompare(left, right)}',
     );
@@ -587,6 +608,10 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('git.unstage(row.relativePath)');
     expect(source).toContain('async function discardScmRow(row: ScmResourceRow)');
     expect(source).toContain('untracked files are not discardable through git restore');
+    expect(source).toContain(
+      'globalThis.confirm?.(`Discard changes in ${row.relativePath}? This cannot be undone.`)',
+    );
+    expect(source).toContain('if (!confirmed) return;');
     expect(source).toContain('await git.restore([row.relativePath]);');
     expect(source).toContain('async function commitScm(message: string)');
     expect(source).toContain('await git.commitResolvedIdentity({ message })');
