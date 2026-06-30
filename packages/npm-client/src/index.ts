@@ -6,7 +6,15 @@ export {
   type VersionManifest,
   type Fetcher,
 } from './registry.ts';
-export { extractTarGz } from './unpacker.ts';
+export { extractTarGz, parseTarEntries } from './unpacker.ts';
+export {
+  EDDY_BUNDLE_FORMAT,
+  packEddyBundle,
+  unpackEddyBundle,
+  type EddyBundleContents,
+  type EddyBundleManifestV1,
+  type EddyBundleTarballEntry,
+} from './eddy-bundle.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
 export { resolveOverride, type OverrideMap } from './overrides.ts';
 export {
