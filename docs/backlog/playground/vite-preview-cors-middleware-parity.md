@@ -22,6 +22,14 @@ contract it was written for.
 This is a tracked ceiling, not template behavior. Templates must not rely on
 the disabled middleware.
 
+## User scenario
+
+A developer builds a Vite app in rifty, runs `vite preview`, and inspects
+headers from the preview iframe or a same-origin fetch. The observable CORS and
+host behavior should match real Vite preview where the browser bridge can model
+it; if not, rifty must fail loudly instead of making template-specific behavior
+look portable.
+
 ## Acceptance
 
 - `vite preview` without user preview config serves `dist/` through the real

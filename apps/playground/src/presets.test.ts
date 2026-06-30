@@ -229,13 +229,14 @@ describe('playground presets', () => {
     expect(demo.setup).toBe('from-scratch');
     expect(demo.category).toBe('Live preview');
 
-    expect(demo.source).toBe(HONO_API_TEMPLATE.entry.content);
-
+    const entryPath = HONO_API_TEMPLATE.entry.relativePath.replace(/^\//, '');
+    expect(presetFileContent(demo, entryPath)).toBe(HONO_API_TEMPLATE.entry.content);
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(HONO_API_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
     for (const file of demo.files ?? []) {
+      if (file.path === entryPath) continue;
       expect(HONO_API_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
 
@@ -252,13 +253,14 @@ describe('playground presets', () => {
     expect(demo.setup).toBe('from-scratch');
     expect(demo.category).toBe('Live preview');
 
-    expect(demo.source).toBe(CLI_REPORT_TEMPLATE.entry.content);
-
+    const entryPath = CLI_REPORT_TEMPLATE.entry.relativePath.replace(/^\//, '');
+    expect(presetFileContent(demo, entryPath)).toBe(CLI_REPORT_TEMPLATE.entry.content);
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(CLI_REPORT_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
     for (const file of demo.files ?? []) {
+      if (file.path === entryPath) continue;
       expect(CLI_REPORT_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
 
@@ -275,13 +277,14 @@ describe('playground presets', () => {
     expect(demo.setup).toBe('from-scratch');
     expect(demo.category).toBe('Live preview');
 
-    expect(demo.source).toBe(KOA_API_TEMPLATE.entry.content);
-
+    const entryPath = KOA_API_TEMPLATE.entry.relativePath.replace(/^\//, '');
+    expect(presetFileContent(demo, entryPath)).toBe(KOA_API_TEMPLATE.entry.content);
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(KOA_API_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
     for (const file of demo.files ?? []) {
+      if (file.path === entryPath) continue;
       expect(KOA_API_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
 
@@ -298,13 +301,14 @@ describe('playground presets', () => {
     expect(demo.setup).toBe('from-scratch');
     expect(demo.category).toBe('Live preview');
 
-    expect(demo.source).toBe(MARKDOWN_SSG_TEMPLATE.entry.content);
-
+    const entryPath = MARKDOWN_SSG_TEMPLATE.entry.relativePath.replace(/^\//, '');
+    expect(presetFileContent(demo, entryPath)).toBe(MARKDOWN_SSG_TEMPLATE.entry.content);
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(MARKDOWN_SSG_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
     for (const file of demo.files ?? []) {
+      if (file.path === entryPath) continue;
       expect(MARKDOWN_SSG_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
 

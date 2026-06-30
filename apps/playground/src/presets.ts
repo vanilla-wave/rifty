@@ -1,13 +1,13 @@
 import type { IconName } from './components/icons.tsx';
 import { MONO_FONT_STACK } from './glue/fonts.ts';
-import { CLI_REPORT_SOURCE, CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
+import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
-import { HONO_API_SERVER_SOURCE, HONO_API_TEMPLATE } from './templates/hono-api.ts';
-import { KOA_API_SERVER_SOURCE, KOA_API_TEMPLATE } from './templates/koa-api.ts';
-import { MARKDOWN_SSG_SOURCE, MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
+import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
+import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
@@ -489,12 +489,17 @@ const HONO_API_PRESET: Preset = {
   blurb: 'A middleware-style API: Hono ctx routes, JSON bodies, and VFS-served assets.',
   glyph: { text: 'HN', color: '#F6C768' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: HONO_API_SERVER_SOURCE,
   openFiles: ['public/index.html', 'public/client.js'],
-  files: Object.entries(HONO_API_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  files: [
+    {
+      path: HONO_API_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: HONO_API_TEMPLATE.entry.content,
+    },
+    ...Object.entries(HONO_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const KOA_API_PRESET: Preset = {
@@ -508,12 +513,17 @@ const KOA_API_PRESET: Preset = {
   blurb: 'A ctx-first API: Koa middleware, router params, cookies, and JSON bodies.',
   glyph: { text: 'KOA', color: '#93E08F' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: KOA_API_SERVER_SOURCE,
   openFiles: ['public/index.html', 'public/client.js'],
-  files: Object.entries(KOA_API_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  files: [
+    {
+      path: KOA_API_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: KOA_API_TEMPLATE.entry.content,
+    },
+    ...Object.entries(KOA_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const CLI_REPORT_PRESET: Preset = {
@@ -527,12 +537,17 @@ const CLI_REPORT_PRESET: Preset = {
   blurb: 'A run-to-completion Node CLI: npm dependency, VFS input, stdout, exit code.',
   glyph: { text: 'CLI', color: '#9BD060' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: CLI_REPORT_SOURCE,
   openFiles: ['data/packages.yml', 'README.md'],
-  files: Object.entries(CLI_REPORT_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  files: [
+    {
+      path: CLI_REPORT_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: CLI_REPORT_TEMPLATE.entry.content,
+    },
+    ...Object.entries(CLI_REPORT_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const MARKDOWN_SSG_PRESET: Preset = {
@@ -546,12 +561,17 @@ const MARKDOWN_SSG_PRESET: Preset = {
   blurb: 'A filesystem-heavy static-site build: markdown in, generated HTML out.',
   glyph: { text: 'MD', color: '#8BD3FF' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: MARKDOWN_SSG_SOURCE,
   openFiles: ['content/intro.md', 'content/runtime.md'],
-  files: Object.entries(MARKDOWN_SSG_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  files: [
+    {
+      path: MARKDOWN_SSG_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: MARKDOWN_SSG_TEMPLATE.entry.content,
+    },
+    ...Object.entries(MARKDOWN_SSG_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 export const PRESETS: readonly Preset[] = [
