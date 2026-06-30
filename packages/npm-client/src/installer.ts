@@ -550,16 +550,28 @@ async function tryEddyFastPath(
       }
     }
 
-    // Coverage gap → fallback (no partial install). Same condition the fast
-    // path uses, so a pass here guarantees `chooseSource` takes the fast path.
+    // Coverage gap / override divergence → fallback (no partial install). This
+    // is the EXACT condition `chooseSource` uses to take the lockfile fast path
+    // (coverage AND no override divergence), so a pass here GUARANTEES
+    // `chooseSource` fast-paths the eddy lockfile — without the divergence half,
+    // a parent-scoped override would make `chooseSource` silently live-resolve
+    // while we'd already have claimed `source: 'eddy'` (a provenance lie).
     const effectiveRequest = {
       ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
       ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
     };
-    if (!lockfileCovers(lockfile, effectiveRequest)) {
-      return declineEddy('bundle lockfile does not cover the requested dependencies');
+    const pins = lockfileCovers(lockfile, effectiveRequest);
+    if (!pins || !subgraphFreeOfOverrideDivergence(lockfile, pins, opts.overrides)) {
+      return declineEddy(
+        'bundle lockfile does not cover the request (or an override forces a re-resolve)',
+      );
     }
 
+    // Seed the (already integrity-verified) tarballs, THEN write the lockfile.
+    // A `put` throwing mid-loop is safe: the cache is content-addressed and
+    // re-verifies on every `get`, so a partial seed leaves only correct bytes;
+    // the lockfile is written ONLY after all puts succeed, so a failure leaves
+    // the pre-existing lockfile untouched and the standard install proceeds.
     for (const { entry, bytes: tgz } of tarballs) {
       await tarballCache.put(entry.name, entry.version, entry.integrity, tgz);
     }

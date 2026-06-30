@@ -208,4 +208,32 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     expect(result.source ?? 'standard').toBe('standard');
     expect(calls.packument).toBeGreaterThan(0); // it really did resolve via the registry
   });
+
+  it('declines (source standard) when an override divergence would force chooseSource to live-resolve', async () => {
+    // A parent-scoped override forces `chooseSource` to live-resolve regardless
+    // of the lockfile (v3 flat lockfiles lose parent context). The eddy gate
+    // must mirror that condition: writing the bundle lockfile + claiming
+    // source:'eddy' here would be a provenance lie — the install would actually
+    // live-resolve. So eddy must DECLINE; provenance stays honest.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/app', { recursive: true });
+    await vfs.writeFile(
+      '/app/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { debug: '^4.4.1' },
+        overrides: { 'debug>ms': 'ms@2.0.0' },
+      }),
+    );
+    const { registry } = makeRegistry();
+    const result = await install({ vfs, cwd: '/app', registry, resolverUrl: eddyUrl });
+    expect(result.source).toBe('standard');
+    // Tree is still correct — the override applied (debug's ms pinned to 2.0.0).
+    expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+    const ms = JSON.parse(await vfs.readFileText('/app/node_modules/ms/package.json')) as {
+      version: string;
+    };
+    expect(ms.version).toBe('2.0.0');
+  });
 });
