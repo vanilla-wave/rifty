@@ -112,6 +112,11 @@ const matrices = [
     rows: [
       ['`Readable` push/data/end', '✅', 'Object mode and byte/string chunks'],
       ['Readable async iteration', '✅', '`for await` over readable chunks'],
+      [
+        'Readable async-iterator helpers',
+        '✅',
+        '`map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested',
+      ],
       ['`Readable.from(iterable)`', '✅', 'Iterable source support plus options parity cases'],
       ['`Writable` write/end/finish', '✅', 'Backpressure surface via `highWaterMark`'],
       ['`Transform`', '✅', '`_transform` callback path'],

@@ -701,6 +701,18 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    * implement `return()` and `throw()` to run the same cleanup path.
    */
   [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
+    return this.createAsyncIterator(true);
+  }
+
+  /**
+   * The hand-rolled async iterator shared by `[Symbol.asyncIterator]` and
+   * `iterator({ destroyOnReturn })`. `destroyOnReturn` (default `true` for the
+   * Symbol path) controls whether an early `return()`/`break`/`throw` ALSO
+   * destroys the source: `true` mirrors Node's default (signal the producer the
+   * consumer is gone); `false` detaches the listeners but leaves the stream
+   * undestroyed and resumable (Node's `destroyOnReturn:false`).
+   */
+  private createAsyncIterator(destroyOnReturn: boolean): AsyncIterableIterator<unknown> {
     let resolveNext: ((v: IteratorResult<unknown>) => void) | null = null;
     let rejectNext: ((err: unknown) => void) | null = null;
     const pending: unknown[] = [];
@@ -752,9 +764,12 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       this.off('error', onError);
       // Pause to stop emitting; if iteration ended before the consumer drained,
       // also destroy — Node's iterator return() does this so the producer
-      // learns the consumer is gone.
+      // learns the consumer is gone. `destroyOnReturn:false` skips the destroy
+      // (the stream stays resumable), but still detaches the listeners above.
       this.pause();
-      if (!naturallyDrained && !error && !this._readableState.destroyed) this.destroy();
+      if (destroyOnReturn && !naturallyDrained && !error && !this._readableState.destroyed) {
+        this.destroy();
+      }
     };
 
     this.on('data', onData);
@@ -801,6 +816,199 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       },
     };
     return iter;
+  }
+
+  // ──────────────────── async-iterator helpers (v17→v22) ────────────────────
+  // Lazy transforms over `[Symbol.asyncIterator]()`. Stream-returning helpers
+  // (`map`/`filter`/`flatMap`/`take`/`drop`) wrap a lazy async generator in
+  // `Readable.from(gen, {objectMode:true})`; promise-returning helpers
+  // (`forEach`/`reduce`/`toArray`/`some`/`every`/`find`) drain the iterator.
+  // `map`/`filter`/`forEach`/`flatMap` accept `{ concurrency, signal }`:
+  // concurrency>1 runs N callbacks at once but emits/observes results in INPUT
+  // order; `signal` aborts mid-iteration with an `AbortError` (`ABORT_ERR`).
+  // All probed head-to-head against real Node v24.
+
+  /**
+   * `readable.iterator({ destroyOnReturn })` — the async iterator with explicit
+   * cleanup control. Default `destroyOnReturn:true` matches `[Symbol.asyncIterator]`
+   * (an early `return()` destroys the source); `false` detaches the listeners but
+   * leaves the stream undestroyed and resumable (Node parity).
+   */
+  iterator(options: { destroyOnReturn?: boolean } = {}): AsyncIterableIterator<unknown> {
+    return this.createAsyncIterator(options.destroyOnReturn ?? true);
+  }
+
+  /** `readable.map(fn, opts?)` → object-mode Readable of mapped values (concurrency/signal aware). */
+  map(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Readable {
+    assertHelperFn(fn, 'map');
+    const opts = validateHelperOptions(options);
+    return Readable.from(mappedGenerator(this, fn, opts), { objectMode: true });
+  }
+
+  /** `readable.filter(fn, opts?)` → object-mode Readable keeping values where `fn` is truthy. */
+  filter(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Readable {
+    assertHelperFn(fn, 'filter');
+    const opts = validateHelperOptions(options);
+    const KEEP = filterSentinel;
+    const gen = mappedGenerator(
+      this,
+      async (value, index) => ((await fn(value, index)) ? value : KEEP),
+      opts,
+    );
+    return Readable.from(droppingSentinel(gen, KEEP), { objectMode: true });
+  }
+
+  /** `readable.flatMap(fn, opts?)` → object-mode Readable flattening each mapped iterable. */
+  flatMap(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Readable {
+    assertHelperFn(fn, 'flatMap');
+    const opts = validateHelperOptions(options);
+    return Readable.from(flatMappedGenerator(this, fn, opts), { objectMode: true });
+  }
+
+  /** `readable.take(n)` → object-mode Readable of the first `n` values. */
+  take(count: number): Readable {
+    assertCount(count, 'take');
+    const source = this;
+    async function* gen(): AsyncGenerator<unknown> {
+      if (count <= 0) {
+        // Honour early-termination cleanup of the source (destroy on return).
+        const it = source[Symbol.asyncIterator]();
+        await it.return?.();
+        return;
+      }
+      let taken = 0;
+      for await (const value of source) {
+        yield value;
+        if (++taken >= count) break;
+      }
+    }
+    return Readable.from(gen(), { objectMode: true });
+  }
+
+  /** `readable.drop(n)` → object-mode Readable skipping the first `n` values. */
+  drop(count: number): Readable {
+    assertCount(count, 'drop');
+    const source = this;
+    async function* gen(): AsyncGenerator<unknown> {
+      let dropped = 0;
+      for await (const value of source) {
+        if (dropped < count) {
+          dropped++;
+          continue;
+        }
+        yield value;
+      }
+    }
+    return Readable.from(gen(), { objectMode: true });
+  }
+
+  /** `readable.forEach(fn, opts?)` → Promise<void>; runs `fn` per value (concurrency/signal aware). */
+  async forEach(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<void> {
+    assertHelperFn(fn, 'forEach');
+    const opts = validateHelperOptions(options);
+    // Drive the same ordered engine; discard outputs.
+    for await (const _ of mappedGenerator(this, fn, opts)) {
+      void _;
+    }
+  }
+
+  /** `readable.toArray(opts?)` → Promise of all values as an array. */
+  async toArray(options?: { signal?: AbortSignal }): Promise<unknown[]> {
+    const signal = options?.signal;
+    throwIfAborted(signal);
+    const out: unknown[] = [];
+    for await (const value of this) {
+      throwIfAborted(signal);
+      out.push(value);
+    }
+    return out;
+  }
+
+  /**
+   * `readable.reduce(fn, initial?)` → Promise of the accumulated value. With no
+   * `initial`, the first element seeds the accumulator; an EMPTY stream with no
+   * `initial` rejects `ERR_MISSING_ARGS` (TypeError), exactly like Node.
+   */
+  async reduce(
+    fn: (accumulator: unknown, value: unknown, index: number) => unknown,
+    initial?: unknown,
+    options?: { signal?: AbortSignal },
+  ): Promise<unknown> {
+    assertHelperFn(fn, 'reduce');
+    const signal = options?.signal;
+    throwIfAborted(signal);
+    const hasInitial = arguments.length >= 2;
+    let acc = initial;
+    let seeded = hasInitial;
+    let index = 0;
+    for await (const value of this) {
+      throwIfAborted(signal);
+      if (!seeded) {
+        acc = value;
+        seeded = true;
+        index++;
+        continue;
+      }
+      acc = await fn(acc, value, index++);
+    }
+    if (!seeded) {
+      const err = new TypeError(
+        'Reduce of an empty stream requires an initial value',
+      ) as TypeError & { code?: string };
+      err.code = 'ERR_MISSING_ARGS';
+      throw err;
+    }
+    return acc;
+  }
+
+  /** `readable.some(fn, opts?)` → Promise<boolean>; short-circuits on the first truthy. */
+  async some(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<boolean> {
+    assertHelperFn(fn, 'some');
+    const opts = validateHelperOptions(options);
+    // A hit (truthy predicate) → `true`; no hit (sentinel) → `false`. Compare
+    // against the sentinel, NOT `find`'s output (which maps the sentinel away).
+    return (await firstMatch(this, fn, opts)) !== undefinedSentinel;
+  }
+
+  /** `readable.every(fn, opts?)` → Promise<boolean>; short-circuits on the first falsy. */
+  async every(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<boolean> {
+    assertHelperFn(fn, 'every');
+    const opts = validateHelperOptions(options);
+    // `every(fn)` is `!some(!fn)`; reuse the ordered short-circuit engine.
+    const failed = await firstMatch(this, async (v, i) => !(await fn(v, i)), opts);
+    return failed === undefinedSentinel;
+  }
+
+  /**
+   * `readable.find(fn, opts?)` → Promise of the first value where `fn` is truthy
+   * (or `undefined`). Short-circuits.
+   */
+  async find(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<unknown> {
+    assertHelperFn(fn, 'find');
+    const opts = validateHelperOptions(options);
+    const hit = await firstMatch(this, fn, opts);
+    return hit === undefinedSentinel ? undefined : hit;
   }
 
   /**
@@ -1149,4 +1357,248 @@ export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, s
   stream.once('close', cleanup);
   stream.once('end', cleanup);
   return stream;
+}
+
+// ─────────────────── async-iterator helper machinery ────────────────────────
+// Shared by `Readable.prototype.{map,filter,flatMap,forEach,some,every,find}`.
+
+/** `{ concurrency, signal }` accepted by the concurrent helpers. */
+export interface AsyncHelperOptions {
+  /** Max in-flight callbacks (default 1). Output stays in INPUT order regardless. */
+  concurrency?: number;
+  /** Abort mid-iteration → reject with an `AbortError` (`code:'ABORT_ERR'`). */
+  signal?: AbortSignal;
+}
+
+interface ResolvedHelperOptions {
+  concurrency: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Unique markers (never collide with user data): `filterSentinel` flags a
+ * filtered-out value inside the shared map engine; `undefinedSentinel` is the
+ * "no match" result for `find`/`some`/`every` (so a genuine `undefined` value
+ * found by `find` is distinguishable from "not found"). Frozen objects, never
+ * exposed.
+ */
+const filterSentinel: unique symbol = Symbol('rifty/io:filtered-out');
+const undefinedSentinel: unique symbol = Symbol('rifty/io:no-match');
+
+/** Node's `ERR_INVALID_ARG_TYPE` for a non-function helper callback (sync throw). */
+function assertHelperFn(fn: unknown, name: string): asserts fn is (...args: never[]) => unknown {
+  if (typeof fn !== 'function') {
+    const err = new TypeError(
+      `The "fn" argument must be of type function. Received ${fn === null ? 'null' : typeof fn}`,
+    ) as TypeError & { code?: string };
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+  }
+}
+
+/** Node's `ERR_OUT_OF_RANGE` (RangeError) for a bad `take`/`drop` count (sync throw). */
+function assertCount(count: number, name: string): void {
+  if (typeof count !== 'number' || Number.isNaN(count) || count < 0) {
+    const err = new RangeError(
+      `The value of "number" is out of range. It must be a non-negative number. Received ${String(count)}`,
+    ) as RangeError & { code?: string };
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+  }
+}
+
+/**
+ * Validate `{ concurrency, signal }`. `concurrency` must be a number `> 0`
+ * (1.5 accepted; 0/-1/'x' → `ERR_OUT_OF_RANGE`, RangeError — sync throw, Node
+ * parity). Returns the resolved options (default concurrency 1).
+ */
+function validateHelperOptions(options?: AsyncHelperOptions): ResolvedHelperOptions {
+  const concurrency = options?.concurrency ?? 1;
+  if (typeof concurrency !== 'number' || Number.isNaN(concurrency) || concurrency <= 0) {
+    const err = new RangeError(
+      `The value of "concurrency" is out of range. It must be a positive number. Received ${String(concurrency)}`,
+    ) as RangeError & { code?: string };
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+  }
+  return { concurrency, signal: options?.signal };
+}
+
+/** Throw the `AbortError` (`ABORT_ERR`) if the signal is aborted. */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+/**
+ * Ordered concurrency engine for `map`/`filter`/`forEach`. Pulls from `source`
+ * up to `concurrency` callbacks in flight, but YIELDS results in INPUT order
+ * (the mandatory guarantee): result for input #i is yielded only once its
+ * callback settles, while the window stays full of later inputs. A callback
+ * throw (or a signal abort) fails fast — the in-flight work is abandoned and the
+ * error propagates on the next `next()`.
+ *
+ * `filter` passes a wrapper that resolves to `filterSentinel` for dropped
+ * values; the caller strips them via {@link droppingSentinel} (so the drop still
+ * happens in order, after the concurrent predicate resolves).
+ */
+async function* mappedGenerator(
+  source: Readable,
+  fn: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): AsyncGenerator<unknown> {
+  const { concurrency, signal } = opts;
+  throwIfAborted(signal);
+  const iterator = source[Symbol.asyncIterator]();
+
+  // Abort handle: a never-resolving promise that rejects with the AbortError the
+  // moment the signal fires, so an in-flight head await unblocks immediately.
+  let abortListener: (() => void) | null = null;
+  const abortPromise = signal
+    ? new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(abortError());
+        else {
+          abortListener = (): void => reject(abortError());
+          signal.addEventListener('abort', abortListener, { once: true });
+        }
+      })
+    : null;
+  abortPromise?.catch(() => {}); // never an unhandled rejection on the clean path
+
+  const cleanup = async (): Promise<void> => {
+    if (abortListener && signal) signal.removeEventListener('abort', abortListener);
+    await iterator.return?.();
+  };
+
+  // The pool keeps up to `concurrency` callbacks in flight. Each in-flight task
+  // settles to `{ index, value }`; we buffer settled results by index and yield
+  // them in INPUT order, refilling a slot the instant ANY task settles (Node
+  // starts the next input on a peer's COMPLETION, not on the head's yield).
+  //
+  // CRUCIAL: each task's promise resolves to its OWN tag and is removed from the
+  // pool only inside the race loop (by identity), so a result is never dropped —
+  // a settled-but-unraced promise (e.g. a SYNCHRONOUS `fn` whose promise settles
+  // during a `fillPool`) is still pending in the pool until the race consumes it.
+  interface Settled {
+    readonly index: number;
+    readonly value: unknown;
+    readonly self: Promise<Settled>;
+  }
+  const pool = new Set<Promise<Settled>>();
+  const ready = new Map<number, unknown>();
+  let inputIndex = 0;
+  let nextToYield = 0;
+  let sourceDone = false;
+
+  const spawn = (value: unknown, index: number): void => {
+    const self: Promise<Settled> = Promise.resolve(fn(value, index)).then((mapped) => ({
+      index,
+      value: mapped,
+      self,
+    }));
+    pool.add(self);
+  };
+
+  // Pull inputs until the pool is full or the source is exhausted. Racing the
+  // abort means a slow `iterator.next()` still unblocks on abort.
+  const fillPool = async (): Promise<void> => {
+    while (!sourceDone && pool.size < concurrency) {
+      const step = await (abortPromise
+        ? Promise.race([iterator.next(), abortPromise])
+        : iterator.next());
+      if (step.done) {
+        sourceDone = true;
+        return;
+      }
+      spawn(step.value, inputIndex++);
+    }
+  };
+
+  try {
+    throwIfAborted(signal);
+    await fillPool();
+    while (pool.size > 0 || ready.has(nextToYield)) {
+      // Emit every in-order result already buffered, refilling the freed slots.
+      while (ready.has(nextToYield)) {
+        const value = ready.get(nextToYield);
+        ready.delete(nextToYield);
+        nextToYield++;
+        yield value;
+        await fillPool();
+      }
+      if (pool.size === 0) break;
+      // Wait for the next task to settle (any of them); remove exactly that
+      // promise from the pool, buffer its result, and refill — mirroring Node's
+      // complete-then-pull ordering.
+      const settled = await (abortPromise
+        ? Promise.race([Promise.race(pool), abortPromise])
+        : Promise.race(pool));
+      pool.delete(settled.self);
+      ready.set(settled.index, settled.value);
+      await fillPool();
+    }
+  } finally {
+    await cleanup();
+  }
+}
+
+/** Strip `filterSentinel` markers from a generator's output (order-preserving). */
+async function* droppingSentinel(
+  gen: AsyncGenerator<unknown>,
+  sentinel: symbol,
+): AsyncGenerator<unknown> {
+  for await (const value of gen) {
+    if (value !== sentinel) yield value;
+  }
+}
+
+/**
+ * `flatMap` engine: map each input through `fn` (concurrency/signal aware, input
+ * order), then flatten each result. A returned iterable/async-iterable is spread
+ * in order; a scalar is yielded as-is (Node flattens one level).
+ */
+async function* flatMappedGenerator(
+  source: Readable,
+  fn: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): AsyncGenerator<unknown> {
+  for await (const mapped of mappedGenerator(source, fn, opts)) {
+    if (mapped != null && typeof mapped === 'object') {
+      const asyncIt = (mapped as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator];
+      const syncIt = (mapped as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+      if (typeof asyncIt === 'function' || typeof syncIt === 'function') {
+        for await (const sub of mapped as AsyncIterable<unknown> | Iterable<unknown>) yield sub;
+        continue;
+      }
+    }
+    yield mapped;
+  }
+}
+
+/**
+ * Shared short-circuit driver for `find`/`some`/`every`: return the first value
+ * whose `predicate` resolves truthy (concurrency/signal aware, input order), or
+ * {@link undefinedSentinel} if none. Stops pulling the source once a hit is
+ * found (and destroys it via the iterator's `return`).
+ */
+async function firstMatch(
+  source: Readable,
+  predicate: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): Promise<unknown> {
+  // Reuse the ordered map engine: map each value to `{ hit, value }`, then scan
+  // in order for the first hit. Concurrency still runs the predicate ahead, but
+  // the FIRST in-order hit wins (matches Node's documented order).
+  const tagged = mappedGenerator(
+    source,
+    async (value, index) => ({ hit: Boolean(await predicate(value, index)), value }),
+    opts,
+  );
+  for await (const entry of tagged) {
+    const { hit, value } = entry as { hit: boolean; value: unknown };
+    if (hit) {
+      await tagged.return?.(undefined);
+      return value;
+    }
+  }
+  return undefinedSentinel;
 }

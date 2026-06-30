@@ -4,6 +4,22 @@
 
 ### Added
 
+- **`Readable.prototype` async-iterator helpers** (v17→v22) —
+  `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/
+  `every`/`find`/`iterator`, lazy transforms over the base
+  `[Symbol.asyncIterator]()`. Stream-returning helpers (`map`/`filter`/`flatMap`/
+  `take`/`drop`) return an objectMode `Readable`; the rest return a Promise.
+  `map`/`filter`/`forEach`/`flatMap` accept `{ concurrency, signal }`:
+  `concurrency > 1` runs N callbacks at once but emits results in INPUT order (the
+  mandatory guarantee — a peer's COMPLETION frees the slot, Node parity), and a
+  `signal` abort rejects mid-iteration with an `AbortError` (`code:'ABORT_ERR'`).
+  Validation matches Node: `map(non-fn)` → `ERR_INVALID_ARG_TYPE`,
+  `take(-1)`/`drop(-1)`/`concurrency<=0` → `ERR_OUT_OF_RANGE`, `reduce` of an
+  empty stream with no initial value → `ERR_MISSING_ARGS` (all the right
+  Error subclass). `iterator({ destroyOnReturn })` controls early-return cleanup
+  (`true` destroys the source, `false` leaves it resumable). A callback throw
+  fails fast. All parity-proven vs real Node v24.
+
 - **`Writable.toWeb` / `Writable.fromWeb` + `Duplex.toWeb` / `Duplex.fromWeb`**
   (Node v17) — the write/duplex half of the Node↔WHATWG bridge (pure-JS over
   Chromium `WritableStream`), completing the read half (`Readable.toWeb`/

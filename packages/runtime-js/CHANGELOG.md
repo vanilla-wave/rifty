@@ -4,6 +4,12 @@
 
 ### Added
 
+- **`node:stream` Readable carries the async-iterator helpers** —
+  `readable.map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/
+  `some`/`every`/`find`/`iterator` (v17→v22, owned by `@riftydev/io`), so
+  `require('node:stream').Readable.from([...]).map(fn).toArray()` works (incl.
+  `{ concurrency, signal }`).
+
 - **`node:stream` exposes the Writable/Duplex WHATWG bridge** —
   `Writable.toWeb`/`Writable.fromWeb` and `Duplex.toWeb`/`Duplex.fromWeb` (Node
   v17, owned by `@riftydev/io`) — so `require('node:stream').Writable.toWeb(w)`

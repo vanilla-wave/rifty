@@ -49,6 +49,7 @@ export {
   isDisturbed,
   type ReadableOptions,
   type ReadableFromWebOptions,
+  type AsyncHelperOptions,
   type WritableOptions,
   type WriteChunk,
   type DuplexOptions,
