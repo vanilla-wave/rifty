@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **The `[vite] dev server ready` marker no longer intermittently vanishes from
+  the terminal (CI flake).** When a starter pick restarts the dev server, the
+  aborted run's late `listen()` IPC could emit the readiness marker AFTER its
+  `pty:exit` — the page dropped the `pty:chunk` for the already-removed run
+  (`runs.get(rid)` was undefined), so the marker (and only it) was lost while the
+  Vite banner + LIVE pill still showed. `pty-client` now routes a chunk that
+  outlives its run to the session's trailing sink, so it still reaches the
+  terminal (matching the passing render where the marker lands just after the
+  prompt). RED-checked unit test in `pty-client.test.ts`.
 - **Picking a starter no longer races a pending entry edit into the seed.** Now
   that the template entry (`main.js`/`main.ts`) is an ordinary debounced
   owner-write tab, `runVitePreset` drains pending editor writes _before_ seeding —
