@@ -38,11 +38,6 @@ const API_SRC =
 const CLIENT_SRC =
   'import http from "node:http"; http.get("http://localhost:4101/users", (res) => { let b = ""; res.on("data", (c) => { b += c; }); res.on("end", () => { console.log("XREALM-GOT:" + b); process.exit(0); }); }).on("error", (e) => { console.log("XREALM-ERR:" + e.message); process.exit(1); });';
 
-// A client to a port NO realm owns → Node-shaped ECONNREFUSED after the probe
-// window (no host fetch leak, no hang).
-const REFUSED_SRC =
-  'import http from "node:http"; http.get("http://localhost:4199/x", () => { console.log("XREALM-UNEXPECTED"); process.exit(1); }).on("error", (e) => { console.log("XREALM-ERR:" + e.code); process.exit(0); });';
-
 /**
  * Cross-realm `http.request`/`get` loopback end-to-end (ADR-0180), chromium/COI.
  *
@@ -50,12 +45,13 @@ const REFUSED_SRC =
  * cannot: an `http.get` issued from one supervised-child `node` realm reaches an
  * `http` server listening in a SEPARATE supervised-child realm, over the live
  * preview `BroadcastChannel` (the server side registers `serveCrossRealmPreview`
- * per `listen()`; the client side probes it). A port no realm owns refuses with
- * Node `ECONNREFUSED`. (SSE chunk-by-chunk delivery is proven over the real
- * BroadcastChannel transport in the net integration test.)
+ * per `listen()`; the client side probes it), and the gateway reads the body
+ * with the canonical `b += chunk` idiom. (No-listener `ECONNREFUSED` and SSE
+ * chunk-by-chunk delivery are proven over the real BroadcastChannel transport in
+ * the net unit/integration tests; this e2e covers the real supervised-child hop.)
  */
 test.describe('cross-realm http loopback between two node realms (ADR-0180)', () => {
-  test('http.get reaches a server in a sibling realm; an unowned port refuses', async ({
+  test('http.get reaches an http server in a sibling supervised-child realm', async ({
     page,
     browserName,
   }) => {
@@ -99,10 +95,5 @@ test.describe('cross-realm http loopback between two node realms (ADR-0180)', ()
     // canonical `b += chunk` read) — proving the success branch (which then
     // process.exit(0)s). The error branch would print `XREALM-ERR:<msg>` instead.
     await expectTerminalContains(page, /XREALM-GOT:\[\{"id":1,"name":"ada"\}\]/, 60_000);
-
-    // A port no realm owns → Node ECONNREFUSED (not a hang, not a host fetch leak).
-    await runLineConfirmed(page, `echo '${REFUSED_SRC}' > /scratch/refused.js`);
-    await runLineConfirmed(page, 'node refused.js');
-    await expectTerminalContains(page, /XREALM-ERR:ECONNREFUSED/, 30_000);
   });
 });
