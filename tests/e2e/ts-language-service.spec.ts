@@ -1178,6 +1178,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // greeter.ts — 1-based:
     //  L1 `export function localGreet(name: string): string {`  localGreet @ col 17
@@ -1190,6 +1191,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // app.ts — 1-based lines used by the position assertions below:
     //  L1 `import { localGreet } from "./greeter.ts";`  localGreet @ col 10
@@ -1205,6 +1207,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         'export const both = a + b;',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
     await expect
@@ -1368,6 +1371,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         '}',
         '',
       ].join('\n'),
+      shellSlot,
     );
     await writeOwnerFile(
       page,
@@ -1379,6 +1383,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         'export const VERSION = 1;',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // app.ts — `localGreet` is used (L1) but never imported ⇒ TS2304/TS2552.
     //  L1 `const a = localGreet("x");`  localGreet @ col 11
@@ -1386,6 +1391,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       page,
       fixApp,
       ['const a = localGreet("x");', 'export const out = a;', ''].join('\n'),
+      shellSlot,
     );
     // organize.ts — imports out of order (VERSION before localGreet) and one
     // unused (`VERSION` is never referenced) ⇒ organize sorts + drops it.
@@ -1397,6 +1403,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
         'export const g = localGreet("y");',
         '',
       ].join('\n'),
+      shellSlot,
     );
     // format.ts — bad spacing (collapsed operators / no space after comma) that
     // tsserver's default format settings rewrite.
@@ -1404,6 +1411,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       page,
       formatTs,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
+      shellSlot,
     );
     await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
     await expect

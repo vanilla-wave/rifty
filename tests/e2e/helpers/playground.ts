@@ -25,17 +25,31 @@ export async function openShellTerminal(
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
   await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
-  const slotCountBefore = await page.locator('.rf-terminal-slot').count();
+  const terminalTabs = page.getByRole('tab', { name: /Terminal \d+/ });
+  const terminalSlots = page.locator('.rf-terminal-slot');
+  const tabCountBefore = await terminalTabs.count();
+  const slotCountBefore = await terminalSlots.count();
   await page.getByRole('button', { name: 'New terminal' }).click();
-  const tab = page.getByRole('tab', { name: /Terminal \d+/ }).last();
-  await expect(tab).toBeVisible();
-  await expect(tab).toHaveAttribute('aria-selected', 'true');
-  const slot = page.locator('.rf-terminal-slot').nth(slotCountBefore);
-  await expect(slot).toHaveAttribute('data-active', 'true');
   await expect
-    .poll(() => terminalBuffer(page, slotCountBefore), { timeout: 30_000 })
+    .poll(() => terminalTabs.count(), { timeout: 10_000 })
+    .toBeGreaterThan(tabCountBefore);
+  await expect
+    .poll(() => terminalSlots.count(), { timeout: 10_000 })
+    .toBeGreaterThan(slotCountBefore);
+  const tab = terminalTabs.last();
+  await expect(tab).toBeVisible();
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toHaveCount(1);
+  const slotIndex = await terminalSlots.evaluateAll((slots) =>
+    slots.findIndex((slot) => slot.getAttribute('data-active') === 'true'),
+  );
+  if (slotIndex < 0) throw new Error('new terminal did not activate a terminal slot');
+  const slot = terminalSlots.nth(slotIndex);
+  await expect
+    .poll(() => terminalBuffer(page, slotIndex), { timeout: 30_000 })
     .toMatch(/^\s*>\s*$/u);
-  if (!focus) return slotCountBefore;
+  if (!focus) return slotIndex;
   await slot.locator('[data-testid="terminal"]').click();
   await expect
     .poll(
@@ -48,7 +62,7 @@ export async function openShellTerminal(
       { timeout: 5_000 },
     )
     .toBe(true);
-  return slotCountBefore;
+  return slotIndex;
 }
 
 export async function runTerminalLine(
