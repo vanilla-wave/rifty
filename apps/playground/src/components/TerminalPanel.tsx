@@ -20,8 +20,8 @@ import {
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
-import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
+import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { Icon } from './icons.tsx';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */

@@ -5,7 +5,7 @@ title: Explicit shell-script support surface
 created: 2026-06-25
 why: Backlog tracks shell primitives, but not the user-facing script workflows: `sh -c`, executable `.sh`, shebang shell scripts, and npm package scripts that are shell programs.
 user_story: As a developer running package scripts in rifty, I want supported shell scripts to run faithfully and unsupported shell grammar to fail loudly, rather than a partial parser silently accepting script text it cannot execute like real shell.
-sources: [Q-2026-06-25-shell-research, ADR-0146, ADR-0148, docs/public/compat/package-tooling.md, docs/backlog/shell/pipes.md, docs/backlog/shell/parameter-expansion.md, docs/backlog/shell/command-substitution.md]
+sources: [Q-2026-06-25-shell-research, ADR-0146, ADR-0148, docs/public/compat/package-tooling.md, docs/backlog/shell/parameter-expansion.md]
 code: [packages/shell/src/builtins.ts, packages/shell/src/tokenize.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/npm-shell-command.ts]
 ---
 

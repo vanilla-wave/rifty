@@ -37,8 +37,16 @@ function ctxWithStdin(s: string | null): {
   const ctx: CommandContext = {
     cwd: '/',
     env: {},
-    stdout: { write: (c) => (outBuf += c) },
-    stderr: { write: (c) => (errBuf += c) },
+    stdout: {
+      write: (c) => {
+        outBuf += c;
+      },
+    },
+    stderr: {
+      write: (c) => {
+        errBuf += c;
+      },
+    },
     ...(s === null ? {} : { stdin: stdinOf(s) }),
   };
   return { ctx, out: () => outBuf, err: () => errBuf };

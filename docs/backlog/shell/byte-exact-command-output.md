@@ -5,7 +5,7 @@ title: Byte-exact shell command output and redirects
 created: 2026-06-25
 why: Shell command output is string-shaped today, which can decode/re-encode bytes and lose fidelity for byte-oriented coreutils, redirects, future pipes, and parity fixtures.
 user_story: As a developer running byte-oriented commands such as `head -c`, `tail -c`, or redirects in rifty, I want stdout/stderr bytes to survive unchanged, but today the shell writer API forces command output through strings.
-sources: [Q-2026-06-25-shell-research, ADR-0093, docs/backlog/terminal/byte-pty-mode-umbrella.md, docs/backlog/shell/pipes.md, docs/backlog/shell/input-redirect.md]
+sources: [Q-2026-06-25-shell-research, ADR-0093, docs/backlog/terminal/byte-pty-mode-umbrella.md]
 code: [packages/shell/src/types.ts, packages/shell/src/shell.ts, packages/shell/src/commands/head.ts, packages/shell/src/commands/tail.ts, packages/shell/src/commands/cat.ts]
 ---
 

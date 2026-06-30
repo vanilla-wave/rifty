@@ -834,7 +834,9 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
 
     const { exitCode, rec } = await runShell(shell, 'npm i -g typescript');
     expect(exitCode).toBe(1);
-    expect(rec.stderr.join('')).toContain("global installs aren't supported in the browser sandbox");
+    expect(rec.stderr.join('')).toContain(
+      "global installs aren't supported in the browser sandbox",
+    );
     expect(calls).toEqual([]);
   });
 

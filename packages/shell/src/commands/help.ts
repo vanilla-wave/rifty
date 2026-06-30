@@ -63,7 +63,7 @@ export function help(listCommandNames: () => readonly string[]): ShellCommand {
     const names = [...listCommandNames()].sort();
     ctx.stdout.write(`Commands:  ${names.join('  ')}\n`);
     ctx.stdout.write(`${RUN_PROGRAMS_NOTE}\n`);
-    ctx.stdout.write("Run `help <command>` for a one-line description.\n");
+    ctx.stdout.write('Run `help <command>` for a one-line description.\n');
     return 0;
   };
 }

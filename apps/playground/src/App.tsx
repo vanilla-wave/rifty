@@ -37,7 +37,6 @@ import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
-import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
 import {
   degradedBannerVisible,
   saveAffordance,
@@ -78,6 +77,7 @@ import { type StarterGroup, seedFilesForStarter, starterById } from './glue/star
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
 import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {

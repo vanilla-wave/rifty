@@ -181,7 +181,9 @@ export const tail: ShellCommand = async (args, ctx) => {
       }
     }
     if (showHeaders) {
-      ctx.stdout.write(`${printed > 0 ? '\n' : ''}==> ${name === '-' ? 'standard input' : name} <==\n`);
+      ctx.stdout.write(
+        `${printed > 0 ? '\n' : ''}==> ${name === '-' ? 'standard input' : name} <==\n`,
+      );
     }
     const slice =
       parsed.count.unit === 'bytes' ? tailBytes(data, parsed.count) : tailLines(data, parsed.count);
