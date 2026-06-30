@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
+  (shareable launch URLs + the perf-benchmark harness,
+  docs/backlog/perf/cold-start-and-install-benchmark). The id is validated
+  against the registry — an unknown id silently falls back to the default;
+  `autorun=1` runs the preset's boot lines (a from-scratch preset installs +
+  starts its dev server), else it lands seeded + active. Drives the cold-boot
+  scratch only. Parser unit-tested; an e2e RED-checked against the default boot.
+
 ### Fixed
 
 - **Picking a starter no longer races a pending entry edit into the seed.** Now
