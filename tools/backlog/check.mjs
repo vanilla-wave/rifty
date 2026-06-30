@@ -42,7 +42,7 @@ const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
 const READY_ITEM_SECTIONS = ['Acceptance', 'Parity cases', 'Out of scope', 'Decisions'];
 const READY_EPIC_SECTIONS = ['Outcome', 'User scenario', 'Items'];
 
-const SCAN_ROOTS = ['packages', 'apps', 'tools'];
+const SCAN_ROOTS = ['packages', 'apps', 'tools', 'services'];
 const CODE_EXT = new Set(['.ts', '.tsx', '.mjs', '.js']);
 const EXCLUDE_DIRS = new Set(['dist', 'node_modules']);
 

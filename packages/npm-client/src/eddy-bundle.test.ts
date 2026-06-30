@@ -32,7 +32,15 @@ function sampleContents(): EddyBundleContents {
     },
     lockfileText: JSON.stringify({ name: 'root', lockfileVersion: 3 }, null, 2),
     tarballs: [
-      { entry: { file: 'tarballs/ms-2.1.3.tgz', name: 'ms', version: '2.1.3', integrity: 'sha512-aaa' }, bytes: bytes(0x1f, 0x8b, 1, 2, 3, 4, 5) },
+      {
+        entry: {
+          file: 'tarballs/ms-2.1.3.tgz',
+          name: 'ms',
+          version: '2.1.3',
+          integrity: 'sha512-aaa',
+        },
+        bytes: bytes(0x1f, 0x8b, 1, 2, 3, 4, 5),
+      },
       {
         entry: {
           file: 'tarballs/@scope__pkg-1.0.0.tgz',
@@ -65,7 +73,8 @@ describe('EddyBundleV1 codec', () => {
   });
 
   it('round-trips a file path longer than the 100-byte ustar name field (GNU long name)', () => {
-    const longName = `tarballs/@really-long-scope__a-package-with-an-extremely-long-name-that-exceeds-one-hundred-bytes-easily-1.2.3.tgz`;
+    const longName =
+      'tarballs/@really-long-scope__a-package-with-an-extremely-long-name-that-exceeds-one-hundred-bytes-easily-1.2.3.tgz';
     expect(longName.length).toBeGreaterThan(100);
     const contents: EddyBundleContents = {
       manifest: {
@@ -97,7 +106,9 @@ describe('EddyBundleV1 codec', () => {
     const out = unpackEddyBundle(packEddyBundle(contents));
     expect(out.tarballs).toHaveLength(1);
     expect(out.tarballs[0]?.entry.file).toBe(longName);
-    expect(out.tarballs[0] ? [...out.tarballs[0].bytes] : null).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(out.tarballs[0] ? [...out.tarballs[0].bytes] : null).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
   });
 
   it('round-trips an empty tarball set (lockfile-only)', () => {
