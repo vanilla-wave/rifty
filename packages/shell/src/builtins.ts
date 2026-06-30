@@ -24,6 +24,7 @@ import { find } from './commands/find.ts';
 import { git } from './commands/git.ts';
 import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
+import { help } from './commands/help.ts';
 import { type ShellJobListItem, jobs } from './commands/jobs.ts';
 import { ls } from './commands/ls.ts';
 import { mkdir } from './commands/mkdir.ts';
@@ -57,6 +58,7 @@ export const CORE_COMMAND_NAMES = [
   'clear',
   'touch',
   'head',
+  'help',
   'jobs',
   'tail',
   'wc',
@@ -81,6 +83,7 @@ export function builtinCommands(
   hasCommand: (name: string) => boolean,
   listJobs: () => readonly ShellJobListItem[],
   resolveBinPath: (name: string) => string | null,
+  listCommandNames: () => readonly string[],
 ): Record<string, ShellCommand> {
   return {
     pwd,
@@ -98,6 +101,7 @@ export function builtinCommands(
     clear,
     touch,
     head,
+    help: help(listCommandNames),
     jobs: jobs(listJobs),
     tail,
     wc,

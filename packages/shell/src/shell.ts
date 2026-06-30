@@ -185,6 +185,8 @@ export class Shell {
       () => this.listBackgroundJobs(),
       // `which` reports installed-CLI hits at the LIVE cwd (cd mutates it).
       (n) => resolveBin(this._cwd, n),
+      // `help` lists the live registry (builtins + host-registered programs).
+      () => this.commandNames(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }

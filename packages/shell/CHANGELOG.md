@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`help` builtin.** `help` lists the live command registry (sorted; includes host-registered `node`/`npm`/`vite`) plus a note that those run programs; `help <cmd>` prints a one-line synopsis, unknown topic → `help: no help topic for '<cmd>'` exit 1. Lists from the live `commandNames()` so it can't drift from the real set. Guards: `help.test.ts`.
+
 ### Fixed
 
 - **PR #78 review fixes for git porcelain fidelity.** Ambiguous revision/path operands now refuse with real git's `both revision and filename` fatal (including untracked worktree filenames and later `log`/`diff` operands); annotated-tag checkout/reset paths no longer corrupt HEAD via tag/tree objects; `git apply` context failures exit 1 with `patch failed` text while capability ceilings stay `NotImplementedError`; `stash push` no longer persists fallback identity into `.git/config`; merge-commit `show` renders `Merge:` and suppresses the default patch; bare `ls-remote` defaults to `origin`; `clone` with no URL exits 129 with usage; and success output now covers `reset --mixed`, `tag -d`, `git rm`, and clean `cherry-pick`. Guards: `git-cli.test.ts`.
