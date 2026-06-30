@@ -1,16 +1,13 @@
 /**
  * Preset→Starter map (ADR-0165 §1/§6). A Starter IS today's `Preset` viewed as
  * the immutable gallery bundle + the re-derivable reset baseline; this thin map
- * keeps the index/lifecycle layers off the `Preset` shape directly. The mapping
- * PRESERVES the preset `.source` object reference (express-sqlite / socket-lab
- * share theirs with the template entry — a test pins that identity), so we copy
- * the ref, never the string.
+ * keeps the index/lifecycle layers off the `Preset` shape directly.
  *
  * `seedFilesForStarter(starter, root)` re-derives the COMPLETE on-disk bundle for
  * a root: the template's seed files (package.json/index.html/entry/extraFiles via
- * `resolveBootstrapConfig`) with the Preset's editor `source` overlaid at the
- * entry path + the Preset's `files[]` overlaid under the root. NO stored
- * per-project artifact, so the reset baseline survives reload and can't drift.
+ * `resolveBootstrapConfig`) with the Preset's `files[]` overlaid under the root.
+ * NO stored per-project artifact, so the reset baseline survives reload and can't
+ * drift.
  */
 import { makeGit, vfsToGitFs } from '@riftydev/git';
 import type { Vfs } from '@riftydev/vfs';
@@ -37,8 +34,6 @@ export interface Starter {
   readonly id: string;
   readonly name: string;
   readonly starter: string; // self-id; the value `Project.starter` records
-  /** Program source — the SAME object ref the preset holds (no copy). */
-  readonly source: string;
   /** Registered template id (ADR-0078) the Starter seeds from; undefined → default. */
   readonly templateId?: string;
   readonly files: readonly { readonly path: string; readonly content: string }[];
@@ -49,9 +44,8 @@ export function starterFromPreset(preset: Preset): Starter {
     id: preset.id,
     name: preset.label,
     starter: preset.id,
-    source: preset.source, // SHARED ref preserved
     templateId: preset.templateId,
-    files: preset.files ?? [],
+    files: preset.files,
   };
 }
 
@@ -64,16 +58,17 @@ export function starterById(id: string): Starter {
 /**
  * Absolute-path → contents map for `root`, re-derived from the Starter bundle
  * (the reset baseline + the first-seed of a fresh tree). Template seed files come
- * from `resolveBootstrapConfig`; the Preset `source` overwrites the template's
- * stub entry; the Preset `files[]` overlay under the root (leading slash tolerated).
+ * from `resolveBootstrapConfig`; the Preset `files[]` overlays ordinary files
+ * under the root (leading slash tolerated).
  */
 export function seedFilesForStarter(starter: Starter, root: string): Record<string, string> {
   const spec = starter.templateId ? resolveProjectSpec(starter.templateId) : defaultProjectSpec();
   const cfg = resolveBootstrapConfig(spec, spec.defaultPort, root);
+  const entryPath = spec.entry.relativePath.replace(/^\/+/, '');
+  if (!starter.files.some((file) => file.path.replace(/^\/+/, '') === entryPath)) {
+    throw new Error(`starter ${starter.id} is missing entry file ${entryPath}`);
+  }
   const files: Record<string, string> = { ...cfg.seedFiles };
-  // The Preset's editor source IS the entry the user opens — overwrite the
-  // template's stub entry with it (matches the page's seedWorkspaceOwner).
-  files[cfg.entryPath] = starter.source;
   for (const f of starter.files) {
     const rel = f.path.startsWith('/') ? f.path : `/${f.path}`;
     files[`${root}${rel}`] = f.content;

@@ -9,6 +9,27 @@ import {
 const terminalSessionTabs = (page: Page) =>
   page.locator('.rf-terminal-tab').filter({ hasText: /^Terminal \d+/ });
 
+const DEFAULT_VITE_READY = /VITE v.*ready/u;
+
+async function expectDefaultViteReady(page: Page, timeout = 60_000): Promise<void> {
+  await expectTerminalContains(page, DEFAULT_VITE_READY, timeout);
+}
+
+async function fetchPreviewOk(page: Page, port: number): Promise<boolean> {
+  return page.evaluate(async (targetPort) => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 4_000);
+    try {
+      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
+      return r.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }, port);
+}
+
 async function terminalOwnsFocus(page: Page): Promise<boolean> {
   return page.evaluate(() => {
     const terminal = document.querySelector('[data-testid="terminal"]');
@@ -22,6 +43,8 @@ function terminalPromptCount(text: string): number {
 }
 
 test.describe('M1 - terminal shell', () => {
+  test.describe.configure({ timeout: 90_000 });
+
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await page.goto('/');
 
@@ -31,7 +54,7 @@ test.describe('M1 - terminal shell', () => {
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Commands run in /scratch',
     );
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
     await expect(terminalSessionTabs(page)).toHaveCount(1);
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
       'aria-selected',
@@ -44,12 +67,17 @@ test.describe('M1 - terminal shell', () => {
   }) => {
     test.setTimeout(120_000);
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     // Fresh browser context = empty OPFS = no stamp: an instant preset's deps are
     // PRE-SEEDED from the baked snapshot (owner-seed), so the dev line just runs.
     // Faithful: `vite` does NOT install — no `npm: +` lines ever — and serves.
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectDefaultViteReady(page);
+    await expect
+      .poll(() => fetchPreviewOk(page, 5174), {
+        timeout: 60_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .toBe(true);
     const buf = await terminalBuffer(page);
     expect(buf).not.toMatch(/npm: \+ /);
     expect(buf).not.toContain('installing');
@@ -57,7 +85,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('new terminal opens a separate idle shell while Vite keeps running', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
     await openShellTerminal(page);
 
@@ -72,16 +100,16 @@ test.describe('M1 - terminal shell', () => {
 
   test('new terminal receives keyboard focus immediately', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
-    await openShellTerminal(page);
+    await openShellTerminal(page, { focus: false });
 
     await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
   });
 
   test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
     const before = await terminalBuffer(page);
 
     await page.locator('[data-testid="terminal"]').click();
@@ -96,7 +124,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
     await openShellTerminal(page);
     const before = await terminalBuffer(page);
 
@@ -112,7 +140,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('terminal tabs switch between their own buffers', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'echo hello-from-terminal-2');
@@ -123,7 +151,7 @@ test.describe('M1 - terminal shell', () => {
       'aria-selected',
       'true',
     );
-    await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
+    await expectDefaultViteReady(page);
     expect(await terminalBuffer(page)).not.toContain('hello-from-terminal-2');
 
     await page.getByRole('tab', { name: 'Terminal 2' }).click();
@@ -136,7 +164,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('closing an idle terminal returns to the running terminal cleanly', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
     await openShellTerminal(page);
     await page.getByRole('button', { name: 'Close Terminal 2' }).click();
@@ -147,7 +175,7 @@ test.describe('M1 - terminal shell', () => {
       'true',
     );
     await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toHaveCount(1);
-    await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
+    await expectDefaultViteReady(page);
   });
 
   test('closing the active idle terminal focuses the previous terminal tab', async ({ page }) => {

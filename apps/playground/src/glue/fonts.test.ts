@@ -52,10 +52,7 @@ describe('playground mono font', () => {
 
   it('uses JetBrains Mono in seeded sandbox preview sources', () => {
     const seededSources = [
-      ...PRESETS.flatMap((preset) => [
-        preset.source,
-        ...(preset.files?.map((file) => file.content) ?? []),
-      ]),
+      ...PRESETS.flatMap((preset) => preset.files?.map((file) => file.content) ?? []),
       EXPRESS_SQLITE_TEMPLATE.entry.content,
       ...Object.values(EXPRESS_SQLITE_TEMPLATE.extraFiles),
     ].join('\n');
@@ -69,10 +66,7 @@ describe('playground mono font', () => {
 
   it('does not inject single-quoted font families into seeded JS string literals', () => {
     const seededSources = [
-      ...PRESETS.flatMap((preset) => [
-        preset.source,
-        ...(preset.files?.map((file) => file.content) ?? []),
-      ]),
+      ...PRESETS.flatMap((preset) => preset.files?.map((file) => file.content) ?? []),
     ].join('\n');
 
     expect(seededSources).not.toContain("font-family:'JetBrains Mono'");

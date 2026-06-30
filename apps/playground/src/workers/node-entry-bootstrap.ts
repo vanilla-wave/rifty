@@ -139,6 +139,8 @@ if (viteCliMode !== null) {
   if (viteCliMode === 'dev') installViteFileChangeBridge();
 }
 
+const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
+
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
 // builtins are registered unconditionally here — http/net are needed both for
@@ -177,8 +179,17 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
     listPorts: () => listPorts(),
     awaitDrain: () => awaitDrain(),
     servePreview: (port) =>
-      serveCrossRealmPreview(port, async (request) => dispatchToPort(port, request)),
-    postListening: (ports) => proc.send?.({ type: 'rifty:node-listening', ports }),
+      serveCrossRealmPreview(
+        port,
+        async (request) => dispatchToPort(port, request),
+        previewScope === undefined ? {} : { scope: previewScope },
+      ),
+    postListening: (ports) =>
+      proc.send?.({
+        type: 'rifty:node-listening',
+        ports,
+        ...(previewScope === undefined ? {} : { previewScope }),
+      }),
     readExitCode: () => proc.exitCode,
     exit: (code) => proc.exit(code),
   });

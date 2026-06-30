@@ -1,57 +1,79 @@
 import { describe, expect, it } from 'vitest';
 import {
   type EditorTab,
-  PROGRAM_TAB_ID,
   closeTab,
   initialTabs,
   nextActiveAfterClose,
+  openDiffTab,
   openFileTab,
   setDirty,
-  setProgramTitle,
 } from './editor-tabs.ts';
 
 describe('initialTabs', () => {
-  it('starts with the program tab at index 0, non-dirty', () => {
-    const tabs = initialTabs('program · main.js');
-    expect(tabs).toHaveLength(1);
-    expect(tabs[0]).toMatchObject({ id: PROGRAM_TAB_ID, kind: 'program', dirty: false });
+  it('starts with ordered ordinary file tabs, no program tab', () => {
+    const tabs = initialTabs([
+      { path: '/workspace/src/main.js', title: 'src/main.js' },
+      { path: '/workspace/src/project.js', title: 'project.js' },
+    ]);
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toMatchObject({
+      id: '/workspace/src/main.js',
+      kind: 'file',
+      path: '/workspace/src/main.js',
+      dirty: false,
+    });
+    expect(tabs[1]).toMatchObject({
+      id: '/workspace/src/project.js',
+      kind: 'file',
+      path: '/workspace/src/project.js',
+      dirty: false,
+    });
   });
 });
 
 describe('openFileTab', () => {
   it('appends a file tab keyed by path', () => {
-    const tabs = openFileTab(initialTabs('p'), '/workspace/a.js', 'a.js');
-    expect(tabs).toHaveLength(2);
-    expect(tabs[1]).toMatchObject({ id: '/workspace/a.js', kind: 'file', path: '/workspace/a.js' });
+    const tabs = openFileTab(initialTabs(), '/workspace/a.js', 'a.js');
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]).toMatchObject({ id: '/workspace/a.js', kind: 'file', path: '/workspace/a.js' });
   });
 
   it('is idempotent for an already-open path', () => {
-    const once = openFileTab(initialTabs('p'), '/workspace/a.js', 'a.js');
+    const once = openFileTab(initialTabs(), '/workspace/a.js', 'a.js');
     const twice = openFileTab(once, '/workspace/a.js', 'a.js');
-    expect(twice).toHaveLength(2);
+    expect(twice).toHaveLength(1);
   });
+});
 
-  it('keeps the program tab first', () => {
-    const tabs = openFileTab(initialTabs('p'), '/workspace/a.js', 'a.js');
-    expect(tabs[0]?.id).toBe(PROGRAM_TAB_ID);
+describe('openDiffTab', () => {
+  it('appends an idempotent diff tab keyed by the compared path/ref', () => {
+    const tabs = openDiffTab(initialTabs(), {
+      id: 'diff:HEAD:/workspace/src/main.ts',
+      path: '/workspace/src/main.ts',
+      title: 'main.ts ↔ HEAD',
+      originalTitle: 'HEAD',
+      modifiedTitle: 'main.ts',
+    });
+
+    expect(tabs[0]).toMatchObject({
+      id: 'diff:HEAD:/workspace/src/main.ts',
+      kind: 'diff',
+      path: '/workspace/src/main.ts',
+      dirty: false,
+    });
+    expect(openDiffTab(tabs, tabs[0] as Extract<EditorTab, { kind: 'diff' }>)).toHaveLength(1);
   });
 });
 
 describe('closeTab', () => {
   it('removes a file tab', () => {
-    const tabs = openFileTab(initialTabs('p'), '/workspace/a.js', 'a.js');
-    expect(closeTab(tabs, '/workspace/a.js')).toHaveLength(1);
-  });
-
-  it('never closes the program tab', () => {
-    const tabs = initialTabs('p');
-    expect(closeTab(tabs, PROGRAM_TAB_ID)).toHaveLength(1);
+    const tabs = openFileTab(initialTabs(), '/workspace/a.js', 'a.js');
+    expect(closeTab(tabs, '/workspace/a.js')).toHaveLength(0);
   });
 });
 
 describe('nextActiveAfterClose', () => {
   const tabs: EditorTab[] = [
-    { id: PROGRAM_TAB_ID, kind: 'program', title: 'p', dirty: false },
     { id: '/a.js', kind: 'file', title: 'a', path: '/a.js', dirty: false },
     { id: '/b.js', kind: 'file', title: 'b', path: '/b.js', dirty: false },
   ];
@@ -64,32 +86,27 @@ describe('nextActiveAfterClose', () => {
     expect(nextActiveAfterClose(tabs, '/a.js', '/a.js')).toBe('/b.js');
   });
 
-  it('falls to the left neighbour (program) when closing the last tab', () => {
+  it('falls to the left neighbour or no active tab when closing the last tab', () => {
     expect(nextActiveAfterClose(tabs, '/b.js', '/b.js')).toBe('/a.js');
-    expect(nextActiveAfterClose(tabs.slice(0, 2), '/a.js', '/a.js')).toBe(PROGRAM_TAB_ID);
+    expect(nextActiveAfterClose(tabs.slice(0, 1), '/a.js', '/a.js')).toBeUndefined();
   });
 });
 
 describe('setDirty', () => {
   it('flags a file tab dirty and clears it', () => {
-    const tabs = openFileTab(initialTabs('p'), '/a.js', 'a');
-    expect(setDirty(tabs, '/a.js', true)[1]?.dirty).toBe(true);
-    expect(setDirty(setDirty(tabs, '/a.js', true), '/a.js', false)[1]?.dirty).toBe(false);
+    const tabs = openFileTab(initialTabs(), '/a.js', 'a');
+    expect(setDirty(tabs, '/a.js', true)[0]?.dirty).toBe(true);
+    expect(setDirty(setDirty(tabs, '/a.js', true), '/a.js', false)[0]?.dirty).toBe(false);
   });
 
-  it('never marks the program tab dirty', () => {
-    const tabs = setDirty(initialTabs('p'), PROGRAM_TAB_ID, true);
-    expect(tabs[0]?.dirty).toBe(false);
-  });
-});
-
-describe('setProgramTitle', () => {
-  it('relabels only the program tab', () => {
-    const tabs = setProgramTitle(
-      openFileTab(initialTabs('p'), '/a.js', 'a'),
-      'program · src/main.js',
-    );
-    expect(tabs[0]?.title).toBe('program · src/main.js');
-    expect(tabs[1]?.title).toBe('a');
+  it('never marks a diff tab dirty', () => {
+    const tabs = openDiffTab(initialTabs(), {
+      id: 'diff:HEAD:/a.js',
+      path: '/a.js',
+      title: 'a.js ↔ HEAD',
+      originalTitle: 'HEAD',
+      modifiedTitle: 'a.js',
+    });
+    expect(setDirty(tabs, 'diff:HEAD:/a.js', true)[0]?.dirty).toBe(false);
   });
 });

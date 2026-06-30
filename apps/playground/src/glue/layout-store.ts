@@ -6,7 +6,7 @@
  */
 import { clampSize } from './splitter-size.ts';
 
-export type SidebarView = 'explorer' | 'presets';
+export type SidebarView = 'explorer' | 'presets' | 'scm';
 
 export interface LayoutState {
   /** Sidebar width, px. */
@@ -62,7 +62,7 @@ export function clampLayout(state: LayoutState): LayoutState {
 }
 
 function isView(v: unknown): v is SidebarView {
-  return v === 'explorer' || v === 'presets';
+  return v === 'explorer' || v === 'presets' || v === 'scm';
 }
 
 /**

@@ -12,7 +12,17 @@ import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
 
 function presetText(preset: Preset): string {
-  return [preset.source, ...(preset.files ?? []).map((file) => file.content)].join('\n');
+  return (preset.files ?? []).map((file) => file.content).join('\n');
+}
+
+function openablePaths(preset: Preset): Set<string> {
+  return new Set((preset.files ?? []).map((file) => file.path));
+}
+
+function presetFileContent(preset: Preset, path: string): string {
+  const file = preset.files?.find((candidate) => candidate.path === path);
+  if (!file) throw new Error(`missing preset file ${preset.id}:${path}`);
+  return file.content;
 }
 
 describe('playground presets', () => {
@@ -24,20 +34,35 @@ describe('playground presets', () => {
     expect(filePresets.every((preset) => (preset.files?.length ?? 0) >= 2)).toBe(true);
     expect(filePresets.every((preset) => (preset.openFiles?.length ?? 0) >= 2)).toBe(true);
     for (const preset of filePresets) {
-      const filePaths = new Set((preset.files ?? []).map((file) => file.path));
-      expect(preset.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+      expect(preset.openFiles?.every((path) => openablePaths(preset).has(path))).toBe(true);
     }
     const projectFiles = PRESETS.find((preset) => preset.id === 'project-files');
-    expect(projectFiles?.source).toContain("import project from './project.json'");
-    expect(projectFiles?.source).toContain("from './project-summary.js'");
-    expect(projectFiles?.source).not.toContain('@vite-ignore');
+    expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).toContain(
+      "import project from './project.json'",
+    );
+    expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).toContain(
+      "from './project-summary.js'",
+    );
+    expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).not.toContain(
+      '@vite-ignore',
+    );
     const nodeWorker = PRESETS.find((preset) => preset.id === 'node-worker');
-    expect(nodeWorker?.source).toContain("new URL('src/");
-    expect(nodeWorker?.source).toContain('await import(');
-    expect(nodeWorker?.source).toContain('@vite-ignore');
+    expect(nodeWorker && presetFileContent(nodeWorker, 'src/main.js')).toContain("new URL('src/");
+    expect(nodeWorker && presetFileContent(nodeWorker, 'src/main.js')).toContain('await import(');
+    expect(nodeWorker && presetFileContent(nodeWorker, 'src/main.js')).toContain('@vite-ignore');
     expect(PRESETS.some((preset) => preset.id === 'real-vite')).toBe(true);
     expect(DEFAULT_PRESET.category).toBe('Files + modules');
     expect(CATEGORY_ORDER).toEqual(['Files + modules', 'Live preview']);
+  });
+
+  it('keeps preset editor tabs as ordinary seeded files without a separate source field', () => {
+    for (const preset of PRESETS) {
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      const entryPath = spec.entry.relativePath.replace(/^\/+/, '');
+      expect('source' in preset).toBe(false);
+      expect(openablePaths(preset).has(entryPath)).toBe(true);
+      expect(preset.openFiles?.every((path) => openablePaths(preset).has(path))).toBe(true);
+    }
   });
 
   it('ships a TypeScript language-service sandbox preset wired to its .ts template', () => {
@@ -45,8 +70,9 @@ describe('playground presets', () => {
     expect(demo).toBeDefined();
     if (!demo) throw new Error('unreachable');
     expect(demo.templateId).toBe(TYPESCRIPT_TEMPLATE.id);
-    expect(demo.source).toBe(TYPESCRIPT_TEMPLATE.entry.content);
+    expect(presetFileContent(demo, 'src/main.ts')).toBe(TYPESCRIPT_TEMPLATE.entry.content);
     expect(demo.glyph?.text).toBe('TS');
+    expect(demo.openFiles?.[0]).toBe('src/main.ts');
 
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(TYPESCRIPT_TEMPLATE.extraFiles)) {
@@ -82,8 +108,8 @@ describe('playground presets', () => {
       'real-vite',
     ]);
     for (const preset of browserVitePresets) {
-      expect(preset.source).toContain('import.meta.hot.accept');
-      expect(preset.source).not.toContain('location.reload');
+      expect(presetText(preset)).toContain('import.meta.hot.accept');
+      expect(presetText(preset)).not.toContain('location.reload');
     }
   });
 
@@ -116,20 +142,22 @@ describe('playground presets', () => {
     expect(demo.mode).toBe('real-vite');
     expect(demo.category).toBe('Live preview');
 
-    // the editor program tab IS the template's server entry (single source)
-    expect(demo.source).toBe(EXPRESS_SQLITE_TEMPLATE.entry.content);
+    expect(presetFileContent(demo, 'src/main.js')).toBe(EXPRESS_SQLITE_TEMPLATE.entry.content);
+    expect(demo.openFiles?.[0]).toBe('src/main.js');
 
     // the page-side explorer shows the same files the worker seeds, in lockstep
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(EXPRESS_SQLITE_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
+    const expressEntry = EXPRESS_SQLITE_TEMPLATE.entry.relativePath.replace(/^\/+/, '');
     for (const file of demo.files ?? []) {
+      if (file.path === expressEntry) continue;
       expect(EXPRESS_SQLITE_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
 
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+    expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
   });
 
   it('ships Vite 8 as an opt-in instant preset distinct from default Vite 7', () => {
@@ -149,16 +177,19 @@ describe('playground presets', () => {
     expect(demo.templateId).toBe('socket-lab');
     expect(demo.mode).toBe('real-vite');
     expect(demo.category).toBe('Live preview');
-    expect(demo.source).toBe(SOCKET_LAB_TEMPLATE.entry.content);
+    expect(presetFileContent(demo, 'src/main.js')).toBe(SOCKET_LAB_TEMPLATE.entry.content);
+    expect(demo.openFiles?.[0]).toBe('src/main.js');
 
     const filePaths = new Set((demo.files ?? []).map((file) => file.path));
     for (const relPath of Object.keys(SOCKET_LAB_TEMPLATE.extraFiles)) {
       expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
     }
+    const socketEntry = SOCKET_LAB_TEMPLATE.entry.relativePath.replace(/^\/+/, '');
     for (const file of demo.files ?? []) {
+      if (file.path === socketEntry) continue;
       expect(SOCKET_LAB_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
     }
-    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+    expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
 
     const text = presetText(demo);
     const scenarioIds = [

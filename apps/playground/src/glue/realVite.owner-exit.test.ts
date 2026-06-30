@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // logic, not a re-implementation.
 
 const sendVfsWriteSpy = vi.fn();
+const readFileBytesSpy = vi.fn();
 const spawnWorker = vi.fn();
 
 vi.mock('@riftydev/kernel', () => ({
@@ -25,14 +26,25 @@ vi.mock('@riftydev/net', () => ({
   unregisterPort: () => {},
 }));
 
-vi.mock('./vfs-write-port.ts', () => ({
-  sendVfsWrite: (...args: unknown[]) => sendVfsWriteSpy(...args),
-}));
+vi.mock('./vfs-write-port.ts', async () => {
+  const actual = await vi.importActual<typeof import('./vfs-write-port.ts')>('./vfs-write-port.ts');
+  return {
+    ...actual,
+    sendVfsWrite: (...args: unknown[]) => sendVfsWriteSpy(...args),
+  };
+});
 
 vi.mock('./workspace-archive-port.ts', () => ({
   bridgeWorkspaceArchive: () => ({
     export: async () => '{}',
     import: async () => {},
+    dispose: () => {},
+  }),
+}));
+
+vi.mock('./workspace-file-read-port.ts', () => ({
+  bridgeWorkspaceFileReads: () => ({
+    readFileBytes: (...args: unknown[]) => readFileBytesSpy(...args),
     dispose: () => {},
   }),
 }));
@@ -80,6 +92,8 @@ let fakeWorker: FakeWorker;
 beforeEach(() => {
   vi.resetModules();
   sendVfsWriteSpy.mockClear();
+  readFileBytesSpy.mockReset();
+  readFileBytesSpy.mockResolvedValue(new Uint8Array([1, 2, 3]));
   fakeWorker = new FakeWorker();
   spawnWorker.mockReturnValue(fakeWorker);
 });
@@ -149,6 +163,34 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     expect(sendVfsWriteSpy).not.toHaveBeenCalled();
   });
 
+  it('throws on writeFrame after the owner has exited (no silent drop)', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    fakeWorker.die(137);
+
+    expect(() =>
+      handle.writeFrame({
+        type: 'rename',
+        from: '/workspace/src/old.js',
+        to: '/workspace/src/new.js',
+      }),
+    ).toThrow(/workspace owner has exited/);
+    expect(sendVfsWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects readFileBytes after the owner has exited (no stale download)', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    expect(handle.isAlive()).toBe(true);
+    fakeWorker.die(137);
+
+    expect(handle.isAlive()).toBe(false);
+    await expect(handle.readFileBytes('/workspace/a.txt')).rejects.toThrow(/workspace owner/);
+    expect(readFileBytesSpy).not.toHaveBeenCalled();
+  });
+
   it('still writes through the live worker before exit', async () => {
     const { startWorkspaceOwner } = await importOwner();
     const handle = startWorkspaceOwner();
@@ -162,5 +204,110 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     );
     expect(writeIpc).toBeDefined();
     expect(sendVfsWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('still sends writeFrame through the live worker before exit', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    handle.writeFrame({
+      type: 'copy',
+      from: '/workspace/src/a.js',
+      to: '/workspace/src/a.copy.js',
+    });
+
+    const writeIpc = fakeWorker.sent.find(
+      (m): m is { type: string; frame: { type: string } } =>
+        !!m &&
+        typeof m === 'object' &&
+        (m as { type?: unknown }).type === 'rifty:vfs-write' &&
+        (m as { frame?: { type?: unknown } }).frame?.type === 'copy',
+    );
+    expect(writeIpc).toBeDefined();
+    expect(sendVfsWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('reads file bytes through the live owner read bridge before exit', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    await expect(handle.readFileBytes('/workspace/a.txt')).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(readFileBytesSpy).toHaveBeenCalledWith('/workspace/a.txt');
+  });
+
+  it('resolves writeFrameAcked only after the owner sends an ack', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    const acked = handle.writeFrameAcked({
+      type: 'mkdir',
+      path: '/workspace/acked',
+      recursive: false,
+    });
+
+    const writeIpc = fakeWorker.sent.find(
+      (m): m is { type: string; opId: string } =>
+        !!m &&
+        typeof m === 'object' &&
+        (m as { type?: unknown }).type === 'rifty:vfs-write' &&
+        typeof (m as { opId?: unknown }).opId === 'string',
+    );
+    expect(writeIpc).toBeDefined();
+    if (!writeIpc) throw new Error('expected acked vfs write frame');
+    let resolved = false;
+    acked.then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    fakeWorker.emit('message', { type: 'rifty:vfs-write-ack', opId: writeIpc.opId, ok: true });
+    await acked;
+    expect(resolved).toBe(true);
+  });
+
+  it('rejects writeFrameAcked with the owner-side apply error', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    const acked = handle.writeFrameAcked({
+      type: 'rename',
+      from: '/workspace/a.txt',
+      to: '/workspace/b.txt',
+    });
+    const writeIpc = fakeWorker.sent.find(
+      (m): m is { type: string; opId: string } =>
+        !!m &&
+        typeof m === 'object' &&
+        (m as { type?: unknown }).type === 'rifty:vfs-write' &&
+        typeof (m as { opId?: unknown }).opId === 'string',
+    );
+    expect(writeIpc).toBeDefined();
+    if (!writeIpc) throw new Error('expected acked vfs write frame');
+
+    fakeWorker.emit('message', {
+      type: 'rifty:vfs-write-ack',
+      opId: writeIpc.opId,
+      ok: false,
+      error: { name: 'Error', message: '"b.txt" already exists' },
+    });
+
+    await expect(acked).rejects.toThrow(/already exists/);
+  });
+
+  it('rejects in-flight writeFrameAcked calls when the owner exits', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    const acked = handle.writeFrameAcked({
+      type: 'copy',
+      from: '/workspace/a.txt',
+      to: '/workspace/b.txt',
+    });
+    fakeWorker.die(137);
+
+    await expect(acked).rejects.toThrow(/workspace owner exited/);
   });
 });

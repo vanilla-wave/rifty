@@ -163,6 +163,14 @@ for (const { rel, area, fm, text } of itemRecords) {
     for (const s of READY_ITEM_SECTIONS) {
       if (!hasSection(text, s)) errors.push(`${rel}: ready item missing '## ${s}' section`);
     }
+    // Epic-grade scenario: a ready item WITHOUT an epic owns its `## User scenario`
+    // (mission-anchored, real software). An epic child inherits it from the epic —
+    // requiring it there too would just duplicate the epic's scenario.
+    if (!fm.epic && !hasSection(text, 'User scenario')) {
+      errors.push(
+        `${rel}: ready item without an epic must carry a '## User scenario' section (epic children inherit it from the epic)`,
+      );
+    }
   }
   // links resolve
   if (fm.epic) {

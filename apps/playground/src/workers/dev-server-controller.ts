@@ -16,6 +16,7 @@ import type { DevServerStatus, OwnerToPageFrame } from '../glue/pty-protocol.ts'
 /** Stop handle returned by an injected dev-server boot. */
 export interface DevServerHandle {
   readonly port: number;
+  readonly previewScope?: string;
   /** `server.close()` + bridge disposal; idempotent. */
   stop(): Promise<void>;
   /**
@@ -64,7 +65,13 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
 
   function frame(): OwnerToPageFrame {
     if (status === 'running' && active) {
-      return { type: 'pty:dev-server', status, port: active.port, url: `/preview/${active.port}/` };
+      return {
+        type: 'pty:dev-server',
+        status,
+        port: active.port,
+        url: `/preview/${active.port}/`,
+        ...(active.previewScope === undefined ? {} : { previewScope: active.previewScope }),
+      };
     }
     return { type: 'pty:dev-server', status };
   }

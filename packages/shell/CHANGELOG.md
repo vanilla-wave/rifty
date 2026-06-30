@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `git commit`'s empty/no-op refusal classifier now comes from `@riftydev/git`
+  (`commitRefusal` / `EMPTY_COMMIT_MESSAGE_ERROR`) instead of a private copy, so
+  shell and playground SCM refuse identically (ADR-0184). No behavior change —
+  `git-cli.test.ts` golden wording unchanged.
+
 ### Fixed
 
 - **PR #78 review fixes for git porcelain fidelity.** Ambiguous revision/path operands now refuse with real git's `both revision and filename` fatal (including untracked worktree filenames and later `log`/`diff` operands); annotated-tag checkout/reset paths no longer corrupt HEAD via tag/tree objects; `git apply` context failures exit 1 with `patch failed` text while capability ceilings stay `NotImplementedError`; `stash push` no longer persists fallback identity into `.git/config`; merge-commit `show` renders `Merge:` and suppresses the default patch; bare `ls-remote` defaults to `origin`; `clone` with no URL exits 129 with usage; and success output now covers `reset --mixed`, `tag -d`, `git rm`, and clean `cherry-pick`. Guards: `git-cli.test.ts`.

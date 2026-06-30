@@ -203,6 +203,31 @@ body {
   display: flex;
   flex-direction: column;
 }
+.rf-sidebar__nav {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 8px 8px 0;
+}
+.rf-sidebar__tab {
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--rf-r-sm);
+  background: transparent;
+  color: var(--rf-text-faint);
+  font: 600 11px / 14px var(--rf-font-sans);
+  cursor: pointer;
+}
+.rf-sidebar__tab:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-sidebar__tab[aria-selected="true"] {
+  background: var(--rf-chip-active);
+  border-color: var(--rf-line-inner);
+  color: var(--rf-accent-text-2);
+}
 
 /* Main: editor-area | gap-splitter | console. */
 .rf-main {
@@ -705,6 +730,189 @@ body {
   color: var(--rf-accent-text);
 }
 
+.rf-scm {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 8px 0;
+}
+.rf-scm__branch {
+  margin-left: auto;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rf-accent-text);
+  font: 600 11px / 14px var(--rf-font-mono);
+}
+.rf-scm__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 10px;
+}
+.rf-scm__commit-form {
+  display: grid;
+  gap: 7px;
+  padding: 4px 0 10px;
+}
+.rf-scm__message {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  max-height: 120px;
+  padding: 7px 8px;
+  color: var(--rf-text);
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line);
+  border-radius: var(--rf-r-sm);
+  font: 400 11.5px / 16px var(--rf-font-sans);
+  outline: none;
+}
+.rf-scm__message:focus {
+  border-color: var(--rf-accent-border);
+}
+.rf-scm__commitbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--rf-accent-text);
+  background: rgba(199, 240, 90, 0.08);
+  border: 1px solid var(--rf-accent-border);
+  border-radius: var(--rf-r-sm);
+  font: 600 11.5px / 14px var(--rf-font-sans);
+  cursor: pointer;
+}
+.rf-scm__commitbtn:disabled,
+.rf-scm__message:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.rf-scm__group {
+  padding: 6px 0 8px;
+  border-top: 1px solid var(--rf-line-inner);
+}
+.rf-scm__group:first-child {
+  border-top: none;
+}
+.rf-scm__group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 5px;
+  padding: 0 2px;
+  color: var(--rf-text-dim);
+  font: 600 11px / 15px var(--rf-font-sans);
+}
+.rf-scm__count {
+  color: var(--rf-text-ghost);
+  font: 600 10px / 14px var(--rf-font-mono);
+}
+.rf-scm__empty {
+  margin: 0;
+  padding: 4px 2px 6px;
+  color: var(--rf-text-ghost);
+  font: 400 11px / 15px var(--rf-font-sans);
+}
+.rf-scm__rows,
+.rf-scm__history {
+  display: grid;
+  gap: 2px;
+}
+.rf-scm__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 2px 0 0;
+  border: 1px solid transparent;
+  border-radius: var(--rf-r-xs);
+  background: transparent;
+  color: var(--rf-text-dim);
+  font: 400 11.5px / 14px var(--rf-font-mono);
+  text-align: left;
+}
+.rf-scm__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 4px;
+  color: inherit;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rf-scm__row:hover,
+.rf-scm__open:focus-visible {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-scm__actions {
+  display: inline-flex;
+  flex: none;
+  gap: 0;
+}
+.rf-scm__badge {
+  flex: none;
+  width: 16px;
+  color: var(--rf-text-faint);
+  font-weight: 700;
+}
+.rf-scm__row[data-code="A"] .rf-scm__badge {
+  color: #8bd8ff;
+}
+.rf-scm__row[data-code="M"] .rf-scm__badge {
+  color: #f1d69b;
+}
+.rf-scm__row[data-code="U"] .rf-scm__badge {
+  color: #98e6b7;
+}
+.rf-scm__row[data-code="D"] .rf-scm__badge {
+  color: #ffb0a0;
+}
+.rf-scm__path,
+.rf-scm__subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rf-scm__commit {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: var(--rf-r-xs);
+  color: var(--rf-text-dim);
+}
+.rf-scm__commit:hover {
+  background: var(--rf-hover);
+}
+.rf-scm__oid {
+  color: var(--rf-accent-text);
+  font: 600 10.5px / 14px var(--rf-font-mono);
+}
+.rf-scm__subject {
+  color: var(--rf-text);
+  font: 500 11px / 14px var(--rf-font-sans);
+}
+.rf-scm__author {
+  grid-column: 2;
+  color: var(--rf-text-ghost);
+  font: 400 10.5px / 13px var(--rf-font-sans);
+}
+
 .rf-row {
   display: flex;
   align-items: center;
@@ -725,6 +933,30 @@ body {
 .rf-row[data-active="true"] {
   background: var(--rf-accent-sel);
   color: var(--rf-accent-text-2);
+}
+.rf-row[data-selected="true"]:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--rf-text);
+}
+.rf-row[data-cut="true"] .rf-row__name,
+.rf-row[data-cut="true"] .rf-row__ico {
+  opacity: 0.48;
+}
+.rf-row[data-git="modified"] .rf-row__name,
+.rf-row[data-git="modified"] .rf-row__ico {
+  color: #e2c08d;
+}
+.rf-row[data-git="untracked"] .rf-row__name,
+.rf-row[data-git="untracked"] .rf-row__ico {
+  color: #73c991;
+}
+.rf-row[data-git="added"] .rf-row__name,
+.rf-row[data-git="added"] .rf-row__ico {
+  color: #73c991;
+}
+.rf-row[data-git="deleted"] .rf-row__name,
+.rf-row[data-git="deleted"] .rf-row__ico {
+  color: #f48771;
 }
 .rf-row[data-dim="true"] {
   color: var(--rf-text-ghost);
@@ -756,6 +988,39 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rf-row__gitbadge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--rf-r-xs);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  font: 700 10px / 1 var(--rf-font-mono);
+  color: var(--rf-text);
+}
+.rf-row[data-git="modified"] .rf-row__gitbadge {
+  color: #f1d69b;
+  border-color: rgba(226, 192, 141, 0.38);
+  background: rgba(226, 192, 141, 0.12);
+}
+.rf-row[data-git="untracked"] .rf-row__gitbadge {
+  color: #98e6b7;
+  border-color: rgba(115, 201, 145, 0.38);
+  background: rgba(115, 201, 145, 0.12);
+}
+.rf-row[data-git="added"] .rf-row__gitbadge {
+  color: #98e6b7;
+  border-color: rgba(115, 201, 145, 0.38);
+  background: rgba(115, 201, 145, 0.12);
+}
+.rf-row[data-git="deleted"] .rf-row__gitbadge {
+  color: #ffb0a0;
+  border-color: rgba(244, 135, 113, 0.38);
+  background: rgba(244, 135, 113, 0.12);
+}
 .rf-row__actions {
   display: none;
   gap: 0;
@@ -773,6 +1038,12 @@ body {
   border-radius: var(--rf-r-xs);
   padding: 2px 6px;
   outline: none;
+}
+.rf-explorer__context {
+  position: fixed;
+  right: auto;
+  width: 168px;
+  z-index: 30;
 }
 
 /* ====================================================================== */
@@ -793,6 +1064,17 @@ body {
 .rf-editor {
   position: absolute;
   inset: 0;
+}
+.rf-editor[data-active="false"] {
+  display: none;
+}
+.rf-diff-editor {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.rf-diff-editor[data-active="true"] {
+  display: block;
 }
 
 .rf-tabsbar {
@@ -862,6 +1144,19 @@ body {
 }
 .rf-tab__dot[data-dirty="true"] {
   background: var(--rf-accent);
+}
+.rf-dirty-gutter {
+  width: 3px !important;
+  margin-left: 2px;
+}
+.rf-dirty-gutter--added {
+  background: var(--rf-ok);
+}
+.rf-dirty-gutter--modified {
+  background: var(--rf-warn);
+}
+.rf-dirty-gutter--deleted {
+  background: #ff6b6b;
 }
 .rf-tab__close {
   width: 16px;
@@ -1844,6 +2139,9 @@ body {
 }
 .rf-status__file {
   color: var(--rf-text-ghost);
+}
+.rf-status__branch {
+  color: var(--rf-accent-text);
 }
 .rf-status__badge[data-tone="ok"] {
   color: var(--rf-ok-text);

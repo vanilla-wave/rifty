@@ -11,11 +11,13 @@
 export interface DevReadyMessage {
   readonly type: 'rifty:dev-ready';
   readonly port: number;
+  readonly previewScope?: string;
 }
 /** Child→owner: vite preview is listening on `port` (adds the production preview slot). */
 export interface PreviewReadyMessage {
   readonly type: 'rifty:preview-ready';
   readonly port: number;
+  readonly previewScope?: string;
 }
 /** Child→owner: boot failed (rejects the controller boot → recoverable). */
 export interface DevErrorMessage {
@@ -39,14 +41,23 @@ export interface DevFileChangedMessage {
 }
 export type DevServerOwnerMessage = DevFileChangedMessage;
 
+function optionalPreviewScope(c: { readonly previewScope?: unknown }): boolean {
+  return c.previewScope === undefined || typeof c.previewScope === 'string';
+}
+
 export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage {
   if (!m || typeof m !== 'object') return false;
-  const c = m as { type?: unknown; port?: unknown; message?: unknown };
+  const c = m as {
+    type?: unknown;
+    port?: unknown;
+    message?: unknown;
+    previewScope?: unknown;
+  };
   // ready carries the listening port — reject NaN/float (would resolve boot LIVE
   // on `/preview/NaN/`). error keeps a plain string check: an error frame MUST
   // reject boot even with a thin message, else dropping it would hang the boot.
-  if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port);
-  if (c.type === 'rifty:preview-ready') return Number.isInteger(c.port);
+  if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
+  if (c.type === 'rifty:preview-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
   if (c.type === 'rifty:dev-error') return typeof c.message === 'string';
   return c.type === 'rifty:dev-snapshot';
 }
