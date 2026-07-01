@@ -117,7 +117,7 @@ jobs:
         if: matrix.lane == 'prod'
         run: |
           set -euo pipefail
-          node tools/perf/bench.mjs --runs 1 --out /tmp/bench-ci.json
+          node tools/perf/bench.mjs --runs 1 --presets project-files --out /tmp/bench-ci.json
           node -e '
             const a = JSON.parse(require("node:fs").readFileSync("/tmp/bench-ci.json", "utf8"));
             const cold = a.metrics.coldStartToInteractiveMs;
@@ -128,7 +128,13 @@ jobs:
               throw new Error("cold-start not measured: " + JSON.stringify(cold));
             }
             if (!install.status) throw new Error("install metric not recorded (must never be silently skipped)");
-            console.log(`bench artifact OK: cold median ${cold.median}ms, install=${install.status}`);
+            // preset-boot (schema v2): one preset requested → one record, with an
+            // explicit status either way (measured or unmeasured+note).
+            const pb = a.metrics.presetBootToPreviewLiveMs;
+            if (!Array.isArray(pb) || pb.length !== 1 || !pb[0].status) {
+              throw new Error("preset-boot metric not recorded: " + JSON.stringify(pb));
+            }
+            console.log(`bench artifact OK: cold median ${cold.median}ms, install=${install.status}, presetBoot[${pb[0].presetId}]=${pb[0].status}${pb[0].median ? ` ${pb[0].median}ms` : ""}`);
           '
       - if: failure()
         uses: actions/upload-artifact@v4

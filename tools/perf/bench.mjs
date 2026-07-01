@@ -61,6 +61,19 @@ const DEV_READY_TIMEOUT = 90_000;
 const INTERACTIVE_TIMEOUT = 45_000;
 const INSTALL_TIMEOUT = 180_000;
 
+// Instant presets for the pick→preview-live metric (`--presets none` skips the
+// phase — recorded in the artifact, never silent). typescript-ls exercises the
+// esbuild-WASI transform path; project-files is the plain-JS floor.
+const PRESETS_ARG = argVal('--presets', 'project-files,typescript-ls');
+const PRESET_IDS = PRESETS_ARG === 'none' ? [] : PRESETS_ARG.split(',').filter(Boolean);
+const PRESET_BOOT_TIMEOUT = 120_000;
+
+// Attribution stages from markers the boot already paints into the page
+// terminal. Only PAGE-observable markers qualify — the dev-server child's
+// other log lines ("importing vite…", "listening on internal port") never
+// reach the page terminal buffer. A missing marker records null, never a guess.
+const PRESET_STAGE_MARKERS = [['viteReadyMs', /\[vite\] dev server ready on port/]];
+
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -232,6 +245,105 @@ async function runPhase(browser, label, withResolver, measureInstall) {
   return { cold, install, installError };
 }
 
+async function runPresetBootOnce(browser, presetId) {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    const t0 = Date.now();
+    await page.goto(`${BASE}/?preset=${presetId}&autorun=1`, { waitUntil: 'commit' });
+    await page.waitForFunction(interactivePredicate, null, { timeout: INTERACTIVE_TIMEOUT });
+    const stages = { interactiveMs: Date.now() - t0 };
+    const pending = new Map(PRESET_STAGE_MARKERS);
+    const deadline = t0 + PRESET_BOOT_TIMEOUT;
+    while (Date.now() < deadline) {
+      const text = (await terminalText(page)).replace(ANSI_SGR, '');
+      for (const [key, re] of pending) {
+        if (re.test(text)) {
+          stages[key] = Date.now() - t0;
+          pending.delete(key);
+        }
+      }
+      const live = await page.evaluate(
+        () => document.querySelector('.rf-preview__status[data-phase="live"]') !== null,
+      );
+      if (live) {
+        const liveMs = Date.now() - t0;
+        // One final scan: a marker's terminal PAINT can lag preview-live by a
+        // beat (the preview probe races the pty chunk); its cause precedes live,
+        // so a marker visible now is real — anything still missing is null.
+        const finalText = (await terminalText(page)).replace(ANSI_SGR, '');
+        for (const [key, re] of pending) {
+          stages[key] = re.test(finalText) ? Date.now() - t0 : null;
+        }
+        return { pickToPreviewLiveMs: liveMs, stages };
+      }
+      await sleep(100);
+    }
+    throw new Error(`[${presetId}] preview never reached live within ${PRESET_BOOT_TIMEOUT}ms`);
+  } finally {
+    await context.close();
+  }
+}
+
+/** Instant-preset pick→preview-live pass (no npm install in the path); its own
+ * dev server, same port-ownership rules as the install passes. All RUNS must go
+ * live or the preset records `unmeasured` (no partial medians — Fidelity). */
+async function runPresetBootPhase(browser) {
+  if (PRESET_IDS.length === 0) return { status: 'skipped', note: '--presets none' };
+  const dev = startDevServer(false);
+  const out = [];
+  try {
+    await waitForHttp(`${BASE}/`, DEV_READY_TIMEOUT);
+    if (dev.exitCode !== null || dev.signalCode !== null) {
+      throw new Error(
+        `[preset-boot] dev server exited (code ${dev.exitCode}, signal ${dev.signalCode}) before serving on port ${PORT} — refusing to measure a foreign responder.`,
+      );
+    }
+    for (const presetId of PRESET_IDS) {
+      try {
+        // One discarded warm-up: the first pass pays dev-server transform-cache
+        // fills a warm deployment never re-pays. The host dev server's first-hit
+        // dep-optimize can even RELOAD the page mid-warmup (destroyed evaluate
+        // context) — exactly the first-hit cost warmup absorbs, so the discarded
+        // run retries once. Measured runs never retry.
+        for (let w = 0; w < WARMUP; w++) {
+          let r;
+          try {
+            r = await runPresetBootOnce(browser, presetId);
+          } catch (err) {
+            console.log(
+              `  [preset ${presetId}] warmup interrupted (${err instanceof Error ? err.message : err}) — retrying the discarded run once`,
+            );
+            r = await runPresetBootOnce(browser, presetId);
+          }
+          console.log(`  [preset ${presetId}] warmup: live=${r.pickToPreviewLiveMs}ms (discarded)`);
+        }
+        const samples = [];
+        const stageRuns = [];
+        for (let i = 0; i < RUNS; i++) {
+          const r = await runPresetBootOnce(browser, presetId);
+          samples.push(r.pickToPreviewLiveMs);
+          stageRuns.push(r.stages);
+          console.log(
+            `  [preset ${presetId}] run ${i + 1}/${RUNS}: live=${r.pickToPreviewLiveMs}ms interactive=${r.stages.interactiveMs}ms viteReady=${r.stages.viteReadyMs ?? 'n/a'}ms`,
+          );
+        }
+        out.push({ presetId, samples, stageRuns });
+      } catch (err) {
+        out.push({
+          presetId,
+          status: 'unmeasured',
+          note: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } finally {
+    stopDevServer(dev);
+    await sleep(1_000);
+  }
+  return out;
+}
+
 function measuredOrUnmeasured(samples, error) {
   // All `RUNS` must succeed — a partial set is not a median of N (Fidelity).
   return samples.length === RUNS
@@ -293,11 +405,14 @@ async function main() {
       installMetric = { status: 'requires proxy' };
     }
 
+    const presetBoot = await runPresetBootPhase(browser);
+
     const artifact = buildArtifact({
       generatedAt: new Date().toISOString(),
       runs: RUNS,
       coldStartSamples: coldSamples,
       install: installMetric,
+      presetBoot,
     });
 
     mkdirSync(dirname(OUT), { recursive: true });
