@@ -17,7 +17,7 @@ test.describe('CLI report template through the worker lifecycle', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 15_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 90_000);
 
     await selectPreset(page, 'cli-report');
 

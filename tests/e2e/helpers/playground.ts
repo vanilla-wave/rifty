@@ -156,6 +156,25 @@ export function viteDevReadyPattern(port = 5174): RegExp {
   return new RegExp(`\\[vite\\] dev server ready on port ${port}`, 'u');
 }
 
+export type InitialTerminalState = 'vite-booted' | 'idle-shell';
+
+export async function waitForViteBootOrIdleShell(
+  page: Page,
+  opts: { readonly viteTimeout?: number; readonly promptTimeout?: number } = {},
+): Promise<InitialTerminalState> {
+  try {
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: opts.viteTimeout ?? 60_000 })
+      .toMatch(/\$ vite/u);
+    return 'vite-booted';
+  } catch {
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: opts.promptTimeout ?? 10_000 })
+      .toMatch(/>\s*$/u);
+    return 'idle-shell';
+  }
+}
+
 export interface CapturedPageProblems {
   readonly messages: readonly string[];
   assertNoViteImportErrors(): void;

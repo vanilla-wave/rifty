@@ -4,6 +4,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  waitForViteBootOrIdleShell,
 } from './helpers/playground.ts';
 
 // Echo-confirmed line entry (copied from node-command.spec.ts): a keystroke that
@@ -66,12 +67,15 @@ test.describe('cross-realm http loopback between two node realms (ADR-0180)', ()
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    // Let the initial dev-server boot storm settle (a keystroke mid-mount is lost).
-    await expect.poll(() => terminalBuffer(page), { timeout: 90_000 }).toMatch(/\$ vite/);
+    // Cross-realm behavior only needs a stable shell. Default Vite autorun is
+    // pinned elsewhere; CI retries can legitimately land on an already-idle
+    // shell, so don't fail before the net contract starts.
+    const initialTerminal = await waitForViteBootOrIdleShell(page);
 
-    // Free Terminal 1 (Ctrl-C the dev server) so it can host the api server.
+    // Free Terminal 1 if the dev server is occupying it, so it can host the api server.
     await page.locator('[data-testid="terminal"]').click();
-    await page.keyboard.press('Control+c');
+    if (initialTerminal === 'vite-booted') await page.keyboard.press('Control+c');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toMatch(/>\s*$/u);
 
     // api server (realm A) — listens on 4101 in Terminal 1's supervised child.
     await runLineConfirmed(page, `echo '${API_SRC}' > /scratch/api.js`);
