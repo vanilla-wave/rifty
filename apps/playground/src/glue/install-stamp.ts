@@ -11,8 +11,9 @@
  * freshness guard.
  *
  * Trust model: the stamp trusts the tree wholesale — no per-file verification.
- * Callers own flush ordering: drain the VFS write-through BEFORE
- * `writeInstallStamp` so a durable stamp implies a durable tree.
+ * Durability ordering (ADR-0187): the write-through queue is FIFO, so the
+ * stamp — written after the tree — lands durably after it by construction;
+ * callers do NOT drain the queue around the stamp.
  */
 // TODO(backlog: playground/install-stamp-invalidation)
 import { type Vfs, joinPath } from '@riftydev/vfs';

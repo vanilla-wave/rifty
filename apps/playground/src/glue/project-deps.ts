@@ -15,11 +15,13 @@
  * from the instant default that shares the same template, a from-scratch preset
  * shows its install even when OPFS was already warmed by an instant preset.
  *
- * Paths 2 and 3 finish by stamping the tree (flush → stamp → flush, so a
- * durable stamp implies a durable tree). Any snapshot failure — fetch,
- * deps drift, restore — degrades to install; a broken asset never bricks
- * the boot. Extracted from the worker bootstrap so the priority logic is
- * unit-testable outside a worker realm.
+ * Paths 2 and 3 finish by stamping the tree. Durability ordering is the
+ * write-through queue's FIFO (ADR-0187): the stamp is enqueued after every
+ * tree write, so a durable stamp implies a durable tree WITHOUT a blocking
+ * drain on the boot path. Any snapshot failure — fetch, deps drift, restore —
+ * degrades to install; a broken asset never bricks the boot. Extracted from
+ * the worker bootstrap so the priority logic is unit-testable outside a
+ * worker realm.
  */
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import {
@@ -64,8 +66,6 @@ export interface EnsureProjectDepsOptions {
    * command, never a dev-line side effect.
    */
   readonly install?: () => Promise<{ readonly packages: number }>;
-  /** Drains the VFS write-through (stamp durability ordering). */
-  readonly flush: () => Promise<void>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
   readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV1 | null>;
@@ -155,8 +155,9 @@ async function tryRestoreSnapshot(
   return { source: 'snapshot', packages: snapshot.packages };
 }
 
+/** Non-blocking stamp (ADR-0187): the stamp's write-through is enqueued after
+ * every tree write, so FIFO ordering alone guarantees a durable stamp implies
+ * a durable tree — no drain on the boot path. */
 async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
-  await opts.flush();
   await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
-  await opts.flush();
 }

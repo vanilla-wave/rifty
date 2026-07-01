@@ -45,7 +45,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       install: async () => {
         throw new Error('must not install on a stamp hit');
       },
-      flush: async () => {},
       log: logFn,
     });
 
@@ -74,7 +73,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         installed = true;
         return { packages: 8 };
       },
-      flush: async () => {},
       log: logFn,
     });
 
@@ -112,7 +110,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         };
         return { packages: 8 };
       },
-      flush: async () => {},
       log: logFn,
     });
 
@@ -137,7 +134,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         installed = true;
         return { packages: 0 };
       },
-      flush: async () => {},
       log: logFn,
     });
 
@@ -161,7 +157,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => ({ packages: 9 }),
-      flush: async () => {},
       log: logFn,
     });
 
@@ -182,7 +177,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => null,
       install: async () => ({ packages: 9 }),
-      flush: async () => {},
       log: logFn,
     });
 
@@ -203,7 +197,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         throw new Error('must not fetch without a snapshot url');
       },
       install: async () => ({ packages: 60 }),
-      flush: async () => {},
       log: logFn,
     });
 
@@ -211,11 +204,16 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect((await installStampSatisfied(vfs, ROOT, 'express-sqlite'))?.packages).toBe(60);
   });
 
-  it('flush-before-stamp ordering holds on the snapshot path', async () => {
+  it('stamps WITHOUT draining the write-through on the snapshot path (ADR-0187)', async () => {
     const { vfs, fsSync, logFn } = project();
-    const flushSawStamp: boolean[] = [];
 
-    await ensureProjectDependencies({
+    // Tripwire: `flush` is no longer part of EnsureProjectDepsOptions —
+    // durability ordering is the write-through FIFO (ADR-0187, pinned in
+    // opfs-sync.test.ts). If a future change re-awaits a drain around the
+    // stamp, this never-resolving flush hangs the arrival and the test
+    // times out RED.
+    const hangingFlush = { flush: () => new Promise<void>(() => {}) };
+    const result = await ensureProjectDependencies({
       vfs,
       fsSync,
       root: ROOT,
@@ -224,13 +222,12 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => ({ packages: 0 }),
-      flush: async () => {
-        flushSawStamp.push(fsSync.existsSync(`${ROOT}/node_modules/.rifty-install-stamp.json`));
-      },
       log: logFn,
+      ...(hangingFlush as Partial<Parameters<typeof ensureProjectDependencies>[0]>),
     });
 
-    expect(flushSawStamp).toEqual([false, true]);
+    expect(result.source).toBe('snapshot');
+    expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
   });
 
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {
@@ -246,7 +243,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       templateId: 'vite',
       slug: 'real-vite',
       // no snapshotUrl + no install → restore-only
-      flush: async () => {},
       log: logFn,
     });
     expect(result).toEqual({ source: 'none', packages: 0 });
@@ -263,7 +259,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       // no `install` → restore-only; a matching snapshot must restore, not install
-      flush: async () => {},
       log: logFn,
     });
     expect(result.source).toBe('snapshot');
@@ -281,7 +276,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       // no `install` → TypeScript starter's instant boot must restore, not install
-      flush: async () => {},
       log: logFn,
     });
     expect(result.source).toBe('snapshot');

@@ -17,9 +17,10 @@
  * stream live through `InstallOptions.onPackage` (ADR-0134).
  *
  * After a successful install the tree is stamped (ADR-0135) so the real-vite
- * worker bootstrap can skip its redundant install; `deps.flush` drains the
- * OPFS write-through before/after the stamp so a durable stamp implies a
- * durable tree.
+ * worker bootstrap can skip its redundant install. The stamp does NOT drain
+ * the OPFS write-through (ADR-0187): the queue is FIFO, so the stamp — enqueued
+ * after every tree write — lands durably after the tree by construction, and
+ * the command returns without paying the drain.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -54,9 +55,6 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
-  /** Drains the VFS write-through (page wires the OPFS sync-mirror flush) so
-   *  the install stamp lands durably AFTER the tree (ADR-0135). */
-  readonly flush?: () => Promise<void>;
   /** The owner's project slug (preset id) the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
@@ -487,8 +485,10 @@ function hasRootLifecycleScript(scripts: Record<string, string>): boolean {
 }
 
 /**
- * Stamp the freshly installed tree (ADR-0135): flush write-through → write
- * stamp → flush stamp. Best-effort — a stamp failure costs the worker's skip
+ * Stamp the freshly installed tree (ADR-0135). Non-blocking (ADR-0187): the
+ * stamp rides the FIFO write-through — enqueued after every tree write, so a
+ * durable stamp still implies a durable tree while the command skips the
+ * ~490ms drain. Best-effort — a stamp failure costs the worker's skip
  * optimization, never the install's success.
  */
 async function stampInstalledTree(
@@ -497,9 +497,7 @@ async function stampInstalledTree(
   packages: number,
 ): Promise<void> {
   try {
-    await deps.flush?.();
     await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
-    await deps.flush?.();
   } catch (err) {
     console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
   }

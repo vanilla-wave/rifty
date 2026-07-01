@@ -234,7 +234,6 @@ async function restoreInstantDeps(
     slug,
     snapshotUrl: cfg.bakedNodeModulesUrl,
     // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
-    flush: flushSyncMirror,
     log: (line) => console.log(line.trimEnd()),
   });
   if (result.source === 'none') {
@@ -804,7 +803,6 @@ async function bootShellOwner(opts: {
     const npmCommand = createNpmShellCommand({
       vfs,
       registry,
-      flush: flushSyncMirror,
       // Stamp the install for the CURRENT project slug (same key the dev-server
       // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
       // this tree — otherwise the arrival re-runs and replaces node_modules,
