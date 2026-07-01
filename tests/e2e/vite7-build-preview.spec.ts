@@ -1,6 +1,8 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   runTerminalLineSettled,
@@ -50,16 +52,11 @@ test.describe('Vite 7 production build/preview', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expect
-      .poll(async () => fetchPreview(page, 5174), {
-        timeout: 90_000,
-        intervals: [500, 1_000, 2_000],
-      })
-      .toMatchObject({ ok: true, status: 200 });
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     await openShellTerminal(page);
     await runTerminalLineSettled(page, 'vite build', 120_000);

@@ -3,6 +3,7 @@ import { clearWorkspaceOpfs } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
   openShellTerminal,
+  pickStarter,
   runTerminalLine,
 } from './helpers/playground.ts';
 
@@ -18,10 +19,10 @@ import {
  * marker is STILL there — i.e. the mount seed did not overwrite the persisted
  * edit. On the clobber bug the reload shows the seeded source, not the marker.
  *
- * RED-checked (verified failing 2026-07-01 before the fix): the on-mount
- * `runVitePreset` → `seedViteWorkspace` used overwrite semantics on every boot,
- * so a reload clobbered a persisted edit. Fixed by re-seeding `ifAbsent` on a
- * boot/reload (a preset SWITCH keeps overwrite), so this guards the reload leg.
+ * Under the project-first chooser the reload restore path re-launches the dev
+ * server via `runVitePreset` which no longer re-seeds (the seed moved to the pick
+ * path), so a reopened scratch draft is served straight from the OPFS-restored
+ * tree — the persisted edit is never overwritten. This guards that reload leg.
  */
 test.describe('a starter-file edit survives reload (mount seed must not clobber)', () => {
   test('edited src/main.js keeps the edit after page.reload()', async ({ page, browserName }) => {
@@ -32,6 +33,9 @@ test.describe('a starter-file edit survives reload (mount seed must not clobber)
     await page.goto('/');
     await clearWorkspaceOpfs(page);
     await page.reload();
+    // Project-first: pick the default real-vite starter (seeds src/main.js + boots
+    // the dev server) instead of relying on a main-style auto-boot.
+    await pickStarter(page, 'project-files');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
     await openShellTerminal(page);
 

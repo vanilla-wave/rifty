@@ -1,7 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
-import { openShellTerminal, runTerminalLineSettled, terminalBuffer } from './helpers/playground.ts';
+import {
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const OWNER_DURABLE_TIMEOUT = 90_000;
 type ProjectIndexSnapshot = {
@@ -51,16 +56,10 @@ async function bootScmFileManager(page: Page): Promise<void> {
     localStorage.removeItem('rf.layout.v2');
   });
   await page.goto('/');
-  await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
-}
-
-async function pickStarter(page: Page, id: string): Promise<void> {
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
-    timeout: OWNER_DURABLE_TIMEOUT,
-  });
+  await pickStarter(page, 'project-files');
+  await expect
+    .poll(() => terminalBuffer(page), { timeout: OWNER_DURABLE_TIMEOUT })
+    .toMatch(/VITE v.*ready/u);
 }
 
 function explorerRow(page: Page, name: string, kind?: 'file' | 'dir') {
@@ -164,11 +163,7 @@ test.describe('GIT file manager', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('rf.layout.v2');
-    });
-    await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
+    await bootScmFileManager(page);
 
     await openShellTerminal(page);
     await runTerminalLineSettled(
@@ -488,6 +483,7 @@ test.describe('GIT file manager', () => {
       },
     );
 
+    await openShellTerminal(page);
     await runTerminalLineSettled(
       page,
       `test ! -e src/${oldName} && grep edited-before-rename-${seq} src/${newName} && echo rename-ok-${seq}`,
@@ -595,11 +591,7 @@ test.describe('GIT file manager', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('rf.layout.v2');
-    });
-    await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
+    await bootScmFileManager(page);
 
     const readmeRow = page.locator('.rf-row[role="treeitem"]', { hasText: 'README.md' }).first();
     await expect(readmeRow).toBeVisible({ timeout: 30_000 });
@@ -649,11 +641,7 @@ test.describe('GIT file manager', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('rf.layout.v2');
-    });
-    await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
+    await bootScmFileManager(page);
     await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -763,11 +751,7 @@ test.describe('GIT file manager', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('rf.layout.v2');
-    });
-    await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
+    await bootScmFileManager(page);
     await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -850,11 +834,7 @@ test.describe('GIT file manager', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(180_000);
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('rf.layout.v2');
-    });
-    await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/VITE v.*ready/u);
+    await bootScmFileManager(page);
 
     const projectName = `GIT Project ${Date.now().toString(36)}`;
     const projectId = await saveScratchAs(page, projectName);

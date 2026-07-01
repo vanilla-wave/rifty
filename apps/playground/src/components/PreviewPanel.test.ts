@@ -93,10 +93,12 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
     const empty = renderToString(() => PreviewPanel({ ports: () => [] }));
     expect(empty).toContain('class="rf-preview__port"');
     expect(empty).not.toContain('class="rf-preview__switcher"');
+    expect(empty).toContain('data-testid="preview-empty"');
 
     const none = renderToString(() => PreviewPanel({}));
     expect(none).toContain('class="rf-preview__port"');
     expect(none).not.toContain('class="rf-preview__switcher"');
+    expect(none).toContain('data-testid="preview-empty"');
   });
 });
 

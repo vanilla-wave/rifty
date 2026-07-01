@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
 import {
   type NodeCliProjectSpec,
   type NodeServerProjectSpec,
@@ -161,6 +162,16 @@ describe('resolveBootstrapConfig', () => {
     );
     expect(spec.bakedNodeModulesTemplateId).toBeUndefined();
     expect(cfg.bakedNodeModulesTemplateId).toBeUndefined();
+  });
+
+  it('seeds the hidden empty first-run workspace without dependency restore', () => {
+    const cfg = resolveBootstrapConfig(HIDDEN_EMPTY_TEMPLATE, 5174, '/scratch');
+
+    expect(cfg.entryPath).toBe('/scratch/src/main.js');
+    expect(cfg.installDeps).toEqual({});
+    expect(cfg.bakedNodeModulesUrl).toBeUndefined();
+    expect(cfg.seedFiles['/scratch/src/main.js']).toBe('');
+    expect(cfg.seedFiles['/scratch/index.html']).toContain('src="src/main.js"');
   });
 });
 

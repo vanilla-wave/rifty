@@ -54,7 +54,7 @@ import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
-import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
+import { reconcileOwnerIndexAtBoot, recoverIndex } from '../glue/project-index.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -215,8 +215,9 @@ function ownerGitVfs(): SyncMirrorVfs {
  * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
  * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
  * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
- * preset's tree and re-seeds THIS preset's package.json so the snapshot matches,
- * then restores it. A missing/drifted snapshot leaves deps absent (vite fails
+ * preset's dependency-owned files and re-seeds THIS preset's package.json so the
+ * snapshot matches, then restores it. User files in the root are never removed by
+ * dependency restore. A missing/drifted snapshot leaves deps absent (vite fails
  * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
  * NOT come here: the explicit `npm install` boot step is their only source.
  */
@@ -229,7 +230,9 @@ async function restoreInstantDeps(
   const vfs = new SyncMirrorVfs();
   if (await installStampSatisfiedForPackageJson(vfs, cfg.root, slug, cfg.packageJson)) return;
   const fs = syncMirror();
-  clearProjectTree(fs, cfg.root);
+  fs.rmSync(`${cfg.root}/node_modules`, { recursive: true, force: true });
+  fs.rmSync(`${cfg.root}/package-lock.json`, { force: true });
+  fs.rmSync(`${cfg.root}/package.json`, { force: true });
   fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
   const result = await ensureProjectDependencies({
     vfs,
@@ -427,6 +430,10 @@ async function bootShellOwner(opts: {
   readonly slug: string;
   /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
   readonly starter: string;
+  /** True when the page picked a fresh starter before this full owner existed. */
+  readonly starterGeneratedBaselinePending: boolean;
+  /** Hidden first-run owner: real shell/root, but no chosen starter/index scratch. */
+  readonly hiddenEmptyBoot: boolean;
   readonly fromScratch: boolean;
   /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
   readonly kernelWorkerUrl: string;
@@ -437,7 +444,18 @@ async function bootShellOwner(opts: {
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
   readonly tsLspWorkerUrl: string;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
+  const {
+    cfg,
+    port,
+    kernelIpc,
+    publishSnapshot,
+    spec,
+    slug,
+    starter,
+    starterGeneratedBaselinePending,
+    hiddenEmptyBoot,
+    fromScratch,
+  } = opts;
   const pendingStarterGeneratedBaseline = new Set<string>();
   const markStarterGeneratedBaselinePending = (root: string): void => {
     pendingStarterGeneratedBaseline.add(root);
@@ -450,18 +468,24 @@ async function bootShellOwner(opts: {
   };
 
   const freshRoot = !syncMirror().existsSync(cfg.root);
-  if (freshRoot) markStarterGeneratedBaselinePending(cfg.root);
-  seedProject(cfg);
-  if (freshRoot) seedStarterBaseline(starter, cfg.root);
-  await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+  if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending)) {
+    markStarterGeneratedBaselinePending(cfg.root);
+  }
+  if (hiddenEmptyBoot) {
+    syncMirror().mkdirSync(cfg.root, { recursive: true });
+  } else {
+    seedProject(cfg);
+    if (freshRoot) seedStarterBaseline(starter, cfg.root);
+    await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+  }
   // Instant presets: pre-seed node_modules from the baked snapshot into the owner
   // store NOW, before any dev line (the full fs is already present). from-scratch
   // deps come from the explicit `npm install` boot step — nothing to do here.
-  if (!fromScratch) {
+  if (!fromScratch && !hiddenEmptyBoot) {
     await restoreInstantDeps(cfg, spec.id, slug);
     await absorbPendingStarterGeneratedBaseline(cfg.root);
   }
-  seedTemplateNodeModulesFiles(cfg);
+  if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);
   const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });
   const gitStatusFeed = serveGitStatusFeed(port, ownerGit);
   const publishOwnerState = (): void => {
@@ -538,7 +562,10 @@ async function bootShellOwner(opts: {
 
   async function prepareActiveDevConfigDeps(): Promise<void> {
     try {
-      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+      if (!devFromScratch) {
+        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+        await absorbPendingStarterGeneratedBaseline(devCfg.root);
+      }
       seedTemplateNodeModulesFiles(devCfg);
       publishOwnerState();
     } catch (err) {
@@ -1097,7 +1124,8 @@ async function bootShellOwner(opts: {
   // the spawn STARTER when /scratch exists but the index is a cold-boot empty — so
   // the owner index is the REAL hydrate source AND saveScratchAsProject's
   // `if(!index.scratch) throw` precondition holds. See reconcileOwnerIndexAtBoot.
-  reconcileOwnerIndexAtBoot(syncMirror(), starter);
+  if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/');
+  else reconcileOwnerIndexAtBoot(syncMirror(), starter);
   // ADR-0165: the OPFS project index is worker-writable only; serve it so the page
   // launcher hydrates an in-memory mirror across owner respawns. Read against THIS
   // realm's syncMirror (the owner owns the index); base '/' = the OPFS root.
@@ -1165,6 +1193,8 @@ async function bootstrap(): Promise<void> {
   // page sends the real starter over RIFTY_RFV_STARTER. Fall back to the default
   // starter id (a fresh boot before the page picks anything).
   const starter = env.RIFTY_RFV_STARTER ?? DEFAULT_PRESET.id;
+  const starterGeneratedBaselinePending = env.RIFTY_RFV_STARTER_BASELINE_PENDING === '1';
+  const hiddenEmptyBoot = env.RIFTY_RFV_HIDDEN_EMPTY_BOOT === '1';
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -1242,6 +1272,8 @@ async function bootstrap(): Promise<void> {
     spec,
     slug,
     starter,
+    starterGeneratedBaselinePending,
+    hiddenEmptyBoot,
     fromScratch,
     kernelWorkerUrl,
     nodeEntryWorkerUrl,

@@ -91,9 +91,21 @@ const DEFAULT_PROJECT_VERSION = '0.0.0';
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   return async (args, ctx) => {
     const sub = args[0];
-    if (!sub) {
-      ctx.stderr.write('npm: missing subcommand (try `npm install`)\n');
+    // Bare `npm` and the help flags print the command list (one per line), but
+    // keep npm's observable usage-exit contract: these forms return 1.
+    if (!sub || sub === '-h' || sub === '--help') {
+      printNpmHelp(ctx);
       return 1;
+    }
+    if (sub === 'help') {
+      if (args.length === 1) {
+        printNpmHelp(ctx);
+        return 0;
+      }
+      throw new NotImplementedError(
+        'npm.help.topic',
+        `${args.slice(1).join(' ')} help is outside the browser npm subset`,
+      );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
       return runInstall(args.slice(1), ctx, deps);
@@ -107,10 +119,40 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       return runPackageScript([sub, ...args.slice(1)], ctx, deps);
     }
     ctx.stderr.write(
-      `npm: unknown subcommand '${sub}' (supported: install, i, add, run, test, start, stop, restart)\n`,
+      `npm: unknown subcommand '${sub}' — run \`npm help\` for a list of commands\n`,
     );
     return 1;
   };
+}
+
+/** Supported subcommands, one row per help line. Aliases fold into the summary
+ *  (no fake separate `i`/`add` commands) so the list stays honest. */
+const NPM_COMMANDS: ReadonlyArray<{ usage: string; summary: string }> = [
+  { usage: 'npm install [<pkg>…]', summary: 'install dependencies (aliases: i, add)' },
+  { usage: 'npm run <script>', summary: 'run a package.json script' },
+  { usage: 'npm test', summary: 'run the "test" script' },
+  { usage: 'npm start', summary: 'run the "start" script' },
+  { usage: 'npm stop', summary: 'run the "stop" script' },
+  { usage: 'npm restart', summary: 'run the "restart" script' },
+  { usage: 'npm help', summary: 'show this help' },
+];
+
+/** Print the supported command list, one command per line (stdout). */
+function printNpmHelp(ctx: CommandContext): void {
+  const width = Math.max(...NPM_COMMANDS.map((c) => c.usage.length));
+  const lines = [
+    'npm <command> — a browser-native subset of npm',
+    '',
+    'Commands:',
+    ...NPM_COMMANDS.map((c) => `  ${c.usage.padEnd(width)}  ${c.summary}`),
+  ];
+  ctx.stdout.write(`${lines.join('\n')}\n`);
+}
+
+/** Human-readable install duration: sub-second in ms, else seconds (1 decimal),
+ *  matching real npm's `added N packages in 3s`. */
+export function formatInstallDuration(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
 /**
@@ -415,7 +457,7 @@ async function runInstall(
     await stampInstalledTree(deps, ctx.cwd, result.packages.length);
     const via = result.source === 'eddy' ? ' via eddy (fast)' : '';
     ctx.stdout.write(
-      `npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms${via}\n`,
+      `npm: installed ${result.packages.length} package(s) in ${formatInstallDuration(elapsedMs)}${via}\n`,
     );
     return 0;
   } catch (err) {

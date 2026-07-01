@@ -19,6 +19,19 @@
 
 ### Fixed
 
+- No blank row after a command whose output ends in a newline. `writePrompt`
+  now re-draws bash-style: the prompt follows the output directly (the output's
+  own trailing `\n` already moved to a fresh line), and only prepends a
+  separating `\r\n` when the caret is mid-line (empty Enter / non-terminated
+  output). Carriage-return-only progress output is not treated as a completed
+  line, and Ctrl+C's `^C\r\n` echo updates the prompt tracker. Tracked via
+  `atLineStart` (mirrors the async write queue — `buffer.cursorX` lags xterm's
+  deferred parse).
+- Terminal font no longer renders "strange" (mis-aligned cells) when the
+  self-hosted webfont is still loading at `mount()`. xterm measures the glyph
+  cell at open time; with `font-display: swap` it measured the fallback, then
+  the real font swapped in against a stale grid. `mount()` now re-measures on
+  `document.fonts.ready` and re-fits.
 - Empty Enter in line mode now submits the blank shell line but redraws the next
   prompt without appending an extra blank row.
 - `RiftyTerminal.dispose()` now treats addon/xterm teardown as best-effort. A

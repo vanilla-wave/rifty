@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootShell,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLineSettled,
@@ -7,7 +8,7 @@ import {
 
 test.describe('Terminal command blocks UX', () => {
   test('bottom panel exposes shell context in the terminal hint', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
     await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
       'aria-selected',
@@ -22,7 +23,7 @@ test.describe('Terminal command blocks UX', () => {
   });
 
   test('terminal commands run without legacy command overlays', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
 
     await runTerminalLineSettled(page, 'echo block-preview-output');

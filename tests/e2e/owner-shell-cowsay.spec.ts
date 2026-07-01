@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootShell,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -37,7 +38,7 @@ test.describe('owner-resident shell runs an installed CLI end-to-end (ADR-0146)'
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
-    await page.goto('/');
+    await bootShell(page);
 
     // A second terminal is a plain idle shell on the same persistent owner
     // (the first auto-boots the dev server). Both sessions share the owner store.

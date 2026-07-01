@@ -17,7 +17,13 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
-import { expectTerminalContains, runTerminalLineSettled } from './helpers/playground.ts';
+import {
+  bootProjectFiles,
+  expectTerminalContains,
+  expectViteDevServerReady,
+  pickStarter as pickStarterFromLauncher,
+  runTerminalLineSettled,
+} from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
@@ -49,12 +55,7 @@ async function newShell(page: Page): Promise<void> {
 }
 
 async function pickStarter(page: Page, id: string): Promise<void> {
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
-    timeout: OWNER_DURABLE_TIMEOUT,
-  });
+  await pickStarterFromLauncher(page, id);
 }
 
 /** Open the launcher Projects tab via the top-bar chip. */
@@ -152,7 +153,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
 
     // A fresh load (no OPFS wipe — the wipe would discard the baked dependency
     // snapshot and force a Rollup native-binary install that fails under WASI).
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
@@ -162,7 +163,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
     await expectProjectChipName(page, 'Project files scratch');
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 30_000);
+    await expectViteDevServerReady(page, 5174, 30_000);
 
     // Pick a DIFFERENT starter (node-worker — also the Vite template, instant
     // setup). The store spins a fresh scratch from that starter and the owner
@@ -177,7 +178,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
 
     // The dev server re-boots in the switched-in scratch (the restart path follows
     // the store-derived active starter/root, ADR-0165 §4 — not a frozen preset).
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page);
   });
 });
 
@@ -216,7 +217,7 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     const alphaMark = `ALPHA-${tag}`;
     const betaMark = `BETA-${tag}`;
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });

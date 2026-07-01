@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -62,7 +63,7 @@ test.describe('cross-realm EADDRINUSE between two node realms (ADR-0186)', () =>
     page.on('console', (msg) => {
       if (msg.type() === 'error') console.log('[console.error]', msg.text());
     });
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
