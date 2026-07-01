@@ -47,6 +47,7 @@
   genuinely-absent host member is a loud `NotImplementedError('stream/web.<Name>')`
   at access, never an `undefined`-export lie. Parity-proven (module keys +
   identities) vs real Node.
+- **`NODE_PROCESS_IDENTITY` is now a public export** (package root + `@riftydev/runtime-js/builtins/process-identity` for a side-effect-free page import). The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is exposed so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v` and the terminal welcome banner), instead of a drifting hardcode.
 - **`node:zlib` gzip Transform subset (ADR-0178).** `createGzip()` and
   `new Gzip()` now return a real `Transform` backed by
   `CompressionStream('gzip')`, producing gzip bytes readable by Node's native

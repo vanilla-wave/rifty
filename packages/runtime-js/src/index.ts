@@ -22,6 +22,10 @@ export type {
 export type { TelemetryEntry, TelemetryKind } from './telemetry/divergence-sink.ts';
 export { registerBuiltin, isBuiltinSpecifier, listBuiltins } from './builtins/index.ts';
 export type { BuiltinFactory } from './builtins/index.ts';
+// Single source of truth for `process.version`/identity (owner + spawned child).
+// Exposed so the host (e.g. the playground's `node -v`) reports the SAME version
+// the child's `process.version` does, never a drifting hardcode.
+export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
 export { SyncRpcFsSync, installRemoteSyncFs } from './ipc/sync-rpc-fs.ts';
 export type { SyncCall } from './ipc/sync-rpc-fs.ts';

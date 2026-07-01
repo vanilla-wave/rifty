@@ -51,6 +51,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
+import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -77,6 +78,7 @@ import { type StarterGroup, seedFilesForStarter, starterById } from './glue/star
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
 import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {
@@ -234,10 +236,30 @@ export function App(props: AppProps) {
   // consistent, never a silent resurrection.
   const pendingOnDiskDeletes = new Set<string>();
 
+  // `?preset=<id>&autorun=1` deep-link (shareable launch URL + the perf harness,
+  // docs/backlog/perf/cold-start-and-install-benchmark): cold-boot straight into a
+  // preset. Validated against the registry — an unknown id silently falls back to
+  // DEFAULT_PRESET. Drives the cold-boot scratch only (a published index wins).
+  const presetDeepLink = parsePresetDeepLink(globalThis.location?.search ?? '');
+  const deepLinkStarterId =
+    presetDeepLink.presetId !== undefined &&
+    PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
+      ? presetDeepLink.presetId
+      : undefined;
+  // A provided-but-unknown `?preset=<id>` (typo / stale share URL) would silently
+  // boot+autorun the DEFAULT preset, looking like it worked. Surface it loudly so
+  // a broken link / a benchmark pointed at the wrong preset is visible.
+  if (presetDeepLink.presetId !== undefined && deepLinkStarterId === undefined) {
+    console.warn(
+      `[rifty] unknown preset "${presetDeepLink.presetId}" in ?preset= deep-link — ignoring it and booting the default preset`,
+    );
+  }
+  const bootStarterId = deepLinkStarterId ?? DEFAULT_PRESET.id;
+
   const store = createAppProjectStore({
     index: projectIndex() ?? {
       activeId: 'scratch',
-      scratch: { starter: DEFAULT_PRESET.id, dirty: false, editedAt: 'no edits yet' },
+      scratch: { starter: bootStarterId, dirty: false, editedAt: 'no edits yet' },
       projects: [],
     },
     storage: storageMode,
@@ -305,7 +327,9 @@ export function App(props: AppProps) {
   async function share(): Promise<void> {
     const url = globalThis.location?.href ?? '';
     const copied = await copyToClipboard(url);
-    if (copied) flashToast(`Link copied — ${globalThis.location?.host ?? url}`, 'success');
+    // The link encodes none of the user's edits (real share-by-link is the M13
+    // item) — the toast must not imply the project travels with it.
+    if (copied) flashToast('Link copied — opens this playground', 'success');
     else flashToast('Could not copy the link to the clipboard', 'error');
   }
 
@@ -1030,6 +1054,11 @@ export function App(props: AppProps) {
       exitCode = await run;
       return exitCode;
     } catch (err) {
+      // A rejected run is a real error (e.g. a tokenizer loud-throw: command
+      // substitution `$(…)`, `${VAR:-x}`). Surface the directed diagnostic in the
+      // terminal, not just the console — a silent non-zero exit reads as broken.
+      const message = err instanceof Error ? err.message : String(err);
+      terminalWriters.get(id)?.(`${message}\n`, 'stderr');
       console.error(err);
       exitCode = 1;
       return exitCode;
@@ -1779,8 +1808,13 @@ export function App(props: AppProps) {
    * the page holds no authoritative fs). This mirrors the durable owner reset for
    * boot-critical files, but is acked before editor tabs reopen so template files
    * like index.html cannot lag a mid-session starter pick.
+   *
+   * `ifAbsent` (boot/reload re-seed): skip files that already exist so a reload
+   * never clobbers a persisted edit — the owner's own freshRoot-gated
+   * seedStarterBaseline already placed the preset content on a cold boot. A
+   * preset SWITCH keeps overwrite (default) to replace the outgoing preset.
    */
-  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
+  async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -1793,13 +1827,14 @@ export function App(props: AppProps) {
         type: 'write',
         path,
         data: ownerWriteEnc.encode(content),
+        ...(ifAbsent ? { ifAbsent: true } : {}),
       });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  async function seedViteWorkspace(preset: Preset): Promise<void> {
-    await seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset, ifAbsent = false): Promise<void> {
+    await seedWorkspaceOwner(preset, ifAbsent);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -1938,7 +1973,7 @@ export function App(props: AppProps) {
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
     devServerBootSessionId = targetSessionId;
-    manager.clear(targetSessionId); // fresh console for the switched-in project
+    manager.freshConsole(targetSessionId, terminalWelcomeBanner); // fresh console + greeting
     void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
     return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
   }
@@ -1959,7 +1994,13 @@ export function App(props: AppProps) {
     setTsProjectRevision((revision) => revision + 1);
   }
 
-  async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
+  async function runVitePreset(
+    preset: Preset,
+    tsGate?: TsPresetTransitionGate,
+    // Boot/reload re-seed: don't clobber a persisted edit (owner already seeded a
+    // cold boot). A preset SWITCH leaves this false so the new preset overwrites.
+    seedIfAbsent = false,
+  ): Promise<void> {
     try {
       setPresetTransitioning(true);
       setActivePreset(preset.id);
@@ -1984,7 +2025,7 @@ export function App(props: AppProps) {
       // freshly-seeded preset entry the dev server runs (replaces the old
       // discardPendingProgramWrite guard).
       await flushPendingEditorWrites();
-      await seedViteWorkspace(preset);
+      await seedViteWorkspace(preset, seedIfAbsent);
       await waitForActiveSnapshotFrame();
       resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
@@ -2009,7 +2050,7 @@ export function App(props: AppProps) {
       if (!session) return;
       session = await ensureReservedDevServerSession(session);
       devServerSessionId = session.id;
-      manager.clear(session.id); // fresh console for the switched-in project
+      manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
       const generation = ++devServerRestartGeneration;
       devServerBootSessionId = session.id;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
@@ -2116,14 +2157,22 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the owner workspace (idempotent). The default README is seeded
-    // owner-side in `seedProject` (single store owner — no page store to write).
-    void seedViteWorkspace(DEFAULT_PRESET).catch(() => {
+    // Seed the owner workspace for the cold-boot preset — the deep-link's (if any)
+    // or DEFAULT. `ifAbsent` so a RELOAD never clobbers a persisted edit (the owner
+    // freshRoot-seeds the preset content on a genuine cold boot); the default
+    // README is seeded owner-side in `seedProject` (single store owner).
+    const bootPreset = presetForId(bootStarterId);
+    void seedViteWorkspace(bootPreset, true).catch(() => {
       /* best-effort seeding */
     });
-    initialRunTimer = setTimeout(() => {
-      void queuePresetTransition(() => runVitePreset(DEFAULT_PRESET));
-    }, 0);
+    // Default boots + runs; a deep-link preset runs only with autorun=1 (else it is
+    // seeded + active and the user runs it). The perf harness uses autorun=1.
+    // `seedIfAbsent=true`: this is a boot/reload run, not a preset switch.
+    if (deepLinkStarterId === undefined || presetDeepLink.autorun) {
+      initialRunTimer = setTimeout(() => {
+        void queuePresetTransition(() => runVitePreset(bootPreset, undefined, true));
+      }, 0);
+    }
   });
 
   onCleanup(() => {
@@ -2753,6 +2802,25 @@ export function App(props: AppProps) {
         togglePalette();
         return;
       }
+      // Cmd/Ctrl+S: kill the browser "Save page" dialog; flush the debounced
+      // editor writes and pulse a transient "Saved" ack (edits already persist).
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 's' || e.code === 'KeyS')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void editorApi?.flushPendingWrites();
+        flashToast('Saved', 'success');
+        return;
+      }
+      // Cmd/Ctrl+W: close the ACTIVE editor tab, not the browser tab. With no
+      // closable editor tab the browser default is left alone (beforeunload then
+      // guards an in-memory dirty session).
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.code === 'KeyW')) {
+        if (editorApi?.closeActiveTab()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       // Escape closes the topmost project overlay (ADR-0165 §9 a11y): a project
       // dialog first (drop any stashed Save-then pending), else the launcher modal.
       // The command palette owns its own Escape, so leave it alone.
@@ -2769,6 +2837,18 @@ export function App(props: AppProps) {
     };
     globalThis.window?.addEventListener('keydown', onKey, true);
     onCleanup(() => globalThis.window?.removeEventListener('keydown', onKey, true));
+
+    // Guard a reflexive Cmd+R / tab close from silently nuking in-memory work:
+    // prompt ONLY when storage is memory-backed (no reload persistence) AND there
+    // are unsaved/just-debounced edits. OPFS persists, so it never prompts.
+    const onBeforeUnload = (e: BeforeUnloadEvent): void => {
+      if (storageMode === 'memory' && store.dirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    globalThis.window?.addEventListener('beforeunload', onBeforeUnload);
+    onCleanup(() => globalThis.window?.removeEventListener('beforeunload', onBeforeUnload));
   });
 
   const livePillLabel = (): string =>
@@ -3071,6 +3151,13 @@ export function App(props: AppProps) {
           activeName={activeName()}
           activeStarter={activeGlyph().label}
           dirty={store.dirty()}
+          onExport={() => void downloadWorkspaceArchive()}
+          exportDisabled={workspaceArchiveBlocked()}
+          exportTitle={
+            workspaceArchiveBlocked()
+              ? 'Stop the dev server to archive the editable workspace'
+              : 'Download the editable workspace as a .json archive'
+          }
           gitBranch={activeGitScm().branch}
         />
       </Show>

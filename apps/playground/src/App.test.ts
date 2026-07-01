@@ -55,7 +55,7 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('const vfs = syncMirror()');
     expect(source).not.toContain('writeText(vfs');
     expect(source).not.toContain("from '@riftydev/vfs/internal'");
-    expect(source).toContain('seedWorkspaceOwner(preset)');
+    expect(source).toContain('seedWorkspaceOwner(preset, ifAbsent)');
   });
 
   it('follows the active preset template instead of hardcoding the default', () => {
@@ -108,9 +108,11 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
     expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
     expect(source).toContain('if (path === rootPackageJsonPath) continue;');
-    expect(source).toContain('async function seedWorkspaceOwner(preset: Preset): Promise<void>');
+    expect(source).toContain(
+      'async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void>',
+    );
     expect(source).toMatch(
-      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),\s*\}\);/s,
+      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),[\s\S]*?\}\);/s,
     );
     // initial editor tabs follow preset data under the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
@@ -122,7 +124,7 @@ describe('App terminal startup wiring', () => {
 
   it('opens ordinary initial editor tabs only after acked seed and fresh owner snapshot', () => {
     const runPreset = source.match(
-      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+      /async function runVitePreset\([\s\S]*?\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
     expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
@@ -132,7 +134,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(runPreset).toMatch(
-      /await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
+      /await seedViteWorkspace\(preset, seedIfAbsent\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
     );
     expect(source).not.toContain("createSignal('main.js')");
     expect(source).not.toContain("createSignal('javascript')");
@@ -140,7 +142,7 @@ describe('App terminal startup wiring', () => {
 
   it('flushes pending editor writes before seeding a picked preset (no mid-seed entry clobber)', () => {
     const runPreset = source.match(
-      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+      /async function runVitePreset\([\s\S]*?\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
     // The de-specialized entry rides the ordinary debounced owner-write path; a
@@ -148,7 +150,7 @@ describe('App terminal startup wiring', () => {
     // can't fire mid-seed and overwrite the freshly-seeded preset entry the dev
     // server runs (replaces the old discardPendingProgramWrite guard).
     expect(runPreset).toMatch(
-      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);/,
+      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset, seedIfAbsent\);/,
     );
   });
 
@@ -166,7 +168,7 @@ describe('App terminal startup wiring', () => {
   });
 
   it('stops an active dev server before writing picked starter files', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     expect(runPresetStart).toBeGreaterThan(-1);
@@ -178,9 +180,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('return lifecycleSessionRunning(devServerSessionId);');
     expect(source).toContain('devServerBootSessionId === sessionId');
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('await seedViteWorkspace(preset);'),
+      runPreset.indexOf('await seedViteWorkspace(preset, seedIfAbsent);'),
     );
-    expect(runPreset.indexOf('await seedViteWorkspace(preset);')).toBeLessThan(
+    expect(runPreset.indexOf('await seedViteWorkspace(preset, seedIfAbsent);')).toBeLessThan(
       runPreset.indexOf(
         'await startDevServerSession(restartSessionId, restartGeneration, preset);',
       ),
@@ -193,14 +195,14 @@ describe('App terminal startup wiring', () => {
     );
     expect(source).not.toContain("terminalStatus(devServerSessionId) === 'running' ||");
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('seedViteWorkspace(preset);'),
+      runPreset.indexOf('seedViteWorkspace(preset, seedIfAbsent);'),
     );
     expect(source).not.toContain('await stopRunningTerminalSessions();');
     expect(source).toContain('setPreviewPorts([])');
   });
 
   it('shows a preset-switching loader until the picked starter has booted or failed', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const switchToStart = source.indexOf('async function switchTo(nextActiveId: ActiveId)');
@@ -325,13 +327,13 @@ describe('App terminal startup wiring', () => {
 
   it('tags the worker with the project slug and clears the console on a project switch', () => {
     // slug → worker install-stamp reuse key keyed to the ACTIVE ROOT/id (ADR-0165
-    // §4: store.activeId — 'scratch' on boot, a projectId after switch); clear →
-    // fresh console for the switched-in project.
+    // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
+    // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
     expect(source).toContain("setDevServerStatus('stopped')");
     expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
-    expect(source).toContain('manager.clear(targetSessionId)');
-    expect(source).toContain('manager.clear(session.id)');
+    expect(source).toContain('manager.freshConsole(targetSessionId, terminalWelcomeBanner)');
+    expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
   });
 
   it('does not restart Vite inside a hidden stale terminal session', () => {
@@ -410,7 +412,7 @@ describe('App terminal startup wiring', () => {
   });
 
   it('waits for picked starter boot before replaying TS documents', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
@@ -447,7 +449,7 @@ describe('App terminal startup wiring', () => {
       "throw new Error('Unable to reserve an idle terminal for the dev server')",
     );
     expect(runPreset).toMatch(
-      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.clear\(session\.id\);/,
+      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
       /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
@@ -541,6 +543,43 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<PreviewPanel');
     expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
+  });
+});
+
+describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
+  it('wires the status-bar Export button to the real archive download', () => {
+    expect(source).toContain('onExport={() => void downloadWorkspaceArchive()}');
+    expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
+  });
+
+  it('the Share toast no longer implies the user edits travel with the link', () => {
+    // share() copies only location.href (no encoded workspace) — the toast must
+    // not claim it shares the project. Real share-by-link is the M13 item.
+    expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
+    expect(source).not.toContain('Link copied — ${globalThis.location?.host');
+  });
+});
+
+describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-first-poke)', () => {
+  it('Cmd/Ctrl+S kills the save-page dialog, flushes debounced writes + acks', () => {
+    expect(source).toContain("(e.key === 's' || e.code === 'KeyS')");
+    expect(source).toContain('void editorApi?.flushPendingWrites();');
+    expect(source).toContain("flashToast('Saved', 'success');");
+  });
+
+  it('Cmd/Ctrl+W closes the active editor tab, not the browser tab', () => {
+    expect(source).toContain("(e.key === 'w' || e.code === 'KeyW')");
+    expect(source).toContain('if (editorApi?.closeActiveTab()) {');
+  });
+
+  it('beforeunload prompts ONLY in memory mode with dirty edits (OPFS never prompts)', () => {
+    expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
+    expect(source).toContain("e.returnValue = '';");
+    expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
+  });
+
+  it('a rejected terminal run writes its diagnostic to the terminal, not just the console', () => {
+    expect(source).toContain("terminalWriters.get(id)?.(`${message}\\n`, 'stderr')");
   });
 });
 

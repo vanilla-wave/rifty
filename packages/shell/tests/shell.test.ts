@@ -127,6 +127,36 @@ describe('Shell — builtins', () => {
     expect(r.exitCode).toBe(127);
     expect(r.stderr).toBe('zzzzzzzz: command not found\n');
   });
+
+  it('suppresses the fuzzy suggestion for denylisted external tools', async () => {
+    const sh = new Shell();
+    // Each of these is edit-distance ≤ threshold to a builtin (cut→cat, sed→seq,
+    // tree→true, cls→ls) and would otherwise produce a confidently-wrong Run.
+    for (const tool of ['cut', 'sed', 'tree', 'cls']) {
+      const r = await sh.run(tool);
+      expect(r.exitCode).toBe(127);
+      expect(r.stderr).toContain(`${tool}: command not found`);
+      expect(r.stderr).not.toContain('Did you mean');
+    }
+  });
+
+  it('nudges recognized package managers toward npm (not a wrong Run target)', async () => {
+    const sh = new Shell();
+    for (const pm of ['npx', 'yarn', 'pnpm', 'bun']) {
+      const r = await sh.run(`${pm} install left-pad`);
+      expect(r.exitCode).toBe(127);
+      expect(r.stderr).toContain(`${pm}: not available`);
+      expect(r.stderr).toContain('npm');
+      expect(r.stderr).not.toContain('Did you mean');
+      expect(r.stderr).not.toContain('command not found');
+    }
+  });
+
+  it('still suggests a genuine typo of a real builtin (within threshold)', async () => {
+    const sh = new Shell();
+    expect((await sh.run('gerp x')).stderr).toContain("Did you mean 'grep'?");
+    expect((await sh.run('ehco hi')).stderr).toContain("Did you mean 'echo'?");
+  });
 });
 
 describe('Shell — custom command registration', () => {
@@ -216,21 +246,58 @@ describe('tokenize — single vs double quotes', () => {
   });
 });
 
-describe('Shell — input redirect is loud', () => {
-  it('throws NotImplementedError when < appears in a command line', async () => {
-    const sh = new Shell();
-    await expect(sh.run('cat < /etc/hostname')).rejects.toBeInstanceOf(NotImplementedError);
+describe('Shell — command substitution / backticks are loud (not silent literal)', () => {
+  it('unquoted $(...) throws (was a silent literal pass-through, a Fidelity bug)', () => {
+    expect(() => tokenize('echo $(date)')).toThrow(/command substitution/i);
   });
 
-  it('the NotImplementedError carries the documented feature name', async () => {
+  it('double-quoted "$(...)" throws — bash substitutes inside double quotes', () => {
+    expect(() => tokenize('echo "$(date)"')).toThrow(/command substitution/i);
+  });
+
+  it('unquoted backticks throw', () => {
+    expect(() => tokenize('echo `pwd`')).toThrow(/command substitution/i);
+  });
+
+  it('double-quoted backticks throw', () => {
+    expect(() => tokenize('echo "`pwd`"')).toThrow(/command substitution/i);
+  });
+
+  it('arithmetic $((...)) is also loud (caught by the same $( guard)', () => {
+    expect(() => tokenize('echo $((1+1))')).toThrow(/command substitution/i);
+  });
+
+  it('the throw is a NotImplementedError carrying the feature name', () => {
+    expect(() => tokenize('echo $(date)')).toThrow(NotImplementedError);
+    expect(() => tokenize('echo $(date)')).toThrow(
+      expect.objectContaining({ feature: 'shell.command-substitution' }),
+    );
+  });
+
+  it('single-quoted $(...) stays LITERAL — no throw (bash suppresses in single quotes)', () => {
+    expect(vals(tokenize("echo '$(date)'"))).toEqual(['echo', '$(date)']);
+  });
+
+  it('single-quoted backticks stay literal', () => {
+    expect(vals(tokenize("echo '`pwd`'"))).toEqual(['echo', '`pwd`']);
+  });
+
+  it('an escaped \\$( in double quotes is literal (no substitution attempted)', () => {
+    expect(vals(tokenize('echo "\\$(date)"'))).toEqual(['echo', '$(date)']);
+  });
+});
+
+describe('Shell — input redirect', () => {
+  // Foreground `cmd < file` is covered in input-redirect.test.ts.
+  it('input redirect in a BACKGROUND job (`cmd < file &`) stays loud (out of scope)', async () => {
     const sh = new Shell();
-    await expect(sh.run('cat < /etc/hostname')).rejects.toMatchObject({
+    await expect(sh.run('cat < /etc/hostname &')).rejects.toMatchObject({
       feature: 'shell.input-redirect',
     });
   });
 });
 
-describe('Shell — pipe is loud', () => {
+describe('Shell — pipes', () => {
   it('tokenises | as its own token (not glued to an argument)', () => {
     // Without dedicated tokenisation `cat a | grep b` would silently become
     // ['cat', 'a', '|', 'grep', 'b'] only by accident if whitespace is right;
@@ -239,14 +306,11 @@ describe('Shell — pipe is loud', () => {
     expect(vals(tokenize('cat a|grep b'))).toEqual(['cat', 'a', '|', 'grep', 'b']);
   });
 
-  it('throws NotImplementedError when | appears in a command line', async () => {
-    const sh = new Shell();
-    await expect(sh.run('cat a | grep b')).rejects.toBeInstanceOf(NotImplementedError);
-  });
+  // Foreground pipe execution + the filters' stdin draining are covered in pipes.test.ts.
 
-  it('the NotImplementedError for pipe carries the documented feature name', async () => {
+  it('a piped BACKGROUND job (`a | b &`) stays loud (out of scope)', async () => {
     const sh = new Shell();
-    await expect(sh.run('cat a | grep b')).rejects.toMatchObject({
+    await expect(sh.run('echo a | echo b &')).rejects.toMatchObject({
       feature: 'shell.pipe',
     });
   });

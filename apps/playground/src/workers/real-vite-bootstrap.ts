@@ -35,7 +35,7 @@ import {
 } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
+import { NODE_PROCESS_IDENTITY, installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
@@ -97,7 +97,12 @@ import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.t
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
-import { resolveNodeEntry } from './node-entry-resolve.ts';
+import {
+  type NodeInvocation,
+  buildNodeEvalSource,
+  classifyNodeInvocation,
+  resolveNodeEntry,
+} from './node-entry-resolve.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
@@ -887,19 +892,66 @@ async function bootShellOwner(opts: {
     // then run it in a supervised child. A long-running server child registers a
     // preview slot via `onListening`; the slot is dropped on exit. A clean Node
     // diagnostic (exit 1) on a missing/absent entry — never a silent stub.
-    shell.registerCommand('node', (args, ctx) => {
-      const r = resolveNodeEntry(ctx.cwd, args[0]);
-      if (!r.ok) {
-        ctx.stderr.write(r.message);
-        return Promise.resolve(1);
-      }
+    const spawnNodeEntry = (
+      entryPath: string,
+      scriptArgs: readonly string[],
+      ctx: CommandContext,
+    ): Promise<number> => {
       const sid = `node-${++nodeRunSeq}`;
       const previewScope = createPreviewScope();
-      return ownerNodeExecutor(r.path, args.slice(1), withPreviewScope(ctx, previewScope), {
+      return ownerNodeExecutor(entryPath, [...scriptArgs], withPreviewScope(ctx, previewScope), {
         sid,
         onListening: (id, ports, scope) => previews.addNode(id, ports, scope ?? previewScope),
         onExit: (id) => previews.removeBySid(id),
       });
+    };
+    // `-e`/`-p`: write the source to a temp `.cjs` in cwd (so `require` resolves
+    // like real `node -e`, faithful CJS), run it through the loader realm, then
+    // clean up regardless of outcome — never `new Function` (require/import stay real).
+    const runNodeEval = async (
+      inv: Extract<NodeInvocation, { kind: 'eval' }>,
+      ctx: CommandContext,
+    ): Promise<number> => {
+      const fs = syncMirror();
+      const evalPath = normalizePath(`${ctx.cwd}/.rifty-eval-${++nodeRunSeq}.cjs`);
+      fs.writeFileSync(evalPath, enc.encode(buildNodeEvalSource(inv.source, inv.print)));
+      try {
+        return await spawnNodeEntry(evalPath, inv.scriptArgs, ctx);
+      } finally {
+        try {
+          fs.rmSync(evalPath, { force: true });
+        } catch {
+          /* best-effort cleanup of the transient eval file */
+        }
+      }
+    };
+    shell.registerCommand('node', (args, ctx) => {
+      const inv = classifyNodeInvocation(args);
+      switch (inv.kind) {
+        case 'missing': {
+          // Single source of the usage message; bare REPL stays the ADR-0155 ceiling.
+          const r = resolveNodeEntry(ctx.cwd, undefined);
+          if (!r.ok) ctx.stderr.write(r.message);
+          return Promise.resolve(1);
+        }
+        case 'version':
+          ctx.stdout.write(`${NODE_PROCESS_IDENTITY.version}\n`);
+          return Promise.resolve(0);
+        case 'badOption':
+          // Node's shape for an unknown option — never a MODULE_NOT_FOUND on /<flag>.
+          ctx.stderr.write(`node: bad option: ${inv.flag}\n`);
+          return Promise.resolve(9);
+        case 'eval':
+          return runNodeEval(inv, ctx);
+        case 'entry': {
+          const r = resolveNodeEntry(ctx.cwd, inv.arg);
+          if (!r.ok) {
+            ctx.stderr.write(r.message);
+            return Promise.resolve(1);
+          }
+          return spawnNodeEntry(r.path, inv.scriptArgs, ctx);
+        }
+      }
     });
     return shell;
   };

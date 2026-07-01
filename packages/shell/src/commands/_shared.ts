@@ -4,6 +4,7 @@
  */
 
 import { type VfsError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import type { StdinReader } from '../types.ts';
 
 /** Absolutize `p` against `cwd` (no-op if already absolute) and normalize. */
 export function resolve(cwd: string, p: string): string {
@@ -12,6 +13,31 @@ export function resolve(cwd: string, p: string): string {
 
 export const enc = new TextEncoder();
 export const dec = new TextDecoder();
+
+/**
+ * Drain a connected `ctx.stdin` to a single byte buffer (concatenating chunks
+ * until EOF). Returns an empty buffer when no stdin is connected. Used by the
+ * filter builtins (cat/grep/wc/head/tail) to read a pipe RHS or `< file`.
+ */
+export async function readAllStdin(ctx: { stdin?: StdinReader }): Promise<Uint8Array> {
+  if (!ctx.stdin) return new Uint8Array(0);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const chunk = await ctx.stdin.read();
+    if (chunk === null) break;
+    chunks.push(chunk);
+    total += chunk.length;
+  }
+  if (chunks.length === 1) return chunks[0]!;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
 
 /**
  * Map a {@link VfsError} code to the GNU `strerror` text the file builtins print

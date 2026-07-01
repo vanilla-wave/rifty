@@ -6,7 +6,7 @@ created: 2026-06-28
 why: the README opens "Pet project; goal is deep understanding" with no GIF / MIT badge / compat table / vs-WebContainers above the fold — the named star-conversion landing undercuts the launch
 user_story: As a developer landing on the repo from a launch, I want the first screen to show what rifty is (GIF), that it's MIT/open, the honest compat table, and how it differs from WebContainers, but today the README leads with "pet project" and buries the wedge in docs/public/open-runtime-position.md.
 epic: open-auditable-launch
-blocked_by: [playground/launch-deeplink-real-npm, perf/cold-start-and-install-benchmark]
+blocked_by: [playground/launch-deeplink-real-npm]
 sources: [docs/public/open-runtime-position.md, docs/public/compat/http.md, docs/public/compat/incompatible-packages.md, docs/public/trust-model.md, docs/research/open-webcontainers-alternative-2026-06.md]
 code: [README.md]
 ---

@@ -425,6 +425,98 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
+  it('replays a transitive baked-override dep on the fast path without EBROKENLOCK', async () => {
+    // Regression (eddy fast-install, ADR-0182): a shadow-override target
+    // (esbuild → @esbuild/wasi-preview1) is stored in the lockfile under the
+    // TARGET key; the override SOURCE name (`esbuild`, here a transitive dep of
+    // `host`) has no entry of its own. `lockfileSubgraph` drops `esbuild` (no
+    // entry), so `subgraphFreeOfOverrideDivergence` never sees its redirect and
+    // the lockfile fast path is taken — the replay source must ALSO apply the
+    // override, else it looks up bare `esbuild`, misses, and throws
+    // EBROKENLOCK. Exactly the break the live eddy bundle hit on vite → esbuild.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '0.21.5' })]]));
+    db.set(
+      'esbuild',
+      new Map([
+        [
+          '0.21.5',
+          await makeEntry('esbuild', '0.21.5', {}, { scripts: { postinstall: 'node install.js' } }),
+        ],
+      ]),
+    );
+    db.set(
+      '@esbuild/wasi-preview1',
+      new Map([
+        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { host: '1.0.0' } }),
+    );
+
+    // First install: live-resolve redirects esbuild → the pinned
+    // @esbuild/wasi-preview1 and writes the lockfile (no node_modules/esbuild).
+    const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(first.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.28.0');
+    expect(first.lockfile.packages['node_modules/esbuild']).toBeUndefined();
+
+    // Second install: the lockfile fast path replays. Must NOT throw EBROKENLOCK.
+    const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
+      '@esbuild/wasi-preview1@0.28.0',
+      'host@1.0.0',
+    ]);
+  });
+
+  it('throws EBROKENLOCK on replay when an override redirect no longer satisfies the locked version', async () => {
+    // The lockfile fast path replays the override TARGET name, but a stale
+    // target version must not be reused silently: if the override range moved
+    // (foo → bar@1.0.0 becomes foo → bar@2.0.0) while the lockfile still pins
+    // bar@1.0.0, the source name has no entry so `subgraphFreeOfOverrideDivergence`
+    // can't catch it — the replay itself must refuse, loudly, not install stale.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
+    db.set(
+      'bar',
+      new Map([
+        ['1.0.0', await makeEntry('bar', '1.0.0')],
+        ['2.0.0', await makeEntry('bar', '2.0.0')],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const pkg = (barTarget: string) =>
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { host: '1.0.0' },
+        overrides: { foo: barTarget },
+      });
+
+    // First install: override foo → bar@1.0.0 → lockfile pins node_modules/bar@1.0.0.
+    await vfs.writeFile('/proj/package.json', pkg('bar@1.0.0'));
+    const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(first.lockfile.packages['node_modules/bar']?.version).toBe('1.0.0');
+
+    // Second install: the override now wants bar@2.0.0, but the lockfile still
+    // pins bar@1.0.0. The fast-path replay must throw EBROKENLOCK, not silently
+    // reuse 1.0.0.
+    await vfs.writeFile('/proj/package.json', pkg('bar@2.0.0'));
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { code?: string })?.code).toBe('EBROKENLOCK');
+  });
+
   it('throws a deliberate error for malformed root package.json shapes', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });

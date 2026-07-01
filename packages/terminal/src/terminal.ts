@@ -485,6 +485,13 @@ export interface RiftyTerminalOptions {
   ghostSuggestion?: TerminalGhostSuggestionProvider;
   /** Host-owned fish-style abbreviations/snippets. */
   rewriteRules?: readonly TerminalRewriteRule[];
+  /**
+   * Content-agnostic onboarding banner printed ONCE on the first {@link mount},
+   * before the first prompt. The host owns the copy (and any ANSI styling /
+   * `\r\n` line breaks); this package ships none. Not reprinted on `clear`; a
+   * fresh terminal instance reprints it.
+   */
+  banner?: string;
   /** Called when xterm scrolls the viewport. */
   onViewportChange?(line: number): void;
   /** Called when command block markers are added or updated. */
@@ -538,6 +545,8 @@ export interface RiftyTerminalOptions {
 export class RiftyTerminal {
   private readonly term: Terminal;
   private fit: FitAddon | null = null;
+  /** Set once the onboarding banner has printed (first mount); never reprinted. */
+  private bannerPrinted = false;
   private readonly opts: RiftyTerminalOptions;
   private readonly clipboard?: { writeText(text: string): void | Promise<void> };
   private readonly disposables: IDisposable[] = [];
@@ -564,6 +573,7 @@ export class RiftyTerminal {
   private resizeObserver: ResizeObserver | null = null;
   private promptActive = false;
   private busy = false;
+  private disposed = false;
 
   constructor(opts: RiftyTerminalOptions) {
     this.opts = opts;
@@ -643,10 +653,18 @@ export class RiftyTerminal {
       this.resizeObserver = new ResizeObserver(() => this.fit?.fit());
       this.resizeObserver.observe(element);
     }
+    // Onboarding banner once, before the first prompt (host owns the copy). Not
+    // reprinted on `clear`; a fresh instance reprints. writePrompt's leading
+    // `\r\n` separates it from the prompt, so the banner carries no trailing one.
+    if (this.opts.banner && !this.bannerPrinted) {
+      this.term.write(this.opts.banner);
+      this.bannerPrinted = true;
+    }
     this.writePrompt();
   }
 
   dispose(): void {
+    this.disposed = true;
     this.resizeObserver?.disconnect();
     for (const disposable of this.disposables.splice(0)) this.safeDispose(disposable);
     this.safeDispose(this.term);
@@ -723,6 +741,25 @@ export class RiftyTerminal {
    */
   snapshotBuffer(options: TerminalSerializeOptions = { excludeModes: true }): string {
     return this.serializeText(options);
+  }
+
+  /**
+   * {@link snapshotBuffer} that resolves only after xterm has parsed every write
+   * issued so far. `term.write()` parses on a deferred macrotask, so a snapshot
+   * taken synchronously after a *final* write (a dev-server "ready" line with no
+   * trailing output) serializes the pre-parse buffer and misses it — the root of
+   * the CI-only `data-terminal-buffer` marker flake. xterm fires the `write`
+   * callback once its buffer drains past that point, so an empty-write barrier
+   * (FIFO after all pending writes) guarantees the snapshot reflects the last
+   * write. Resolves `''` if the terminal is disposed before/while draining.
+   */
+  snapshotBufferSettled(
+    options: TerminalSerializeOptions = { excludeModes: true },
+  ): Promise<string> {
+    if (this.disposed) return Promise.resolve('');
+    return new Promise((resolve) => {
+      this.term.write('', () => resolve(this.disposed ? '' : this.serializeText(options)));
+    });
   }
 
   getCommandBlocks(): TerminalCommandBlock[] {

@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Oversized request body → `413` JSON, not a torn socket.** A POST over
+  `MAX_BODY_BYTES` now replies with `413 {error:'request body too large'}` and
+  DRAINS (discards) the rest of the upload rather than destroying the socket —
+  the old `req.destroy()` reset the connection (client saw `ECONNRESET`;
+  destroying after the reply instead would race the still-arriving upload →
+  `EPIPE`). Memory stays bounded (nothing is buffered past the cap).
+- **`EDDY_TTL_SECONDS` validated at startup (`parseTtlSeconds`).** A junk value
+  (`abc`, `30s`) now throws loudly instead of coercing to `NaN` and silently
+  killing the mutable-tier cache (every request recomputed). A whitespace-only
+  value (`" "`, `"\t"`) is also refused — `Number(" ")` is `0`, not `NaN`, so it
+  would otherwise slip past the finite/≥0 gate and silently set TTL 0 (dead
+  cache). `0` (always recompute) and unset (default TTL) are unchanged.
+- **Honest caching docs.** `hosting-eddy.md` + the server comment no longer
+  claim a live CDN tier: the `Cache-Control: immutable` header is inert on the
+  POST resolve response (shared caches don't store POST), so today only the
+  in-process LRU is the shared cache. A real CDN tier needs a
+  `GET /bundle/<closure-hash>` route — tracked in
+  `docs/backlog/distribution/eddy-cdn-tier-get-by-hash.md`.
+
 ### Added
 
 - **Eddy fast-install resolver service (`@riftydev/eddy`, ADR-0182).** Runs

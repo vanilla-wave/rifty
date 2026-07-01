@@ -5,11 +5,14 @@
  * (the upstream registry; npmjs default, mirroring the bake-snapshots tool),
  * `EDDY_TTL_SECONDS` (mutable-tier TTL; 0 = always recompute).
  */
+import { parseTtlSeconds } from './env.ts';
 import { createEddyServer } from './server.ts';
 
 const port = Number(process.env.PORT ?? '8788');
 const registryBaseUrl = process.env.REGISTRY_BASE_URL ?? 'https://registry.npmjs.org';
-const ttlSeconds = process.env.EDDY_TTL_SECONDS ? Number(process.env.EDDY_TTL_SECONDS) : undefined;
+// Throws loudly on a junk value (`abc`, `30s`) rather than coercing to NaN and
+// silently disabling the mutable-tier cache.
+const ttlSeconds = parseTtlSeconds(process.env.EDDY_TTL_SECONDS);
 
 const server = createEddyServer({ registryBaseUrl, ttlSeconds });
 server.listen(port, '0.0.0.0').then(() => {

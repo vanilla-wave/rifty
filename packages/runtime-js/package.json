@@ -36,6 +36,7 @@
     "./builtins/child_process": "./src/builtins/child_process.ts",
     "./builtins/node-entry": "./src/builtins/node-entry.ts",
     "./builtins/node-entry-url": "./src/builtins/node-entry-url.ts",
+    "./builtins/process-identity": "./src/builtins/process-identity.ts",
     "./builtins/os": "./src/builtins/os.ts",
     "./builtins/path": "./src/builtins/path.ts",
     "./builtins/perf_hooks": "./src/builtins/perf_hooks.ts",

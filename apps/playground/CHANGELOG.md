@@ -2,8 +2,46 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
+  (shareable launch URLs + the `pnpm bench` perf harness). The id is validated
+  against the registry — an unknown id falls back to the default AND logs a
+  `console.warn` (a typo'd share URL / benchmark preset is no longer silent);
+  `autorun=1` runs the preset's boot lines (a from-scratch preset installs +
+  starts its dev server), else it lands seeded + active. Drives the cold-boot
+  scratch only. Parser unit-tested; an e2e RED-checked against the default boot.
+
 ### Fixed
 
+- **A rejected terminal run now shows its diagnostic in the terminal, not just the console.** A tokenizer loud-throw (command substitution `$(…)`, `${VAR:-x}`) previously rejected the run and only `console.error`-ed — the terminal showed a bare non-zero exit that read as "broken". The interactive run path now writes the error message to the terminal as stderr.
+- **UI affordance honesty — the dead "Export soon" chip works, the Share toast stops over-claiming.** The status-bar `Export` control is now a real button wired to the already-shipped whole-workspace archive download (`downloadWorkspaceArchive`), disabled only while the dev server is running (with a title explaining why) — no more dead `soon` teaser next to a feature that already exists. The Share success toast now reads `Link copied — opens this playground` instead of implying the user's edits travel with the copied URL (it encodes none; real share-by-link is the M13 item). Guards: `StatusBar.test.tsx`, `App.test.ts`.
+
+### Added
+
+- **Session data-loss guards — `beforeunload` + Cmd+W + Cmd+S.** A reflexive Cmd+R / tab close no longer silently nukes an in-memory session: a `beforeunload` prompt fires ONLY when storage is memory-backed AND there are unsaved/just-debounced edits (OPFS-backed sessions never prompt). Cmd/Ctrl+W closes the active editor tab instead of the browser tab (leaving the browser default when no editor tab is closable); Cmd/Ctrl+S suppresses the browser "Save page" dialog, flushes the debounced editor writes, and pulses a transient "Saved" ack. Extends the single capture-phase keydown handler; new `EditorApi.closeActiveTab()` / `flushPendingWrites()`. Guards: `App.test.ts`, `EditorHost.test.ts`, curious-first-15-min e2e.
+- **Terminal welcome banner.** On a cold load the terminal greets with a two-line dim banner before the first prompt: `rifty · node v24.0.0 · npm in your browser` (version from the live runtime identity, so it can't drift or over-claim) and `try:  node -v   ·   npm install chalk   ·   help`. Prints once per terminal session (not after a user `clear`); supplied via the new content-agnostic `RiftyTerminalOptions.banner`. The boot/project-switch fresh-console (`TerminalManager.freshConsole`) re-emits the banner so the auto-booting dev-server terminal greets too (its clear would otherwise erase the mount banner). Guards: `terminal-welcome-banner.test.ts`, `App.test.ts`, curious-first-15-min e2e.
+- **Cold-boot loading skeleton.** `index.html` now ships a static CSS spinner + `Booting rifty…` line inside `#app` (pure inline HTML/CSS in the critical `<style>`, no JS or font dependency — it paints on the first byte), so a slow first load isn't a blank dark screen. `main.tsx` clears it just before mounting the app; a hard boot failure (e.g. the COI assert) still clears the body and paints its own banner, so the skeleton never masks a real failure. Honors `prefers-reduced-motion`.
+- **`npm` tolerates `-D/--save` flags and aliases `test`/`start`/`stop`/`restart`.** `npm install -D <pkg>` / `--save-dev` records under `devDependencies`; `-S/--save` (default), `-E/--save-exact`, and a bare install record under `dependencies` (save flags are otherwise no-ops); `npm i -g`/`--global` gets a directed `global installs aren't supported in the browser sandbox — install into the project instead` (exit 1) instead of the generic M9-scope line; an unknown install flag still loud-rejects. `npm test`/`start`/`stop`/`restart` now alias to `npm run <name>` (a missing script keeps npm's missing-script message, non-zero). The `unknown subcommand` list advertises the new aliases. Guards: `npm-shell-command.test.ts`.
+- **`node` CLI flags — `-v/--version`, `-e/-p`, and `bad option`.** The `node` command now parses a leading flag before resolving an entry path: `node -v`/`--version` prints `v24.0.0` (the live `process.version`) exit 0; `node -e "<src>"`/`--eval` runs the source through the real module-loader realm (a temp `.cjs` in cwd → CJS `require` faithful, never `new Function`); `node -p "<expr>"`/`--print` prints `util.inspect(result)`; any other leading-`-` arg → `node: bad option: <flag>` exit 9. Previously `node --version` and every `node -e …` threw `Cannot find module '/workspace/--version'` because `args[0]` was absolutized blindly. Bare `node` (REPL) stays the documented ceiling. Guards: `node-entry-resolve.test.ts`, curious-first-15-min e2e.
+- **A reload no longer clobbers an edited starter file.** The on-mount preset
+  seed (`runVitePreset`/`seedViteWorkspace` → `seedWorkspaceOwner`) pushed the
+  preset's starter files into the owner with OVERWRITE semantics on every boot,
+  so a reload reverted a user's edit to a seeded file (e.g. `src/main.js`) back
+  to the seeded source — silent data loss. The boot/reload re-seed now uses the
+  new `ifAbsent` write-frame flag (skip-if-exists, matching the owner's
+  `seedProject`); a preset SWITCH keeps overwrite so it still replaces the
+  outgoing preset. RED-checked e2e `starter-file-edit-survives-reload.spec.ts`;
+  cold-boot / switch / reload legs all verified.
+- **The `[vite] dev server ready` marker no longer intermittently vanishes from
+  the terminal (CI flake).** When a starter pick restarts the dev server, the
+  aborted run's late `listen()` IPC could emit the readiness marker AFTER its
+  `pty:exit` — the page dropped the `pty:chunk` for the already-removed run
+  (`runs.get(rid)` was undefined), so the marker (and only it) was lost while the
+  Vite banner + LIVE pill still showed. `pty-client` now routes a chunk that
+  outlives its run to the session's trailing sink, so it still reaches the
+  terminal (matching the passing render where the marker lands just after the
+  prompt). RED-checked unit test in `pty-client.test.ts`.
 - **Launcher groups node-runtime starters under SERVER, not "Vite dev server".**
   The gallery group is now derived from the resolved template runtime
   (`groupForPreset`) instead of the display category, so every `node-server` /
@@ -118,6 +156,27 @@
 
 ### Fixed
 
+- **CI-only "[vite] dev server ready never appears" e2e flake — root cause.**
+  The `data-terminal-buffer` mirror was serialized *synchronously* after writing
+  to xterm, but `xterm.write()` parses on a deferred macrotask. A final
+  dev-server-ready line (no trailing output to trigger a later refresh) was
+  serialized before xterm parsed it, so it never reached the mirror; under CI
+  load xterm's chunked drain lagged the refresh deadline, and being the last
+  write nothing re-triggered the serialize. `TerminalPanel.refreshTerminalBuffer`
+  now serializes via `RiftyTerminal.snapshotBufferSettled` (an xterm empty-write
+  settle barrier), so the mirror always reflects the final write. Deterministic
+  regression test in `@riftydev/terminal`; the native Vite banner appeared while
+  the marker vanished precisely because the banner had trailing output and the
+  marker did not.
+- **Terminal buffer mirror can no longer starve under streaming output.**
+  `data-terminal-buffer` (the serialized mirror the UI + e2e read) was refreshed
+  by a reset-on-every-write 16ms debounce: while a dev server streams output,
+  every chunk cleared the pending timer, so the mirror could freeze on stale
+  content under unbroken output. The new `createBufferRefreshScheduler` coalesces
+  tight bursts but caps the wait (`maxWaitMs`), guaranteeing a refresh even under
+  a continuous stream; the starvation case is a deterministic unit test.
+  (Perf/coalescing guard — the marker flake itself is fixed by the settle barrier
+  above, not the debounce cap.)
 - **Explorer/SCM file actions now use fresh owner state.** Download and compare
   drain pending editor writes before owner reads, new files compare against an
   empty HEAD side, SCM discard asks for confirmation, and owner batch/write

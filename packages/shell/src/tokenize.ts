@@ -21,16 +21,20 @@
  *     these and runs each segment with POSIX joiner semantics (see `shell.ts`).
  *     Inside quotes they stay literal — `echo 'a && b'` is one argument.
  *
- * Deliberately NOT supported (kept loud — caller is expected to error):
+ * Deliberately NOT supported:
  *   glob (`*`, `?`, `[abc]`) is NOT expanded here — the dispatcher expands it
- *   AFTER tokenize, using the `quoted` flag (ADR-0091); command substitution
- *   `$(…)` / `` `…` ``; arithmetic `$((…))`; heredocs.
+ *   AFTER tokenize, using the `quoted` flag (ADR-0091). Command substitution
+ *   `$(…)` / `` `…` `` and arithmetic `$((…))` THROW here (loud — they used to
+ *   pass through as a silent literal, a Fidelity bug); single-quoted forms stay
+ *   literal (bash suppresses substitution in `'…'`); heredocs unsupported.
  *
  * Expansion uses the optional `env`; unknown variables expand to '' (POSIX).
  * Word splitting after expansion is NOT done — `"$x"` and unquoted `$x` both
  * stay one token. Deliberate: bash splits unquoted expansions on `IFS`, but
  * every playground call-site passes already-tokenised values.
  */
+
+import { NotImplementedError } from '@riftydev/io';
 
 /** A word token plus whether any of its characters came from inside quotes. */
 export interface WordToken {
@@ -54,6 +58,20 @@ export function isOp(token: Token): token is OpToken {
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 
+/**
+ * Loud gap for `$(…)` / `$((…))` / `` `…` `` — command substitution and
+ * arithmetic expansion are not evaluated yet. Throws in the contexts where bash
+ * WOULD substitute (unquoted + double-quoted), so the user sees a directed error
+ * instead of the silent literal pass-through this used to do (a Fidelity bug).
+ * Single-quoted forms never reach here, staying literal (bash-faithful).
+ */
+function throwCommandSubstitution(): never {
+  throw new NotImplementedError(
+    'shell.command-substitution',
+    'command substitution `$(…)` / backticks (and `$((…))` arithmetic) are not evaluated yet — run the inner command separately and use its output',
+  );
+}
+
 function expandVarAt(
   line: string,
   i: number,
@@ -65,6 +83,8 @@ function expandVarAt(
   // Caller has verified line[i] === '$'.
   const j = i + 1;
   if (j >= line.length) return { value: '$', next: j };
+  // `$(` → command substitution `$(…)` or arithmetic `$((…))` — loud, not literal.
+  if (line[j] === '(') throwCommandSubstitution();
   if (line[j] === '{') {
     const end = line.indexOf('}', j + 1);
     if (end === -1) {
@@ -171,6 +191,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
             i = next;
             continue;
           }
+          // A bare backtick inside "…" is command substitution (bash) — loud.
+          if (dc === '`') throwCommandSubstitution();
           buf += dc;
           quoted = true;
           i++;
@@ -191,6 +213,9 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         const { value, next } = expandVarAt(line, i, env);
         buf += value;
         i = next;
+      } else if (c === '`') {
+        // Unquoted backtick is command substitution (bash) — loud, not literal.
+        throwCommandSubstitution();
       } else {
         buf += c;
         i++;
