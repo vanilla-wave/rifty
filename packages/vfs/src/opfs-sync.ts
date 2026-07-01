@@ -499,6 +499,10 @@ export class OpfsFsSync implements FsSync {
   }
 
   private enqueuePending(task: () => Promise<void>): void {
+    // FIFO is load-bearing (ADR-0187): the install stamp's "durable stamp
+    // implies durable tree" is delivered by write-through ORDER, not by a
+    // blocking flush. Parallelizing this queue requires per-path ordering +
+    // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
     const p = this.pending.length === 0 ? task() : this.pendingTail.then(task, task);
     this.pendingTail = p.catch(() => {});
     this.trackPending(p);

@@ -1014,3 +1014,37 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
     expect(() => fs.cpSync('/dir', '/dir/sub', { recursive: true })).toThrow(/EINVAL/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Write-through FIFO ordering (ADR-0187): completion order == call order even
+// when a LATER write could finish faster. Load-bearing: the install stamp is
+// enqueued after the tree's writes, so "durable stamp implies durable tree"
+// holds WITHOUT a blocking flush on the install path. Parallelizing this queue
+// requires per-path ordering + an explicit stamp barrier — this pin is the
+// tripwire.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp durability)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('completes write-throughs in call order under inverted per-write latencies', async () => {
+    const completed: string[] = [];
+    const delays: Record<string, number> = { '/a': 30, '/b': 15, '/c': 0 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        completed.push(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a', new Uint8Array([1])); // slowest first…
+    fs.writeFileSync('/b', new Uint8Array([2]));
+    fs.writeFileSync('/c', new Uint8Array([3])); // …fastest last
+    await fs.flush();
+    expect(completed).toEqual(['/a', '/b', '/c']);
+  });
+});
