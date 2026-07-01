@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### CI
 
+- **`chromium-light` e2e serialized in CI to kill the dev-server contention flake.** On the shared CI runner, ≥2 light-lane specs cold-booting a Vite-WASI dev server (owner + dev-server child + Rolldown WASI pthread pool) concurrently starved the owner worker (0 `emitChunk`, ~15s owner-RPC timeout), so the terminal-readiness poll timed out on a random spec subset (also red on `main`). The light lane now runs `--workers=1` **in CI only** — reproduced locally at `--workers=16` (16 fail) vs `--workers=1` (all pass); the heavy lane already proved single-boot-at-a-time is reliable. Local runs keep parallel (beefy machines don't oversubscribe). Re-enabling light parallelism for speed would need the owner to survive concurrent boots. Closes the `light-lane-dev-server-boot-contention-flake` backlog item.
 - **e2e lanes run as parallel matrix jobs, not sequential steps.** `e2e-chromium`
   is now a `matrix: lane: [heavy, light, prod]` (separate runners) instead of one
   job running the three lanes back-to-back. e2e wall-clock becomes `max(lane)`
