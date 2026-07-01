@@ -75,6 +75,27 @@ jobs:
       # (Netlify COI headers) and asserts the owner boots. Catches prod-only
       # regressions the dev-server e2e above can't (green-checks-but-broken-deploy).
       - run: pnpm test:e2e:prod
+      # Cold-start benchmark smoke (docs/backlog/perf/cold-start-and-install-benchmark).
+      # Gates on the harness PRODUCING a well-formed artifact — cold-start measured,
+      # the install number recorded (here `requires proxy`: no VITE_RIFTY_REGISTRY_URL
+      # in CI) — NOT on absolute ms (wall-clock is noisy on shared CI; PB-6). One run
+      # is enough to prove production; the committed launch figure is a local median.
+      - name: Cold-start benchmark smoke
+        run: |
+          set -euo pipefail
+          node tools/perf/bench.mjs --runs 1 --out /tmp/bench-ci.json
+          node -e '
+            const a = JSON.parse(require("node:fs").readFileSync("/tmp/bench-ci.json", "utf8"));
+            const cold = a.metrics.coldStartToInteractiveMs;
+            const install = a.metrics.npmInstallToFirstViteResponseMs;
+            // Sanity, NOT a perf threshold (PB-6): a real measurement is a finite
+            // positive ms — catches a silent 0/NaN, not a slow-but-honest number.
+            if (cold.status !== "measured" || !Number.isFinite(cold.median) || cold.median <= 0) {
+              throw new Error("cold-start not measured: " + JSON.stringify(cold));
+            }
+            if (!install.status) throw new Error("install metric not recorded (must never be silently skipped)");
+            console.log(`bench artifact OK: cold median ${cold.median}ms, install=${install.status}`);
+          '
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

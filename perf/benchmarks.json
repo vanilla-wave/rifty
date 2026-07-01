@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-01T00:24:26.063Z",
+  "runner": {
+    "runs": 5,
+    "browser": "chromium",
+    "headless": true
+  },
+  "metrics": {
+    "coldStartToInteractiveMs": {
+      "status": "measured",
+      "count": 5,
+      "samples": [
+        1625,
+        707,
+        663,
+        666,
+        673
+      ],
+      "median": 673,
+      "displayMs": 700
+    },
+    "npmInstallToFirstViteResponseMs": {
+      "status": "requires proxy"
+    }
+  }
+}
