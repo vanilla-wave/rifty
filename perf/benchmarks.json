@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-01T00:24:26.063Z",
+  "generatedAt": "2026-07-01T10:40:31.413Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,17 +11,44 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        1625,
-        707,
-        663,
-        666,
-        673
+        681,
+        672,
+        670,
+        662,
+        668
       ],
-      "median": 673,
+      "median": 670,
       "displayMs": 700
     },
     "npmInstallToFirstViteResponseMs": {
-      "status": "requires proxy"
+      "status": "measured",
+      "count": 5,
+      "samples": [
+        2266,
+        2517,
+        2267,
+        2518,
+        2518
+      ],
+      "median": 2517,
+      "displayMs": 2600,
+      "registryUrl": "https://registry.rifty.dev/npm-registry",
+      "resolverUrl": "https://eddy.rifty.dev",
+      "baseline": {
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          5049,
+          4284,
+          4028,
+          4523,
+          4284
+        ],
+        "median": 4284,
+        "displayMs": 4300,
+        "label": "standard"
+      },
+      "speedupX": 1.7
     }
   }
 }

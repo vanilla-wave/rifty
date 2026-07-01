@@ -89,5 +89,28 @@ describe('bench aggregate core', () => {
       expect(install.displayMs).toBeGreaterThanOrEqual(1850);
       expect(install.registryUrl).toBe('https://registry.rifty.dev');
     });
+
+    it('nests the standard baseline + a measured speedup when an eddy pass ran', () => {
+      const art = buildArtifact({
+        generatedAt: '2026-07-01T00:00:00.000Z',
+        runs: 5,
+        coldStartSamples: [700, 690],
+        install: {
+          status: 'measured',
+          samples: [2521, 2525, 2523], // eddy = primary/top-level
+          registryUrl: 'https://registry.rifty.dev/npm-registry',
+          resolverUrl: 'https://eddy.rifty.dev',
+          baselineSamples: [4276, 4283, 4533], // standard
+        },
+      });
+      const install = art.metrics.npmInstallToFirstViteResponseMs;
+      expect(install.status).toBe('measured');
+      expect(install.median).toBe(2523); // top-level = eddy (the fast path)
+      expect(install.resolverUrl).toBe('https://eddy.rifty.dev');
+      expect(install.baseline.label).toBe('standard');
+      expect(install.baseline.median).toBe(4283);
+      // speedup = standard median ÷ eddy median = 4283 / 2523 ≈ 1.70
+      expect(install.speedupX).toBe(1.7);
+    });
   });
 });

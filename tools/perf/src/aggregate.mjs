@@ -38,10 +38,17 @@ export function summarize(samples, stepMs = DEFAULT_STEP_MS) {
 
 /**
  * Assemble the committed benchmark artifact. `coldStartSamples` is always
- * measured; `install` is either `{ status: 'measured', samples, registryUrl }`
- * or a non-measured record (`{ status: 'requires proxy' }`). The install number
- * is ALWAYS recorded — measured or an explicit `requires proxy`, never silently
- * skipped (the item's CI contract).
+ * measured; `install` is either a measured record or a non-measured one
+ * (`{ status: 'requires proxy' }` / `{ status: 'unmeasured', note }`). The
+ * install number is ALWAYS recorded — measured or an explicit non-measured
+ * status, never silently skipped (the item's CI contract).
+ *
+ * A measured `install` carries the PRIMARY path's `samples` (standard when no
+ * resolver, eddy when one is configured) + `registryUrl`. When an eddy pass ran
+ * against a standard baseline it also carries `resolverUrl` + `baselineSamples`;
+ * the artifact then nests the standard baseline under `baseline` and records the
+ * measured `speedupX` (baseline median ÷ eddy median). ONE number can't lie
+ * about the other: both sample sets are kept verbatim.
  */
 export function buildArtifact({
   generatedAt,
@@ -72,5 +79,15 @@ function buildInstallMetric(install, stepMs) {
   }
   const summary = summarize(install.samples, stepMs);
   if (install.registryUrl) summary.registryUrl = install.registryUrl;
+  if (install.resolverUrl) summary.resolverUrl = install.resolverUrl;
+  // An eddy pass with a standard baseline: nest the baseline + the measured
+  // speedup (baseline median ÷ eddy median, 2 d.p.). No baseline → standard-only
+  // run, top-level samples ARE the standard number.
+  if (install.baselineSamples && install.baselineSamples.length > 0) {
+    const baseline = summarize(install.baselineSamples, stepMs);
+    baseline.label = 'standard';
+    summary.baseline = baseline;
+    summary.speedupX = Math.round((baseline.median / summary.median) * 100) / 100;
+  }
   return summary;
 }

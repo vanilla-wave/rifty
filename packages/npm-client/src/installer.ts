@@ -630,7 +630,7 @@ function chooseSource(
       subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
       return {
-        source: createLockfileSource(existingLockfile),
+        source: createLockfileSource(existingLockfile, opts),
         dependencies: effectiveDependencies,
         optionalDependencies: effectiveOptionalDependencies,
       };
@@ -962,43 +962,54 @@ async function pinToPackage(
 /**
  * Lockfile-replay source. Walks up the parent's path via `pinnedEntryForParent`
  * and returns the first matching entry. `range` is ignored (the lockfile pins
- * exact versions); `parentName` is ignored (override divergence pre-validated by
- * `subgraphFreeOfOverrideDivergence`). Returns `installPath = <matched lockfile
- * key>` so the walk reproduces the recorded layout regardless of visit order.
+ * exact versions); `name`/`parentName` are override-resolved first so a redirect
+ * target's recorded key is what gets looked up. Returns `installPath = <matched
+ * lockfile key>` so the walk reproduces the recorded layout regardless of visit
+ * order.
  *
  * Throws `EBROKENLOCK` on a missing or malformed (no `resolved`/`integrity`)
  * entry: the contract is "lockfile is authoritative or it's an error".
  * Returning `null` would leave a partial set that reads as network slowness.
  */
-function createLockfileSource(lockfile: Lockfile): ResolutionSource {
+function createLockfileSource(lockfile: Lockfile, opts: InstallOptions): ResolutionSource {
   return {
     async resolve(name, _range, ctx): Promise<ResolvedPin> {
-      const hit = pinnedEntryForParent(lockfile, name, ctx.parentInstallPath);
+      // Apply the same shadow/user override the live-resolve source does
+      // (`createRegistrySource`, ADR-0015 baked table + user `overrides`) BEFORE
+      // the lockfile lookup. The writer stores a redirect under its TARGET key
+      // (`esbuild` → `@esbuild/wasi-preview1`), leaving no `node_modules/esbuild`
+      // entry, so replaying the SOURCE name verbatim would miss the pin and throw
+      // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
+      // esbuild. `subgraphFreeOfOverrideDivergence` cannot pre-empt it: the
+      // source name has no entry, so `lockfileSubgraph` never surfaces it.
+      const override = resolveOverride(name, ctx.parentName, opts.overrides);
+      const effectiveName = override?.name ?? name;
+      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentInstallPath);
       if (!hit) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile coverage gap — '${name}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
+            `EBROKENLOCK: lockfile coverage gap — '${effectiveName}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
           ),
-          { code: 'EBROKENLOCK', packageName: name, reason: 'missing-entry' as const },
+          { code: 'EBROKENLOCK', packageName: effectiveName, reason: 'missing-entry' as const },
         );
       }
       const { entry, installPath } = hit;
       if (!entry.resolved || !entry.integrity) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile entry for '${name}' at '${installPath}' is malformed (missing ${
+            `EBROKENLOCK: lockfile entry for '${effectiveName}' at '${installPath}' is malformed (missing ${
               !entry.resolved ? 'resolved' : 'integrity'
             }). Delete the lockfile and re-install.`,
           ),
           {
             code: 'EBROKENLOCK',
-            packageName: name,
+            packageName: effectiveName,
             reason: 'malformed-entry' as const,
           },
         );
       }
       return {
-        name,
+        name: effectiveName,
         version: entry.version,
         resolved: entry.resolved,
         integrity: entry.integrity,

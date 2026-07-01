@@ -16,12 +16,16 @@
  *   (b) npm-install-to-first-Vite-response ms — ONLY when a registry proxy is
  *       configured (`VITE_RIFTY_REGISTRY_URL`, D-004), pointing at the deployed
  *       `registry.rifty.dev`; otherwise recorded `requires proxy` (never
- *       silently skipped — the item's contract).
+ *       silently skipped — the item's contract). When `VITE_RIFTY_RESOLVER_URL`
+ *       is ALSO set, (b) runs TWO passes on the same port — a standard baseline
+ *       (no resolver) then the eddy fast path — and records the eddy median as
+ *       the headline number with the standard baseline + measured `speedupX`
+ *       nested under it (the resolver is baked per dev server, so it takes two).
  *
  * Usage: node tools/perf/bench.mjs [--runs N] [--out path]
  *   RIFTY_PLAYGROUND_PORT  isolate the dev-server port (default 5390)
  *   VITE_RIFTY_REGISTRY_URL  enables (b), routes install at the live proxy
- *   VITE_RIFTY_RESOLVER_URL  optional eddy fast-path URL
+ *   VITE_RIFTY_RESOLVER_URL  adds the eddy fast-path pass + speedup vs baseline
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -40,6 +44,12 @@ const argVal = (name, def) => {
 };
 
 const RUNS = Math.max(1, Number(argVal('--runs', '5')));
+// One discarded warm-up run per install pass: the FIRST run pays a one-off
+// cost (dev-server module graph, registry-proxy/eddy connection) that a
+// deployed, warm server never re-pays, so it would skew the install median
+// (esp. the standard baseline, whose packument waterfall is latency-bound). The
+// deep-link cold-start (a) is measured on the real runs, unaffected.
+const WARMUP = 1;
 const OUT = resolve(REPO_ROOT, argVal('--out', 'perf/benchmarks.json'));
 const PORT = Number(process.env.RIFTY_PLAYGROUND_PORT ?? '5390');
 const REGISTRY_URL = process.env.VITE_RIFTY_REGISTRY_URL; // D-004 — enables (b)
@@ -100,10 +110,15 @@ async function waitForTerminal(page, regex, timeoutMs) {
   throw new Error(`terminal never matched ${regex} within ${timeoutMs}ms`);
 }
 
-function startDevServer() {
+function startDevServer(withResolver) {
   const env = { ...process.env, RIFTY_PLAYGROUND_PORT: String(PORT) };
   if (REGISTRY_URL) env.VITE_RIFTY_REGISTRY_URL = REGISTRY_URL;
-  if (RESOLVER_URL) env.VITE_RIFTY_RESOLVER_URL = RESOLVER_URL;
+  // The resolver is baked into the dev bundle at transform time, so the eddy vs
+  // standard baseline needs two dev servers. Delete (not just omit) it for the
+  // baseline pass so an inherited value can't leak the eddy path into it.
+  if (withResolver && RESOLVER_URL) env.VITE_RIFTY_RESOLVER_URL = RESOLVER_URL;
+  // biome-ignore lint/performance/noDelete: strip an inherited resolver so the baseline pass's dev server truly lacks the eddy fast path (not a hot loop — a one-shot spawn).
+  else delete env.VITE_RIFTY_RESOLVER_URL;
   return spawn('pnpm', ['dev'], { cwd: REPO_ROOT, env, stdio: 'inherit', detached: true });
 }
 
@@ -150,49 +165,105 @@ async function runOnce(browser, measureInstall) {
   }
 }
 
-async function main() {
-  const measureInstall = Boolean(REGISTRY_URL);
-  console.log(
-    `bench: ${RUNS} run(s), port ${PORT}, install ${measureInstall ? `via ${REGISTRY_URL}` : 'SKIPPED (no VITE_RIFTY_REGISTRY_URL → requires proxy)'}`,
-  );
-  const dev = startDevServer();
-  let browser;
+/**
+ * One measurement pass against a freshly-spawned dev server (its own resolver
+ * bake). Kills the dev-server group on the way out so the strict port is free
+ * for the next pass. Returns the run's cold + install samples.
+ */
+async function runPhase(browser, label, withResolver, measureInstall) {
+  const dev = startDevServer(withResolver);
+  const cold = [];
+  const install = [];
+  let installError = null;
   try {
     await waitForHttp(`${BASE}/`, DEV_READY_TIMEOUT);
-    browser = await chromium.launch({
-      headless: true,
-      args: process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
-    });
-
-    const cold = [];
-    const install = [];
-    let installError = null;
+    // Warm the shared server + proxy once (discarded) so the measured install
+    // samples are steady-state, not first-hit. Only when install is measured —
+    // a cold-only pass (no proxy, e.g. CI smoke) needs no warm-up.
+    if (measureInstall) {
+      for (let w = 0; w < WARMUP; w++) {
+        const wr = await runOnce(browser, measureInstall);
+        console.log(
+          `  [${label}] warmup ${w + 1}/${WARMUP}: cold=${wr.coldMs}ms${wr.installMs != null ? ` install=${wr.installMs}ms` : wr.installError ? ` install=FAILED (${wr.installError})` : ''} (discarded)`,
+        );
+      }
+    }
     for (let i = 0; i < RUNS; i++) {
       const r = await runOnce(browser, measureInstall);
       cold.push(r.coldMs);
       if (r.installMs != null) install.push(r.installMs);
       else if (r.installError) installError = r.installError;
       console.log(
-        `  run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}`,
+        `  [${label}] run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}`,
       );
     }
+  } finally {
+    stopDevServer(dev);
+    await sleep(1_000); // let the strict port free before the next pass spawns
+  }
+  return { cold, install, installError };
+}
 
-    let installMetric;
-    if (!measureInstall) {
-      installMetric = { status: 'requires proxy' };
-    } else if (install.length > 0) {
-      installMetric = { status: 'measured', samples: install, registryUrl: REGISTRY_URL };
-    } else {
-      installMetric = {
-        status: 'unmeasured',
-        note: `proxy ${REGISTRY_URL} configured but install did not reach first Vite response${installError ? `: ${installError}` : ''}`,
+function measuredOrUnmeasured(samples, error) {
+  return samples.length > 0
+    ? { samples }
+    : {
+        note: `proxy ${REGISTRY_URL} configured but install did not reach first Vite response${error ? `: ${error}` : ''}`,
       };
+}
+
+async function main() {
+  const measureInstall = Boolean(REGISTRY_URL);
+  const measureEddy = measureInstall && Boolean(RESOLVER_URL);
+  console.log(
+    `bench: ${RUNS} run(s), port ${PORT}, install ${measureInstall ? `via ${REGISTRY_URL}` : 'SKIPPED (no VITE_RIFTY_REGISTRY_URL → requires proxy)'}${measureEddy ? ` — standard baseline + eddy fast path (${RESOLVER_URL})` : ''}`,
+  );
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
+    });
+
+    let coldSamples;
+    let installMetric;
+    if (measureEddy) {
+      // Two passes on the same port: standard (no resolver) then eddy. Cold-start
+      // is resolver-independent — report the eddy pass's samples.
+      const base = await runPhase(browser, 'standard', false, true);
+      const eddy = await runPhase(browser, 'eddy', true, true);
+      coldSamples = eddy.cold;
+      if (eddy.install.length > 0 && base.install.length > 0) {
+        installMetric = {
+          status: 'measured',
+          samples: eddy.install,
+          baselineSamples: base.install,
+          registryUrl: REGISTRY_URL,
+          resolverUrl: RESOLVER_URL,
+        };
+      } else {
+        installMetric = {
+          status: 'unmeasured',
+          note: `proxy ${REGISTRY_URL} + resolver ${RESOLVER_URL} configured but ${eddy.install.length === 0 ? 'eddy' : 'standard'} install did not reach first Vite response${eddy.installError ? `: ${eddy.installError}` : base.installError ? `: ${base.installError}` : ''}`,
+        };
+      }
+    } else if (measureInstall) {
+      const std = await runPhase(browser, 'standard', false, true);
+      coldSamples = std.cold;
+      const m = measuredOrUnmeasured(std.install, std.installError);
+      installMetric = m.samples
+        ? { status: 'measured', samples: m.samples, registryUrl: REGISTRY_URL }
+        : { status: 'unmeasured', note: m.note };
+    } else {
+      const coldOnly = await runPhase(browser, 'cold', false, false);
+      coldSamples = coldOnly.cold;
+      installMetric = { status: 'requires proxy' };
     }
 
     const artifact = buildArtifact({
       generatedAt: new Date().toISOString(),
       runs: RUNS,
-      coldStartSamples: cold,
+      coldStartSamples: coldSamples,
       install: installMetric,
     });
 
@@ -201,9 +272,8 @@ async function main() {
     console.log(`\nartifact → ${OUT}\n${JSON.stringify(artifact.metrics, null, 2)}`);
   } finally {
     // Bound the browser teardown so a wedged Chromium can't hang the process
-    // (→ CI job timeout); the dev-server group is SIGKILLed regardless.
+    // (→ CI job timeout); each phase SIGKILLs its own dev-server group.
     if (browser) await Promise.race([browser.close().catch(() => {}), sleep(10_000)]);
-    stopDevServer(dev);
   }
 }
 

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lockfile fast-path replays shadow/user overrides (eddy on override packages).** The
+  lockfile-replay source (`createLockfileSource`) now applies `resolveOverride` before the
+  entry lookup, matching the live-resolve source. A redirect target is stored under its own
+  key (`esbuild` → `@esbuild/wasi-preview1`, ADR-0015 baked table), leaving no
+  `node_modules/<source>` entry; `lockfileSubgraph` therefore never surfaces the source name
+  so `subgraphFreeOfOverrideDivergence` cannot pre-empt it, and the replay used to look up the
+  bare source name, miss, and throw `EBROKENLOCK`. This broke eddy's pre-seeded lockfile for
+  ANY override package — including `vite` (→ esbuild), the flagship template: `npm install`
+  aborted, so `&& npm run dev` never booted. Regression test in `installer.test.ts`.
+
 ### Added
 
 - **Opt-in eddy fast install (`InstallOptions.resolverUrl` / `prefer`, ADR-0182).** When
