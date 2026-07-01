@@ -91,11 +91,21 @@ const DEFAULT_PROJECT_VERSION = '0.0.0';
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   return async (args, ctx) => {
     const sub = args[0];
-    // Bare `npm` and the help flags print the command list (one per line) — the
-    // browser subset, honestly scoped (no fake `access`/`publish`/… entries).
-    if (!sub || sub === 'help' || sub === '-h' || sub === '--help') {
+    // Bare `npm` and the help flags print the command list (one per line), but
+    // keep npm's observable usage-exit contract: these forms return 1.
+    if (!sub || sub === '-h' || sub === '--help') {
       printNpmHelp(ctx);
-      return 0;
+      return 1;
+    }
+    if (sub === 'help') {
+      if (args.length === 1) {
+        printNpmHelp(ctx);
+        return 0;
+      }
+      throw new NotImplementedError(
+        'npm.help.topic',
+        `${args.slice(1).join(' ')} help is outside the browser npm subset`,
+      );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
       return runInstall(args.slice(1), ctx, deps);
@@ -127,7 +137,7 @@ const NPM_COMMANDS: ReadonlyArray<{ usage: string; summary: string }> = [
   { usage: 'npm help', summary: 'show this help' },
 ];
 
-/** Print the supported command list, one command per line (stdout, exit 0). */
+/** Print the supported command list, one command per line (stdout). */
 function printNpmHelp(ctx: CommandContext): void {
   const width = Math.max(...NPM_COMMANDS.map((c) => c.usage.length));
   const lines = [

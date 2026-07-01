@@ -794,21 +794,33 @@ describe('npm-shell-command — argv', () => {
 });
 
 describe('npm-shell-command — help', () => {
-  async function help(line: string): Promise<{ exitCode: number; out: string }> {
+  async function help(line: string): Promise<{ exitCode: number; out: string; err: string }> {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
     shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
     const { exitCode, rec } = await runShell(shell, line);
-    return { exitCode, out: rec.stdout.join('') };
+    return { exitCode, out: rec.stdout.join(''), err: rec.stderr.join('') };
   }
 
-  for (const line of ['npm -h', 'npm --help', 'npm help', 'npm']) {
-    it(`'${line}' prints help to stdout with exit 0`, async () => {
+  it('`npm help` prints help to stdout with exit 0', async () => {
+    const { exitCode, out } = await help('npm help');
+    expect(exitCode).toBe(0);
+    expect(out).toContain('Commands:');
+  });
+
+  for (const line of ['npm -h', 'npm --help', 'npm']) {
+    it(`'${line}' prints help to stdout with npm's usage exit 1`, async () => {
       const { exitCode, out } = await help(line);
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(1);
       expect(out).toContain('Commands:');
     });
   }
+
+  it('rejects unsupported help topics instead of silently showing generic help', async () => {
+    const { exitCode, err } = await help('npm help publish');
+    expect(exitCode).toBe(1);
+    expect(err).toContain('Not implemented: npm.help.topic');
+  });
 
   it('lists each supported command on its own line', async () => {
     const { out } = await help('npm help');

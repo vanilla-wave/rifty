@@ -888,11 +888,12 @@ export class RiftyTerminal {
     if (this.opts.allowOsc52Clipboard) {
       for (const write of osc52.writes) this.writeClipboard(write.text);
     }
+    const endedAtLineStart = osc52.text.endsWith('\n');
     const text = osc52.text.replace(/\n/g, '\r\n');
     const rendered = stream === 'stderr' ? `${ANSI_RED}${text}${ANSI_RESET}` : text;
     // Track line-break on the LOGICAL text: the stderr ANSI wrapper ends in a
     // reset sequence, not a newline, so `rendered` would mis-report line start.
-    this.writeOutput(rendered, text.endsWith('\n') || text.endsWith('\r'));
+    this.writeOutput(rendered, endedAtLineStart);
   }
 
   writeLine(data: string, stream: TerminalStream = 'stdout'): void {
@@ -1012,7 +1013,7 @@ export class RiftyTerminal {
     this.term.write(cursorMoveByOffset(buffer, cursorPos, 0, this.term.cols));
     this.term.write(clearWrappedInputRegion(buffer, this.term.cols));
     this.term.write(text);
-    if (!text.endsWith('\n') && !text.endsWith('\r')) this.term.write('\r\n');
+    if (!endedAtLineStart) this.term.write('\r\n');
     this.term.write(`${PROMPT}${this.renderInputBuffer(buffer)}`);
     const tail = buffer.slice(cursorPos);
     if (tail.length > 0) this.term.write(cursorLeft(cellWidth(tail)));
@@ -1620,6 +1621,7 @@ export class RiftyTerminal {
     // echoes the visible representation before delivering SIGINT to the
     // foreground process group.
     this.term.write('^C\r\n');
+    this.atLineStart = true;
     this.buffer = '';
     this.cursorPos = 0;
     this.clearSuggestion();
@@ -1630,6 +1632,7 @@ export class RiftyTerminal {
     this.opts.onSignal?.('SIGINT');
     if (!this.busy) {
       this.term.write(PROMPT);
+      this.atLineStart = false;
       this.promptActive = true;
     }
     // When busy, the host's signal handler exits the running command; the

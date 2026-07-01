@@ -23,8 +23,10 @@
   now re-draws bash-style: the prompt follows the output directly (the output's
   own trailing `\n` already moved to a fresh line), and only prepends a
   separating `\r\n` when the caret is mid-line (empty Enter / non-terminated
-  output). Tracked via `atLineStart` (mirrors the async write queue —
-  `buffer.cursorX` lags xterm's deferred parse).
+  output). Carriage-return-only progress output is not treated as a completed
+  line, and Ctrl+C's `^C\r\n` echo updates the prompt tracker. Tracked via
+  `atLineStart` (mirrors the async write queue — `buffer.cursorX` lags xterm's
+  deferred parse).
 - Terminal font no longer renders "strange" (mis-aligned cells) when the
   self-hosted webfont is still loading at `mount()`. xterm measures the glyph
   cell at open time; with `font-display: swap` it measured the fallback, then
