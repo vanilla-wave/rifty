@@ -1,8 +1,13 @@
 /**
  * Eddy HTTP server (ADR-0182 §1): POST a dep-set, get one `EddyBundleV1` tar
  * stream (or a typed JSON decline). The bundle carries the as-of stamp in
- * `x-eddy-*` headers + `Cache-Control: immutable` so the CDN holds the
- * content-addressed artifact (ADR-0163 streaming-proxy infra precedent).
+ * `x-eddy-*` headers.
+ *
+ * Caching today is the in-process `EddyCache` LRU (`cache.ts`) — bounded,
+ * per-process. The `Cache-Control: immutable` header below sits on the POST
+ * response, which shared caches never store, so a real shared/edge CDN tier is
+ * NOT reachable yet: it needs a cacheable `GET /bundle/<closureHash>` route.
+ * TODO(backlog: distribution/eddy-cdn-tier-get-by-hash).
  */
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http';
 import type { Server } from 'node:http';
@@ -70,7 +75,14 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
   try {
     body = await readBody(req);
   } catch (err) {
-    sendJson(res, 400, { error: err instanceof Error ? err.message : 'failed to read body' });
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    const status = typeof statusCode === 'number' ? statusCode : 400;
+    sendJson(res, status, { error: err instanceof Error ? err.message : 'failed to read body' });
+    // Reply first, THEN stop the still-arriving upload — destroying before the
+    // response flushed is what tore the socket (client saw ECONNRESET). The
+    // JSON body carries a Content-Length, so the client has the full 4xx before
+    // this fires; the destroy just caps the wasted upload bandwidth.
+    res.on('finish', () => req.destroy());
     return;
   }
   let parsed: unknown;
@@ -95,6 +107,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
   }
   res.writeHead(200, {
     'content-type': 'application/x-tar',
+    // Correct once a `GET /bundle/<closureHash>` route exists behind a CDN; on
+    // this POST response it is inert (shared caches don't store POST). Kept so
+    // the future GET route inherits the intended freshness. See the module
+    // header + TODO(backlog: distribution/eddy-cdn-tier-get-by-hash).
     'cache-control': 'public, max-age=31536000, immutable',
     'x-eddy-resolved-at': result.manifest.asOf.resolvedAt,
     'x-eddy-closure-hash': result.manifest.asOf.closureHash,
@@ -132,11 +148,16 @@ function readBody(req: IncomingMessage): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let tooLarge = false;
     req.on('data', (chunk: Buffer) => {
+      if (tooLarge) return; // over the cap: discard the rest, don't buffer (memory-bounded)
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error('request body too large'));
-        req.destroy();
+        tooLarge = true;
+        // Reject WITHOUT destroying the socket — `handle` must still write the
+        // 413. `req.destroy()` here (the old bug) reset the connection before
+        // the response flushed, so the client got ECONNRESET, not a 4xx.
+        reject(Object.assign(new Error('request body too large'), { statusCode: 413 }));
         return;
       }
       chunks.push(chunk);

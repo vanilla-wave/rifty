@@ -40,11 +40,16 @@ Once `@riftydev/eddy` is published to npm, a thin image is just
 | `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (point at your registry proxy to share one trust boundary, ADR-0163) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
 
-Immutable artifacts are served `Cache-Control: public, max-age=31536000,
-immutable` so a CDN holds the content-addressed bundle; the mutable
-`dep-set → closure-hash` lookup honors the TTL. Every bundle carries an as-of
-stamp in `x-eddy-resolved-at` / `x-eddy-closure-hash` /
-`x-eddy-npm-client-version` headers.
+Caching today is eddy's **in-process LRU** (bounded, per-process): a repeat
+identical dep-set is served from memory with no upstream recompute, and the
+mutable `dep-set → closure-hash` lookup honors the TTL. A shared,
+cross-instance/edge **CDN tier is not wired yet** — the `Cache-Control:
+immutable` header sits on the POST resolve response, which CDNs don't cache, and
+there is no `GET /bundle/<closure-hash>` route. That's a follow-up
+(`docs/backlog/distribution/eddy-cdn-tier-get-by-hash.md`) and does not affect
+the cold-install win (that comes from the bundle mechanism, not this cache).
+Every bundle carries an as-of stamp in `x-eddy-resolved-at` /
+`x-eddy-closure-hash` / `x-eddy-npm-client-version` headers.
 
 ## Wire a client to it
 

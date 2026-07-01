@@ -33,6 +33,14 @@
   instead of `… could not be installed: ENATIVEUNSUPPORTED …` — a pack of platform
   bindings no longer looks like a wall of install failures. Genuine optional failures
   (network/missing) keep the louder "could not be installed" wording.
+- **Eddy fast path refuses a non-v3 bundle lockfile.** `tryEddyFastPath` now declines to the
+  standard install if the bundle's `package-lock.json` isn't `lockfileVersion: 3`, BEFORE seeding
+  the cache or writing the lockfile. A divergent resolver returning a v1/v2 shape no longer
+  clobbers the user's lockfile or makes `install()` throw `NotImplementedError` on the post-seed
+  re-read — honoring both the never-throw and lockfile-untouched promises (ADR-0182).
+- **Eddy decline diagnostic names the feature.** A typed `422` decline now warns
+  `resolver declined (<feature>)` instead of the opaque `resolver returned HTTP 422`: the JSON
+  decline body is parsed before the `!response.ok` gate that previously shadowed it.
 
 ### Added
 

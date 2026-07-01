@@ -102,6 +102,24 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
+  it('POST body over the size limit → 4xx JSON, not a torn socket', async () => {
+    // > MAX_BODY_BYTES (1 MB). The server must REPLY (4xx JSON) before it stops
+    // the upload — the pre-fix code called `req.destroy()` mid-stream, tearing
+    // the shared socket before the response flushed, so the client saw
+    // ECONNRESET instead of a readable error (reproduced on Node 24).
+    const huge = 'x'.repeat(1_200_000);
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: { debug: huge } }),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toMatch(/too large/);
+  });
+
   it('POST malformed JSON → 400', async () => {
     const res = await fetch(baseUrl, {
       method: 'POST',

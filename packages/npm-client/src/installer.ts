@@ -527,16 +527,30 @@ async function tryEddyFastPath(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
-    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
+    // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
+    // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
+    // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
       const decline = (await response.json().catch(() => null)) as { feature?: string } | null;
       return declineEddy(`resolver declined (${decline?.feature ?? 'unsupported'})`);
     }
+    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
 
     const bytes = new Uint8Array(await response.arrayBuffer());
     const { lockfileText, tarballs } = unpackEddyBundle(bytes);
     const lockfile = JSON.parse(lockfileText) as Lockfile;
+
+    // Refuse a non-v3 bundle lockfile BEFORE seeding/writing. Honest eddy always
+    // emits v3 (`linker.ts` hardcode), but a divergent/buggy resolver could send
+    // another shape; writing it would clobber the user's lockfile AND make the
+    // post-seed re-read throw `NotImplementedError(v1/v2)` (installer-lockfile-
+    // reader) — breaking BOTH the never-throw and lockfile-untouched promises.
+    if ((lockfile.lockfileVersion as number) !== 3) {
+      return declineEddy(
+        `bundle lockfile is not v3 (got ${JSON.stringify(lockfile.lockfileVersion)})`,
+      );
+    }
 
     // Mirror-grade trust (ADR-0182 §5): verify each tarball's bytes against the
     // integrity the BUNDLE carries (not npm source-of-truth). Non-disableable.
