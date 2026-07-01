@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
+- **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**
   A persisted active project (dirty scratch draft or saved project) reopened on
   reload re-rooted/adopted the owner but never re-issued the co-resident dev-server

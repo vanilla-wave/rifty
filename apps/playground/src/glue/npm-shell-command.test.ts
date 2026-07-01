@@ -19,7 +19,11 @@ import { RegistryClient } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
-import { type InstallFn, createNpmShellCommand } from './npm-shell-command.ts';
+import {
+  type InstallFn,
+  createNpmShellCommand,
+  formatInstallDuration,
+} from './npm-shell-command.ts';
 
 /**
  * Build a successful install stub that records the call and returns the
@@ -778,6 +782,77 @@ describe('npm-shell-command — argv', () => {
     expect(rec.stderr.join('')).toContain("flag '--frozen-lockfile' not supported");
     expect(calls).toEqual([]);
   });
+
+  it('points an unknown subcommand at `npm help`', async () => {
+    const vfs = new MemoryVfs();
+    const shell = new Shell({ cwd: '/' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+
+    const { rec } = await runShell(shell, 'npm publish');
+    expect(rec.stderr.join('')).toContain('npm help');
+  });
+});
+
+describe('npm-shell-command — help', () => {
+  async function help(line: string): Promise<{ exitCode: number; out: string; err: string }> {
+    const vfs = new MemoryVfs();
+    const shell = new Shell({ cwd: '/' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    const { exitCode, rec } = await runShell(shell, line);
+    return { exitCode, out: rec.stdout.join(''), err: rec.stderr.join('') };
+  }
+
+  it('`npm help` prints help to stdout with exit 0', async () => {
+    const { exitCode, out } = await help('npm help');
+    expect(exitCode).toBe(0);
+    expect(out).toContain('Commands:');
+  });
+
+  for (const line of ['npm -h', 'npm --help', 'npm']) {
+    it(`'${line}' prints help to stdout with npm's usage exit 1`, async () => {
+      const { exitCode, out } = await help(line);
+      expect(exitCode).toBe(1);
+      expect(out).toContain('Commands:');
+    });
+  }
+
+  it('rejects unsupported help topics instead of silently showing generic help', async () => {
+    const { exitCode, err } = await help('npm help publish');
+    expect(exitCode).toBe(1);
+    expect(err).toContain('Not implemented: npm.help.topic');
+  });
+
+  it('lists each supported command on its own line', async () => {
+    const { out } = await help('npm help');
+    // One command per line — no comma-joined single line.
+    const lines = out.split('\n');
+    for (const name of ['install', 'run', 'test', 'start', 'stop', 'restart']) {
+      const hit = lines.filter((l) => new RegExp(`\\bnpm ${name}\\b`).test(l));
+      expect(hit).toHaveLength(1);
+    }
+    expect(out).not.toContain('install, i, add, run');
+  });
+
+  it('advertises the install aliases without a separate line per alias', async () => {
+    const { out } = await help('npm help');
+    expect(out).toContain('i, add');
+  });
+});
+
+describe('npm-shell-command — formatInstallDuration', () => {
+  it('renders sub-second durations in milliseconds', () => {
+    expect(formatInstallDuration(0)).toBe('0ms');
+    expect(formatInstallDuration(1)).toBe('1ms');
+    expect(formatInstallDuration(850)).toBe('850ms');
+    expect(formatInstallDuration(999)).toBe('999ms');
+  });
+
+  it('renders one-second-and-over durations in seconds (one decimal)', () => {
+    expect(formatInstallDuration(1000)).toBe('1.0s');
+    expect(formatInstallDuration(1500)).toBe('1.5s');
+    expect(formatInstallDuration(2523)).toBe('2.5s');
+    expect(formatInstallDuration(60000)).toBe('60.0s');
+  });
 });
 
 describe('npm-shell-command — save flags + lifecycle aliases', () => {
@@ -898,12 +973,15 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
     expect(rec.stderr.join('')).toContain("missing script 'test'");
   });
 
-  it('the unknown-subcommand list now advertises the aliases', async () => {
+  it('advertises the lifecycle commands via `npm help`, one per line', async () => {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
     shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
-    const { rec } = await runShell(shell, 'npm publish');
-    expect(rec.stderr.join('')).toContain('test, start, stop, restart');
+    const { rec } = await runShell(shell, 'npm help');
+    const lines = rec.stdout.join('').split('\n');
+    for (const name of ['test', 'start', 'stop', 'restart']) {
+      expect(lines.filter((l) => new RegExp(`\\bnpm ${name}\\b`).test(l))).toHaveLength(1);
+    }
   });
 });
 
