@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Write-through FIFO ordering pinned as a contract (ADR-0187).** `OpfsFsSync`'s
+  `enqueuePending` serialization is now load-bearing for the playground's non-blocking install
+  stamp ("durable stamp implies durable tree" via queue order, not a blocking flush): a
+  RED-on-parallelize test asserts completion order equals call order under inverted per-write
+  latencies, and the site carries the contract comment.
+
 ### Fixed
 
 - **`MemoryBackend.rename` now invalidates cached dirents for both source and

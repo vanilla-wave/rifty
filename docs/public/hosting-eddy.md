@@ -40,16 +40,41 @@ Once `@riftydev/eddy` is published to npm, a thin image is just
 | `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (point at your registry proxy to share one trust boundary, ADR-0163) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
 
-Caching today is eddy's **in-process LRU** (bounded, per-process): a repeat
-identical dep-set is served from memory with no upstream recompute, and the
-mutable `dep-set → closure-hash` lookup honors the TTL. A shared,
-cross-instance/edge **CDN tier is not wired yet** — the `Cache-Control:
-immutable` header sits on the POST resolve response, which CDNs don't cache, and
-there is no `GET /bundle/<closure-hash>` route. That's a follow-up
-(`docs/backlog/distribution/eddy-cdn-tier-get-by-hash.md`) and does not affect
-the cold-install win (that comes from the bundle mechanism, not this cache).
-Every bundle carries an as-of stamp in `x-eddy-resolved-at` /
-`x-eddy-closure-hash` / `x-eddy-npm-client-version` headers.
+Caching is two layers (ADR-0182 §6 + ADR-0186): eddy's **in-process LRU**
+(bounded, per-process; a repeat identical dep-set is served from memory, the
+mutable `dep-set → closure-hash` lookup honors the TTL), plus the
+content-addressed **`GET /bundle/<closure-hash>`** route serving the immutable
+tier with `Cache-Control: public, max-age=31536000, immutable`. Any CDN you
+front eddy with — and every browser's HTTP cache — holds those bytes forever; a
+miss is a 404 `no-store`, and the client falls back to POST, which re-seeds the
+tier (self-healing after a restart or LRU eviction). Every bundle carries an
+as-of stamp in `x-eddy-resolved-at` / `x-eddy-closure-hash` /
+`x-eddy-npm-client-version` headers.
+
+## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
+
+A playground deploy can pin a preset's resolved closure so its install rides
+the cacheable GET (browser HTTP cache / CDN edge) instead of a POST
+(ADR-0186 §5):
+
+1. POST the preset's dep-set once and read the `x-eddy-closure-hash` response
+   header (the smoke command below prints headers with `-D-`).
+2. Set `VITE_RIFTY_EDDY_PINS='{"<preset-slug>":"<closure-hash>"}'` (JSON map) in
+   the playground build env, next to `VITE_RIFTY_RESOLVER_URL`.
+
+Re-pin whenever a template's dependencies change, or on a deliberate cadence to
+pick up new transitive releases. A stale pin never rots into a wrong install —
+the client verifies coverage + integrity and degrades to POST; unpinned presets
+simply keep POSTing.
+
+## Cold-spike knobs
+
+A multi-second first-request spike is scale-to-zero / cache-miss, not the
+steady path: keep at least one instance warm (`min-instances ≥ 1` or an
+always-on VM), set `EDDY_TTL_SECONDS` to your staleness budget so warm hits
+never recompute, and front the GET route with a CDN so instance restarts don't
+lose hot immutable-tier entries. More server CPU only speeds a cache-miss
+`resolveBundle`, never a warm hit.
 
 ## Wire a client to it
 

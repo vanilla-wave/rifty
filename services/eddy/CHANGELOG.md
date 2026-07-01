@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /bundle/<closureHash>` (ADR-0186).** Content-addressed immutable-tier lookup serving
+  the exact bundle bytes with `Cache-Control: public, max-age=31536000, immutable` — the header
+  is now load-bearing (a fronting CDN and the browser HTTP cache hold bundles forever). A miss
+  (LRU eviction, restart) is `404` + `no-store`; the client's POST fallback re-seeds the tier.
+  CORS methods now advertise GET; `access-control-allow-headers: content-type` kept for older
+  preflighting clients.
+
 ### Fixed
 
 - **Oversized request body → `413` JSON, not a torn socket.** A POST over

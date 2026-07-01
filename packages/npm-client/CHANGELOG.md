@@ -17,6 +17,29 @@
   ADR-0051)` and `npm: rollup@<v> internals patched from shadow registry`. User `overrides` do
   not print (`resolveOverride` now returns `source: 'user' | 'baked'`). Tests in
   `installer-shadow-shims.test.ts`.
+### Added (eddy wire protocol v1.1, ADR-0186)
+
+- **`InstallOptions.resolverClosureHash` — pinned GET-by-hash.** The fast path first tries the
+  cacheable `GET <resolverUrl>/bundle/<hash>` (browser-HTTP-cache/CDN friendly, preflight-free);
+  any miss/failure falls through to the POST resolve, a POST failure to the standard install.
+  Same non-disableable gates on every path — a stale pin degrades, never mis-installs.
+- **`startEddyPrefetch` + `InstallOptions.resolverPrefetch`.** Start the bundle fetch before
+  `install()` runs (e.g. at owner boot) so the round-trip overlaps boot work. The handle is
+  keyed on the canonical request (`canonicalEddyRequestKey`; `eddyRequestFromPackageJson`
+  mirrors the installer's manifest merge) and consumed at most once — a prefetch for drifted
+  deps is ignored, never trusted.
+- **Streaming bundle unpack (`streamTarEntries`).** The fast path consumes the bundle as a
+  stream: format/v3/coverage gates run on the manifest + lockfile members (a decline cancels
+  the download before tarball bytes transfer); tarballs are integrity-verified and seeded into
+  the content-addressed cache as each arrives (partial seed leaves only verified bytes); the
+  lockfile is still written only after every manifest-named tarball landed. Buffered fallback
+  when `Response.body` is unavailable.
+
+### Performance
+
+- **Eddy POST is CORS-simple.** No `content-type` header (string body → `text/plain`), so a
+  cross-origin browser client skips the OPTIONS preflight — one RTT off the cold install path
+  (ADR-0186 §2). The server always parsed the body unconditionally.
 
 ### Fixed
 

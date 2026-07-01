@@ -30,6 +30,8 @@ Blockers 1 (harness) + 2 (deployed eddy) are now RESOLVED: `pnpm bench` measures
 
 **Still open (blocker 3 only): h3 vs h2 control.** Playwright can't pin the transport; the 1.70x above is whatever Chromium negotiated to `*.rifty.dev` (likely h2). Measuring the h3 delta + the decision rule below remain.
 
+**Folded here (2026-07-01, ex `perf/install-transport-tuning`):** of that item's three levers, the fetch-semaphore raise was DROPPED (measured inert — one coalesced h2 connection per origin) and `<link rel=preconnect>` SHIPPED (ADR-0186: playground boot preconnects the registry + resolver origins, env-config only). h3 — the only remaining transport lever; Caddy serves it natively (`protocols h1 h2 h3`) — lives HERE. Re-baseline with `pnpm bench` before attributing any delta to h3: ADR-0186 (preflight-free POST, pinned GET-by-hash, owner-boot prefetch, streaming unpack) and ADR-0187 (non-blocking stamp) each cut the eddy path's non-transport share after the 1.70x measurement.
+
 ## Open forks (resolve to reach ready)
 
 - h3 control: force (or at least distinguish) an h3 vs h2 negotiation for the eddy bundle POST + the standard tarball phase, so the h2-vs-h3 delta is measurable — the last gap the `pnpm bench` harness (delivered) can't yet cover.

@@ -62,6 +62,20 @@
   providers now classify the broken-workspace-TypeScript reject by the ts-LS
   "has no resolvable compiler entry" message (compiler entry is resolved with
   Node semantics, no longer a `lib/typescript.js` probe).
+### Performance
+
+- **`npm install` returns without draining the OPFS write-through (ADR-0187).** The install
+  stamp (and the snapshot-restore stamp) no longer flush the queue around the stamp write —
+  the write-through FIFO already lands the stamp after every tree write, so "durable stamp
+  implies durable tree" holds while the command skips the ~490ms drain (the dev line starts
+  that much earlier). `NpmShellCommandDeps.flush` / `EnsureProjectDepsOptions.flush` removed;
+  reload-critical drains (dev-ready, eval boundary) unchanged.
+- **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0186).** For the active
+  from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
+  overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes
+  it only on a canonical dep-set match. `VITE_RIFTY_EDDY_PINS` (JSON `preset-slug →
+  closureHash`, env-config, default absent) turns the fetch into a cacheable GET-by-hash.
+  Page boot preconnects the registry + resolver origins (env-config only, D-004).
 
 ### Added
 

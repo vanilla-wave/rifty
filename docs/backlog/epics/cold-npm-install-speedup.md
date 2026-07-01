@@ -5,7 +5,7 @@ title: Cold npm install fast enough to not bounce
 created: 2026-06-28
 value: A first-time visitor running `npm install` on a real project (no lockfile, cold cache) in a browser tab sees it finish fast enough to stay, not bounce.
 user_story: As a developer trying a real project in rifty for the first time, I want a cold `npm install` to finish quickly, but today it is dominated by a serial full-packument metadata waterfall and I wait too long.
-items: [npm-client/abbreviated-packuments, perf/cold-install-metadata-reprofile, npm-client/persisted-packument-store, perf/install-transport-tuning]
+items: [npm-client/abbreviated-packuments, perf/cold-install-metadata-reprofile, npm-client/persisted-packument-store]
 ---
 
 ## Outcome
@@ -21,7 +21,7 @@ A developer opens a from-scratch preset (no lockfile, cold cache), sets a real d
 - `npm-client/abbreviated-packuments` — corgi `Accept` header; cuts per-packument BYTES ~2.5x. NOTE (measured 2026-06-28): the waterfall is latency-bound — abbreviated does NOT reduce wall-time on a normal connection; it helps slow/metered links + JSON parse only. Cheap, but not the wall-time win it was first billed as. (ready)
 - `perf/cold-install-metadata-reprofile` — the decision gate: re-decompose cold-install wall-time into transfer-bytes vs round-trip-count AFTER corgi, on the `pnpm bench` harness (delivered). (draft)
 - `npm-client/persisted-packument-store` — cross-session/cross-project metadata reuse for the "new project, same deps, no lockfile" case. (draft)
-- `perf/install-transport-tuning` — transport hygiene (HTTP/3, preconnect); ride-along, gated on the re-profile. NOTE (measured 2026-06-28): raising the fetch semaphore is INERT in-browser (one coalesced h2 connection per origin); only HTTP/3 is a live lever. (draft)
+- ~~`perf/install-transport-tuning`~~ — CLOSED 2026-07-01: preconnect SHIPPED (ADR-0186, boot preconnects registry + resolver origins), fetch-semaphore raise DROPPED (measured inert — one coalesced h2 connection per origin), the h3 lever folded into `perf/eddy-http3-cold-validation`.
 
 The structural cold-install win — collapsing both latency-bound waterfalls into one server-resolved bundled fetch (~6x) — moved to its own epic `fast-install-resolver` (eddy, ADR-0182), which superseded this epic's former `server-side-closure-resolver` + `bundled-popular-subgraph-metadata` draft items after they were measured + verified. This epic now holds the cheap, always-on, no-infra levers for the standard path.
 
