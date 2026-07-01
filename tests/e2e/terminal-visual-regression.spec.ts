@@ -1,6 +1,6 @@
 import { inflateSync } from 'node:zlib';
 import { type Page, expect, test } from '@playwright/test';
-import { runTerminalLineSettled } from './helpers/playground.ts';
+import { bootShell, runTerminalLineSettled } from './helpers/playground.ts';
 
 async function openShellTerminal(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'New terminal' }).click();
@@ -243,7 +243,7 @@ async function expectNoNewCursorBarBeforePrompt(
 
 test.describe('Terminal visual regressions', () => {
   test('command status never paints over the first text cell', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
 
     await runCommand(page, 'ls');
@@ -254,7 +254,7 @@ test.describe('Terminal visual regressions', () => {
   });
 
   test('typing at the prompt does not flash stale status cells at line start', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
 
     await runCommand(page, 'ls');

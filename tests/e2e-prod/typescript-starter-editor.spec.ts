@@ -1,19 +1,10 @@
 import { type Locator, type Page, expect, test } from '@playwright/test';
-import { terminalBuffer } from '../e2e/helpers/playground.ts';
+import { pickStarter, terminalBuffer } from '../e2e/helpers/playground.ts';
 
 async function pickStarterAndWaitForTemplate(page: Page): Promise<void> {
   const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
   const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click('[data-preset="typescript-ls"]');
-
-  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
-  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await discard.click();
-  }
-
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await pickStarter(page, 'typescript-ls');
   await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
   await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
   await expect(previewBody).toContainText('TypeScript language surface', { timeout: 90_000 });

@@ -1,10 +1,11 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 // Escape a literal command for a RegExp that matches the terminal's `> <line>`
@@ -84,14 +85,12 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // Let the initial dev-server boot storm settle before interacting: clicks/
     // keystrokes during the mount storm land on replaced nodes (a typed line can
     // be lost). Wait for the boot signal first (mirror owner-shell-async-lifecycle).
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 90_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     // Terminal 2 = a plain idle shell on the persistent owner (Terminal 1 auto-
     // boots the dev server). Both sessions share the owner store.
@@ -132,7 +131,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // SW must control the page before /preview/<port>/ can route (mirror fullstack-demo).
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
@@ -141,9 +140,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
 
     // Let the initial dev-server boot storm settle before interacting (a typed
     // line can be lost mid-mount-storm otherwise).
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 90_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     await openShellTerminal(page);
 
@@ -217,7 +214,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(240_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
@@ -226,7 +223,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // The default vite preset boots the co-resident dev server (Terminal 1) on
     // first load (its slot is `npm run dev`). Wait for its boot before adding
     // node servers so the registry already holds the dev slot.
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
 
@@ -297,16 +294,14 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
 
     // Dev server boots in Terminal 1 → preview is on.
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 90_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page, 5174, 90_000);
     const editorArea = page.locator('.rf-editorarea');
     await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 60_000 });
 

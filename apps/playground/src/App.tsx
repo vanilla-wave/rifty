@@ -10,7 +10,15 @@ import {
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { basename, joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import {
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
@@ -36,6 +44,7 @@ import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
+import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
 import {
   degradedBannerVisible,
@@ -52,10 +61,12 @@ import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
 import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
+import { needsProjectChoiceOnBoot } from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
   deleteProjectTree,
+  markScratchDirtyIndex,
   newScratchIndex,
   renameProjectIndex,
   resetProjectIndex,
@@ -83,11 +94,17 @@ import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {
   clearTsLsInitDiagnostics,
+  shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
-import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
+import {
+  type VfsSnapshotEntry,
+  requestVfsSnapshot,
+  subscribeVfsSnapshot,
+} from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
+import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
@@ -162,6 +179,21 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
   };
 }
 
+function createHiddenEmptyWorkspaceOwner(): WorkspaceOwnerHandle {
+  return isSabIpcSupported()
+    ? startWorkspaceOwner({
+        workspaceId: loadWorkspaceId(),
+        root: '/scratch',
+        template: HIDDEN_EMPTY_TEMPLATE,
+        slug: 'scratch',
+        starter: DEFAULT_PRESET.id,
+        setup: 'instant',
+        hiddenEmptyBoot: true,
+        onLog: (line) => console.info(line),
+      })
+    : createUnavailableOwner();
+}
+
 export interface AppProps {
   /**
    * Bundle from `bootstrapPlayground()`: VFS backend descriptor (ADR-0013) plus
@@ -203,6 +235,7 @@ export function App(props: AppProps) {
   // stays below where the owner exists; only this SIGNAL is hoisted so the store
   // can hydrate from it.
   const [projectIndex, setProjectIndex] = createSignal<ProjectIndex | null>(null);
+  const [editorProjectContextReady, setEditorProjectContextReady] = createSignal(false);
 
   // ADR-0165 §57: DIRTY binds to a REAL owner file-write, never a UI counter. The
   // owner handle exposes no write event (writes ORIGINATE on the page through
@@ -224,10 +257,10 @@ export function App(props: AppProps) {
   // launcher, dialogs, and status bar. Hydrated from the owner-published index
   // mirror (`projectIndex()`); `storage` from the real boot backend. The
   // App-level wrapper binds dirty to `fileWriteOwner` (§57) and defers the on-disk
-  // delete to the owner tree (§56). The cold-boot default index models the active
-  // scratch from DEFAULT_PRESET (so the chip/banner/Save work before the owner
-  // publishes); `onDiskDelete` reads `workspaceOwner()` LAZILY at fire-time, so the
-  // store can be created here — before the owner is spawned below — with no TDZ hit.
+  // delete to the owner tree (§56). The cold-boot default index is empty: no
+  // scratch/starter is chosen until the user picks one from the launcher.
+  // `onDiskDelete` reads `workspaceOwner()` LAZILY at fire-time, so the store can
+  // be created here — before the full workspace owner is spawned — with no TDZ hit.
   // §56 durable-delete tracking: ids whose on-disk removal was POSTED but not yet
   // confirmed by an owner re-publish. A delete fired during the owner teardown→
   // respawn gap (switch) reaches no listener and is dropped, so the project would
@@ -237,25 +270,39 @@ export function App(props: AppProps) {
   const pendingOnDiskDeletes = new Set<string>();
 
   // `?preset=<id>&autorun=1` deep-link (shareable launch URL + the perf harness,
-  // docs/backlog/perf/cold-start-and-install-benchmark): cold-boot straight into a
-  // preset. Validated against the registry — an unknown id silently falls back to
-  // DEFAULT_PRESET. Drives the cold-boot scratch only (a published index wins).
+  // docs/backlog/perf/cold-start-and-install-benchmark): a cold tab BYPASSES the
+  // project-first chooser and boots straight into the preset (onMount below).
+  // Validated against the registry — an unknown/absent id → the project-first chooser.
   const presetDeepLink = parsePresetDeepLink(globalThis.location?.search ?? '');
   const deepLinkStarterId =
     presetDeepLink.presetId !== undefined &&
     PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
       ? presetDeepLink.presetId
       : undefined;
-  const bootStarterId = deepLinkStarterId ?? DEFAULT_PRESET.id;
+  // A provided-but-unknown `?preset=<id>` (typo / stale share URL) would silently
+  // fall through to the project-first chooser, looking like the link did nothing.
+  // Surface it loudly so a broken link / a benchmark pointed at the wrong preset
+  // is visible.
+  if (presetDeepLink.presetId !== undefined && deepLinkStarterId === undefined) {
+    console.warn(
+      `[rifty] unknown preset "${presetDeepLink.presetId}" in ?preset= deep-link — ignoring it and showing the project chooser`,
+    );
+  }
 
   const store = createAppProjectStore({
     index: projectIndex() ?? {
       activeId: 'scratch',
-      scratch: { starter: bootStarterId, dirty: false, editedAt: 'no edits yet' },
+      scratch: null,
       projects: [],
     },
     storage: storageMode,
     owner: fileWriteOwner,
+    onScratchDirty: (starter) => {
+      if (saveAffordance(storageMode).ephemeral) return;
+      void markScratchDirtyIndex(workspaceOwner().snapshotPort, starter).catch((err: unknown) =>
+        console.error('[project-index] mark scratch dirty failed', err),
+      );
+    },
     // §56: the page-mirror delete + Undo is REAL (launcher updates, restore works).
     // After the grace window the DURABLE removal of `/projects/<id>` posts an
     // `index-delete` to the owner (the OPFS index is worker-writable-only,
@@ -718,21 +765,12 @@ export function App(props: AppProps) {
     preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
 
   const activeTemplate = (): ProjectSpec => templateForPreset(presetForId(activeStarterId()));
+  let starterGeneratedBaselinePendingForNextOwner = false;
 
-  // Persistent workspace owner (ADR-0146 owner-resident shell + ADR-0148
-  // co-resident dev server): hosts the resident `Shell` per session + cwd/env +
-  // the CO-RESIDENT dev server, runs `npm install` + bin/`execSync` + `vite`
-  // in-realm against ITS `syncMirror()` — the one store the explorer/editor read
-  // over the snapshot/nm bridges. Spawned once at setup, killed on cleanup. Gated
-  // on SAB IPC: in the single-store-owner model there is no PAGE shell fallback,
-  // so a non-isolated host gets a fail-loud stub owner that surfaces the
-  // requirement per command (rather than crashing the app tree at setup).
-  // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
-  // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
-  // effect reads `workspaceOwner()` so the signal swap re-runs them — that swap IS
-  // the re-wire to the new owner.
-  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(
-    isSabIpcSupported()
+  function createActiveWorkspaceOwner(): WorkspaceOwnerHandle {
+    const starterGeneratedBaselinePending = starterGeneratedBaselinePendingForNextOwner;
+    starterGeneratedBaselinePendingForNextOwner = false;
+    return isSabIpcSupported()
       ? startWorkspaceOwner({
           // ADR-0165 §4: root + slug follow the STORE's active id (scratch on boot,
           // a projectId after switch); template/setup follow the active STARTER.
@@ -741,11 +779,23 @@ export function App(props: AppProps) {
           template: activeTemplate(),
           slug: store.activeId(),
           starter: activeStarterId(),
+          starterGeneratedBaselinePending,
           setup: presetForId(activeStarterId()).setup,
           onLog: (line) => console.info(line),
         })
-      : createUnavailableOwner(),
-  );
+      : createUnavailableOwner();
+  }
+
+  // Workspace owner signal (ADR-0146/0148/0165): cold boot starts with a hidden
+  // empty /scratch owner. It gives the IDE a real shell before the launcher
+  // choice, but the worker suppresses starter files + index scratch synthesis so
+  // no visible project is chosen until the user picks one.
+  // ADR-0165 §3: the owner is torn down + respawned on switch (RIFTY_RFV_ROOT is
+  // frozen per spawn). Held in a signal so requestSwitch can swap it; every bridge
+  // effect reads `workspaceOwner()` so the signal swap re-runs them — that swap IS
+  // the re-wire to the new owner.
+  const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();
+  const [ownerHandle, setOwnerHandle] = createSignal<WorkspaceOwnerHandle>(initialOwnerHandle);
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
   const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
   // A rename closes the open tabs under `from`; map each back to its path under
@@ -863,6 +913,7 @@ export function App(props: AppProps) {
         devServerOwnerSessionId = frame.sid ?? null;
       }
       setDevServerStatus(frame.status);
+      if (frame.status !== 'stopped') setWorkspaceOwnerReady(true);
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
       }
@@ -937,6 +988,37 @@ export function App(props: AppProps) {
       env: props.terminalPersistence.initialState.env,
     },
   });
+  let workspaceOwnerStarted = initialOwnerHandle.workspaceId !== 'unavailable';
+  let workspaceOwnerStart: Promise<WorkspaceOwnerHandle> | null = null;
+  const [workspaceOwnerReady, setWorkspaceOwnerReady] = createSignal(false);
+  void initialOwnerHandle.ready.catch((err: unknown) => {
+    console.error('[workspace-owner] hidden empty boot failed', err);
+  });
+
+  async function ensureWorkspaceOwnerStarted(markReady = true): Promise<WorkspaceOwnerHandle> {
+    if (workspaceOwnerStarted) {
+      const current = workspaceOwner();
+      await current.ready;
+      if (markReady) setWorkspaceOwnerReady(true);
+      return current;
+    }
+    if (workspaceOwnerStart) return workspaceOwnerStart;
+    const current = workspaceOwner();
+    workspaceOwnerStart = (async (): Promise<WorkspaceOwnerHandle> => {
+      setWorkspaceOwnerReady(false);
+      current.close();
+      await current.closed;
+      const next = createActiveWorkspaceOwner();
+      setOwnerHandle(next);
+      await manager.rebindOwner(next);
+      workspaceOwnerStarted = true;
+      if (markReady) setWorkspaceOwnerReady(true);
+      return next;
+    })().finally(() => {
+      workspaceOwnerStart = null;
+    });
+    return workspaceOwnerStart;
+  }
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
   // Used by `runTerminalSequence` to echo `$ <line>` for boot sequences (the
@@ -1220,7 +1302,7 @@ export function App(props: AppProps) {
       beforeRequest: waitForTsReady,
     });
 
-    async function initAndReplay(root = activeRoot()): Promise<boolean> {
+    async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
         await waitForTsRequestGate();
         if (disposed) return false;
@@ -1237,7 +1319,13 @@ export function App(props: AppProps) {
       })().catch((err: unknown) => {
         if (!disposed) {
           const message = (err as Error).message;
-          setDiagnostics((prev) => upsertTsLsInitDiagnostic(new Map(prev), root, message));
+          setDiagnostics((prev) => {
+            const next = new Map(prev);
+            if (!shouldPublishTsLsInitDiagnostic(spec, message)) {
+              return clearTsLsInitDiagnostics(next);
+            }
+            return upsertTsLsInitDiagnostic(next, root, message);
+          });
           console.warn('[ts-lsp] init', message);
         }
         return false;
@@ -1642,7 +1730,8 @@ export function App(props: AppProps) {
     createEffect(() => {
       tsProjectRevision();
       const root = activeRoot();
-      void initAndReplay(root);
+      const spec = activeTemplate();
+      void initAndReplay(root, spec);
     });
 
     onCleanup(() => {
@@ -1680,14 +1769,22 @@ export function App(props: AppProps) {
   createEffect(() => {
     const owner = workspaceOwner();
     const mirror = bridgeProjectIndex(owner.snapshotPort);
-    const unsub = mirror.subscribe(setProjectIndex);
+    let sawIndexReply = false;
+    const unsub = mirror.subscribe((idx) => {
+      sawIndexReply = true;
+      setProjectIndex(idx);
+    });
     void mirror.request(); // owner re-publishes (recovers a pre-listener push)
+    const retryRequest = setInterval(() => {
+      if (!sawIndexReply) void mirror.request();
+    }, 250);
     for (const id of pendingOnDiskDeletes) {
       void deleteProjectTree(owner.snapshotPort, id).catch((err: unknown) =>
         console.error('[project-index] retry delete failed', err),
       );
     }
     onCleanup(() => {
+      clearInterval(retryRequest);
       unsub();
       mirror.dispose();
     });
@@ -1700,10 +1797,73 @@ export function App(props: AppProps) {
   createEffect(() => {
     const idx = projectIndex();
     if (!idx) return;
-    store.hydrateIndex(idx);
+    untrack(() => {
+      store.hydrateIndex(idx);
+      const wasReady = editorProjectContextReady();
+      const ready = !needsProjectChoiceOnBoot(idx);
+      // Never let a stale/in-flight scratch:null publish RE-HIDE an editor already
+      // shown: onPickStarter flips editorProjectContextReady(true) + initialBootDecisionMade
+      // optimistically, so once the boot decision is made a needs-choice index is a
+      // lagging owner mirror, not a real return to the chooser — flipping it false here
+      // would unmount/remount EditorHost mid-pick (stale editorApi + TS-LS churn).
+      if (ready || !initialBootDecisionMade) {
+        setEditorProjectContextReady(ready);
+      }
+      if (ready && !wasReady) resetEditorToActiveInitialFiles();
+    });
     for (const id of pendingOnDiskDeletes) {
       if (!idx.projects.some((p) => p.id === id)) pendingOnDiskDeletes.delete(id);
     }
+  });
+
+  function openFirstRunLauncher(): void {
+    autoOpenedFirstRunLauncher = true;
+    store.setLauncherTab('starters');
+    store.openLauncher();
+  }
+
+  function closeLauncher(): void {
+    initialBootDecisionMade = true;
+    autoOpenedFirstRunLauncher = false;
+    store.closeLauncher();
+  }
+
+  // Re-root + RELAUNCH the restored project on reload. The hidden cold-boot owner is
+  // rooted at /scratch, so a persisted active index must first adopt the right root:
+  //  - different root (saved project) → owner respawn at /projects/<id> (switchTo;
+  //    RIFTY_RFV_ROOT is frozen per spawn, ADR-0165 §3), else the IDE boots the empty
+  //    /scratch owner;
+  //  - same root (dirty scratch draft) → the already-started hidden owner adopts it.
+  // THEN relaunch the co-resident dev server (ADR-0148): it is a pty command that died
+  // with the previous page, so the owner re-boot restores the TREE but not the running
+  // server → console + preview stay empty until re-issued (switchTo's restartDevServer
+  // hook is a no-op here — no devServerSessionId yet on a fresh reload). runVitePreset
+  // over the persisted (OPFS-preloaded) tree = setDevConfig + boot, never a re-seed, so
+  // edits survive — the same launch a fresh pick performs (onPickStarter).
+  async function restoreActiveProjectOnReload(idx: ProjectIndex): Promise<void> {
+    if (workspaceOwner().root !== rootForId(idx.activeId)) {
+      if (!(await trackSwitch(switchTo(idx.activeId)))) return;
+    } else {
+      await ensureWorkspaceOwnerStarted(true);
+    }
+    // Serialize through the preset-transition queue like every other launch
+    // (onPickStarter / applyPending) so a concurrent pick/archive can't race the boot.
+    void queuePresetTransition(() => runVitePreset(presetForId(activeStarterId())));
+  }
+
+  createEffect(() => {
+    const idx = projectIndex();
+    if (!idx || initialBootDecisionMade) return;
+    initialBootDecisionMade = true;
+    if (needsProjectChoiceOnBoot(idx)) {
+      openFirstRunLauncher();
+      return;
+    }
+    if (autoOpenedFirstRunLauncher) {
+      autoOpenedFirstRunLauncher = false;
+      store.closeLauncher();
+    }
+    void restoreActiveProjectOnReload(idx);
   });
 
   // Auto-dismiss the store toast (ADR-0165 §9). The page `flashToast` self-clears,
@@ -1740,7 +1900,9 @@ export function App(props: AppProps) {
   const activeGlyph = createMemo(() => glyphFor(activeStarterId()));
   const activeName = createMemo((): string => {
     const id = store.activeId();
-    if (id === 'scratch') return scratchDisplayName(activeGlyph().label);
+    if (id === 'scratch') {
+      return store.scratch() ? scratchDisplayName(activeGlyph().label) : 'Choose project';
+    }
     return store.projects().find((p) => p.id === id)?.name ?? `Missing project (${id})`;
   });
 
@@ -1763,7 +1925,8 @@ export function App(props: AppProps) {
   // OWNER snapshot (the one
   // source of truth) — no `vite`-gated swap. Editor edits write to the owner; the
   // sync snapshot holds project-file content, the async read-port covers the rest.
-  let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
+  let initialBootDecisionMade = false;
+  let autoOpenedFirstRunLauncher = false;
 
   function presetForId(id: string): Preset {
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
@@ -1782,10 +1945,45 @@ export function App(props: AppProps) {
     editorApi?.openInitialFiles(paths);
   }
 
+  function starterSnapshotEntries(preset: Preset, root: string): VfsSnapshotEntry[] {
+    const dirs = new Set<string>();
+    const files = Object.entries(seedFilesForStarter(starterById(preset.id), root)).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    for (const [path] of files) {
+      let slash = path.lastIndexOf('/');
+      while (slash > root.length) {
+        const dir = path.slice(0, slash);
+        dirs.add(dir);
+        slash = dir.lastIndexOf('/');
+      }
+    }
+    return [
+      ...[...dirs].sort().map((path) => ({ path, kind: 'dir' as const, size: 0 })),
+      ...files.map(([path, content]) => {
+        const data = ownerWriteEnc.encode(content);
+        return { path, kind: 'file' as const, size: data.byteLength, content: data };
+      }),
+    ];
+  }
+
+  function paintPickedStarterSnapshot(preset: Preset): void {
+    snapshotFs.update({
+      type: 'snapshot',
+      root: activeRoot(),
+      entries: starterSnapshotEntries(preset, activeRoot()),
+      nodeModulesPresent: false,
+    });
+  }
+
   // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
   async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+    if (!workspaceOwnerStarted) {
+      flashError('Choose a project before editing files');
+      return;
+    }
     await workspaceOwner().writeFrameAcked({
       type: 'write',
       path,
@@ -1800,8 +1998,13 @@ export function App(props: AppProps) {
    * the page holds no authoritative fs). This mirrors the durable owner reset for
    * boot-critical files, but is acked before editor tabs reopen so template files
    * like index.html cannot lag a mid-session starter pick.
+   *
+   * `ifAbsent` (boot/reload re-seed): skip files that already exist so a reload
+   * never clobbers a persisted edit — the owner's own freshRoot-gated
+   * seedStarterBaseline already placed the preset content on a cold boot. A
+   * preset SWITCH keeps overwrite (default) to replace the outgoing preset.
    */
-  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
+  async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -1814,13 +2017,14 @@ export function App(props: AppProps) {
         type: 'write',
         path,
         data: ownerWriteEnc.encode(content),
+        ...(ifAbsent ? { ifAbsent: true } : {}),
       });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  async function seedViteWorkspace(preset: Preset): Promise<void> {
-    await seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset, ifAbsent = false): Promise<void> {
+    await seedWorkspaceOwner(preset, ifAbsent);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -1951,6 +2155,13 @@ export function App(props: AppProps) {
     }
   }
 
+  async function stopDevServerBeforeStarterWrite(): Promise<void> {
+    const sessionId = lifecycleDevServerRunning()
+      ? (devServerSessionId ?? devServerSession().id)
+      : null;
+    await stopDevServerSession(sessionId);
+  }
+
   async function startDevServerSession(
     sessionId: string,
     generation: number,
@@ -1980,10 +2191,23 @@ export function App(props: AppProps) {
     setTsProjectRevision((revision) => revision + 1);
   }
 
+  async function loadPresetUi(preset: Preset): Promise<void> {
+    setActivePreset(preset.id);
+    await machine.loadPreset(preset);
+    paintPickedStarterSnapshot(preset);
+    resetEditorToActiveInitialFiles();
+  }
+
+  async function paintPickedStarterUi(preset: Preset): Promise<void> {
+    await loadPresetUi(preset);
+  }
+
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
       setPresetTransitioning(true);
-      setActivePreset(preset.id);
+      // The caller already painted the starter UI and, for OPFS, established the
+      // owner tree via durableNewScratch(). Re-loading/re-seeding here can erase
+      // edits made during the boot window.
       const restartNeeded = lifecycleDevServerRunning();
       const restartSessionId = restartNeeded
         ? (devServerSessionId ?? devServerSession().id)
@@ -1998,16 +2222,6 @@ export function App(props: AppProps) {
         session = devServerSession();
         devServerSessionId = session.id;
       }
-      await machine.loadPreset(preset);
-      // Drain pending editor writes BEFORE seeding: the de-specialized entry now
-      // rides the ordinary debounced owner-write path, so an un-acked entry edit
-      // must not fire mid-seed (seed + snapshot await span >300ms) and clobber the
-      // freshly-seeded preset entry the dev server runs (replaces the old
-      // discardPendingProgramWrite guard).
-      await flushPendingEditorWrites();
-      await seedViteWorkspace(preset);
-      await waitForActiveSnapshotFrame();
-      resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
       // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
       // must update the runtime before the dev line runs. `slug` keys the install
@@ -2058,6 +2272,13 @@ export function App(props: AppProps) {
       // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
       // already describe the NEXT project. Gate stays false (store decided already).
       // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
+      // Drain debounced editor writes to the CURRENT (still-alive) owner BEFORE teardown:
+      // a 300ms flush firing mid-respawn would otherwise hit the not-started guard, drop
+      // the bytes, yet clear the tab dirty marker (silent data loss). Explorer mutations
+      // already flush-before-mutate; the switch path must too.
+      await flushPendingEditorWrites();
+      workspaceOwnerStarted = false;
+      setWorkspaceOwnerReady(false);
 
       // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
       // A switch otherwise never updates the on-disk `activeId`, so the respawned
@@ -2118,6 +2339,8 @@ export function App(props: AppProps) {
         restartDevServer: async () => {
           setDevServerStatus('stopped');
           await manager.rebindOwner(workspaceOwner());
+          workspaceOwnerStarted = true;
+          setWorkspaceOwnerReady(true);
           if (restartDevServerSessionId) {
             await restartDevServer(restartDevServerSessionId);
           }
@@ -2137,24 +2360,25 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the owner workspace (idempotent) for the cold-boot preset — the
-    // deep-link's (if any) or DEFAULT. The default README is seeded owner-side in
-    // `seedProject` (single store owner — no page store to write).
-    const bootPreset = presetForId(bootStarterId);
-    void seedViteWorkspace(bootPreset).catch(() => {
-      /* best-effort seeding */
-    });
-    // Default boots + runs; a deep-link preset runs only with autorun=1 (else it is
-    // seeded + active and the user runs it). The perf harness uses autorun=1.
-    if (deepLinkStarterId === undefined || presetDeepLink.autorun) {
-      initialRunTimer = setTimeout(() => {
-        void queuePresetTransition(() => runVitePreset(bootPreset));
-      }, 0);
+    // Boot policy (ADR-0165 project-first + main deep-link): a valid `?preset=…`
+    // deep-link (shareable launch + perf harness) BYPASSES the chooser and auto-picks
+    // the preset — the SAME path a manual gallery pick runs (seed → owner →
+    // runVitePreset), so a cold tab boots straight into and runs it. Otherwise
+    // project-first: open the first-run launcher if nothing is chosen within the beat.
+    if (deepLinkStarterId !== undefined) {
+      // Pre-empt the chooser synchronously (onPickStarter only flips this after its
+      // awaits) so a fast owner index publish can't flash the first-run launcher.
+      initialBootDecisionMade = true;
+      void onPickStarter(deepLinkStarterId);
+    } else {
+      const timer = setTimeout(() => {
+        if (!initialBootDecisionMade) openFirstRunLauncher();
+      }, 1000);
+      onCleanup(() => clearTimeout(timer));
     }
   });
 
   onCleanup(() => {
-    if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
     void flushPendingEditorWrites();
     manager.dispose();
@@ -2218,6 +2442,14 @@ export function App(props: AppProps) {
         console.error('[project-switch] switch failed', err);
         const message = err instanceof Error ? err.message : String(err);
         store.setToast({ kind: 'error', text: `Switch failed: ${message}` });
+        // A switch that threw before restartDevServer set workspaceOwnerStarted=true
+        // leaves it parked false → every later editor write blocks on the "choose a
+        // project" guard for the rest of the session. Recover it from the live owner
+        // (the rewired new owner, or the surviving old one) so the IDE isn't wedged.
+        if (!workspaceOwnerStarted && workspaceOwner().isAlive()) {
+          workspaceOwnerStarted = true;
+          setWorkspaceOwnerReady(true);
+        }
         return false;
       })
       .finally(() => {
@@ -2256,9 +2488,12 @@ export function App(props: AppProps) {
   // (after a prior Save the owner index is `scratch:null`). Read the port at fire
   // time; skipped in memory mode (no durable index). The owner is not respawned on
   // a pick — it stays rooted at /scratch and re-seeds the live tree.
-  function durableNewScratch(id: string): void {
+  async function durableNewScratch(
+    id: string,
+    opts: { readonly preserveDirtySameStarter?: boolean } = {},
+  ): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
-      void newScratchIndex(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
+      await newScratchIndex(workspaceOwner().snapshotPort, id, opts).catch((err: unknown) =>
         console.error('[project-index] new scratch failed', err),
       );
     }
@@ -2271,12 +2506,25 @@ export function App(props: AppProps) {
     pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
+    initialBootDecisionMade = true;
     const runPick = async (): Promise<void> => {
       const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
       const tsGate = wasDirty ? undefined : beginTsPresetTransition();
+      if (!wasDirty) setWorkspaceOwnerReady(false);
       store.pickStarter(id);
       if (!wasDirty) {
-        durableNewScratch(id);
+        await paintPickedStarterUi(presetForId(id));
+        setEditorProjectContextReady(true);
+        if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
+        await ensureWorkspaceOwnerStarted(false);
+        await stopDevServerBeforeStarterWrite();
+        await durableNewScratch(id, { preserveDirtySameStarter: true });
+        // Memory mode has no durable index → durableNewScratch is a no-op, so this is
+        // the ONLY owner-tree seed. AWAIT it before runVitePreset boots vite, else the
+        // dev server can start over an un-seeded /scratch (runVitePreset no longer
+        // seeds/waits — that guarantee moved here).
+        if (saveAffordance(storageMode).ephemeral) await seedViteWorkspace(presetForId(id));
+        setWorkspaceOwnerReady(true);
         await runVitePreset(presetForId(id), tsGate);
       }
     };
@@ -2293,12 +2541,13 @@ export function App(props: AppProps) {
     pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveDurable())) return;
-    const before = store.activeId();
     const ownerNeedsSwitch = workspaceOwner().root !== rootForId(id);
     store.requestSwitch(id);
     const prompted = store.dialog()?.kind === 'switch';
-    if (!prompted && (store.activeId() !== before || ownerNeedsSwitch)) {
+    if (!prompted && ownerNeedsSwitch) {
       void trackSwitch(switchTo(id));
+    } else if (!prompted) {
+      void ensureWorkspaceOwnerStarted(true);
     }
   }
 
@@ -2331,6 +2580,41 @@ export function App(props: AppProps) {
       return;
     }
     store.openDialog({ kind: 'delete', id });
+  }
+
+  // The styled reset-sandbox dialog is the confirm gate (ADR-0165 §9); this runs on
+  // its confirm. Closing the owner first releases its OPFS sync-access handles so the
+  // clear does not race an open handle.
+  async function onResetBrowserSandbox(): Promise<void> {
+    store.setDialog(null);
+    try {
+      manager.dispose();
+    } catch {
+      /* reload follows; best-effort cleanup */
+    }
+    try {
+      const owner = workspaceOwner();
+      owner.close();
+      await Promise.race([
+        owner.closed.catch(() => 0),
+        new Promise((resolve) => setTimeout(resolve, 750)),
+      ]);
+    } catch {
+      /* reload follows; best-effort cleanup */
+    }
+    const result = await resetBrowserSandboxState();
+    if (result.failed.length > 0) {
+      // Honest-loud (fidelity): the destructive action did NOT fully clear. Say so
+      // BEFORE reload swallows any toast, so the user knows state survived and can retry
+      // — never a silent success over persisted state the owner will re-hydrate.
+      console.error('[sandbox-reset] partial failure', result.failed);
+      globalThis.alert?.(
+        `Some sandbox state could not be cleared: ${result.failed
+          .map((f) => f.name)
+          .join(', ')}. Reloading anyway — you may need to retry the reset.`,
+      );
+    }
+    globalThis.location?.reload();
   }
 
   // Open the Save-as-project dialog for the active scratch (ProjectsTab save CTA).
@@ -2415,7 +2699,7 @@ export function App(props: AppProps) {
     const pending = pendingAfterSave();
     if (pending) {
       setPendingAfterSave(null);
-      if (await saveWait.durable) applyPendingTarget(pending);
+      if (await saveWait.durable) await applyPendingTarget(pending);
     } else if (!ephemeral) {
       pendingSaveAutoSwitchId = id;
       void switchToSavedProjectAfterSave(id, saveWait.durable);
@@ -2528,13 +2812,34 @@ export function App(props: AppProps) {
   // dirty-guarded `requestSwitch`/`pickStarter`: re-invoking the guarded ones from
   // a still-dirty scratch would re-open the switch dialog and never flip activeId,
   // so the owner would respawn at the new root with the OLD template/starter.
-  function applyPendingTarget(target: { pendingStarter?: string; pendingId?: string }): void {
-    const pendingStarter = target.pendingStarter;
-    if (pendingStarter) {
+  async function applyPendingTarget(target: {
+    pendingStarter?: string;
+    pendingId?: string;
+  }): Promise<void> {
+    if (target.pendingStarter) {
+      const pendingStarter = target.pendingStarter;
       const tsGate = beginTsPresetTransition();
-      store.confirmPickStarter(pendingStarter);
-      durableNewScratch(pendingStarter);
-      void queuePresetTransition(() => runVitePreset(presetForId(pendingStarter), tsGate));
+      const runPendingStarter = async (): Promise<void> => {
+        setWorkspaceOwnerReady(false);
+        store.confirmPickStarter(pendingStarter);
+        await paintPickedStarterUi(presetForId(pendingStarter));
+        setEditorProjectContextReady(true);
+        if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
+        await ensureWorkspaceOwnerStarted(false);
+        await stopDevServerBeforeStarterWrite();
+        await durableNewScratch(pendingStarter);
+        // Memory mode: AWAIT the seed before vite boots (see onPickStarter) — the
+        // only owner-tree seed in the ephemeral path.
+        if (saveAffordance(storageMode).ephemeral)
+          await seedViteWorkspace(presetForId(pendingStarter));
+        setWorkspaceOwnerReady(true);
+        await runVitePreset(presetForId(pendingStarter), tsGate);
+      };
+      if (presetTransitioning()) {
+        await queuePresetTransition(runPendingStarter);
+        return;
+      }
+      void queuePresetTransition(runPendingStarter);
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void trackSwitch(switchTo(target.pendingId));
@@ -2547,7 +2852,7 @@ export function App(props: AppProps) {
   function onSwitchDiscardThen(): void {
     const d = store.dialog();
     store.setDialog(null);
-    if (d?.kind === 'switch') applyPendingTarget(d);
+    if (d?.kind === 'switch') void applyPendingTarget(d);
   }
 
   // Save-then-continue: stash the pending target, then open the Save dialog (which
@@ -2809,7 +3114,7 @@ export function App(props: AppProps) {
           store.setDialog(null);
         } else if (store.launcherOpen()) {
           e.preventDefault();
-          store.closeLauncher();
+          closeLauncher();
         }
       }
     };
@@ -2861,7 +3166,11 @@ export function App(props: AppProps) {
   const isOpfs = storageMode === 'opfs';
 
   return (
-    <div class="rf-app">
+    <div
+      class="rf-app"
+      data-workspace-owner={workspaceOwnerReady() ? 'workspace' : 'chooser'}
+      data-project-index={projectIndex() ? 'ready' : 'loading'}
+    >
       <Show when={props.boot.swError && !swBannerDismissed()}>
         <div class="rf-banner" role="alert" data-banner="sw-error">
           <span class="rf-banner__msg">{swErrorBannerMessage(props.boot.swError ?? '')}</span>
@@ -3008,27 +3317,29 @@ export function App(props: AppProps) {
 
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
-              <EditorHost
-                initialEditorFiles={publishedInitialEditorFiles}
-                root={activeRoot}
-                vfs={snapshotFs}
-                registerApi={(api) => {
-                  editorApi = api;
-                  setEditorApiSig(() => api);
-                }}
-                onActive={(info) => {
-                  setActiveFile(info.label);
-                  setActiveLang(info.language);
-                  setActiveFilePath(info.path);
-                }}
-                onFileWritten={writeWorkspaceFile}
-                readNodeModulesFile={readNodeModulesFile()}
-                readGitOriginalText={readGitOriginalText}
-                gitStatus={gitStatusMap}
-                previewUrl={previewUrl}
-                onOpenPreviewTab={openPreviewTab}
-                onError={flashError}
-              />
+              <Show when={editorProjectContextReady()}>
+                <EditorHost
+                  initialEditorFiles={publishedInitialEditorFiles}
+                  root={activeRoot}
+                  vfs={snapshotFs}
+                  registerApi={(api) => {
+                    editorApi = api;
+                    setEditorApiSig(() => api);
+                  }}
+                  onActive={(info) => {
+                    setActiveFile(info.label);
+                    setActiveLang(info.language);
+                    setActiveFilePath(info.path);
+                  }}
+                  onFileWritten={writeWorkspaceFile}
+                  readNodeModulesFile={readNodeModulesFile()}
+                  readGitOriginalText={readGitOriginalText}
+                  gitStatus={gitStatusMap}
+                  previewUrl={previewUrl}
+                  onOpenPreviewTab={openPreviewTab}
+                  onError={flashError}
+                />
+              </Show>
 
               <Show when={hasPreview()}>
                 <Splitter
@@ -3158,7 +3469,7 @@ export function App(props: AppProps) {
           store.setLauncherTab(tab);
           saveLauncherTab(globalThis.localStorage, tab); // remember for next open (§9)
         }}
-        onClose={() => store.closeLauncher()}
+        onClose={closeLauncher}
         onSearch={(q) => store.setQ(q)}
         onCat={(cat) => store.setCat(cat)}
         onPickStarter={onPickStarter}
@@ -3166,6 +3477,7 @@ export function App(props: AppProps) {
         onSave={openSaveDialog}
         onMenu={(id) => store.setMenuFor(id)}
         onMenuAction={onMenuAction}
+        onResetSandbox={() => store.openDialog({ kind: 'reset-sandbox' })}
       />
 
       <ProjectDialogs
@@ -3185,6 +3497,7 @@ export function App(props: AppProps) {
         onConfirmRename={onConfirmRename}
         onConfirmReset={onConfirmReset}
         onConfirmDelete={() => store.confirmDelete()}
+        onConfirmResetSandbox={() => void onResetBrowserSandbox()}
         onSwitchSaveThen={onSwitchSaveThen}
         onSwitchDiscardThen={onSwitchDiscardThen}
       />

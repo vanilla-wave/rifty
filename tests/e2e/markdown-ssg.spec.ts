@@ -18,7 +18,6 @@ test.describe('Markdown SSG template through the SW preview bridge', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 15_000);
 
     await selectPreset(page, 'markdown-ssg');
 

@@ -27,6 +27,7 @@ export function ProjectsTab(props: {
   onMenu(id: string): void;
   onMenuAction(id: string, action: RowAction): void;
   onNewFromStarter(): void;
+  onResetSandbox(): void;
 }) {
   const scratchActive = (): boolean => props.activeId === 'scratch';
   const storeLabel = (): string => (props.storage === 'opfs' ? 'OPFS' : 'memory');
@@ -57,15 +58,13 @@ export function ProjectsTab(props: {
                   {sc.dirty ? 'edited just now · not yet saved' : 'no edits yet'}
                 </div>
               </div>
-              <Show when={!scratchActive()}>
-                <button
-                  type="button"
-                  class="rf-btn rf-btn--outline"
-                  onClick={() => props.onSwitch('scratch')}
-                >
-                  Switch to
-                </button>
-              </Show>
+              <button
+                type="button"
+                class="rf-btn rf-btn--outline"
+                onClick={() => props.onSwitch('scratch')}
+              >
+                {scratchActive() ? 'Open' : 'Switch to'}
+              </button>
               <button
                 type="button"
                 class="rf-btn rf-btn--lime"
@@ -78,6 +77,18 @@ export function ProjectsTab(props: {
           );
         }}
       </Show>
+
+      <div class="rf-projects__toolbar">
+        <button
+          type="button"
+          class="rf-btn rf-btn--danger-outline"
+          data-action="reset-browser-sandbox"
+          title="Delete browser sandbox state and reload"
+          onClick={() => props.onResetSandbox()}
+        >
+          <Icon name="trash-bin" size={13} /> Reset sandbox
+        </button>
+      </div>
 
       <div class="rf-projects__label">SAVED PROJECTS · {props.projects.length}</div>
 

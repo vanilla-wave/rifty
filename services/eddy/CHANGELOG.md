@@ -12,8 +12,10 @@
   `EPIPE`). Memory stays bounded (nothing is buffered past the cap).
 - **`EDDY_TTL_SECONDS` validated at startup (`parseTtlSeconds`).** A junk value
   (`abc`, `30s`) now throws loudly instead of coercing to `NaN` and silently
-  killing the mutable-tier cache (every request recomputed). `0` (always
-  recompute) and unset (default TTL) are unchanged.
+  killing the mutable-tier cache (every request recomputed). A whitespace-only
+  value (`" "`, `"\t"`) is also refused — `Number(" ")` is `0`, not `NaN`, so it
+  would otherwise slip past the finite/≥0 gate and silently set TTL 0 (dead
+  cache). `0` (always recompute) and unset (default TTL) are unchanged.
 - **Honest caching docs.** `hosting-eddy.md` + the server comment no longer
   claim a live CDN tier: the `Cache-Control: immutable` header is inert on the
   POST resolve response (shared caches don't store POST), so today only the

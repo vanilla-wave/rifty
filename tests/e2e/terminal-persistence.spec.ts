@@ -1,5 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import { openShellTerminal, runTerminalLine } from './helpers/playground.ts';
+import { bootShell, openShellTerminal, runTerminalLine } from './helpers/playground.ts';
 
 async function readOpfsJson<T>(page: Page, path: string): Promise<T | null> {
   return page.evaluate(async (target) => {
@@ -20,7 +20,7 @@ async function readOpfsJson<T>(page: Page, path: string): Promise<T | null> {
 
 test.describe('Terminal persistence', () => {
   test('shell-mode command history records submitted input', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
 
     await runTerminalLine(page, 'll ');
@@ -36,7 +36,7 @@ test.describe('Terminal persistence', () => {
   });
 
   test('persists rich command history through OPFS after reload', async ({ page }) => {
-    await page.goto('/');
+    await bootShell(page);
     await openShellTerminal(page);
 
     const marker = `smoke${Date.now().toString(36)}`;

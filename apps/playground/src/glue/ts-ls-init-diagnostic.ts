@@ -1,6 +1,9 @@
 import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
+import type { ProjectSpec } from '../templates/project-spec.ts';
 
 export const TS_LS_INIT_DIAGNOSTIC_SOURCE = 'ts-lsp-init';
+const MISSING_WORKSPACE_TYPESCRIPT_ERROR =
+  'TypeScript is not installed in this project; run npm install -D typescript';
 
 function diagnosticPath(projectRoot: string): string {
   const root = projectRoot.replace(/\/+$/, '') || '/';
@@ -22,6 +25,16 @@ export function upsertTsLsInitDiagnostic(
   };
   next.set(path, [...(next.get(path) ?? []), diagnostic]);
   return next;
+}
+
+function projectSpecDeclaresTypeScript(spec: ProjectSpec): boolean {
+  const devDependencies = spec.devDependencies ?? {};
+  return Object.hasOwn(spec.install, 'typescript') || Object.hasOwn(devDependencies, 'typescript');
+}
+
+export function shouldPublishTsLsInitDiagnostic(spec: ProjectSpec, message: string): boolean {
+  if (!message.includes(MISSING_WORKSPACE_TYPESCRIPT_ERROR)) return true;
+  return projectSpecDeclaresTypeScript(spec);
 }
 
 export function clearTsLsInitDiagnostics(

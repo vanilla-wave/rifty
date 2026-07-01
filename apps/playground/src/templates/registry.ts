@@ -9,6 +9,7 @@
 import { NotImplementedError } from '@riftydev/vfs';
 import { CLI_REPORT_TEMPLATE } from './cli-report.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
+import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
 import { HONO_API_TEMPLATE } from './hono-api.ts';
 import { KOA_API_TEMPLATE } from './koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
@@ -21,6 +22,7 @@ import { VITE8_TEMPLATE } from './vite8.ts';
 export const DEFAULT_TEMPLATE_ID = 'vite';
 
 const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>([
+  [HIDDEN_EMPTY_TEMPLATE.id, HIDDEN_EMPTY_TEMPLATE],
   [VITE_TEMPLATE.id, VITE_TEMPLATE],
   [VITE8_TEMPLATE.id, VITE8_TEMPLATE],
   [TYPESCRIPT_TEMPLATE.id, TYPESCRIPT_TEMPLATE],

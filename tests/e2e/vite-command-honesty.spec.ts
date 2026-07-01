@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   runTerminalLineSettled,
@@ -15,11 +17,11 @@ test.describe('honest vite command dispatch', () => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
     test.setTimeout(240_000);
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 90_000);
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'which vite');

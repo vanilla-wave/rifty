@@ -114,6 +114,46 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain('relayTsLspRequest(message);');
   });
 
+  it('restores instant dependencies without wiping user files in the project root', () => {
+    const restoreStart = source.indexOf('async function restoreInstantDeps(');
+    const restoreEnd = source.indexOf('function seedTemplateNodeModulesFiles', restoreStart);
+    const restore = source.slice(restoreStart, restoreEnd);
+    expect(restoreStart).toBeGreaterThan(-1);
+    expect(restoreEnd).toBeGreaterThan(restoreStart);
+    expect(restore).not.toContain('clearProjectTree(fs, cfg.root)');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/node_modules`');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/package-lock.json`');
+    expect(restore).toContain('fs.rmSync(`${cfg.root}/package.json`');
+  });
+
+  it('absorbs generated baseline files immediately after dev-config instant restore', () => {
+    const prepareStart = source.indexOf('async function prepareActiveDevConfigDeps()');
+    const prepareEnd = source.indexOf('// Co-resident dev server', prepareStart);
+    const prepare = source.slice(prepareStart, prepareEnd);
+    expect(prepareStart).toBeGreaterThan(-1);
+    expect(prepareEnd).toBeGreaterThan(prepareStart);
+    expect(prepare.indexOf('await restoreInstantDeps(devCfg, devSpec.id, devSlug);')).toBeLessThan(
+      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
+    );
+    expect(
+      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
+    ).toBeLessThan(prepare.indexOf('seedTemplateNodeModulesFiles(devCfg);'));
+  });
+
+  it('supports hidden empty boot without synthesizing a chosen scratch starter', () => {
+    expect(source).toContain("const hiddenEmptyBoot = env.RIFTY_RFV_HIDDEN_EMPTY_BOOT === '1'");
+    expect(source).toContain(
+      'if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending))',
+    );
+    expect(source).toMatch(
+      /if \(hiddenEmptyBoot\) \{[\s\S]*?syncMirror\(\)\.mkdirSync\(cfg\.root, \{ recursive: true \}\);[\s\S]*?\} else \{[\s\S]*?seedProject\(cfg\);[\s\S]*?if \(freshRoot\) seedStarterBaseline\(starter, cfg\.root\);[\s\S]*?await ensureStarterInitialCommit\(ownerGitVfs\(\), cfg\.root\);[\s\S]*?\}/,
+    );
+    expect(source).toContain('if (!fromScratch && !hiddenEmptyBoot)');
+    expect(source).toContain('if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);');
+    expect(source).toContain("if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/')");
+    expect(source).toContain('else reconcileOwnerIndexAtBoot(syncMirror(), starter)');
+  });
+
   it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');

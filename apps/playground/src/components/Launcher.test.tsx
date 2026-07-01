@@ -29,6 +29,7 @@ const base = {
   onSave: () => {},
   onMenu: () => {},
   onMenuAction: () => {},
+  onResetSandbox: () => {},
 };
 
 describe('Launcher', () => {

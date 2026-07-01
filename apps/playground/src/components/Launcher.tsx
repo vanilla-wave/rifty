@@ -38,6 +38,7 @@ export function Launcher(props: {
   onSave(): void;
   onMenu(id: string | null): void;
   onMenuAction(id: string, action: RowAction): void;
+  onResetSandbox(): void;
 }) {
   const count = (): number => props.projects.length + (props.scratch ? 1 : 0);
   const placeholder = (): string =>
@@ -109,6 +110,7 @@ export function Launcher(props: {
                 onMenu={props.onMenu}
                 onMenuAction={props.onMenuAction}
                 onNewFromStarter={() => props.onTab('starters')}
+                onResetSandbox={props.onResetSandbox}
               />
             }
           >
