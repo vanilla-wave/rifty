@@ -26,7 +26,7 @@ Delivered (closed; the ~6x mechanism, parity-proven + `pnpm pr:check` green):
 Open:
 
 - `playground/eddy-from-scratch-presets` — the env-config `resolverUrl` seam into the playground install + `via eddy (fast)` provenance is built; the deploy-gated/product remainder (per-preset toggle UX, committed-lockfile exact pins, re-pin cadence, live ~0.6s demo) stays open pending a deployed eddy. (draft)
-- `perf/eddy-http3-cold-validation` — the open risk: a real-browser HTTP/3 cold-install measurement that gates the quoted ~6x. Blocked on the (unbuilt) `perf/cold-start-and-install-benchmark` harness + a deployed eddy + h3 transport control. (draft)
+- `perf/eddy-http3-cold-validation` — the open risk: the HTTP/3 leg of the real-browser cold-install number. Harness + deployed eddy now exist; warm-h2 is measured at **1.70x** (standard 4284ms → eddy 2517ms, `perf/benchmarks.json`) — the ~6x was a Node/sandbox model. Only h3 transport control (Playwright can't pin it) is still open. (draft)
 - `distribution/eddy-package-and-deploy` — `@riftydev/eddy` is publish-ready (tsup build + bin) with a Docker/compose recipe + self-host docs; the actual npm publish + rifty.dev deploy are confirm-first/outward. (ready)
 
 Supersedes (folded from the `cold-npm-install-speedup` epic): the former `npm-client/server-side-closure-resolver` and `npm-client/bundled-popular-subgraph-metadata` draft items — their measured-and-verified design is now this epic + ADR-0182. Out of scope: the extracted-tree artifact variant (4.3x byte penalty, dominated); signed/attested manifests (mirror-grade only for v1); a pluggable client `ClosureSource` (URL seam only for v1); independent npm source-of-truth re-verification (would re-introduce the waterfall).

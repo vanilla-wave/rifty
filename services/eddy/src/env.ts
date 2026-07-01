@@ -14,7 +14,10 @@
 export function parseTtlSeconds(raw: string | undefined): number | undefined {
   if (raw === undefined || raw === '') return undefined;
   const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) {
+  // `Number(' ')`/`Number('\t')` coerce to 0 (not NaN), so a whitespace-only
+  // value would slip past the finite/≥0 gate and silently set TTL 0 (always
+  // recompute) — a dead cache. Treat it as junk, not "0".
+  if (raw.trim() === '' || !Number.isFinite(value) || value < 0) {
     throw new Error(
       `EDDY_TTL_SECONDS must be a non-negative number of seconds (0 = always recompute); got ${JSON.stringify(raw)}`,
     );

@@ -26,4 +26,12 @@ describe('parseTtlSeconds (EDDY_TTL_SECONDS env-config)', () => {
   it('throws on a negative value', () => {
     expect(() => parseTtlSeconds('-5')).toThrow(/EDDY_TTL_SECONDS/);
   });
+
+  it('throws on a whitespace-only value (Number(" ") === 0 would silently disable the cache)', () => {
+    // `Number(' ')`/`Number('\t')` coerce to 0, not NaN — so without an explicit
+    // guard a whitespace typo passes the finite/≥0 gate and sets TTL 0 (always
+    // recompute), silently killing the mutable tier. Refuse it like other junk.
+    expect(() => parseTtlSeconds(' ')).toThrow(/EDDY_TTL_SECONDS/);
+    expect(() => parseTtlSeconds('\t')).toThrow(/EDDY_TTL_SECONDS/);
+  });
 });

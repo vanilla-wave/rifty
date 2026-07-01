@@ -473,6 +473,50 @@ describe('install — package.json defaults', () => {
     ]);
   });
 
+  it('throws EBROKENLOCK on replay when an override redirect no longer satisfies the locked version', async () => {
+    // The lockfile fast path replays the override TARGET name, but a stale
+    // target version must not be reused silently: if the override range moved
+    // (foo → bar@1.0.0 becomes foo → bar@2.0.0) while the lockfile still pins
+    // bar@1.0.0, the source name has no entry so `subgraphFreeOfOverrideDivergence`
+    // can't catch it — the replay itself must refuse, loudly, not install stale.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
+    db.set(
+      'bar',
+      new Map([
+        ['1.0.0', await makeEntry('bar', '1.0.0')],
+        ['2.0.0', await makeEntry('bar', '2.0.0')],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const pkg = (barTarget: string) =>
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { host: '1.0.0' },
+        overrides: { foo: barTarget },
+      });
+
+    // First install: override foo → bar@1.0.0 → lockfile pins node_modules/bar@1.0.0.
+    await vfs.writeFile('/proj/package.json', pkg('bar@1.0.0'));
+    const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(first.lockfile.packages['node_modules/bar']?.version).toBe('1.0.0');
+
+    // Second install: the override now wants bar@2.0.0, but the lockfile still
+    // pins bar@1.0.0. The fast-path replay must throw EBROKENLOCK, not silently
+    // reuse 1.0.0.
+    await vfs.writeFile('/proj/package.json', pkg('bar@2.0.0'));
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { code?: string })?.code).toBe('EBROKENLOCK');
+  });
+
   it('throws a deliberate error for malformed root package.json shapes', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });

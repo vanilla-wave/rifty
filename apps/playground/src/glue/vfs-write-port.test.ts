@@ -322,6 +322,29 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     expect(syncMirror().existsSync('/workspace/d/a.js')).toBe(false);
   });
 
+  it('write with ifAbsent seeds an absent file but never clobbers an existing one', () => {
+    const changes: (readonly string[])[] = [];
+    // Absent → seeds it (and notifies).
+    applyVfsWriteFrame(
+      { type: 'write', path: '/workspace/src/main.js', data: enc.encode('preset'), ifAbsent: true },
+      { onWrite: (paths) => changes.push(paths) },
+    );
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/src/main.js'))).toBe('preset');
+    // A user edit (the persisted/restored state on reload).
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/src/main.js',
+      data: enc.encode('my edit'),
+    });
+    // Re-seed (mount/reload) with ifAbsent → present → skip, no clobber, no notify.
+    applyVfsWriteFrame(
+      { type: 'write', path: '/workspace/src/main.js', data: enc.encode('preset'), ifAbsent: true },
+      { onWrite: (paths) => changes.push(paths) },
+    );
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/src/main.js'))).toBe('my edit');
+    expect(changes).toEqual([['/workspace/src/main.js']]); // only the first (absent) write notified
+  });
+
   it('subsequent writes overwrite the prior content', async () => {
     teardown = serveVfsWrites(7003);
 

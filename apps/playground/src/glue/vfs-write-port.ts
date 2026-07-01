@@ -55,6 +55,10 @@ export type VfsWriteSingleFrame =
       readonly path: string;
       readonly data: Uint8Array;
       readonly recursive?: boolean;
+      /** Idempotent seed: skip (no-op, still acked) when the path already exists,
+       *  so a boot/reload re-seed never clobbers a persisted/edited file. Matches
+       *  the worker-side `seedProject`'s `if !exists`. Overwrite is the default. */
+      readonly ifAbsent?: boolean;
     }
   | {
       readonly type: 'mkdir';
@@ -253,6 +257,10 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
   }
   if (frame.type === 'write') {
     const fs = syncMirror();
+    // Idempotent seed: an existing file is left untouched (still a successful
+    // no-op → the IPC caller's ack fires). A boot/reload re-seed must never
+    // clobber a persisted edit; overwrite semantics are the default (unset).
+    if (frame.ifAbsent && fs.existsSync(frame.path)) return;
     const parent = dirname(frame.path);
     if (frame.recursive ?? true) {
       fs.mkdirSync(parent, { recursive: true });
