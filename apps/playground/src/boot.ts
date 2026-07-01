@@ -7,6 +7,9 @@
  */
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { detectVfsBackend } from '@riftydev/vfs';
+import { type PreconnectDocument, injectPreconnects } from './glue/preconnect.ts';
+import { getRegistryProxyPrefix } from './glue/registry-fetch.ts';
+import { getResolverUrl } from './glue/resolver-config.ts';
 import { type StoragePersistenceStatus, probeStoragePersistence } from './glue/storage-status.ts';
 
 export interface VfsBootDescriptor {
@@ -141,7 +144,23 @@ export interface BootstrapPlaygroundDeps {
   readonly detectVfs?: DetectBackendFn;
   readonly probeStorage?: () => Promise<StoragePersistenceStatus>;
   readonly registerSw?: (scriptUrl: string) => Promise<unknown>;
+  readonly injectPreconnects?: () => void;
   readonly logger?: Pick<Console, 'warn' | 'error'>;
+}
+
+/**
+ * Preconnect to the configured registry + eddy origins (ADR-0186): DNS+TCP+TLS
+ * warm during boot instead of serializing into the first install fetch.
+ * Best-effort — a DOM-less realm or a throwing DOM never breaks boot.
+ */
+function injectDefaultPreconnects(): void {
+  const doc = (globalThis as { document?: PreconnectDocument }).document;
+  if (!doc) return;
+  try {
+    injectPreconnects(doc, [getRegistryProxyPrefix(), getResolverUrl()]);
+  } catch {
+    // Purely an optimization — never fatal at boot.
+  }
 }
 
 /**
@@ -153,6 +172,7 @@ export interface BootstrapPlaygroundDeps {
 export async function bootstrapPlayground(deps: BootstrapPlaygroundDeps = {}): Promise<BootResult> {
   const logger = deps.logger ?? console;
   (deps.assertCoi ?? assertCrossOriginIsolated)();
+  (deps.injectPreconnects ?? injectDefaultPreconnects)();
   const vfsBoot = await bootstrap(deps.detectVfs);
   const storage = await (deps.probeStorage ?? (() => probeStoragePersistence()))();
   const swRegister = deps.registerSw ?? ((url: string) => registerServiceWorker(url));

@@ -25,6 +25,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import {
+  type EddyPrefetchHandle,
   type InstallOptions,
   type InstallResult,
   type RegistryClient,
@@ -66,6 +67,13 @@ export interface NpmShellCommandDeps {
    *  to the standard verifying install); the install line reports
    *  `via eddy (fast)` when the eddy path produced the tree. */
   readonly resolverUrl?: string;
+  /** Pinned closure hash for the ACTIVE preset (ADR-0186, `VITE_RIFTY_EDDY_PINS`).
+   *  A getter — the active preset can change. Inert without `resolverUrl`. */
+  readonly resolverClosureHash?: () => string | undefined;
+  /** Owner-boot bundle prefetch for the ACTIVE preset (ADR-0186). A getter;
+   *  install() consumes the handle at most once and only on a canonical
+   *  request match. Inert without `resolverUrl`. */
+  readonly resolverPrefetch?: () => EddyPrefetchHandle | undefined;
 }
 
 interface ProjectPackageJson {
@@ -438,12 +446,16 @@ async function runInstall(
   const start = performance.now();
 
   const installFn = deps.install ?? realInstall;
+  const resolverClosureHash = deps.resolverClosureHash?.();
+  const resolverPrefetch = deps.resolverPrefetch?.();
   try {
     const result = await installFn({
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
+      ...(resolverClosureHash ? { resolverClosureHash } : {}),
+      ...(resolverPrefetch ? { resolverPrefetch } : {}),
       onPackage: (event) => {
         ctx.stdout.write(
           `npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`,

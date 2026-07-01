@@ -10,3 +10,33 @@ export function getResolverUrl(): string | undefined {
   if (typeof value === 'string' && value.length > 0) return value;
   return undefined;
 }
+
+let warnedMalformedPins = false;
+
+/**
+ * Per-preset pinned closure hash (ADR-0186 §5). `VITE_RIFTY_EDDY_PINS` is a
+ * JSON map `preset-slug → closureHash` set at deploy time (D-004, default
+ * absent). A pin turns the preset's bundle fetch into a cacheable
+ * `GET /bundle/<hash>` (browser HTTP cache + CDN); a stale pin degrades to
+ * POST via the client's verification gates. Operator workflow + re-pin
+ * cadence: docs/public/hosting-eddy.md.
+ */
+export function getEddyPin(
+  presetSlug: string,
+  rawPins: unknown = import.meta.env.VITE_RIFTY_EDDY_PINS,
+): string | undefined {
+  if (typeof rawPins !== 'string' || rawPins.length === 0) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPins);
+  } catch {
+    if (!warnedMalformedPins) {
+      warnedMalformedPins = true;
+      console.warn('[rifty] VITE_RIFTY_EDDY_PINS is not valid JSON — eddy pins ignored');
+    }
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  const value = (parsed as Record<string, unknown>)[presetSlug];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}

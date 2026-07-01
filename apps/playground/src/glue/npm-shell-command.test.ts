@@ -1140,6 +1140,36 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(rec.stdout.join('')).toContain('via eddy (fast)');
   });
 
+  it('forwards the ACTIVE preset pin + prefetch handle into install() (ADR-0186)', async () => {
+    const vfs = await projVfs();
+    const prefetchHandle = { take: () => null };
+    let seen: Pick<InstallOptions, 'resolverClosureHash' | 'resolverPrefetch'> | null = null;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-pin',
+        resolverPrefetch: () => prefetchHandle,
+        install: async (arg1) => {
+          const opts = arg1 as InstallOptions;
+          seen = {
+            resolverClosureHash: opts.resolverClosureHash,
+            resolverPrefetch: opts.resolverPrefetch,
+          };
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual({ resolverClosureHash: 'sha256-pin', resolverPrefetch: prefetchHandle });
+  });
+
   it('is inert when resolverUrl is unset — no resolverUrl forwarded, no provenance tag', async () => {
     const vfs = await projVfs();
     let seenResolverUrl: string | undefined = 'UNSET';

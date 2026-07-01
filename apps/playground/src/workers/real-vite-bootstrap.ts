@@ -63,7 +63,8 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { getResolverUrl } from '../glue/resolver-config.ts';
+import { startInstallPrefetch } from '../glue/install-prefetch.ts';
+import { getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -500,6 +501,31 @@ async function bootShellOwner(opts: {
   let lastDevRoot: string | null = null;
   let devConfigReady: Promise<void> = Promise.resolve();
 
+  // Owner-boot eddy prefetch (ADR-0186): for the ACTIVE from-scratch preset,
+  // start the bundle fetch NOW so the resolver round-trip overlaps the rest of
+  // owner boot; the boot line's `npm install` consumes it (canonically keyed —
+  // a drifted package.json makes install() ignore it). Skipped when a stamp
+  // will suppress the install anyway (reload of an installed tree).
+  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
+  async function primeInstallPrefetch(): Promise<void> {
+    installPrefetch = undefined;
+    const resolverUrl = getResolverUrl();
+    if (!devFromScratch || !resolverUrl) return;
+    const stamped = await installStampSatisfiedForPackageJson(
+      new SyncMirrorVfs(),
+      devCfg.root,
+      devSlug,
+      devCfg.packageJson,
+    );
+    if (stamped) return;
+    installPrefetch = startInstallPrefetch({
+      packageJsonText: devCfg.packageJson,
+      resolverUrl,
+      closureHash: getEddyPin(devSlug),
+    });
+  }
+  void primeInstallPrefetch();
+
   function devConfigRequestsWorkspaceTypeScript(): boolean {
     return effectiveDepsFromPackageJsonText(devCfg.packageJson)?.typescript !== undefined;
   }
@@ -813,6 +839,10 @@ async function bootShellOwner(opts: {
       // resolver URL is configured the visible `npm install` uses eddy's bundle
       // + auto-fallback; inert (byte-identical) when unset.
       resolverUrl: getResolverUrl(),
+      // ADR-0186: the ACTIVE preset's pinned closure hash (cacheable GET) and
+      // the owner-boot prefetch — getters, the active preset can change.
+      resolverClosureHash: () => getEddyPin(devSlug),
+      resolverPrefetch: () => installPrefetch,
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
@@ -938,6 +968,9 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
+      // Re-prime the eddy prefetch for the NEW preset (ADR-0186) — the boot
+      // line's `npm install` follows this config change.
+      void primeInstallPrefetch();
       devConfigReady = prepareActiveDevConfigDeps();
     },
     // Deps gate per run: every pty command waits for the active preset's deps

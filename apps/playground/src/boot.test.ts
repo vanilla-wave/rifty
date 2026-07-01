@@ -140,6 +140,25 @@ describe('assertCrossOriginIsolated', () => {
 });
 
 describe('bootstrapPlayground', () => {
+  it('injects registry+resolver preconnects right after the COI gate (ADR-0186)', async () => {
+    const order: string[] = [];
+    await bootstrapPlayground({
+      assertCoi: () => order.push('coi'),
+      injectPreconnects: () => order.push('preconnect'),
+      detectVfs: () => 'memory' as const,
+      registerSw: async () => ({}),
+      probeStorage: async () => ({
+        available: false as const,
+        persistedBefore: false,
+        persistedAfter: false,
+        usage: 0,
+        quota: 0,
+      }),
+      logger: { warn: () => {}, error: () => {} },
+    });
+    expect(order).toEqual(['coi', 'preconnect']);
+  });
+
   it('asserts COI, initialises the VFS, registers the SW, then resolves', async () => {
     const order: string[] = [];
     const assertCoi = vi.fn(() => {
