@@ -267,7 +267,15 @@ async function installExecSyncMode(): Promise<() => void> {
         code: 'EUNSUPPORTED',
       });
     }
-    const result = runChildSync(tokens[1] ?? '', payload.opts?.cwd ?? '/');
+    const cwd = payload.opts?.cwd ?? '/';
+    const rawArg = tokens[1] ?? '';
+    const scriptPath = normalizePath(isAbsolute(rawArg) ? rawArg : joinPath(cwd, rawArg));
+    if (!syncMirror().existsSync(scriptPath)) {
+      throw Object.assign(new Error(`execSync: script not found: ${scriptPath}`), {
+        code: 'ENOENT',
+      });
+    }
+    const result = runChildSync(scriptPath, cwd);
     if (result.exitCode !== 0) {
       throw Object.assign(new Error(`Command failed: ${payload.cmd}`), {
         code: 'ECHILDFAILED',

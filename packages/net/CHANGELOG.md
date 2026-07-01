@@ -32,6 +32,14 @@
 
 ### Fixed
 
+- **Loopback HTTP/HTTPS fidelity tightened after PR #102 review.** `https.request('http://…')`
+  now throws `ERR_INVALID_PROTOCOL` instead of silently rewriting plaintext to
+  TLS, `https.request(new URL(...))` preserves the URL host/path, and IPv4-mapped
+  IPv6 loopback (`::ffff:127.0.0.1`) stays on the in-process registry instead of
+  leaking to `fetch`. Explicit `http.Server.listen(port)` / `net.Server.listen(port)`
+  now registers only after the cross-realm bind claim wins, so a denied claimant
+  never creates a transient local owner. Cross-realm POST forwarding preserves
+  request-body chunk boundaries instead of collapsing the body into one buffer.
 - **Empty-body `IncomingMessage` reaches EOF for the `req.resume()` discard
   idiom.** The deferred end-of-stream path (which avoids a late-listener missing
   `'end'`) now also fires when the request is `resume()`d with no

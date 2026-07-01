@@ -21,6 +21,13 @@ import { Writable } from './writable.ts';
 /** A `compose` stage: a Node Duplex/Transform, or a body function. */
 type ComposeStage = Duplex | ((source: AsyncGenerator<unknown>) => unknown);
 
+function abortError(): Error {
+  const err = new Error('The operation was aborted') as Error & { code?: string };
+  err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
+  return err;
+}
+
 /** Normalise one stage into a Node `Duplex` (a function → `Duplex.from(fn)`). */
 function toDuplex(stage: unknown): Duplex {
   if (stage instanceof Duplex) return stage;
@@ -119,8 +126,9 @@ export function compose(...stages: ComposeStage[]): Duplex {
 
   // Destroying the facade tears down the chain too.
   composed.on('close', () => {
+    const destroyReason = composed._writableState.errored ?? abortError();
     for (const d of duplexes) {
-      if (!d.destroyed) d.destroy(composed._writableState.errored ?? undefined);
+      if (!d.destroyed) d.destroy(destroyReason);
     }
   });
 

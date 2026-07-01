@@ -94,6 +94,41 @@ describe('Writable.toWeb', () => {
     await expect(closedRejection).resolves.toBe(err);
   });
 
+  it('rejects pending write() when the Node writable is destroyed without an error', async () => {
+    const held: { cb: ((err?: Error | null) => void) | null } = { cb: null };
+    const w = new Writable({
+      objectMode: true,
+      highWaterMark: 1,
+      write(_chunk, _e, cb) {
+        held.cb = cb;
+      },
+    });
+    const writer = Writable.toWeb(w).getWriter();
+    const pending = writer.write('a');
+    await tick();
+
+    w.destroy();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+    held.cb?.();
+  });
+
+  it('rejects close() when the Node writable is destroyed without an error before finish', async () => {
+    const w = new Writable({
+      objectMode: true,
+      final() {
+        // Withhold finish; no-arg destroy must reject close instead of hanging.
+      },
+    });
+    const writer = Writable.toWeb(w).getWriter();
+    const closing = writer.close();
+    await tick();
+
+    w.destroy();
+
+    await expect(closing).rejects.toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+  });
+
   it('web writer.abort(reason) destroys the Node writable with that reason', async () => {
     const reason = new Error('toweb-abort');
     let errEvt: unknown = null;

@@ -61,7 +61,7 @@ function writableStateOf(stream: unknown): WritableState | undefined {
 export function isReadable(stream: unknown): boolean | null {
   const state = readableStateOf(stream);
   if (!state) return null;
-  return !state.destroyed && !state.endEmitted && !state.ended && state.errored === null;
+  return !state.destroyed && !state.endEmitted && state.errored === null;
 }
 
 /**

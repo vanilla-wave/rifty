@@ -1238,38 +1238,44 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       resolvedMode = true;
     }
 
+    let pulling = false;
+    let done = false;
     const r = new Readable({
       highWaterMark: options.highWaterMark,
       objectMode: resolvedMode,
       encoding: options.encoding,
+      read(): void {
+        void pump();
+      },
     });
 
-    void (async () => {
+    const pump = async (): Promise<void> => {
+      if (pulling || done || r.destroyed) return;
+      pulling = true;
       try {
-        // Push the peeked first chunk (sync-iterator branch only).
-        if (firstResult !== null && !(firstResult as IteratorResult<unknown>).done) {
-          r.push((firstResult as IteratorResult<unknown>).value);
-        }
-        if (isAsync) {
-          const ai = iterator as AsyncIterator<unknown>;
-          while (true) {
-            const step = await ai.next();
-            if (step.done) break;
-            r.push(step.value);
+        while (!r.destroyed && r._readableState.length < r._readableState.highWaterMark) {
+          let step: IteratorResult<unknown>;
+          if (firstResult !== null) {
+            step = firstResult as IteratorResult<unknown>;
+            firstResult = null;
+          } else if (isAsync) {
+            step = await (iterator as AsyncIterator<unknown>).next();
+          } else {
+            step = (iterator as Iterator<unknown>).next();
           }
-        } else {
-          const si = iterator as Iterator<unknown>;
-          while (true) {
-            const step = si.next();
-            if (step.done) break;
-            r.push(step.value);
+          if (step.done) {
+            done = true;
+            r.push(null);
+            return;
           }
+          if (!r.push(step.value)) return;
         }
-        r.push(null);
       } catch (err) {
         r.destroy(err as Error);
+      } finally {
+        pulling = false;
       }
-    })();
+    };
     return r;
   }
 
@@ -1312,7 +1318,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           const { done, value } = await reader.read();
           if (done) break;
           if (value === undefined) continue;
-          if (!r.push(value)) await waitForReadableDemand(r);
+          const chunk =
+            !r.readableObjectMode && typeof value === 'string' ? Buffer.from(value) : value;
+          if (!r.push(chunk)) await waitForReadableDemand(r);
         }
         closed = true;
         reader.releaseLock();
@@ -1397,8 +1405,7 @@ interface AbortableStream {
 /**
  * `stream.addAbortSignal(signal, stream)` (Node v15.4) — destroy `stream` with
  * an `AbortError` (`code:'ABORT_ERR'`) when `signal` aborts; an already-aborted
- * signal destroys on the next microtask (so a synchronous `.on('error')` after
- * this call still catches it, matching Node's `process.nextTick` deferral).
+ * signal destroys synchronously, matching Node's immediate branch.
  * Returns `stream`. The abort listener is detached when the stream finishes
  * (`'close'` or `'end'`) so it does not leak.
  *
@@ -1406,7 +1413,7 @@ interface AbortableStream {
  */
 export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, stream: T): T {
   if (signal.aborted) {
-    queueMicrotask(() => stream.destroy(abortError()));
+    stream.destroy(abortError());
     return stream;
   }
   const onAbort = (): void => {

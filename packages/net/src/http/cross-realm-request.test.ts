@@ -19,6 +19,10 @@ function serve(port: number, dispatch: (req: Request) => Promise<Response>): voi
   serveTeardowns.push(serveCrossRealmPreview(port, dispatch));
 }
 
+function listenOn(server: ReturnType<typeof createServer>, port: number): Promise<void> {
+  return new Promise((resolve) => server.listen(port, () => resolve()));
+}
+
 interface ClientResult {
   statusCode: number;
   headers: Record<string, string>;
@@ -158,11 +162,41 @@ describe('http cross-realm loopback via the preview broker (ADR-0180)', () => {
     expect(res.body).toBe('got:payload-xyz');
   });
 
+  it('preserves cross-realm POST body write chunk boundaries', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('must not hit fetch'));
+    const observed: string[] = [];
+    serve(7006, async (request) => {
+      const reader = request.body?.getReader();
+      if (reader) {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          observed.push(decoder.decode(value));
+        }
+      }
+      return new Response(observed.join('|'), { status: 200 });
+    });
+
+    const req = request({ hostname: 'localhost', port: 7006, path: '/upload', method: 'POST' });
+    const done = drain(req);
+    req.write('a');
+    req.write('b');
+    req.end('c');
+    const res = await done;
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('a|b|c');
+    expect(observed).toEqual(['a', 'b', 'c']);
+  });
+
   it('serves a LOCAL registered port from the registry, never the cross-realm broker', async () => {
     // A sibling realm ALSO answers on 7005 over the channel, but the local
     // registry must win — routeClientRequest returns {kind:'local'} first.
     serve(7005, async () => new Response('from-sibling', { status: 200 }));
-    createServer((_req, res) => res.end('from-local')).listen(7005);
+    await listenOn(
+      createServer((_req, res) => res.end('from-local')),
+      7005,
+    );
 
     const res = await drain(get('http://localhost:7005/'));
 

@@ -53,6 +53,7 @@ export const PREVIEW_PORT_FRAME_VERSION = '2';
 const MAX_CHUNK_BYTES = 64 * 1024;
 const DEFAULT_STREAM_DRAIN_TIMEOUT_MS = 30_000;
 const STREAM_DRAIN_TIMEOUT = Symbol('preview-port-stream-drain-timeout');
+type PreviewRequestBody = Uint8Array | readonly Uint8Array[] | null;
 
 export interface PreviewPortScopeOptions {
   /**
@@ -93,7 +94,7 @@ export type PreviewPortFrame =
       readonly method: string;
       readonly url: string;
       readonly headers: Readonly<Record<string, string>>;
-      readonly body: Uint8Array | null;
+      readonly body: PreviewRequestBody;
       // ADR-0180: a service-to-service client consumes chunks LIVE (pushes them
       // into its IncomingMessage as they arrive). When set, the server streams
       // all non-null bodies including SSE — no SSE refusal, no buffered-drain
@@ -244,9 +245,8 @@ export function serveCrossRealmPreview(
     );
     const requestInit: RequestInit = { method: frame.method, headers };
     if (frame.body !== null && frame.method !== 'GET' && frame.method !== 'HEAD') {
-      const copy = new ArrayBuffer(frame.body.byteLength);
-      new Uint8Array(copy).set(frame.body);
-      requestInit.body = copy;
+      requestInit.body = bodyStreamFromChunks(frame.body);
+      (requestInit as RequestInit & { duplex?: 'half' }).duplex = 'half';
     }
 
     let response: Response;
@@ -470,7 +470,7 @@ export interface PreviewDispatchStruct {
   readonly url: string;
   readonly method: string;
   readonly headers: Readonly<Record<string, string>>;
-  readonly body: Uint8Array | null;
+  readonly body: PreviewRequestBody;
 }
 
 export interface CrossRealmPortHandler extends PortHandler {
@@ -636,7 +636,7 @@ export function bridgeCrossRealmPreview(
     method: string,
     url: string,
     headers: Readonly<Record<string, string>>,
-    bodyBytes: Uint8Array | null,
+    bodyBytes: PreviewRequestBody,
   ): Promise<Response> => {
     const requestId = nextRequestId();
     const frame: PreviewPortFrame = {
@@ -665,7 +665,7 @@ export function bridgeCrossRealmPreview(
     const bodyBytes =
       request.method === 'GET' || request.method === 'HEAD'
         ? null
-        : new Uint8Array(await request.arrayBuffer());
+        : [new Uint8Array(await request.arrayBuffer())];
     return post(request.method, request.url, headersToObject(request.headers), bodyBytes);
   }) as CrossRealmPortHandler;
 
@@ -868,5 +868,25 @@ export function dispatchCrossRealmLoopback(
       body: bodyBytes,
       live: true,
     } satisfies PreviewPortFrame);
+  });
+}
+
+function bodyChunks(body: Exclude<PreviewRequestBody, null>): readonly Uint8Array[] {
+  return body instanceof Uint8Array ? [body] : body;
+}
+
+function cloneChunk(chunk: Uint8Array): Uint8Array {
+  const copy = new Uint8Array(chunk.byteLength);
+  copy.set(chunk);
+  return copy;
+}
+
+function bodyStreamFromChunks(body: Exclude<PreviewRequestBody, null>): ReadableStream<Uint8Array> {
+  const chunks = bodyChunks(body).map(cloneChunk);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
   });
 }

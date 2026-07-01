@@ -83,6 +83,35 @@ describe('stream.compose', () => {
     expect(s1.destroyed).toBe(true);
   });
 
+  it('destroy() with no error aborts every stage with an AbortError', async () => {
+    const s0 = upper();
+    const s1 = bracket();
+    const errors: unknown[] = [];
+    s0.on('error', (err) => errors.push(err));
+    s1.on('error', (err) => errors.push(err));
+    const composed = compose(s0, s1);
+
+    composed.destroy();
+    await tick();
+
+    expect(s0.destroyed).toBe(true);
+    expect(s1.destroyed).toBe(true);
+    expect(errors.length).toBeGreaterThanOrEqual(2);
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'AbortError', code: 'ABORT_ERR' }),
+        expect.objectContaining({ name: 'AbortError', code: 'ABORT_ERR' }),
+      ]),
+    );
+    expect(
+      errors.every(
+        (err) =>
+          (err as { name?: string }).name === 'AbortError' &&
+          (err as { code?: string }).code === 'ABORT_ERR',
+      ),
+    ).toBe(true);
+  });
+
   it('rejects zero stages with ERR_MISSING_ARGS (TypeError)', () => {
     let err: unknown = null;
     try {

@@ -15,4 +15,20 @@ describe('runInRifty', () => {
 
     expect(stdout).toBe('after-drain\n');
   });
+
+  it('exec-sync mode surfaces missing child scripts as ENOENT through the runtime handler', async () => {
+    const stdout = await runInRifty({
+      kind: 'exec-sync',
+      code: `
+        const { execSync } = require('node:child_process');
+        try {
+          execSync('node missing.js', { cwd: '/' });
+        } catch (err) {
+          console.log(err.code);
+        }
+      `,
+    });
+
+    expect(stdout).toBe('ENOENT\n');
+  });
 });

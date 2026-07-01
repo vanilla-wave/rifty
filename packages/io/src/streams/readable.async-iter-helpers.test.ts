@@ -43,6 +43,26 @@ describe('Readable async-iterator helpers — placement + return types', () => {
       expect(out.readableObjectMode).toBe(true);
     }
   });
+
+  it('stream-returning helpers do not pull from the source until consumed', async () => {
+    let pulls = 0;
+    async function* source(): AsyncGenerator<number> {
+      pulls += 1;
+      yield 1;
+      pulls += 1;
+      yield 2;
+    }
+
+    const mapped = Readable.from(source()).map((x) => (x as number) * 2);
+    await delay(20);
+    expect(pulls).toBe(0);
+
+    expect(await mapped.take(1).toArray()).toEqual([2]);
+    // `take(1)` closes the upstream async iterator after the first value; this
+    // generator resumes once to run its `finally`/post-yield cleanup, so the
+    // important laziness contract is the zero pulls before consumption.
+    expect(pulls).toBe(2);
+  });
 });
 
 describe('Readable async-iterator helpers — outputs', () => {

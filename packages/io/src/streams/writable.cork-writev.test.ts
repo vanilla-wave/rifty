@@ -55,6 +55,27 @@ describe('Writable cork/uncork + _writev', () => {
     expect(writes).toEqual(['a', 'b', 'c']);
   });
 
+  it('does not batch uncorked back-to-back writes through _writev when _write exists', async () => {
+    const calls: string[] = [];
+    const w = new Writable({
+      objectMode: true,
+      write(chunk, _enc, cb) {
+        calls.push(`write:${chunk}`);
+        cb();
+      },
+      writev(chunks, cb) {
+        calls.push(`writev:${chunks.map((entry) => entry.chunk).join(',')}`);
+        cb();
+      },
+    });
+
+    w.write('a');
+    w.write('b');
+    await settle();
+
+    expect(calls).toEqual(['write:a', 'write:b']);
+  });
+
   it('nested cork: flush only after the cork counter returns to 0', async () => {
     const calls: WriteChunk[][] = [];
     const w = new Writable({

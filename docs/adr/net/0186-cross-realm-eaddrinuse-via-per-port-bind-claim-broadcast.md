@@ -32,7 +32,7 @@ The claim window MUST be ≥ the channel's same-origin delivery latency so both 
 
 ### D3 — Owned only between claim-aware peers; additive degrade
 
-`claim`/`claim-deny` are additive (ADR-0031): a pre-0185 peer never sends them, so it neither denies nor competes — a new claimant facing only old peers wins (the pre-0185 double-bind status quo), never mis-fails. Within a single shipped version all realms are claim-aware, so the conflict is caught. No version bump of `PREVIEW_PORT_FRAME_VERSION` (purely additive union members).
+`claim`/`claim-deny` are additive (ADR-0031): a pre-0186 peer never sends them, so it neither denies nor competes — a new claimant facing only old peers wins (the pre-0186 double-bind status quo), never mis-fails. Within a single shipped version all realms are claim-aware, so the conflict is caught. No version bump of `PREVIEW_PORT_FRAME_VERSION` (purely additive union members).
 
 ### D4 — Release on close / realm-exit
 
@@ -45,7 +45,7 @@ The claim fires only for an EXPLICIT `listen(port)` with `port !== 0`. `listen(0
 ## Consequences
 
 - Faithful cross-realm `EADDRINUSE`: a second sandbox node process that `listen`s an already-bound port emits Node-shaped `'error'` (errno -98, syscall `listen`) instead of silently double-binding — closing the ADR-0180 D5 gap so port-conflict bugs surface as in Node.
-- Every `listen(port)` (port ≠ 0) now waits the claim window before `'listening'`/its callback fires, even uncontended (a free port cannot be proven free without waiting). Bounded, injectable, imperceptible for a once-started server; production perf is a non-goal.
+- Every `listen(port)` (port ≠ 0) now waits the claim window before registering, firing `'listening'`, or calling the callback, even uncontended (a free port cannot be proven free without waiting). Bounded, publicly tunable through `getDefaultClaimWindowMs`/`setDefaultClaimWindowMs` for harnesses and deployments; production perf is a non-goal.
 - One additive frame pair (`claim`/`claim-deny`) on the existing channel; no new transport, no `PREVIEW_PORT_FRAME_VERSION` bump (ADR-0031 additive).
 - Ephemeral (`listen(0)`) and non-HttpServer (Vite preview) cross-realm collisions remain unclaimed (D5) — documented, not hidden.
 - Shared helper (`claimPort`/`releasePort`) covers BOTH `HttpServer.listen` and `net.Server.listen`, so the two listen paths stay in lockstep.

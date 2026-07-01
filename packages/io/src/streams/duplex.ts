@@ -326,6 +326,9 @@ export class Duplex extends Readable {
     if (isStreamHalvesPair(src)) {
       return duplexFromHalves(src.readable, src.writable, options);
     }
+    if (isWebReadableStream(src)) {
+      return duplexFromReadable(Readable.fromWeb(src, options), options);
+    }
     // A body function `(source) => asyncIterable` (async generator or any fn
     // returning an async-iterable). This is the write+read duplexify shape.
     if (typeof src === 'function') {
@@ -371,6 +374,14 @@ function isReadableSource(
     typeof (src as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function' ||
     typeof (src as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function' ||
     typeof (src as { then?: unknown }).then === 'function'
+  );
+}
+
+function isWebReadableStream(src: unknown): src is ReadableStream<unknown> {
+  return (
+    src !== null &&
+    typeof src === 'object' &&
+    typeof (src as { getReader?: unknown }).getReader === 'function'
   );
 }
 
@@ -501,7 +512,10 @@ function duplexFromReadableSource(
           yield await (src as Promise<unknown>);
         })()
       : (src as Iterable<unknown> | AsyncIterable<unknown>);
-  const readable = Readable.from(iterable, { objectMode: options.objectMode });
+  return duplexFromReadable(Readable.from(iterable, { objectMode: options.objectMode }), options);
+}
+
+function duplexFromReadable(readable: Readable, options: DuplexOptions): Duplex {
   const d = new Duplex({
     ...options,
     objectMode: options.objectMode ?? readable.readableObjectMode,

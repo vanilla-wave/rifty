@@ -94,6 +94,27 @@ describe('Duplex.toWeb', () => {
     const r1 = await reader.read();
     expect(r1.value).toBe('T:a');
   });
+
+  it('rejects pending web writes when the Duplex is destroyed without an error', async () => {
+    const held: { cb: ((err?: Error | null) => void) | null } = { cb: null };
+    const d = new Duplex({
+      objectMode: true,
+      highWaterMark: 1,
+      read() {},
+      write(_chunk, _e, cb) {
+        held.cb = cb;
+      },
+    });
+    const pair = Duplex.toWeb(d);
+    const writer = pair.writable.getWriter();
+    const pending = writer.write('a');
+    await tick();
+
+    d.destroy();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+    held.cb?.();
+  });
 });
 
 describe('Duplex.fromWeb', () => {
@@ -164,5 +185,25 @@ describe('Duplex.fromWeb', () => {
         writable: WritableStream;
       }),
     ).toThrow(TypeError);
+  });
+});
+
+describe('Duplex.from', () => {
+  it('ReadableStream source emits string chunks as Buffers like Node', async () => {
+    const d = Duplex.from(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue('hello');
+          controller.close();
+        },
+      }),
+    );
+    const chunks: unknown[] = [];
+    d.on('data', (chunk) => chunks.push(chunk));
+    await tick();
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toBeInstanceOf(Uint8Array);
+    expect(String(chunks[0])).toBe('hello');
   });
 });

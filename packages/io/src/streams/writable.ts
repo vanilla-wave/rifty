@@ -96,6 +96,8 @@ export interface WritableState {
    * processes synchronously-completing chunks in the same tick).
    */
   drainScheduled: boolean;
+  /** True when the next flush may batch buffered chunks through `_writev`. */
+  writevBatch: boolean;
 }
 
 export class Writable extends EventEmitter {
@@ -129,6 +131,7 @@ export class Writable extends EventEmitter {
       needDrain: false,
       corked: 0,
       drainScheduled: false,
+      writevBatch: false,
     };
     this.writeImpl = opts.write;
     this.writevImpl = opts.writev;
@@ -207,6 +210,7 @@ export class Writable extends EventEmitter {
     // microtask, so a `write()` after `uncork()` in the same tick starts a
     // fresh batch rather than joining this one.
     if (state.corked === 0 && !state.writing && state.buffered.length > 0) {
+      state.writevBatch = true;
       this.drainBuffer();
     }
   }
@@ -251,6 +255,7 @@ export class Writable extends EventEmitter {
     }
     state.buffered.push({ chunk, encoding, cb: cbFinal });
     state.length += state.objectMode ? 1 : chunkSize(chunk);
+    if (state.writing && state.corked === 0) state.writevBatch = true;
     // While corked, hold the chunk — `uncork()`/`end()` triggers the flush. An
     // uncorked write schedules the (coalesced) drain as before.
     if (state.corked === 0) this.scheduleDrain();
@@ -291,7 +296,9 @@ export class Writable extends EventEmitter {
       // `_write`, a single buffered chunk routes to `_write` below. The batch is
       // the loop's terminal action this pass (its `done` advances/re-arms).
       const writev = this.resolveWritev();
-      if (writev && (state.buffered.length > 1 || !this.hasRealWrite())) {
+      const canBatch = state.writevBatch && state.buffered.length > 1;
+      if (writev && (canBatch || !this.hasRealWrite())) {
+        state.writevBatch = false;
         if (this.flushViaWritev(writev)) continue;
         return;
       }
@@ -425,6 +432,7 @@ export class Writable extends EventEmitter {
     const state = this._writableState;
     // end() implies an uncork: drop any outstanding cork depth so the buffered
     // chunks flush (Node clears `corked` on end).
+    if (state.corked > 0 && state.buffered.length > 0) state.writevBatch = true;
     state.corked = 0;
     let cbFinal: (() => void) | undefined;
     if (typeof chunkOrCb === 'function') {
@@ -558,6 +566,7 @@ export class Writable extends EventEmitter {
   static toWeb(streamWritable: WritableLike): WritableStream<unknown> {
     const w = streamWritable;
     let errored: Error | null = null;
+    let finished = false;
     let controllerRef: WritableStreamDefaultController | null = null;
     // `w` erroring at any time errors the WHATWG controller (rejecting the
     // writer's `closed`). Wired once; a pre-existing error is replayed in start.
@@ -565,6 +574,14 @@ export class Writable extends EventEmitter {
       const e = err instanceof Error ? err : new Error(String(err));
       errored = e;
       controllerRef?.error(e);
+    });
+    w.on('finish', () => {
+      finished = true;
+    });
+    w.on('close', () => {
+      if (finished || errored) return;
+      errored = abortError();
+      controllerRef?.error(errored);
     });
 
     return new WritableStream<unknown>({
@@ -588,12 +605,18 @@ export class Writable extends EventEmitter {
             cleanup();
             reject(err);
           };
+          const onClose = (): void => {
+            cleanup();
+            reject(errored ?? abortError());
+          };
           const cleanup = (): void => {
             w.off('drain', onDrain);
             w.off('error', onError);
+            w.off('close', onClose);
           };
           w.on('drain', onDrain);
           w.on('error', onError);
+          w.on('close', onClose);
         });
       },
       close(): Promise<void> | void {
@@ -607,12 +630,19 @@ export class Writable extends EventEmitter {
             cleanup();
             reject(err);
           };
+          const onClose = (): void => {
+            cleanup();
+            if (finished) resolve();
+            else reject(errored ?? abortError());
+          };
           const cleanup = (): void => {
             w.off('finish', onFinish);
             w.off('error', onError);
+            w.off('close', onClose);
           };
           w.on('finish', onFinish);
           w.on('error', onError);
+          w.on('close', onClose);
           w.end();
         });
       },
@@ -621,4 +651,11 @@ export class Writable extends EventEmitter {
       },
     });
   }
+}
+
+function abortError(): Error {
+  const err = new Error('The operation was aborted') as Error & { code?: string };
+  err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
+  return err;
 }

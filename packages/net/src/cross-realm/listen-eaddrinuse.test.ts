@@ -6,8 +6,10 @@
  * (`tests/e2e/cross-realm-listen-eaddrinuse.spec.ts`).
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from '../http/server.ts';
+import net from '../net.ts';
+import { listPorts, unregisterPort } from '../registry.ts';
 import { channelNameFor } from '../ws/channel.ts';
 import { __resetPortClaims } from './port-claim.ts';
 import { PREVIEW_PORT_FRAME_VERSION, previewPortChannelUrl } from './preview-port.ts';
@@ -30,7 +32,9 @@ function siblingOwner(port: number): BroadcastChannel {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   __resetPortClaims();
+  for (const port of listPorts()) unregisterPort(port);
 });
 
 describe('listen() cross-realm EADDRINUSE (ADR-0186)', () => {
@@ -54,6 +58,40 @@ describe('listen() cross-realm EADDRINUSE (ADR-0186)', () => {
     expect(err.port).toBe(port);
     expect(listened).toBe(false); // never fired 'listening' for the failed bind
     expect(s.address()).toBeNull(); // unregistered on loss
+    sibling.close();
+  });
+
+  it('does not register or serve an http port while the cross-realm claim is pending', async () => {
+    const port = 7413;
+    const sibling = siblingOwner(port);
+    const s = createServer((_req, res) => res.end('must-not-serve'));
+
+    const error = new Promise<Error & Record<string, unknown>>((resolve) => {
+      s.on('error', (err) => resolve(err as Error & Record<string, unknown>));
+    });
+    s.listen({ port });
+
+    expect(listPorts()).not.toContain(port);
+    const err = await error;
+    expect(err.code).toBe('EADDRINUSE');
+    expect(listPorts()).not.toContain(port);
+    sibling.close();
+  });
+
+  it('does not register or serve a net port while the cross-realm claim is pending', async () => {
+    const port = 7414;
+    const sibling = siblingOwner(port);
+    const s = net.createServer();
+
+    const error = new Promise<Error & Record<string, unknown>>((resolve) => {
+      s.on('error', (err) => resolve(err as Error & Record<string, unknown>));
+    });
+    s.listen({ port });
+
+    expect(listPorts()).not.toContain(port);
+    const err = await error;
+    expect(err.code).toBe('EADDRINUSE');
+    expect(listPorts()).not.toContain(port);
     sibling.close();
   });
 

@@ -105,6 +105,12 @@
 
 ### Fixed
 
+- **`execSync` recursive-runner seams are loud and exercised.** A host that calls
+  the browser recursive runner without configuring the node-entry Worker URL now
+  throws a directed setup error instead of falling into a silent empty-mirror
+  child, and conformance now wires the public `installRuntimeJsExecSyncHandler`
+  through `makeInProcessNodeEntryRunner()` so the Node-hosted loader-run seam is
+  covered end-to-end.
 - **`zlib.Gzip.destroy()` no longer leaks the `CompressionStream`.** Destroying
   a gzip Transform mid-stream (e.g. an HTTP client aborting a compressed
   response) now aborts the underlying `CompressionStream` writer, so the

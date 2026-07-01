@@ -179,21 +179,34 @@ describe('node:https client request/get over the page fetch (ADR-0181)', () => {
     expect(dataChunks).toBe(0);
   });
 
-  it('forces an http: string URL up to https: egress', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }));
+  it('throws ERR_INVALID_PROTOCOL for an http: string URL instead of silently upgrading it', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    expect(() => https.get('http://example.com/x')).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_PROTOCOL' }),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('https.request(URL, cb) preserves the URL host/port/path while forcing https dispatch', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'));
 
     await new Promise<void>((resolve, reject) => {
-      const req = https.get('http://example.com/x', (res) => {
+      const req = https.request(new URL('https://api.example.com:9443/path?q=1'), (res) => {
         res.on('data', () => {});
         res.on('end', () => resolve());
         res.on('error', reject);
       });
       req.on('error', reject);
+      req.end();
     });
 
-    expect(new URL(String(fetchSpy.mock.calls[0]![0])).protocol).toBe('https:');
+    const calledUrl = new URL(String(fetchSpy.mock.calls[0]![0]));
+    expect(calledUrl.protocol).toBe('https:');
+    expect(calledUrl.hostname).toBe('api.example.com');
+    expect(calledUrl.port).toBe('9443');
+    expect(calledUrl.pathname).toBe('/path');
+    expect(calledUrl.search).toBe('?q=1');
   });
 });
 
@@ -310,6 +323,15 @@ describe('loopback https has no in-browser TLS server (pairs with ADR-0180 D4)',
     expect(() =>
       https.request({ host: '::1', port: 8443, path: '/' } as Record<string, unknown>),
     ).toThrow(/loopback https targets have no in-browser TLS server/);
+  });
+
+  it('refuses IPv4-mapped IPv6 loopback hosts after WHATWG canonicalization', () => {
+    expect(() => https.request({ hostname: '::ffff:127.0.0.1', port: 8443, path: '/' })).toThrow(
+      /loopback https targets have no in-browser TLS server/,
+    );
+    expect(() => https.get('https://[::ffff:7f00:1]:8443/x')).toThrow(
+      /loopback https targets have no in-browser TLS server/,
+    );
   });
 
   it('does NOT refuse an external hostname when a host override is loopback (dispatch precedence)', () => {

@@ -15,6 +15,7 @@ import {
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
 import { installRuntimeJsExecSyncHandler } from '../../../packages/runtime-js/src/ipc/handlers.ts';
+import { makeInProcessNodeEntryRunner } from '../../../packages/runtime-js/src/ipc/in-process-node-entry-runner.ts';
 
 afterEach(() => resetSyncMirror());
 
@@ -143,6 +144,32 @@ describe('execSync — v2 binary frame returns byte-exact stdout (ADR-0084 #23)'
     const raw = Uint8Array.from([0x00, 0xc0, 0xc1, 0xf5, 0xff, 0x80, 0x7f, 0x41]);
     const value = await roundTrip(raw);
     expect(Array.from(value)).toEqual(Array.from(raw));
+  });
+
+  it('can wire the real handler to the in-process node-entry runner', async () => {
+    writeFileSync('/bin.js', "process.stdout.write('loader-ok');\n");
+    const { sab, ring } = createSabRing({ payloadCapacity: 1024 });
+    const caller = SabRing.attach(sab, 1024);
+    const dispatcher = new SyncRpcDispatcher();
+    installRuntimeJsExecSyncHandler(
+      dispatcher,
+      (path) => (path === '/bin.js' ? new Uint8Array(0) : null),
+      { runWorker: makeInProcessNodeEntryRunner() },
+    );
+    dispatcher.attach(ring);
+    caller.writeRequest(
+      encodeRequest({
+        method: 'execSync',
+        payload: { cmd: 'node /bin.js', opts: { cwd: '/' } },
+      }),
+    );
+
+    const replyBytes = await caller.waitReplyAsync(2000);
+    dispatcher.detachAll();
+    const reply = decodeReply(replyBytes);
+
+    if (!reply.ok) throw new Error(`unexpected error reply: ${JSON.stringify(reply.error)}`);
+    expect(new TextDecoder().decode(reply.value as Uint8Array)).toBe('loader-ok');
   });
 });
 

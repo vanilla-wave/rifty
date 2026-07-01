@@ -24,6 +24,7 @@ import {
 } from './http/server.ts';
 
 type HttpsCallback = (res: ClientResponse) => void;
+type HttpsUrlInput = string | URL;
 
 /**
  * `RequestOptions` plus the TLS/socket-control surface we explicitly refuse.
@@ -134,18 +135,32 @@ function guardLoopback(dispatchUrl: string): void {
   }
 }
 
-function forceHttpsUrl(url: string): string {
+function invalidProtocolError(protocol: string): TypeError & { code: string } {
+  return Object.assign(new TypeError(`Protocol "${protocol}" not supported. Expected "https:"`), {
+    code: 'ERR_INVALID_PROTOCOL',
+  });
+}
+
+function validateHttpsUrl(url: HttpsUrlInput): string {
   try {
-    const parsed = new URL(url);
-    parsed.protocol = 'https:';
+    const parsed = url instanceof URL ? url : new URL(url);
+    if (parsed.protocol !== 'https:') throw invalidProtocolError(parsed.protocol);
     return parsed.href;
-  } catch {
+  } catch (err) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      (err as { code?: unknown }).code === 'ERR_INVALID_PROTOCOL'
+    ) {
+      throw err;
+    }
+    if (url instanceof URL) throw invalidProtocolError(url.protocol);
     return url;
   }
 }
 
 type HttpClientImpl = (
-  urlOrOpts: string | RequestOptions,
+  urlOrOpts: HttpsUrlInput | RequestOptions,
   optsOrCb?: RequestOptions | HttpsCallback,
   maybeCb?: HttpsCallback,
 ) => ClientRequest;
@@ -156,26 +171,27 @@ type HttpClientImpl = (
  */
 function dispatchHttps(
   impl: HttpClientImpl,
-  urlOrOpts: string | HttpsRequestOptions,
+  urlOrOpts: HttpsUrlInput | HttpsRequestOptions,
   optsOrCb?: HttpsRequestOptions | HttpsCallback,
   maybeCb?: HttpsCallback,
 ): ClientRequest {
   const overrides = typeof optsOrCb === 'object' && optsOrCb !== null ? optsOrCb : undefined;
   const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
 
-  if (typeof urlOrOpts === 'object' && urlOrOpts !== null) guardTlsAndSocketOptions(urlOrOpts);
+  if (typeof urlOrOpts === 'object' && urlOrOpts !== null && !(urlOrOpts instanceof URL)) {
+    guardTlsAndSocketOptions(urlOrOpts);
+  }
   if (overrides) guardTlsAndSocketOptions(overrides);
 
   // Build the EXACT url the http client will dispatch, refuse it if it
   // canonicalises to loopback, then hand off with `protocol: 'https:'` forced.
-  if (typeof urlOrOpts === 'string') {
+  if (typeof urlOrOpts === 'string' || urlOrOpts instanceof URL) {
+    const url = validateHttpsUrl(urlOrOpts);
     if (overrides) {
       const forced = { ...overrides, protocol: 'https:' };
-      guardLoopback(buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...forced }));
-      return impl(urlOrOpts, forced, cb);
+      guardLoopback(buildRequestUrl({ ...optionsFromUrl(url), ...forced }));
+      return impl(url, forced, cb);
     }
-    // No overrides: force the protocol on the URL itself so auth/fragment survive.
-    const url = forceHttpsUrl(urlOrOpts);
     guardLoopback(url);
     return impl(url, cb);
   }
@@ -185,7 +201,7 @@ function dispatchHttps(
 }
 
 export function request(
-  urlOrOpts: string | HttpsRequestOptions,
+  urlOrOpts: HttpsUrlInput | HttpsRequestOptions,
   optsOrCb?: HttpsRequestOptions | HttpsCallback,
   maybeCb?: HttpsCallback,
 ): ClientRequest {
@@ -193,7 +209,7 @@ export function request(
 }
 
 export function get(
-  urlOrOpts: string | HttpsRequestOptions,
+  urlOrOpts: HttpsUrlInput | HttpsRequestOptions,
   optsOrCb?: HttpsRequestOptions | HttpsCallback,
   maybeCb?: HttpsCallback,
 ): ClientRequest {

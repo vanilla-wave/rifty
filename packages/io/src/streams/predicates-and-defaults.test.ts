@@ -39,6 +39,15 @@ describe('stream predicates', () => {
     expect(isReadable(r)).toBe(false);
   });
 
+  it('isReadable: stays true after push(null) until buffered data drains and end emits', () => {
+    const r = new Readable({ read() {} });
+    r.push('tail');
+    r.push(null);
+    expect(r._readableState.ended).toBe(true);
+    expect(r._readableState.endEmitted).toBe(false);
+    expect(isReadable(r)).toBe(true);
+  });
+
   it('isWritable: true fresh, false ended/destroyed, null for non-Writable', async () => {
     const w = new Writable({
       write(_c, _e, cb) {
@@ -152,13 +161,12 @@ describe('addAbortSignal', () => {
     expect(errors[0]?.code).toBe('ABORT_ERR');
   });
 
-  it('an already-aborted signal destroys the stream', async () => {
+  it('an already-aborted signal destroys the stream synchronously', () => {
     const ac = new AbortController();
     ac.abort();
     const r = new Readable({ read() {} });
     r.on('error', () => {});
     addAbortSignal(ac.signal, r);
-    await settle();
     expect(r.destroyed).toBe(true);
   });
 });

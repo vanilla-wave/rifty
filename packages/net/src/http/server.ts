@@ -77,6 +77,7 @@ function assertSupportedServerOptions(options: ServerOptions | undefined): void 
 
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
+  private pendingPort: number | null = null;
   private readonly handler: RequestListener;
   private readonly upgradeChannels: BroadcastChannel[] = [];
   private readonly upgradeSockets: Map<string, WebSocketUpgradeSocket> = new Map();
@@ -125,49 +126,45 @@ export class HttpServer extends EventEmitter {
     }
     // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
     // the realm registry (no OS socket), exposed via `address().port` until close.
+    const register = (port: number): void => {
+      this.port = port;
+      registerPort(port, (request) => {
+        if (isWebSocketUpgradeRequest(request)) {
+          return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: { 'content-type': 'text/plain' },
+          });
+        }
+        const req = new IncomingMessage(request);
+        const res = new ServerResponse();
+        this.handler(req, res);
+        this.emit('request', req, res);
+        return res.toResponse();
+      });
+      this.listenForWebSocketUpgrades(port);
+    };
     const port = requested === 0 ? allocateEphemeralPort() : requested;
-    this.port = port;
-    registerPort(port, (request) => {
-      if (isWebSocketUpgradeRequest(request)) {
-        return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: { 'content-type': 'text/plain' },
-        });
-      }
-      const req = new IncomingMessage(request);
-      const res = new ServerResponse();
-      this.handler(req, res);
-      this.emit('request', req, res);
-      return res.toResponse();
-    });
-    this.listenForWebSocketUpgrades(port);
-    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0186 D5) — fire
-    // `'listening'` on the next microtask, as before, with no claim.
     if (requested === 0) {
+      register(port);
       queueMicrotask(() => {
         this.emit('listening');
         callback?.();
       });
       return this;
     }
-    // Explicit port: a cross-realm bind-claim (ADR-0186) gates `'listening'`.
-    // The port is already registered synchronously (above) so the intra-realm
-    // fast-path + immediate same-realm dispatch are unchanged; the claim only
-    // decides whether THIS realm keeps it. Win → `'listening'`; a sibling realm
-    // already owns it → unregister + async `'error'` EADDRINUSE (no `'listening'`).
+    this.pendingPort = port;
     void claimPort(port).then((won) => {
-      if (this.port !== port) {
-        // Closed during the claim window — undo any ownership the claim acquired.
+      if (this.pendingPort !== port) {
         if (won) releasePort(port);
         return;
       }
+      this.pendingPort = null;
       if (won) {
+        register(port);
         this.emit('listening');
         callback?.();
       } else {
-        unregisterPort(port);
-        this.port = null;
         this.emit('error', addrInUseError('127.0.0.1', port));
       }
     });
@@ -184,6 +181,7 @@ export class HttpServer extends EventEmitter {
       unregisterPort(this.port);
       this.port = null;
     }
+    this.pendingPort = null;
     for (const socket of this.upgradeSockets.values()) socket.destroy();
     this.upgradeSockets.clear();
     for (const channel of this.upgradeChannels) {
@@ -292,6 +290,8 @@ export interface RequestOptions {
   protocol?: string;
 }
 
+type RequestUrlInput = string | URL;
+
 export type ClientRequest = EventEmitter & {
   write(chunk: Uint8Array | string): boolean;
   end(chunkOrCb?: Uint8Array | string | (() => void), cb?: () => void): void;
@@ -314,8 +314,21 @@ const CROSS_REALM_PROBE_MS = 500;
 // Exported so `https.ts` refuses loopback `https:` against the SAME definition
 // (no in-browser TLS server) instead of duplicating the predicate.
 export function isLoopbackHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
+  const lower = hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
   if (LOOPBACK_HOSTS.has(lower)) return true;
+  if (lower.startsWith('::ffff:')) {
+    const mapped = lower.slice('::ffff:'.length);
+    if (/^127(\.\d{1,3}){3}$/.test(mapped)) return true;
+    const parts = mapped.split(':');
+    if (parts.length === 2) {
+      const hi = Number.parseInt(parts[0] ?? '', 16);
+      const lo = Number.parseInt(parts[1] ?? '', 16);
+      if (Number.isInteger(hi) && Number.isInteger(lo)) {
+        const firstOctet = (hi >> 8) & 0xff;
+        return firstOctet === 127;
+      }
+    }
+  }
   return /^127(\.\d{1,3}){3}$/.test(lower);
 }
 
@@ -425,7 +438,7 @@ function connectionHasToken(value: string | null | undefined, token: string): bo
  * boundaries are preserved through to the server-side `IncomingMessage`.
  */
 export function request(
-  urlOrOpts: string | RequestOptions,
+  urlOrOpts: RequestUrlInput | RequestOptions,
   optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
   maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {
@@ -433,12 +446,16 @@ export function request(
   const overrides = typeof optsOrCb === 'object' ? optsOrCb : undefined;
   const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
   let url: string;
-  if (typeof urlOrOpts === 'string') {
-    url = overrides ? buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...overrides }) : urlOrOpts;
+  if (typeof urlOrOpts === 'string' || urlOrOpts instanceof URL) {
+    url = overrides
+      ? buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...overrides })
+      : urlOrOpts instanceof URL
+        ? urlOrOpts.href
+        : urlOrOpts;
   } else {
     url = buildRequestUrl(urlOrOpts);
   }
-  const base = typeof urlOrOpts === 'string' ? undefined : urlOrOpts;
+  const base = typeof urlOrOpts === 'string' || urlOrOpts instanceof URL ? undefined : urlOrOpts;
   const method = overrides?.method ?? base?.method ?? 'GET';
   const headers = overrides?.headers ?? base?.headers ?? {};
 
@@ -572,12 +589,7 @@ export function request(
         // consulted first (routeClientRequest returns 'local'), so this never
         // shadows a same-realm server.
         try {
-          const bodyBytes =
-            requestBody === null
-              ? null
-              : new Uint8Array(
-                  await new Response(requestBody as unknown as BodyInit).arrayBuffer(),
-                );
+          const bodyBytes = requestBody === null ? null : await drainRequestBodyChunks(requestBody);
           const crossRealm = await dispatchCrossRealmLoopback(
             route.port,
             { url, method, headers, body: bodyBytes },
@@ -659,6 +671,26 @@ export function request(
     },
   });
   return req;
+}
+
+async function drainRequestBodyChunks(
+  body: ReadableStream<Uint8Array>,
+): Promise<readonly Uint8Array[]> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined || value.byteLength === 0) continue;
+      const copy = new Uint8Array(value.byteLength);
+      copy.set(value);
+      chunks.push(copy);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return chunks;
 }
 
 function openWebSocketClientUpgrade(opts: {
@@ -939,9 +971,9 @@ function isValidWebSocketKey(key: string | undefined): key is string {
   }
 }
 
-export function optionsFromUrl(url: string): RequestOptions {
+export function optionsFromUrl(url: RequestUrlInput): RequestOptions {
   try {
-    const parsed = new URL(url);
+    const parsed = url instanceof URL ? url : new URL(url);
     return {
       protocol: parsed.protocol,
       hostname: parsed.hostname,
@@ -954,7 +986,7 @@ export function optionsFromUrl(url: string): RequestOptions {
 }
 
 export function get(
-  urlOrOpts: string | RequestOptions,
+  urlOrOpts: RequestUrlInput | RequestOptions,
   optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
   maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {

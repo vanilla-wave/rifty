@@ -93,6 +93,16 @@
 
 ### Fixed
 
+- **Node stream edge parity tightened after PR #102 review.** `Writable.toWeb()`
+  and `Duplex.toWeb()` now reject pending web writes/closes with `AbortError`
+  when the Node side is destroyed without an explicit error; `Readable.from()`
+  stream helpers remain lazy until consumed; `isReadable()` stays true after
+  `push(null)` until EOF is emitted; `Readable.fromWeb()` converts default-mode
+  string chunks to `Buffer`s while preserving object-mode chunks; an
+  already-aborted `addAbortSignal()` destroys synchronously; uncorked back-to-back
+  writes no longer batch through `_writev` unless Node would; and
+  `compose(...).destroy()` aborts stages with `AbortError` instead of a clean
+  destroy.
 - **`Readable.toWeb()` end-of-life fidelity (matches Node's `finished()`).** A
   source already ended or destroyed before conversion now settles the web stream
   on the next microtask instead of hanging forever; a `destroy()` without an
