@@ -220,7 +220,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(pickStarter).toMatch(
-      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?void runVitePreset\(presetForId\(id\), tsGate\);/,
+      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await stopDevServerBeforeStarterWrite\(\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
     );
     expect(runPreset).not.toContain('await loadPresetUi(preset);');
     expect(runPreset).not.toContain('seedViteWorkspace(preset);');
@@ -257,21 +257,25 @@ describe('App terminal startup wiring', () => {
     const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
+    const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
+    const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
+    const pickStarter = source.slice(pickStarterStart, pickStarterEnd);
     expect(runPresetStart).toBeGreaterThan(-1);
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
+    expect(pickStarterStart).toBeGreaterThan(-1);
+    expect(pickStarterEnd).toBeGreaterThan(pickStarterStart);
     expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
+    expect(source).toContain('async function stopDevServerBeforeStarterWrite(): Promise<void>');
     expect(source).toContain('function lifecycleDevServerRunning(): boolean');
     expect(source).toContain('let devServerBootSessionId: string | null = null;');
     expect(source).toContain('let devServerOwnerSessionId: string | null = null;');
     expect(source).toContain('return lifecycleSessionRunning(devServerSessionId);');
     expect(source).toContain('devServerBootSessionId === sessionId');
-    expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('await seedViteWorkspace(preset);'),
+    expect(pickStarter.indexOf('await stopDevServerBeforeStarterWrite();')).toBeLessThan(
+      pickStarter.indexOf('await durableNewScratch(id, { preserveDirtySameStarter: true });'),
     );
-    expect(runPreset.indexOf('await seedViteWorkspace(preset);')).toBeLessThan(
-      runPreset.indexOf(
-        'await startDevServerSession(restartSessionId, restartGeneration, preset);',
-      ),
+    expect(pickStarter.indexOf('await stopDevServerBeforeStarterWrite();')).toBeLessThan(
+      pickStarter.indexOf('await seedViteWorkspace(presetForId(id));'),
     );
     expect(source).not.toContain('async function stopRunningTerminalSessions(): Promise<void>');
     expect(source).not.toContain('function anyTerminalRunning(): boolean');
@@ -280,9 +284,7 @@ describe('App terminal startup wiring', () => {
       "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
     );
     expect(source).not.toContain("terminalStatus(devServerSessionId) === 'running' ||");
-    expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('seedViteWorkspace(preset);'),
-    );
+    expect(runPreset).not.toContain('seedViteWorkspace(preset);');
     expect(source).not.toContain('await stopRunningTerminalSessions();');
     expect(source).toContain('setPreviewPorts([])');
   });
@@ -297,8 +299,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain(
       'const [presetTransitioning, setPresetTransitioning] = createSignal(false)',
     );
-    expect(runPreset).toMatch(
-      /setPresetTransitioning\(true\);[\s\S]*?setActivePreset\(preset\.id\);/,
+    expect(runPreset).toContain('setPresetTransitioning(true);');
+    expect(source).toMatch(
+      /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?setActivePreset\(preset\.id\);/,
     );
     expect(runPreset).toMatch(
       /finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/,
@@ -567,7 +570,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('function queuePresetTransition(');
     expect(pickStarter).toContain('const runPick = async (): Promise<void> => {');
     expect(pickStarter).toMatch(
-      /store\.pickStarter\(id\);[\s\S]*?durableNewScratch\(id\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
+      /store\.pickStarter\(id\);[\s\S]*?durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
     );
     expect(pickStarter).toMatch(
       /if \(presetTransitioning\(\)\) \{[\s\S]*?await queuePresetTransition\(runPick\);[\s\S]*?return;/,

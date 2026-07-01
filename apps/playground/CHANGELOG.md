@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Starter picks stop the active dev server before reseeding starter files.**
+  Project-first picks now stop the current lifecycle-owned dev command before
+  resetting `/scratch`, so the old Vite process cannot observe a half-written
+  starter while the new queued boot is being prepared.
 - **The `[vite] dev server ready` marker no longer intermittently vanishes from
   the terminal (CI flake).** When a starter pick restarts the dev server, the
   aborted run's late `listen()` IPC could emit the readiness marker AFTER its

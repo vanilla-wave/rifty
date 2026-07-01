@@ -2107,6 +2107,13 @@ export function App(props: AppProps) {
     }
   }
 
+  async function stopDevServerBeforeStarterWrite(): Promise<void> {
+    const sessionId = lifecycleDevServerRunning()
+      ? (devServerSessionId ?? devServerSession().id)
+      : null;
+    await stopDevServerSession(sessionId);
+  }
+
   async function startDevServerSession(
     sessionId: string,
     generation: number,
@@ -2450,6 +2457,7 @@ export function App(props: AppProps) {
         setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
+        await stopDevServerBeforeStarterWrite();
         await durableNewScratch(id, { preserveDirtySameStarter: true });
         // Memory mode has no durable index → durableNewScratch is a no-op, so this is
         // the ONLY owner-tree seed. AWAIT it before runVitePreset boots vite, else the
@@ -2758,6 +2766,7 @@ export function App(props: AppProps) {
         setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
+        await stopDevServerBeforeStarterWrite();
         await durableNewScratch(pendingStarter);
         // Memory mode: AWAIT the seed before vite boots (see onPickStarter) — the
         // only owner-tree seed in the ephemeral path.
