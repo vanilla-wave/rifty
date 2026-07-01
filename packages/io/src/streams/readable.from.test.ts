@@ -108,6 +108,39 @@ describe('Readable.from(iter, options?)', () => {
     expect(out.map((chunk) => Buffer.from(chunk).toString('utf8'))).toEqual(['aa', 'bb']);
   });
 
+  it('fromWeb converts default-stream string chunks to Buffers in byte mode', async () => {
+    const stream = new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue('hello');
+        controller.close();
+      },
+    });
+
+    const r = Readable.fromWeb(stream);
+    const out = await drainObjectMode<unknown>(r);
+
+    expect(r.readableObjectMode).toBe(false);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBeInstanceOf(Uint8Array);
+    expect(String(out[0])).toBe('hello');
+  });
+
+  it('fromWeb preserves default-stream object chunks when objectMode is true', async () => {
+    const first = { a: 1 };
+    const stream = new ReadableStream<{ a: number }>({
+      start(controller) {
+        controller.enqueue(first);
+        controller.close();
+      },
+    });
+
+    const r = Readable.fromWeb(stream, { objectMode: true });
+    const out = await drainObjectMode<unknown>(r);
+
+    expect(r.readableObjectMode).toBe(true);
+    expect(out).toEqual([first]);
+  });
+
   it('toWeb preserves object-mode chunks instead of stringifying them', async () => {
     const first = { a: 1 };
     const stream = Readable.toWeb(Readable.from([first, { a: 2 }]));

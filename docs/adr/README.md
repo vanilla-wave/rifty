@@ -78,6 +78,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0154 | HTTP stream interop and drain contract |
 | 0180 | Cross-realm http.request loopback via the preview broker |
 | 0181 | Client node:https request and get over browser fetch |
+| 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 
 ### service-worker
 
@@ -316,5 +317,6 @@ Removed, no successor (resolve to git history):
 - `docs/opencode/`, `docs/opencode-rifty-feasibility-2026-05-30.md`, `docs/opencode/HANDOFF.md` — retired server-facade exploration, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
+- `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
 
 Retired ADR numbers (process moved to `AGENTS.md` / `docs/process/decision-workflow.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve there, not to a file. Older docs may also cite `CLAUDE.md` — it is a symlink to `AGENTS.md`. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `docs/process/decision-workflow.md`.)

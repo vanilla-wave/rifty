@@ -1,9 +1,15 @@
-import { http, dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
+import { http, dispatchToPort, listPorts, releasePort, unregisterPort } from '@riftydev/net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(() => {
-  for (const p of listPorts()) unregisterPort(p);
+  for (const p of listPorts()) {
+    releasePort(p);
+    unregisterPort(p);
+  }
 });
+
+const listenOn = (server: ReturnType<typeof http.createServer>, port: number): Promise<void> =>
+  new Promise<void>((resolve) => server.listen(port, () => resolve()));
 
 describe('node:http server via port registry', () => {
   it('responds to a basic GET', async () => {
@@ -11,7 +17,7 @@ describe('node:http server via port registry', () => {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end(`hello ${req.url}`);
     });
-    server.listen(3000);
+    await listenOn(server, 3000);
     expect(listPorts()).toContain(3000);
     const response = await dispatchToPort(3000, new Request('http://x/y'));
     expect(response.status).toBe(200);
@@ -30,7 +36,7 @@ describe('node:http server via port registry', () => {
         res.end(`got: ${body}`);
       });
     });
-    server.listen(3001);
+    await listenOn(server, 3001);
     const response = await dispatchToPort(
       3001,
       new Request('http://x/echo', { method: 'POST', body: 'hello!' }),
@@ -47,7 +53,7 @@ describe('node:http server via port registry', () => {
       res.writeHead(req.url === '/modified' ? 304 : 204);
       res.end();
     });
-    server.listen(3024);
+    await listenOn(server, 3024);
 
     const noContent = await dispatchToPort(3024, new Request('http://x/gone'));
     expect(noContent.status).toBe(204);
@@ -75,7 +81,7 @@ describe('node:http server via port registry', () => {
         }),
       );
     });
-    server.listen(3025);
+    await listenOn(server, 3025);
 
     const bodied = await dispatchToPort(
       3025,
@@ -93,7 +99,7 @@ describe('node:http server via port registry', () => {
 
   it('close() unregisters the port', async () => {
     const server = http.createServer((_req, res) => res.end('x'));
-    server.listen(3002);
+    await listenOn(server, 3002);
     expect(listPorts()).toContain(3002);
     await new Promise<void>((r) => server.close(() => r()));
     expect(listPorts()).not.toContain(3002);
@@ -109,7 +115,7 @@ describe('node:http server via port registry', () => {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end(`self ${req.url}`);
     });
-    server.listen(3003);
+    await listenOn(server, 3003);
 
     const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const req = http.get('http://localhost:3003/self-check', (res) => {
@@ -127,7 +133,7 @@ describe('node:http server via port registry', () => {
 
   it('http.get to a closed loopback port emits ECONNREFUSED (Node contract)', async () => {
     const server = http.createServer((_req, res) => res.end('x'));
-    server.listen(3004);
+    await listenOn(server, 3004);
     await new Promise<void>((r) => server.close(() => r()));
 
     const err = await new Promise<Error & { code?: string; syscall?: string; port?: number }>(
@@ -151,7 +157,7 @@ describe('node:http streaming responses (ADR-0017 phase 1)', () => {
       res.write('data: b\n\n');
       res.end('data: c\n\n');
     });
-    server.listen(3100);
+    await listenOn(server, 3100);
     const response = await dispatchToPort(3100, new Request('http://x/events'));
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/event-stream');
@@ -186,7 +192,7 @@ describe('node:http streaming responses (ADR-0017 phase 1)', () => {
         res.end('late');
       }, 50);
     });
-    server.listen(3101);
+    await listenOn(server, 3101);
     const t0 = Date.now();
     const response = await dispatchToPort(3101, new Request('http://x/poll'));
     const body = response.body;
@@ -214,7 +220,7 @@ describe('node:http streaming responses (ADR-0017 phase 1)', () => {
       for (let i = 0; i < 5; i++) res.write(`x${i}`);
       res.end();
     });
-    server.listen(3102);
+    await listenOn(server, 3102);
     const response = await dispatchToPort(3102, new Request('http://x/bp'));
     const body = response.body;
     if (!body) throw new Error('expected streaming body');

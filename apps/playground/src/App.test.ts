@@ -703,9 +703,13 @@ describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-
 });
 
 describe('stream compat docs', () => {
-  it('claims Readable.toWeb separately from still-unclaimed Writable.toWeb', () => {
+  it('claims Readable.toWeb AND the Writable/Duplex WHATWG bridge', () => {
     expect(streamsCompatSrc).toContain('| `Readable.toWeb` | ✅ |');
-    expect(streamsCompatSrc).toContain('| `Writable.toWeb` | ❌ |');
+    // The Writable/Duplex WHATWG bridge is now CLAIMED (stream-writable-duplex-web-bridge) —
+    // Writable.toWeb is no longer a `❌` row.
+    expect(streamsCompatSrc).toContain('`Writable.toWeb`');
+    expect(streamsCompatSrc).toContain('`Duplex.toWeb`');
+    expect(streamsCompatSrc).not.toContain('| `Writable.toWeb` | ❌ |');
     expect(streamsCompatSrc).not.toContain('| `Readable.toWeb` / `Writable.toWeb` | ❌ |');
     expect(streamInteropAdrSrc).toContain('Correction 2026-06-29');
     expect(streamInteropAdrSrc).toContain('Readable.toWeb()');

@@ -86,6 +86,8 @@ const TOMBSTONES = new Set([
   'docs/public/compat/browsers.md',
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
+  'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
+  'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)
 ]);
 
 const errors = [];

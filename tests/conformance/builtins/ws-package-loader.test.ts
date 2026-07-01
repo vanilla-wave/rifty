@@ -3,6 +3,7 @@ import { dirname, join, relative } from 'node:path';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { releasePort } from '../../../packages/net/src/cross-realm/port-claim.ts';
 import { dispatchToPort, listPorts, unregisterPort } from '../../../packages/net/src/registry.ts';
 import { BridgedWebSocket } from '../../../packages/net/src/ws/bridge.ts';
 
@@ -19,11 +20,14 @@ describe('real ws package under the rifty module loader', () => {
         const { WebSocketServer } = require('ws');
         const server = http.createServer((_req, res) => res.end('http-ok'));
         const wss = new WebSocketServer({ server, path: '/ws' });
+        let resolveReady;
+        const ready = new Promise((resolve) => { resolveReady = resolve; });
         wss.on('connection', (socket) => {
           socket.on('message', (data) => socket.send('echo:' + String(data)));
         });
-        server.listen({ port: 4104 });
+        server.listen({ port: 4104 }, () => resolveReady());
         module.exports = {
+          ready,
           close() {
             wss.close();
             server.close();
@@ -32,9 +36,11 @@ describe('real ws package under the rifty module loader', () => {
       `,
     });
     const loader = createModuleLoader(vfs, { cwd: '/workspace' });
-    const guest = loader.require('./guest.js', '/workspace/__entry.js') as { close(): void };
-    await Promise.resolve();
-    await Promise.resolve();
+    const guest = loader.require('./guest.js', '/workspace/__entry.js') as {
+      ready: Promise<void>;
+      close(): void;
+    };
+    await guest.ready;
 
     const httpResponse = await dispatchToPort(4104, new Request('http://preview.local:4104/'));
     expect(await httpResponse.text()).toBe('http-ok');
@@ -58,7 +64,7 @@ describe('real ws package under the rifty module loader', () => {
     ws.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 
   it('runs the real ws client against a real ws server on node:http', async () => {
@@ -109,7 +115,7 @@ describe('real ws package under the rifty module loader', () => {
     await expect(guest.result).resolves.toBe('echo:hello');
 
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 
   it('round-trips a real ws client ping to a real ws server pong over the bridge', async () => {
@@ -169,7 +175,7 @@ describe('real ws package under the rifty module loader', () => {
     await expect(guest.result).resolves.toBe('probe');
 
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 
   it('concludes a graceful server close cleanly on the real ws client (no status -> 1005)', async () => {
@@ -227,7 +233,7 @@ describe('real ws package under the rifty module loader', () => {
     await expect(guest.result).resolves.toEqual({ code: 1005, reason: '' });
 
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 
   it('server.ping() to a real ws client yields exactly one server pong and one client ping', async () => {
@@ -278,7 +284,7 @@ describe('real ws package under the rifty module loader', () => {
     await expect(guest.result).resolves.toEqual({ serverPongs: 1, clientPings: 1 });
 
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 
   it('a browser-like bridge client silently pongs a server ping without surfacing it', async () => {
@@ -297,6 +303,8 @@ describe('real ws package under the rifty module loader', () => {
         const result = new Promise((resolve) => { resolveResult = resolve; });
         const server = http.createServer((_req, res) => res.end('http-ok'));
         const wss = new WebSocketServer({ server, path: '/ws' });
+        let resolveReady;
+        const ready = new Promise((resolve) => { resolveReady = resolve; });
         let timer;
         let serverPongs = 0;
         wss.on('connection', (socket) => {
@@ -304,8 +312,9 @@ describe('real ws package under the rifty module loader', () => {
           setTimeout(() => socket.ping('sp'), 5);
           timer = setTimeout(() => resolveResult(serverPongs), 250);
         });
-        server.listen({ port: 4117 });
+        server.listen({ port: 4117 }, () => resolveReady());
         module.exports = {
+          ready,
           result,
           close() { clearTimeout(timer); wss.close(); server.close(); }
         };
@@ -313,11 +322,11 @@ describe('real ws package under the rifty module loader', () => {
     });
     const loader = createModuleLoader(vfs, { cwd: '/workspace' });
     const guest = loader.require('./guest.js', '/workspace/__entry.js') as {
+      ready: Promise<void>;
       result: Promise<number>;
       close(): void;
     };
-    await Promise.resolve();
-    await Promise.resolve();
+    await guest.ready;
 
     const ws = new BridgedWebSocket('ws://localhost:4117/ws', 'pong-probe');
     const surfaced: unknown[] = [];
@@ -332,9 +341,16 @@ describe('real ws package under the rifty module loader', () => {
 
     ws.close();
     guest.close();
-    for (const port of listPorts()) unregisterPort(port);
+    cleanupPorts();
   });
 });
+
+function cleanupPorts(): void {
+  for (const port of listPorts()) {
+    releasePort(port);
+    unregisterPort(port);
+  }
+}
 
 function seedInstalledWsPackage(vfs: MemoryFsSync): void {
   const root = 'node_modules/ws';

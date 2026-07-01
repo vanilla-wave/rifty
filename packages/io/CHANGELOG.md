@@ -2,8 +2,107 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`stream.compose` + `Readable.prototype.wrap` + `Duplex.from`** (Node v16) —
+  `compose(...stages)` builds a `Duplex` (write→stage0→stageN→read) wired through
+  the shipped `pipeline`, so an error in any stage destroys EVERY stage; stages
+  may be `Duplex`/`Transform` instances or async-generator-function bodies
+  `(source) => asyncIterable`. `Duplex.from(src)` builds a Duplex from a
+  `{ readable, writable }` pair, a body function, or any iterable/async-iterable/
+  string/Promise (readable-driven), and throws `ERR_INVALID_ARG_TYPE` on an
+  unknown shape (no silent coercion). `Readable.prototype.wrap(legacyStream)`
+  adapts a streams1 `'data'`/`'end'` source with `pause()`/`resume()`
+  backpressure and returns the Readable. All return an `instanceof Duplex`;
+  Node's internal `Duplexify` class NAME is deliberately NOT replicated (out of
+  scope). All parity-proven vs real Node v24.
+
+- **`Readable.prototype` async-iterator helpers** (v17→v22) —
+  `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/
+  `every`/`find`/`iterator`, lazy transforms over the base
+  `[Symbol.asyncIterator]()`. Stream-returning helpers (`map`/`filter`/`flatMap`/
+  `take`/`drop`) return an objectMode `Readable`; the rest return a Promise.
+  `map`/`filter`/`forEach`/`flatMap` accept `{ concurrency, signal }`:
+  `concurrency > 1` runs N callbacks at once but emits results in INPUT order (the
+  mandatory guarantee — a peer's COMPLETION frees the slot, Node parity), and a
+  `signal` abort rejects mid-iteration with an `AbortError` (`code:'ABORT_ERR'`).
+  Validation matches Node: `map(non-fn)` → `ERR_INVALID_ARG_TYPE`,
+  `take(-1)`/`drop(-1)`/`concurrency<=0` → `ERR_OUT_OF_RANGE`, `reduce` of an
+  empty stream with no initial value → `ERR_MISSING_ARGS` (all the right
+  Error subclass). `iterator({ destroyOnReturn })` controls early-return cleanup
+  (`true` destroys the source, `false` leaves it resumable). A callback throw
+  fails fast. All parity-proven vs real Node v24.
+
+- **`Writable.toWeb` / `Writable.fromWeb` + `Duplex.toWeb` / `Duplex.fromWeb`**
+  (Node v17) — the write/duplex half of the Node↔WHATWG bridge (pure-JS over
+  Chromium `WritableStream`), completing the read half (`Readable.toWeb`/
+  `fromWeb`). `Writable.toWeb(w)`: each web `write(chunk)` calls `w.write` and
+  AWAITS `'drain'` when it returns false (serialized, drain-gated backpressure —
+  the next chunk's `_write` is not reached until the prior completes); `close` →
+  `w.end` + await `'finish'`; `abort(reason)` → `w.destroy(reason)`; `w` erroring
+  rejects the writer's `closed`. `Writable.fromWeb(ws)`: `_write` pumps to a held
+  web writer (its promise is the backpressure), `_final` → `writer.close`,
+  `destroy(reason)` → sink `abort(reason)` (same error object); a web-side
+  `controller.error(err)` destroys the Node writable (emits `'error'(err)`,
+  `destroyed`). `Duplex.toWeb(d)` → `{ readable, writable }` (reusing both
+  `toWeb`s); `Duplex.fromWeb(pair)` composes them into one `Duplex`. `Duplex`
+  now carries `allowHalfOpen` (default `true` for a bare Duplex, Node parity):
+  with `false`, the readable side ending auto-ends the writable side —
+  `Duplex.fromWeb` deliberately defaults it to `false` (the OPPOSITE), honoring
+  `{ allowHalfOpen: true }`. Non-WHATWG args throw a synchronous `TypeError`
+  (`ERR_INVALID_ARG_TYPE`). All parity-proven vs real Node v24.
+
+- **`Writable` `cork()` / `uncork()` + real `_writev` batching.** `cork()` defers
+  buffered writes (no `_write`/`_writev` while corked); `uncork()` flushes them —
+  in ONE `_writev(chunks, cb)` call (Node's `[{chunk, encoding}, …]` shape) when
+  2+ chunks are pending and a `_writev` exists, else sequential `_write` (order
+  preserved). Nested cork is a counter (`writableCorked`); the buffer drains only
+  when it returns to 0, and `end()` clears it (implicit uncork). A corked stream
+  still reports backpressure (`write()` → `false` past HWM) and emits `'drain'`
+  after the flush. The `writev?` option (and a subclass `_writev` override) is
+  **re-added WIRED FOR REAL** — the previously-removed type-only placeholder lied
+  (it did nothing); it is accepted now ONLY because it is honored. A `_writev`
+  error errors every batched callback and destroys the stream. All parity-proven
+  vs real Node.
+
+- **Stream predicates + default-HWM accessors + `addAbortSignal`.**
+  `isReadable`/`isWritable`/`isErrored`/`isDisturbed` (Node v16.14/v17.3) read the
+  existing `_readableState`/`_writableState`; `isDisturbed` is backed by an
+  EXPLICIT `disturbed` bit (set on first chunk-consumed or destroy), never
+  inferred. Return shapes match REAL Node exactly: `isReadable`/`isWritable` →
+  `null` for a non-stream (or wrong half), `isErrored`/`isDisturbed` → `false`;
+  a non-stream input never throws. `getDefaultHighWaterMark(objectMode)` /
+  `setDefaultHighWaterMark(objectMode, n)` (Node v19.9) — the default HWM is now a
+  single module-level source of truth (65536 bytes / 16 objects, matching current
+  Node; the ctors' hardcoded `?? 16*1024` is gone) read by the Readable/Writable
+  constructors when no explicit `highWaterMark` is passed (an explicit option
+  still wins). `addAbortSignal(signal, stream)` (Node v15.4) is now a standalone
+  export, extracted from `Readable.fromWeb`'s inline abort wiring (which reuses
+  it): aborting destroys the stream with an `AbortError` (`code:'ABORT_ERR'`),
+  and an already-aborted signal destroys immediately. All parity-proven vs real
+  Node.
+
+- **`Readable.toWeb(r)`** (Node v17) — converts a Node `Readable` into a real
+  WHATWG `ReadableStream`. Pull-driven (NOT buffer-the-whole-stream): the
+  underlying source pulls exactly one chunk per WHATWG `pull()`, so a slow web
+  consumer holds the source paused at its `highWaterMark`. `r` ending → stream
+  close; `r` erroring → stream error with the SAME error; `reader.cancel(reason)`
+  → `r.destroy()`. Mirrors the existing `Readable.fromWeb`. Parity-proven vs real
+  Node (order/close, error propagation, cancel→destroy, backpressure, object
+  mode); exported from `streams/index.ts`.
+
 ### Fixed
 
+- **Node stream edge parity tightened after PR #102 review.** `Writable.toWeb()`
+  and `Duplex.toWeb()` now reject pending web writes/closes with `AbortError`
+  when the Node side is destroyed without an explicit error; `Readable.from()`
+  stream helpers remain lazy until consumed; `isReadable()` stays true after
+  `push(null)` until EOF is emitted; `Readable.fromWeb()` converts default-mode
+  string chunks to `Buffer`s while preserving object-mode chunks; an
+  already-aborted `addAbortSignal()` destroys synchronously; uncorked back-to-back
+  writes no longer batch through `_writev` unless Node would; and
+  `compose(...).destroy()` aborts stages with `AbortError` instead of a clean
+  destroy.
 - **`Readable.toWeb()` end-of-life fidelity (matches Node's `finished()`).** A
   source already ended or destroyed before conversion now settles the web stream
   on the next microtask instead of hanging forever; a `destroy()` without an

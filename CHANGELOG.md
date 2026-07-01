@@ -78,6 +78,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Kernel server-process model (`serve`) — ADR-0143 "D" phase P1 (ADR-0144).** The kernel gains a `serve` spawn flag so a long-lived owner-worker is NOT reaped when its entry settles cleanly (`finalizeWorkerEntry`); the real-vite preview owner drops its `await new Promise<never>(() => {})` keep-alive hack. First landed phase of the ADR-0143 owner-worker execution model (one worker owns `node_modules` + runs the shell/CLI/`execSync` in-realm, PAGE = viewer — retiring the bin-worker ENOENT class). Phased plan + status: `docs/backlog/shell/d-owner-worker-milestone.md`.
 - **Kernel server-process model (`serve`) — ADR-0143 "D" phase P1 (ADR-0144).** The kernel gains a `serve` spawn flag so a long-lived owner-worker is NOT reaped when its entry settles cleanly (`finalizeWorkerEntry`); the real-vite preview owner drops its `await new Promise<never>(() => {})` keep-alive hack. First landed phase of the ADR-0143 owner-worker execution model (one worker owns `node_modules` + supervises shell/CLI/`execSync` execution, PAGE = viewer — retiring the bin-worker ENOENT class). Phased plan + status: `docs/backlog/shell/d-owner-worker-milestone.md`.
 
+### Fixed
+
+- **Node parity runner `exec-sync` mode preserves missing-child `ENOENT`.** The
+  synchronous in-realm harness now checks the VFS mirror before loader-running a
+  child, so `execSync('node missing.js')` surfaces `ENOENT` through the same
+  binary-frame path as the runtime handler instead of being flattened to
+  `ECHILDFAILED`.
+
 ### Documented
 
 - **PR #76 review honesty fixes.** Diagnostics in the TS language-service compat
