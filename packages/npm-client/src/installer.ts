@@ -1008,6 +1008,25 @@ function createLockfileSource(lockfile: Lockfile, opts: InstallOptions): Resolut
           },
         );
       }
+      // Override redirected to a target NAME the lockfile pins, but a moved
+      // override RANGE (e.g. the baked table bumps, or a user edits `overrides`)
+      // can leave the locked version stale. The live-resolve source would pick a
+      // satisfying version; the fast path must NOT silently reuse a version the
+      // current override no longer admits. `subgraphFreeOfOverrideDivergence`
+      // misses it (the source name has no entry to surface), so refuse here —
+      // loud, per the "lockfile is authoritative or it's an error" contract.
+      if (override?.range && !matchesRange(entry.version, override.range)) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: override '${name}' → '${effectiveName}@${override.range}' but package-lock.json pins ${effectiveName}@${entry.version}, which no longer satisfies it. Delete the lockfile and re-install.`,
+          ),
+          {
+            code: 'EBROKENLOCK',
+            packageName: effectiveName,
+            reason: 'override-range-drift' as const,
+          },
+        );
+      }
       return {
         name: effectiveName,
         version: entry.version,

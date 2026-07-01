@@ -279,6 +279,15 @@ export function App(props: AppProps) {
     PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
       ? presetDeepLink.presetId
       : undefined;
+  // A provided-but-unknown `?preset=<id>` (typo / stale share URL) would silently
+  // fall through to the project-first chooser, looking like the link did nothing.
+  // Surface it loudly so a broken link / a benchmark pointed at the wrong preset
+  // is visible.
+  if (presetDeepLink.presetId !== undefined && deepLinkStarterId === undefined) {
+    console.warn(
+      `[rifty] unknown preset "${presetDeepLink.presetId}" in ?preset= deep-link — ignoring it and showing the project chooser`,
+    );
+  }
 
   const store = createAppProjectStore({
     index: projectIndex() ?? {
@@ -1989,8 +1998,13 @@ export function App(props: AppProps) {
    * the page holds no authoritative fs). This mirrors the durable owner reset for
    * boot-critical files, but is acked before editor tabs reopen so template files
    * like index.html cannot lag a mid-session starter pick.
+   *
+   * `ifAbsent` (boot/reload re-seed): skip files that already exist so a reload
+   * never clobbers a persisted edit — the owner's own freshRoot-gated
+   * seedStarterBaseline already placed the preset content on a cold boot. A
+   * preset SWITCH keeps overwrite (default) to replace the outgoing preset.
    */
-  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
+  async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -2003,13 +2017,14 @@ export function App(props: AppProps) {
         type: 'write',
         path,
         data: ownerWriteEnc.encode(content),
+        ...(ifAbsent ? { ifAbsent: true } : {}),
       });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  async function seedViteWorkspace(preset: Preset): Promise<void> {
-    await seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset, ifAbsent = false): Promise<void> {
+    await seedWorkspaceOwner(preset, ifAbsent);
   }
 
   function devServerSession(): TerminalSessionSnapshot {

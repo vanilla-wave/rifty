@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pnpm bench` refuses a partial or foreign-server measurement.** Two Fidelity
+  hardenings on the install metric: (1) a pass now records `measured` ONLY when
+  ALL `RUNS` samples reached first Vite response — a partial set (e.g. 1/5 after
+  flakes) is `unmeasured` with the success count, never a launch-citable thin
+  median; (2) the harness fails fast if the strict port is already serving
+  (a stale/foreign dev server the run would measure instead of a fresh one) and
+  refuses if its own spawned dev server exited before serving.
+
 ### Added
 
 - **Cold-start + npm-install benchmark harness (`pnpm bench`, `docs/backlog/perf/cold-start-and-install-benchmark`).** A zero-dep timing runner (`tools/perf/bench.mjs`) drives a headless Chromium tab (Playwright — already a devDep, not vitest `bench`) through the `?preset=real-vite&autorun=1` deep-link, median-of-N with a fresh browser context per run: (a) cold-start-to-interactive ms — always; (b) npm-install-to-first-Vite-response ms — only when `VITE_RIFTY_REGISTRY_URL` points at the deployed registry proxy (D-004), else recorded `requires proxy` (never silently skipped). Emits the committed `perf/benchmarks.json` a launch figure can cite (measured median, conservatively rounded up). A CI smoke gates on the harness PRODUCING a well-formed artifact — cold-start measured + the install number recorded — NOT on absolute ms (wall-clock is noisy on shared CI; PB-6). The pure aggregation core (median / conservative round-up / artifact schema) is RED-first unit-tested. When `VITE_RIFTY_RESOLVER_URL` is ALSO set, (b) runs TWO passes on the same port — a standard baseline (no resolver) then the eddy fast path — and nests the standard baseline + a measured `speedupX` under the eddy metric; a discarded warm-up run per install pass keeps the median steady-state (the first hit pays a one-off dev-server/proxy-connection cost a deployed warm server never re-pays). First real-browser measurement (live `registry.rifty.dev` + `eddy.rifty.dev`, `real-vite` preset, warm, median-of-5): standard **4284ms** → eddy **2517ms** = **1.70×** (committed to `perf/benchmarks.json`).

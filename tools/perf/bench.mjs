@@ -91,6 +91,26 @@ async function waitForHttp(url, timeoutMs) {
   );
 }
 
+/**
+ * Fail fast if the strict port is already serving: `pnpm dev` uses strictPort, so
+ * a stale/foreign server on this port makes the spawned dev server crash on bind
+ * while `waitForHttp` happily measures the WRONG server (the stale-port trap).
+ * The harness OWNS its port — an occupied one is an operator error, not a result.
+ */
+async function assertPortFree() {
+  try {
+    const res = await fetch(`${BASE}/`, { redirect: 'manual' });
+    if (res.status > 0) {
+      throw new Error(
+        `port ${PORT} is already serving (a stale/foreign dev server?) — the harness would measure it, not a fresh one. Kill it or set a unique RIFTY_PLAYGROUND_PORT.`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('already serving')) throw err;
+    /* connection refused → port free, good */
+  }
+}
+
 async function terminalText(page) {
   return page.evaluate(() => {
     const el =
@@ -177,6 +197,14 @@ async function runPhase(browser, label, withResolver, measureInstall) {
   let installError = null;
   try {
     await waitForHttp(`${BASE}/`, DEV_READY_TIMEOUT);
+    // Our spawned dev server must be the one that answered. If it already exited
+    // (strictPort bind lost to a server that slipped onto the port), we'd be
+    // measuring a foreign responder — refuse rather than publish a wrong number.
+    if (dev.exitCode !== null || dev.signalCode !== null) {
+      throw new Error(
+        `[${label}] dev server exited (code ${dev.exitCode}, signal ${dev.signalCode}) before serving on port ${PORT} — refusing to measure a foreign responder.`,
+      );
+    }
     // Warm the shared server + proxy once (discarded) so the measured install
     // samples are steady-state, not first-hit. Only when install is measured —
     // a cold-only pass (no proxy, e.g. CI smoke) needs no warm-up.
@@ -205,10 +233,11 @@ async function runPhase(browser, label, withResolver, measureInstall) {
 }
 
 function measuredOrUnmeasured(samples, error) {
-  return samples.length > 0
+  // All `RUNS` must succeed — a partial set is not a median of N (Fidelity).
+  return samples.length === RUNS
     ? { samples }
     : {
-        note: `proxy ${REGISTRY_URL} configured but install did not reach first Vite response${error ? `: ${error}` : ''}`,
+        note: `proxy ${REGISTRY_URL} configured but only ${samples.length}/${RUNS} runs reached first Vite response — refusing a partial median${error ? `: ${error}` : ''}`,
       };
 }
 
@@ -220,6 +249,7 @@ async function main() {
   );
   let browser;
   try {
+    await assertPortFree();
     browser = await chromium.launch({
       headless: true,
       args: process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
@@ -233,7 +263,10 @@ async function main() {
       const base = await runPhase(browser, 'standard', false, true);
       const eddy = await runPhase(browser, 'eddy', true, true);
       coldSamples = eddy.cold;
-      if (eddy.install.length > 0 && base.install.length > 0) {
+      // Both passes must yield ALL `RUNS` samples — a median of N means N runs,
+      // not "whatever survived". A partial set is recorded `unmeasured` (never a
+      // launch-citable thin median), the item's Fidelity contract.
+      if (eddy.install.length === RUNS && base.install.length === RUNS) {
         installMetric = {
           status: 'measured',
           samples: eddy.install,
@@ -244,7 +277,7 @@ async function main() {
       } else {
         installMetric = {
           status: 'unmeasured',
-          note: `proxy ${REGISTRY_URL} + resolver ${RESOLVER_URL} configured but ${eddy.install.length === 0 ? 'eddy' : 'standard'} install did not reach first Vite response${eddy.installError ? `: ${eddy.installError}` : base.installError ? `: ${base.installError}` : ''}`,
+          note: `proxy ${REGISTRY_URL} + resolver ${RESOLVER_URL} configured but only standard ${base.install.length}/${RUNS} + eddy ${eddy.install.length}/${RUNS} runs reached first Vite response — refusing a partial median${eddy.installError ? ` (eddy: ${eddy.installError})` : base.installError ? ` (standard: ${base.installError})` : ''}`,
         };
       }
     } else if (measureInstall) {
