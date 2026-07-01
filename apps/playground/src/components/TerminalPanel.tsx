@@ -22,6 +22,7 @@ import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { Icon } from './icons.tsx';
+import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */
 export interface TerminalDims {
@@ -89,7 +90,6 @@ export function TerminalPanel(props: {
   let lastSubmittedLine = '';
   let completionSeq = 0;
   let busyNoticeTimer: ReturnType<typeof setTimeout> | undefined;
-  let bufferRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   const paletteItems = createMemo<readonly PaletteItem[]>(() => {
     const query = paletteQuery().trim().toLowerCase();
     const actions: PaletteItem[] = [
@@ -156,19 +156,27 @@ export function TerminalPanel(props: {
   }
 
   function refreshTerminalBuffer(): void {
-    try {
-      setTerminalBuffer(term?.snapshotBuffer({ excludeModes: true }) ?? '');
-    } catch {
+    const t = term;
+    if (!t) {
       setTerminalBuffer('');
+      return;
     }
+    // xterm parses writes on a deferred macrotask; serialize only once they have
+    // landed, else a final dev-server-ready line (no trailing output to trigger a
+    // later refresh) is missed — the CI-only `data-terminal-buffer` marker flake.
+    void t
+      .snapshotBufferSettled({ excludeModes: true })
+      .then((text) => setTerminalBuffer(text))
+      .catch(() => setTerminalBuffer(''));
   }
 
+  // Coalesce the mirror refresh, but cap the wait so a reset-on-every-write
+  // debounce can't starve `data-terminal-buffer` under a streaming dev server.
+  // See terminal-buffer-scheduler. (Marker-flush correctness is handled by
+  // `snapshotBufferSettled` above, not the debounce.)
+  const bufferRefresh = createBufferRefreshScheduler(() => refreshTerminalBuffer());
   function scheduleTerminalBufferRefresh(): void {
-    if (bufferRefreshTimer) clearTimeout(bufferRefreshTimer);
-    bufferRefreshTimer = setTimeout(() => {
-      bufferRefreshTimer = undefined;
-      refreshTerminalBuffer();
-    }, 16);
+    bufferRefresh.schedule();
   }
 
   function showBusyNotice(_event: TerminalBusyInputEvent): void {
@@ -428,7 +436,7 @@ export function TerminalPanel(props: {
 
   onCleanup(() => {
     if (busyNoticeTimer) clearTimeout(busyNoticeTimer);
-    if (bufferRefreshTimer) clearTimeout(bufferRefreshTimer);
+    bufferRefresh.cancel();
     disposeTheme?.();
     term?.dispose();
   });

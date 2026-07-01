@@ -14,6 +14,25 @@
 
 ### Fixed
 
+- **The `[vite] dev server ready` marker no longer intermittently vanishes from
+  the terminal (CI flake).** When a starter pick restarts the dev server, the
+  aborted run's late `listen()` IPC could emit the readiness marker AFTER its
+  `pty:exit` — the page dropped the `pty:chunk` for the already-removed run
+  (`runs.get(rid)` was undefined), so the marker (and only it) was lost while the
+  Vite banner + LIVE pill still showed. `pty-client` now routes a chunk that
+  outlives its run to the session's trailing sink, so it still reaches the
+  terminal (matching the passing render where the marker lands just after the
+  prompt). RED-checked unit test in `pty-client.test.ts`.
+- **Launcher groups node-runtime starters under SERVER, not "Vite dev server".**
+  The gallery group is now derived from the resolved template runtime
+  (`groupForPreset`) instead of the display category, so every `node-server` /
+  `node-cli` starter (Express + SQLite, Socket Lab, Hono, Koa, Markdown SSG, and
+  the CLI report) renders under the **SERVER / Node runtime** header rather than
+  being mislabelled under the Vite **FRONT-END** group. Vite apps still group
+  under FRONT-END.
+- **Koa API starter surfaces a failed POST in the UI** instead of an unhandled
+  promise rejection — the client submit handler now wraps the request in
+  `try/catch` and writes the error to the status line, matching the Hono starter.
 - **Picking a starter no longer races a pending entry edit into the seed.** Now
   that the template entry (`main.js`/`main.ts`) is an ordinary debounced
   owner-write tab, `runVitePreset` drains pending editor writes _before_ seeding —
@@ -118,6 +137,27 @@
 
 ### Fixed
 
+- **CI-only "[vite] dev server ready never appears" e2e flake — root cause.**
+  The `data-terminal-buffer` mirror was serialized *synchronously* after writing
+  to xterm, but `xterm.write()` parses on a deferred macrotask. A final
+  dev-server-ready line (no trailing output to trigger a later refresh) was
+  serialized before xterm parsed it, so it never reached the mirror; under CI
+  load xterm's chunked drain lagged the refresh deadline, and being the last
+  write nothing re-triggered the serialize. `TerminalPanel.refreshTerminalBuffer`
+  now serializes via `RiftyTerminal.snapshotBufferSettled` (an xterm empty-write
+  settle barrier), so the mirror always reflects the final write. Deterministic
+  regression test in `@riftydev/terminal`; the native Vite banner appeared while
+  the marker vanished precisely because the banner had trailing output and the
+  marker did not.
+- **Terminal buffer mirror can no longer starve under streaming output.**
+  `data-terminal-buffer` (the serialized mirror the UI + e2e read) was refreshed
+  by a reset-on-every-write 16ms debounce: while a dev server streams output,
+  every chunk cleared the pending timer, so the mirror could freeze on stale
+  content under unbroken output. The new `createBufferRefreshScheduler` coalesces
+  tight bursts but caps the wait (`maxWaitMs`), guaranteeing a refresh even under
+  a continuous stream; the starvation case is a deterministic unit test.
+  (Perf/coalescing guard — the marker flake itself is fixed by the settle barrier
+  above, not the debounce cap.)
 - **Explorer/SCM file actions now use fresh owner state.** Download and compare
   drain pending editor writes before owner reads, new files compare against an
   empty HEAD side, SCM discard asks for confirmation, and owner batch/write
@@ -146,6 +186,30 @@
 - **Saved projects now re-root the workspace owner after Save.** A plain
   Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
+- **Rapid starter picks are serialized through the full preset transition.**
+  A second launcher pick now waits for the prior boot before mutating the
+  scratch starter, durable index, and dev-server lifecycle, so files, active
+  starter UI, and preview ownership cannot split across two presets.
+- **Preset switching stops only the lifecycle-owned terminal session.** Starter
+  changes still stop the active dev/CLI boot session before reseeding files, but
+  no longer abort unrelated running terminal tabs. A pre-existing owner-reported
+  dev server from a non-lifecycle terminal is not treated as the picked starter's
+  successful boot signal; dev-server readiness is tied to the owning `pty`
+  session id, and a stopped lifecycle session does not make a later unrelated
+  command in that terminal stoppable by preset switching.
+
+- **`vite preview` config honesty tightened.** Root `vite.config.*` files and
+  `vite preview --config` now throw `NotImplementedError('vite.preview.config-loading')`
+  instead of being silently ignored by the browser preview bridge patch; the
+  remaining CORS/host parity item is promoted to a ready backlog contract.
+
+- **Vite 7 `vite preview` serves the production build through the real CLI.**
+  The CLI source patch now adjusts Vite's preview inline config directly instead
+  of loading the dev wrapper config through esbuild, binds preview to the
+  synthetic preview-local host, and keeps the remaining CORS-middleware parity
+  gap explicit in `backlog/playground/vite-preview-cors-middleware-parity`.
+  `tests/e2e/vite7-build-preview.spec.ts` pins `vite build` -> `vite preview`
+  -> `/preview/4173/`.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
@@ -1053,6 +1117,24 @@
     tests + parity. The historical worker-VFS transport residual was later
     closed by the owner-worker child executor; real package CLIs now run through
     the owner store.
+
+- **Playground stack-consumer templates: Hono API, Koa API, CLI report,
+  Markdown SSG.** The template registry now ships four new from-scratch presets:
+  `hono-api` (Hono middleware/ctx through the standard `@hono/node-server`
+  adapter), `koa-api` (Koa `app.callback()` through `node:http`, router params,
+  cookies, JSON body reads), `cli-report` (`node-cli` run-to-completion worker
+  lifecycle, stdout + exit code, no preview), and `markdown-ssg` (`marked` + fs
+  read/write/walk into generated `dist/` HTML served through `node:http`). Each
+  has a focused Chromium e2e spec under `tests/e2e/`. Hono/Koa/Markdown SSG use
+  the shared seeded-preview mono font stack rather than local font strings.
+
+- **`node-cli` playground project runtime.** `ProjectSpec` now distinguishes
+  run-to-completion Node entries from long-running `node-server` entries. CLI
+  presets still seed package.json/files and install real npm dependencies in
+  the worker realm, but their lifecycle scripts now execute the package.json
+  command through the owner shell/bin path instead of jumping directly to the
+  template entry. They exit normally instead of waiting for `listen(port)` or
+  mounting a preview iframe.
 
 - **Baked node_modules snapshots — instant presets are instant on the FIRST
   boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`

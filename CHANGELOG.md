@@ -15,10 +15,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### CI
 
-- **Playwright CI worker cap follow-up recorded.** Added
-  `backlog/process-meta/playwright-ci-worker-scope` and a config seam for
-  scoping CI serialization to the TS-LS-heavy specs instead of the whole e2e
-  suite.
+- **e2e lanes run as parallel matrix jobs, not sequential steps.** `e2e-chromium`
+  is now a `matrix: lane: [heavy, light, prod]` (separate runners) instead of one
+  job running the three lanes back-to-back. e2e wall-clock becomes `max(lane)`
+  instead of the sum; separate runners also remove heavy↔light contention
+  entirely (each lane gets a dedicated machine). `fail-fast: false` so one red
+  lane doesn't cancel the others; report artifacts are per-lane
+  (`playwright-report-<lane>`).
+- **Scoped Playwright CI serialization to the heavy specs — light lane runs in
+  parallel again.** Replaced the global `workers: CI ? 1` (which serialized the
+  whole e2e suite) with two chromium lanes: `chromium-heavy` (TS-LS / fullstack
+  cold-boot specs, run serially with `--workers=1`) and `chromium-light` (the
+  remaining ~29 isolated specs, default parallel). CI runs them as separate
+  steps so a heavy cold-boot never contends with the light lane — the contention
+  that forced `workers=1` (heavy specs starved each other across files even with
+  in-file `describe.serial`). Resolves backlog
+  `process-meta/playwright-ci-worker-scope`.
+- **Cache the Playwright browser binary in CI.** `ci.yml` + `ci-cross-browser.yml`
+  cache `~/.cache/ms-playwright` keyed by the resolved Playwright version, so a
+  version bump busts it but normal runs skip the uncached CDN download (only the
+  apt system deps re-run on a hit). Also fixed the cross-browser chromium row
+  (`test:e2e:` → the two-lane `test:e2e`).
+- **Fail-fast `maxFailures` on CI e2e.** `playwright.config.ts` stops after 12
+  failures, `playwright.prod.config.ts` after 2 — a broadly-broken run no longer
+  burns every cold-boot cycle before going red.
 - **Public npm registry pinned — no more corporate-mirror lockfile poisoning.** Root `.npmrc` now sets `registry=https://registry.npmjs.org/` so a contributor's mirror `~/.npmrc` (e.g. `registry=https://npm.yandex-team.ru`) can no longer leak `tarball:` URLs into `pnpm-lock.yaml`. Prevents the poison at the source — beats the user/default registry + `npm_config_registry`. A scoped (`@scope:registry=`) or `--registry=` override could still poison the lock, but then CI's `pnpm install --frozen-lockfile` fails on the mirror host and blocks the PR, so no extra lockfile guard is warranted.
 - **`pnpm pr:check` — one parallel per-PR gate.** New `tools/checks/pr-check.mjs` runs lint, typecheck, build:libs, check:arch, parity/e2e coverage, backlog/refs checks, and unit + parity concurrently with a buffered pass/fail summary; exit ≠ 0 on any failure. `test:e2e` stays separate (its playwright workers + vite server starve the timing-sensitive parity checks when co-scheduled); CI keeps its own e2e job.
 - **`pnpm check:arch` (dependency-cruiser) replaces `check:deps` (madge) and folds in `check:isolation`.** One ruleset (`tools/checks/arch-rules.cjs`) enforces layer top-down direction (previously UNENFORCED — madge caught only cycles, not reverse edges), no cycles, no foreign `src/internal/*`, and solid-js only in playground (D-002). Unlike madge it honors `@riftydev/*` subpath `exports`, so cross-package subpath edges are visible (madge silently skipped 29). `madge` dropped; `no-solid-outside-playground.mjs` removed. Resolves backlog `process-meta/directional-layer-boundary-check` + `process-meta/madge-subpath-exports-cycle-blindspot`.

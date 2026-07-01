@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-06-18
 
+Correction 2026-06-29: `Readable.toWeb()` is now implemented as the narrow
+Node Readable → WHATWG ReadableStream bridge. It preserves emitted chunk
+identity/type, forwards the supplied strategy, and destroys the source on
+reader cancel. `Writable.toWeb()` and full `node:stream/web` remain unclaimed.
+
 ## Context
 
 Two Effect-shaped HTTP paths were still provisional after ADR-0054:
@@ -22,15 +27,15 @@ less stable than the tested implementation.
 - `Readable.pipe()` accepts writable sinks whose `write()` returns a Promise
   and pauses the source until it resolves. This makes `ServerResponse` a valid
   pipe target without an Effect-specific adapter.
-- Full `node:stream/web` and `toWeb()` remain unclaimed until implemented and
-  tested.
+- Full `node:stream/web` and `Writable.toWeb()` remain unclaimed until
+  implemented and tested.
 
 ## Consequences
 
 - Effect's web-stream response path can use the normal Node API:
   `Readable.fromWeb(body).pipe(res)`.
-- The stream compat matrix claims `Readable.fromWeb` only, not the whole WHATWG
-  bridge surface.
+- The stream compat matrix claims `Readable.fromWeb` and `Readable.toWeb`
+  only, not the whole WHATWG bridge surface.
 - Backpressure remains JS-stream backpressure, not OS/socket throughput.
 
 ## Tests

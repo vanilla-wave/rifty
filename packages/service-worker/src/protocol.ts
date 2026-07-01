@@ -42,7 +42,7 @@ export const SW_FRAME_VERSION = '1';
  * Pins:
  *   - The URL convention exported from `@riftydev/io/preview-protocol`:
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
- *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
+ *     `synthesizePreviewUrl(path, port?)`, and the shape of `parsePreviewPath`.
  *   - The owner-fallback and owner-scoping rules in the preview owner bindings:
  *     prefer `FetchEvent.clientId`, fall back to a controlled window, prefer an
  *     already-ready window for no-clientId copied preview URLs, and let Worker
@@ -74,7 +74,7 @@ export const SW_FRAME_VERSION = '1';
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '4';
+export const SW_ROUTING_VERSION = '5';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

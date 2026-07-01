@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
+const originalGlobalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'global');
+
+type GlobalWithNodeAlias = typeof globalThis & { global?: typeof globalThis };
 
 function spec(): KernelProcessSpec {
   const stdout = new MessageChannel();
@@ -30,6 +33,11 @@ afterEach(() => {
     writable: true,
     configurable: true,
   });
+  if (originalGlobalDescriptor) {
+    Object.defineProperty(globalThis, 'global', originalGlobalDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis as GlobalWithNodeAlias, 'global');
+  }
 });
 
 function onceData(process: ReturnType<typeof installNodeProcessShim>): Promise<unknown> {
@@ -39,6 +47,14 @@ function onceData(process: ReturnType<typeof installNodeProcessShim>): Promise<u
 }
 
 describe('installNodeProcessShim stdin', () => {
+  it('installs the Node global alias for kernel worker realms', () => {
+    Reflect.deleteProperty(globalThis as GlobalWithNodeAlias, 'global');
+
+    installNodeProcessShim(spec());
+
+    expect((globalThis as GlobalWithNodeAlias).global).toBe(globalThis);
+  });
+
   it('exposes kernel stdin as process.stdin data events', async () => {
     const stdin = new MessageChannel();
     const process = installNodeProcessShim({

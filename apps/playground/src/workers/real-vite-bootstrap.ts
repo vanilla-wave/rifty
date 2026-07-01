@@ -24,6 +24,7 @@
  */
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
+import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import {
   type SpawnWorkerSpec,
   type WorkerProcessHandle,
@@ -57,6 +58,7 @@ import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
+  type PtyDevServer,
   isPageToOwner,
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
@@ -115,6 +117,23 @@ const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
 const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
+const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
+
+function devServerFrame(
+  sid: string | undefined,
+  frame: Omit<PtyDevServer, 'type' | 'sid'>,
+): PtyDevServer {
+  return {
+    type: 'pty:dev-server',
+    ...(sid === undefined ? {} : { sid }),
+    ...frame,
+  };
+}
+
+function ptySidFromContext(ctx: CommandContext): string | undefined {
+  const sid = ctx.env[PTY_SESSION_ENV];
+  return sid && sid.length > 0 ? sid : undefined;
+}
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -328,7 +347,12 @@ function resolveCliPath(cwd: string, path: string): string {
 }
 
 function withViteCliArgs(binPath: string, args: readonly string[], ctx: CommandContext): string[] {
-  if (binNameOf(binPath) !== 'vite' || viteCliMode(args) !== 'dev') return [...args];
+  if (binNameOf(binPath) !== 'vite') return [...args];
+  const mode = viteCliMode(args);
+  if (mode === 'preview') {
+    return [...args, '--host', PREVIEW_LOCAL_HOST];
+  }
+  if (mode !== 'dev') return [...args];
   return [
     ...withoutViteConfigArgs(args),
     '--config',
@@ -349,6 +373,10 @@ function withViteCliEnv(
   const mode = viteCliMode(args);
   const userConfigPath = viteConfigArg(args);
   const previewMode = mode === 'dev' || mode === 'preview';
+  const userConfigEnv: Record<string, string> = {};
+  if (userConfigPath !== null) {
+    userConfigEnv.RIFTY_VITE_CLI_USER_CONFIG = resolveCliPath(ctx.cwd, userConfigPath);
+  }
   return {
     ...ctx,
     env: {
@@ -361,11 +389,10 @@ function withViteCliEnv(
         ? {
             RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
             RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
-            ...(userConfigPath === null
-              ? {}
-              : { RIFTY_VITE_CLI_USER_CONFIG: resolveCliPath(ctx.cwd, userConfigPath) }),
+            ...userConfigEnv,
           }
         : {}),
+      ...(mode === 'preview' ? userConfigEnv : {}),
     },
   };
 }
@@ -638,13 +665,14 @@ async function bootShellOwner(opts: {
     }
     if (mode === 'dev') {
       ctx.stdout.write(`[vite] dev server ready on port ${firstPort}\n`);
-      send({
-        type: 'pty:dev-server',
-        status: 'running',
-        port: firstPort,
-        url: `/preview/${firstPort}/`,
-        ...(previewScope === undefined ? {} : { previewScope }),
-      });
+      send(
+        devServerFrame(ptySidFromContext(ctx), {
+          status: 'running',
+          port: firstPort,
+          url: `/preview/${firstPort}/`,
+          ...(previewScope === undefined ? {} : { previewScope }),
+        }),
+      );
     }
   };
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
@@ -657,7 +685,7 @@ async function bootShellOwner(opts: {
       if (name === 'vite' && viteCliMode(req.args) === 'dev') {
         const port = parsePositivePort(req.env.RIFTY_VITE_CLI_PORT) ?? devCfg.port;
         ctx.stdout.write(`[real-vite/worker] starting dev server on port ${port}...\n`);
-        send({ type: 'pty:dev-server', status: 'starting' });
+        send(devServerFrame(ptySidFromContext(ctx), { status: 'starting' }));
       }
     },
     onSpawn: (req, handle) => {
@@ -675,14 +703,14 @@ async function bootShellOwner(opts: {
       if (sid !== undefined)
         previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env));
     },
-    onExit: (req) => {
+    onExit: (req, ctx) => {
       const sid = binPreviewSids.get(req);
       if (sid !== undefined) previews.removeBySid(sid);
       if (binNameOf(req.shimPath) !== 'vite') return;
       const mode = viteCliMode(req.args);
       if (mode === 'dev') {
         activeViteDevChild = null;
-        send({ type: 'pty:dev-server', status: 'stopped' });
+        send(devServerFrame(ptySidFromContext(ctx), { status: 'stopped' }));
       }
       if (mode === 'preview' && vitePreviewActive) {
         vitePreviewActive = false;
@@ -731,7 +759,7 @@ async function bootShellOwner(opts: {
   const runDevServer = async (ctx: CommandContext): Promise<number> => {
     const signal = ctx.signal ?? new AbortController().signal;
     try {
-      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk));
+      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk), ptySidFromContext(ctx));
       return 130; // resolves only when `signal` aborts (Ctrl-C)
     } catch (err) {
       if (signal.aborted) return 130;
@@ -740,7 +768,10 @@ async function bootShellOwner(opts: {
     }
   };
 
-  const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
+  const makeShell = (
+    seed?: { cwd?: string; env?: Record<string, string> },
+    ptySid?: string,
+  ): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
     // HERE against the owner's tree (single-store-owner: the page holds no
@@ -748,7 +779,10 @@ async function bootShellOwner(opts: {
     // deleted since.
     const shell = new Shell({
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
-      env: seed?.env ?? {},
+      env: {
+        ...(seed?.env ?? {}),
+        ...(ptySid === undefined ? {} : { [PTY_SESSION_ENV]: ptySid }),
+      },
       execBin: ownerBinExecutor,
     });
     const runPackageScript = async (
@@ -756,29 +790,50 @@ async function bootShellOwner(opts: {
       command: string,
       ctx: CommandContext,
     ): Promise<number> => {
+      const runScriptCommand = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        const scriptShell = makeShell(
+          { cwd: scriptCtx.cwd, env: scriptCtx.env },
+          ptySidFromContext(scriptCtx),
+        );
+        try {
+          const result = await scriptShell.run(scriptCommand, {
+            onChunk: (chunk, stream) => {
+              if (stream === 'stdout') scriptCtx.stdout.write(chunk);
+              else scriptCtx.stderr.write(chunk);
+            },
+            signal: scriptCtx.signal,
+            isTTY: scriptCtx.isTTY,
+            cols: scriptCtx.cols,
+            rows: scriptCtx.rows,
+            stdin: scriptCtx.stdin,
+          });
+          return result.exitCode;
+        } finally {
+          scriptShell.dispose();
+        }
+      };
+      const runNodeCliTemplate = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\n`);
+        const code = await runScriptCommand(scriptCommand, scriptCtx);
+        scriptCtx.stdout.write(`[cli] completed with exit code ${code}\n`);
+        return code;
+      };
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.
-      if (devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)) {
+      if (devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)) {
+        return runNodeCliTemplate(command, ctx);
+      }
+      if (devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)) {
         return runDevServer(ctx);
       }
-      const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env });
-      try {
-        const result = await scriptShell.run(command, {
-          onChunk: (chunk, stream) => {
-            if (stream === 'stdout') ctx.stdout.write(chunk);
-            else ctx.stderr.write(chunk);
-          },
-          signal: ctx.signal,
-          isTTY: ctx.isTTY,
-          cols: ctx.cols,
-          rows: ctx.rows,
-          stdin: ctx.stdin,
-        });
-        return result.exitCode;
-      } finally {
-        scriptShell.dispose();
-      }
+      return runScriptCommand(command, ctx);
     };
     const npmCommand = createNpmShellCommand({
       vfs,

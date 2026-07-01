@@ -54,6 +54,15 @@ jobs:
 
   e2e-chromium:
     runs-on: ubuntu-latest
+    # Run the three lanes as PARALLEL matrix jobs (separate runners), not
+    # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
+    # the sum. Separate runners also remove heavy<->light contention entirely
+    # (the reason the old global workers=1 / same-job lane-split existed), so each
+    # lane gets a dedicated machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [heavy, light, prod]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -69,18 +78,34 @@ jobs:
         # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
-      # Prod-artifact smoke: builds the app + serves it with `pnpm preview`
-      # (Netlify COI headers) and asserts the owner boots. Catches prod-only
-      # regressions the dev-server e2e above can't (green-checks-but-broken-deploy).
-      - run: pnpm test:e2e:prod
+      # Cache the browser binary keyed by the resolved Playwright version so a
+      # version bump (lockfile) busts it but day-to-day runs skip the uncached,
+      # CDN-variable download. The apt system deps (`install-deps`) live outside
+      # ~/.cache/ms-playwright, so they run on every hit too.
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
+      # (--workers=1); light = the rest in parallel; prod = prod-artifact smoke
+      # (builds the app + `pnpm preview` with Netlify COI headers, asserts the
+      # owner boots — catches prod-only regressions the dev-server e2e can't).
+      - run: pnpm test:e2e:${{ matrix.lane }}
       # Cold-start benchmark smoke (docs/backlog/perf/cold-start-and-install-benchmark).
-      # Gates on the harness PRODUCING a well-formed artifact — cold-start measured,
-      # the install number recorded (here `requires proxy`: no VITE_RIFTY_REGISTRY_URL
-      # in CI) — NOT on absolute ms (wall-clock is noisy on shared CI; PB-6). One run
-      # is enough to prove production; the committed launch figure is a local median.
+      # Runs once, on the fast prod lane (chromium already installed above). Gates on
+      # the harness PRODUCING a well-formed artifact — cold-start measured, the install
+      # number recorded (here `requires proxy`: no VITE_RIFTY_REGISTRY_URL in CI) — NOT
+      # on absolute ms (wall-clock is noisy on shared CI; PB-6). The committed launch
+      # figure is a local median.
       - name: Cold-start benchmark smoke
+        if: matrix.lane == 'prod'
         run: |
           set -euo pipefail
           node tools/perf/bench.mjs --runs 1 --out /tmp/bench-ci.json
@@ -99,5 +124,5 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.lane }}
           path: playwright-report

@@ -31,6 +31,14 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('withViteCliArgs');
   });
 
+  it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
+    expect(source).toContain("if (mode === 'preview')");
+    expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
+    expect(source).toContain("if (mode !== 'dev') return [...args]");
+    expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
+    expect(source).toContain("...(mode === 'preview' ? userConfigEnv : {})");
+  });
+
   it('forwards editor writes into the active real vite CLI child', () => {
     expect(source).toContain('let activeViteDevChild');
     expect(source).toContain("type: 'rifty:vite-file-change'");
@@ -73,11 +81,22 @@ describe('vite command — real installed bin routing', () => {
 
   it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
     expect(source).toContain('const runPackageScript = async');
-    expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
     expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
-    expect(source).toContain('const result = await scriptShell.run(command');
+    expect(source).toContain('const scriptShell = makeShell(');
+    expect(source).toContain('{ cwd: scriptCtx.cwd, env: scriptCtx.env }');
+    expect(source).toContain('ptySidFromContext(scriptCtx)');
+    expect(source).toContain('const result = await scriptShell.run(scriptCommand');
     expect(source).not.toContain('only the dev line boots the co-resident server');
+  });
+
+  it('runs node-cli lifecycle scripts by executing the package.json command', () => {
+    expect(source).toContain('const runNodeCliTemplate = async');
+    expect(source).toContain("devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
+    expect(source).toContain('return runNodeCliTemplate(command, ctx)');
+    expect(source).not.toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
+    expect(source).toContain('scriptCtx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
   });
 
   it('waits for preset dev-config dependency restore before running the next pty command', () => {

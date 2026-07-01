@@ -9,7 +9,7 @@
  *   {
  *     type: 'rifty:preview:ready',
  *     frameVersion: '1',
- *     routingVersion: '4',
+ *     routingVersion: '5',
  *     ownerToken: '...',     // page owner scope that spawned this Worker
  *     ports: [3000, 5173]   // additive optional — default []
  *   }

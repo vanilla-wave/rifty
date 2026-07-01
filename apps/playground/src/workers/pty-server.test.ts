@@ -124,6 +124,39 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit' && exit.env.FOO).toBe('bar');
   });
 
+  it('passes the pty session id to the shell factory', () => {
+    const seen: string[] = [];
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: (_seed, sid) => {
+        seen.push(sid);
+        return new Shell({ cwd: '/', env: {} });
+      },
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'terminal-9' });
+    expect(seen).toEqual(['terminal-9']);
+  });
+
+  it('strips internal pty env keys from persisted exit env', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (f) => out.push(f),
+      makeShell: () => new Shell({ cwd: '/', env: { RIFTY_INTERNAL_PTY_SID: 'terminal-1' } }),
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'terminal-1' });
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 'terminal-1',
+      rid: 'r1',
+      line: 'echo hi',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
+    expect(exit && exit.type === 'pty:exit' && exit.env.RIFTY_INTERNAL_PTY_SID).toBeUndefined();
+  });
+
   it('exec on an unknown session emits pty:exit{error} instead of silently hanging the page run', async () => {
     const { server, out } = harness();
     // No pty:open for this sid (protocol-order violation / owner restarted).

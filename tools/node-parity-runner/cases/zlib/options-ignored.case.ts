@@ -5,9 +5,9 @@ import type { ParityCase } from '../../src/types.ts';
 // ignores them, but both emit a VALID stream that round-trips. Pinning the
 // round-trip — NOT the bytes, which legitimately differ like `level` already
 // does — proves rifty does not throw where Node accepts these and that the output
-// stays decodable. (`windowBits`/`dictionary`/truthy-`info` THROW in rifty and so
-// diverge from Node by design — exercised rifty-only in the conformance suite, not
-// here.)
+// stays decodable. (`flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info`
+// THROW in rifty and so diverge from Node by design — exercised rifty-only in the
+// conformance suite, not here.)
 const c: ParityCase = {
   kind: 'esm',
   code: `
@@ -20,7 +20,12 @@ const c: ParityCase = {
     const deflate = promisify(zlib.deflate);
     const inflate = promisify(zlib.inflate);
 
-    const a = await gzip(text, { level: 9, memLevel: 8, strategy: 0, chunkSize: 1024 });
+    const a = await gzip(text, {
+      level: 9,
+      memLevel: 8,
+      strategy: 0,
+      chunkSize: 1024,
+    });
     console.log('gzip+knobs:', Buffer.from(await gunzip(a)).toString() === text ? 'roundtrip-ok' : 'MISMATCH');
 
     const b = await deflate(text, { level: 1, strategy: 0, info: false });

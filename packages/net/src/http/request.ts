@@ -21,7 +21,28 @@ import { Readable } from '@riftydev/io';
  * setter handles the write-before-read path (a reassign before any read drops
  * the lazy getter and honours the value).
  */
-function defineLazyHeaders(target: { headers: Record<string, string> }, src: Headers): void {
+function materializeHeaders(src: Headers, syntheticHost?: string): Record<string, string> {
+  const value = Object.fromEntries(src);
+  if (syntheticHost && value.host === undefined) value.host = syntheticHost;
+  return value;
+}
+
+function materializeRawHeaders(src: Headers, syntheticHost?: string): string[] {
+  const pairs: string[] = [];
+  let sawHost = false;
+  for (const [key, value] of src) {
+    if (key.toLowerCase() === 'host') sawHost = true;
+    pairs.push(key, value);
+  }
+  if (syntheticHost && !sawHost) pairs.unshift('host', syntheticHost);
+  return pairs;
+}
+
+function defineLazyHeaders(
+  target: { headers: Record<string, string>; rawHeaders?: string[] },
+  src: Headers,
+  syntheticHost?: string,
+): void {
   const materialise = (value: Record<string, string>): void => {
     Object.defineProperty(target, 'headers', {
       value,
@@ -34,13 +55,19 @@ function defineLazyHeaders(target: { headers: Record<string, string> }, src: Hea
     configurable: true,
     enumerable: true,
     get(): Record<string, string> {
-      const value = Object.fromEntries(src);
+      const value = materializeHeaders(src, syntheticHost);
       materialise(value);
       return value;
     },
     set(value: Record<string, string>): void {
       materialise(value);
     },
+  });
+  Object.defineProperty(target, 'rawHeaders', {
+    value: materializeRawHeaders(src, syntheticHost),
+    writable: true,
+    enumerable: true,
+    configurable: true,
   });
 }
 
@@ -55,6 +82,7 @@ export interface IncomingMessageSocket {
   localAddress: string;
   remotePort: number;
   localPort: number;
+  readable: boolean;
   destroy(): void;
 }
 
@@ -64,6 +92,7 @@ function makeSocket(): IncomingMessageSocket {
     localAddress: '127.0.0.1',
     remotePort: 0,
     localPort: 0,
+    readable: true,
     destroy(): void {
       /* no-op — there's no TCP socket behind this request */
     },
@@ -91,9 +120,38 @@ function isIncomingMessageInit(value: Request | IncomingMessageInit): value is I
 async function pipeBodyStream(
   body: ReadableStream<Uint8Array> | null,
   target: Readable,
+  onComplete: () => void,
 ): Promise<void> {
   if (body === null) {
-    target.push(null);
+    let pushedEnd = false;
+    let completed = false;
+    const complete = (): void => {
+      if (completed) return;
+      completed = true;
+      onComplete();
+    };
+    const pushEnd = (): void => {
+      if (pushedEnd) return;
+      pushedEnd = true;
+      complete();
+      target.push(null);
+    };
+    const armEnd = (): void => {
+      target.off('newListener', onNewListener);
+      target.off('resume', onResume);
+      queueMicrotask(pushEnd);
+    };
+    const onNewListener = (event: unknown): void => {
+      if (event !== 'data' && event !== 'readable' && event !== 'end') return;
+      armEnd();
+    };
+    // `req.resume()` (the canonical "discard an unread body" idiom) attaches no
+    // data/readable/end listener, so it must also drive EOF — else 'end' never
+    // fires and a consumer that drains-without-listening hangs (Node ends).
+    const onResume = (): void => armEnd();
+    target.on('newListener', onNewListener);
+    target.on('resume', onResume);
+    queueMicrotask(complete);
     return;
   }
   const reader = body.getReader();
@@ -105,6 +163,7 @@ async function pipeBodyStream(
         await waitForReadableDemand(target);
       }
     }
+    onComplete();
     target.push(null);
   } catch (err) {
     target.destroy(err as Error);
@@ -157,9 +216,11 @@ function waitForReadableDemand(target: Readable): Promise<void> {
 export class IncomingMessage extends Readable {
   method: string;
   url: string;
+  complete = false;
   // Installed lazily (writable data property) by defineLazyHeaders — no field
   // initializer, which would clobber the accessor at construction.
   declare headers: Record<string, string>;
+  declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(request: Request | IncomingMessageInit) {
@@ -186,15 +247,19 @@ export class IncomingMessage extends Readable {
       headers = new Headers(headers);
       headers.set('transfer-encoding', 'chunked');
     }
-    defineLazyHeaders(this, headers);
-    void pipeBodyStream(init.body ?? null, this);
+    defineLazyHeaders(this, headers, u.host);
+    void pipeBodyStream(init.body ?? null, this, () => {
+      this.complete = true;
+    });
   }
 }
 
 export class IncomingMessageFromFetch extends Readable {
   statusCode: number;
   statusMessage: string;
+  complete = false;
   declare headers: Record<string, string>;
+  declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(response: Response) {
@@ -202,6 +267,8 @@ export class IncomingMessageFromFetch extends Readable {
     this.statusCode = response.status;
     this.statusMessage = response.statusText;
     defineLazyHeaders(this, response.headers);
-    void pipeBodyStream(response.body, this);
+    void pipeBodyStream(response.body, this, () => {
+      this.complete = true;
+    });
   }
 }

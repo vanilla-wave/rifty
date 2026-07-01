@@ -88,6 +88,39 @@ describe('pty-client', () => {
     expect(bChunks.join('')).toBe('B');
   });
 
+  // Regression (CI dev-server-ready marker flake): the owner emits the
+  // "[vite] dev server ready" line from an async listen() message that can land
+  // AFTER the run's pty:exit when a restart aborted the run. The run is gone, so
+  // rid correlation finds nothing — but the marker is real output for the
+  // session's terminal and must NOT be silently dropped (it was: the e2e read an
+  // empty/short buffer and timed out). It lands via the session's trailing sink.
+  it('delivers a chunk arriving after pty:exit to the session terminal (marker race)', async () => {
+    const { client, sent } = harness();
+    const chunks: string[] = [];
+    const p = client.exec('s1', 'vite', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: (c) => chunks.push(c),
+    });
+    const rid = (
+      sent.find((f) => f.type === 'pty:exec') as Extract<PageToOwnerFrame, { type: 'pty:exec' }>
+    ).rid;
+    // Run exits first (Ctrl-C / restart abort, code 130) ...
+    client.onFrame({ type: 'pty:exit', sid: 's1', rid, code: 130, cwd: '/', env: {} });
+    await expect(p).resolves.toBe(130);
+    // ... then the readiness marker arrives late for the now-gone run.
+    client.onFrame({
+      type: 'pty:chunk',
+      sid: 's1',
+      rid,
+      stream: 'stdout',
+      seq: 1,
+      data: new TextEncoder().encode('[vite] dev server ready on port 5174\n'),
+    });
+    expect(chunks.join('')).toContain('[vite] dev server ready on port 5174');
+  });
+
   it('caches cwd/env from pty:exit (snapshot reflects last exit)', async () => {
     const { client, sent } = harness();
     const p = client.exec('s1', 'cd /work', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} });
