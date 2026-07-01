@@ -98,6 +98,9 @@
 
 ### Changed
 
+- esbuild WASI transform bridge compiles `esbuild.wasm` once per realm and
+  reuses the `WebAssembly.Module` across transforms (was: full ~19 MB recompile
+  per transform call — dominated dev-server TS/JSX transform latency).
 - Byte-honest SCM diff blob selection moved out of `App` into a tested
   `scm-diff-plan` module (`scm-diff-plan.test.ts`) so the blob-vs-blob choice for
   every status code is covered behaviorally, not by source-text guards.
