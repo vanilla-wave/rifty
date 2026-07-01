@@ -14,8 +14,6 @@
  */
 
 export type OpenClass =
-  /** Program-mirror path — focus the permanent program tab, never a file tab. */
-  | 'program'
   /** node_modules OR a present-but-over-cap file — async owner read-port, view-only. */
   | 'remote'
   /** Readable in the owner snapshot — sync read, editable (or binary → view-only). */
@@ -29,8 +27,6 @@ export type OpenClass =
   | 'await-snapshot';
 
 export interface OpenContext {
-  /** Root-relative program-mirror path (ADR-0165 §4): {@link ./program-path.ts programMirrorPath}. */
-  readonly programMirrorPath: string;
   /** Path is under a `node_modules` segment. */
   readonly isNodeModules: boolean;
   /** Path exists as a file in the snapshot tree (may be over-cap → no bytes). */
@@ -44,7 +40,6 @@ export interface OpenContext {
 /**
  * Decide how to open `path`. The caller does the IO; this only routes.
  *
- * - program-mirror → `'program'`
  * - node_modules (remote port) → `'remote'`
  * - readable in snapshot → `'sync'`
  * - present but over-cap (no inlined bytes, remote port) → `'remote'` (view-only,
@@ -52,8 +47,7 @@ export interface OpenContext {
  * - absent + non-node_modules → `'await-snapshot'` (retry on the next frame),
  *   regardless of `hasRemotePort` — a seeded project file is editable, not view-only.
  */
-export function classifyOpen(path: string, ctx: OpenContext): OpenClass {
-  if (path === ctx.programMirrorPath) return 'program';
+export function classifyOpen(_path: string, ctx: OpenContext): OpenClass {
   if (ctx.isNodeModules && ctx.hasRemotePort) return 'remote';
   if (ctx.readable) return 'sync';
   if (ctx.present && ctx.hasRemotePort) return 'remote';

@@ -1,5 +1,5 @@
 /**
- * Cross-realm `EADDRINUSE` at `listen()` (ADR-0185) — the LISTEN integration,
+ * Cross-realm `EADDRINUSE` at `listen()` (ADR-0186) — the LISTEN integration,
  * in-process. A sibling realm is simulated by a raw `BroadcastChannel` that
  * answers any `claim` for the port with `claim-deny` (exactly what a real
  * owner's answerer does). The two-real-realm hop is the browser e2e
@@ -33,7 +33,7 @@ afterEach(() => {
   __resetPortClaims();
 });
 
-describe('listen() cross-realm EADDRINUSE (ADR-0185)', () => {
+describe('listen() cross-realm EADDRINUSE (ADR-0186)', () => {
   it('emits a Node-shaped EADDRINUSE and does not keep the port when a sibling realm owns it', async () => {
     const port = 7411;
     const sibling = siblingOwner(port);

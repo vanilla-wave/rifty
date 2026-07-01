@@ -1,0 +1,16 @@
+# Build context hygiene for deploy/yandex/eddy/Dockerfile (the only image built
+# from this repo). Keep the context to source + manifests; the image runs its own
+# musl `pnpm install` + tsup build, so host node_modules/dist must not leak in.
+**/node_modules
+.git
+**/dist
+**/.cache
+.claude
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+**/.vite
+**/.turbo
+*.log
+.DS_Store

@@ -20,6 +20,12 @@ const TIERS = [
 const seg = (pkgs) => `(?:^|/)(?:${pkgs.join('|')})/`;
 const ALL = TIERS.flat();
 
+// Server-side services (outside the browser layer graph). They may import UP
+// into browser-layer packages (e.g. eddy → npm-client, ADR-0182), but no
+// browser-layer package may import them. Kept OUT of TIERS so the linear
+// reverse-import logic never constrains their (legitimate) upward imports.
+const SERVICES = ['eddy'];
+
 // enhancedResolveOptions: honor package.json `exports` so cross-package subpath
 // imports (`@riftydev/vfs/internal`) resolve to src — madge could not (blindspot).
 const options = {
@@ -59,12 +65,19 @@ const forbidden = [
     name: 'no-foreign-internal',
     severity: 'error',
     comment: 'reach another package only via its public entry, never its src/internal/*',
-    from: { path: `(?:^|/)(${ALL.join('|')})/src/` },
+    from: { path: `(?:^|/)(${[...ALL, ...SERVICES].join('|')})/src/` },
     to: {
-      path: `(?:^|/)(?:${ALL.join('|')})/src/internal/`,
+      path: `(?:^|/)(?:${[...ALL, ...SERVICES].join('|')})/src/internal/`,
       // allow same-package internal, and a declared `./internal` export entry
       pathNot: ['(?:^|/)$1/src/internal/', '/internal/index\\.[tj]sx?$'],
     },
+  },
+  {
+    name: 'no-browser-imports-eddy',
+    severity: 'error',
+    comment: 'ADR-0182: services/eddy is server-side; no browser-layer package may import it',
+    from: { path: seg(ALL) },
+    to: { path: seg(SERVICES) },
   },
   {
     name: 'solid-only-in-playground',

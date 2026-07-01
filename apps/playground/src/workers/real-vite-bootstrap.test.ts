@@ -12,9 +12,16 @@ describe('real Vite bootstrap preview routing', () => {
     // ADR-0148 (co-resident dev server runs inside the store owner): the owner's
     // single vfs-write handler forwards editor writes to
     // the running dev server's HMR (the virtual FS fires no real watcher events).
-    expect(source).toContain('const onVfsWrite = (path: string): void');
+    expect(source).toContain('const onVfsWrite = (paths: readonly string[]): void');
+    expect(source).toContain('for (const path of paths)');
     expect(source).toContain('devServer.notifyFileChanged(path)');
     expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
+  });
+
+  it('uses the status-aware owner publish wrapper for every owner mutation refresh hook', () => {
+    expect(source).toContain('onSnapshotDirty: publishOwnerState');
+    expect(source).not.toContain('onSnapshotDirty: publishSnapshot');
+    expect(source).toContain('flushSyncMirror,\n    publishOwnerState,');
   });
 
   it('passes browser HMR config to real vite .bin dev children', () => {
@@ -22,6 +29,14 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('RIFTY_VITE_CLI_HMR');
     expect(source).toContain('RIFTY_VITE_CLI_PORT');
     expect(source).toContain('withViteCliArgs');
+  });
+
+  it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
+    expect(source).toContain("if (mode === 'preview')");
+    expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
+    expect(source).toContain("if (mode !== 'dev') return [...args]");
+    expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
+    expect(source).toContain("...(mode === 'preview' ? userConfigEnv : {})");
   });
 
   it('forwards editor writes into the active real vite CLI child', () => {
@@ -34,6 +49,13 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
     expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
+  });
+
+  it('acks owner-routed VFS writes with real owner-side apply errors', () => {
+    expect(source).toContain("type: 'rifty:vfs-write-ack'");
+    expect(source).toContain('opId: message.opId');
+    expect(source).toContain('ok: false');
+    expect(source).toContain('error: { name: error.name, message: error.message }');
   });
 
   it('re-seeds template-owned node_modules files into the owner before child dev boot', () => {
@@ -53,17 +75,28 @@ describe('vite command — real installed bin routing', () => {
 
   it('mirrors server-capable non-vite bins into the preview registry', () => {
     expect(source).toContain('const binPreviewSids = new WeakMap<object, string>()');
-    expect(source).toContain('previews.addNode(sid, message.ports)');
+    expect(source).toContain('previews.addNode(sid, message.ports, message.previewScope');
     expect(source).toContain('previews.removeBySid(sid)');
   });
 
   it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
     expect(source).toContain('const runPackageScript = async');
-    expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
     expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
-    expect(source).toContain('const result = await scriptShell.run(command');
+    expect(source).toContain('const scriptShell = makeShell(');
+    expect(source).toContain('{ cwd: scriptCtx.cwd, env: scriptCtx.env }');
+    expect(source).toContain('ptySidFromContext(scriptCtx)');
+    expect(source).toContain('const result = await scriptShell.run(scriptCommand');
     expect(source).not.toContain('only the dev line boots the co-resident server');
+  });
+
+  it('runs node-cli lifecycle scripts by executing the package.json command', () => {
+    expect(source).toContain('const runNodeCliTemplate = async');
+    expect(source).toContain("devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
+    expect(source).toContain('return runNodeCliTemplate(command, ctx)');
+    expect(source).not.toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
+    expect(source).toContain('scriptCtx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
   });
 
   it('waits for preset dev-config dependency restore before running the next pty command', () => {

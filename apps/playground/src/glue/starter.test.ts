@@ -3,15 +3,13 @@ import { asyncVfs, dirname } from '@riftydev/vfs';
 import { createMemoryFs, installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { PRESETS, type Preset } from '../presets.ts';
-import {
-  EXPRESS_SQLITE_SERVER_SOURCE,
-  EXPRESS_SQLITE_TEMPLATE,
-} from '../templates/express-sqlite.ts';
-import { SOCKET_LAB_TEMPLATE } from '../templates/socket-lab.ts';
+import { EXPRESS_SQLITE_SERVER_SOURCE } from '../templates/express-sqlite.ts';
+import { resolveProjectSpec } from '../templates/registry.ts';
 import {
   GROUP_FOR_CATEGORY,
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
+  groupForPreset,
   seedFilesForStarter,
   starterById,
   starterFromPreset,
@@ -24,33 +22,48 @@ function presetById(id: string): Preset {
 }
 
 describe('starterFromPreset (ADR-0165 §1/§6)', () => {
-  it('maps every registered preset to a Starter with matching id/source', () => {
+  it('keeps starter contents as one ordinary file bundle with no separate source overlay', () => {
     for (const preset of PRESETS) {
       const starter = starterFromPreset(preset);
-      expect(starter.id).toBe(preset.id);
-      expect(starter.source).toBe(preset.source); // SHARED ref, not a copy
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      const entryPath = spec.entry.relativePath.replace(/^\/+/, '');
+      const entryFile = starter.files.find((file) => file.path === entryPath);
+
+      expect('source' in starter).toBe(false);
+      expect(entryFile).toBeDefined();
+      expect(seedFilesForStarter(starter, '/scratch')[`/scratch/${entryPath}`]).toBe(
+        entryFile?.content,
+      );
     }
   });
 
-  it('PRESERVES the express-sqlite / socket-lab shared .source object identity (a test elsewhere pins equality)', () => {
-    const ex = starterFromPreset(presetById('express-sqlite'));
-    const so = starterFromPreset(presetById('socket-lab'));
-    expect(ex.source).toBe(presetById('express-sqlite').source);
-    expect(so.source).toBe(presetById('socket-lab').source);
+  it('throws loudly when a starter omits the template entry file from files[]', () => {
+    expect(() =>
+      seedFilesForStarter(
+        {
+          id: 'broken',
+          name: 'Broken',
+          starter: 'broken',
+          templateId: 'vite',
+          files: [{ path: 'README.md', content: 'not the entry\n' }],
+        },
+        '/scratch',
+      ),
+    ).toThrow('starter broken is missing entry file src/main.js');
+  });
+
+  it('maps every registered preset to a Starter with matching id and file bundle', () => {
+    for (const preset of PRESETS) {
+      const starter = starterFromPreset(preset);
+      expect(starter.id).toBe(preset.id);
+      expect(starter.files).toBe(preset.files); // same array ref
+    }
   });
 });
 
 // reconciliation A: the launcher gallery groups Starters by preset
-// category, and the Preset→Starter map must never deep-copy a template body — the
-// `.source`/`.files` refs the preset shares with its template stay identical.
+// category, and the Preset→Starter map must never deep-copy the file bundle.
 describe('starterFromPreset shared refs + GROUP_FOR_CATEGORY (ADR-0165 §1)', () => {
-  it('preserves the shared source object ref vs the template entry (a test pins template equality)', () => {
-    const ex = starterFromPreset(presetById('express-sqlite'));
-    expect(ex.source).toBe(EXPRESS_SQLITE_TEMPLATE.entry.content); // same ref, not a copy
-    const so = starterFromPreset(presetById('socket-lab'));
-    expect(so.source).toBe(SOCKET_LAB_TEMPLATE.entry.content);
-  });
-
   it('preserves the files array element refs (same array ref the preset holds)', () => {
     const ex = starterFromPreset(presetById('express-sqlite'));
     expect(ex.files).toBe(presetById('express-sqlite').files); // same array ref
@@ -60,6 +73,20 @@ describe('starterFromPreset shared refs + GROUP_FOR_CATEGORY (ADR-0165 §1)', ()
     expect(GROUP_FOR_CATEGORY['Live preview']).toBe('frontend');
     expect(GROUP_FOR_CATEGORY['Files + modules']).toBe('frontend');
     expect(GROUP_FOR_CATEGORY[presetById('express-sqlite').category]).toBe('frontend');
+  });
+
+  it('groupForPreset routes node-runtime starters to SERVER, Vite apps to FRONT-END', () => {
+    // Derived from the resolved template runtime, not the display category — so
+    // a node-server / node-cli starter is never mislabelled under the Vite group.
+    expect(groupForPreset(presetById('hono-api'))).toBe('server'); // node-server
+    expect(groupForPreset(presetById('koa-api'))).toBe('server');
+    expect(groupForPreset(presetById('markdown-ssg'))).toBe('server');
+    expect(groupForPreset(presetById('cli-report'))).toBe('server'); // node-cli
+    expect(groupForPreset(presetById('express-sqlite'))).toBe('server'); // Express is a node server
+    expect(groupForPreset(presetById('socket-lab'))).toBe('server');
+    // Vite/front-end presets stay on FRONT-END.
+    expect(groupForPreset(presetById('real-vite'))).toBe('frontend');
+    expect(groupForPreset(presetById('project-files'))).toBe('frontend');
   });
 });
 
@@ -74,7 +101,7 @@ describe('starterById', () => {
 
 // Canonical signature per Cross-Phase Reconciliation A: seedFilesForStarter(starter, root)
 // — re-derives the FULL template seed (index.html/package.json/entry/extraFiles)
-// for `root`, with the Preset source overlaid at the entry + Preset files[] under root.
+// for `root`, with the Preset files[] overlaid under root.
 describe('seedFilesForStarter (starter, root)', () => {
   it('initializes every Starter root as a git repository', () => {
     for (const preset of PRESETS) {
@@ -215,33 +242,28 @@ describe('seedFilesForStarter (starter, root)', () => {
     }
   });
 
-  it('emits the program source at the starter entry path + every preset file', () => {
+  it('emits every preset file under the root', () => {
     const files = seedFilesForStarter(starterById('express-sqlite'), '/scratch');
-    // the program source is present under some path
-    expect(Object.values(files)).toContain(presetById('express-sqlite').source);
-    // each preset file content is present under the root
     for (const f of presetById('express-sqlite').files ?? []) {
       expect(files[`/scratch/${f.path}`]).toBe(f.content);
     }
   });
 
-  it('maps a vite Starter to template seed files with the Preset source at the entry', () => {
+  it('maps a vite Starter to template seed files with preset files overlaid', () => {
     const files = seedFilesForStarter(starterById('project-files'), '/scratch');
     // template config seeds index.html + package.json
     expect(files['/scratch/index.html']).toContain('<div id="app">');
     const vitePkg = files['/scratch/package.json'];
     expect(vitePkg).toBeTypeOf('string');
     expect(JSON.parse(vitePkg ?? '').type).toBe('module');
-    // the Preset's editor source overwrites the entry (not the template's stub entry)
+    // the preset file bundle overwrites the template entry like any other path
     expect(files['/scratch/src/main.js']).toContain("getElementById('app')");
-    // a Preset extra file lands under the root
     expect(files['/scratch/src/project.json']).toContain('Workspace anatomy');
     expect(files['/scratch/README.md']).toContain('Workspace anatomy');
   });
 
-  it('maps a node-server Starter (express-sqlite) preserving the SHARED source ref + extraFiles', () => {
+  it('maps a node-server Starter (express-sqlite) preserving entry file + extraFiles', () => {
     const files = seedFilesForStarter(starterById('express-sqlite'), '/projects/p1');
-    // node-server entry === the SHARED EXPRESS_SQLITE_SERVER_SOURCE object (equality pinned elsewhere)
     expect(files['/projects/p1/src/main.js']).toBe(EXPRESS_SQLITE_SERVER_SOURCE);
     // package.json declares the node-server dev script
     const nodePkg = files['/projects/p1/package.json'];

@@ -57,7 +57,8 @@ describe('dev-server boot preview routing', () => {
     // ADR-0150 P6b corrected: the child owns listen() + serveCrossRealmPreview;
     // setupPreviewBridge no-ops in any worker realm so it is NOT called here (the
     // SW-direct route is page-anchored via mountPlaygroundPreviewBridge).
-    expect(source).toContain('serveCrossRealmPreview(port');
+    expect(source).toContain('serveCrossRealmPreview(');
+    expect(source).toContain('opts.previewScope === undefined ? {} : { scope: opts.previewScope }');
     expect(source).not.toContain('setupPreviewBridge(');
   });
 
@@ -89,6 +90,8 @@ describe('node-server runtime branch', () => {
   it('dispatches on the bootstrap config runtime discriminant', () => {
     expect(source).toContain("cfg.runtime === 'node-server'");
     expect(source).toContain("cfg.runtime === 'vite'");
+    expect(source).toContain("cfg.runtime === 'node-cli'");
+    expect(source).toContain('node-cli templates run through the owner node executor');
   });
 
   it('brings the node:sqlite WASM engine up from a same-origin asset', () => {

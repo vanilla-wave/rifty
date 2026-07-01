@@ -76,4 +76,72 @@ describe('resolveProjectSpec', () => {
     expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
     expect(spec.defaultPort).not.toBe(resolveProjectSpec('express-sqlite').defaultPort);
   });
+
+  it('resolves the hono middleware node-server template', () => {
+    const spec = resolveProjectSpec('hono-api');
+    expect(spec.runtime).toBe('node-server');
+    if (spec.runtime !== 'node-server') throw new Error('unreachable');
+    expect(spec.install).toHaveProperty('hono');
+    expect(spec.install).toHaveProperty('@hono/node-server');
+    expect(spec.sqlite).toBe(false);
+    expect(spec.entry.relativePath).toBe('/src/main.js');
+    expect(spec.entry.content).toContain("from 'hono'");
+    expect(spec.entry.content).toContain("from '@hono/node-server'");
+    expect(spec.entry.content).toContain('serve({');
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/public/index.html', '/public/client.js']),
+    );
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('express-sqlite').defaultPort);
+  });
+
+  it('resolves the koa middleware node-server template', () => {
+    const spec = resolveProjectSpec('koa-api');
+    expect(spec.runtime).toBe('node-server');
+    if (spec.runtime !== 'node-server') throw new Error('unreachable');
+    expect(spec.install).toHaveProperty('koa');
+    expect(spec.install).toHaveProperty('@koa/router');
+    expect(spec.sqlite).toBe(false);
+    expect(spec.entry.relativePath).toBe('/src/main.js');
+    expect(spec.entry.content).toContain("from 'koa'");
+    expect(spec.entry.content).toContain("from '@koa/router'");
+    expect(spec.entry.content).toContain('app.callback()');
+    expect(spec.entry.content).toContain('ctx.cookies');
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/public/index.html', '/public/client.js']),
+    );
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('express-sqlite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('hono-api').defaultPort);
+  });
+
+  it('resolves the run-to-completion CLI template', () => {
+    const spec = resolveProjectSpec('cli-report');
+    expect(spec.runtime).toBe('node-cli');
+    if (spec.runtime !== 'node-cli') throw new Error('unreachable');
+    expect(spec.install).toHaveProperty('yaml');
+    expect(spec.entry.relativePath).toBe('/src/cli.js');
+    expect(spec.entry.content).toContain("from 'yaml'");
+    expect(spec.entry.content).toContain("from 'node:fs'");
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/data/packages.yml', '/README.md']),
+    );
+  });
+
+  it('resolves the markdown SSG node-server template', () => {
+    const spec = resolveProjectSpec('markdown-ssg');
+    expect(spec.runtime).toBe('node-server');
+    if (spec.runtime !== 'node-server') throw new Error('unreachable');
+    expect(spec.install).toHaveProperty('marked');
+    expect(spec.sqlite).toBe(false);
+    expect(spec.entry.relativePath).toBe('/src/main.js');
+    expect(spec.entry.content).toContain("from 'marked'");
+    expect(spec.entry.content).toContain("from 'node:http'");
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/content/intro.md', '/content/runtime.md']),
+    );
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('express-sqlite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('hono-api').defaultPort);
+  });
 });

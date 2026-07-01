@@ -202,6 +202,7 @@ export async function bootDevServer(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
+  readonly previewScope?: string;
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
@@ -278,6 +279,10 @@ export async function bootDevServer(opts: {
   // re-assert it defensively so the entry always listens on the routed port.
   globalThis.process.env.PORT = String(port);
 
+  if (cfg.runtime === 'node-cli') {
+    throw new Error('[real-vite/worker] node-cli templates run through the owner node executor');
+  }
+
   if (cfg.runtime === 'node-server') {
     await bootNodeServer(cfg, loader, log);
     publishSnapshot();
@@ -353,8 +358,10 @@ export async function bootDevServer(opts: {
   // `pty:dev-server{running,port}` frame (ADR-0148) — the SW-direct route is
   // page-anchored (mountPlaygroundPreviewBridge). `setupPreviewBridge` no-ops in
   // any worker realm, so it is NOT called here (ADR-0150 corrected).
-  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
-    dispatchToPort(port, request),
+  const tearPreviewBridge = serveCrossRealmPreview(
+    port,
+    async (request) => dispatchToPort(port, request),
+    opts.previewScope === undefined ? {} : { scope: opts.previewScope },
   );
   log('[real-vite/worker] preview bridge ready\n');
 

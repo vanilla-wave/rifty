@@ -43,13 +43,17 @@ export type PtyExit = {
   error?: string;
 };
 
-/** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner): not tied to a run/`rid`. */
+/** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner). */
 export type DevServerStatus = 'starting' | 'running' | 'stopped';
 export type PtyDevServer = {
   type: 'pty:dev-server';
   status: DevServerStatus;
+  /** Owning terminal session. Present for lifecycle frames emitted by a pty run. */
+  sid?: string;
   /** Internal listen port — defined once `status` reaches 'running'. */
   port?: number;
+  /** Run-scoped preview bridge discriminator for the page↔worker hop. */
+  previewScope?: string;
   /** Preview URL the iframe loads — defined once 'running'. */
   url?: string;
   /** Non-fatal start failure surfaced to the page pill (`status` stays 'stopped'). */
@@ -83,6 +87,8 @@ export type PreviewPortEntry = {
   source: 'dev-server' | 'preview' | 'node';
   /** Owning session/run id (for label + teardown correlation). */
   sid: string;
+  /** Run-scoped preview bridge discriminator for the page↔worker hop. */
+  previewScope?: string;
 };
 /**
  * Owner→page snapshot of ALL live previewable ports (ADR-0155 — generalizes the

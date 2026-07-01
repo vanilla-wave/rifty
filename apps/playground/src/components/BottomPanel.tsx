@@ -120,6 +120,7 @@ export function BottomPanel(props: {
                           type="button"
                           role="tab"
                           class="rf-terminal-tab__select"
+                          data-session-id={id}
                           aria-selected={isActive()}
                           onClick={() => {
                             setView('terminal');
@@ -170,7 +171,11 @@ export function BottomPanel(props: {
         <div class="rf-console__pane" data-view="terminal" data-active={view() === 'terminal'}>
           <For each={sessionIds()}>
             {(id) => (
-              <div class="rf-terminal-slot" data-active={id === props.activeSessionId}>
+              <div
+                class="rf-terminal-slot"
+                data-session-id={id}
+                data-active={id === props.activeSessionId}
+              >
                 <TerminalPanel
                   testId={id === props.activeSessionId ? 'terminal' : undefined}
                   attach={(write) => props.attach(id, write)}

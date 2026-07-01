@@ -135,7 +135,7 @@ async function readProjectFile(page: Page, id: string, rel: string): Promise<str
   return await readWorkspaceText(page, `/projects/${id}/${rel}`);
 }
 
-/** Insert a marker via Monaco's real input path → onProgramChange → scratch dirty. */
+/** Insert a marker via Monaco's real input path → owner file write → scratch dirty. */
 async function dirtyScratchViaEditor(page: Page): Promise<void> {
   const editor = page.locator('[data-testid="editor"]');
   await editor

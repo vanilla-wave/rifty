@@ -892,3 +892,66 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 });
+
+describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
+  async function projVfs(): Promise<MemoryVfs> {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        { name: 'demo', version: '0.0.0', dependencies: { debug: '^4.4.1' } },
+        null,
+        2,
+      )}\n`,
+    );
+    return vfs;
+  }
+
+  it('passes resolverUrl through to install() and tags the line when the eddy path ran', async () => {
+    const vfs = await projVfs();
+    let seenResolverUrl: string | undefined = 'UNSET';
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        install: async (arg1) => {
+          seenResolverUrl = (arg1 as InstallOptions).resolverUrl;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seenResolverUrl).toBe('http://eddy.test');
+    expect(rec.stdout.join('')).toContain('via eddy (fast)');
+  });
+
+  it('is inert when resolverUrl is unset — no resolverUrl forwarded, no provenance tag', async () => {
+    const vfs = await projVfs();
+    let seenResolverUrl: string | undefined = 'UNSET';
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install: async (arg1) => {
+          seenResolverUrl = (arg1 as InstallOptions).resolverUrl;
+          return { ...singletonResult('debug', '4.4.1'), source: 'standard' };
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seenResolverUrl).toBeUndefined();
+    expect(rec.stdout.join('')).not.toContain('via eddy');
+  });
+});

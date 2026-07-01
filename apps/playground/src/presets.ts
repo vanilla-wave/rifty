@@ -1,9 +1,13 @@
 import type { IconName } from './components/icons.tsx';
 import { MONO_FONT_STACK } from './glue/fonts.ts';
+import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
+import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
+import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
+import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
@@ -21,7 +25,7 @@ export type PresetMode = 'dev' | 'real-vite';
 export type PresetSetup = 'instant' | 'from-scratch';
 
 export interface PresetFile {
-  /** Workspace-relative path written next to src/main.js when this preset loads. */
+  /** Workspace-relative path seeded for this preset. */
   readonly path: string;
   readonly content: string;
 }
@@ -50,11 +54,9 @@ export interface Preset {
   readonly glyph?: { readonly text: string; readonly color: string };
   /** Optional pill (e.g. "live", "~20s") shown next to the label. */
   readonly tag?: { readonly text: string; readonly tone: 'live' | 'slow' };
-  /** Editor source loaded when the preset is selected. */
-  readonly source: string;
-  /** Additional project files written into /workspace for this preset. */
-  readonly files?: readonly PresetFile[];
-  /** Workspace-relative files opened as inactive editor tabs when this preset loads. */
+  /** Project files written under the active root for this preset. */
+  readonly files: readonly PresetFile[];
+  /** Workspace-relative files opened as editor tabs when this preset loads; first is active. */
   readonly openFiles?: readonly string[];
 }
 
@@ -332,9 +334,9 @@ const PROJECT_FILES_PRESET: Preset = {
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
   glyph: { text: 'JS', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
-  source: PROJECT_FILES_SOURCE,
-  openFiles: ['src/project-summary.js', 'src/project.json'],
+  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json'],
   files: [
+    { path: 'src/main.js', content: PROJECT_FILES_SOURCE },
     { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
     { path: 'src/project.json', content: PROJECT_JSON_SOURCE },
     { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },
@@ -353,9 +355,9 @@ const NODE_WORKER_PRESET: Preset = {
   blurb: 'Shows where Node-style project files fit around the worker dev server.',
   glyph: { text: 'N', color: '#9BD060' },
   tag: { text: 'instant', tone: 'live' },
-  source: NODE_WORKER_SOURCE,
-  openFiles: ['src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
+  openFiles: ['src/main.js', 'src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
   files: [
+    { path: 'src/main.js', content: NODE_WORKER_SOURCE },
     { path: 'src/runtime-notes.js', content: RUNTIME_NOTES_SOURCE },
     { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },
     { path: 'scripts/inspect-workspace.mjs', content: INSPECT_WORKSPACE_SOURCE },
@@ -374,12 +376,17 @@ const TYPESCRIPT_LS_PRESET: Preset = {
   blurb: 'Strict TS project seeded with imports, .d.ts resolution, diagnostics, and refactors.',
   glyph: { text: 'TS', color: '#7FB5FF' },
   tag: { text: 'instant', tone: 'live' },
-  source: TYPESCRIPT_TEMPLATE.entry.content,
-  openFiles: ['tsconfig.json', 'src/model.ts', 'src/math.ts'],
-  files: Object.entries(TYPESCRIPT_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  openFiles: ['src/main.ts', 'tsconfig.json', 'src/model.ts', 'src/math.ts'],
+  files: [
+    {
+      path: TYPESCRIPT_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: TYPESCRIPT_TEMPLATE.entry.content,
+    },
+    ...Object.entries(TYPESCRIPT_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const REAL_VITE_PRESET: Preset = {
@@ -393,7 +400,8 @@ const REAL_VITE_PRESET: Preset = {
   blurb: 'Runs a visible npm install in the terminal, then boots the Vite dev server.',
   glyph: { text: 'V', color: '#5FCE96' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: REAL_VITE_SOURCE,
+  openFiles: ['src/main.js'],
+  files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
 };
 
 const VITE8_PRESET: Preset = {
@@ -407,13 +415,15 @@ const VITE8_PRESET: Preset = {
   blurb: 'Experimental Vite 8 + Rolldown WASI dev server. build/preview upstream-blocked.',
   glyph: { text: 'V8', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
-  source: REAL_VITE_SOURCE,
+  openFiles: ['src/main.js'],
+  files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
 };
 
 /**
  * Fullstack demo (node-server template, see the node-server template ADR):
- * the editor program is the SERVER entry; explorer files mirror the template's
- * worker-seeded `extraFiles` so both realms show the same project.
+ * The opened tabs are ordinary seeded files. The server entry is just one file
+ * in the preset bundle; public assets mirror the worker-seeded `extraFiles` so
+ * both realms show the same project.
  */
 const EXPRESS_SQLITE_PRESET: Preset = {
   id: 'express-sqlite',
@@ -426,12 +436,17 @@ const EXPRESS_SQLITE_PRESET: Preset = {
   blurb: 'A client-server app: real Express from npm, SQLite-as-WASM behind node:sqlite.',
   glyph: { text: 'EX', color: '#7FB7E8' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: EXPRESS_SQLITE_SERVER_SOURCE,
-  openFiles: ['public/index.html', 'public/client.js'],
-  files: Object.entries(EXPRESS_SQLITE_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  openFiles: ['src/main.js', 'public/index.html', 'public/client.js'],
+  files: [
+    {
+      path: EXPRESS_SQLITE_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: EXPRESS_SQLITE_SERVER_SOURCE,
+    },
+    ...Object.entries(EXPRESS_SQLITE_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 /**
@@ -450,12 +465,113 @@ const SOCKET_LAB_PRESET: Preset = {
   blurb: 'HTTP/WebSocket lab over the browser port registry, with raw-socket ceilings marked.',
   glyph: { text: 'SO', color: '#80C7FF' },
   tag: { text: 'npm install', tone: 'slow' },
-  source: SOCKET_LAB_SERVER_SOURCE,
-  openFiles: ['public/client.js', 'README.md'],
-  files: Object.entries(SOCKET_LAB_TEMPLATE.extraFiles).map(([path, content]) => ({
-    path: path.replace(/^\/+/, ''),
-    content,
-  })),
+  openFiles: ['src/main.js', 'public/client.js', 'README.md'],
+  files: [
+    {
+      path: SOCKET_LAB_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: SOCKET_LAB_SERVER_SOURCE,
+    },
+    ...Object.entries(SOCKET_LAB_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+const HONO_API_PRESET: Preset = {
+  id: 'hono-api',
+  label: 'Hono API',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: HONO_API_TEMPLATE.id,
+  blurb: 'A middleware-style API: Hono ctx routes, JSON bodies, and VFS-served assets.',
+  glyph: { text: 'HN', color: '#F6C768' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['public/index.html', 'public/client.js'],
+  files: [
+    {
+      path: HONO_API_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: HONO_API_TEMPLATE.entry.content,
+    },
+    ...Object.entries(HONO_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+const KOA_API_PRESET: Preset = {
+  id: 'koa-api',
+  label: 'Koa API',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: KOA_API_TEMPLATE.id,
+  blurb: 'A ctx-first API: Koa middleware, router params, cookies, and JSON bodies.',
+  glyph: { text: 'KOA', color: '#93E08F' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['public/index.html', 'public/client.js'],
+  files: [
+    {
+      path: KOA_API_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: KOA_API_TEMPLATE.entry.content,
+    },
+    ...Object.entries(KOA_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+const CLI_REPORT_PRESET: Preset = {
+  id: 'cli-report',
+  label: 'CLI report',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: CLI_REPORT_TEMPLATE.id,
+  blurb: 'A run-to-completion Node CLI: npm dependency, VFS input, stdout, exit code.',
+  glyph: { text: 'CLI', color: '#9BD060' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['data/packages.yml', 'README.md'],
+  files: [
+    {
+      path: CLI_REPORT_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: CLI_REPORT_TEMPLATE.entry.content,
+    },
+    ...Object.entries(CLI_REPORT_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+const MARKDOWN_SSG_PRESET: Preset = {
+  id: 'markdown-ssg',
+  label: 'Markdown SSG',
+  category: 'Live preview',
+  icon: 'file-output',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: MARKDOWN_SSG_TEMPLATE.id,
+  blurb: 'A filesystem-heavy static-site build: markdown in, generated HTML out.',
+  glyph: { text: 'MD', color: '#8BD3FF' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['content/intro.md', 'content/runtime.md'],
+  files: [
+    {
+      path: MARKDOWN_SSG_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: MARKDOWN_SSG_TEMPLATE.entry.content,
+    },
+    ...Object.entries(MARKDOWN_SSG_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 export const PRESETS: readonly Preset[] = [
@@ -466,9 +582,13 @@ export const PRESETS: readonly Preset[] = [
   VITE8_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
+  HONO_API_PRESET,
+  KOA_API_PRESET,
+  CLI_REPORT_PRESET,
+  MARKDOWN_SSG_PRESET,
 ];
 
-/** The preset selected at boot. Its source is the default editor content. */
+/** The preset selected at boot. Its files/openFiles seed the initial workspace tabs. */
 export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
 
 /**

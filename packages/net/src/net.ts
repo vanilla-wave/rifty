@@ -198,7 +198,7 @@ export class Server extends EventEmitter {
         });
       });
     });
-    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0185 D5).
+    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0186 D5).
     if (requested === 0) {
       queueMicrotask(() => {
         this.emit('listening');
@@ -206,7 +206,7 @@ export class Server extends EventEmitter {
       });
       return this;
     }
-    // Explicit port: a cross-realm bind-claim (ADR-0185) gates `'listening'`.
+    // Explicit port: a cross-realm bind-claim (ADR-0186) gates `'listening'`.
     // The port is registered synchronously (above) — the claim only decides
     // whether THIS realm keeps it; a sibling owner → unregister + EADDRINUSE.
     void claimPort(resolvedPort).then((won) => {
@@ -232,7 +232,7 @@ export class Server extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.listenedPort !== null) {
-      releasePort(this.listenedPort); // stop answering cross-realm claims (ADR-0185 D4)
+      releasePort(this.listenedPort); // stop answering cross-realm claims (ADR-0186 D4)
       unregisterPort(this.listenedPort);
       this.listenedPort = null;
     }

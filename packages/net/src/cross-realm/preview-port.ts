@@ -54,6 +54,15 @@ const MAX_CHUNK_BYTES = 64 * 1024;
 const DEFAULT_STREAM_DRAIN_TIMEOUT_MS = 30_000;
 const STREAM_DRAIN_TIMEOUT = Symbol('preview-port-stream-drain-timeout');
 
+export interface PreviewPortScopeOptions {
+  /**
+   * Optional run-scoped discriminator. A page bridge only talks to worker
+   * responders carrying the same scope, preventing stale same-port dev-server
+   * workers from racing replies on the shared BroadcastChannel.
+   */
+  readonly scope?: string;
+}
+
 /**
  * Synthetic URL used as the keyed input to {@link channelNameFor} for the
  * preview-port bridge. The dev-server port number is embedded so multiple
@@ -90,6 +99,10 @@ export type PreviewPortFrame =
       // all non-null bodies including SSE — no SSE refusal, no buffered-drain
       // deadline (those protect the page consumer, which buffers until end).
       readonly live?: boolean;
+      // Run-scoped discriminator (origin/main): a page bridge only talks to
+      // worker responders carrying the same scope — stale same-port dev-server
+      // workers can't race replies on the shared channel.
+      readonly scope?: string;
     }
   | {
       // ADR-0180: ownership probe. A realm receiving a `request` for a port it
@@ -100,9 +113,9 @@ export type PreviewPortFrame =
       readonly requestId: string;
     }
   | {
-      // ADR-0185: cross-realm bind-claim. A realm broadcasts this at `listen(port)`
+      // ADR-0186: cross-realm bind-claim. A realm broadcasts this at `listen(port)`
       // before registering; an existing owner replies `claim-deny`, a concurrent
-      // claimant tie-breaks by `id` (lower wins). Additive (ADR-0031): a pre-0185
+      // claimant tie-breaks by `id` (lower wins). Additive (ADR-0031): a pre-0186
       // peer never sends/answers it, so it just never participates. `id` is a
       // per-claim, lexicographically-orderable unique string.
       readonly type: 'claim';
@@ -111,7 +124,7 @@ export type PreviewPortFrame =
       readonly id: string;
     }
   | {
-      // ADR-0185: the owner's (or a winning concurrent claimant's) refusal of a
+      // ADR-0186: the owner's (or a winning concurrent claimant's) refusal of a
       // `claim`, echoing the loser's `id` so only that claimant backs off.
       readonly type: 'claim-deny';
       readonly v: string;
@@ -202,7 +215,7 @@ function plainResponse(text: string, status: number): Response {
 export function serveCrossRealmPreview(
   port: number,
   dispatch: (request: Request) => Promise<Response>,
-  opts: { readonly streamDrainTimeoutMs?: number } = {},
+  opts: PreviewPortScopeOptions & { readonly streamDrainTimeoutMs?: number } = {},
 ): () => void {
   const channelName = channelNameFor(previewPortChannelUrl(port));
   const channel = new BroadcastChannel(channelName);
@@ -211,6 +224,8 @@ export function serveCrossRealmPreview(
   const onMessage = async (event: MessageEvent): Promise<void> => {
     const frame = event.data as PreviewPortFrame;
     if (frame.type !== 'request') return;
+    if ((opts.scope !== undefined || frame.scope !== undefined) && frame.scope !== opts.scope)
+      return;
     const requestId = frame.requestId;
     const wantsStream = frame.v === PREVIEW_PORT_FRAME_VERSION;
     const live = frame.live === true;
@@ -224,7 +239,10 @@ export function serveCrossRealmPreview(
       requestId,
     } satisfies PreviewPortFrame);
 
-    const requestInit: RequestInit = { method: frame.method, headers: frame.headers };
+    const headers = Object.fromEntries(
+      Object.entries(frame.headers).filter(([key]) => key !== 'accept-encoding'),
+    );
+    const requestInit: RequestInit = { method: frame.method, headers };
     if (frame.body !== null && frame.method !== 'GET' && frame.method !== 'HEAD') {
       const copy = new ArrayBuffer(frame.body.byteLength);
       new Uint8Array(copy).set(frame.body);
@@ -484,7 +502,7 @@ interface Waiter {
 
 export function bridgeCrossRealmPreview(
   port: number,
-  opts: { readonly timeoutMs?: number } = {},
+  opts: PreviewPortScopeOptions & { readonly timeoutMs?: number } = {},
 ): CrossRealmPortHandler {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const channelName = channelNameFor(previewPortChannelUrl(port));
@@ -515,7 +533,7 @@ export function bridgeCrossRealmPreview(
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as PreviewPortFrame;
     // `request` is inbound to the worker; `claim`/`claim-deny` are the bind-claim
-    // protocol (ADR-0185) on the same channel — none is a reply this bridge awaits.
+    // protocol (ADR-0186) on the same channel — none is a reply this bridge awaits.
     if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
     const waiter = pending.get(frame.requestId);
     if (!waiter) return; // unknown/late frame, or another bridge instance's
@@ -629,6 +647,7 @@ export function bridgeCrossRealmPreview(
       url,
       headers,
       body: bodyBytes,
+      ...(opts.scope === undefined ? {} : { scope: opts.scope }),
     };
     const promise = new Promise<Response>((resolve) => {
       const timer = setTimeout(() => {
@@ -746,7 +765,7 @@ export function dispatchCrossRealmLoopback(
     const onMessage = (event: MessageEvent): void => {
       const frame = event.data as PreviewPortFrame;
       // `request` is the outbound probe; `claim`/`claim-deny` belong to the
-      // bind-claim protocol (ADR-0185) on the same channel — neither is ours.
+      // bind-claim protocol (ADR-0186) on the same channel — neither is ours.
       if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
       if (frame.requestId !== requestId) return; // another request / bridge instance
 

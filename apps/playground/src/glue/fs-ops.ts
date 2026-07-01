@@ -1,12 +1,12 @@
 /**
  * File-manager mutations over the sync VFS mirror (ADR-0075), factored out of
  * {@link ../components/FileExplorer.tsx | FileExplorer} so the tricky bits —
- * recursive `copyTree`, rename (no native `renameSync` on `FsSync`), collision
- * guards — are unit-testable against a fake target with no DOM.
+ * recursive `copyTree`, rename collision guards — are unit-testable against a
+ * fake target with no DOM.
  *
  * Every op uses the SAME sync mirror the runtime/shell read, so changes are
- * visible immediately. Collisions throw (never a silent overwrite); directory
- * rename is a real recursive copy + remove (no silent stub).
+ * visible immediately. Collisions throw (never a silent overwrite); rename uses
+ * the VFS primitive so filesystem move semantics stay in the filesystem layer.
  */
 import type { VfsDirent } from '@riftydev/vfs';
 import { dirname, joinPath } from '@riftydev/vfs';
@@ -19,6 +19,7 @@ export interface FsOpsTarget {
   readdirSync(path: string): readonly VfsDirent[];
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
+  renameSync(from: string, to: string): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
   /**
    * When true the target is a read-only view (e.g. the real-vite worker
@@ -33,6 +34,14 @@ export interface FsOpsTarget {
    * Absent on the plain sync mirror (no async publish to await).
    */
   subscribe?(listener: () => void): () => void;
+}
+
+export interface AsyncFsOpsTarget extends Pick<FsOpsTarget, 'existsSync'> {
+  writeFile(path: string, data: Uint8Array, options?: { recursive?: boolean }): Promise<void>;
+  mkdir(path: string, options: { recursive?: boolean }): Promise<void>;
+  rm(path: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  copy(from: string, to: string): Promise<void>;
 }
 
 const enc = new TextEncoder();
@@ -61,10 +70,20 @@ export function createFile(fs: FsOpsTarget, path: string): void {
   fs.writeFileSync(path, new Uint8Array());
 }
 
+export async function createFileAsync(fs: AsyncFsOpsTarget, path: string): Promise<void> {
+  if (fs.existsSync(path)) throw new Error(`"${path}" already exists`);
+  await fs.writeFile(path, new Uint8Array(), { recursive: false });
+}
+
 /** Create a directory. Throws if `path` already exists. */
 export function createDir(fs: FsOpsTarget, path: string): void {
   if (fs.existsSync(path)) throw new Error(`"${path}" already exists`);
   fs.mkdirSync(path, { recursive: true });
+}
+
+export async function createDirAsync(fs: AsyncFsOpsTarget, path: string): Promise<void> {
+  if (fs.existsSync(path)) throw new Error(`"${path}" already exists`);
+  await fs.mkdir(path, { recursive: false });
 }
 
 /** Delete a file or directory (recursive, force). */
@@ -72,12 +91,15 @@ export function deletePath(fs: FsOpsTarget, path: string): void {
   fs.rmSync(path, { recursive: true, force: true });
 }
 
+export async function deletePathAsync(fs: AsyncFsOpsTarget, path: string): Promise<void> {
+  if (!fs.existsSync(path)) throw new Error(`ENOENT: no such file or directory "${path}"`);
+  await fs.rm(path, { recursive: true, force: false });
+}
+
 /**
  * Recursively copy `from` → `to`. Files copy their bytes; directories are
- * recreated and their children copied. `FsSync` has no `renameSync`, so this is
- * the honest primitive behind {@link renamePath}.
- *
- * TODO(backlog: vfs/native-renamesync)
+ * recreated and their children copied. Rename is intentionally separate and
+ * routes to `FsSync.renameSync` below.
  */
 export function copyTree(fs: FsOpsTarget, from: string, to: string): void {
   const st = fs.statSync(from);
@@ -92,12 +114,28 @@ export function copyTree(fs: FsOpsTarget, from: string, to: string): void {
   }
 }
 
-/** Rename/move `from` → `to` (copy then remove). Throws if `to` already exists. */
+export async function copyTreeAsync(fs: AsyncFsOpsTarget, from: string, to: string): Promise<void> {
+  if (!fs.existsSync(from)) throw new Error(`ENOENT: no such file or directory "${from}"`);
+  if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
+  await fs.copy(from, to);
+}
+
+/** Rename/move `from` → `to` via `FsSync.renameSync`. Throws if `to` already exists. */
 export function renamePath(fs: FsOpsTarget, from: string, to: string): void {
   if (from === to) return;
   if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
-  copyTree(fs, from, to);
-  fs.rmSync(from, { recursive: true, force: true });
+  fs.renameSync(from, to);
+}
+
+export async function renamePathAsync(
+  fs: AsyncFsOpsTarget,
+  from: string,
+  to: string,
+): Promise<void> {
+  if (from === to) return;
+  if (!fs.existsSync(from)) throw new Error(`ENOENT: no such file or directory "${from}"`);
+  if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
+  await fs.rename(from, to);
 }
 
 /** Heuristic binary sniff: a NUL byte in the first 8 KB. TODO(backlog: playground/binary-file-content-type-detection) */

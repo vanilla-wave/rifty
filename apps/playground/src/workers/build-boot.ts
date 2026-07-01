@@ -121,9 +121,10 @@ export async function bootBuild(opts: {
 export async function bootPreview(opts: {
   readonly root: string;
   readonly port: number;
+  readonly previewScope?: string;
   readonly log: (chunk: string) => void;
 }): Promise<{ readonly port: number; stop(): Promise<void> }> {
-  const { root, port, log } = opts;
+  const { root, port, previewScope, log } = opts;
   assertNoUserViteConfig(root);
   assertBuiltDist(root);
   overlayBuildShims(root);
@@ -142,8 +143,10 @@ export async function bootPreview(opts: {
     logLevel: 'info',
     preview: { port, strictPort: true, host: true },
   });
-  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
-    dispatchToPort(port, request),
+  const tearPreviewBridge = serveCrossRealmPreview(
+    port,
+    async (request) => dispatchToPort(port, request),
+    previewScope === undefined ? {} : { scope: previewScope },
   );
   log(`[vite] preview ready on port ${port}\n`);
   return {

@@ -11,16 +11,17 @@ Each publishable package exposes two views of its entry points:
 
 Build is `tsup` (`pnpm build:libs`). First-party `@riftydev/*` and external deps stay external (not re-bundled), so installing several `@riftydev/*` packages at the same version shares one copy of kernel/vfs singletons.
 
-## Publishable set (12 packages)
+## Publishable set (13 packages)
 
 - `packages/*` (11, including the umbrella front door **`@riftydev/sdk`** — ADR-0071)
 - `@riftydev/shadow-registry` (in `tools/`, a runtime dep of `@riftydev/npm-client`)
+- `@riftydev/eddy` (in `services/`, the opt-in fast-install resolver service — ADR-0182; hand-authored build, see below)
 
-`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 12 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
+`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 13 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
 
 ## Single source of truth
 
-`tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`) regenerates every package's publish block + `tsup.config.ts` from one SPEC. Edit it when you add a package, change `sideEffects`, add a subpath export, or bump the baseline version.
+`tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`) regenerates every `packages/*` + `@riftydev/shadow-registry` publish block + `tsup.config.ts` from one SPEC. Edit it when you add a package, change `sideEffects`, add a subpath export, or bump the baseline version. **`@riftydev/eddy` is the exception**: it's a service with a `bin` CLI entry (not a library subpath), so its `package.json` + `tsup.config.ts` are hand-authored and live outside the SPEC — `sync:publish` doesn't touch it (ADR-0182).
 
 ## Local dry-run (no network)
 
@@ -40,6 +41,8 @@ CI's `lint-and-typecheck` job runs `pnpm build:libs` on every PR, so the publish
 **No NPM_TOKEN.** Auth is **npm OIDC trusted publishing**: with `id-token: write`, pnpm mints a short-lived token from GitHub's OIDC and publishes with build provenance — no long-lived secret in the repo. The bootstrap below makes that work.
 
 > ⚠️ Never run a bare `pnpm -r publish`: the workspace also contains non-`private` integration fixtures (`tools/integration-fixtures/*`) that must never reach npm. Always use the scoped filter above.
+
+> ℹ️ **`@riftydev/eddy` is not yet in `release.yml`'s automated set.** OIDC can't publish a name that doesn't exist, so eddy is first bootstrapped with a token (Phase 1, `--only @riftydev/eddy`) + given its own trusted publisher (Phase 2); only then is it added to `release.yml`'s publish filter so subsequent `v*` tags ship it tokenlessly. Until that follow-up, `release.yml` publishes the original 12.
 
 ### Tooling-version floor (do not regress)
 
@@ -73,11 +76,18 @@ No CI secret needed. Since the names don't exist yet, a granular token can't pre
 
 ```bash
 pnpm install
-NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 12, publishes nothing
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 13, publishes nothing
 NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh             # the real publish
 ```
 
-The script runs `build:libs`, bundles `LICENSE` into each package, and publishes the filtered set (`./packages/*` + `@riftydev/shadow-registry`, `--access public`). The token is read from `$NPM_TOKEN` and **never written to disk** — a throwaway npmrc holds the literal `${NPM_TOKEN}` placeholder that pnpm interpolates at read time, and it (plus the `LICENSE` copies) is removed on exit. Equivalent manual form:
+To bootstrap a **single new name later** (e.g. `@riftydev/eddy`, added once the original 12 already exist), scope it with `--only` so the existing names aren't re-published:
+
+```bash
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/eddy --dry-run
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/eddy
+```
+
+The script runs `build:libs`, bundles `LICENSE` into each package, and publishes the filtered set (`./packages/*` + `@riftydev/shadow-registry` + `@riftydev/eddy`, `--access public`; or just `--only`'s filter). The token is read from `$NPM_TOKEN` and **never written to disk** — a throwaway npmrc holds the literal `${NPM_TOKEN}` placeholder that pnpm interpolates at read time, and it (plus the `LICENSE` copies) is removed on exit. Equivalent manual form:
 
 ```bash
 pnpm build:libs
@@ -87,11 +97,11 @@ pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
   publish --access public --no-git-checks   # --access public is mandatory for @riftydev/*
 ```
 
-All 12 names now exist on the registry. Revoke the token after Phase 2.
+All 13 names now exist on the registry. Revoke the token after Phase 2.
 
 ### Phase 2 — add a GitHub Actions trusted publisher to EACH package
 
-On npmjs.com, for **each** of the 12 packages → **Settings → Trusted Publisher → GitHub Actions**, fill (all **case-sensitive**; npm validates only at publish time):
+On npmjs.com, for **each** published package → **Settings → Trusted Publisher → GitHub Actions**, fill (all **case-sensitive**; npm validates only at publish time):
 
 | Field | Value |
 |---|---|
@@ -101,7 +111,7 @@ On npmjs.com, for **each** of the 12 packages → **Settings → Trusted Publish
 | Environment | *(leave empty)* |
 | Allowed actions | tick **npm publish** |
 
-To skip the 12× toil, use npm's **bulk trusted-publishing** config flow, or the `npm trust github <pkg> --repo vanilla-wave/rifty --file release.yml --allow-publish` CLI (npm ≥ 11.10.0; needs account 2FA + an interactive OTP). The package must already exist either way (Phase 1).
+To skip the per-package toil, use npm's **bulk trusted-publishing** config flow, or the `npm trust github <pkg> --repo vanilla-wave/rifty --file release.yml --allow-publish` CLI (npm ≥ 11.10.0; needs account 2FA + an interactive OTP). The package must already exist either way (Phase 1).
 
 ### After that
 

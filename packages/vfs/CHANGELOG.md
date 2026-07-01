@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **`MemoryBackend.rename` now invalidates cached dirents for both source and
+  destination parents.** A move after `readdirSync()` no longer leaves stale
+  directory listings in the file manager or sync VFS consumers.
 - **`MemoryBackend.writeFile` mtime is now strictly monotonic on overwrite.** Two writes to the same file within one clock tick previously shared the same `Date.now()` mtime; an overwrite now bumps mtime to at least `prev + 1`. Closes a silent-data-loss hole for mtime-trusting stat caches: isomorphic-git's racy-clean index shortcut (`compareStats`) compares mtime only at SECOND granularity but `ino` exactly, so a same-byte-length edit was invisible to `git status`/`diff`. Deterministic guard: `mtime-monotonic.test.ts`. Pairs with the `@riftydev/git` fs-adapter's mtime-derived `ino` (ADR-0167).
 
 ### Performance

@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Cross-realm `EADDRINUSE` at `listen()`** (ADR-0185, closes backlog/net/cross-realm-listen-eaddrinuse). Two supervised-child `node` realms (ADR-0150) can no longer silently double-bind the same loopback port. At `listen(port)` (explicit port only) each realm broadcasts a bind-`claim` on the per-port preview `BroadcastChannel`; an existing owner replies `claim-deny` and a concurrent claimant tie-breaks deterministically by a lexicographic id (lower wins), so exactly one realm keeps the port and the loser emits the Node-shaped async `'error'` `EADDRINUSE` (errno -98, syscall `listen`) — never a spurious `'listening'`. The port still registers synchronously, so the intra-realm fast-path (ADR-0157) and immediate same-realm dispatch are unchanged; the claim only gates `'listening'` and unregisters on a loss. Released on `close()`/realm-exit (the channel dies with the realm). Additive `claim`/`claim-deny` frames on the existing channel (no `PREVIEW_PORT_FRAME_VERSION` bump, ADR-0031). Shared `claimPort`/`releasePort` helper drives BOTH `http.Server.listen` and `net.Server.listen`. Trade-off: a bounded claim-window latency on every explicit `listen` (production perf is a non-goal) — the window is tunable via the new exported `setDefaultClaimWindowMs`/`getDefaultClaimWindowMs` (a single-realm harness runs it at 0); `releasePort` is exported as the `close()` counterpart (mirrors the public `unregisterPort`). Out of scope: ephemeral `listen(0)` cross-realm uniqueness and collision with a non-`listen` owner (the Vite preview). Unit + integration tested over a real `BroadcastChannel` (win / deny / tie-break / release + the listen-level EADDRINUSE), RED-checked; the real two-realm hop is the `cross-realm-listen-eaddrinuse` browser e2e.
+- **Cross-realm `EADDRINUSE` at `listen()`** (ADR-0186, closes backlog/net/cross-realm-listen-eaddrinuse). Two supervised-child `node` realms (ADR-0150) can no longer silently double-bind the same loopback port. At `listen(port)` (explicit port only) each realm broadcasts a bind-`claim` on the per-port preview `BroadcastChannel`; an existing owner replies `claim-deny` and a concurrent claimant tie-breaks deterministically by a lexicographic id (lower wins), so exactly one realm keeps the port and the loser emits the Node-shaped async `'error'` `EADDRINUSE` (errno -98, syscall `listen`) — never a spurious `'listening'`. The port still registers synchronously, so the intra-realm fast-path (ADR-0157) and immediate same-realm dispatch are unchanged; the claim only gates `'listening'` and unregisters on a loss. Released on `close()`/realm-exit (the channel dies with the realm). Additive `claim`/`claim-deny` frames on the existing channel (no `PREVIEW_PORT_FRAME_VERSION` bump, ADR-0031). Shared `claimPort`/`releasePort` helper drives BOTH `http.Server.listen` and `net.Server.listen`. Trade-off: a bounded claim-window latency on every explicit `listen` (production perf is a non-goal) — the window is tunable via the new exported `setDefaultClaimWindowMs`/`getDefaultClaimWindowMs` (a single-realm harness runs it at 0); `releasePort` is exported as the `close()` counterpart (mirrors the public `unregisterPort`). Out of scope: ephemeral `listen(0)` cross-realm uniqueness and collision with a non-`listen` owner (the Vite preview). Unit + integration tested over a real `BroadcastChannel` (win / deny / tie-break / release + the listen-level EADDRINUSE), RED-checked; the real two-realm hop is the `cross-realm-listen-eaddrinuse` browser e2e.
 - **`IncomingMessage` body chunks are `Buffer`s (Node parity).** `http`/`https` response (and server-side request) `'data'` chunks are now `Buffer`s rather than raw `Uint8Array`s, so the canonical Node client idiom `let b = ''; res.on('data', (c) => (b += c))` decodes utf8 — a bare `Uint8Array` stringifies to CSV byte values, silently corrupting a body read without an explicit decode. Surfaced by the cross-realm e2e (a gateway reading the proxied body). `Buffer` IS a `Uint8Array`, so existing `decode(chunk)` / byte-length consumers are unaffected.
 - **Cross-realm `http.request`/`get` loopback via the preview broker** (ADR-0180, closes backlog/net/cross-realm-http-loopback). A loopback request whose port has no handler in THIS realm now probes sibling Worker realms over the per-port preview `BroadcastChannel` before refusing: a realm that owns the port emits an additive `accept` frame (ownership signal) and serves the reply; no `accept` within the bounded probe window → Node-shaped `ECONNREFUSED` (the realm-local registry is the whole namespace). Reuses the ADR-0043/0048 transport — the server side already registers `serveCrossRealmPreview` per listened port, so service-to-service calls between two supervised-child `node` servers (ADR-0150) now connect. Streamed replies stay LIVE: a `live` requester consumes `reply-stream-*` chunk-by-chunk into its `IncomingMessage`, so a cross-realm SSE/NDJSON feed reaches the caller before the server ends (the page preview consumer still buffers + refuses SSE, unchanged). The local registry is consulted FIRST, so a same-realm server never broadcasts. New `dispatchCrossRealmLoopback` export + additive `accept`/`live` frames (versioned, ADR-0031). Unit + integration tested over a real `BroadcastChannel` (refuse / round-trip / POST / SSE-live / local-first), RED-checked. Cross-realm `https:` stays refused (no in-browser TLS server); no cross-realm backpressure/cancel yet (M12, ADR-0017).
 - **Client `node:https` `request`/`get` over the page fetch** (ADR-0181, closes backlog/net/https-client-fetch-subset). `https.request`/`https.get` for external `https:` URLs now reuse the `node:http` client machinery with `protocol:'https:'` forced and egress over the browser-validated `fetch` — the same path `node:http` already takes for external `https:` targets — so POST body + `drain` backpressure, the 3-arg `request(url, opts, cb)` merge, and 204/304 null-body are all inherited. `https.globalAgent` is a benign readable config object (`.maxSockets` etc. never throw). The TLS ceiling from ADR-0010 stands: `createServer`, `new Agent()`, every TLS/socket option (`cert`/`key`/`ca`/`pfx`/`passphrase`/`ciphers`/`secureProtocol`/`servername`/`rejectUnauthorized:false`/custom `agent`), and loopback `https:` (no in-browser TLS server) throw `NotImplementedError` naming the refused capability — never a silent plaintext fallback or a silently ignored option (`rejectUnauthorized:true` is honoured, matching the browser). New `isLoopbackHost` export from `http/server.ts` so the loopback refusal shares the http loopback definition. Conformance + unit tested (`packages/net/src/https.test.ts`), referenced against the proven http client.
@@ -32,6 +32,15 @@
 
 ### Fixed
 
+- **Empty-body `IncomingMessage` reaches EOF for the `req.resume()` discard
+  idiom.** The deferred end-of-stream path (which avoids a late-listener missing
+  `'end'`) now also fires when the request is `resume()`d with no
+  `data`/`readable`/`end` listener — the canonical "drain an unread body" idiom.
+  Previously such a request never emitted `'end'` (its `readableEnded` stayed
+  `false`), diverging from Node; now it ends like Node. Regression-tested.
+- **Cross-realm preview responders can now be scoped (ADR-0183).**
+  `bridgeCrossRealmPreview` may send a preview run scope, and scoped
+  `serveCrossRealmPreview` responders ignore requests for older same-port runs.
 - **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets enforce a
   100 MiB `maxPayload` (`0` = unlimited, matching `ws`) and close 1009 on
   oversized single frames or fragmented reassembly; malformed RFC6455 edges are
@@ -130,6 +139,35 @@
   `IncomingMessage` sees chunk boundaries before `end()`. `write()` returns
   `false` when the stream queue is full and emits `drain` after the consumer
   pulls.
+- **`node:http` covers more server-request shapes used by real adapters.**
+  `createServer({}, listener)` now registers the listener overload used by
+  adapter packages; non-empty `ServerOptions` throw `NotImplementedError`
+  rather than being silently ignored. `IncomingMessage` materialises `host` plus
+  shape-compatible `rawHeaders` from Fetch-normalised preview headers (host is
+  present; raw wire casing/order/duplicates are not claimed). Surfaced by the
+  Hono playground template; zero-body requests keep `end` observable for
+  listeners attached after handler return, mark `complete` even with no body
+  listener, and keep `socket.readable` true because no TCP socket lifecycle is
+  modeled.
+  `IncomingMessage` bodies are also covered through `Readable.toWeb()`
+  for `@hono/node-server` POST parsing. Guarded by `http/server.test.ts`,
+  `http/request.test.ts`, and parity cases `http/create-server-options-listener.case.ts` +
+  `http/server-host-rawheaders.case.ts`.
+
+- **Preview bridge no longer forwards browser-managed `accept-encoding`.**
+  Cross-realm preview requests preserve user headers but drop
+  `accept-encoding` before rebuilding the worker-side `Request`, so Vite/sirv
+  compression middleware does not observe a browser-owned compression negotiation
+  header that the virtual Node server cannot fulfill directly.
+
+- **SSE bodies fail loud over the cross-realm preview bridge.**
+  `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
+  (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
+  body never resolves — ADR-0048). It now posts a loud `error` frame naming
+  the ceiling (`net.preview.cross-realm-sse-drain`), which the page maps to a
+  502, instead of hanging forever. Mirrors the SW-bridge guard in
+  `@riftydev/service-worker`. Non-SSE unbounded bodies still drain — see
+  `docs/backlog/net/cross-realm-preview-unbounded-body.md`.
 - **`register-builtins` modules now expose idempotent callable registrars.**
   `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
   side-effect import behavior while letting production workers call the

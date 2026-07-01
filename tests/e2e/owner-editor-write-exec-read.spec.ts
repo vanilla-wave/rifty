@@ -4,6 +4,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 /**
@@ -15,15 +16,13 @@ import {
  * exec. Under the single-store-owner model the editor write travels over the
  * vfs-write bridge into the OWNER `syncMirror` — the same tree the shell reads.
  *
- * This drives the REAL page path: a keystroke into the Monaco program editor
- * fires `onProgramChange` → `workspaceOwner.writeFile(<activeRoot>/src/main.js)` →
- * owner. A second shell then `cat`s that exact path and must see the NEW marker.
+ * This drives the REAL page path: a keystroke into the Monaco file editor
+ * debounces through `writeWorkspaceFile(<activeRoot>/src/main.js)` → owner. A
+ * second shell then `cat`s that exact path and must see the NEW marker.
  *
- * ADR-0165 §4: the program-mirror path is ROOT-RELATIVE — the edit must land at
+ * ADR-0165 §4: the editor file path is ROOT-RELATIVE — the edit must land at
  * `<activeRoot>/src/main.js` (`/scratch` on boot), the path the dev server runs,
- * NOT the legacy hardcoded `/workspace`. RED-check: revert programMirrorPath to
- * `/workspace/src/main.js` → the edit lands on the dead `/workspace` path → `cat
- * /scratch/src/main.js` never sees the marker → this test fails.
+ * NOT the legacy hardcoded `/workspace`.
  *
  * Load-bearing: the marker is unique per run, so `cat` returning it cannot be a
  * stale-tree coincidence — it proves the page-originated write landed in the
@@ -44,19 +43,19 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     await page.goto('/');
 
     // Wait for the owner shell to be ready: terminal 1 echoes the boot dev line.
-    // By now the on-mount program seed has run, so the edit below is not clobbered
-    // by a later seed write.
+    // By now the owner seed has run, so the edit below is not clobbered by a
+    // later seed write.
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
     await expect
       .poll(() => terminalBuffer(page, 0), { timeout: 90_000 })
-      .toContain('[vite] dev server ready on port 5174');
+      .toMatch(viteDevReadyPattern());
 
     // A second idle shell on the same persistent owner — the reader.
     await openShellTerminal(page);
 
-    // Edit the program through Monaco's real input path (no test-only setter):
-    // prepend a unique marker comment at line 1. The change fires onProgramChange
-    // → the owner write bridge → <activeRoot>/src/main.js in the owner syncMirror
+    // Edit the entry file through Monaco's real input path (no test-only setter):
+    // prepend a unique marker comment at line 1. The change fires the ordinary
+    // file-tab owner write bridge → <activeRoot>/src/main.js in the owner syncMirror
     // (ADR-0165 §4: root-relative, /scratch on boot).
     const marker = `editor-write-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const editor = page.locator('[data-testid="editor"]');
@@ -75,7 +74,7 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     await page.waitForTimeout(1_000);
     expect(await terminalBuffer(page, 0)).not.toContain('module invalidation failed');
 
-    // Exec reads the ROOT-RELATIVE program path in the owner → the marker the
+    // Exec reads the ROOT-RELATIVE entry path in the owner → the marker the
     // editor just wrote is visible. The boot root is /scratch (ADR-0165 §4), so a
     // `cat /workspace/...` would be a dead path — the edit lands at /scratch.
     // Poll (the write crosses the page→owner IPC asynchronously).

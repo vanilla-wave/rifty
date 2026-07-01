@@ -16,6 +16,7 @@ export interface DevServerChildSpawnParams {
   readonly root: string;
   /** The template's real dev port (distinct from the owner's 59124 bridge key). */
   readonly devPort: number;
+  readonly previewScope?: string;
 }
 
 export interface RecursiveWorkerUrls {
@@ -39,6 +40,7 @@ export function buildDevServerChildSpawnSpec(
       RIFTY_RFV_SETUP: params.setup,
       RIFTY_RFV_ROOT: params.root,
       RIFTY_DEV_PORT: String(params.devPort),
+      ...(params.previewScope === undefined ? {} : { RIFTY_PREVIEW_SCOPE: params.previewScope }),
       // Rolldown (Vite 8 bundler) ships a napi-rs loader that tries every native
       // `@rolldown/binding-<platform>` first; in rifty those all throw
       // ENATIVEUNSUPPORTED, then its `@rolldown/binding-wasm32-wasi` attempt is
@@ -162,8 +164,9 @@ export function createOwnerChildDevServer(
           fn();
         };
 
-        const makeHandle = (port: number): DevServerHandle => ({
+        const makeHandle = (port: number, previewScope?: string): DevServerHandle => ({
           port,
+          ...(previewScope === undefined ? {} : { previewScope }),
           onFileChanged(path: string) {
             handle.send({ type: 'rifty:dev-file-changed', path });
           },
@@ -192,8 +195,8 @@ export function createOwnerChildDevServer(
             // a stray rejection still resolves boot (the server IS listening).
             const ready = m.port;
             Promise.resolve(opts.flush?.()).then(
-              () => finish(() => resolve(makeHandle(ready))),
-              () => finish(() => resolve(makeHandle(ready))),
+              () => finish(() => resolve(makeHandle(ready, m.previewScope))),
+              () => finish(() => resolve(makeHandle(ready, m.previewScope))),
             );
           } else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
           else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();

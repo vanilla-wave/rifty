@@ -1,9 +1,9 @@
 /**
- * Cross-realm bind-claim for `listen(port)` (ADR-0185).
+ * Cross-realm bind-claim for `listen(port)` (ADR-0186).
  *
  * The port registry is realm-local, so two Worker realms can each bind the same
  * port. At `listen(port)` (explicit port only — ephemeral `listen(0)` is skipped,
- * ADR-0185 D5) a realm broadcasts a `claim` on the per-port preview
+ * ADR-0186 D5) a realm broadcasts a `claim` on the per-port preview
  * `BroadcastChannel` (the SAME channel ADR-0043/0048/0180 use) and waits a
  * bounded window:
  *   - an existing OWNER replies `claim-deny` (echoing the claimant's `id`) → the
@@ -11,7 +11,7 @@
  *   - a CONCURRENT claimant tie-breaks deterministically by `id` (lower wins);
  *   - no deny within the window → win: register + become the owner, answering
  *     future claims with `claim-deny`.
- * Released on `close()`/realm-exit (the channel dies with the realm — ADR-0185 D4).
+ * Released on `close()`/realm-exit (the channel dies with the realm — ADR-0186 D4).
  *
  * Relies on the WHATWG `BroadcastChannel` "a channel never receives its own
  * posts" rule: a claimant never self-denies, while sibling realms' channel
@@ -29,7 +29,7 @@ import {
 /**
  * Bounded window a claimant waits for a deny / competing claim before binding.
  * Must exceed the channel's same-origin delivery latency so both peers observe
- * each other's frames (ADR-0185 D2). Default suits in-browser Worker realms;
+ * each other's frames (ADR-0186 D2). Default suits in-browser Worker realms;
  * injectable per claim (tests use a short value).
  */
 let defaultClaimWindowMs = 100;
@@ -75,7 +75,7 @@ function startOwnerAnswerer(port: number, channel: BroadcastChannel): void {
  * Broadcast a bind-claim for `port` and resolve `true` (won — this realm now
  * owns the port and answers future claims) or `false` (an existing owner denied,
  * or a concurrent claimant with a lower id won → the caller emits `EADDRINUSE`).
- * Call ONLY for an explicit `port !== 0` (ADR-0185 D5).
+ * Call ONLY for an explicit `port !== 0` (ADR-0186 D5).
  */
 export function claimPort(
   port: number,
@@ -123,7 +123,7 @@ export function claimPort(
 /**
  * Release a port this realm owned (on `close()`): stop answering claims so a
  * later `listen(port)` from any realm wins. A realm that exits drops the channel
- * implicitly (ADR-0185 D4); this is the explicit in-realm path. No-op for a port
+ * implicitly (ADR-0186 D4); this is the explicit in-realm path. No-op for a port
  * this realm never owned (e.g. a server that lost its claim).
  */
 export function releasePort(port: number): void {

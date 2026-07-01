@@ -6,13 +6,13 @@
  * groups hidden under search/filter. Picking spins a fresh scratch (pickStarter).
  *
  * Cross-Phase Reconciliation A: the canonical `Starter` (glue/starter.ts) is the
- * seed/lifecycle entity (id/name/source/files); the gallery-display fields
+ * seed/lifecycle entity (id/name/files); the gallery-display fields
  * (label/blurb/glyph/setup/category) live on `Preset`. So the gallery renders
  * straight from `Preset[]` and derives its launcher group via
  * `GROUP_FOR_CATEGORY[preset.category]` — never a deep-copied display Starter.
  */
 import { For, Show } from 'solid-js';
-import { GROUP_FOR_CATEGORY, type StarterGroup } from '../glue/starter.ts';
+import { type StarterGroup, groupForPreset } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
 import { Icon } from './icons.tsx';
 
@@ -29,7 +29,7 @@ const CATS: ReadonlyArray<{ id: 'all' | StarterGroup; label: string }> = [
   { id: 'wasm', label: 'Wasm' },
 ];
 
-const groupOf = (p: Preset): StarterGroup => GROUP_FOR_CATEGORY[p.category] ?? 'frontend';
+const groupOf = (p: Preset): StarterGroup => groupForPreset(p);
 
 export function StartersTab(props: {
   presets: readonly Preset[];

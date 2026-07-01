@@ -14,6 +14,10 @@
 
 ### Fixed
 
+- **Doc drift:** the `rifty:preview:ready` example frame in
+  `owner-binding-worker.ts` now shows `routingVersion: '5'`, matching the bumped
+  `SW_ROUTING_VERSION` constant (the runtime path was already correct; only the
+  illustrative comment was stale).
 - **ADR-0160:** port-scoped page bridges now refuse cross-port requests end to
   end. The SW no longer falls back to a ready window that advertised other
   ports, and `setupPreviewBridge({ ports })` ignores `rifty:preview:request`
@@ -57,6 +61,12 @@
   success path. Without them a foreign tab embedding the preview under page COEP
   credentialless (D-001) saw `ERR_BLOCKED_BY_RESPONSE` instead of an honest
   error page.
+- **Preview requests preserve the target port in synthetic upstream URLs.**
+  `synthesizePreviewUrl(path, port)` now lets the SW serialise
+  `http://preview.local:<port>/...`, so Node HTTP adapters deriving
+  `Request.url` from `Host` see the same preview target the route matched.
+  `SW_ROUTING_VERSION` bumps to `5`.
+
 - **SSE bodies fail loud in no-transferable-stream realms.**
   `packSerializedResponse` now refuses to drain `text/event-stream` bodies when
   `ReadableStream` transfer over `postMessage` is unavailable, throwing

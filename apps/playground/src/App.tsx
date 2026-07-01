@@ -1,3 +1,4 @@
+import { type LogEntry, porcelainXY } from '@riftydev/git';
 import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
@@ -7,7 +8,7 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import { normalizePath } from '@riftydev/vfs';
+import { basename, joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
@@ -23,12 +24,13 @@ import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
 import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
-import { FileExplorer } from './components/FileExplorer.tsx';
+import { FileExplorer, type FileExplorerMutations } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { ProjectDialogs } from './components/ProjectDialogs.tsx';
 import { ProjectSwitcherChip } from './components/ProjectSwitcherChip.tsx';
 import type { RowAction } from './components/ProjectsTab.tsx';
+import { ScmPanel } from './components/ScmPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
@@ -41,10 +43,14 @@ import {
   storageModeFromBoot,
 } from './glue/degraded-storage.ts';
 import { readChildren } from './glue/file-tree.ts';
+import { looksBinary } from './glue/fs-ops.ts';
+import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';
+import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';
+import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/launcher-prefs.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
-import { programMirrorPath } from './glue/program-path.ts';
+import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -63,6 +69,8 @@ import {
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
+import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts';
+import type { ScmResourceRow } from './glue/scm-status.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
@@ -91,6 +99,8 @@ const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
+const fatalDec = new TextDecoder('utf-8', { fatal: true });
+const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {
   return `ws-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
@@ -130,9 +140,15 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     writeStdin: () => {},
     signal: () => {},
     closeSession: () => {},
+    isAlive: () => false,
     writeFile: () => {},
+    writeFrame: () => {
+      throw new Error(OWNER_UNAVAILABLE_MSG);
+    },
+    writeFrameAcked: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    readFileBytes: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     snapshot: () => ({ cwd: '/scratch', env: {} }),
     onDevServer: () => () => {},
     onPreview: () => () => {},
@@ -187,10 +203,10 @@ export function App(props: AppProps) {
   const [projectIndex, setProjectIndex] = createSignal<ProjectIndex | null>(null);
 
   // ADR-0165 §57: DIRTY binds to a REAL owner file-write, never a UI counter. The
-  // owner handle exposes no write event (writes ORIGINATE on the page —
-  // editor/program edits flow out through `writeWorkspaceFile`/`onProgramChange`),
-  // so the page IS the write source: a tiny notifier the write paths fire and the
-  // store subscribes to. This is the honest signal — a write actually happened.
+  // owner handle exposes no write event (writes ORIGINATE on the page through
+  // `writeWorkspaceFile`), so the page IS the write source: a tiny notifier the
+  // write path fires and the store subscribes to. This is the honest signal — a
+  // write actually happened.
   const fileWriteListeners = new Set<(path: string, content: string) => void>();
   function notifyFileWritten(path: string, content: string): void {
     for (const cb of fileWriteListeners) cb(path, content);
@@ -257,9 +273,9 @@ export function App(props: AppProps) {
     return store.projects().find((p) => p.id === id)?.starter ?? activePreset();
   };
 
-  const [activeFile, setActiveFile] = createSignal('main.js');
+  const [activeFile, setActiveFile] = createSignal('');
   const [activeFilePath, setActiveFilePath] = createSignal<string | undefined>(undefined);
-  const [activeLang, setActiveLang] = createSignal('javascript');
+  const [activeLang, setActiveLang] = createSignal('plaintext');
   const [toast, setToast] = createSignal<{ message: string; tone: 'error' | 'success' } | null>(
     null,
   );
@@ -294,7 +310,7 @@ export function App(props: AppProps) {
   }
 
   function workspaceArchiveBlocked(): boolean {
-    return devServerStatus() !== 'stopped';
+    return presetTransitioning() || devServerStatus() !== 'stopped';
   }
 
   async function downloadWorkspaceArchive(): Promise<void> {
@@ -336,6 +352,322 @@ export function App(props: AppProps) {
     } catch (err) {
       flashError(`Import failed: ${(err as Error).message}`);
     }
+  }
+
+  function assertWorkspaceFileOwnerAlive(
+    owner: WorkspaceOwnerHandle,
+    path: string,
+    action: string,
+  ): void {
+    const current = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT || !owner.isAlive()) {
+      throw new Error(`workspace owner is unavailable — cannot ${action} ${basename(path)}`);
+    }
+    if (
+      current !== owner ||
+      current.root !== owner.root ||
+      current.snapshotPort !== owner.snapshotPort
+    ) {
+      throw new Error(`workspace owner changed while ${action}ing ${basename(path)}`);
+    }
+  }
+
+  async function readWorkspaceFileBytesFromOwner(
+    owner: WorkspaceOwnerHandle,
+    path: string,
+    action: string,
+  ): Promise<Uint8Array> {
+    assertWorkspaceFileOwnerAlive(owner, path, action);
+    const bytes = await owner.readFileBytes(path);
+    assertWorkspaceFileOwnerAlive(owner, path, action);
+    return bytes;
+  }
+
+  async function readWorkspaceFileForDownload(path: string): Promise<Uint8Array> {
+    return readWorkspaceFileBytesFromOwner(workspaceOwner(), path, 'download');
+  }
+
+  async function downloadWorkspaceFile(path: string): Promise<void> {
+    try {
+      await flushPendingEditorWrites();
+      const bytes = await readWorkspaceFileForDownload(path);
+      const doc = globalThis.document;
+      if (!doc) throw new Error('file download is unavailable without a document');
+      const blobBuffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(blobBuffer).set(bytes);
+      const blob = new Blob([blobBuffer], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = basename(path);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      flashToast(`${basename(path)} downloaded`, 'success');
+    } catch (err) {
+      flashError(`Download failed: ${(err as Error).message}`);
+    }
+  }
+
+  function decodeTextBlob(label: string, bytes: Uint8Array): string {
+    if (looksBinary(bytes)) throw new Error(`${label} is binary; text diff is unavailable`);
+    try {
+      return fatalDec.decode(bytes);
+    } catch {
+      throw new Error(`${label} is not valid UTF-8; text diff is unavailable`);
+    }
+  }
+
+  function compareDiffId(kind: string, left: string, right: string): string {
+    return `diff:${kind}:${encodeURIComponent(left)}:${encodeURIComponent(right)}`;
+  }
+
+  async function readGitOriginalText(input: {
+    readonly path: string;
+    readonly ref: string;
+  }): Promise<string> {
+    const owner = workspaceOwner();
+    const root = owner.root;
+    const snapshotPort = owner.snapshotPort;
+    const relative = input.path.startsWith(`${root}/`) ? input.path.slice(root.length + 1) : '';
+    if (!relative) throw new Error(`Cannot read git original outside ${root}`);
+    if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
+      throw new Error('git original read failed: workspace owner is unavailable');
+    }
+    assertWorkspaceFileOwnerAlive(owner, input.path, 'read git original');
+    const git = bridgeGitOwnerRpc(snapshotPort);
+    try {
+      const original = await git.show(`${input.ref}:${relative}`);
+      const currentOwner = workspaceOwner();
+      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
+        throw new Error(`workspace owner changed while reading ${input.ref}:${relative}`);
+      }
+      if (original.type !== 'blob') throw new Error(`${input.ref}:${relative} is not a blob`);
+      return decodeTextBlob(`${input.ref}:${relative}`, original.content);
+    } finally {
+      git.dispose();
+    }
+  }
+
+  async function openWorkingFileCompare(leftPath: string, rightPath: string): Promise<void> {
+    try {
+      await flushPendingEditorWrites();
+      const owner = workspaceOwner();
+      const [leftBytes, rightBytes] = await Promise.all([
+        readWorkspaceFileBytesFromOwner(owner, leftPath, 'compare'),
+        readWorkspaceFileBytesFromOwner(owner, rightPath, 'compare'),
+      ]);
+      editorApi?.openTextDiff({
+        id: compareDiffId('working', leftPath, rightPath),
+        path: rightPath,
+        title: `${basename(leftPath)} ↔ ${basename(rightPath)}`,
+        originalTitle: basename(leftPath),
+        modifiedTitle: basename(rightPath),
+        original: decodeTextBlob(leftPath, leftBytes),
+        modified: decodeTextBlob(rightPath, rightBytes),
+      });
+    } catch (err) {
+      flashError(`Compare failed: ${(err as Error).message}`);
+    }
+  }
+
+  async function openWorkingHeadCompare(path: string): Promise<void> {
+    try {
+      await flushPendingEditorWrites();
+      const owner = workspaceOwner();
+      const root = owner.root;
+      const snapshotPort = owner.snapshotPort;
+      const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
+      if (!relative) {
+        flashError(`Cannot compare outside ${root}`);
+        return;
+      }
+      if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
+        flashError('Compare failed: workspace owner is unavailable');
+        return;
+      }
+      assertWorkspaceFileOwnerAlive(owner, path, 'compare');
+      const working = await readWorkspaceFileBytesFromOwner(owner, path, 'compare');
+      editorApi?.openWorkingDiff({
+        path,
+        ref: 'HEAD',
+        hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),
+        modified: decodeTextBlob(relative, working),
+      });
+    } catch (err) {
+      flashError(`Compare failed: ${(err as Error).message}`);
+    }
+  }
+
+  async function headBlobExistsForCurrentStatus(
+    owner: WorkspaceOwnerHandle,
+    path: string,
+    relative: string,
+  ): Promise<boolean> {
+    assertWorkspaceFileOwnerAlive(owner, path, 'compare');
+    const git = bridgeGitOwnerRpc(owner.snapshotPort);
+    try {
+      const status = await git.status();
+      assertWorkspaceFileOwnerAlive(owner, path, 'compare');
+      const entry = status.find((candidate) => candidate.filepath === relative);
+      return statusCodeHasHeadBlob(entry ? (porcelainXY(entry.status) ?? undefined) : undefined);
+    } finally {
+      git.dispose();
+    }
+  }
+
+  async function readGitIndexText(
+    git: ReturnType<typeof bridgeGitOwnerRpc>,
+    relative: string,
+  ): Promise<string> {
+    const index = await git.show(`:${relative}`);
+    if (index.type !== 'blob') throw new Error(`:${relative} is not a blob`);
+    return decodeTextBlob(`:${relative}`, index.content);
+  }
+
+  async function readGitHeadText(
+    git: ReturnType<typeof bridgeGitOwnerRpc>,
+    relative: string,
+  ): Promise<string> {
+    const original = await git.show(`HEAD:${relative}`);
+    if (original.type !== 'blob') throw new Error(`HEAD:${relative} is not a blob`);
+    return decodeTextBlob(`HEAD:${relative}`, original.content);
+  }
+
+  async function openScmResourceDiff(row: ScmResourceRow): Promise<void> {
+    await flushPendingEditorWrites();
+    const path = row.path;
+    const owner = workspaceOwner();
+    const root = owner.root;
+    const snapshotPort = owner.snapshotPort;
+    const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
+    if (!relative) {
+      flashError(`Cannot open git diff outside ${root}`);
+      return;
+    }
+    if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
+      flashError('Open changes failed: workspace owner is unavailable');
+      return;
+    }
+    assertWorkspaceFileOwnerAlive(owner, path, 'open Git changes');
+    const git = bridgeGitOwnerRpc(snapshotPort);
+    try {
+      const currentOwner = workspaceOwner();
+      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
+        throw new Error(`workspace owner changed while opening ${relative}`);
+      }
+      const plan = scmDiffPlan(row);
+      const original =
+        plan.original === 'head'
+          ? await readGitHeadText(git, relative)
+          : plan.original === 'index'
+            ? await readGitIndexText(git, relative)
+            : '';
+      const modified =
+        plan.modified === 'index'
+          ? await readGitIndexText(git, relative)
+          : plan.modified === 'working'
+            ? decodeTextBlob(
+                relative,
+                await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes'),
+              )
+            : '';
+      const idScope = row.side === 'index' ? `scm-index-${row.code}` : `scm-worktree-${row.code}`;
+      editorApi?.openTextDiff({
+        id: compareDiffId(idScope, row.side === 'index' ? 'HEAD' : row.relativePath, path),
+        path,
+        title: `${basename(path)} ↔ ${plan.modifiedTitle}`,
+        originalTitle: plan.originalTitle,
+        modifiedTitle: plan.modifiedTitle,
+        original,
+        modified,
+      });
+    } catch (err) {
+      flashError(`Open changes failed: ${(err as Error).message}`);
+    } finally {
+      git.dispose();
+    }
+  }
+
+  function assertScmOwner(owner: WorkspaceOwnerHandle): void {
+    const current = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT || !owner.isAlive()) {
+      throw new Error('workspace owner is unavailable');
+    }
+    if (
+      current !== owner ||
+      current.root !== owner.root ||
+      current.snapshotPort !== owner.snapshotPort
+    ) {
+      throw new Error('workspace owner changed while applying Git action');
+    }
+  }
+
+  async function runScmOwnerAction(
+    label: string,
+    action: (git: ReturnType<typeof bridgeGitOwnerRpc>) => Promise<void>,
+    opts: { readonly refreshVfs?: boolean } = {},
+  ): Promise<void> {
+    await flushPendingEditorWrites();
+    const owner = workspaceOwner();
+    assertScmOwner(owner);
+    const git = bridgeGitOwnerRpc(owner.snapshotPort);
+    try {
+      await action(git);
+      assertScmOwner(owner);
+      requestGitStatus(owner.snapshotPort);
+      if (opts.refreshVfs) requestVfsSnapshot(owner.snapshotPort);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      flashError(`${label} failed: ${error.message}`);
+      throw error;
+    } finally {
+      git.dispose();
+    }
+  }
+
+  function stageDeletesWorkingBlob(row: ScmResourceRow): boolean {
+    return row.badge === 'D';
+  }
+
+  async function stageScmRow(row: ScmResourceRow): Promise<void> {
+    await runScmOwnerAction(`Stage ${row.relativePath}`, async (git) => {
+      if (stageDeletesWorkingBlob(row)) await git.remove(row.relativePath);
+      else await git.add(row.relativePath);
+    });
+  }
+
+  async function unstageScmRow(row: ScmResourceRow): Promise<void> {
+    await runScmOwnerAction(`Unstage ${row.relativePath}`, (git) => git.unstage(row.relativePath));
+  }
+
+  async function discardScmRow(row: ScmResourceRow): Promise<void> {
+    if (row.badge === 'U') {
+      const error = new Error('untracked files are not discardable through git restore');
+      flashError(`Discard ${row.relativePath} failed: ${error.message}`);
+      throw error;
+    }
+    const confirmed =
+      globalThis.confirm?.(`Discard changes in ${row.relativePath}? This cannot be undone.`) ??
+      false;
+    if (!confirmed) return;
+    await runScmOwnerAction(
+      `Discard ${row.relativePath}`,
+      async (git) => {
+        await git.restore([row.relativePath]);
+      },
+      { refreshVfs: true },
+    );
+    // The owner working file is now back at HEAD. Drop any open editor model so
+    // its (discarded) buffer cannot be re-flushed to the owner on the next edit,
+    // silently resurrecting the change. Re-open reads the restored owner bytes.
+    editorApi?.closePath(row.path);
+  }
+
+  async function commitScm(message: string): Promise<void> {
+    await runScmOwnerAction('Commit', async (git) => {
+      const oid = await git.commitResolvedIdentity({ message });
+      flashToast(`Committed ${oid.slice(0, 7)}`, 'success');
+    });
   }
 
   function chooseWorkspaceArchive(): void {
@@ -399,12 +731,65 @@ export function App(props: AppProps) {
       : createUnavailableOwner(),
   );
   const workspaceOwner = (): WorkspaceOwnerHandle => ownerHandle();
+  const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner());
+  // A rename closes the open tabs under `from`; map each back to its path under
+  // `to` so open editors follow the move (a file, or every file under a renamed
+  // dir) instead of silently vanishing.
+  function reopenTargetsForRename(from: string, to: string): readonly string[] {
+    return (editorApi?.openPathsUnder(from) ?? []).map((path) => `${to}${path.slice(from.length)}`);
+  }
+  const explorerMutations: FileExplorerMutations = {
+    createFile: (path) => ownerRpcFs.createFile(path),
+    createDir: (path) => ownerRpcFs.createDir(path),
+    async deletePath(path) {
+      await flushPendingEditorWrites();
+      editorApi?.closePathTree(path);
+      await ownerRpcFs.deletePath(path);
+    },
+    async renamePath(from, to) {
+      await flushPendingEditorWrites();
+      const reopen = reopenTargetsForRename(from, to);
+      editorApi?.closePathTree(from);
+      await ownerRpcFs.renamePath(from, to);
+      for (const path of reopen) editorApi?.openFile(path);
+    },
+    async renameMany(entries) {
+      await flushPendingEditorWrites();
+      const reopen = entries.flatMap(({ from, to }) => reopenTargetsForRename(from, to));
+      for (const { from } of entries) editorApi?.closePathTree(from);
+      await ownerRpcFs.renameMany(entries);
+      for (const path of reopen) editorApi?.openFile(path);
+    },
+    async copyTree(from, to) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.copyTree(from, to);
+    },
+    async writeFile(path, data, options) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.writeFile(path, data, options);
+      editorApi?.closePath(path);
+    },
+    async writeFiles(entries) {
+      await flushPendingEditorWrites();
+      await ownerRpcFs.writeFiles(entries);
+      for (const { path } of entries) editorApi?.closePath(path);
+    },
+  };
+  const [gitStatusMap, setGitStatusMap] = createSignal<ReadonlyMap<string, string>>(new Map());
+  type GitScmReads = {
+    readonly root: string;
+    readonly branch?: string;
+    readonly history: readonly LogEntry[];
+  };
+  const emptyGitScm = (root = activeRoot()): GitScmReads => ({ root, history: [] });
+  const [gitScmReads, setGitScmReads] = createSignal<GitScmReads>(emptyGitScm());
+  const activeGitScm = createMemo(() =>
+    gitScmReads().root === activeRoot() ? gitScmReads() : emptyGitScm(),
+  );
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
-  const machine = useMode({
-    sources: { dev: DEFAULT_PRESET.source, realVite: DEFAULT_PRESET.source },
-  });
+  const machine = useMode({});
 
   // Dev-server lifecycle is OWNER-driven now (ADR-0148 co-resident dev server):
   // the `vite` / `npm run dev` line runs in the owner over the pty channel; the owner reports
@@ -413,6 +798,8 @@ export function App(props: AppProps) {
   const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
     'stopped',
   );
+  const [presetTransitioning, setPresetTransitioning] = createSignal(false);
+  let presetTransitionChain: Promise<void> = Promise.resolve();
   const devServerRunning = (): boolean => devServerStatus() === 'running';
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
   interface TsPresetTransitionGate {
@@ -426,6 +813,13 @@ export function App(props: AppProps) {
     });
     return { resolve };
   }
+  function queuePresetTransition(run: () => Promise<void>): Promise<void> {
+    const queued = presetTransitionChain.then(run, run);
+    presetTransitionChain = queued.catch((err: unknown) => {
+      console.error('[preset-transition] failed', err);
+    });
+    return presetTransitionChain;
+  }
 
   // ALL live previewable ports (ADR-0155): the dev-server port + each `node
   // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
@@ -433,6 +827,8 @@ export function App(props: AppProps) {
   // `onDevServer` path above; this set drives the per-node-port bridges (below).
   const [previewPorts, setPreviewPorts] = createSignal<PreviewPortEntry[]>([]);
   let devServerSessionId: string | null = null;
+  let devServerBootSessionId: string | null = null;
+  let devServerOwnerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
   // Mirror the owner's dev-server state + wire the page-side preview SW route on
@@ -442,6 +838,14 @@ export function App(props: AppProps) {
     let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
       const wasRunning = devServerStatus() === 'running';
+      if (frame.status === 'stopped') {
+        devServerOwnerSessionId = null;
+        if (frame.sid === undefined || frame.sid === devServerBootSessionId) {
+          devServerBootSessionId = null;
+        }
+      } else {
+        devServerOwnerSessionId = frame.sid ?? null;
+      }
       setDevServerStatus(frame.status);
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
@@ -450,7 +854,7 @@ export function App(props: AppProps) {
       tearPreview?.();
       tearPreview =
         frame.status === 'running' && frame.port !== undefined
-          ? wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken)
+          ? wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken, frame.previewScope)
           : undefined;
     });
     onCleanup(() => {
@@ -470,30 +874,34 @@ export function App(props: AppProps) {
 
   // Per-port SW preview bridge for non-dev-server ports (node + vite preview). The dev-server
   // port keeps its existing bridge from the `onDevServer` path above — never
-  // double-wire it. Diff the live ports against active teardowns: wire a
+  // double-wire it. Diff the live port+scope bridges against active teardowns: wire a
   // newly-present port, tear down + drop one that left the set. `onCleanup` tears
   // down all.
-  const nodePortBridges = new Map<number, () => void>();
+  function previewBridgeKey(port: number, previewScope?: string): string {
+    return JSON.stringify([port, previewScope ?? null]);
+  }
+  const nodePortBridges = new Map<string, () => void>();
   createEffect(() => {
     // Never wire a node bridge for the ACTIVE dev-server port (ADR-0157 review C3):
     // the `onDevServer` path already owns that `/preview/<port>/` route, so a node
     // server that picked the same port must not register a second (clobbering)
     // bridge whose teardown would delete the shared route.
     const devPort = devServerRunning() ? machine.realVitePort() : null;
-    const live = new Set(
-      previewPorts()
-        .filter((p) => p.source !== 'dev-server' && p.port !== devPort)
-        .map((p) => p.port),
-    );
-    for (const port of live) {
-      if (!nodePortBridges.has(port)) {
-        nodePortBridges.set(port, wirePreviewBridge(port, workspaceOwner().previewOwnerToken));
+    const entries = previewPorts().filter((p) => p.source !== 'dev-server' && p.port !== devPort);
+    const live = new Set(entries.map((p) => previewBridgeKey(p.port, p.previewScope)));
+    for (const [key, tear] of nodePortBridges) {
+      if (!live.has(key)) {
+        tear();
+        nodePortBridges.delete(key);
       }
     }
-    for (const [port, tear] of nodePortBridges) {
-      if (!live.has(port)) {
-        tear();
-        nodePortBridges.delete(port);
+    for (const p of entries) {
+      const key = previewBridgeKey(p.port, p.previewScope);
+      if (!nodePortBridges.has(key)) {
+        nodePortBridges.set(
+          key,
+          wirePreviewBridge(p.port, workspaceOwner().previewOwnerToken, p.previewScope),
+        );
       }
     }
   });
@@ -696,6 +1104,44 @@ export function App(props: AppProps) {
     // publish would have been missed), replacing the owner-side retry-storm.
     requestVfsSnapshot(workspaceOwner().snapshotPort);
     onCleanup(unsubscribe);
+  });
+
+  createEffect(() => {
+    const owner = workspaceOwner();
+    const root = owner.root;
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) {
+      setGitStatusMap(new Map());
+      setGitScmReads(emptyGitScm(root));
+      return;
+    }
+    const git = bridgeGitOwnerRpc(owner.snapshotPort);
+    let disposed = false;
+    async function refreshScmReads(): Promise<void> {
+      try {
+        const [branch, history] = await Promise.all([git.currentBranch(), git.log({ depth: 20 })]);
+        if (disposed) return;
+        setGitScmReads({ root, branch, history });
+      } catch (err) {
+        if (disposed) return;
+        setGitScmReads(emptyGitScm(root));
+        console.warn('[scm] read failed', (err as Error).message);
+      }
+    }
+    void refreshScmReads();
+    const unsubscribe = subscribeGitStatus(owner.snapshotPort, (frame) => {
+      const next = new Map<string, string>();
+      for (const entry of frame.entries) next.set(joinPath(root, entry.path), entry.code);
+      setGitStatusMap(next);
+      void refreshScmReads();
+    });
+    setGitStatusMap(new Map());
+    onCleanup(() => {
+      disposed = true;
+      unsubscribe();
+      git.dispose();
+      setGitStatusMap(new Map());
+      setGitScmReads(emptyGitScm());
+    });
   });
 
   // Lazy node_modules read bridge + cache (ADR-0080), against the persistent
@@ -1302,29 +1748,28 @@ export function App(props: AppProps) {
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
   }
 
-  function workspacePresetPath(path: string): string {
-    const normalized = normalizePath(`${activeRoot()}/${path.replace(/^\/+/, '')}`);
-    if (normalized === activeRoot() || !normalized.startsWith(`${activeRoot()}/`)) {
-      throw new Error(`Preset file escapes workspace: ${path}`);
-    }
-    return normalized;
-  }
+  const activeInitialEditorFiles = createMemo(() =>
+    initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot()),
+  );
+  const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal<
+    readonly string[]
+  >(activeInitialEditorFiles());
 
-  function openPresetEditorTabs(preset: Preset): void {
-    for (const path of preset.openFiles ?? []) {
-      editorApi?.openFile(workspacePresetPath(path), { activate: false });
-    }
+  function resetEditorToActiveInitialFiles(): void {
+    const paths = activeInitialEditorFiles();
+    setPublishedInitialEditorFiles(paths);
+    editorApi?.openInitialFiles(paths);
   }
 
   // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
-  function writeWorkspaceFile(path: string, content: string): void {
-    // The program mirror (active template entry, ADR-0165 §4) flows through
-    // onProgramChange (which owns its owner write); skip the double-write here.
-    if (path !== programMirrorPath(activeRoot(), activeTemplate())) {
-      workspaceOwner().writeFile(path, content);
-    }
+  async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+    await workspaceOwner().writeFrameAcked({
+      type: 'write',
+      path,
+      data: ownerWriteEnc.encode(content),
+    });
     notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
   }
 
@@ -1332,10 +1777,10 @@ export function App(props: AppProps) {
    * Push starter files into the persistent owner realm (ADR-0146
    * owner-resident shell; the owner is the single authoritative store owner and
    * the page holds no authoritative fs). This mirrors the durable owner reset for
-   * boot-critical files, but runs synchronously before the dev-server boot line so
-   * template files like index.html cannot lag a mid-session starter pick.
+   * boot-critical files, but is acked before editor tabs reopen so template files
+   * like index.html cannot lag a mid-session starter pick.
    */
-  function seedWorkspaceOwner(preset: Preset): void {
+  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -1344,13 +1789,17 @@ export function App(props: AppProps) {
       // package.json is install-owned after boot; rewriting it here drops
       // npm-installed deps on reload while the owner/index reset already seeds it.
       if (path === rootPackageJsonPath) continue;
-      workspaceOwner().writeFile(path, content);
+      await workspaceOwner().writeFrameAcked({
+        type: 'write',
+        path,
+        data: ownerWriteEnc.encode(content),
+      });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  function seedViteWorkspace(preset: Preset): void {
-    seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset): Promise<void> {
+    await seedWorkspaceOwner(preset);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -1371,6 +1820,29 @@ export function App(props: AppProps) {
       return idle;
     }
     return createSession();
+  }
+
+  function usableDevServerSession(id: string): TerminalSessionSnapshot | undefined {
+    try {
+      const session = manager.snapshot(id);
+      return session.status === 'idle' && !hiddenSessionIds.has(session.id) ? session : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function ensureReservedDevServerSession(
+    session: TerminalSessionSnapshot,
+  ): Promise<TerminalSessionSnapshot> {
+    const reserved = usableDevServerSession(session.id);
+    if (reserved) return reserved;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const replacement = createSession();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      const usable = usableDevServerSession(replacement.id);
+      if (usable) return usable;
+    }
+    throw new Error('Unable to reserve an idle terminal for the dev server');
   }
 
   function isVisibleTerminalSession(id: string): boolean {
@@ -1397,59 +1869,124 @@ export function App(props: AppProps) {
     }
   }
 
+  function clearDevServerBootSession(sessionId: string): void {
+    if (devServerBootSessionId === sessionId) devServerBootSessionId = null;
+  }
+
+  function lifecycleSessionRunning(sessionId: string | null): boolean {
+    return (
+      sessionId !== null &&
+      devServerBootSessionId === sessionId &&
+      (terminalStatus(sessionId) === 'running' || devServerOwnerSessionId === sessionId)
+    );
+  }
+
+  function lifecycleDevServerRunning(): boolean {
+    return lifecycleSessionRunning(devServerSessionId);
+  }
+
   async function waitForTerminalIdle(id: string | null): Promise<void> {
     while (terminalStatus(id) === 'running') {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
   }
 
-  async function waitForDevServerBoot(sessionId: string, generation: number): Promise<void> {
+  async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean> {
     while (generation === devServerRestartGeneration) {
-      if (devServerStatus() === 'running' || terminalStatus(sessionId) === 'idle') return;
+      if (devServerStatus() === 'running' && devServerOwnerSessionId === sessionId) return true;
+      if (terminalStatus(sessionId) === 'idle') {
+        clearDevServerBootSession(sessionId);
+        return false;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
+    clearDevServerBootSession(sessionId);
+    return false;
+  }
+
+  async function waitForPresetBoot(
+    sessionId: string,
+    generation: number,
+    spec: ProjectSpec,
+  ): Promise<boolean> {
+    if (spec.runtime === 'node-cli') {
+      await waitForTerminalIdle(sessionId);
+      clearDevServerBootSession(sessionId);
+      return true;
+    }
+    return waitForDevServerBoot(sessionId, generation);
+  }
+
+  async function stopDevServerSession(sessionId: string | null): Promise<void> {
+    const stopLifecycleRun = lifecycleSessionRunning(sessionId);
+    if (sessionId && stopLifecycleRun) manager.stop(sessionId);
+    if (sessionId && stopLifecycleRun && devServerOwnerSessionId === sessionId) {
+      await waitForDevServerStop();
+    }
+    if (stopLifecycleRun) {
+      await waitForTerminalIdle(sessionId);
+      if (sessionId) clearDevServerBootSession(sessionId);
+      setPreviewPorts([]);
+    }
+  }
+
+  async function startDevServerSession(
+    sessionId: string,
+    generation: number,
+    preset: Preset,
+  ): Promise<boolean> {
+    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
+    devServerSessionId = targetSessionId;
+    devServerBootSessionId = targetSessionId;
+    manager.clear(targetSessionId); // fresh console for the switched-in project
+    void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
+    return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
   }
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
     // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
     // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
-    if (devServerSessionId) manager.stop(devServerSessionId);
-    await waitForDevServerStop();
-    await waitForTerminalIdle(devServerSessionId);
+    await stopDevServerSession(devServerSessionId);
     if (generation !== devServerRestartGeneration) return;
-    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
-    devServerSessionId = targetSessionId;
-    manager.clear(targetSessionId); // fresh console for the switched-in project
     // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
     // switch the store has re-pointed to the destination project's starter, so a
     // restart boots ITS template — never the stale picked-preset starter.
-    void runTerminalSequence(
-      targetSessionId,
-      presetBootLines(presetForId(activeStarterId()), activeRoot()),
-    );
-    await waitForDevServerBoot(targetSessionId, generation);
+    await startDevServerSession(sessionId, generation, presetForId(activeStarterId()));
   }
 
-  function reinitializeTsForPickedPreset(preset: Preset): void {
-    openPresetEditorTabs(preset);
+  function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
 
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
+      setPresetTransitioning(true);
       setActivePreset(preset.id);
-      await machine.loadPreset(preset);
-      discardPendingProgramWrite();
-      seedViteWorkspace(preset);
-      const restartNeeded =
-        devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running';
-      const restartSessionId = devServerSessionId;
+      const restartNeeded = lifecycleDevServerRunning();
+      const restartSessionId = restartNeeded
+        ? (devServerSessionId ?? devServerSession().id)
+        : undefined;
+      const restartGeneration = restartNeeded ? ++devServerRestartGeneration : undefined;
+      if (restartNeeded) await stopDevServerSession(restartSessionId ?? null);
+      if (restartGeneration !== undefined && restartGeneration !== devServerRestartGeneration) {
+        return;
+      }
       let session: TerminalSessionSnapshot | undefined;
       if (!restartNeeded) {
         session = devServerSession();
         devServerSessionId = session.id;
       }
+      await machine.loadPreset(preset);
+      // Drain pending editor writes BEFORE seeding: the de-specialized entry now
+      // rides the ordinary debounced owner-write path, so an un-acked entry edit
+      // must not fire mid-seed (seed + snapshot await span >300ms) and clobber the
+      // freshly-seeded preset entry the dev server runs (replaces the old
+      // discardPendingProgramWrite guard).
+      await flushPendingEditorWrites();
+      await seedViteWorkspace(preset);
+      await waitForActiveSnapshotFrame();
+      resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
       // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
       // must update the runtime before the dev line runs. `slug` keys the install
@@ -1462,18 +1999,25 @@ export function App(props: AppProps) {
         setup: preset.setup,
       });
       if (restartNeeded) {
-        if (restartSessionId) await restartDevServer(restartSessionId);
-        reinitializeTsForPickedPreset(preset);
+        if (restartSessionId && restartGeneration !== undefined) {
+          const booted = await startDevServerSession(restartSessionId, restartGeneration, preset);
+          if (!booted) return;
+        }
+        reinitializeTsForPickedPreset();
         return;
       }
       if (!session) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      session = await ensureReservedDevServerSession(session);
+      devServerSessionId = session.id;
       manager.clear(session.id); // fresh console for the switched-in project
       const generation = ++devServerRestartGeneration;
+      devServerBootSessionId = session.id;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
-      await waitForDevServerBoot(session.id, generation);
-      reinitializeTsForPickedPreset(preset);
+      const booted = await waitForPresetBoot(session.id, generation, templateForPreset(preset));
+      if (!booted) return;
+      reinitializeTsForPickedPreset();
     } finally {
+      setPresetTransitioning(false);
       tsGate?.resolve();
     }
   }
@@ -1486,94 +2030,106 @@ export function App(props: AppProps) {
   // separately via `onConfirmSave` → the owner `index-save` frame. `awaitReady`
   // uses the snapshot-port handshake as the ready gate (the owner publishes at boot).
   async function switchTo(nextActiveId: ActiveId): Promise<boolean> {
-    // The dirty-scratch confirm already ran in the store (`requestSwitch` opened the
-    // switch dialog), so by the time we get here the switch is committed — the store
-    // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
-    // already describe the NEXT project. Gate stays false (store decided already).
-    // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
+    try {
+      setPresetTransitioning(true);
+      // The dirty-scratch confirm already ran in the store (`requestSwitch` opened the
+      // switch dialog), so by the time we get here the switch is committed — the store
+      // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
+      // already describe the NEXT project. Gate stays false (store decided already).
+      // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
 
-    // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
-    // A switch otherwise never updates the on-disk `activeId`, so the respawned
-    // owner re-publishes the STALE activeId and `hydrateIndex` reverts the switch
-    // (a race), and a reload boots the wrong root. Post to the CURRENT owner and
-    // wait for its durable ack, so the new owner boots reading the right id.
-    // Memory mode has no durable index → page-mirror only.
-    if (!saveAffordance(storageMode).ephemeral) {
-      await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
+      // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
+      // A switch otherwise never updates the on-disk `activeId`, so the respawned
+      // owner re-publishes the STALE activeId and `hydrateIndex` reverts the switch
+      // (a race), and a reload boots the wrong root. Post to the CURRENT owner and
+      // wait for its durable ack, so the new owner boots reading the right id.
+      // Memory mode has no durable index → page-mirror only.
+      if (!saveAffordance(storageMode).ephemeral) {
+        await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
+      }
+      const restartDevServerSessionId = lifecycleDevServerRunning() ? devServerSessionId : null;
+      const switched = await requestSwitch({
+        currentOwner: workspaceOwner(),
+        nextRoot: rootForId(nextActiveId),
+        nextSlug: nextActiveId,
+        isDirty: () => false,
+        confirmDiscard: async () =>
+          globalThis.confirm?.('Discard unsaved scratch changes?') ?? true,
+        save: async () => {
+          /* unused: the store ran the dirty-confirm; durable Save persists via onConfirmSave → owner index-save */
+        },
+        discard: async () => {
+          /* unused: the store ran the dirty-confirm; durable reset persists via onConfirmReset → owner index-reset */
+        },
+        spawn: ({ root, slug }) =>
+          startWorkspaceOwner({
+            // template/setup follow the active STARTER, which the store already
+            // re-pointed to the destination project (ADR-0165 §4).
+            workspaceId,
+            root,
+            template: activeTemplate(),
+            slug,
+            starter: activeStarterId(),
+            setup: presetForId(activeStarterId()).setup,
+            onLog: (line) => console.info(line),
+          }),
+        awaitReady: (next) =>
+          new Promise<void>((resolve) => {
+            // REAL readiness gate (ADR-0165 §3): resolve on the new owner's FIRST
+            // published snapshot frame — the owner serves the snapshot bridge only
+            // after `bootShellOwner` has wired its pty/fs/index handlers, so a frame
+            // means it is ready to take commands. A bounded timeout fallback prevents
+            // a never-arriving frame from hanging the switch (the page→owner IPC also
+            // buffers, so a late wire still self-recovers via each bridge's re-request).
+            let settled = false;
+            const finish = (): void => {
+              if (settled) return;
+              settled = true;
+              unsub();
+              clearTimeout(timer);
+              resolve();
+            };
+            const unsub = subscribeVfsSnapshot(next.snapshotPort, () => finish());
+            requestVfsSnapshot(next.snapshotPort);
+            const timer = setTimeout(finish, 2000);
+          }),
+        rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
+        restartDevServer: async () => {
+          setDevServerStatus('stopped');
+          await manager.rebindOwner(workspaceOwner());
+          if (restartDevServerSessionId) {
+            await restartDevServer(restartDevServerSessionId);
+          }
+        },
+        clearTerminal: () => {
+          if (restartDevServerSessionId) manager.clear(restartDevServerSessionId);
+        },
+      });
+      if (switched) {
+        await waitForActiveSnapshotFrame();
+        resetEditorToActiveInitialFiles();
+      }
+      return switched;
+    } finally {
+      setPresetTransitioning(false);
     }
-    return await requestSwitch({
-      currentOwner: workspaceOwner(),
-      nextRoot: rootForId(nextActiveId),
-      nextSlug: nextActiveId,
-      isDirty: () => false,
-      confirmDiscard: async () => globalThis.confirm?.('Discard unsaved scratch changes?') ?? true,
-      save: async () => {
-        /* unused: the store ran the dirty-confirm; durable Save persists via onConfirmSave → owner index-save */
-      },
-      discard: async () => {
-        /* unused: the store ran the dirty-confirm; durable reset persists via onConfirmReset → owner index-reset */
-      },
-      spawn: ({ root, slug }) =>
-        startWorkspaceOwner({
-          // template/setup follow the active STARTER, which the store already
-          // re-pointed to the destination project (ADR-0165 §4).
-          workspaceId,
-          root,
-          template: activeTemplate(),
-          slug,
-          starter: activeStarterId(),
-          setup: presetForId(activeStarterId()).setup,
-          onLog: (line) => console.info(line),
-        }),
-      awaitReady: (next) =>
-        new Promise<void>((resolve) => {
-          // REAL readiness gate (ADR-0165 §3): resolve on the new owner's FIRST
-          // published snapshot frame — the owner serves the snapshot bridge only
-          // after `bootShellOwner` has wired its pty/fs/index handlers, so a frame
-          // means it is ready to take commands. A bounded timeout fallback prevents
-          // a never-arriving frame from hanging the switch (the page→owner IPC also
-          // buffers, so a late wire still self-recovers via each bridge's re-request).
-          let settled = false;
-          const finish = (): void => {
-            if (settled) return;
-            settled = true;
-            unsub();
-            clearTimeout(timer);
-            resolve();
-          };
-          const unsub = subscribeVfsSnapshot(next.snapshotPort, () => finish());
-          requestVfsSnapshot(next.snapshotPort);
-          const timer = setTimeout(finish, 2000);
-        }),
-      rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
-      restartDevServer: async () => {
-        setDevServerStatus('stopped');
-        await manager.rebindOwner(workspaceOwner());
-        if (devServerSessionId) await restartDevServer(devServerSessionId);
-      },
-      clearTerminal: () => {
-        if (devServerSessionId) manager.clear(devServerSessionId);
-      },
-    });
   }
 
   onMount(() => {
     // Seed the owner workspace (idempotent). The default README is seeded
     // owner-side in `seedProject` (single store owner — no page store to write).
-    try {
-      seedViteWorkspace(DEFAULT_PRESET);
-    } catch {
+    void seedViteWorkspace(DEFAULT_PRESET).catch(() => {
       /* best-effort seeding */
-    }
+    });
     initialRunTimer = setTimeout(() => {
-      void runVitePreset(DEFAULT_PRESET);
+      void queuePresetTransition(() => runVitePreset(DEFAULT_PRESET));
     }, 0);
   });
 
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    flushPendingProgramWrite();
+    void flushPendingEditorWrites();
     manager.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -1592,6 +2148,7 @@ export function App(props: AppProps) {
   let pendingSaveApplied: Promise<boolean> | null = null;
   let pendingSaveDurability: Promise<boolean> | null = null;
   let pendingSwitch: Promise<boolean> | null = null;
+  let pendingSaveAutoSwitchId: ActiveId | null = null;
 
   function trackSave(
     id: string,
@@ -1647,32 +2204,23 @@ export function App(props: AppProps) {
     return (await pendingSwitch) ?? true;
   }
 
-  let programWriteTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingProgramWrite: { path: string; content: string } | undefined;
-
-  function flushPendingProgramWrite(): void {
-    const pending = pendingProgramWrite;
-    if (!pending) return;
-    discardPendingProgramWrite();
-    workspaceOwner().writeFile(pending.path, pending.content);
-    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
+  async function flushPendingEditorWrites(): Promise<void> {
+    await editorApi?.flushPendingWrites();
   }
 
-  function discardPendingProgramWrite(): void {
-    if (programWriteTimer) {
-      clearTimeout(programWriteTimer);
-      programWriteTimer = undefined;
+  function requestActiveGitStatus(): void {
+    const owner = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
+    requestGitStatus(owner.snapshotPort);
+  }
+
+  async function selectSidebarView(view: 'explorer' | 'scm'): Promise<void> {
+    const willShow = layout.view() !== view || layout.sidebarCollapsed();
+    if (view === 'scm' && willShow) {
+      await flushPendingEditorWrites();
+      requestActiveGitStatus();
     }
-    pendingProgramWrite = undefined;
-  }
-
-  function scheduleProgramWrite(path: string, content: string): void {
-    pendingProgramWrite = { path, content };
-    if (programWriteTimer) clearTimeout(programWriteTimer);
-    programWriteTimer = setTimeout(() => {
-      programWriteTimer = undefined;
-      flushPendingProgramWrite();
-    }, 300);
+    layout.selectView(view);
   }
 
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
@@ -1693,20 +2241,29 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
+    pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
-    const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
-    const tsGate = wasDirty ? undefined : beginTsPresetTransition();
-    store.pickStarter(id);
-    if (!wasDirty) {
-      durableNewScratch(id);
-      void runVitePreset(presetForId(id), tsGate);
+    const runPick = async (): Promise<void> => {
+      const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
+      const tsGate = wasDirty ? undefined : beginTsPresetTransition();
+      store.pickStarter(id);
+      if (!wasDirty) {
+        durableNewScratch(id);
+        await runVitePreset(presetForId(id), tsGate);
+      }
+    };
+    if (presetTransitioning()) {
+      await queuePresetTransition(runPick);
+      return;
     }
+    void queuePresetTransition(runPick);
   }
 
   // Switch active root from the launcher/chip. The store gates a dirty scratch
   // (switch dialog); an applied switch drives the real owner respawn (switchTo).
   async function onLauncherSwitch(id: ActiveId): Promise<void> {
+    pendingSaveAutoSwitchId = null;
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveDurable())) return;
     const before = store.activeId();
@@ -1753,6 +2310,24 @@ export function App(props: AppProps) {
   function openSaveDialog(): void {
     setSaveName('');
     store.openDialog({ kind: 'save', defaultName: '' });
+  }
+
+  async function switchToSavedProjectAfterSave(
+    id: ActiveId,
+    saved: Promise<boolean>,
+  ): Promise<void> {
+    try {
+      if (saveAffordance(storageMode).ephemeral) return;
+      if (!(await saved)) return;
+      if (pendingAfterSave()) return;
+      if (pendingSaveAutoSwitchId !== id) return;
+      if (pendingSwitch) return;
+      if (store.activeId() !== id) return;
+      if (workspaceOwner().root === rootForId(id)) return;
+      void trackSwitch(switchTo(id));
+    } finally {
+      if (pendingSaveAutoSwitchId === id) pendingSaveAutoSwitchId = null;
+    }
   }
 
   // Confirm Save: the store flips the mirror pointer; a fresh page id is allocated
@@ -1814,6 +2389,9 @@ export function App(props: AppProps) {
     if (pending) {
       setPendingAfterSave(null);
       if (await saveWait.durable) applyPendingTarget(pending);
+    } else if (!ephemeral) {
+      pendingSaveAutoSwitchId = id;
+      void switchToSavedProjectAfterSave(id, saveWait.durable);
     }
   }
 
@@ -1833,17 +2411,34 @@ export function App(props: AppProps) {
     store.confirmRename(renameName());
   }
 
-  // Re-seed the live editor program + restart the dev server after the OWNER
+  // Re-seed visible editor tabs + restart the dev server after the OWNER
   // re-seeded the ACTIVE root (ADR-0165 §6). The owner already republished the
   // file snapshot (reset-refresh hook), so the explorer is fresh; here the page
-  // resets the program tab to the clean starter source (echo-suppressed in
-  // EditorHost → no re-dirty) and reboots the dev server so the preview reflects
-  // the restored tree (node_modules was wiped → the boot re-installs).
-  function refreshActiveAfterReset(): void {
-    const preset = presetForId(activeStarterId());
-    machine.setSource(preset.source);
-    openPresetEditorTabs(preset);
-    if (devServerStatus() !== 'stopped' && devServerSessionId) {
+  // reopens the preset's initial files and reboots the dev server so the preview
+  // reflects the restored tree (node_modules was wiped → the boot re-installs).
+  async function waitForActiveSnapshotFrame(): Promise<void> {
+    const owner = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let unsubscribe: () => void = () => {};
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finish, 2000);
+      unsubscribe = snapshotFs.subscribe(finish);
+      requestVfsSnapshot(owner.snapshotPort);
+    });
+  }
+
+  async function refreshActiveAfterReset(): Promise<void> {
+    await waitForActiveSnapshotFrame();
+    resetEditorToActiveInitialFiles();
+    if (lifecycleDevServerRunning() && devServerSessionId) {
       void restartDevServer(devServerSessionId);
     }
   }
@@ -1857,15 +2452,19 @@ export function App(props: AppProps) {
   function onConfirmReset(): void {
     const d = store.dialog();
     const id = d && d.kind === 'reset' ? d.id : null;
-    if (id && !saveAffordance(storageMode).ephemeral) {
-      const reset =
-        id === 'scratch'
-          ? resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId())
-          : resetProjectIndex(workspaceOwner().snapshotPort, id);
-      void reset.catch((err: unknown) => console.error('[project-index] reset failed', err));
-    }
-    store.confirmReset();
-    if (id && id === store.activeId()) refreshActiveAfterReset();
+    const activeReset = id === store.activeId();
+    void (async (): Promise<void> => {
+      await flushPendingEditorWrites();
+      if (id && !saveAffordance(storageMode).ephemeral) {
+        if (id === 'scratch') {
+          await resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId());
+        } else {
+          await resetProjectIndex(workspaceOwner().snapshotPort, id);
+        }
+      }
+      store.confirmReset();
+      if (activeReset) await refreshActiveAfterReset();
+    })().catch((err: unknown) => console.error('[project-index] reset failed', err));
   }
 
   // Dialog-derived strings (ADR-0165 §9 ProjectDialogs contract).
@@ -1903,11 +2502,12 @@ export function App(props: AppProps) {
   // a still-dirty scratch would re-open the switch dialog and never flip activeId,
   // so the owner would respawn at the new root with the OLD template/starter.
   function applyPendingTarget(target: { pendingStarter?: string; pendingId?: string }): void {
-    if (target.pendingStarter) {
+    const pendingStarter = target.pendingStarter;
+    if (pendingStarter) {
       const tsGate = beginTsPresetTransition();
-      store.confirmPickStarter(target.pendingStarter);
-      durableNewScratch(target.pendingStarter);
-      void runVitePreset(presetForId(target.pendingStarter), tsGate);
+      store.confirmPickStarter(pendingStarter);
+      durableNewScratch(pendingStarter);
+      void queuePresetTransition(() => runVitePreset(presetForId(pendingStarter), tsGate));
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void trackSwitch(switchTo(target.pendingId));
@@ -1966,18 +2566,6 @@ export function App(props: AppProps) {
   </body>
 </html>`);
     previewWindow.document.close();
-  }
-
-  function onProgramChange(next: string): void {
-    machine.setSource(next);
-    // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
-    // authoritative fs): push the program edit to the OWNER (the single store) so
-    // the co-resident dev server HMR-updates and the archive sees it. The path is
-    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches the active template entry.
-    // Debounced like ordinary file tabs: Monaco emits one content event per
-    // keystroke, and writing each one floods Vite with duplicate HMR updates.
-    const programPath = programMirrorPath(activeRoot(), activeTemplate());
-    scheduleProgramWrite(programPath, next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -2089,8 +2677,9 @@ export function App(props: AppProps) {
         run: () => openPreviewTab(),
       });
     }
-    if (devServerStatus() !== 'stopped' && devServerSessionId) {
-      const sessionId = devServerSessionId;
+    const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;
+    if (devServerStatus() !== 'stopped' && stoppableDevServerSessionId) {
+      const sessionId = stoppableDevServerSessionId;
       items.push({
         id: 'act:stop-server',
         section: 'Commands',
@@ -2183,26 +2772,29 @@ export function App(props: AppProps) {
   });
 
   const livePillLabel = (): string =>
-    devServerStatus() === 'running'
-      ? `LIVE :${machine.realVitePort()}`
-      : devServerStatus() === 'starting'
-        ? 'STARTING'
-        : 'STOPPED';
+    presetTransitioning()
+      ? 'SWITCHING'
+      : devServerStatus() === 'running'
+        ? `LIVE :${machine.realVitePort()}`
+        : devServerStatus() === 'starting'
+          ? 'STARTING'
+          : 'STOPPED';
 
   const modeLabel = (): string =>
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
-        ? devServerStatus() === 'running'
-          ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
-          : `${activeTemplate().displayName} · ${devServerStatus()}`
+        ? presetTransitioning()
+          ? `${activeTemplate().displayName} · switching`
+          : devServerStatus() === 'running'
+            ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
+            : `${activeTemplate().displayName} · ${devServerStatus()}`
         : activeTemplate().displayName;
 
   const terminalModeHint = (): TerminalModeHint => ({
     label: 'Shell',
     detail: `Commands run in ${activeRoot()}; running programs own stdin.`,
   });
-  const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
   // Mount the preview when the dev server is up/starting OR any node server
   // registered a port (ADR-0155 §3 / ADR-0157 review C1): a `node server.js` with
   // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
@@ -2241,7 +2833,11 @@ export function App(props: AppProps) {
           onOpen={openLauncherAtRememberedTab}
         />
 
-        <span class="rf-livepill" data-state={devServerStatus()} title={modeLabel()}>
+        <span
+          class="rf-livepill"
+          data-state={presetTransitioning() ? 'switching' : devServerStatus()}
+          title={modeLabel()}
+        >
           <span class="rf-livepill__dot" aria-hidden="true" />
           {livePillLabel()}
         </span>
@@ -2283,17 +2879,60 @@ export function App(props: AppProps) {
           }}
         >
           <aside class="rf-sidebar rf-card">
-            {/* SSoT (ADR-0148 co-resident dev server): the explorer ALWAYS reflects the OWNER snapshot
-                (one source of truth) + the lazy node_modules read-port — no
-                `vite`-gated backing-store swap. */}
-            <FileExplorer
-              vfs={snapshotFs}
-              root={activeRoot()}
-              nodeModules={nodeModulesProp()}
-              visible={!layout.sidebarCollapsed()}
-              activePath={activeFilePath()}
-              onOpenFile={(path) => editorApi?.openFile(path)}
-            />
+            <div class="rf-sidebar__nav" role="tablist" aria-label="Sidebar views">
+              <button
+                type="button"
+                role="tab"
+                class="rf-sidebar__tab"
+                aria-selected={layout.view() !== 'scm'}
+                onClick={() => void selectSidebarView('explorer')}
+              >
+                Files
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="rf-sidebar__tab"
+                aria-selected={layout.view() === 'scm'}
+                onClick={() => void selectSidebarView('scm')}
+              >
+                GIT
+              </button>
+            </div>
+            <Show
+              when={layout.view() === 'scm'}
+              fallback={
+                /* SSoT (ADR-0148 co-resident dev server): the explorer ALWAYS reflects the OWNER snapshot
+                   (one source of truth) + the lazy node_modules read-port — no
+                   `vite`-gated backing-store swap. */
+                <FileExplorer
+                  vfs={snapshotFs}
+                  mutations={explorerMutations}
+                  root={activeRoot()}
+                  nodeModules={nodeModulesProp()}
+                  visible={!layout.sidebarCollapsed()}
+                  activePath={activeFilePath()}
+                  gitStatus={gitStatusMap()}
+                  onOpenFile={(path) => editorApi?.openFile(path)}
+                  onDownloadFile={(path) => void downloadWorkspaceFile(path)}
+                  onCompareFiles={(left, right) => void openWorkingFileCompare(left, right)}
+                  onCompareWithHead={(path) => void openWorkingHeadCompare(path)}
+                  onNotify={(message, tone) => flashToast(message, tone)}
+                />
+              }
+            >
+              <ScmPanel
+                root={activeRoot()}
+                branch={activeGitScm().branch}
+                status={gitStatusMap()}
+                history={activeGitScm().history}
+                onOpenChange={(row) => void openScmResourceDiff(row)}
+                onStage={stageScmRow}
+                onUnstage={unstageScmRow}
+                onDiscard={discardScmRow}
+                onCommit={commitScm}
+              />
+            </Show>
           </aside>
 
           <Splitter
@@ -2312,11 +2951,8 @@ export function App(props: AppProps) {
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
               <EditorHost
-                programValue={machine.source}
-                programPath={() => programMirrorPath(activeRoot(), activeTemplate())}
-                programTitle={programTitle}
+                initialEditorFiles={publishedInitialEditorFiles}
                 root={activeRoot}
-                onProgramChange={onProgramChange}
                 vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;
@@ -2329,6 +2965,8 @@ export function App(props: AppProps) {
                 }}
                 onFileWritten={writeWorkspaceFile}
                 readNodeModulesFile={readNodeModulesFile()}
+                readGitOriginalText={readGitOriginalText}
+                gitStatus={gitStatusMap}
                 previewUrl={previewUrl}
                 onOpenPreviewTab={openPreviewTab}
                 onError={flashError}
@@ -2433,6 +3071,7 @@ export function App(props: AppProps) {
           activeName={activeName()}
           activeStarter={activeGlyph().label}
           dirty={store.dirty()}
+          gitBranch={activeGitScm().branch}
         />
       </Show>
 

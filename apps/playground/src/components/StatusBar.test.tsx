@@ -93,6 +93,12 @@ describe('StatusBar project surface', () => {
     expect(html).toContain('Export');
     expect(html).toContain('soon');
   });
+
+  it('shows the current rifty-git branch when available', () => {
+    const html = renderToString(() => StatusBar({ ...base, gitBranch: 'main' }));
+    expect(html).toContain('main');
+    expect(html).toContain('rifty-git branch');
+  });
 });
 
 describe('StatusBar degraded memory mode', () => {

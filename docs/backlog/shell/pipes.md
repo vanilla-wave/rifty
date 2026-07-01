@@ -5,6 +5,7 @@ title: Shell pipes (`a | b`)
 created: 2026-06-08
 why: `|` tokenized but dispatcher throws — no inter-command stdout→stdin wiring
 user_story: As a developer at the rifty shell prompt, I want to chain `a | b` so one command's stdout feeds the next's stdin, but today `|` parses then runSegment throws `NotImplementedError('shell.pipe')` — no plumbing between commands.
+epic: frictionless-first-poke
 sources: []
 ---
 ## Context

@@ -80,7 +80,7 @@ declare global {
 async function installHttpMode(): Promise<() => void> {
   await import('@riftydev/net/register-builtins');
   const { dispatchToPort, listPorts, unregisterPort } = await import('@riftydev/net/registry');
-  // The cross-realm bind-claim (ADR-0185) defers `listen()`'s `'listening'`/cb by
+  // The cross-realm bind-claim (ADR-0186) defers `listen()`'s `'listening'`/cb by
   // a window so a sibling realm can deny. The parity harness is single-realm (no
   // denier), and these cases issue the request INSIDE the listen callback — run
   // the claim at 0 so the cb fires within the harness host-timer grace instead of

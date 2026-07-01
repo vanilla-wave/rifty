@@ -48,5 +48,5 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 ## Known Limitations
 
-- The Node stream subset is package-compat focused; complete WHATWG bridge APIs are not yet claimed.
+- The Node stream subset is package-compat focused; `Writable.toWeb` and complete `node:stream/web` APIs are not yet claimed.
 - Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.

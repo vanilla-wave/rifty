@@ -5,6 +5,7 @@ title: Shell input redirect (`cmd < file`)
 created: 2026-06-08
 why: `<` tokenized but throws — no stdin-from-file wiring; explicit M12 item
 user_story: As a developer at the rifty shell prompt, I want `sort < data.txt` to feed a VFS file as stdin, but today `<` tokenizes then throws `NotImplementedError('shell.input-redirect')` — only workaround is bash via WASI.
+epic: frictionless-first-poke
 sources: []
 ---
 ## Context

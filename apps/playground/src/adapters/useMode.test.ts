@@ -2,9 +2,9 @@
  * Unit tests for `useMode` — the playground mode state machine.
  *
  * The extraction's contract is that `App.tsx` owns the visible terminal command
- * while this machine owns only mode/source/port state. We test the parts that
- * don't require booting a real dev server: initial state, source updates, preset
- * loading, and idempotent disposal.
+ * while this machine owns only mode/port state. We test the parts that
+ * don't require booting a real dev server: initial state, preset loading, and
+ * idempotent disposal.
  *
  * The transition that hits `startRealVite` is exercised end-to-end by the e2e
  * suite (`m7-preview-sw.spec.ts`, `m10-hmr.spec.ts`).
@@ -15,8 +15,6 @@
 import { createRoot } from 'solid-js';
 import { describe, expect, it } from 'vitest';
 import { useMode } from './useMode.ts';
-
-const sources = { dev: 'DEV', realVite: 'REAL_VITE' };
 
 interface LogCall {
   readonly chunk: string;
@@ -34,18 +32,17 @@ function makeLog(): { log: (c: string, s?: 'stdout' | 'stderr') => void; calls: 
 }
 
 describe('useMode', () => {
-  it('starts in real-vite mode with the live preview source', () => {
+  it('starts in real-vite mode', () => {
     createRoot((dispose) => {
-      const m = useMode({ sources });
+      const m = useMode({});
       expect(m.mode()).toBe('real-vite');
-      expect(m.source()).toBe('REAL_VITE');
       dispose();
     });
   });
 
   it('exposes the configured initial real-vite port', () => {
     createRoot((dispose) => {
-      const m = useMode({ sources, realVitePort: 5179 });
+      const m = useMode({ realVitePort: 5179 });
       expect(m.realVitePort()).toBe(5179);
       dispose();
     });
@@ -53,18 +50,8 @@ describe('useMode', () => {
 
   it('falls back to port 5174 when none is configured', () => {
     createRoot((dispose) => {
-      const m = useMode({ sources });
+      const m = useMode({});
       expect(m.realVitePort()).toBe(5174);
-      dispose();
-    });
-  });
-
-  it('setSource updates the editor source without notifying a runtime handle', () => {
-    createRoot((dispose) => {
-      const m = useMode({ sources });
-      m.setSource('NEXT');
-      expect(m.source()).toBe('NEXT');
-      expect(m.mode()).toBe('real-vite');
       dispose();
     });
   });
@@ -73,15 +60,14 @@ describe('useMode', () => {
     createRoot((dispose) => {
       // The contract is "safe to construct before the terminal is wired".
       // Asserting no-throw is the cheapest expression of that.
-      const m = useMode({ sources });
-      expect(() => m.setSource('whatever')).not.toThrow();
+      expect(() => useMode({})).not.toThrow();
       dispose();
     });
   });
 
   it('dispose is idempotent', () => {
     createRoot((dispose) => {
-      const m = useMode({ sources });
+      const m = useMode({});
       m.dispose();
       expect(() => m.dispose()).not.toThrow();
       expect(m.mode()).toBe('real-vite');
@@ -89,29 +75,26 @@ describe('useMode', () => {
     });
   });
 
-  it('logger option is accepted but source edits stay silent', () => {
+  it('logger option is accepted without owning editor file contents', () => {
     createRoot((dispose) => {
       const { log, calls } = makeLog();
-      const m = useMode({ sources, log });
-      m.setSource('still live preview');
+      const m = useMode({ log });
       expect(calls).toHaveLength(0);
-      expect(m.source()).toBe('still live preview');
+      expect(m.mode()).toBe('real-vite');
       dispose();
     });
   });
 
-  it('loadPreset switches source and updates the template port', async () => {
+  it('loadPreset switches mode and updates the template port', async () => {
     await createRoot(async (dispose) => {
-      const m = useMode({ sources, realVitePort: 5123 });
+      const m = useMode({ realVitePort: 5123 });
 
       await m.loadPreset({
         mode: 'real-vite',
-        source: 'FROM_PRESET',
         templateId: 'vite',
       });
 
       expect(m.mode()).toBe('real-vite');
-      expect(m.source()).toBe('FROM_PRESET');
       expect(m.realVitePort()).toBe(5174);
       dispose();
     });

@@ -61,13 +61,27 @@ export interface ListenOptions {
   exclusive?: boolean;
 }
 
+export type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
+
+export type ServerOptions = Record<string, unknown>;
+
+function assertSupportedServerOptions(options: ServerOptions | undefined): void {
+  if (options === undefined) return;
+  const unsupported = Object.keys(options);
+  if (unsupported.length === 0) return;
+  throw new NotImplementedError(
+    `http.createServer.options.${unsupported[0]}`,
+    'non-empty ServerOptions are not implemented',
+  );
+}
+
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
-  private readonly handler: (req: IncomingMessage, res: ServerResponse) => void;
+  private readonly handler: RequestListener;
   private readonly upgradeChannels: BroadcastChannel[] = [];
   private readonly upgradeSockets: Map<string, WebSocketUpgradeSocket> = new Map();
 
-  constructor(handler: (req: IncomingMessage, res: ServerResponse) => void = () => {}) {
+  constructor(handler: RequestListener = () => {}) {
     super();
     this.handler = handler;
   }
@@ -128,7 +142,7 @@ export class HttpServer extends EventEmitter {
       return res.toResponse();
     });
     this.listenForWebSocketUpgrades(port);
-    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0185 D5) — fire
+    // Ephemeral (`listen(0)`) never collides cross-realm (ADR-0186 D5) — fire
     // `'listening'` on the next microtask, as before, with no claim.
     if (requested === 0) {
       queueMicrotask(() => {
@@ -137,7 +151,7 @@ export class HttpServer extends EventEmitter {
       });
       return this;
     }
-    // Explicit port: a cross-realm bind-claim (ADR-0185) gates `'listening'`.
+    // Explicit port: a cross-realm bind-claim (ADR-0186) gates `'listening'`.
     // The port is already registered synchronously (above) so the intra-realm
     // fast-path + immediate same-realm dispatch are unchanged; the claim only
     // decides whether THIS realm keeps it. Win → `'listening'`; a sibling realm
@@ -166,7 +180,7 @@ export class HttpServer extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.port !== null) {
-      releasePort(this.port); // stop answering cross-realm claims (ADR-0185 D4)
+      releasePort(this.port); // stop answering cross-realm claims (ADR-0186 D4)
       unregisterPort(this.port);
       this.port = null;
     }
@@ -257,9 +271,14 @@ export class HttpServer extends EventEmitter {
   }
 }
 
+export function createServer(handler?: RequestListener): HttpServer;
+export function createServer(options: ServerOptions, handler?: RequestListener): HttpServer;
 export function createServer(
-  handler?: (req: IncomingMessage, res: ServerResponse) => void,
+  optionsOrHandler?: ServerOptions | RequestListener,
+  maybeHandler?: RequestListener,
 ): HttpServer {
+  const handler = typeof optionsOrHandler === 'function' ? optionsOrHandler : maybeHandler;
+  if (typeof optionsOrHandler !== 'function') assertSupportedServerOptions(optionsOrHandler);
   return new HttpServer(handler);
 }
 

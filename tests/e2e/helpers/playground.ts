@@ -17,19 +17,79 @@ export async function terminalBuffer(
   return stripTerminal((await locator.getAttribute('data-terminal-buffer')) ?? '');
 }
 
-export async function openShellTerminal(page: Page): Promise<void> {
+export async function openShellTerminal(
+  page: Page,
+  options: { readonly focus?: boolean } = {},
+): Promise<number> {
+  const focus = options.focus ?? true;
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
-  await page.getByRole('button', { name: 'New terminal' }).click();
-  await expect(page.getByRole('tab', { name: /Terminal 2/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
+  await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
+  const terminalSlots = page.locator('.rf-terminal-slot');
+  const slotCountBefore = await terminalSlots.count();
+  const slotIdsBefore = await terminalSlots.evaluateAll((slots) =>
+    slots.map((slot) => slot.getAttribute('data-session-id')).filter((id) => id != null),
   );
+  await page.getByRole('button', { name: 'New terminal' }).click();
+  await expect
+    .poll(() => terminalSlots.count(), { timeout: 10_000 })
+    .toBeGreaterThan(slotCountBefore);
+  const newSessionId = async () =>
+    terminalSlots.evaluateAll(
+      (slots, before) =>
+        slots
+          .map((slot) => slot.getAttribute('data-session-id'))
+          .find((id): id is string => id != null && !before.includes(id)) ?? '',
+      slotIdsBefore,
+    );
+  await expect.poll(newSessionId, { timeout: 10_000 }).not.toBe('');
+  const sessionId = await newSessionId();
+  if (sessionId.length === 0) throw new Error('new terminal did not expose a session id');
+  const tab = page.locator(`.rf-terminal-tab__select[data-session-id="${sessionId}"]`);
+  await expect(tab).toBeVisible();
+  if (focus) await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  const slot = page.locator(`.rf-terminal-slot[data-session-id="${sessionId}"]`);
+  await expect(slot).toHaveAttribute('data-active', 'true');
+  const slotIndex = await terminalSlots.evaluateAll(
+    (slots, id) => slots.findIndex((slot) => slot.getAttribute('data-session-id') === id),
+    sessionId,
+  );
+  if (slotIndex < 0) throw new Error('new terminal did not activate a terminal slot');
+  await expect.poll(() => terminalBuffer(page, slotIndex), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  if (!focus) return slotIndex;
+  await slot.locator('[data-testid="terminal"]').click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const terminal = document.querySelector('[data-testid="terminal"]');
+          const active = document.activeElement;
+          return terminal != null && active != null && terminal.contains(active);
+        }),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+  return slotIndex;
 }
 
-export async function runTerminalLine(page: Page, line: string): Promise<void> {
-  const slot = page.locator('.rf-terminal-slot[data-active="true"]');
+export async function runTerminalLine(
+  page: Page,
+  line: string,
+  targetSlot: 'active' | number = 'active',
+): Promise<void> {
+  if (targetSlot !== 'active') {
+    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    await expect(tab).toBeVisible();
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  const slot =
+    targetSlot === 'active'
+      ? page.locator('.rf-terminal-slot[data-active="true"]')
+      : page.locator('.rf-terminal-slot').nth(targetSlot);
   await expect(slot).toBeVisible();
-  await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
   await slot.locator('[data-testid="terminal"]').click();
   const input = slot.locator('textarea.xterm-helper-textarea, textarea').first();
   await expect(input).toBeAttached();
@@ -61,13 +121,26 @@ export async function insertTerminalLineSettled(
   page: Page,
   line: string,
   timeout = 30_000,
+  targetSlot: 'active' | number = 'active',
 ): Promise<void> {
-  const before = terminalPromptCount(await terminalBuffer(page));
-  await page.locator('[data-testid="terminal"]').click();
+  const before = terminalPromptCount(await terminalBuffer(page, targetSlot));
+  if (targetSlot !== 'active') {
+    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    await expect(tab).toBeVisible();
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  const slot =
+    targetSlot === 'active'
+      ? page.locator('.rf-terminal-slot[data-active="true"]')
+      : page.locator('.rf-terminal-slot').nth(targetSlot);
+  await expect(slot).toBeVisible();
+  await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  await slot.locator('[data-testid="terminal"]').click();
   await page.keyboard.insertText(line);
   await page.keyboard.press('Enter');
   await expect
-    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout })
+    .poll(async () => terminalPromptCount(await terminalBuffer(page, targetSlot)), { timeout })
     .toBeGreaterThan(before);
 }
 
@@ -76,5 +149,58 @@ export async function expectTerminalContains(
   text: string | RegExp,
   timeout = 5_000,
 ): Promise<void> {
-  await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(text);
+  await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(terminalPattern(text));
+}
+
+export function viteDevReadyPattern(port = 5174): RegExp {
+  return new RegExp(`\\[vite\\] dev server ready on port ${port}`, 'u');
+}
+
+export interface CapturedPageProblems {
+  readonly messages: readonly string[];
+  assertNoViteImportErrors(): void;
+}
+
+export function capturePageProblems(page: Page): CapturedPageProblems {
+  const messages: string[] = [];
+  page.on('pageerror', (err) => {
+    messages.push(`[pageerror] ${err.message}`);
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') messages.push(`[console.error] ${msg.text()}`);
+  });
+  return {
+    messages,
+    assertNoViteImportErrors(): void {
+      expect(messages.join('\n')).not.toMatch(
+        /(?:Pre-transform error|vite:import-analysis|Failed to resolve import)/u,
+      );
+    },
+  };
+}
+
+function terminalPattern(text: string | RegExp): string | RegExp {
+  if (typeof text !== 'string') return text;
+  const match = /^\[vite\] dev server ready on port (\d+)$/u.exec(text);
+  return match ? viteDevReadyPattern(Number(match[1])) : text;
+}
+
+export async function selectPreset(page: Page, id: string): Promise<void> {
+  const trigger = page.locator('[data-action="open-launcher"]');
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await trigger.click();
+    const row = page.locator(`[data-preset="${id}"]`);
+    if (!(await row.isVisible().catch(() => false))) {
+      await page.getByRole('button', { name: 'Starters' }).click();
+    }
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await row.click({ force: true });
+    try {
+      await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 1_000 });
+      return;
+    } catch {
+      await page.waitForTimeout(100);
+    }
+  }
+  await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 5_000 });
 }

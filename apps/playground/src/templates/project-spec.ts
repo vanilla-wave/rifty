@@ -4,12 +4,14 @@
  * this value object instead of inline Vite literals, so a second runnable
  * template is a data change rather than a worker fork.
  *
- * Two runtimes (discriminated on `runtime`):
+ * Runtimes (discriminated on `runtime`):
  * - `'vite'` — the worker imports `runtimeSpecifier` and boots its dev server
  *   (`createServer` + HMR bridge); the worker seeds an index.html for it.
  * - `'node-server'` — the worker imports the ENTRY itself; the entry is a
  *   long-running Node program (e.g. Express) that calls `listen(port)` and
  *   serves its own HTML. No index.html is seeded — it would shadow the server.
+ * - `'node-cli'` — the worker imports the ENTRY itself; the entry runs to
+ *   completion and exits without a preview port.
  *
  * Pure data + pure mapping function: no DOM, no channels, no solid-js (glue
  * altitude). Only `id` crosses a realm boundary (over env as
@@ -30,7 +32,7 @@ export interface ServerSpec {
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
   readonly relativePath: string;
-  /** Initial entry-file contents, seeded before the editor source overwrites it. */
+  /** Template entry-file contents; presets may overwrite this path via files[]. */
   readonly content: string;
 }
 
@@ -73,18 +75,26 @@ export interface ViteProjectSpec extends ProjectSpecBase {
   readonly hmr: { readonly enabled: boolean };
 }
 
-/** Template whose worker runs the entry as a long-running Node server program. */
-export interface NodeServerProjectSpec extends ProjectSpecBase {
-  readonly runtime: 'node-server';
+interface NodeProjectSpecBase extends ProjectSpecBase {
   /** Root-relative extra files the WORKER seeds BEFORE the server starts
    *  (e.g. `/public/*` for `express.static`) — page-side preset sync is too
    *  late for assets the first preview request already needs. */
   readonly extraFiles: Readonly<Record<string, string>>;
+}
+
+/** Template whose worker runs the entry as a long-running Node server program. */
+export interface NodeServerProjectSpec extends NodeProjectSpecBase {
+  readonly runtime: 'node-server';
   /** Bring up the sql.js WASM engine (`node:sqlite`) before importing the entry. */
   readonly sqlite: boolean;
 }
 
-export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec;
+/** Template whose worker runs the entry once and surfaces output in the terminal. */
+export interface NodeCliProjectSpec extends NodeProjectSpecBase {
+  readonly runtime: 'node-cli';
+}
+
+export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec | NodeCliProjectSpec;
 
 interface BootstrapConfigBase {
   readonly root: string;
@@ -117,7 +127,14 @@ export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
   readonly sqlite: boolean;
 }
 
-export type BootstrapConfig = ViteBootstrapConfig | NodeServerBootstrapConfig;
+export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-cli';
+}
+
+export type BootstrapConfig =
+  | ViteBootstrapConfig
+  | NodeServerBootstrapConfig
+  | NodeCliBootstrapConfig;
 
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
@@ -271,13 +288,14 @@ export function resolveBootstrapConfig(
       ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
       : {}),
   };
-  if (spec.runtime === 'node-server') {
+  if (spec.runtime === 'node-server' || spec.runtime === 'node-cli') {
     const seedFiles: Record<string, string> = {
       ...initializedGitFiles(root),
       [entryPath]: spec.entry.content,
       [`${root}/package.json`]: pkg.json,
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
+    if (spec.runtime === 'node-cli') return { ...base, runtime: 'node-cli', seedFiles };
     return { ...base, runtime: 'node-server', sqlite: spec.sqlite, seedFiles };
   }
   const seedFiles: Record<string, string> = {

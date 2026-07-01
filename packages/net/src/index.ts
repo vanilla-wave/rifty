@@ -58,7 +58,7 @@ export {
   serveCrossRealmPreview,
   PREVIEW_PORT_FRAME_VERSION,
 } from './cross-realm/preview-port.ts';
-// ADR-0185 — cross-realm bind-claim window knob (the `listen()` claim defers
+// ADR-0186 — cross-realm bind-claim window knob (the `listen()` claim defers
 // `'listening'` by this long; injectable so single-realm harnesses/tests can run
 // it at 0 and deployments can tune the bound). `releasePort` is the `close()`
 // counterpart (mirrors the public `unregisterPort`); `claimPort` stays internal
@@ -71,4 +71,5 @@ export {
 export type {
   CrossRealmPortHandler,
   PreviewDispatchStruct,
+  PreviewPortScopeOptions,
 } from './cross-realm/preview-port.ts';

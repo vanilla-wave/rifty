@@ -293,7 +293,21 @@ export const dgram = {
 // opencode boots HTTP/1 so that branch is never taken, but the import must
 // succeed for the static graph; server/session creation throws if HTTP/2 is
 // actually used. Exposed names mirror Node 24's `node:http2`; `sensitiveHeaders`
-// is the documented symbol.
+// is the documented symbol. The request/response class identities matter even
+// on HTTP/1 paths: adapters such as `@hono/node-server` import them and
+// run `incoming instanceof Http2ServerRequest` before choosing the HTTP/1 path.
+export class Http2ServerRequest {
+  constructor() {
+    throw new NotImplementedError('http2.Http2ServerRequest');
+  }
+}
+
+export class Http2ServerResponse {
+  constructor() {
+    throw new NotImplementedError('http2.Http2ServerResponse');
+  }
+}
+
 export const http2 = {
   createServer: notImpl('http2.createServer'),
   createSecureServer: notImpl('http2.createSecureServer'),
@@ -306,6 +320,8 @@ export const http2 = {
   // Real spec constants (pure data) — undici's client-h2.js reads
   // `constants.HTTP2_HEADER_*` at module-eval.
   constants: HTTP2_CONSTANTS,
+  Http2ServerRequest,
+  Http2ServerResponse,
 };
 
 export const readline = {

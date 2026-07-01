@@ -7,17 +7,20 @@ import {
   terminalBuffer,
 } from './helpers/playground.ts';
 
-async function fetchPreview(page: Page): Promise<{
+async function fetchPreview(
+  page: Page,
+  port: number,
+): Promise<{
   ok: boolean;
   status: number;
   contentType: string;
   body: string;
 }> {
-  return page.evaluate(async () => {
+  return page.evaluate(async (targetPort) => {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4_000);
     try {
-      const r = await fetch('/preview/4173/', { cache: 'no-store', signal: ac.signal });
+      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
       return {
         ok: r.ok,
         status: r.status,
@@ -34,7 +37,7 @@ async function fetchPreview(page: Page): Promise<{
     } finally {
       clearTimeout(timer);
     }
-  });
+  }, port);
 }
 
 test.describe('Vite 7 production build/preview', () => {
@@ -51,7 +54,12 @@ test.describe('Vite 7 production build/preview', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 90_000);
+    await expect
+      .poll(async () => fetchPreview(page, 5174), {
+        timeout: 90_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .toMatchObject({ ok: true, status: 200 });
 
     await openShellTerminal(page);
     await runTerminalLineSettled(page, 'vite build', 120_000);
@@ -62,15 +70,14 @@ test.describe('Vite 7 production build/preview', () => {
     expect(afterBuild).not.toContain('/src/main.js');
 
     await runTerminalLine(page, 'vite preview');
-    await expectTerminalContains(page, '[vite] preview ready on port 4173', 90_000);
 
     await expect
-      .poll(async () => fetchPreview(page), {
+      .poll(async () => fetchPreview(page, 4173), {
         timeout: 90_000,
         intervals: [1_000, 2_000, 4_000],
       })
       .toMatchObject({ ok: true, status: 200 });
-    const html = await fetchPreview(page);
+    const html = await fetchPreview(page, 4173);
     expect(html.contentType).toContain('text/html');
     expect(html.body).toMatch(/assets\/index-[^"]+\.js/);
     expect(html.body).not.toContain('/src/main.js');

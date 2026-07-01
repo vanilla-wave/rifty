@@ -23,6 +23,8 @@
  * paths (A-026's whole point is the page realm stops paying for them).
  */
 
+import { makeGit, vfsToGitFs } from '@riftydev/git';
+import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import {
   type SpawnWorkerSpec,
   type WorkerProcessHandle,
@@ -40,6 +42,8 @@ import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
+import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
+import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
 import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
@@ -54,11 +58,13 @@ import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
+  type PtyDevServer,
   isPageToOwner,
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
+import { getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import {
   amendStarterGeneratedBaseline,
@@ -73,8 +79,13 @@ import {
   publishVfsSnapshot,
   serveSnapshotRequests,
 } from '../glue/vfs-snapshot-port.ts';
-import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
+import {
+  type VfsWriteIpcMessage,
+  applyVfsWriteFrame,
+  serveVfsWrites,
+} from '../glue/vfs-write-port.ts';
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
+import { serveWorkspaceFileReads } from '../glue/workspace-file-read-port.ts';
 import { DEFAULT_PRESET } from '../presets.ts';
 import {
   type BootstrapConfig,
@@ -106,6 +117,23 @@ const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
 const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
+const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
+
+function devServerFrame(
+  sid: string | undefined,
+  frame: Omit<PtyDevServer, 'type' | 'sid'>,
+): PtyDevServer {
+  return {
+    type: 'pty:dev-server',
+    ...(sid === undefined ? {} : { sid }),
+    ...frame,
+  };
+}
+
+function ptySidFromContext(ctx: CommandContext): string | undefined {
+  const sid = ctx.env[PTY_SESSION_ENV];
+  return sid && sid.length > 0 ? sid : undefined;
+}
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -130,11 +158,6 @@ function decodeLsChunk(chunk: unknown): string {
   return typeof chunk === 'string' ? chunk : '';
 }
 
-interface VfsWriteIpcMessage {
-  readonly type: 'rifty:vfs-write';
-  readonly frame: VfsWriteFrame;
-}
-
 function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   if (!message || typeof message !== 'object') return false;
   const candidate = message as { readonly type?: unknown; readonly frame?: unknown };
@@ -144,7 +167,7 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
 function seedProject(cfg: BootstrapConfig): void {
   const fs = syncMirror();
   fs.mkdirSync(cfg.root, { recursive: true });
-  // Idempotent: editor source overwrites the entry afterwards; an existing
+  // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
   for (const [path, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(path);
@@ -162,7 +185,7 @@ function seedProject(cfg: BootstrapConfig): void {
     fs.writeFileSync(
       readme,
       enc.encode(
-        '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
+        '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit any seeded project file from the file tree or open tabs.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
       ),
     );
   }
@@ -262,6 +285,27 @@ function parsePositivePort(value: string | undefined): number | null {
   return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
 }
 
+function createPreviewScope(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
+}
+
+function previewScopeFromEnv(env: Record<string, string | undefined>): string | undefined {
+  return env.RIFTY_PREVIEW_SCOPE || undefined;
+}
+
+function withPreviewScope(
+  ctx: CommandContext,
+  previewScope = createPreviewScope(),
+): CommandContext {
+  return {
+    ...ctx,
+    env: {
+      ...ctx.env,
+      RIFTY_PREVIEW_SCOPE: previewScope,
+    },
+  };
+}
+
 function viteCliPort(args: readonly string[], fallback: number): number {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -303,7 +347,12 @@ function resolveCliPath(cwd: string, path: string): string {
 }
 
 function withViteCliArgs(binPath: string, args: readonly string[], ctx: CommandContext): string[] {
-  if (binNameOf(binPath) !== 'vite' || viteCliMode(args) !== 'dev') return [...args];
+  if (binNameOf(binPath) !== 'vite') return [...args];
+  const mode = viteCliMode(args);
+  if (mode === 'preview') {
+    return [...args, '--host', PREVIEW_LOCAL_HOST];
+  }
+  if (mode !== 'dev') return [...args];
   return [
     ...withoutViteConfigArgs(args),
     '--config',
@@ -323,20 +372,27 @@ function withViteCliEnv(
   if (binNameOf(binPath) !== 'vite') return ctx;
   const mode = viteCliMode(args);
   const userConfigPath = viteConfigArg(args);
+  const previewMode = mode === 'dev' || mode === 'preview';
+  const userConfigEnv: Record<string, string> = {};
+  if (userConfigPath !== null) {
+    userConfigEnv.RIFTY_VITE_CLI_USER_CONFIG = resolveCliPath(ctx.cwd, userConfigPath);
+  }
   return {
     ...ctx,
     env: {
       ...ctx.env,
       RIFTY_VITE_CLI_MODE: mode,
+      ...(previewMode
+        ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
+        : {}),
       ...(mode === 'dev' && opts
         ? {
             RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
             RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
-            ...(userConfigPath === null
-              ? {}
-              : { RIFTY_VITE_CLI_USER_CONFIG: resolveCliPath(ctx.cwd, userConfigPath) }),
+            ...userConfigEnv,
           }
         : {}),
+      ...(mode === 'preview' ? userConfigEnv : {}),
     },
   };
 }
@@ -401,11 +457,21 @@ async function bootShellOwner(opts: {
     await absorbPendingStarterGeneratedBaseline(cfg.root);
   }
   seedTemplateNodeModulesFiles(cfg);
-  publishSnapshot();
+  const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });
+  const gitStatusFeed = serveGitStatusFeed(port, ownerGit);
+  const publishOwnerState = (): void => {
+    publishSnapshot();
+    gitStatusFeed.schedule();
+  };
+  const publishOwnerStateNow = (): void => {
+    publishSnapshot();
+    void gitStatusFeed.publishNow({ force: true });
+  };
+  publishOwnerState();
   // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
   // replies-via-request rather than a blind retry-storm. Startup publish covers a
   // subscribed page; this covers a page that subscribes/reloads after us.
-  const tearSnapReq = serveSnapshotRequests(port, publishSnapshot);
+  const tearSnapReq = serveSnapshotRequests(port, publishOwnerStateNow);
 
   // Owner→page frames (pty + dev-server status). republish on `pty:exit` since a
   // finished command may have mutated the tree (ADR-0146: owner republishes its
@@ -421,9 +487,10 @@ async function bootShellOwner(opts: {
   // initialized before `send` ever runs — both stay `const`-clean (no `let`).
   function send(frame: OwnerToPageFrame): void {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
-    if (frame.type === 'pty:exit') publishSnapshot();
+    if (frame.type === 'pty:exit') publishOwnerState();
     if (frame.type === 'pty:dev-server') {
-      if (frame.status === 'running' && frame.port !== undefined) previews.setDevServer(frame.port);
+      if (frame.status === 'running' && frame.port !== undefined)
+        previews.setDevServer(frame.port, frame.previewScope);
       else if (frame.status === 'stopped') previews.clearDevServer();
     }
   }
@@ -468,7 +535,7 @@ async function bootShellOwner(opts: {
     try {
       if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
       seedTemplateNodeModulesFiles(devCfg);
-      publishSnapshot();
+      publishOwnerState();
     } catch (err) {
       log(
         `[shell-owner/worker] dev config dependency restore failed: ${
@@ -550,8 +617,9 @@ async function bootShellOwner(opts: {
           // from `port` (the owner's snapshot/nm/vfs-write bridge key).
           root: devCfg.root,
           devPort: devCfg.port,
+          previewScope: createPreviewScope(),
         },
-        onSnapshotDirty: publishSnapshot,
+        onSnapshotDirty: publishOwnerState,
         // Owner realm → real OWNER OPFS drain. The child's install writes land in
         // THIS realm's write-through queue over fs.* RPC; the child's own flush is
         // a no-op (remote SyncRpcFsSync has none). Drain here on dev-ready so the
@@ -565,12 +633,15 @@ async function bootShellOwner(opts: {
   let activeViteDevChild: BinWorkerHandle | null = null;
   // Editor writes land via the vfs-write bridge; forward them to the running dev
   // server's HMR (the virtual FS fires no real watcher events) + republish.
-  const onVfsWrite = (path: string): void => {
-    publishSnapshot();
-    devServer.notifyFileChanged(path);
-    activeViteDevChild?.send?.({ type: 'rifty:vite-file-change', path });
+  const onVfsWrite = (paths: readonly string[]): void => {
+    publishOwnerState();
+    for (const path of paths) {
+      devServer.notifyFileChanged(path);
+      activeViteDevChild?.send?.({ type: 'rifty:vite-file-change', path });
+    }
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
+  const tearGitBridge = serveGitOwnerRpc(port, ownerGit);
 
   const vfs = new SyncMirrorVfs();
   const registry = createProxiedRegistryClient();
@@ -585,20 +656,23 @@ async function bootShellOwner(opts: {
     const firstPort = message.ports[0];
     if (firstPort === undefined) return;
     const mode = viteCliMode(req.args);
+    const previewScope = message.previewScope ?? previewScopeFromEnv(ctx.env);
     if (mode === 'preview') {
       vitePreviewActive = true;
-      previews.setPreview(firstPort);
+      previews.setPreview(firstPort, previewScope);
       ctx.stdout.write(`[vite] preview ready on port ${firstPort}\n`);
       return;
     }
     if (mode === 'dev') {
       ctx.stdout.write(`[vite] dev server ready on port ${firstPort}\n`);
-      send({
-        type: 'pty:dev-server',
-        status: 'running',
-        port: firstPort,
-        url: `/preview/${firstPort}/`,
-      });
+      send(
+        devServerFrame(ptySidFromContext(ctx), {
+          status: 'running',
+          port: firstPort,
+          url: `/preview/${firstPort}/`,
+          ...(previewScope === undefined ? {} : { previewScope }),
+        }),
+      );
     }
   };
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
@@ -611,7 +685,7 @@ async function bootShellOwner(opts: {
       if (name === 'vite' && viteCliMode(req.args) === 'dev') {
         const port = parsePositivePort(req.env.RIFTY_VITE_CLI_PORT) ?? devCfg.port;
         ctx.stdout.write(`[real-vite/worker] starting dev server on port ${port}...\n`);
-        send({ type: 'pty:dev-server', status: 'starting' });
+        send(devServerFrame(ptySidFromContext(ctx), { status: 'starting' }));
       }
     },
     onSpawn: (req, handle) => {
@@ -626,16 +700,17 @@ async function bootShellOwner(opts: {
         return;
       }
       const sid = binPreviewSids.get(req);
-      if (sid !== undefined) previews.addNode(sid, message.ports);
+      if (sid !== undefined)
+        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env));
     },
-    onExit: (req) => {
+    onExit: (req, ctx) => {
       const sid = binPreviewSids.get(req);
       if (sid !== undefined) previews.removeBySid(sid);
       if (binNameOf(req.shimPath) !== 'vite') return;
       const mode = viteCliMode(req.args);
       if (mode === 'dev') {
         activeViteDevChild = null;
-        send({ type: 'pty:dev-server', status: 'stopped' });
+        send(devServerFrame(ptySidFromContext(ctx), { status: 'stopped' }));
       }
       if (mode === 'preview' && vitePreviewActive) {
         vitePreviewActive = false;
@@ -656,7 +731,11 @@ async function bootShellOwner(opts: {
           }
         : undefined,
     );
-    return childBinExecutor(binPath, viteArgs, viteCtx);
+    return childBinExecutor(
+      binPath,
+      viteArgs,
+      binNameOf(binPath) === 'vite' ? viteCtx : withPreviewScope(viteCtx),
+    );
   };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
@@ -680,7 +759,7 @@ async function bootShellOwner(opts: {
   const runDevServer = async (ctx: CommandContext): Promise<number> => {
     const signal = ctx.signal ?? new AbortController().signal;
     try {
-      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk));
+      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk), ptySidFromContext(ctx));
       return 130; // resolves only when `signal` aborts (Ctrl-C)
     } catch (err) {
       if (signal.aborted) return 130;
@@ -689,7 +768,10 @@ async function bootShellOwner(opts: {
     }
   };
 
-  const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
+  const makeShell = (
+    seed?: { cwd?: string; env?: Record<string, string> },
+    ptySid?: string,
+  ): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
     // HERE against the owner's tree (single-store-owner: the page holds no
@@ -697,7 +779,10 @@ async function bootShellOwner(opts: {
     // deleted since.
     const shell = new Shell({
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
-      env: seed?.env ?? {},
+      env: {
+        ...(seed?.env ?? {}),
+        ...(ptySid === undefined ? {} : { [PTY_SESSION_ENV]: ptySid }),
+      },
       execBin: ownerBinExecutor,
     });
     const runPackageScript = async (
@@ -705,29 +790,50 @@ async function bootShellOwner(opts: {
       command: string,
       ctx: CommandContext,
     ): Promise<number> => {
+      const runScriptCommand = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        const scriptShell = makeShell(
+          { cwd: scriptCtx.cwd, env: scriptCtx.env },
+          ptySidFromContext(scriptCtx),
+        );
+        try {
+          const result = await scriptShell.run(scriptCommand, {
+            onChunk: (chunk, stream) => {
+              if (stream === 'stdout') scriptCtx.stdout.write(chunk);
+              else scriptCtx.stderr.write(chunk);
+            },
+            signal: scriptCtx.signal,
+            isTTY: scriptCtx.isTTY,
+            cols: scriptCtx.cols,
+            rows: scriptCtx.rows,
+            stdin: scriptCtx.stdin,
+          });
+          return result.exitCode;
+        } finally {
+          scriptShell.dispose();
+        }
+      };
+      const runNodeCliTemplate = async (
+        scriptCommand: string,
+        scriptCtx: CommandContext,
+      ): Promise<number> => {
+        scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\n`);
+        const code = await runScriptCommand(scriptCommand, scriptCtx);
+        scriptCtx.stdout.write(`[cli] completed with exit code ${code}\n`);
+        return code;
+      };
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.
-      if (devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)) {
+      if (devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)) {
+        return runNodeCliTemplate(command, ctx);
+      }
+      if (devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)) {
         return runDevServer(ctx);
       }
-      const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env });
-      try {
-        const result = await scriptShell.run(command, {
-          onChunk: (chunk, stream) => {
-            if (stream === 'stdout') ctx.stdout.write(chunk);
-            else ctx.stderr.write(chunk);
-          },
-          signal: ctx.signal,
-          isTTY: ctx.isTTY,
-          cols: ctx.cols,
-          rows: ctx.rows,
-          stdin: ctx.stdin,
-        });
-        return result.exitCode;
-      } finally {
-        scriptShell.dispose();
-      }
+      return runScriptCommand(command, ctx);
     };
     const npmCommand = createNpmShellCommand({
       vfs,
@@ -739,6 +845,10 @@ async function bootShellOwner(opts: {
       // dropping the user's `npm install` (ADR-0135).
       projectSlug: () => devSlug,
       runScript: runPackageScript,
+      // ADR-0182 opt-in fast install — env-config only (default OFF). When a
+      // resolver URL is configured the visible `npm install` uses eddy's bundle
+      // + auto-fallback; inert (byte-identical) when unset.
+      resolverUrl: getResolverUrl(),
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
@@ -770,7 +880,7 @@ async function bootShellOwner(opts: {
       if (code === 0 && absorbGeneratedBaseline) {
         await absorbPendingStarterGeneratedBaseline(devCfg.root);
       }
-      publishSnapshot(); // node_modules may have changed — refresh the page's view
+      publishOwnerState(); // node_modules may have changed — refresh the page's view
       return code;
     });
     // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
@@ -784,9 +894,10 @@ async function bootShellOwner(opts: {
         return Promise.resolve(1);
       }
       const sid = `node-${++nodeRunSeq}`;
-      return ownerNodeExecutor(r.path, args.slice(1), ctx, {
+      const previewScope = createPreviewScope();
+      return ownerNodeExecutor(r.path, args.slice(1), withPreviewScope(ctx, previewScope), {
         sid,
-        onListening: (id, ports) => previews.addNode(id, ports),
+        onListening: (id, ports, scope) => previews.addNode(id, ports, scope ?? previewScope),
         onExit: (id) => previews.removeBySid(id),
       });
     });
@@ -872,7 +983,22 @@ async function bootShellOwner(opts: {
       return;
     }
     if (isVfsWriteIpcMessage(message)) {
-      applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
+      if (!message.opId) {
+        applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
+        return;
+      }
+      try {
+        applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
+        kernelIpc.send?.({ type: 'rifty:vfs-write-ack', opId: message.opId, ok: true });
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        kernelIpc.send?.({
+          type: 'rifty:vfs-write-ack',
+          opId: message.opId,
+          ok: false,
+          error: { name: error.name, message: error.message },
+        });
+      }
       return;
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy
@@ -912,6 +1038,8 @@ async function bootShellOwner(opts: {
   // owner, the page holds no authoritative fs): the owner serializes /
   // applies its own tree so the PAGE keeps no authoritative store of its own.
   const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root);
+  // Full-byte single-file downloads read from the owner, not the capped page snapshot.
+  const tearFileReadBridge = serveWorkspaceFileReads(port, cfg.root);
   // ADR-0165 §7 boot reconcile + scratch synthesis (BEFORE serving the index):
   // finish/roll back a half-completed Save and synthesize a scratch entry keyed on
   // the spawn STARTER when /scratch exists but the index is a cold-boot empty — so
@@ -921,15 +1049,15 @@ async function bootShellOwner(opts: {
   // ADR-0165: the OPFS project index is worker-writable only; serve it so the page
   // launcher hydrates an in-memory mirror across owner respawns. Read against THIS
   // realm's syncMirror (the owner owns the index); base '/' = the OPFS root.
-  // `publishSnapshot` is the reset-refresh hook (ADR-0165 §6): an in-place re-seed
-  // bypasses onVfsWrite, so the index bridge republishes the file snapshot itself
-  // — the page editor/explorer reflect the restored tree.
+  // `publishOwnerState` is the reset-refresh hook (ADR-0165 §6): an in-place
+  // re-seed bypasses onVfsWrite, so the index bridge republishes the file snapshot
+  // and schedules rifty-git status refresh together.
   const tearIndexBridge = serveProjectIndex(
     port,
     syncMirror(),
     '/',
     flushSyncMirror,
-    publishSnapshot,
+    publishOwnerState,
     async (root) => {
       markStarterGeneratedBaselinePending(root);
       await ensureStarterInitialCommit(ownerGitVfs(), root);
@@ -940,9 +1068,12 @@ async function bootShellOwner(opts: {
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
   void tearVfsBridge;
+  void gitStatusFeed;
+  void tearGitBridge;
   void tearSnapReq;
   void tearNodeModulesBridge;
   void tearArchiveBridge;
+  void tearFileReadBridge;
   void tearIndexBridge;
   void server;
 }

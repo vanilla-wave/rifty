@@ -1,11 +1,11 @@
 ---
 kind: epic
-status: ready
+status: in-progress
 title: Eddy — opt-in fast npm install (~6x cold)
 created: 2026-06-28
 value: A developer running a cold `npm install` on a real project in a browser tab gets it in well under a second — the same real Node dependency tree, just resolved + bundled by an open, self-hostable server instead of a dozen serial round-trips.
 user_story: As a developer (or an SDK embedder building their own sandbox) I want a cold, no-lockfile `npm install` to finish in ~0.6s instead of ~4s, but today it pays two latency-bound waterfalls (packument metadata + many small tarballs) that no client-side knob can remove.
-items: [npm-client/eddy-resolver-service, npm-client/eddy-client-opt-in, playground/eddy-from-scratch-presets, perf/eddy-http3-cold-validation, distribution/eddy-package-and-deploy]
+items: [playground/eddy-from-scratch-presets, perf/eddy-http3-cold-validation, distribution/eddy-package-and-deploy]
 ---
 
 ## Outcome
@@ -18,10 +18,15 @@ A developer opens a from-scratch preset (or types their own `package.json`), run
 
 ## Items
 
-- `npm-client/eddy-resolver-service` — the `@riftydev/eddy` Node service: resolve (reuse npm-client) → `EddyBundleV1` (lockfile + compressed tarballs) + two-tier cache + as-of stamp + `prefer-online`. The engine. (ready)
-- `npm-client/eddy-client-opt-in` — the public `InstallOptions.resolverUrl`/`prefer` seam (SDK re-export): fetch bundle → pre-seed cache + write lockfile → existing fast path; default OFF, env-config, mirror-grade trust, auto-fallback. (ready)
-- `playground/eddy-from-scratch-presets` — wire from-scratch presets to fast mode: exact-version pins + committed lockfiles (perpetual cache hit) + the sandbox toggle + a re-pin/re-bake cadence. (draft)
-- `perf/eddy-http3-cold-validation` — the open risk: a real-browser HTTP/3 cold-install measurement that gates the quoted ~6x (built on `perf/cold-start-and-install-benchmark`). (draft)
-- `distribution/eddy-package-and-deploy` — publish `@riftydev/eddy` (npm + Docker image), deploy on rifty.dev alongside the Caddy proxy, self-host docs. (draft)
+Delivered (closed; the ~6x mechanism, parity-proven + `pnpm pr:check` green):
+
+- **eddy resolver service** — the `@riftydev/eddy` Node service (`services/eddy/`): runs rifty's own `install()` → harvests the lockfile + compressed tarballs → `EddyBundleV1` + two-tier cache + as-of stamp + `prefer-online` + typed `unsupported` decline. One algorithm; lockfile ≡ a client live-resolve by construction. (done → removed)
+- **eddy client opt-in** — the public `InstallOptions.resolverUrl`/`prefer` seam (auto-re-exported via `@riftydev/sdk/npm-client`): fetch bundle → verify bytes vs bundle integrity (non-disableable) → pre-seed cache + write lockfile → existing fast path; default OFF, env-config, mirror-grade trust, auto-fallback on every failure mode; `InstallResult.source` provenance + `trust-model.md`. (done → removed)
+
+Open:
+
+- `playground/eddy-from-scratch-presets` — the env-config `resolverUrl` seam into the playground install + `via eddy (fast)` provenance is built; the deploy-gated/product remainder (per-preset toggle UX, committed-lockfile exact pins, re-pin cadence, live ~0.6s demo) stays open pending a deployed eddy. (draft)
+- `perf/eddy-http3-cold-validation` — the open risk: a real-browser HTTP/3 cold-install measurement that gates the quoted ~6x. Blocked on the (unbuilt) `perf/cold-start-and-install-benchmark` harness + a deployed eddy + h3 transport control. (draft)
+- `distribution/eddy-package-and-deploy` — `@riftydev/eddy` is publish-ready (tsup build + bin) with a Docker/compose recipe + self-host docs; the actual npm publish + rifty.dev deploy are confirm-first/outward. (ready)
 
 Supersedes (folded from the `cold-npm-install-speedup` epic): the former `npm-client/server-side-closure-resolver` and `npm-client/bundled-popular-subgraph-metadata` draft items — their measured-and-verified design is now this epic + ADR-0182. Out of scope: the extracted-tree artifact variant (4.3x byte penalty, dominated); signed/attested manifests (mirror-grade only for v1); a pluggable client `ClosureSource` (URL seam only for v1); independent npm source-of-truth re-verification (would re-introduce the waterfall).

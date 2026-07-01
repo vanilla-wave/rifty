@@ -275,10 +275,13 @@ export class MemoryBackend {
       if (srcNode.kind === 'dir' && dstNode.kind === 'file') throw new VfsError('ENOTDIR', dst);
       if (dstNode.kind === 'dir' && dstNode.children.size > 0) throw new VfsError('ENOTEMPTY', dst);
       dstParent.children.delete(dstName);
+      dstParent.sortedDirents = null;
     }
     // Move the live node reference — O(1) on the memory backend, mtime untouched.
     srcParent.children.delete(srcName);
+    srcParent.sortedDirents = null;
     dstParent.children.set(dstName, srcNode);
+    dstParent.sortedDirents = null;
     const now = Date.now();
     srcParent.mtime = now;
     dstParent.mtime = now;

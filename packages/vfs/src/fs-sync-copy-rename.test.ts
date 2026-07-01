@@ -48,6 +48,18 @@ describe('FsSync.renameSync (ADR-0090)', () => {
     expect(fs.readdirSync('/other').map((d) => d.name)).toContain('a.txt');
   });
 
+  it('invalidates cached dirents for both source and destination parents', () => {
+    const fs = seed();
+    fs.mkdirSync('/other', { recursive: true });
+    expect(fs.readdirSync('/dir').map((d) => d.name)).toEqual(['a.txt']);
+    expect(fs.readdirSync('/other').map((d) => d.name)).toEqual([]);
+
+    fs.renameSync('/dir/a.txt', '/other/a.txt');
+
+    expect(fs.readdirSync('/dir').map((d) => d.name)).toEqual([]);
+    expect(fs.readdirSync('/other').map((d) => d.name)).toEqual(['a.txt']);
+  });
+
   it('renames a whole directory subtree cross-dir, preserving descendants', () => {
     const fs = seed();
     fs.mkdirSync('/dir/sub', { recursive: true });
