@@ -21,6 +21,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
+import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { Icon } from './icons.tsx';
 import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
 
@@ -322,6 +323,7 @@ export function TerminalPanel(props: {
   onMount(() => {
     if (!container) return;
     term = new RiftyTerminal({
+      banner: terminalWelcomeBanner,
       onInput: (line) => {
         lastSubmittedLine = line;
         stderrTail = '';

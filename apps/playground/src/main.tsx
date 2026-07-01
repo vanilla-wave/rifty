@@ -57,5 +57,8 @@ async function renderApp(): Promise<void> {
   // fallback on failure), register `/sw.js` (banner on failure, not fatal).
   const bootResult = await bootstrapPlayground();
   const terminalPersistence = await createTerminalPersistence(WORKSPACE);
+  // Drop the index.html cold-boot skeleton before mounting (Solid's render into a
+  // non-empty container would otherwise leave the skeleton behind the app).
+  root.replaceChildren();
   render(() => <App boot={bootResult} terminalPersistence={terminalPersistence} />, root);
 }

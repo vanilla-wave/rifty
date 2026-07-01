@@ -325,13 +325,13 @@ describe('App terminal startup wiring', () => {
 
   it('tags the worker with the project slug and clears the console on a project switch', () => {
     // slug → worker install-stamp reuse key keyed to the ACTIVE ROOT/id (ADR-0165
-    // §4: store.activeId — 'scratch' on boot, a projectId after switch); clear →
-    // fresh console for the switched-in project.
+    // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
+    // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
     expect(source).toContain("setDevServerStatus('stopped')");
     expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
-    expect(source).toContain('manager.clear(targetSessionId)');
-    expect(source).toContain('manager.clear(session.id)');
+    expect(source).toContain('manager.freshConsole(targetSessionId, terminalWelcomeBanner)');
+    expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
   });
 
   it('does not restart Vite inside a hidden stale terminal session', () => {
@@ -447,7 +447,7 @@ describe('App terminal startup wiring', () => {
       "throw new Error('Unable to reserve an idle terminal for the dev server')",
     );
     expect(runPreset).toMatch(
-      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.clear\(session\.id\);/,
+      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
       /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
@@ -541,6 +541,43 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<PreviewPanel');
     expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
+  });
+});
+
+describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
+  it('wires the status-bar Export button to the real archive download', () => {
+    expect(source).toContain('onExport={() => void downloadWorkspaceArchive()}');
+    expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
+  });
+
+  it('the Share toast no longer implies the user edits travel with the link', () => {
+    // share() copies only location.href (no encoded workspace) — the toast must
+    // not claim it shares the project. Real share-by-link is the M13 item.
+    expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
+    expect(source).not.toContain('Link copied — ${globalThis.location?.host');
+  });
+});
+
+describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-first-poke)', () => {
+  it('Cmd/Ctrl+S kills the save-page dialog, flushes debounced writes + acks', () => {
+    expect(source).toContain("(e.key === 's' || e.code === 'KeyS')");
+    expect(source).toContain('void editorApi?.flushPendingWrites();');
+    expect(source).toContain("flashToast('Saved', 'success');");
+  });
+
+  it('Cmd/Ctrl+W closes the active editor tab, not the browser tab', () => {
+    expect(source).toContain("(e.key === 'w' || e.code === 'KeyW')");
+    expect(source).toContain('if (editorApi?.closeActiveTab()) {');
+  });
+
+  it('beforeunload prompts ONLY in memory mode with dirty edits (OPFS never prompts)', () => {
+    expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
+    expect(source).toContain("e.returnValue = '';");
+    expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
+  });
+
+  it('a rejected terminal run writes its diagnostic to the terminal, not just the console', () => {
+    expect(source).toContain("terminalWriters.get(id)?.(`${message}\\n`, 'stderr')");
   });
 });
 

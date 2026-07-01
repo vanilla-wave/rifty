@@ -78,6 +78,7 @@ import { type StarterGroup, seedFilesForStarter, starterById } from './glue/star
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
 import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {
@@ -318,7 +319,9 @@ export function App(props: AppProps) {
   async function share(): Promise<void> {
     const url = globalThis.location?.href ?? '';
     const copied = await copyToClipboard(url);
-    if (copied) flashToast(`Link copied — ${globalThis.location?.host ?? url}`, 'success');
+    // The link encodes none of the user's edits (real share-by-link is the M13
+    // item) — the toast must not imply the project travels with it.
+    if (copied) flashToast('Link copied — opens this playground', 'success');
     else flashToast('Could not copy the link to the clipboard', 'error');
   }
 
@@ -1043,6 +1046,11 @@ export function App(props: AppProps) {
       exitCode = await run;
       return exitCode;
     } catch (err) {
+      // A rejected run is a real error (e.g. a tokenizer loud-throw: command
+      // substitution `$(…)`, `${VAR:-x}`). Surface the directed diagnostic in the
+      // terminal, not just the console — a silent non-zero exit reads as broken.
+      const message = err instanceof Error ? err.message : String(err);
+      terminalWriters.get(id)?.(`${message}\n`, 'stderr');
       console.error(err);
       exitCode = 1;
       return exitCode;
@@ -1951,7 +1959,7 @@ export function App(props: AppProps) {
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
     devServerBootSessionId = targetSessionId;
-    manager.clear(targetSessionId); // fresh console for the switched-in project
+    manager.freshConsole(targetSessionId, terminalWelcomeBanner); // fresh console + greeting
     void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
     return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
   }
@@ -2022,7 +2030,7 @@ export function App(props: AppProps) {
       if (!session) return;
       session = await ensureReservedDevServerSession(session);
       devServerSessionId = session.id;
-      manager.clear(session.id); // fresh console for the switched-in project
+      manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
       const generation = ++devServerRestartGeneration;
       devServerBootSessionId = session.id;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
@@ -2772,6 +2780,25 @@ export function App(props: AppProps) {
         togglePalette();
         return;
       }
+      // Cmd/Ctrl+S: kill the browser "Save page" dialog; flush the debounced
+      // editor writes and pulse a transient "Saved" ack (edits already persist).
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 's' || e.code === 'KeyS')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void editorApi?.flushPendingWrites();
+        flashToast('Saved', 'success');
+        return;
+      }
+      // Cmd/Ctrl+W: close the ACTIVE editor tab, not the browser tab. With no
+      // closable editor tab the browser default is left alone (beforeunload then
+      // guards an in-memory dirty session).
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.code === 'KeyW')) {
+        if (editorApi?.closeActiveTab()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       // Escape closes the topmost project overlay (ADR-0165 §9 a11y): a project
       // dialog first (drop any stashed Save-then pending), else the launcher modal.
       // The command palette owns its own Escape, so leave it alone.
@@ -2788,6 +2815,18 @@ export function App(props: AppProps) {
     };
     globalThis.window?.addEventListener('keydown', onKey, true);
     onCleanup(() => globalThis.window?.removeEventListener('keydown', onKey, true));
+
+    // Guard a reflexive Cmd+R / tab close from silently nuking in-memory work:
+    // prompt ONLY when storage is memory-backed (no reload persistence) AND there
+    // are unsaved/just-debounced edits. OPFS persists, so it never prompts.
+    const onBeforeUnload = (e: BeforeUnloadEvent): void => {
+      if (storageMode === 'memory' && store.dirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    globalThis.window?.addEventListener('beforeunload', onBeforeUnload);
+    onCleanup(() => globalThis.window?.removeEventListener('beforeunload', onBeforeUnload));
   });
 
   const livePillLabel = (): string =>
@@ -3090,6 +3129,13 @@ export function App(props: AppProps) {
           activeName={activeName()}
           activeStarter={activeGlyph().label}
           dirty={store.dirty()}
+          onExport={() => void downloadWorkspaceArchive()}
+          exportDisabled={workspaceArchiveBlocked()}
+          exportTitle={
+            workspaceArchiveBlocked()
+              ? 'Stop the dev server to archive the editable workspace'
+              : 'Download the editable workspace as a .json archive'
+          }
           gitBranch={activeGitScm().branch}
         />
       </Show>

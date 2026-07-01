@@ -13,7 +13,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve, strerror } from './_shared.ts';
+import { dec, readAllStdin, resolve, strerror } from './_shared.ts';
 
 interface Selected {
   lines: boolean;
@@ -98,9 +98,21 @@ export const wc: ShellCommand = async (args, ctx) => {
   }
 
   if (files.length === 0) {
-    // stdin is a later milestone; with no operand there is nothing to count.
-    ctx.stderr.write('wc: no file operand\n');
-    return 1;
+    // No FILE → count stdin if connected (pipe RHS / `< file`); GNU prints just
+    // the counts with no filename label. Neither FILE nor stdin → usage error.
+    if (!ctx.stdin) {
+      ctx.stderr.write('wc: no file operand\n');
+      return 1;
+    }
+    const counts = countBytes(await readAllStdin(ctx));
+    const cols: number[] = [];
+    if (sel.lines) cols.push(counts.lines);
+    if (sel.words) cols.push(counts.words);
+    if (sel.bytes) cols.push(counts.bytes);
+    if (sel.chars) cols.push(counts.chars);
+    const width = Math.max(1, String(Math.max(0, ...cols)).length);
+    ctx.stdout.write(`${cols.map((n) => String(n).padStart(width)).join(' ')}\n`);
+    return 0;
   }
 
   const fs = syncMirror();

@@ -766,17 +766,144 @@ describe('npm-shell-command — argv', () => {
     expect(rec.stderr.join('')).toContain("unknown subcommand 'publish'");
   });
 
-  it('refuses flags (M9 scope) instead of silently dropping them', async () => {
+  it('refuses an UNKNOWN install flag instead of silently dropping it', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const { install, calls } = makeStubInstall(() => emptyResult());
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
 
-    const { exitCode, rec } = await runShell(shell, 'npm install --save-dev lodash');
+    const { exitCode, rec } = await runShell(shell, 'npm install --frozen-lockfile lodash');
     expect(exitCode).toBe(1);
-    expect(rec.stderr.join('')).toContain("flag '--save-dev' not supported");
+    expect(rec.stderr.join('')).toContain("flag '--frozen-lockfile' not supported");
     expect(calls).toEqual([]);
+  });
+});
+
+describe('npm-shell-command — save flags + lifecycle aliases', () => {
+  async function readPkg(
+    vfs: MemoryVfs,
+  ): Promise<{ dependencies?: Record<string, string>; devDependencies?: Record<string, string> }> {
+    return JSON.parse(await vfs.readFileText('/proj/package.json'));
+  }
+
+  it('npm i -D <pkg> records it under devDependencies, NOT dependencies', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    expect((await runShell(shell, 'npm i -D vitest@^2.0.0')).exitCode).toBe(0);
+    const pkg = await readPkg(vfs);
+    expect(pkg.devDependencies).toEqual({ vitest: '^2.0.0' });
+    expect(pkg.dependencies ?? {}).toEqual({});
+  });
+
+  it('--save-dev is the long alias of -D', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    expect((await runShell(shell, 'npm install --save-dev lodash')).exitCode).toBe(0);
+    expect((await readPkg(vfs)).devDependencies).toEqual({ lodash: 'latest' });
+  });
+
+  it('--save / -E / bare all record under dependencies (save is the default)', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    expect((await runShell(shell, 'npm i --save a@1.0.0')).exitCode).toBe(0);
+    expect((await runShell(shell, 'npm i -E b@2.0.0')).exitCode).toBe(0);
+    const pkg = await readPkg(vfs);
+    expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
+    expect(pkg.devDependencies ?? {}).toEqual({});
+  });
+
+  it('npm i -g <pkg> → directed browser-sandbox message, exit 1, no install', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm i -g typescript');
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain(
+      "global installs aren't supported in the browser sandbox",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it('npm test / start / stop / restart alias to npm run <name>', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { test: 'vitest run', start: 'node s.js', stop: 'true', restart: 'true' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const ran: Array<{ name: string; command: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command) => {
+          ran.push({ name, command });
+          return 0;
+        },
+      }),
+    );
+
+    for (const name of ['test', 'start', 'stop', 'restart']) {
+      expect((await runShell(shell, `npm ${name}`)).exitCode).toBe(0);
+    }
+    expect(ran).toEqual([
+      { name: 'test', command: 'vitest run' },
+      { name: 'start', command: 'node s.js' },
+      { name: 'stop', command: 'true' },
+      { name: 'restart', command: 'true' },
+    ]);
+  });
+
+  it('npm test with no test script → missing-script message, non-zero', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', version: '0.0.0', scripts: {} }, null, 2)}\n`,
+    );
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, runScript: async () => 0 }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm test');
+    expect(exitCode).not.toBe(0);
+    expect(rec.stderr.join('')).toContain("missing script 'test'");
+  });
+
+  it('the unknown-subcommand list now advertises the aliases', async () => {
+    const vfs = new MemoryVfs();
+    const shell = new Shell({ cwd: '/' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    const { rec } = await runShell(shell, 'npm publish');
+    expect(rec.stderr.join('')).toContain('test, start, stop, restart');
   });
 });
 

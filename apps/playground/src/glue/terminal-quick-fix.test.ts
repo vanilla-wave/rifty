@@ -24,6 +24,13 @@ describe('detectTerminalQuickFix', () => {
     expect(detectTerminalQuickFix('zzzzzzzz: command not found\n')).toBeNull();
   });
 
+  it('offers no Run action for a package-manager nudge (never a wrong target)', () => {
+    // The shell emits this instead of a fuzzy `Did you mean 'npm'?` for npx/yarn/…
+    expect(
+      detectTerminalQuickFix('npx: not available — rifty wires npm (try: npm install …)\n'),
+    ).toBeNull();
+  });
+
   it('detects address-in-use output using the last submitted command', () => {
     expect(
       detectTerminalQuickFix({
