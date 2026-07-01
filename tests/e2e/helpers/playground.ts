@@ -300,9 +300,17 @@ function terminalPattern(text: string | RegExp): string | RegExp {
 }
 
 export async function selectPreset(page: Page, id: string): Promise<void> {
+  const launcher = page.locator('[data-testid="launcher"]');
   const trigger = page.locator('[data-action="open-launcher"]');
   for (let attempt = 0; attempt < 5; attempt++) {
-    await trigger.click();
+    // The project-first chooser AUTO-opens on cold boot (~1s) and its veil would
+    // intercept a header-trigger click. Wait past that beat (>1s) so a cold boot
+    // always finds the auto-chooser; only open it ourselves — force, so no veil can
+    // block it since it's only closed mid-session — if it stayed shut.
+    if (!(await launcher.isVisible({ timeout: 3_000 }).catch(() => false))) {
+      await trigger.click({ force: true }).catch(() => {});
+    }
+    await expect(launcher).toBeVisible({ timeout: 10_000 });
     const row = page.locator(`[data-preset="${id}"]`);
     if (!(await row.isVisible().catch(() => false))) {
       await page.getByRole('button', { name: 'Starters' }).click();

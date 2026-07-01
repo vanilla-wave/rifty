@@ -42,6 +42,7 @@
  *      losing `globalThis` state; the terminal logs no errors.
  */
 import { type Locator, expect, test } from '@playwright/test';
+import { pickStarter } from './helpers/playground.ts';
 
 const enabled = process.env.RIFTY_E2E_HMR === '1';
 const HMR_EVENT_KEY = '__rifty_e2e_hmr';
@@ -52,6 +53,9 @@ test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
   test('preview iframe patches src/main.js without a full reload', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
+    // Project-first: pick the real-vite starter to boot the dev server (main used to
+    // auto-boot it on load; the chooser now gates that behind an explicit pick).
+    await pickStarter(page, 'project-files');
 
     const term = page.locator('[data-testid="terminal"]');
     await expect(term).toContainText('importing vite', { timeout: 30_000 });
