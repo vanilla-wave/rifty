@@ -37,7 +37,18 @@ export interface SwitchDialog {
   readonly pendingStarter?: string;
   readonly pendingId?: string;
 }
-export type Dialog = SaveDialog | RenameDialog | ResetDialog | DeleteDialog | SwitchDialog | null;
+/** Confirm-wipe-all-browser-state prompt (Projects tab · Reset sandbox). */
+export interface ResetSandboxDialog {
+  readonly kind: 'reset-sandbox';
+}
+export type Dialog =
+  | SaveDialog
+  | RenameDialog
+  | ResetDialog
+  | DeleteDialog
+  | SwitchDialog
+  | ResetSandboxDialog
+  | null;
 export interface Toast {
   readonly kind: 'info' | 'error';
   readonly text: string;

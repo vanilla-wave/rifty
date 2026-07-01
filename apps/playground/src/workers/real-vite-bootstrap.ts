@@ -1185,15 +1185,6 @@ async function bootstrap(): Promise<void> {
   // readers (node-server `process.env.PORT`, programs) must still see it.
   globalThis.process.env = env;
 
-  if (env.RIFTY_OWNER_MODE === 'project-index') {
-    reconcileOwnerIndexAtBoot(syncMirror(), starter);
-    const tearIndexBridge = serveProjectIndex(port, syncMirror(), '/', flushSyncMirror);
-    kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port });
-    log('[project-index-owner/worker] project index bridge live; workspace not seeded\n');
-    void tearIndexBridge;
-    return;
-  }
-
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real project.
   const publishSnapshot = (): void => {

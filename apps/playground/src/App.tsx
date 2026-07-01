@@ -1772,7 +1772,14 @@ export function App(props: AppProps) {
       store.hydrateIndex(idx);
       const wasReady = editorProjectContextReady();
       const ready = !needsProjectChoiceOnBoot(idx);
-      setEditorProjectContextReady(ready);
+      // Never let a stale/in-flight scratch:null publish RE-HIDE an editor already
+      // shown: onPickStarter flips editorProjectContextReady(true) + initialBootDecisionMade
+      // optimistically, so once the boot decision is made a needs-choice index is a
+      // lagging owner mirror, not a real return to the chooser — flipping it false here
+      // would unmount/remount EditorHost mid-pick (stale editorApi + TS-LS churn).
+      if (ready || !initialBootDecisionMade) {
+        setEditorProjectContextReady(ready);
+      }
       if (ready && !wasReady) resetEditorToActiveInitialFiles();
     });
     for (const id of pendingOnDiskDeletes) {
@@ -1804,7 +1811,17 @@ export function App(props: AppProps) {
       autoOpenedFirstRunLauncher = false;
       store.closeLauncher();
     }
-    void ensureWorkspaceOwnerStarted(true);
+    // The hidden cold-boot owner is rooted at /scratch. A persisted project-active
+    // index (Save-as-project then reload) must RE-ROOT the owner to /projects/<id>:
+    // ensureWorkspaceOwnerStarted short-circuits on the already-started hidden owner
+    // and never re-roots, so without this a returning saved project boots into the
+    // empty /scratch owner (ADR-0165 §3 — RIFTY_RFV_ROOT is frozen per spawn, so a
+    // root change is an owner respawn, i.e. switchTo).
+    if (workspaceOwner().root !== rootForId(idx.activeId)) {
+      void trackSwitch(switchTo(idx.activeId));
+    } else {
+      void ensureWorkspaceOwnerStarted(true);
+    }
   });
 
   // Auto-dismiss the store toast (ADR-0165 §9). The page `flashToast` self-clears,
@@ -2200,6 +2217,11 @@ export function App(props: AppProps) {
       // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
       // already describe the NEXT project. Gate stays false (store decided already).
       // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
+      // Drain debounced editor writes to the CURRENT (still-alive) owner BEFORE teardown:
+      // a 300ms flush firing mid-respawn would otherwise hit the not-started guard, drop
+      // the bytes, yet clear the tab dirty marker (silent data loss). Explorer mutations
+      // already flush-before-mutate; the switch path must too.
+      await flushPendingEditorWrites();
       workspaceOwnerStarted = false;
       setWorkspaceOwnerReady(false);
 
@@ -2353,6 +2375,14 @@ export function App(props: AppProps) {
         console.error('[project-switch] switch failed', err);
         const message = err instanceof Error ? err.message : String(err);
         store.setToast({ kind: 'error', text: `Switch failed: ${message}` });
+        // A switch that threw before restartDevServer set workspaceOwnerStarted=true
+        // leaves it parked false → every later editor write blocks on the "choose a
+        // project" guard for the rest of the session. Recover it from the live owner
+        // (the rewired new owner, or the surviving old one) so the IDE isn't wedged.
+        if (!workspaceOwnerStarted && workspaceOwner().isAlive()) {
+          workspaceOwnerStarted = true;
+          setWorkspaceOwnerReady(true);
+        }
         return false;
       })
       .finally(() => {
@@ -2421,7 +2451,11 @@ export function App(props: AppProps) {
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(id, { preserveDirtySameStarter: true });
-        if (saveAffordance(storageMode).ephemeral) seedViteWorkspace(presetForId(id));
+        // Memory mode has no durable index → durableNewScratch is a no-op, so this is
+        // the ONLY owner-tree seed. AWAIT it before runVitePreset boots vite, else the
+        // dev server can start over an un-seeded /scratch (runVitePreset no longer
+        // seeds/waits — that guarantee moved here).
+        if (saveAffordance(storageMode).ephemeral) await seedViteWorkspace(presetForId(id));
         setWorkspaceOwnerReady(true);
         await runVitePreset(presetForId(id), tsGate);
       }
@@ -2480,10 +2514,11 @@ export function App(props: AppProps) {
     store.openDialog({ kind: 'delete', id });
   }
 
+  // The styled reset-sandbox dialog is the confirm gate (ADR-0165 §9); this runs on
+  // its confirm. Closing the owner first releases its OPFS sync-access handles so the
+  // clear does not race an open handle.
   async function onResetBrowserSandbox(): Promise<void> {
-    const confirmed =
-      globalThis.confirm?.('Delete all saved browser sandbox state and reload?') ?? false;
-    if (!confirmed) return;
+    store.setDialog(null);
     try {
       manager.dispose();
     } catch {
@@ -2499,7 +2534,18 @@ export function App(props: AppProps) {
     } catch {
       /* reload follows; best-effort cleanup */
     }
-    await resetBrowserSandboxState();
+    const result = await resetBrowserSandboxState();
+    if (result.failed.length > 0) {
+      // Honest-loud (fidelity): the destructive action did NOT fully clear. Say so
+      // BEFORE reload swallows any toast, so the user knows state survived and can retry
+      // — never a silent success over persisted state the owner will re-hydrate.
+      console.error('[sandbox-reset] partial failure', result.failed);
+      globalThis.alert?.(
+        `Some sandbox state could not be cleared: ${result.failed
+          .map((f) => f.name)
+          .join(', ')}. Reloading anyway — you may need to retry the reset.`,
+      );
+    }
     globalThis.location?.reload();
   }
 
@@ -2713,7 +2759,10 @@ export function App(props: AppProps) {
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
         await durableNewScratch(pendingStarter);
-        if (saveAffordance(storageMode).ephemeral) seedViteWorkspace(presetForId(pendingStarter));
+        // Memory mode: AWAIT the seed before vite boots (see onPickStarter) — the
+        // only owner-tree seed in the ephemeral path.
+        if (saveAffordance(storageMode).ephemeral)
+          await seedViteWorkspace(presetForId(pendingStarter));
         setWorkspaceOwnerReady(true);
         await runVitePreset(presetForId(pendingStarter), tsGate);
       };
@@ -3321,7 +3370,7 @@ export function App(props: AppProps) {
         onSave={openSaveDialog}
         onMenu={(id) => store.setMenuFor(id)}
         onMenuAction={onMenuAction}
-        onResetSandbox={() => void onResetBrowserSandbox()}
+        onResetSandbox={() => store.openDialog({ kind: 'reset-sandbox' })}
       />
 
       <ProjectDialogs
@@ -3341,6 +3390,7 @@ export function App(props: AppProps) {
         onConfirmRename={onConfirmRename}
         onConfirmReset={onConfirmReset}
         onConfirmDelete={() => store.confirmDelete()}
+        onConfirmResetSandbox={() => void onResetBrowserSandbox()}
         onSwitchSaveThen={onSwitchSaveThen}
         onSwitchDiscardThen={onSwitchDiscardThen}
       />

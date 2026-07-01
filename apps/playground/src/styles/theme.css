@@ -1363,8 +1363,31 @@ body {
 .rf-preview__empty {
   position: absolute;
   inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   background: var(--rf-preview-bg);
   pointer-events: none;
+}
+.rf-preview__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--rf-line-strong);
+  border-top-color: var(--rf-text-faint);
+  border-radius: 50%;
+  animation: rf-spin 0.7s linear infinite;
+}
+.rf-preview__starting-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--rf-text-faint);
+}
+@keyframes rf-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .rf-preview__overlay {
   position: absolute;

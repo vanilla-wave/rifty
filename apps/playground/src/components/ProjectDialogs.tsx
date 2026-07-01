@@ -23,6 +23,7 @@ export function ProjectDialogs(props: {
   onConfirmRename(): void;
   onConfirmReset(): void;
   onConfirmDelete(): void;
+  onConfirmResetSandbox(): void;
   onSwitchSaveThen(): void;
   onSwitchDiscardThen(): void;
 }) {
@@ -183,6 +184,34 @@ export function ProjectDialogs(props: {
                       Discard & continue
                     </button>
                   </div>
+                </div>
+              </Show>
+              <Show when={is('reset-sandbox')}>
+                <div class="rf-dialog__icon" data-tone="danger">
+                  <Icon name="trash-bin" size={20} />
+                </div>
+                <h2 class="rf-dialog__title">Reset browser sandbox?</h2>
+                <p class="rf-dialog__body">
+                  This deletes <strong>every saved project, scratch, and installed package</strong>{' '}
+                  from this browser (OPFS, storage, caches, service worker) and reloads. This can't
+                  be undone.
+                </p>
+                <div class="rf-dialog__actions">
+                  <button
+                    type="button"
+                    class="rf-btn rf-btn--ghost"
+                    onClick={() => props.onCancel()}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    class="rf-btn rf-btn--danger"
+                    data-action="confirm-reset-browser-sandbox"
+                    onClick={() => props.onConfirmResetSandbox()}
+                  >
+                    Reset sandbox
+                  </button>
                 </div>
               </Show>
             </div>

@@ -77,6 +77,51 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('clearInterval(retryRequest);');
   });
 
+  it('re-roots the owner to a persisted project on boot instead of leaving it at /scratch', () => {
+    // The cold-boot hidden owner is rooted at /scratch; a project-active index
+    // (Save-as-project then reload) must respawn at /projects/<id> — the started
+    // short-circuit in ensureWorkspaceOwnerStarted never re-roots, so the boot
+    // decision must switch on a root mismatch.
+    const bootEffect = source.match(
+      /if \(!idx \|\| initialBootDecisionMade\) return;[\s\S]*?\n {2}\}\);/,
+    )?.[0];
+    expect(bootEffect).toBeDefined();
+    expect(bootEffect).toContain('if (workspaceOwner().root !== rootForId(idx.activeId)) {');
+    expect(bootEffect).toContain('void trackSwitch(switchTo(idx.activeId));');
+    expect(bootEffect).toContain('void ensureWorkspaceOwnerStarted(true);');
+  });
+
+  it('flushes pending editor writes before a project switch tears the owner down', () => {
+    const switchTo = source.match(
+      /async function switchTo\(nextActiveId: ActiveId\): Promise<boolean> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(switchTo).toBeDefined();
+    // Flush must precede the not-started flip so the write lands on the still-alive
+    // owner rather than being dropped while the tab is marked clean (silent data loss).
+    expect(switchTo).toMatch(
+      /await flushPendingEditorWrites\(\);[\s\S]*?workspaceOwnerStarted = false;/,
+    );
+  });
+
+  it('awaits the memory-mode starter seed before the dev server boots', () => {
+    // Ephemeral mode has no durable index, so seedViteWorkspace is the only owner-tree
+    // seed; it must be awaited before runVitePreset boots vite over an empty scratch.
+    expect(source).toContain(
+      'if (saveAffordance(storageMode).ephemeral) await seedViteWorkspace(presetForId(id));',
+    );
+  });
+
+  it('recovers workspaceOwnerStarted from the live owner when a switch fails', () => {
+    // A switch that throws before restartDevServer set the flag true must not wedge
+    // every later write behind the "choose a project" guard for the session.
+    const trackSwitch = source.match(
+      /function trackSwitch\(run: Promise<boolean>\): Promise<boolean> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(trackSwitch).toBeDefined();
+    expect(trackSwitch).toContain('if (!workspaceOwnerStarted && workspaceOwner().isAlive()) {');
+    expect(trackSwitch).toContain('workspaceOwnerStarted = true;');
+  });
+
   it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
     // Single-store-owner regression guard (exactly one authoritative store; page
     // holds no authoritative fs): the page must not construct or write a local

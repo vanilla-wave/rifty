@@ -19,6 +19,7 @@ const render = (dialog: Dialog, extra: Partial<Parameters<typeof ProjectDialogs>
       onConfirmRename: () => {},
       onConfirmReset: () => {},
       onConfirmDelete: () => {},
+      onConfirmResetSandbox: () => {},
       onSwitchSaveThen: () => {},
       onSwitchDiscardThen: () => {},
       ...extra,
@@ -49,6 +50,12 @@ describe('ProjectDialogs', () => {
     expect(html).toContain('node-api');
     expect(html).toContain('Save scratch, then continue');
     expect(html).toContain('Discard & continue');
+  });
+  it('reset-sandbox: wipe-all copy + confirm action', () => {
+    const html = render({ kind: 'reset-sandbox' });
+    expect(html).toContain('Reset browser sandbox?');
+    expect(html).toContain('OPFS, storage, caches, service worker');
+    expect(html).toContain('confirm-reset-browser-sandbox');
   });
   it('renders nothing when dialog is null', () => {
     expect(render(null)).not.toContain('rf-dialog');

@@ -263,8 +263,11 @@ export function PreviewPanel(props: {
           <div
             class="rf-preview__empty"
             data-testid="preview-empty"
-            aria-label="Preview waiting for server"
-          />
+            aria-label="Starting dev server"
+          >
+            <span class="rf-preview__spinner" aria-hidden="true" />
+            <span class="rf-preview__starting-label">Starting dev server…</span>
+          </div>
         )}
         {phase() === 'error' && (
           <div class="rf-preview__overlay">

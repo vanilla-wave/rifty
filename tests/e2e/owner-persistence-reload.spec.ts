@@ -201,4 +201,80 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
       )
       .toBe(false);
   });
+
+  test('a saved project reopens after reload instead of an empty scratch', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    const marker = `saved-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const projectName = `Saved ${marker}`;
+
+    await page.goto('/');
+    await clearWorkspaceOpfs(page);
+    await page.reload();
+    await pickStarter(page, 'project-files');
+
+    // Dirty the scratch (marker), then Save-as-project: activeId flips to /projects/<id>
+    // and persists durably; the in-session owner re-roots to it.
+    await setOpenEditorValue(page, '/scratch/src/main.js', `// ${marker}\n`);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    const launcher = page.locator('[data-testid="launcher"]');
+    await page.click('[data-action="open-launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 5_000 });
+    await page.getByRole('button', { name: /^Projects/ }).click();
+    await page.click('[data-action="save-scratch"]');
+    const dialog = page.locator('.rf-dialog[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    await dialog.locator('input.rf-dialog__input').fill(projectName);
+    await dialog.getByRole('button', { name: 'Save project' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+    const projectId = await (async (): Promise<string> => {
+      const read = async (): Promise<string> => {
+        const index = await readWorkspaceJson<{
+          projects: { id: string; name: string }[];
+        }>(page, '/.rifty-project-index.json');
+        return index?.projects.find((p) => p.name === projectName)?.id ?? '';
+      };
+      await expect.poll(read, { timeout: 60_000 }).not.toBe('');
+      return read();
+    })();
+    await page.locator('.rf-launcher__close').click();
+    await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+
+    // Reload: the cold-boot hidden owner is rooted at /scratch. The persisted
+    // project-active index MUST re-root the owner to /projects/<id> — else the IDE
+    // boots into the empty scratch. Regression guard for the boot re-root.
+    await page.reload();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(launcher).toHaveCount(0);
+
+    // The durable index still points at the saved project (not reset to scratch).
+    await expect
+      .poll(
+        async () => {
+          const index = await readWorkspaceJson<{ activeId: string }>(
+            page,
+            '/.rifty-project-index.json',
+          );
+          return index?.activeId ?? 'missing';
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(projectId);
+
+    // Decisive: the owner-resident shell's cwd IS the owner root. A correct re-root
+    // lands the shell in /projects/<id> with the saved file; the bug (owner left at
+    // /scratch) prints /scratch and the relative `cat` misses the marker.
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'pwd');
+    await expectTerminalContains(page, `/projects/${projectId}`, 20_000);
+    await runTerminalLine(page, 'cat src/main.js');
+    await expectTerminalContains(page, marker, 20_000);
+  });
 });

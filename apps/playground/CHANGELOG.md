@@ -203,10 +203,14 @@
   `tests/e2e/vite7-build-preview.spec.ts` pins `vite build` -> `vite preview`
   -> `/preview/4173/`.
 - **First-run chooser no longer loads the default project behind the modal.**
-  Cold boot starts an index-only owner, keeps the editor empty, and only spawns
-  the full workspace owner after the user opens a saved scratch/project or picks
-  a starter. Re-opening a persisted scratch preserves user files while
-  dependency restore only refreshes dependency-owned paths.
+  Cold boot keeps the editor empty and only runs a dev server after the user opens
+  a saved scratch/project or picks a starter. Re-opening a persisted scratch
+  preserves user files while dependency restore only refreshes dependency-owned
+  paths.
+- **A saved project reopens on reload instead of an empty scratch.** A persisted
+  project-active index (Save-as-project then reload) now re-roots the workspace
+  owner from the cold-boot `/scratch` to `/projects/<id>`, so Explorer, editor,
+  terminal cwd, and git reflect the saved project rather than an empty tree.
 - **First-run chooser now sits over a real hidden empty workspace.** Cold boot
   creates a real `/scratch` shell/file tree without choosing a starter, so the
   IDE no longer shows a fake entry file or rejects shell commands while the
@@ -220,6 +224,24 @@
   `src/main.js` program tab before restoring `src/main.ts`.
 - Reset/first-run project choice no longer reveals the hidden empty owner's
   `src/main.js` scaffold or file tree behind the launcher.
+- **Switching projects no longer silently drops the last edit.** A project switch
+  now flushes pending debounced editor writes to the current owner before teardown,
+  so a just-typed change can't hit the not-started guard and be discarded while its
+  tab is marked clean.
+- A project switch that fails mid-respawn no longer wedges the IDE: the
+  workspace-owner-started flag recovers from the live owner instead of blocking
+  every later editor write behind the "choose a project" guard.
+- A picked starter no longer flickers (EditorHost unmount/remount + TS-LS churn)
+  when a stale first-run index publish lands during the pick.
+- Memory (non-OPFS) starter picks now seed the workspace before the dev server
+  boots, so vite can't start over an un-seeded scratch tree.
+- **Reset sandbox is now a styled in-app confirm** (matching Delete/Reset), and a
+  partial clear (e.g. an OPFS handle still held) is surfaced to the user instead of
+  reloading as if it succeeded.
+- The preview pane now shows a spinner + "Starting dev server…" while a server is
+  booting, instead of a blank body.
+- Removed the unused index-only-owner spawn path (`startProjectIndexOwner` + its
+  worker `project-index` boot branch), superseded by the hidden-empty owner.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
