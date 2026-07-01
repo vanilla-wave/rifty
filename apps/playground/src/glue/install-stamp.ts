@@ -190,3 +190,74 @@ export async function installStampSatisfiedForPackageJson(
   if (!depsEqual(stamp.deps, currentDeps)) return null;
   return stamp;
 }
+
+/** The sync fs slice the SYNC stamp predicate reads through. */
+export interface InstallStampSyncFs {
+  existsSync(path: string): boolean;
+  readFileBytesSync(path: string): Uint8Array;
+}
+
+const stampDecoder = new TextDecoder('utf-8');
+
+/**
+ * Sync twin of {@link installStampSatisfiedForPackageJson} over the sync
+ * mirror. Exists for the owner-boot eddy prefetch gate (ADR-0186): an ASYNC
+ * gate starves behind the owner's busy boot loop, so the prefetch used to fire
+ * AFTER the install it was meant to feed — a sync gate lets the fetch start
+ * before any boot work blocks the realm.
+ */
+export function installStampSatisfiedForPackageJsonSync(
+  fs: InstallStampSyncFs,
+  root: string,
+  slug: string,
+  packageJsonText: string,
+): InstallStamp | null {
+  const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
+  if (!expectedDeps) return null;
+  const currentDeps = readEffectiveDepsSync(fs, root);
+  if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
+  const stamp = readInstallStampSync(fs, root);
+  if (!stamp) return null;
+  if (stamp.slug !== slug) return null;
+  if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
+  if (!depsEqual(stamp.deps, currentDeps)) return null;
+  return stamp;
+}
+
+function readTextSyncOrNull(fs: InstallStampSyncFs, path: string): string | null {
+  if (!fs.existsSync(path)) return null;
+  try {
+    return stampDecoder.decode(fs.readFileBytesSync(path));
+  } catch {
+    return null;
+  }
+}
+
+function readEffectiveDepsSync(
+  fs: InstallStampSyncFs,
+  root: string,
+): Record<string, string> | null {
+  const text = readTextSyncOrNull(fs, joinPath(root, 'package.json'));
+  return text === null ? null : effectiveDepsFromPackageJsonText(text);
+}
+
+function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
+  const text = readTextSyncOrNull(fs, installStampPath(root));
+  if (text === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const raw = parsed as { version?: unknown; slug?: unknown; deps?: unknown; packages?: unknown };
+  if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
+  if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
+  return {
+    version: 1,
+    slug: typeof raw.slug === 'string' ? raw.slug : '',
+    deps: readStringMap(raw.deps),
+    packages: raw.packages,
+  };
+}

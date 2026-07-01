@@ -48,6 +48,7 @@ import { startInstallPrefetch } from '../glue/install-prefetch.ts';
 import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
+  installStampSatisfiedForPackageJsonSync,
 } from '../glue/install-stamp.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
@@ -425,6 +426,65 @@ async function bootShellOwner(opts: {
     hiddenEmptyBoot,
     fromScratch,
   } = opts;
+
+  // The persistent owner is spawned once with the deep-link/default template; a
+  // preset switch updates which template/runtime the NEXT co-resident dev server
+  // boots (ADR-0148 — the page sends `pty:dev-config` before the dev line).
+  let devSpec = spec;
+  let devCfg = cfg;
+  let devSlug = slug;
+  let devFromScratch = fromScratch;
+  let lastDevTemplateId: string | null = null;
+  let lastDevRoot: string | null = null;
+  let devConfigReady: Promise<void> = Promise.resolve();
+
+  // Owner-boot eddy prefetch (ADR-0186), FIRST thing in the boot — before the
+  // seed/git work blocks the realm — so the bundle download runs concurrently
+  // with the rest of owner boot and the boot line's `npm install` consumes the
+  // buffered bytes (canonically keyed — a drifted package.json makes install()
+  // ignore it). Skipped when a stamp will suppress the install (reload of an
+  // installed tree). SYNC by design: an async stamp gate starves behind the
+  // busy boot loop and the prefetch fired AFTER the install it was meant to
+  // feed (measured 2026-07-02: two POSTs, 40ms apart, zero overlap).
+  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
+  let installPrefetchConfig: string | undefined;
+  function primeInstallPrefetch(): void {
+    const resolverUrl = getResolverUrl();
+    if (!devFromScratch || !resolverUrl) {
+      installPrefetch = undefined;
+      installPrefetchConfig = undefined;
+      return;
+    }
+    // A deep-link boot primes at spawn AND again on the page's `pty:dev-config`
+    // for the SAME config — re-priming then would discard the in-flight
+    // download and fire a second POST (measured 2026-07-02: duplicate POSTs
+    // 40ms apart, and the two concurrent 7MB streams intermittently stalled
+    // ~10s). Keep the handle when nothing changed.
+    const config = `${devSpec.id} ${devCfg.root} ${devSlug} ${devCfg.packageJson}`;
+    if (installPrefetch && installPrefetchConfig === config) return;
+    installPrefetch = undefined;
+    installPrefetchConfig = config;
+    const stamped = installStampSatisfiedForPackageJsonSync(
+      syncMirror(),
+      devCfg.root,
+      devSlug,
+      devCfg.packageJson,
+    );
+    if (stamped) return;
+    installPrefetch = startInstallPrefetch({
+      packageJsonText: devCfg.packageJson,
+      resolverUrl,
+      // Pins key on the TEMPLATE id (the template owns the dep-set); the slug
+      // is the root id ('scratch'|projectId, ADR-0165) and says nothing about
+      // the closure.
+      closureHash: getEddyPin(devSpec.id),
+      bundleBaseUrl: getEddyBundleBaseUrl(),
+    });
+  }
+  // A hidden empty boot has no chosen starter — nothing installs until the
+  // page's `pty:dev-config` picks one (its handler re-primes with that config).
+  if (!hiddenEmptyBoot) primeInstallPrefetch();
+
   const pendingStarterGeneratedBaseline = new Set<string>();
   const markStarterGeneratedBaselinePending = (root: string): void => {
     pendingStarterGeneratedBaseline.add(root);
@@ -489,46 +549,6 @@ async function bootShellOwner(opts: {
   // server (vite, webpack-dev-server, bare node:http) flips it; no bin-name
   // keying.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
-
-  // The persistent owner is spawned once with the default template; a preset
-  // switch updates which template/runtime the NEXT co-resident dev server boots
-  // (ADR-0148 — the page sends `pty:dev-config` before re-running the dev line).
-  let devSpec = spec;
-  let devCfg = cfg;
-  let devSlug = slug;
-  let devFromScratch = fromScratch;
-  let lastDevTemplateId: string | null = null;
-  let lastDevRoot: string | null = null;
-  let devConfigReady: Promise<void> = Promise.resolve();
-
-  // Owner-boot eddy prefetch (ADR-0186): for the ACTIVE from-scratch preset,
-  // start the bundle fetch NOW so the resolver round-trip overlaps the rest of
-  // owner boot; the boot line's `npm install` consumes it (canonically keyed —
-  // a drifted package.json makes install() ignore it). Skipped when a stamp
-  // will suppress the install anyway (reload of an installed tree).
-  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
-  async function primeInstallPrefetch(): Promise<void> {
-    installPrefetch = undefined;
-    const resolverUrl = getResolverUrl();
-    if (!devFromScratch || !resolverUrl) return;
-    const stamped = await installStampSatisfiedForPackageJson(
-      new SyncMirrorVfs(),
-      devCfg.root,
-      devSlug,
-      devCfg.packageJson,
-    );
-    if (stamped) return;
-    installPrefetch = startInstallPrefetch({
-      packageJsonText: devCfg.packageJson,
-      resolverUrl,
-      // Pins key on the TEMPLATE id (the template owns the dep-set); the slug
-      // is the root id ('scratch'|projectId, ADR-0165) and says nothing about
-      // the closure.
-      closureHash: getEddyPin(devSpec.id),
-      bundleBaseUrl: getEddyBundleBaseUrl(),
-    });
-  }
-  void primeInstallPrefetch();
 
   function devConfigRequestsWorkspaceTypeScript(): boolean {
     return effectiveDepsFromPackageJsonText(devCfg.packageJson)?.typescript !== undefined;
@@ -976,7 +996,7 @@ async function bootShellOwner(opts: {
       devFromScratch = config.setup === 'from-scratch';
       // Re-prime the eddy prefetch for the NEW preset (ADR-0186) — the boot
       // line's `npm install` follows this config change.
-      void primeInstallPrefetch();
+      primeInstallPrefetch();
       devConfigReady = prepareActiveDevConfigDeps();
     },
     // Deps gate per run: every pty command waits for the active preset's deps

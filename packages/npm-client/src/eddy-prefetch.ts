@@ -44,16 +44,31 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
     ? fetchImpl(bundleUrlFor(opts.bundleBaseUrl ?? opts.resolverUrl, opts.closureHash))
     : // Same CORS-simple POST the installer sends (no content-type header).
       fetchImpl(opts.resolverUrl, { method: 'POST', body: JSON.stringify(body) });
+  // Drain the body EAGERLY: a response left unread across the boot window
+  // stalls its h2 stream (measured ~10s on ~1-in-3 installs, 2026-07-02
+  // probe) — buffering downloads the bundle DURING boot and makes the later
+  // consume instant. `take` hands out a synthetic Response over the buffered
+  // bytes with the original status/headers, so the installer's gates (JSON
+  // decline, !ok, streaming unpack) see the same shape.
+  const buffered = response.then(async (r) => ({
+    status: r.status,
+    statusText: r.statusText,
+    headers: r.headers,
+    bytes: new Uint8Array(await r.arrayBuffer()),
+  }));
   // An untaken failed prefetch must never surface as an unhandled rejection;
-  // the ORIGINAL promise (with its rejection) is what `take` hands out.
-  response.catch(() => {});
+  // the ORIGINAL rejection still reaches whoever takes the handle.
+  buffered.catch(() => {});
   let taken = false;
   return {
     ...(opts.closureHash === undefined ? {} : { closureHash: opts.closureHash }),
     take(requestKey: string): Promise<Response> | null {
       if (taken || requestKey !== key) return null;
       taken = true;
-      return response;
+      return buffered.then(
+        (r) =>
+          new Response(r.bytes, { status: r.status, statusText: r.statusText, headers: r.headers }),
+      );
     },
   };
 }

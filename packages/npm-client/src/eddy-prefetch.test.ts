@@ -38,6 +38,36 @@ describe('startEddyPrefetch', () => {
     expect(handle.closureHash).toBe('sha256-ab/cd=');
   });
 
+  it('drains the response body EAGERLY — an unread body left across the boot window stalls its h2 stream', async () => {
+    // Measured 2026-07-02: a prefetched response whose body sat unconsumed
+    // until install() intermittently stalled ~10s. The handle must buffer the
+    // bytes as soon as headers arrive, WITHOUT waiting for take().
+    let drained = false;
+    let pulls = 0;
+    // pull() only runs when a READER consumes — the eager drain is the witness.
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        if (pulls === 1) controller.enqueue(new Uint8Array([1, 2, 3]));
+        else {
+          controller.close();
+          drained = true;
+        }
+      },
+    });
+    const { impl } = { impl: (async () => new Response(stream)) as unknown as typeof fetch };
+    const handle = startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl: impl,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(drained).toBe(true);
+    // The taken synthetic Response still carries the buffered bytes.
+    const taken = await (handle.take(KEY) as Promise<Response>);
+    expect([...new Uint8Array(await taken.arrayBuffer())]).toEqual([1, 2, 3]);
+  });
+
   it('a pinned prefetch GETs from bundleBaseUrl when set (CDN base ≠ POST origin)', () => {
     const { impl, calls } = fetchSpy(async () => new Response('x'));
     startEddyPrefetch({

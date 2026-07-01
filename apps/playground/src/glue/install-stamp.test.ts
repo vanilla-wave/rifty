@@ -1,10 +1,12 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import {
+  type InstallStampSyncFs,
   depsEqual,
   installStampPath,
   installStampSatisfied,
   installStampSatisfiedForPackageJson,
+  installStampSatisfiedForPackageJsonSync,
   readEffectiveDeps,
   readInstallStamp,
   restampSlug,
@@ -185,5 +187,42 @@ describe('install stamp (ADR-0135)', () => {
     await seedProject(vfs);
     await restampSlug(vfs, ROOT, 'proj-1'); // does not throw
     expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+  });
+
+  it('installStampSatisfiedForPackageJsonSync mirrors the async predicate (owner-boot prefetch gate)', async () => {
+    // The sync twin exists so the eddy prefetch gate never awaits (an async
+    // gate starves behind the busy boot loop, ADR-0186). Same verdicts as the
+    // async predicate over the same tree.
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14, 'scratch');
+    // Structural sync fake over the SAME file contents:
+    const files = new Map<string, string>();
+    files.set(
+      `${ROOT}/package.json`,
+      JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
+    );
+    files.set(installStampPath(ROOT), await vfs.readFileText(installStampPath(ROOT)));
+    const enc = new TextEncoder();
+    const fs: InstallStampSyncFs = {
+      existsSync: (path) => files.has(path) || path === `${ROOT}/node_modules`,
+      readFileBytesSync: (path) => enc.encode(files.get(path) ?? ''),
+    };
+    const pkgText = JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } });
+    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)?.packages).toBe(
+      14,
+    );
+    // Wrong slug / drifted template deps → null, same as the async predicate.
+    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'other', pkgText)).toBeNull();
+    expect(
+      installStampSatisfiedForPackageJsonSync(
+        fs,
+        ROOT,
+        'scratch',
+        JSON.stringify({ dependencies: { vite: '^6.0.0' } }),
+      ),
+    ).toBeNull();
+    expect(await installStampSatisfiedForPackageJson(vfs, ROOT, 'scratch', pkgText)).not.toBeNull();
   });
 });
