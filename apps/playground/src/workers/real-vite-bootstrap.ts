@@ -521,7 +521,10 @@ async function bootShellOwner(opts: {
     installPrefetch = startInstallPrefetch({
       packageJsonText: devCfg.packageJson,
       resolverUrl,
-      closureHash: getEddyPin(devSlug),
+      // Pins key on the TEMPLATE id (the template owns the dep-set); the slug
+      // is the root id ('scratch'|projectId, ADR-0165) and says nothing about
+      // the closure.
+      closureHash: getEddyPin(devSpec.id),
       bundleBaseUrl: getEddyBundleBaseUrl(),
     });
   }
@@ -840,9 +843,10 @@ async function bootShellOwner(opts: {
       // resolver URL is configured the visible `npm install` uses eddy's bundle
       // + auto-fallback; inert (byte-identical) when unset.
       resolverUrl: getResolverUrl(),
-      // ADR-0186: the ACTIVE preset's pinned closure hash (cacheable GET) and
-      // the owner-boot prefetch — getters, the active preset can change.
-      resolverClosureHash: () => getEddyPin(devSlug),
+      // ADR-0186: the ACTIVE template's pinned closure hash (cacheable GET) and
+      // the owner-boot prefetch — getters, the active preset can change. Keyed
+      // on the TEMPLATE id, not the slug (the template owns the dep-set).
+      resolverClosureHash: () => getEddyPin(devSpec.id),
       resolverBundleBaseUrl: getEddyBundleBaseUrl(),
       resolverPrefetch: () => installPrefetch,
     });

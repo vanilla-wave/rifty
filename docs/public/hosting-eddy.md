@@ -59,7 +59,7 @@ the cacheable GET (browser HTTP cache / CDN edge) instead of a POST
 
 1. POST the preset's dep-set once and read the `x-eddy-closure-hash` response
    header (the smoke command below prints headers with `-D-`).
-2. Set `VITE_RIFTY_EDDY_PINS='{"<preset-slug>":"<closure-hash>"}'` (JSON map) in
+2. Set `VITE_RIFTY_EDDY_PINS='{"<template-id>":"<closure-hash>"}'` (JSON map) in
    the playground build env, next to `VITE_RIFTY_RESOLVER_URL`.
 3. CDN-fronted GETs need a SEPARATE hostname: edges (Yandex CDN included)
    refuse the POST resolve, so the CDN cname must not replace the resolver
