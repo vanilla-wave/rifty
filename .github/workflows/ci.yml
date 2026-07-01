@@ -94,10 +94,42 @@ jobs:
       - if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
       # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
-      # (--workers=1); light = the rest in parallel; prod = prod-artifact smoke
-      # (builds the app + `pnpm preview` with Netlify COI headers, asserts the
-      # owner boots — catches prod-only regressions the dev-server e2e can't).
-      - run: pnpm test:e2e:${{ matrix.lane }}
+      # (--workers=1); light = the rest; prod = prod-artifact smoke (builds the
+      # app + `pnpm preview` with Netlify COI headers, asserts the owner boots —
+      # catches prod-only regressions the dev-server e2e can't).
+      #
+      # light is serialized --workers=1 IN CI ONLY: on the shared CI runner, ≥2
+      # dev-server specs cold-booting a Vite-WASI stack (owner + dev-server child +
+      # Rolldown WASI pthread pool) concurrently starve the owner worker (0
+      # emitChunk, ~15s owner-RPC timeout) → the readiness poll times out on a
+      # random spec subset. Reproduced locally: --workers=16 → 16 fail, --workers=1
+      # → all pass; the heavy lane already proves single-boot-at-a-time is reliable.
+      # Local runs keep parallel (beefy machines don't oversubscribe). Re-enabling
+      # light parallelism for speed needs the owner to survive concurrent boots.
+      - run: pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }}
+      # Cold-start benchmark smoke (docs/backlog/perf/cold-start-and-install-benchmark).
+      # Runs once, on the fast prod lane (chromium already installed above). Gates on
+      # the harness PRODUCING a well-formed artifact — cold-start measured, the install
+      # number recorded (here `requires proxy`: no VITE_RIFTY_REGISTRY_URL in CI) — NOT
+      # on absolute ms (wall-clock is noisy on shared CI; PB-6). The committed launch
+      # figure is a local median.
+      - name: Cold-start benchmark smoke
+        if: matrix.lane == 'prod'
+        run: |
+          set -euo pipefail
+          node tools/perf/bench.mjs --runs 1 --out /tmp/bench-ci.json
+          node -e '
+            const a = JSON.parse(require("node:fs").readFileSync("/tmp/bench-ci.json", "utf8"));
+            const cold = a.metrics.coldStartToInteractiveMs;
+            const install = a.metrics.npmInstallToFirstViteResponseMs;
+            // Sanity, NOT a perf threshold (PB-6): a real measurement is a finite
+            // positive ms — catches a silent 0/NaN, not a slow-but-honest number.
+            if (cold.status !== "measured" || !Number.isFinite(cold.median) || cold.median <= 0) {
+              throw new Error("cold-start not measured: " + JSON.stringify(cold));
+            }
+            if (!install.status) throw new Error("install metric not recorded (must never be silently skipped)");
+            console.log(`bench artifact OK: cold median ${cold.median}ms, install=${install.status}`);
+          '
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

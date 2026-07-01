@@ -51,6 +51,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
+import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -234,10 +235,22 @@ export function App(props: AppProps) {
   // consistent, never a silent resurrection.
   const pendingOnDiskDeletes = new Set<string>();
 
+  // `?preset=<id>&autorun=1` deep-link (shareable launch URL + the perf harness,
+  // docs/backlog/perf/cold-start-and-install-benchmark): cold-boot straight into a
+  // preset. Validated against the registry — an unknown id silently falls back to
+  // DEFAULT_PRESET. Drives the cold-boot scratch only (a published index wins).
+  const presetDeepLink = parsePresetDeepLink(globalThis.location?.search ?? '');
+  const deepLinkStarterId =
+    presetDeepLink.presetId !== undefined &&
+    PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
+      ? presetDeepLink.presetId
+      : undefined;
+  const bootStarterId = deepLinkStarterId ?? DEFAULT_PRESET.id;
+
   const store = createAppProjectStore({
     index: projectIndex() ?? {
       activeId: 'scratch',
-      scratch: { starter: DEFAULT_PRESET.id, dirty: false, editedAt: 'no edits yet' },
+      scratch: { starter: bootStarterId, dirty: false, editedAt: 'no edits yet' },
       projects: [],
     },
     storage: storageMode,
@@ -2116,14 +2129,20 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the owner workspace (idempotent). The default README is seeded
-    // owner-side in `seedProject` (single store owner — no page store to write).
-    void seedViteWorkspace(DEFAULT_PRESET).catch(() => {
+    // Seed the owner workspace (idempotent) for the cold-boot preset — the
+    // deep-link's (if any) or DEFAULT. The default README is seeded owner-side in
+    // `seedProject` (single store owner — no page store to write).
+    const bootPreset = presetForId(bootStarterId);
+    void seedViteWorkspace(bootPreset).catch(() => {
       /* best-effort seeding */
     });
-    initialRunTimer = setTimeout(() => {
-      void queuePresetTransition(() => runVitePreset(DEFAULT_PRESET));
-    }, 0);
+    // Default boots + runs; a deep-link preset runs only with autorun=1 (else it is
+    // seeded + active and the user runs it). The perf harness uses autorun=1.
+    if (deepLinkStarterId === undefined || presetDeepLink.autorun) {
+      initialRunTimer = setTimeout(() => {
+        void queuePresetTransition(() => runVitePreset(bootPreset));
+      }, 0);
+    }
   });
 
   onCleanup(() => {
