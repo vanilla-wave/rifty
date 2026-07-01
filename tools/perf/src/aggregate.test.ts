@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 // The pure core is `.mjs` so `../bench.mjs` (a zero-dep node runner) imports it
 // directly; the unit suite drives it here.
-import { buildArtifact, median, roundUpMs, summarize } from './aggregate.mjs';
+import { buildArtifact, median, roundUpMs, SCHEMA_VERSION, summarize } from './aggregate.mjs';
 
 describe('bench aggregate core', () => {
   describe('median', () => {
@@ -49,7 +49,7 @@ describe('bench aggregate core', () => {
         coldStartSamples: [610, 620, 600],
         install: { status: 'requires proxy' },
       });
-      expect(art.schemaVersion).toBe(1);
+      expect(art.schemaVersion).toBe(2);
       expect(art.generatedAt).toBe('2026-07-01T00:00:00.000Z');
       expect(art.runner.runs).toBe(3);
       expect(art.metrics.coldStartToInteractiveMs.status).toBe('measured');
@@ -111,6 +111,87 @@ describe('bench aggregate core', () => {
       expect(install.baseline.median).toBe(4283);
       // speedup = standard median ÷ eddy median = 4283 / 2523 ≈ 1.70
       expect(install.speedupX).toBe(1.7);
+    });
+  });
+
+  describe('preset-boot metric (instant preset pick→preview-live, no npm in the path)', () => {
+    const BASE = {
+      generatedAt: '2026-07-02T00:00:00.000Z',
+      runs: 3,
+      coldStartSamples: [1, 2, 3],
+      install: { status: 'requires proxy' },
+    };
+
+    it('summarizes measured preset-boot samples with per-stage medians', () => {
+      const art = buildArtifact({
+        ...BASE,
+        presetBoot: [
+          {
+            presetId: 'project-files',
+            samples: [2500, 2400, 2700],
+            stageRuns: [
+              { interactiveMs: 700, viteReadyMs: 2100 },
+              { interactiveMs: 650, viteReadyMs: 2000 },
+              { interactiveMs: 720, viteReadyMs: 2280 },
+            ],
+          },
+        ],
+      });
+      const [m] = art.metrics.presetBootToPreviewLiveMs;
+      expect(m.presetId).toBe('project-files');
+      expect(m.status).toBe('measured');
+      expect(m.median).toBe(2500);
+      expect(m.displayMs).toBe(2500);
+      expect(m.stages).toEqual({ interactiveMs: 700, viteReadyMs: 2100 });
+    });
+
+    it('a stage missing in ANY run aggregates to null (no thin stage medians)', () => {
+      const art = buildArtifact({
+        ...BASE,
+        runs: 2,
+        presetBoot: [
+          {
+            presetId: 'p',
+            samples: [100, 200],
+            stageRuns: [
+              { interactiveMs: 10, viteReadyMs: 90 },
+              { interactiveMs: 12, viteReadyMs: null },
+            ],
+          },
+        ],
+      });
+      expect(art.metrics.presetBootToPreviewLiveMs[0].stages).toEqual({
+        interactiveMs: 11,
+        viteReadyMs: null,
+      });
+    });
+
+    it('records an unmeasured preset verbatim (never a partial median)', () => {
+      const art = buildArtifact({
+        ...BASE,
+        presetBoot: [{ presetId: 'p', status: 'unmeasured', note: 'only 1/2 runs went live' }],
+      });
+      expect(art.metrics.presetBootToPreviewLiveMs[0]).toEqual({
+        presetId: 'p',
+        status: 'unmeasured',
+        note: 'only 1/2 runs went live',
+      });
+    });
+
+    it('omits the key when the phase did not run, records an explicit skip when told to', () => {
+      expect(buildArtifact(BASE).metrics.presetBootToPreviewLiveMs).toBeUndefined();
+      const skipped = buildArtifact({
+        ...BASE,
+        presetBoot: { status: 'skipped', note: '--presets none' },
+      });
+      expect(skipped.metrics.presetBootToPreviewLiveMs).toEqual({
+        status: 'skipped',
+        note: '--presets none',
+      });
+    });
+
+    it('bumps the schema version for the new metric', () => {
+      expect(SCHEMA_VERSION).toBe(2);
     });
   });
 });

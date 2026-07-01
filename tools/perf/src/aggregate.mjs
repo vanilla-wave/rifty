@@ -5,7 +5,7 @@
  * measured samples and writes the JSON artifact.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 const DEFAULT_STEP_MS = 100;
 
 /** Median of a non-empty numeric array (mean of the two middles when even). */
@@ -55,6 +55,7 @@ export function buildArtifact({
   runs,
   coldStartSamples,
   install,
+  presetBoot,
   stepMs = DEFAULT_STEP_MS,
 }) {
   return {
@@ -64,8 +65,40 @@ export function buildArtifact({
     metrics: {
       coldStartToInteractiveMs: summarize(coldStartSamples, stepMs),
       npmInstallToFirstViteResponseMs: buildInstallMetric(install, stepMs),
+      ...(presetBoot !== undefined
+        ? { presetBootToPreviewLiveMs: buildPresetBootMetric(presetBoot, stepMs) }
+        : {}),
     },
   };
+}
+
+/**
+ * Instant-preset pick→preview-live (schema v2; no npm install in the path).
+ * `presetBoot` is either `{ status, note }` (phase skipped — recorded, never
+ * silent) or per-preset records: measured `{ presetId, samples, stageRuns }` or
+ * `{ presetId, status: 'unmeasured', note }`. A stage absent in ANY run
+ * aggregates to null — a thin stage median would claim attribution it lacks.
+ */
+function buildPresetBootMetric(presetBoot, stepMs) {
+  if (!Array.isArray(presetBoot)) {
+    return { status: presetBoot.status, ...(presetBoot.note ? { note: presetBoot.note } : {}) };
+  }
+  return presetBoot.map((p) => {
+    if (p.status === 'unmeasured') {
+      return { presetId: p.presetId, status: 'unmeasured', note: p.note };
+    }
+    return { presetId: p.presetId, ...summarize(p.samples, stepMs), stages: medianStages(p.stageRuns) };
+  });
+}
+
+function medianStages(stageRuns) {
+  const keys = [...new Set(stageRuns.flatMap((s) => Object.keys(s)))];
+  const out = {};
+  for (const key of keys) {
+    const vals = stageRuns.map((s) => s[key]).filter((v) => typeof v === 'number');
+    out[key] = vals.length === stageRuns.length ? median(vals) : null;
+  }
+  return out;
 }
 
 function buildInstallMetric(install, stepMs) {
