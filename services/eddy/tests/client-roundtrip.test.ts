@@ -251,6 +251,34 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('sends a CORS-simple POST (text/plain default, no explicit content-type) — no browser preflight', async () => {
+    // A fetch() with a string body and NO content-type header defaults to
+    // `text/plain;charset=UTF-8` — a CORS-simple request, so a cross-origin
+    // browser client skips the OPTIONS preflight (one RTT off the cold path).
+    // The server parses the body unconditionally (readBody + JSON.parse).
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    let seenContentType: string | undefined;
+    const raw = await startRaw((req, res) => {
+      seenContentType = req.headers['content-type'];
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(built.bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('eddy');
+      expect(seenContentType).toMatch(/^text\/plain/);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('is inert when resolverUrl is unset (source standard, identical to today)', async () => {
     const vfs = new MemoryVfs();
     await writePackageJson(vfs, DEPS);

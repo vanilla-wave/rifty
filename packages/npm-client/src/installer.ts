@@ -546,9 +546,12 @@ async function tryEddyFastPath(
     const requestBody: Record<string, unknown> = { dependencies, optionalDependencies };
     if (opts.overrides) requestBody.overrides = opts.overrides;
     if (opts.prefer) requestBody.prefer = opts.prefer;
+    // No content-type header: a string body defaults to `text/plain` — a
+    // CORS-simple request, so a cross-origin browser skips the OPTIONS
+    // preflight (one RTT off the cold path). The server parses the body
+    // unconditionally.
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
     // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so

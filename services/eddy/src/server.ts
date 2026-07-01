@@ -62,8 +62,9 @@ export function createEddyServer(opts: EddyServerOptions): EddyServer {
 
 async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCache): Promise<void> {
   if (req.method === 'OPTIONS') {
-    // CORS preflight: the JSON POST is non-simple, so a cross-origin browser
-    // client sends OPTIONS first. Answer it before the 405 method gate.
+    // CORS preflight. The current client sends a CORS-simple POST (text/plain
+    // body, no preflight); this answers already-deployed older clients that
+    // still POST application/json. Handled before the 405 method gate.
     res.writeHead(204, corsHeaders());
     res.end();
     return;
@@ -212,10 +213,11 @@ function sendJson(
 
 /**
  * Permissive CORS + cross-origin-resource-policy so the browser client (a
- * COEP-isolated Worker on a DIFFERENT origin, e.g. play.rifty.dev) can preflight
- * and read the bundle. The JSON POST is non-simple, so the browser sends an
- * OPTIONS preflight first (handled in `handle`). `x-eddy-*` are exposed so a
- * client may read the as-of stamp. ADR-0182.
+ * COEP-isolated Worker on a DIFFERENT origin, e.g. play.rifty.dev) can read the
+ * bundle. The client's POST is CORS-simple (text/plain body) and the GET has no
+ * custom headers, so neither preflights; OPTIONS stays answered for older
+ * clients. `x-eddy-*` are exposed so a client may read the as-of stamp.
+ * ADR-0182.
  */
 function corsHeaders(): Record<string, string> {
   return {
