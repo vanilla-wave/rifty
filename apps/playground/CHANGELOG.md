@@ -14,6 +14,18 @@
 
 ### Fixed
 
+- **Reload now relaunches the restored project's dev server (console + preview).**
+  A persisted active project (dirty scratch draft or saved project) reopened on
+  reload re-rooted/adopted the owner but never re-issued the co-resident dev-server
+  pty command that died with the previous page → empty console, no preview
+  (`switchTo`'s `restartDevServer` hook no-ops on a fresh reload — no
+  `devServerSessionId` yet). The boot-decision restore path now runs `runVitePreset`
+  (through the preset-transition queue) over the persisted (OPFS-preloaded) tree once
+  the owner is ready — the same launch a fresh pick performs, never a re-seed.
+- **Starter picks stop the active dev server before reseeding starter files.**
+  Project-first picks now stop the current lifecycle-owned dev command before
+  resetting `/scratch`, so the old Vite process cannot observe a half-written
+  starter while the new queued boot is being prepared.
 - **A rejected terminal run now shows its diagnostic in the terminal, not just the console.** A tokenizer loud-throw (command substitution `$(…)`, `${VAR:-x}`) previously rejected the run and only `console.error`-ed — the terminal showed a bare non-zero exit that read as "broken". The interactive run path now writes the error message to the terminal as stderr.
 - **UI affordance honesty — the dead "Export soon" chip works, the Share toast stops over-claiming.** The status-bar `Export` control is now a real button wired to the already-shipped whole-workspace archive download (`downloadWorkspaceArchive`), disabled only while the dev server is running (with a title explaining why) — no more dead `soon` teaser next to a feature that already exists. The Share success toast now reads `Link copied — opens this playground` instead of implying the user's edits travel with the copied URL (it encodes none; real share-by-link is the M13 item). Guards: `StatusBar.test.tsx`, `App.test.ts`.
 
@@ -146,6 +158,8 @@
   declare the ordered `openFiles` set, the first file is active, and entry files
   such as `src/main.js` use the same close/reopen/save/GIT flow as every other
   editable file.
+- Clean browser sessions now open the existing project launcher over the IDE on
+  `Starters` and wait for a user choice before running a dev server.
 - The default Vite template now installs `vite@^7.0.0` plus
   `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
   `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
@@ -229,11 +243,54 @@
   gap explicit in `backlog/playground/vite-preview-cors-middleware-parity`.
   `tests/e2e/vite7-build-preview.spec.ts` pins `vite build` -> `vite preview`
   -> `/preview/4173/`.
+- **First-run chooser no longer loads the default project behind the modal.**
+  Cold boot keeps the editor empty and only runs a dev server after the user opens
+  a saved scratch/project or picks a starter. Re-opening a persisted scratch
+  preserves user files while dependency restore only refreshes dependency-owned
+  paths.
+- **A saved project reopens on reload instead of an empty scratch.** A persisted
+  project-active index (Save-as-project then reload) now re-roots the workspace
+  owner from the cold-boot `/scratch` to `/projects/<id>`, so Explorer, editor,
+  terminal cwd, and git reflect the saved project rather than an empty tree.
+- **First-run chooser now sits over a real hidden empty workspace.** Cold boot
+  creates a real `/scratch` shell/file tree without choosing a starter, so the
+  IDE no longer shows a fake entry file or rejects shell commands while the
+  launcher waits for the user's first project choice.
+- Reloading after choosing a starter now reopens the saved scratch directly
+  instead of showing the first-run project chooser again.
+- Editing a starter now persists the active scratch as a dirty draft in the
+  owner project index, so reload reopens the draft instead of showing the
+  chooser or reseeding the starter over the user's changes.
+- Reloading a TypeScript scratch draft no longer flashes the default
+  `src/main.js` program tab before restoring `src/main.ts`.
+- Reset/first-run project choice no longer reveals the hidden empty owner's
+  `src/main.js` scaffold or file tree behind the launcher.
+- **Switching projects no longer silently drops the last edit.** A project switch
+  now flushes pending debounced editor writes to the current owner before teardown,
+  so a just-typed change can't hit the not-started guard and be discarded while its
+  tab is marked clean.
+- A project switch that fails mid-respawn no longer wedges the IDE: the
+  workspace-owner-started flag recovers from the live owner instead of blocking
+  every later editor write behind the "choose a project" guard.
+- A picked starter no longer flickers (EditorHost unmount/remount + TS-LS churn)
+  when a stale first-run index publish lands during the pick.
+- Memory (non-OPFS) starter picks now seed the workspace before the dev server
+  boots, so vite can't start over an un-seeded scratch tree.
+- **Reset sandbox is now a styled in-app confirm** (matching Delete/Reset), and a
+  partial clear (e.g. an OPFS handle still held) is surfaced to the user instead of
+  reloading as if it succeeded.
+- The preview pane now shows a spinner + "Starting dev server…" while a server is
+  booting, instead of a blank body.
+- Removed the unused index-only-owner spawn path (`startProjectIndexOwner` + its
+  worker `project-index` boot branch), superseded by the hidden-empty owner.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
   The Problems count badge now keeps its number vertically centered, and closing
   the active idle terminal focuses the previous terminal tab.
+- The preview pane now keeps its normal browser frame visible with an empty body
+  while a server is still starting, and the Projects tab has a confirmed sandbox
+  reset that clears browser state and reloads.
 - **Real Vite CLI children no longer advertise unwired stdin as a TTY.** `.bin`
   and `node <file>` children keep TTY stdout/stderr for ANSI output but expose
   non-TTY stdin until terminal stdin forwarding lands, so Vite dev skips
@@ -245,6 +302,14 @@
   user's edits while ignoring generated `node_modules`/build output.
 - **Preset switches no longer replay stale entry edits.** Switching starters
   resets the ordinary initial file tabs before TS/dev-server re-init, so an edit
+- Fresh starter picks before the workspace owner exists now carry their pending
+  generated baseline through instant dependency restore, keeping restored
+  `package-lock.json` inside `Initial commit`.
+- Starter picks now paint the selected editor source immediately while the
+  workspace owner continues booting in the background, so the IDE no longer
+  sits empty after the launcher closes.
+- **Preset switches no longer replay stale debounced program edits.** A pending
+  program-tab write is discarded before reseeding a picked starter, so an edit
   from the previous template cannot clobber the freshly seeded `/src/main.*`
   entry after the switch.
 - **TS diagnostics refresh after project re-init.** When starter/dev-server
@@ -254,6 +319,8 @@
 - **TS-LS init failures are visible in Problems.** Missing or broken workspace
   TypeScript now surfaces as an actionable Problems diagnostic instead of only a
   console warning.
+- Non-TypeScript starters no longer show the expected missing workspace
+  TypeScript init failure in Problems; TypeScript starters still surface it.
 - **TS-LS provider fallbacks stay quiet when workspace TypeScript is unavailable.**
   Monaco provider calls now return empty editor results for the same missing or
   unreadable workspace TypeScript errors that Problems already reports, so

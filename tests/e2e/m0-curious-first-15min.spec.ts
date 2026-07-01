@@ -1,10 +1,19 @@
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
-  openShellTerminal,
   runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
+
+// Project-first cold boot auto-opens the chooser; dismiss it to poke the pre-pick
+// hidden-empty shell (a real shell before any project pick, ADR-0165). `isVisible()`
+// does NOT wait, so wait for the chooser to appear before closing it.
+async function dismissChooser(page: Page): Promise<void> {
+  const launcher = page.locator('[data-testid="launcher"]');
+  await expect(launcher).toBeVisible({ timeout: 30_000 });
+  await page.locator('.rf-launcher__close').click();
+  await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+}
 
 /**
  * The frictionless-first-poke epic Done-gate: a "curious first 15 minutes" walk.
@@ -20,7 +29,10 @@ test.describe('M0 - curious first 15 minutes', () => {
   test('the terminal greets and the reflexive first moves work', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('$ vite');
+    await dismissChooser(page);
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 15_000 })
+      .toContain('rifty · node v24.0.0');
 
     // The very first thing the visitor sees: a version line + try-this hints,
     // before they type anything.
@@ -29,8 +41,8 @@ test.describe('M0 - curious first 15 minutes', () => {
     expect(greeting).toContain('try:');
     expect(greeting).toContain('node -v');
 
-    // Move to an idle shell (Terminal 1 is busy running vite).
-    await openShellTerminal(page);
+    // The reflexive first moves run in the pre-pick hidden-empty shell (Terminal 1,
+    // idle — under project-first there's no auto-booted vite sharing it).
 
     // `node -v` — the universal sanity check (was MODULE_NOT_FOUND on /workspace/--version).
     await runTerminalLineSettled(page, 'node -v');
@@ -62,8 +74,7 @@ test.describe('M0 - curious first 15 minutes', () => {
   test('every ceiling fails loud + directed, not silently or wrong', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('$ vite');
-    await openShellTerminal(page);
+    await dismissChooser(page);
 
     // Unknown node flag → `bad option`, never a MODULE_NOT_FOUND on /workspace/<flag>.
     await runTerminalLineSettled(page, 'node --frobnicate');

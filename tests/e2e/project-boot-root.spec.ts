@@ -14,6 +14,7 @@
  * `/projects/project-files`.
  */
 import { expect, test } from '@playwright/test';
+import { pickStarter } from './helpers/playground.ts';
 
 test.describe('ADR-0165 §4 — boot root follows the page store (active scratch)', () => {
   test('every root-keyed surface resolves to /scratch, not /projects/<starter>', async ({
@@ -21,6 +22,8 @@ test.describe('ADR-0165 §4 — boot root follows the page store (active scratch
   }) => {
     test.setTimeout(60_000);
     await page.goto('/');
+    await expect(page.locator('[data-action="open-launcher"]')).toContainText('Choose project');
+    await pickStarter(page, 'project-files');
 
     // The mode hint is the page's own rendering of `activeRoot()`.
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();

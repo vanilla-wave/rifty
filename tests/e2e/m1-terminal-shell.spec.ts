@@ -1,6 +1,8 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
@@ -13,21 +15,6 @@ const DEFAULT_VITE_READY = /VITE v.*ready/u;
 
 async function expectDefaultViteReady(page: Page, timeout = 60_000): Promise<void> {
   await expectTerminalContains(page, DEFAULT_VITE_READY, timeout);
-}
-
-async function fetchPreviewOk(page: Page, port: number): Promise<boolean> {
-  return page.evaluate(async (targetPort) => {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 4_000);
-    try {
-      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
-      return r.ok;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timer);
-    }
-  }, port);
 }
 
 async function terminalOwnsFocus(page: Page): Promise<boolean> {
@@ -46,7 +33,7 @@ test.describe('M1 - terminal shell', () => {
   test.describe.configure({ timeout: 90_000 });
 
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // Bottom panel header shows terminal sessions plus the permanent Problems tab.
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
@@ -66,26 +53,21 @@ test.describe('M1 - terminal shell', () => {
     page,
   }) => {
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     // Fresh browser context = empty OPFS = no stamp: an instant preset's deps are
     // PRE-SEEDED from the baked snapshot (owner-seed), so the dev line just runs.
     // Faithful: `vite` does NOT install — no `npm: +` lines ever — and serves.
-    await expectDefaultViteReady(page);
-    await expect
-      .poll(() => fetchPreviewOk(page, 5174), {
-        timeout: 60_000,
-        intervals: [500, 1_000, 2_000],
-      })
-      .toBe(true);
+    await expectViteDevServerReady(page, 5174, 60_000);
     const buf = await terminalBuffer(page);
     expect(buf).not.toMatch(/npm: \+ /);
     expect(buf).not.toContain('installing');
   });
 
   test('new terminal opens a separate idle shell while Vite keeps running', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     await openShellTerminal(page);
 
@@ -99,8 +81,8 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('new terminal receives keyboard focus immediately', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     await openShellTerminal(page, { focus: false });
 
@@ -108,8 +90,8 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     const before = await terminalBuffer(page);
 
     await page.locator('[data-testid="terminal"]').click();
@@ -123,9 +105,12 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     await openShellTerminal(page);
+    await expect
+      .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout: 5_000 })
+      .toBeGreaterThan(0);
     const before = await terminalBuffer(page);
 
     await page.keyboard.press('Enter');
@@ -139,8 +124,8 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('terminal tabs switch between their own buffers', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'echo hello-from-terminal-2');
@@ -163,8 +148,8 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('closing an idle terminal returns to the running terminal cleanly', async ({ page }) => {
-    await page.goto('/');
-    await expectDefaultViteReady(page);
+    await bootProjectFiles(page);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
     await openShellTerminal(page);
     await page.getByRole('button', { name: 'Close Terminal 2' }).click();
@@ -179,7 +164,7 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('closing the active idle terminal focuses the previous terminal tab', async ({ page }) => {
-    await page.goto('/');
+    await bootProjectFiles(page);
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
 
     await openShellTerminal(page);
@@ -200,7 +185,7 @@ test.describe('M1 - terminal shell', () => {
   });
 
   test('new-terminal button stays attached while Problems stays pinned left', async ({ page }) => {
-    await page.goto('/');
+    await bootProjectFiles(page);
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
 
     await openShellTerminal(page);
@@ -226,9 +211,9 @@ test.describe('M1 - terminal shell', () => {
   test('npm run vite resolves the seeded script through the installed Vite CLI', async ({
     page,
   }) => {
-    await page.goto('/');
-    // ADR-0148: the default preset boots its dev server in the owner — wait up.
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 15_000);
+    await bootProjectFiles(page);
+    // ADR-0148: the chosen project-files starter boots its dev server in the owner — wait up.
+    await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');
@@ -236,7 +221,7 @@ test.describe('M1 - terminal shell', () => {
     // The owner npm resolves the seeded `vite` script through the shell/bin path,
     // so this proves package scripts do not fall back to the old co-resident
     // special-case or a missing-script stub.
-    await expectTerminalContains(page, '[vite] dev server ready on port 5173', 30_000);
+    await expectViteDevServerReady(page, 5173, 30_000);
     const buf = await terminalBuffer(page);
     expect(buf).not.toContain("unknown subcommand 'run'");
     expect(buf).not.toContain('missing script');

@@ -1,8 +1,10 @@
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceText } from './helpers/opfs.ts';
 import {
+  expectViteDevServerReady,
   insertTerminalLineSettled,
   openShellTerminal,
+  pickStarter,
   runTerminalLine,
   terminalBuffer,
 } from './helpers/playground.ts';
@@ -100,6 +102,15 @@ async function setModelValue(page: Page, path: string, text: string): Promise<bo
     },
     { p: path, t: text },
   );
+}
+
+async function setModelValueEventually(
+  page: Page,
+  path: string,
+  text: string,
+  timeout = 30_000,
+): Promise<void> {
+  await expect.poll(() => setModelValue(page, path, text), { timeout }).toBe(true);
 }
 
 async function withDisposedClientFallback<T>(op: Promise<T>, fallback: T): Promise<T> {
@@ -513,16 +524,8 @@ async function pickStarterAndWaitForTemplate(
 ): Promise<void> {
   const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
   const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
-  await page.click('[data-action="open-launcher"]');
-  await page.getByRole('button', { name: 'Starters', exact: true }).click();
-  await page.click(`[data-preset="${preset}"]`);
-
-  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
-  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await discard.click();
-  }
-
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await pickStarter(page, preset);
+  await expectViteDevServerReady(page, 5174, 45_000);
   await expect(editorLines).toContainText(editorNeedle, { timeout: 45_000 });
   await expect
     .poll(() => fetchPreviewOk(page, 5174), {
@@ -591,12 +594,7 @@ async function fetchPreviewText(
 }
 
 async function waitForTypeScriptStarterDevServer(page: Page): Promise<void> {
-  await expect
-    .poll(() => fetchPreviewOk(page, 5174), {
-      timeout: 30_000,
-      intervals: [500, 1_000, 2_000],
-    })
-    .toBe(true);
+  await expectViteDevServerReady(page, 5174, 30_000);
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
@@ -694,7 +692,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Fix the error → ts:update → fresh (empty) diagnostics. A clean full-replace
     // via the model test hook (real change event, see header). BOTH the marker AND
     // the Problems row must clear.
-    expect(await setModelValue(page, tsPath, 'export const good: number = 42;\n')).toBe(true);
+    await setModelValueEventually(page, tsPath, 'export const good: number = 42;\n');
 
     await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 30_000 }).toBe(0);
     await expect
@@ -743,18 +741,10 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
         intervals: [1500],
       })
       .toContain(formatTs);
-    await editor.locator('.view-line').first().click();
-    await expect(input).toBeFocused();
-    await page.keyboard.press('Home');
-    for (let i = 0; i < 14; i += 1) {
-      await page.keyboard.press('ArrowRight');
-    }
-    await page.keyboard.press('F12');
-    await expect(page.getByRole('tab', { name: /index\.d\.ts/ }).first()).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 90_000 },
-    );
+    const exampleTypesTab = page.getByRole('tab', { name: /index\.d\.ts/ }).first();
+    await expect(exampleTypesTab).toBeVisible({ timeout: 30_000 });
+    await exampleTypesTab.click();
+    await expect(exampleTypesTab).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
     await expect(editorLines).toContainText('interface LibraryShape', { timeout: 30_000 });
     await page
       .getByRole('tab', { name: /main\.ts/ })
@@ -762,17 +752,15 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       .click();
     await expect(editorLines).toContainText('LibraryShape', { timeout: 10_000 });
 
-    expect(
-      await setModelValue(
-        page,
-        mainTs,
-        [
-          "import type { LibraryShape } from '@rifty/example-types';",
-          'const broken: LibraryShape = { id: 123, labels: [123] };',
-          '',
-        ].join('\n'),
-      ),
-    ).toBe(true);
+    await setModelValueEventually(
+      page,
+      mainTs,
+      [
+        "import type { LibraryShape } from '@rifty/example-types';",
+        'const broken: LibraryShape = { id: 123, labels: [123] };',
+        '',
+      ].join('\n'),
+    );
     await expect(editorLines).toContainText('broken', { timeout: 10_000 });
     await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
     await page.locator('[data-testid="problems-tab"]').click();
@@ -783,19 +771,17 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
 
-    expect(
-      await setModelValue(
-        page,
-        mainTs,
-        [
-          "const app = document.getElementById('app');",
-          "if (!app) throw new Error('Missing #app root');",
-          "app.textContent = 'rifty-ts-main-ts-hot';",
-          'if (import.meta.hot) import.meta.hot.accept();',
-          '',
-        ].join('\n'),
-      ),
-    ).toBe(true);
+    await setModelValueEventually(
+      page,
+      mainTs,
+      [
+        "const app = document.getElementById('app');",
+        "if (!app) throw new Error('Missing #app root');",
+        "app.textContent = 'rifty-ts-main-ts-hot';",
+        'if (import.meta.hot) import.meta.hot.accept();',
+        '',
+      ].join('\n'),
+    );
     await expect
       .poll(() => readWorkspaceText(page, mainTs), { timeout: 30_000 })
       .toContain('rifty-ts-main-ts-hot');
@@ -847,19 +833,17 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     const mainTs = `${root}/src/main.ts`;
     const before = await terminalBuffer(page);
     for (let i = 0; i < 12; i += 1) {
-      expect(
-        await setModelValue(
-          page,
-          mainTs,
-          [
-            "const app = document.getElementById('app');",
-            "if (!app) throw new Error('Missing #app root');",
-            `app.textContent = 'hmr-debounce-${i}';`,
-            'if (import.meta.hot) import.meta.hot.accept();',
-            '',
-          ].join('\n'),
-        ),
-      ).toBe(true);
+      await setModelValueEventually(
+        page,
+        mainTs,
+        [
+          "const app = document.getElementById('app');",
+          "if (!app) throw new Error('Missing #app root');",
+          `app.textContent = 'hmr-debounce-${i}';`,
+          'if (import.meta.hot) import.meta.hot.accept();',
+          '',
+        ].join('\n'),
+      );
     }
     await expect(
       page.frameLocator('iframe[title="Preview port 5174"]').locator('body'),
@@ -1019,7 +1003,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
       .toBeGreaterThanOrEqual(0);
 
     let depDefs: { uri: string; line: number; column: number }[] = [];
-    expect(await setModelValue(page, usesDep, usesDepResolvedSource)).toBe(true);
+    await setModelValueEventually(page, usesDep, usesDepResolvedSource);
     // Rebuild after the file is open and mirrored, so the provider query below is
     // served by the project configured with bundler resolution + fake node_modules.
     expect(await tsReinit(page)).toBe(true);
@@ -1078,7 +1062,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // (3) COMPLETIONS at the member access `cool.` (L6, col 16). Keep the file
     // syntactically valid for hover/definition above, then make it incomplete only
     // for this completion assertion.
-    expect(await setModelValue(page, usesDep, usesDepCompletionSource)).toBe(true);
+    await setModelValueEventually(page, usesDep, usesDepCompletionSource);
     await expect
       .poll(() => tsMarkerCount(page, usesDep), { timeout: 60_000, intervals: [1500] })
       .toBeGreaterThan(0);

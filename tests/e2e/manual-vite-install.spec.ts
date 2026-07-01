@@ -8,11 +8,12 @@
  */
 import { type Locator, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 const enabled = process.env.RIFTY_E2E_MANUAL_VITE === '1';
@@ -26,12 +27,10 @@ test.describe('manual Vite install path', () => {
 
   test('npm install vite + npm run dev gets real HMR in the preview iframe', async ({ page }) => {
     test.setTimeout(180_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 10_000 })
-      .toMatch(viteDevReadyPattern());
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectViteDevServerReady(page, 5174, 60_000);
 
     await openShellTerminal(page);
     await runTerminalLine(
@@ -43,7 +42,7 @@ test.describe('manual Vite install path', () => {
 
     await runTerminalLine(page, 'npm run dev');
     await expectTerminalContains(page, 'vite: starting dev server', 10_000);
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page, 5174, 60_000);
 
     const previewFrame = page.frameLocator('iframe').first();
     const previewBody = previewFrame.locator('body');

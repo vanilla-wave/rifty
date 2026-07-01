@@ -98,6 +98,34 @@ describe('createPageStore (ADR-0165 page store)', () => {
     });
   });
 
+  it('hydrateIndex does not let a late stale owner publish erase a local starter pick', () => {
+    createRoot((dispose) => {
+      const s = createPageStore();
+      s.hydrateIndex({
+        activeId: 'scratch',
+        scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
+        projects: [],
+      });
+
+      s.pickStarter('typescript-ls');
+      s.hydrateIndex({
+        activeId: 'scratch',
+        scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
+        projects: [],
+      });
+
+      expect(s.scratch()).toMatchObject({ starter: 'typescript-ls', dirty: false });
+
+      s.hydrateIndex({
+        activeId: 'scratch',
+        scratch: { starter: 'typescript-ls', dirty: false, editedAt: 'no edits yet' },
+        projects: [],
+      });
+      expect(s.scratch()).toMatchObject({ starter: 'typescript-ls', dirty: false });
+      dispose();
+    });
+  });
+
   it('setters mutate the persisted fields reactively; dirty() is DERIVED from the active scratch', () => {
     createRoot((dispose) => {
       const s = createPageStore();

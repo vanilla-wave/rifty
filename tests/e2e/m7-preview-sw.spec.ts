@@ -8,19 +8,23 @@
  * cross-realm HMR bridge; Vite 8 keeps HMR disabled by ADR-0161.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains, terminalBuffer } from './helpers/playground.ts';
+import {
+  bootProjectFiles,
+  expectViteDevServerReady,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
   test('GET /preview/5174/ returns worker-owned Vite HTML round-tripped through the SW', async ({
     page,
   }) => {
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page, 5174, 60_000);
 
     const fetchPreview = async () =>
       page.evaluate(async () => {
@@ -73,12 +77,12 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
     // The default preset (project-files) boots a Vite dev server on load.
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page, 5174, 60_000);
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     // `<h1>Workspace anatomy</h1>` is produced by main.js after it imports the
@@ -97,11 +101,11 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));
 
-    await page.goto('/');
+    await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    await expectViteDevServerReady(page, 5174, 60_000);
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     await expect(frame.locator('.workspace-shell h1')).toHaveText('Workspace anatomy', {

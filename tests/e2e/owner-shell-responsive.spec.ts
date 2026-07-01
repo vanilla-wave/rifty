@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  bootShell,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -40,7 +41,7 @@ test.describe('owner supervisor serves concurrent child CLIs + Ctrl-C kills a ch
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
-    await page.goto('/');
+    await bootShell(page);
 
     // Terminal 2 = a plain idle shell on the persistent owner (Terminal 1 auto-
     // boots the dev server). All sessions share the owner store.

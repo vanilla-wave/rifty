@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 // Repo root for the Vite `/@fs/<abs>` dev-server transform URL Test C fetches.
@@ -66,11 +67,9 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
   }) => {
     test.skip(browserName !== 'chromium', 'child drain is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
 
@@ -108,11 +107,9 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
   }) => {
     test.skip(browserName !== 'chromium', 'child drain is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
 
@@ -144,10 +141,8 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     test.skip(browserName !== 'chromium', 'dev-server fetch — chromium only for COI parity');
 
     // Navigate first so the dev server is warm (webServer may lazily compile).
-    await page.goto('/');
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await bootProjectFiles(page);
+    await expectViteDevServerReady(page);
 
     // Fetch the LIVE Vite dev-server transform of the KERNEL worker-entry module —
     // the one Vite injects `@vite/client` into. Kernel is a workspace package

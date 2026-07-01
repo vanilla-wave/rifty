@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
   openShellTerminal,
   runTerminalLine,
@@ -57,7 +58,7 @@ test.describe('production build — child-realm global Buffer matches its module
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
-    await page.goto('/');
+    await bootProjectFiles(page);
 
     // Cross-origin isolation must be live on the prod headers (owner is SAB-gated).
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);

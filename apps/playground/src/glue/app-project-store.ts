@@ -29,6 +29,8 @@ export interface AppProjectStoreDeps {
   readonly index: ProjectIndex;
   readonly storage: StorageKind;
   readonly owner: AppStoreOwner;
+  /** Durable scratch-dirty marker (owner project index, ADR-0165 §57). */
+  readonly onScratchDirty?: (starter: string) => void;
   /** Irreversible on-disk tree removal, deferred to the toast window (§56). */
   readonly onDiskDelete?: (projectId: string) => void;
 }
@@ -44,7 +46,12 @@ export function createAppProjectStore(deps: AppProjectStoreDeps): PageStore {
   store.setStorage(deps.storage);
 
   // Dirty binds to the REAL owner write signal (§57), never a UI counter.
-  deps.owner.onFileWritten(() => store.markDirty());
+  deps.owner.onFileWritten(() => {
+    const wasDirty = store.dirty();
+    store.markDirty();
+    const scratch = store.scratch();
+    if (!wasDirty && store.dirty() && scratch) deps.onScratchDirty?.(scratch.starter);
+  });
 
   // Delete-with-Undo defers the on-disk removal to the toast window (§56).
   let pending: { id: string; timer: ReturnType<typeof setTimeout> } | null = null;
