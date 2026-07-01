@@ -58,8 +58,10 @@ export interface EddyBundleContents {
   tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }>;
 }
 
-const MANIFEST_FILE = 'eddy-bundle.json';
-const LOCKFILE_FILE = 'package-lock.json';
+/** Bundle member names — fixed order `manifest → lockfile → tarballs/*` (the
+ * streaming client gates on the first two before any tarball bytes arrive). */
+export const MANIFEST_FILE = 'eddy-bundle.json';
+export const LOCKFILE_FILE = 'package-lock.json';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');

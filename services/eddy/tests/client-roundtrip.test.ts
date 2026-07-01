@@ -7,7 +7,16 @@
  */
 import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { RegistryClient, install, packEddyBundle, unpackEddyBundle } from '@riftydev/npm-client';
+import {
+  RegistryClient,
+  VfsTarballCache,
+  canonicalEddyRequestKey,
+  install,
+  packEddyBundle,
+  parseTarEntries,
+  startEddyPrefetch,
+  unpackEddyBundle,
+} from '@riftydev/npm-client';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -43,7 +52,20 @@ function startRaw(
 }
 
 function closeServer(server: Server): Promise<void> {
+  // Sever keep-alive/hung sockets first: several tests below leave a response
+  // body unread (an ignored prefetch) or never-ending (the early-abort case),
+  // and a bare `close()` would wait on those sockets forever.
+  (server as Server & { closeAllConnections?: () => void }).closeAllConnections?.();
   return new Promise((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
+}
+
+async function buildBundleFor(deps: Record<string, string>): Promise<Uint8Array> {
+  const built = await resolveBundle(
+    { dependencies: deps },
+    { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+  );
+  if (built.kind !== 'bundle') throw new Error('setup: expected a bundle');
+  return built.bytes;
 }
 
 let eddy: EddyServer;
@@ -286,6 +308,242 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     const result = await install({ vfs, cwd: '/app', registry });
     expect(result.source ?? 'standard').toBe('standard');
     expect(calls.packument).toBeGreaterThan(0); // it really did resolve via the registry
+  });
+
+  it('resolverClosureHash: a pinned GET hit installs via eddy with ZERO POSTs', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    const { manifest } = unpackEddyBundle(bytes);
+    const hash = manifest.asOf.closureHash;
+    let posts = 0;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'POST') {
+        posts++;
+        res.writeHead(500);
+        res.end();
+        return;
+      }
+      expect(req.url).toBe(`/bundle/${encodeURIComponent(hash)}`);
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry, calls } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: hash,
+      });
+      expect(result.source).toBe('eddy');
+      expect(posts).toBe(0);
+      expect(calls.packument + calls.tarball).toBe(0);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('resolverClosureHash: a 404 miss (restarted/evicted server) falls back to POST → still eddy', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    let gets = 0;
+    let posts = 0;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'GET') {
+        gets++;
+        res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify({ error: 'unknown bundle hash' }));
+        return;
+      }
+      posts++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: 'sha256-stale',
+      });
+      expect(result.source).toBe('eddy');
+      expect(gets).toBe(1);
+      expect(posts).toBe(1);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('resolverClosureHash: a STALE pin (bundle no longer covers the deps) falls back to POST', async () => {
+    // GET serves an old bundle for {debug} only; the project now also wants kleur.
+    const staleBytes = await buildBundleFor({ debug: '^4.4.1' });
+    const freshBytes = await buildBundleFor({ debug: '^4.4.1', kleur: '4.1.5' });
+    const raw = await startRaw((req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(req.method === 'GET' ? staleBytes : freshBytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { debug: '^4.4.1', kleur: '4.1.5' });
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: 'sha256-old',
+      });
+      expect(result.source).toBe('eddy');
+      expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('resolverPrefetch: a matching prefetch is consumed — the server sees exactly ONE request', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    let requests = 0;
+    const raw = await startRaw((_req, res) => {
+      requests++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const prefetch = startEddyPrefetch({
+        resolverUrl: raw.url,
+        request: { dependencies: DEPS, optionalDependencies: {} },
+      });
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverPrefetch: prefetch,
+      });
+      expect(result.source).toBe('eddy');
+      expect(requests).toBe(1);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('resolverPrefetch: a prefetch for STALE deps is ignored (never trusted) — install fetches its own', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    let requests = 0;
+    const raw = await startRaw((_req, res) => {
+      requests++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      // Prefetched for a DIFFERENT dep-set (the user edited package.json since).
+      const staleRequest = { dependencies: { kleur: '4.1.5' }, optionalDependencies: {} };
+      const prefetch = startEddyPrefetch({ resolverUrl: raw.url, request: staleRequest });
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverPrefetch: prefetch,
+      });
+      expect(result.source).toBe('eddy');
+      expect(requests).toBe(2); // the untaken prefetch + install's own POST
+      // Drain the ignored prefetch so the keep-alive socket can close.
+      await prefetch.take(canonicalEddyRequestKey(staleRequest))?.then((r) => r.arrayBuffer());
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('streams the bundle: a coverage decline aborts BEFORE the tarball bytes transfer', async () => {
+    // The server sends ONLY the manifest + lockfile members, then holds the
+    // connection open forever. A buffering client would hang awaiting the full
+    // body; the streaming client gates on the lockfile, declines (coverage
+    // gap), cancels the download, and falls back to the standard install.
+    const bytes = await buildBundleFor({ debug: '^4.4.1' });
+    const entries = parseTarEntries(bytes);
+    const manifestSize = entries[0]?.data.length ?? 0;
+    const lockfileSize = entries[1]?.data.length ?? 0;
+    const boundary =
+      512 + Math.ceil(manifestSize / 512) * 512 + 512 + Math.ceil(lockfileSize / 512) * 512;
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.write(Buffer.from(bytes.slice(0, boundary)));
+      // never end()
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { debug: '^4.4.1', kleur: '4.1.5' }); // not covered
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard');
+      expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  }, 15_000);
+
+  it('seeds tarballs AS THEY ARRIVE: a mid-bundle integrity failure leaves earlier verified bytes cached', async () => {
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    expect(contents.tarballs.length).toBeGreaterThan(1);
+    const first = contents.tarballs[0];
+    const victim = contents.tarballs[1];
+    if (!first || !victim) return;
+    const tampered = new Uint8Array(victim.bytes);
+    tampered[0] = (tampered[0] ?? 0) ^ 0xff;
+    victim.bytes = tampered;
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(packEddyBundle(contents)));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const cache = new VfsTarballCache(vfs);
+      const puts: string[] = [];
+      const recordingCache = {
+        get: (name: string, version: string, integrity: string) =>
+          cache.get(name, version, integrity),
+        put: (name: string, version: string, integrity: string, bytes: Uint8Array) => {
+          puts.push(`${name}@${version}`);
+          return cache.put(name, version, integrity, bytes);
+        },
+      };
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        tarballCache: recordingCache,
+      });
+      // The tampered member declined the bundle → standard install ran…
+      expect(result.source).toBe('standard');
+      // …but the FIRST tarball had already been verified + seeded (content-
+      // addressed cache: a partial seed leaves only correct bytes), so the
+      // very first put predates the standard install's.
+      expect(puts[0]).toBe(`${first.entry.name}@${first.entry.version}`);
+      const seeded = await cache.get(first.entry.name, first.entry.version, first.entry.integrity);
+      expect(seeded).not.toBeNull();
+    } finally {
+      await closeServer(raw.server);
+    }
   });
 
   it('declines (source standard) when an override divergence would force chooseSource to live-resolve', async () => {

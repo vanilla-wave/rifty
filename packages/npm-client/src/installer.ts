@@ -30,7 +30,20 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
-import { unpackEddyBundle } from './eddy-bundle.ts';
+import {
+  EDDY_BUNDLE_FORMAT,
+  type EddyBundleManifestV1,
+  type EddyBundleTarballEntry,
+  LOCKFILE_FILE,
+  MANIFEST_FILE,
+} from './eddy-bundle.ts';
+import { streamTarEntries } from './eddy-bundle-stream.ts';
+import type { EddyPrefetchHandle } from './eddy-prefetch.ts';
+import {
+  type EddyRequestBody,
+  bundleUrlFor,
+  canonicalEddyRequestKey,
+} from './eddy-request.ts';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,
@@ -54,7 +67,7 @@ import {
   computeIntegrity,
   parseIntegrityAlgorithm,
 } from './tarball-cache.ts';
-import { extractTarGz } from './unpacker.ts';
+import { extractTarGz, parseTarEntries } from './unpacker.ts';
 import { Semaphore } from './utils/semaphore.ts';
 
 export interface InstallOptions {
@@ -106,6 +119,22 @@ export interface InstallOptions {
    * `console.warn` — a substitution is never silent.
    */
   onSubstitution?: (line: string) => void;
+  /**
+   * Pinned closure hash: try the cacheable `GET <resolverUrl>/bundle/<hash>`
+   * first (browser-HTTP-cache/CDN friendly, preflight-free); ANY failure —
+   * miss, network, verification — falls through to the POST resolve. The
+   * returned bundle passes the same non-disableable gates as a POSTed one, so
+   * a stale pin degrades to POST, never to a wrong install. Inert without
+   * `resolverUrl`.
+   */
+  resolverClosureHash?: string;
+  /**
+   * A bundle prefetch started earlier (`startEddyPrefetch`) so the round-trip
+   * overlaps boot work. Consumed at most once, and ONLY when its canonical
+   * request matches this install's — a prefetch for stale deps is ignored,
+   * never trusted. Inert without `resolverUrl`.
+   */
+  resolverPrefetch?: EddyPrefetchHandle;
 }
 
 /** Payload for {@link InstallOptions.onPackage}. */
@@ -523,15 +552,18 @@ function hasLockfileFastPath(
 }
 
 /**
- * ADR-0182 opt-in fast path. POST the dep-set to the resolver, verify the
- * returned `EddyBundleV1` (bytes vs the bundle integrity — NON-disableable,
- * mirror-grade trust), check the bundle lockfile covers the request, then —
- * only after every check passes — pre-seed the tarball cache + write the
- * lockfile. Returns `true` on success (the existing fast path then runs with
- * zero packument network); on ANY failure mode (unreachable, HTTP error,
- * malformed bundle, integrity mismatch, coverage gap, typed `unsupported`
- * decline) it warns and returns `false`, leaving the pre-existing lockfile
- * untouched so the standard verifying install runs. Never throws.
+ * ADR-0182 opt-in fast path. Obtain an `EddyBundleV1` from the resolver, verify
+ * it (bytes vs the bundle integrity — NON-disableable, mirror-grade trust),
+ * check the bundle lockfile covers the request, seed the tarball cache, write
+ * the lockfile. Returns `true` on success (the existing lockfile fast path then
+ * runs with zero packument network); on ANY failure it warns and returns
+ * `false`, leaving the pre-existing lockfile untouched so the standard
+ * verifying install runs. Never throws.
+ *
+ * The bundle can arrive via THREE attempts, first survivor wins, each failure
+ * falls through to the next: a prefetched response (`resolverPrefetch`,
+ * consumed only on a canonical-request match), the pinned cacheable
+ * `GET /bundle/<closureHash>` (`resolverClosureHash`), and the POST resolve.
  */
 async function tryEddyFastPath(
   opts: InstallOptions,
@@ -542,85 +574,155 @@ async function tryEddyFastPath(
 ): Promise<boolean> {
   const url = opts.resolverUrl;
   if (!url) return false;
-  try {
-    const requestBody: Record<string, unknown> = { dependencies, optionalDependencies };
-    if (opts.overrides) requestBody.overrides = opts.overrides;
-    if (opts.prefer) requestBody.prefer = opts.prefer;
-    // No content-type header: a string body defaults to `text/plain` — a
-    // CORS-simple request, so a cross-origin browser skips the OPTIONS
-    // preflight (one RTT off the cold path). The server parses the body
-    // unconditionally.
-    const response = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
-    // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
-    // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
-    // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      const decline = (await response.json().catch(() => null)) as { feature?: string } | null;
-      return declineEddy(`resolver declined (${decline?.feature ?? 'unsupported'})`);
-    }
-    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const { lockfileText, tarballs } = unpackEddyBundle(bytes);
-    const lockfile = JSON.parse(lockfileText) as Lockfile;
+  const body: EddyRequestBody = { dependencies, optionalDependencies };
+  if (opts.overrides) body.overrides = opts.overrides;
+  const requestKey = canonicalEddyRequestKey(body, opts.prefer ?? 'cached');
 
-    // Refuse a non-v3 bundle lockfile BEFORE seeding/writing. Honest eddy always
-    // emits v3 (`linker.ts` hardcode), but a divergent/buggy resolver could send
-    // another shape; writing it would clobber the user's lockfile AND make the
-    // post-seed re-read throw `NotImplementedError(v1/v2)` (installer-lockfile-
-    // reader) — breaking BOTH the never-throw and lockfile-untouched promises.
-    if ((lockfile.lockfileVersion as number) !== 3) {
-      return declineEddy(
-        `bundle lockfile is not v3 (got ${JSON.stringify(lockfile.lockfileVersion)})`,
-      );
-    }
+  // The EXACT condition `chooseSource` uses for its lockfile fast path
+  // (coverage AND no override divergence) — a bundle passing it GUARANTEES
+  // `chooseSource` fast-paths the eddy lockfile; without the divergence half, a
+  // parent-scoped override would make `chooseSource` silently live-resolve
+  // while we'd already have claimed `source: 'eddy'` (a provenance lie).
+  const effectiveRequest = {
+    ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
+    ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
+  };
 
-    // Mirror-grade trust (ADR-0182 §5): verify each tarball's bytes against the
-    // integrity the BUNDLE carries (not npm source-of-truth). Non-disableable.
-    for (const { entry, bytes: tgz } of tarballs) {
-      const algorithm = parseIntegrityAlgorithm(entry.integrity);
-      if (!algorithm) {
-        return declineEddy(`unparseable integrity for ${entry.name}@${entry.version}`);
-      }
-      if ((await computeIntegrity(tgz, algorithm)) !== entry.integrity) {
-        return declineEddy(`integrity mismatch for ${entry.name}@${entry.version}`);
-      }
-    }
-
-    // Coverage gap / override divergence → fallback (no partial install). This
-    // is the EXACT condition `chooseSource` uses to take the lockfile fast path
-    // (coverage AND no override divergence), so a pass here GUARANTEES
-    // `chooseSource` fast-paths the eddy lockfile — without the divergence half,
-    // a parent-scoped override would make `chooseSource` silently live-resolve
-    // while we'd already have claimed `source: 'eddy'` (a provenance lie).
-    const effectiveRequest = {
-      ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
-      ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
-    };
-    const pins = lockfileCovers(lockfile, effectiveRequest);
-    if (!pins || !subgraphFreeOfOverrideDivergence(lockfile, pins, opts.overrides)) {
-      return declineEddy(
-        'bundle lockfile does not cover the request (or an override forces a re-resolve)',
-      );
-    }
-
-    // Seed the (already integrity-verified) tarballs, THEN write the lockfile.
-    // A `put` throwing mid-loop is safe: the cache is content-addressed and
-    // re-verifies on every `get`, so a partial seed leaves only correct bytes;
-    // the lockfile is written ONLY after all puts succeed, so a failure leaves
-    // the pre-existing lockfile untouched and the standard install proceeds.
-    for (const { entry, bytes: tgz } of tarballs) {
-      await tarballCache.put(entry.name, entry.version, entry.integrity, tgz);
-    }
-    await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-    return true;
-  } catch (err) {
-    return declineEddy(err instanceof Error ? err.message : String(err));
+  const prefetched = opts.resolverPrefetch?.take(requestKey) ?? null;
+  const attempts: Array<{ label: string; run: () => Promise<Response> }> = [];
+  if (prefetched) attempts.push({ label: 'prefetch', run: () => prefetched });
+  const pin = opts.resolverClosureHash;
+  // Skip a duplicate GET when the consumed prefetch already WAS this pin's GET.
+  if (pin && !(prefetched && opts.resolverPrefetch?.closureHash === pin)) {
+    attempts.push({ label: 'get', run: () => fetch(bundleUrlFor(url, pin)) });
   }
+  attempts.push({
+    label: 'post',
+    run: () => {
+      const requestBody: Record<string, unknown> = { ...body };
+      if (opts.prefer) requestBody.prefer = opts.prefer;
+      // No content-type header: a string body defaults to `text/plain` — a
+      // CORS-simple request, so a cross-origin browser skips the OPTIONS
+      // preflight (one RTT off the cold path). The server parses the body
+      // unconditionally.
+      return fetch(url, { method: 'POST', body: JSON.stringify(requestBody) });
+    },
+  });
+
+  const reasons: string[] = [];
+  for (const attempt of attempts) {
+    try {
+      const outcome = await consumeEddyResponse(
+        await attempt.run(),
+        effectiveRequest,
+        opts,
+        tarballCache,
+      );
+      if (outcome === true) return true;
+      reasons.push(`${attempt.label}: ${outcome}`);
+    } catch (err) {
+      reasons.push(`${attempt.label}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return declineEddy(reasons.join('; '));
+}
+
+const eddyDecoder = new TextDecoder('utf-8');
+
+async function* bufferedTarEntries(
+  bytes: Uint8Array,
+): AsyncGenerator<{ name: string; data: Uint8Array }, void, undefined> {
+  for (const e of parseTarEntries(bytes)) yield e;
+}
+
+/**
+ * Verify + adopt ONE bundle response; `true` on success, a decline reason
+ * otherwise. The bundle is consumed AS A STREAM (network overlaps hash + cache
+ * writes): the format/v3/coverage gates run on the manifest + lockfile members
+ * — the first two, by bundle contract — so a decline cancels the download
+ * before tarball bytes transfer. Each tarball is verified against the
+ * integrity the BUNDLE carries (ADR-0182 §5, non-disableable) and seeded into
+ * the content-addressed cache as it arrives: a mid-bundle failure leaves only
+ * verified bytes (the cache re-verifies on every `get`). The lockfile is
+ * written ONLY after every manifest-named tarball landed, so any failure
+ * leaves the pre-existing lockfile untouched.
+ */
+async function consumeEddyResponse(
+  response: Response,
+  effectiveRequest: Record<string, string>,
+  opts: InstallOptions,
+  tarballCache: TarballCache,
+): Promise<true | string> {
+  // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
+  // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
+  // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const decline = (await response.json().catch(() => null)) as {
+      feature?: string;
+      error?: string;
+    } | null;
+    return `resolver declined (${decline?.feature ?? decline?.error ?? 'unsupported'})`;
+  }
+  if (!response.ok) return `resolver returned HTTP ${response.status}`;
+
+  const entries = response.body
+    ? streamTarEntries(response.body)
+    : bufferedTarEntries(new Uint8Array(await response.arrayBuffer()));
+
+  let manifest: EddyBundleManifestV1 | null = null;
+  let lockfile: Lockfile | null = null;
+  const byFile = new Map<string, EddyBundleTarballEntry>();
+  const seededFiles = new Set<string>();
+  for await (const entry of entries) {
+    if (manifest === null) {
+      if (entry.name !== MANIFEST_FILE) return `bundle does not start with ${MANIFEST_FILE}`;
+      const parsed = JSON.parse(eddyDecoder.decode(entry.data)) as EddyBundleManifestV1;
+      if (parsed.format !== EDDY_BUNDLE_FORMAT) {
+        return `unsupported EddyBundle format: ${JSON.stringify(parsed.format)}`;
+      }
+      for (const t of parsed.tarballs) byFile.set(t.file, t);
+      manifest = parsed;
+      continue;
+    }
+    if (lockfile === null) {
+      if (entry.name !== LOCKFILE_FILE) return `bundle missing ${LOCKFILE_FILE} before tarballs`;
+      const parsed = JSON.parse(eddyDecoder.decode(entry.data)) as Lockfile;
+      // Refuse a non-v3 bundle lockfile BEFORE seeding/writing. Honest eddy
+      // always emits v3 (`linker.ts` hardcode), but a divergent/buggy resolver
+      // could send another shape; writing it would clobber the user's lockfile
+      // AND make the post-seed re-read throw `NotImplementedError(v1/v2)` —
+      // breaking BOTH the never-throw and lockfile-untouched promises.
+      if ((parsed.lockfileVersion as number) !== 3) {
+        return `bundle lockfile is not v3 (got ${JSON.stringify(parsed.lockfileVersion)})`;
+      }
+      // Coverage gap / override divergence → fallback (no partial install).
+      const pins = lockfileCovers(parsed, effectiveRequest);
+      if (!pins || !subgraphFreeOfOverrideDivergence(parsed, pins, opts.overrides)) {
+        return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
+      }
+      lockfile = parsed;
+      continue;
+    }
+    const t = byFile.get(entry.name);
+    if (!t) return `unexpected bundle member ${entry.name}`;
+    const algorithm = parseIntegrityAlgorithm(t.integrity);
+    if (!algorithm) return `unparseable integrity for ${t.name}@${t.version}`;
+    if ((await computeIntegrity(entry.data, algorithm)) !== t.integrity) {
+      return `integrity mismatch for ${t.name}@${t.version}`;
+    }
+    await tarballCache.put(t.name, t.version, t.integrity, entry.data);
+    seededFiles.add(entry.name);
+  }
+  if (manifest === null || lockfile === null) {
+    return 'malformed EddyBundleV1 bundle: missing manifest or lockfile';
+  }
+  if (seededFiles.size !== byFile.size) {
+    return 'bundle is missing tarball member(s) named by its manifest';
+  }
+  await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
+  return true;
 }
 
 function declineEddy(reason: string): false {
