@@ -49,6 +49,18 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect(calls.packument + calls.tarball).toBeGreaterThan(afterFirst);
   });
 
+  it('getBundle returns the immutable-tier bundle by closure hash, null for unknown', async () => {
+    const { fetch } = makeLocalFetcher();
+    const cache = new EddyCache({ resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch } });
+    const result = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(result.kind).toBe('bundle');
+    if (result.kind !== 'bundle') return;
+    const hit = cache.getBundle(result.manifest.asOf.closureHash);
+    expect(hit).not.toBeNull();
+    expect([...(hit as { bytes: Uint8Array }).bytes]).toEqual([...result.bytes]);
+    expect(cache.getBundle('sha256-nope')).toBeNull();
+  });
+
   it('evicts the least-recently-used closure when over capacity', async () => {
     const { fetch, calls } = makeLocalFetcher();
     const cache = new EddyCache({

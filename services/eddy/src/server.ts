@@ -3,16 +3,17 @@
  * stream (or a typed JSON decline). The bundle carries the as-of stamp in
  * `x-eddy-*` headers.
  *
- * Caching today is the in-process `EddyCache` LRU (`cache.ts`) — bounded,
- * per-process. The `Cache-Control: immutable` header below sits on the POST
- * response, which shared caches never store, so a real shared/edge CDN tier is
- * NOT reachable yet: it needs a cacheable `GET /bundle/<closureHash>` route.
- * TODO(backlog: distribution/eddy-cdn-tier-get-by-hash).
+ * `GET /bundle/<closureHash>` serves the same bytes content-addressed from the
+ * immutable tier with `Cache-Control: immutable` — a shared/edge CDN (and the
+ * browser HTTP cache) can hold them forever. A miss (LRU eviction, restart) is
+ * a 404 `no-store`; the client falls back to POST, which re-seeds the tier.
+ * Caching itself is the in-process `EddyCache` LRU (`cache.ts`) — bounded,
+ * per-process.
  */
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Fetcher } from '@riftydev/npm-client';
+import type { EddyBundleManifestV1, Fetcher } from '@riftydev/npm-client';
 import { EddyCache } from './cache.ts';
 import type { EddyResolveRequest } from './resolver.ts';
 
@@ -67,8 +68,31 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     res.end();
     return;
   }
+  if (req.method === 'GET') {
+    const match = /^\/bundle\/([^/]+)$/.exec(req.url ?? '');
+    if (!match) {
+      sendJson(res, 405, {
+        error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>',
+      });
+      return;
+    }
+    // The closure hash is `sha256-<base64>` — base64 carries `/`+`=`, so the
+    // path segment arrives percent-encoded.
+    const hit = cache.getBundle(decodeURIComponent(match[1] as string));
+    if (!hit) {
+      // no-store: a shared cache must never pin a miss — the next POST may
+      // re-seed this very hash.
+      sendJson(res, 404, { error: 'unknown bundle hash' }, { 'cache-control': 'no-store' });
+      return;
+    }
+    res.writeHead(200, bundleHeaders(hit.manifest));
+    res.end(Buffer.from(hit.bytes));
+    return;
+  }
   if (req.method !== 'POST') {
-    sendJson(res, 405, { error: 'method not allowed — POST a dep-set as JSON' });
+    sendJson(res, 405, {
+      error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>',
+    });
     return;
   }
   let body: string;
@@ -106,19 +130,23 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     sendJson(res, 422, { kind: 'unsupported', feature: result.feature, message: result.message });
     return;
   }
-  res.writeHead(200, {
-    'content-type': 'application/x-tar',
-    // Correct once a `GET /bundle/<closureHash>` route exists behind a CDN; on
-    // this POST response it is inert (shared caches don't store POST). Kept so
-    // the future GET route inherits the intended freshness. See the module
-    // header + TODO(backlog: distribution/eddy-cdn-tier-get-by-hash).
-    'cache-control': 'public, max-age=31536000, immutable',
-    'x-eddy-resolved-at': result.manifest.asOf.resolvedAt,
-    'x-eddy-closure-hash': result.manifest.asOf.closureHash,
-    'x-eddy-npm-client-version': result.manifest.npmClientVersion,
-    ...corsHeaders(),
-  });
+  res.writeHead(200, bundleHeaders(result.manifest));
   res.end(Buffer.from(result.bytes));
+}
+
+/** 200-bundle headers, shared by the POST resolve and the GET-by-hash route.
+ * `immutable` is inert on the POST (shared caches don't store POST) but load-
+ * bearing on the GET: a CDN/browser cache holds the content-addressed bytes
+ * forever. */
+function bundleHeaders(manifest: EddyBundleManifestV1): Record<string, string> {
+  return {
+    'content-type': 'application/x-tar',
+    'cache-control': 'public, max-age=31536000, immutable',
+    'x-eddy-resolved-at': manifest.asOf.resolvedAt,
+    'x-eddy-closure-hash': manifest.asOf.closureHash,
+    'x-eddy-npm-client-version': manifest.npmClientVersion,
+    ...corsHeaders(),
+  };
 }
 
 function pickRecord(value: unknown): Record<string, string> | undefined {
@@ -168,8 +196,17 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders() });
+function sendJson(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): void {
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    ...corsHeaders(),
+    ...extraHeaders,
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -183,7 +220,10 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 function corsHeaders(): Record<string, string> {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    // Kept although the current client sends a CORS-simple POST (no
+    // content-type header, no preflight): an already-deployed older client
+    // still preflights with `content-type`.
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
     'access-control-expose-headers':

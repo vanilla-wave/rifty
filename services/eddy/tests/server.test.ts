@@ -57,9 +57,53 @@ describe('eddy HTTP server', () => {
     expect(body.feature).toMatch(/file/);
   });
 
-  it('GET → 405 method not allowed', async () => {
+  it('GET / → 405 method not allowed', async () => {
     const res = await fetch(baseUrl, { method: 'GET' });
     expect(res.status).toBe(405);
+  });
+
+  // CDN tier: the closure hash names an immutable artifact, so a GET by hash is
+  // safe for a shared/edge cache to hold forever (unlike the POST, which shared
+  // caches never store). The client falls back to POST on a miss.
+  it('GET /bundle/<closureHash> → 200 byte-identical bundle with immutable + CORS headers', async () => {
+    const post = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: { debug: '^4.4.1' } }),
+    });
+    expect(post.status).toBe(200);
+    const hash = post.headers.get('x-eddy-closure-hash') as string;
+    const posted = new Uint8Array(await post.arrayBuffer());
+
+    const res = await fetch(`${baseUrl}/bundle/${encodeURIComponent(hash)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/x-tar/);
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(res.headers.get('x-eddy-closure-hash')).toBe(hash);
+    expect(res.headers.get('x-eddy-resolved-at')).toBeTruthy();
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+    const got = new Uint8Array(await res.arrayBuffer());
+    expect([...got]).toEqual([...posted]);
+  });
+
+  it('GET /bundle/<unknown> → 404 JSON with no-store (a CDN must never pin a miss)', async () => {
+    const res = await fetch(`${baseUrl}/bundle/${encodeURIComponent('sha256-nope')}`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toMatch(/unknown bundle/);
+  });
+
+  it('OPTIONS advertises GET alongside POST', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://play.rifty.dev', 'access-control-request-method': 'GET' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-methods')).toMatch(/GET/);
   });
 
   // The playground fetches eddy CROSS-ORIGIN from a COEP-isolated Worker; the

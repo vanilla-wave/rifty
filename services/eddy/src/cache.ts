@@ -34,7 +34,7 @@ export interface EddyCacheOptions {
   resolveFn?: typeof resolveBundle;
 }
 
-interface CachedBundle {
+export interface CachedBundle {
   bytes: Uint8Array;
   manifest: EddyBundleManifestV1;
 }
@@ -99,6 +99,13 @@ export class EddyCache {
     const cap = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.mutable = new Lru(cap);
     this.immutable = new Lru(cap);
+  }
+
+  /** Immutable-tier direct lookup (`GET /bundle/<closureHash>`), LRU-promoting.
+   * In-memory only: a post-restart miss is answered by the client's POST
+   * fallback, which re-seeds this tier. */
+  getBundle(closureHash: string): CachedBundle | null {
+    return this.immutable.get(closureHash) ?? null;
   }
 
   async resolve(req: EddyResolveRequest): Promise<EddyResolveResult> {
