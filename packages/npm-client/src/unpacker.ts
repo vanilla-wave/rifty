@@ -37,6 +37,25 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
   throw new Error('No gzip support in this environment (need DecompressionStream)');
 }
 
+/**
+ * Decode one 512-byte tar header: full member name (ustar `prefix` applied,
+ * trailing `/` stripped), raw typeflag char, data size. Shared by the buffered
+ * parser below and the eddy streaming reader (`eddy-bundle-stream.ts`).
+ */
+export function parseTarHeader(header: Uint8Array): {
+  name: string;
+  typeflag: string;
+  size: number;
+} {
+  const dec = new TextDecoder('utf-8');
+  const headerName = readString(header, 0, 100, dec).replace(/\/$/, '');
+  const typeflag = String.fromCharCode(header[156] ?? 0);
+  const size = parseOctal(header, 124, 12);
+  let prefix = readString(header, 345, 155, dec);
+  if (prefix) prefix = `${prefix}/`;
+  return { name: `${prefix}${headerName}`, typeflag, size };
+}
+
 function parseTar(bytes: Uint8Array): TarEntry[] {
   const dec = new TextDecoder('utf-8');
   const out: TarEntry[] = [];
@@ -47,11 +66,7 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
     const header = bytes.subarray(offset, offset + 512);
     // End of archive: zero block.
     if (header.every((b) => b === 0)) break;
-    const headerName = readString(header, 0, 100, dec).replace(/\/$/, '');
-    const typeFlag = String.fromCharCode(header[156] ?? 0);
-    const size = parseOctal(header, 124, 12);
-    let prefix = readString(header, 345, 155, dec);
-    if (prefix) prefix = `${prefix}/`;
+    const { name: parsedName, typeflag: typeFlag, size } = parseTarHeader(header);
     const dataStart = offset + 512;
     const data = bytes.subarray(dataStart, dataStart + size);
     const nextOffset = dataStart + Math.ceil(size / 512) * 512;
@@ -72,11 +87,11 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
       // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
       throw new NotImplementedError(
         'npm-client.tar.symlink',
-        `tar symlinks not supported until M12 (entry: ${pendingLongName ?? `${prefix}${headerName}`})`,
+        `tar symlinks not supported until M12 (entry: ${pendingLongName ?? parsedName})`,
       );
     }
 
-    const fullName = pendingLongName ?? `${prefix}${headerName}`;
+    const fullName = pendingLongName ?? parsedName;
     pendingLongName = null;
     const type: TarEntry['type'] =
       typeFlag === '5' ? 'dir' : typeFlag === '0' || typeFlag === '' ? 'file' : 'other';
