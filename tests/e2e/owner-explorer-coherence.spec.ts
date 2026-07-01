@@ -1,10 +1,9 @@
 import { expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
-  terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 /**
@@ -25,9 +24,7 @@ test.describe('owner explorer coherence (ADR-0146 explorer-reflects-owner / ADR-
 
     // The explorer renders the OWNER snapshot from boot (SSoT, ADR-0148) — wait
     // for the shell to be ready (the boot sequence echoed the dev line).
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 30_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
     const marker = `p3marker${Date.now().toString(36)}`;

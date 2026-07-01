@@ -3,10 +3,10 @@ import { expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 // Repo root for the Vite `/@fs/<abs>` dev-server transform URL Test C fetches.
@@ -69,9 +69,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     test.setTimeout(120_000);
     await bootProjectFiles(page);
 
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
 
@@ -111,9 +109,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     test.setTimeout(120_000);
     await bootProjectFiles(page);
 
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     await openShellTerminal(page);
 
@@ -146,9 +142,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
 
     // Navigate first so the dev server is warm (webServer may lazily compile).
     await bootProjectFiles(page);
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 60_000 })
-      .toMatch(viteDevReadyPattern());
+    await expectViteDevServerReady(page);
 
     // Fetch the LIVE Vite dev-server transform of the KERNEL worker-entry module —
     // the one Vite injects `@vite/client` into. Kernel is a workspace package
