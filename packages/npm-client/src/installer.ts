@@ -30,6 +30,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { streamTarEntries } from './eddy-bundle-stream.ts';
 import {
   EDDY_BUNDLE_FORMAT,
   type EddyBundleManifestV1,
@@ -37,13 +38,8 @@ import {
   LOCKFILE_FILE,
   MANIFEST_FILE,
 } from './eddy-bundle.ts';
-import { streamTarEntries } from './eddy-bundle-stream.ts';
 import type { EddyPrefetchHandle } from './eddy-prefetch.ts';
-import {
-  type EddyRequestBody,
-  bundleUrlFor,
-  canonicalEddyRequestKey,
-} from './eddy-request.ts';
+import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,

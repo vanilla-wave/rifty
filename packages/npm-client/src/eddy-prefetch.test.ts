@@ -45,7 +45,9 @@ describe('startEddyPrefetch', () => {
       request: REQUEST,
       fetchImpl: impl,
     });
-    expect(handle.take(canonicalEddyRequestKey({ ...REQUEST, dependencies: { other: '1' } }))).toBeNull();
+    expect(
+      handle.take(canonicalEddyRequestKey({ ...REQUEST, dependencies: { other: '1' } })),
+    ).toBeNull();
     const hit = handle.take(KEY);
     expect(hit).not.toBeNull();
     expect(await (hit as Promise<Response>).then((r) => r.text())).toBe('bundle-bytes');

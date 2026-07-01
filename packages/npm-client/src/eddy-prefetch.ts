@@ -10,11 +10,7 @@
  * (format, v3, integrity, coverage) like any other bundle.
  */
 
-import {
-  type EddyRequestBody,
-  bundleUrlFor,
-  canonicalEddyRequestKey,
-} from './eddy-request.ts';
+import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
 
 export interface EddyPrefetchHandle {
   /** The pinned closure hash this prefetch was a GET for (absent → it POSTed).

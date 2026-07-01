@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  EDDY_BUNDLE_FORMAT,
-  type EddyBundleContents,
-  packEddyBundle,
-} from './eddy-bundle.ts';
 import { streamTarEntries } from './eddy-bundle-stream.ts';
+import { EDDY_BUNDLE_FORMAT, type EddyBundleContents, packEddyBundle } from './eddy-bundle.ts';
 import { parseTarEntries } from './unpacker.ts';
 
 const enc = new TextEncoder();
@@ -19,7 +15,12 @@ function buildBundle(): { bytes: Uint8Array; contents: EddyBundleContents } {
       npmClientVersion: '0.0.0-test',
       asOf: { resolvedAt: '2026-07-01T00:00:00Z', registry: 'http://r', closureHash: 'sha256-x' },
       tarballs: [
-        { file: 'tarballs/debug-4.4.1.tgz', name: 'debug', version: '4.4.1', integrity: 'sha512-a' },
+        {
+          file: 'tarballs/debug-4.4.1.tgz',
+          name: 'debug',
+          version: '4.4.1',
+          integrity: 'sha512-a',
+        },
         { file: longName, name: 'a'.repeat(120), version: '1.0.0', integrity: 'sha512-b' },
       ],
     },

@@ -44,6 +44,7 @@ import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
+import { startInstallPrefetch } from '../glue/install-prefetch.ts';
 import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
@@ -63,7 +64,6 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { startInstallPrefetch } from '../glue/install-prefetch.ts';
 import { getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';

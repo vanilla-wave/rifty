@@ -33,7 +33,9 @@ describe('eddyRequestFromPackageJson — mirrors normalizeInstallArgs', () => {
   it('returns null on shapes the installer would reject (never throws)', () => {
     expect(eddyRequestFromPackageJson('{not json')).toBeNull();
     expect(eddyRequestFromPackageJson('[]')).toBeNull();
-    expect(eddyRequestFromPackageJson(JSON.stringify({ dependencies: { a: { nested: true } } }))).toBeNull();
+    expect(
+      eddyRequestFromPackageJson(JSON.stringify({ dependencies: { a: { nested: true } } })),
+    ).toBeNull();
     expect(eddyRequestFromPackageJson(JSON.stringify({ dependencies: 'oops' }))).toBeNull();
   });
 });
