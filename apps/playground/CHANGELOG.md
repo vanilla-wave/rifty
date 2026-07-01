@@ -98,6 +98,10 @@
 
 ### Changed
 
+- Preview readiness is event-driven: a dev-server announce and the iframe load
+  event wake the warm-up probe/commit checks immediately (poll intervals remain
+  as fallback; commit is now checked before the first sleep). Logic extracted to
+  `preview-warmup.ts` with deterministic unit tests.
 - esbuild WASI transform bridge compiles `esbuild.wasm` once per realm and
   reuses the `WebAssembly.Module` across transforms (was: full ~19 MB recompile
   per transform call — dominated dev-server TS/JSX transform latency).
