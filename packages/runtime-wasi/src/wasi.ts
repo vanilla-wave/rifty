@@ -160,13 +160,18 @@ export class Wasi {
   }
 }
 
-/** Convenience: compile bytes, instantiate with the WASI shim, run `_start`. */
+/** Convenience: compile bytes (or reuse a precompiled Module — the caller's
+ * cross-run compile cache), instantiate with the WASI shim, run `_start`. A
+ * fresh instance per call keeps one-process-per-run WASI semantics either way. */
 export async function runWasi(
-  wasm: BufferSource,
+  wasm: BufferSource | WebAssembly.Module,
   opts: WasiOptions = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const wasi = new Wasi(opts);
-  const { instance } = await WebAssembly.instantiate(wasm, wasi.imports);
+  const instance =
+    wasm instanceof WebAssembly.Module
+      ? await WebAssembly.instantiate(wasm, wasi.imports)
+      : (await WebAssembly.instantiate(wasm, wasi.imports)).instance;
   let exitCode = 0;
   try {
     exitCode = wasi.start(instance);

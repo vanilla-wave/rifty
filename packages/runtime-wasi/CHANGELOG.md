@@ -4,6 +4,10 @@
 
 ### Added
 
+- **`runWasi` accepts a precompiled `WebAssembly.Module`:** callers can compile
+  once and reuse the Module across runs (a fresh instance per run keeps WASI
+  one-process-per-run semantics). Bytes input unchanged.
+
 - **Node `wasi` shape for Vite 8/Rolldown:** `Wasi` now exposes `wasiImport`,
   `getImportObject()`, and `initialize(instance)` aliases matching Node's
   `node:wasi` contract while preserving the existing preview1 syscall surface.
