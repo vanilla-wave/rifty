@@ -22,6 +22,16 @@ Adversarial measurement established the structure (standard ~4s; eddy ~0.6-0.7s;
 
 Until then the quoted ~6x stays an explicitly-**unvalidated-on-real-h3** figure (recorded as such in ADR-0182 "Open validation"); never quote it as measured.
 
+## Measured (2026-07-01) — 2 of 3 blockers cleared
+
+Blockers 1 (harness) + 2 (deployed eddy) are now RESOLVED: `pnpm bench` measures a standard-baseline + eddy pass with a nested `speedupX` (`perf/benchmarks.json`), pointed at the live `registry.rifty.dev` + `eddy.rifty.dev`.
+
+- **First real-browser number** (`real-vite` preset, warm, median-of-5, one discarded warm-up): standard **4284ms** → eddy **2517ms** = **1.70x**. eddy is deterministic (2266–2518, one bundle POST); the variance is all in the standard baseline (packument+tarball waterfall). Structural: **~100 network round-trips → 1 POST**.
+- **The ~6x does NOT hold on warm h2** — it was a Node/sandbox model. The metric shares the ~vite-boot (~0.5s, in both), and the standard baseline rides a WARM single-h2 proxy connection (not the 4s cold path the ~6x assumed). Install-only (directional): eddy ~1.3s vs standard ~3.8–7.4s. **Launch headline: quote 1.70x (or the structural 100→1 round-trips), never ~6x.**
+- **eddy was BROKEN, not just slow, before this** — the client's lockfile fast path did not replay shadow/user overrides, so eddy's pre-seeded lockfile threw `EBROKENLOCK` on every override package (`vite` → esbuild). Fixed in `@riftydev/npm-client` (`createLockfileSource` override-aware) with a regression test; without it the eddy pass here times out. See memory / `installer.ts`.
+
+**Still open (blocker 3 only): h3 vs h2 control.** Playwright can't pin the transport; the 1.70x above is whatever Chromium negotiated to `*.rifty.dev` (likely h2). Measuring the h3 delta + the decision rule below remain.
+
 ## Open forks (resolve to reach ready)
 
 - Harness: extend `perf/cold-start-and-install-benchmark`'s (future) real-Chromium harness to measure (a) standard cold install and (b) eddy fast install for the same dep-set, over both h2 and h3, median-of-N, fresh profile — once a deployed eddy URL exists.

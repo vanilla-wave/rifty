@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve, strerror } from './_shared.ts';
+import { dec, readAllStdin, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   numberAll: boolean; // -n
@@ -89,21 +89,31 @@ function parse(args: string[]): { opts: Opts; files: string[] } {
  * `cat [-n] [-b] [-A] [-E] FILE...` — concatenate files to stdout.
  *
  * Exit 0 on success; 1 if any file errored (missing file or no FILE arg).
- * stdin mode (cat with no FILE reading the pipe) is a later phase — for now an
- * empty FILE list is a usage error. Unlisted flags throw NotImplementedError.
+ * With no FILE it reads `ctx.stdin` (pipe RHS / `< file`); a `-` operand also
+ * reads stdin (GNU). Neither a FILE nor a connected stdin → usage error.
+ * Unlisted flags throw NotImplementedError.
  */
 export const cat: ShellCommand = async (args, ctx) => {
   const { opts, files } = parse(args);
-  if (files.length === 0) {
+  // No FILE → read stdin if connected; otherwise a usage error (unchanged).
+  const sources = files.length > 0 ? files : ctx.stdin ? ['-'] : [];
+  if (sources.length === 0) {
     ctx.stderr.write('cat: missing argument\n');
     return 1;
   }
   const fs = syncMirror();
   let exit = 0;
   let lineNo = 1; // GNU numbers across all files in one stream
-  for (const f of files) {
+  let stdinBytes: Uint8Array | null = null; // drained once, shared by every `-`
+  for (const f of sources) {
     try {
-      const bytes = fs.readFileBytesSync(resolve(ctx.cwd, f));
+      let bytes: Uint8Array;
+      if (f === '-') {
+        if (stdinBytes === null) stdinBytes = await readAllStdin(ctx);
+        bytes = stdinBytes;
+      } else {
+        bytes = fs.readFileBytesSync(resolve(ctx.cwd, f));
+      }
       const { text, nextNo } = render(dec.decode(bytes), opts, lineNo);
       lineNo = nextNo;
       ctx.stdout.write(text);

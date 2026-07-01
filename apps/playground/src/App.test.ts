@@ -77,18 +77,32 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('clearInterval(retryRequest);');
   });
 
-  it('re-roots the owner to a persisted project on boot instead of leaving it at /scratch', () => {
+  it('re-roots the owner to a persisted project on boot AND relaunches its dev server', () => {
     // The cold-boot hidden owner is rooted at /scratch; a project-active index
     // (Save-as-project then reload) must respawn at /projects/<id> — the started
     // short-circuit in ensureWorkspaceOwnerStarted never re-roots, so the boot
-    // decision must switch on a root mismatch.
+    // decision switches on a root mismatch, else adopts the started hidden owner.
+    // THEN it relaunches the co-resident dev server (a pty command that died with
+    // the previous page): runVitePreset over the persisted tree, else the reopened
+    // project shows an empty console + no preview.
+    const restore = source.match(
+      /async function restoreActiveProjectOnReload\(idx: ProjectIndex\): Promise<void> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(restore).toBeDefined();
+    expect(restore).toContain('if (workspaceOwner().root !== rootForId(idx.activeId)) {');
+    expect(restore).toContain('if (!(await trackSwitch(switchTo(idx.activeId)))) return;');
+    expect(restore).toContain('await ensureWorkspaceOwnerStarted(true);');
+    // The relaunch — over the persisted (OPFS-preloaded) tree, never a re-seed —
+    // serialized through the preset-transition queue like every other launch.
+    expect(restore).toContain(
+      'void queuePresetTransition(() => runVitePreset(presetForId(activeStarterId())));',
+    );
+    // The boot decision delegates to the restore path (still boot-gated once).
     const bootEffect = source.match(
       /if \(!idx \|\| initialBootDecisionMade\) return;[\s\S]*?\n {2}\}\);/,
     )?.[0];
     expect(bootEffect).toBeDefined();
-    expect(bootEffect).toContain('if (workspaceOwner().root !== rootForId(idx.activeId)) {');
-    expect(bootEffect).toContain('void trackSwitch(switchTo(idx.activeId));');
-    expect(bootEffect).toContain('void ensureWorkspaceOwnerStarted(true);');
+    expect(bootEffect).toContain('void restoreActiveProjectOnReload(idx);');
   });
 
   it('flushes pending editor writes before a project switch tears the owner down', () => {
@@ -416,13 +430,13 @@ describe('App terminal startup wiring', () => {
 
   it('tags the worker with the project slug and clears the console on a project switch', () => {
     // slug → worker install-stamp reuse key keyed to the ACTIVE ROOT/id (ADR-0165
-    // §4: store.activeId — 'scratch' on boot, a projectId after switch); clear →
-    // fresh console for the switched-in project.
+    // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
+    // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
     expect(source).toContain("setDevServerStatus('stopped')");
     expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
-    expect(source).toContain('manager.clear(targetSessionId)');
-    expect(source).toContain('manager.clear(session.id)');
+    expect(source).toContain('manager.freshConsole(targetSessionId, terminalWelcomeBanner)');
+    expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
   });
 
   it('marks a same-root launcher open ready without respawning the hidden owner', () => {
@@ -552,7 +566,7 @@ describe('App terminal startup wiring', () => {
       "throw new Error('Unable to reserve an idle terminal for the dev server')",
     );
     expect(runPreset).toMatch(
-      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.clear\(session\.id\);/,
+      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
       /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
@@ -646,6 +660,43 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<PreviewPanel');
     expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
+  });
+});
+
+describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
+  it('wires the status-bar Export button to the real archive download', () => {
+    expect(source).toContain('onExport={() => void downloadWorkspaceArchive()}');
+    expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
+  });
+
+  it('the Share toast no longer implies the user edits travel with the link', () => {
+    // share() copies only location.href (no encoded workspace) — the toast must
+    // not claim it shares the project. Real share-by-link is the M13 item.
+    expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
+    expect(source).not.toContain('Link copied — ${globalThis.location?.host');
+  });
+});
+
+describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-first-poke)', () => {
+  it('Cmd/Ctrl+S kills the save-page dialog, flushes debounced writes + acks', () => {
+    expect(source).toContain("(e.key === 's' || e.code === 'KeyS')");
+    expect(source).toContain('void editorApi?.flushPendingWrites();');
+    expect(source).toContain("flashToast('Saved', 'success');");
+  });
+
+  it('Cmd/Ctrl+W closes the active editor tab, not the browser tab', () => {
+    expect(source).toContain("(e.key === 'w' || e.code === 'KeyW')");
+    expect(source).toContain('if (editorApi?.closeActiveTab()) {');
+  });
+
+  it('beforeunload prompts ONLY in memory mode with dirty edits (OPFS never prompts)', () => {
+    expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
+    expect(source).toContain("e.returnValue = '';");
+    expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
+  });
+
+  it('a rejected terminal run writes its diagnostic to the terminal, not just the console', () => {
+    expect(source).toContain("terminalWriters.get(id)?.(`${message}\\n`, 'stderr')");
   });
 });
 

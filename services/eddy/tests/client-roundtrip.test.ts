@@ -9,7 +9,7 @@ import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { RegistryClient, install, packEddyBundle, unpackEddyBundle } from '@riftydev/npm-client';
 import { MemoryVfs } from '@riftydev/vfs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
@@ -183,10 +183,28 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
-  it('falls back on a typed "unsupported" decline', async () => {
+  it('falls back (never throws, no lockfile corruption) when the bundle lockfile is not v3', async () => {
+    // A divergent/buggy resolver returns a bundle whose package-lock.json is a
+    // NON-v3 shape (here v1) but whose `packages` still cover the request +
+    // whose tarball integrity is intact. Honest eddy always emits v3
+    // (`linker.ts` hardcode), but mirror-grade trust means the client must gate
+    // this: adopting it would (a) write a v1 lockfile over the user's, and
+    // (b) make install()'s post-seed re-read throw NotImplementedError(v1) —
+    // breaking BOTH the "never throws" and "leaves the lockfile untouched"
+    // promises.
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    const lf = JSON.parse(contents.lockfileText) as { lockfileVersion: number };
+    lf.lockfileVersion = 1; // valid `packages`, but a version the client must refuse
+    contents.lockfileText = JSON.stringify(lf);
+    const poisoned = packEddyBundle(contents);
     const raw = await startRaw((_req, res) => {
-      res.writeHead(422, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ kind: 'unsupported', feature: 'file', message: 'use standard' }));
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(poisoned));
     });
     try {
       const vfs = new MemoryVfs();
@@ -195,7 +213,40 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
       expect(result.source).toBe('standard');
       expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+      // The standard install wrote the correct v3 lockfile — the v1 bundle
+      // lockfile was never persisted.
+      const onDisk = JSON.parse(await vfs.readFileText('/app/package-lock.json')) as {
+        lockfileVersion: number;
+      };
+      expect(onDisk.lockfileVersion).toBe(3);
     } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('falls back on a typed "unsupported" decline, naming the declined feature', async () => {
+    // Server sends declines as 422 + JSON (server.ts). The client's warn must
+    // name the feature (`declined (file)`), not a generic `HTTP 422` — the JSON
+    // decline branch has to run BEFORE the `!response.ok` gate, else the typed
+    // reason is unreachable and every decline reads as an opaque status.
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(422, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ kind: 'unsupported', feature: 'file', message: 'use standard' }));
+    });
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map((a) => String(a)).join(' '));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard');
+      expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+      expect(warnings.some((w) => /declined \(file\)/.test(w))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
       await closeServer(raw.server);
     }
   });

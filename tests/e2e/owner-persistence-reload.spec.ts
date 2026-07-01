@@ -202,6 +202,48 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
       .toBe(false);
   });
 
+  test('a reopened scratch draft relaunches its dev server (console + preview) after reload', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    const marker = `revive-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+    await page.goto('/');
+    await clearWorkspaceOpfs(page);
+    await page.reload();
+    await pickStarter(page, 'typescript-ls');
+    // The fresh pick launches the co-resident dev server (ADR-0148): LIVE pill + preview.
+    await expect(page.locator('.rf-livepill[data-state="running"]')).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(page.locator('[data-testid="preview"]')).toBeVisible({ timeout: 90_000 });
+
+    // Edit → the scratch becomes a durable dirty draft (reload-discoverable).
+    await setOpenEditorValue(page, '/scratch/src/main.ts', `// ${marker}\n`);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/src/main.ts'), { timeout: 60_000 })
+      .toContain(marker);
+
+    // Reload reopens the same draft. The co-resident dev server is a pty command
+    // that died with the previous page, so the reopen MUST relaunch it — else the
+    // console stays empty and no preview mounts (the reported bug). Regression guard
+    // for the reload dev-server relaunch, NOT covered by the file/tab guards above.
+    await page.reload();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    await expect(page.locator('.rf-livepill[data-state="running"]')).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(page.locator('[data-testid="preview"]')).toBeVisible({ timeout: 90_000 });
+  });
+
   test('a saved project reopens after reload instead of an empty scratch', async ({
     page,
     browserName,

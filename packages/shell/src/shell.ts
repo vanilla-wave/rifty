@@ -23,7 +23,7 @@ import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
-import type { CommandContext, ShellCommand } from './types.ts';
+import type { CommandContext, ShellCommand, StdinReader } from './types.ts';
 
 /**
  * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
@@ -103,6 +103,39 @@ const ABORTED = Symbol('shell.aborted');
 
 /** Exit code for a command interrupted by SIGINT (128 + SIGINT(2)). */
 const SIGINT_EXIT = 130;
+
+/**
+ * Known external tools whose names fuzzy-match a builtin (npx→npm, cut→cat,
+ * sed→seq, tree→true, code→node, cls→ls, …). Suppressing the suggestion stops a
+ * confidently-WRONG one-click `Run <builtin>` that would run an unrelated tool.
+ */
+const SUGGESTION_DENYLIST = new Set([
+  'npx',
+  'yarn',
+  'pnpm',
+  'bun',
+  'sed',
+  'awk',
+  'cut',
+  'tree',
+  'code',
+  'vim',
+  'nano',
+  'python',
+  'cls',
+  'curl',
+  'wget',
+]);
+
+/** Package managers that get a directed npm nudge instead of `command not found`. */
+const PACKAGE_MANAGERS = new Set(['npx', 'yarn', 'pnpm', 'bun']);
+
+/** Directed nudge for a recognized package manager (rifty wires only npm). */
+function packageManagerNudge(cmd: string): string | null {
+  return PACKAGE_MANAGERS.has(cmd)
+    ? `${cmd}: not available — rifty wires npm (try: npm install …)\n`
+    : null;
+}
 
 function damerauLevenshtein(a: string, b: string): number {
   const rows = a.length + 1;
@@ -185,6 +218,8 @@ export class Shell {
       () => this.listBackgroundJobs(),
       // `which` reports installed-CLI hits at the LIVE cwd (cd mutates it).
       (n) => resolveBin(this._cwd, n),
+      // `help` lists the live registry (builtins + host-registered programs).
+      () => this.commandNames(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }
@@ -217,6 +252,9 @@ export class Shell {
   }
 
   private suggestCommand(cmd: string): string | null {
+    // A known external tool fuzzy-matching a builtin is a wrong suggestion, not
+    // a typo — never offer it (the harm is a confidently-wrong one-click action).
+    if (SUGGESTION_DENYLIST.has(cmd)) return null;
     let best: { name: string; distance: number } | null = null;
     for (const name of this.commands.keys()) {
       const distance = damerauLevenshtein(cmd, name);
@@ -398,13 +436,13 @@ export class Shell {
       if (token.op === '|') {
         throw new NotImplementedError(
           'shell.pipe',
-          'pipe operator not yet supported — M12 work item',
+          'pipes in a background job (`a | b &`) are not supported — run the pipeline in the foreground',
         );
       }
       if (token.op === '<') {
         throw new NotImplementedError(
           'shell.input-redirect',
-          'use bash via wasi for < input redirect — M12 work item',
+          'input redirect in a background job (`cmd < file &`) is not supported — run it in the foreground',
         );
       }
     }
@@ -472,19 +510,55 @@ export class Shell {
   ): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
-    if (segmentTokens.some((t) => isOp(t) && t.op === '<')) {
-      throw new NotImplementedError(
-        'shell.input-redirect',
-        'use bash via wasi for < input redirect — M12 work item',
-      );
+    // Split into pipeline stages on `|`. One stage is the common path; a
+    // multi-stage pipeline BUFFERS each stage's stdout into the next's stdin.
+    const stages = splitOnPipe(segmentTokens);
+    if (stages.length === 1) {
+      return this.runSimpleCommand(stages[0]!, options.stdin, true, options, signal, abortPromise);
     }
 
-    if (segmentTokens.some((t) => isOp(t) && t.op === '|')) {
-      throw new NotImplementedError(
-        'shell.pipe',
-        'pipe operator not yet supported — M12 work item',
+    let pipeStdin = options.stdin;
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    for (let s = 0; s < stages.length; s++) {
+      const isLast = s === stages.length - 1;
+      // Only the final stage streams stdout to the terminal; every stage's
+      // stderr passes through (bash does not pipe stderr). Pipeline exit = the
+      // last stage's exit (POSIX; no pipefail).
+      const res = await this.runSimpleCommand(
+        stages[s]!,
+        pipeStdin,
+        isLast,
+        options,
+        signal,
+        abortPromise,
       );
+      stderr += res.stderr;
+      exitCode = res.exitCode;
+      if (signal.aborted) break; // SIGINT cancels the whole pipeline
+      if (isLast) stdout = res.stdout;
+      else pipeStdin = bufferStdin(encoder.encode(res.stdout));
     }
+    return { exitCode, stdout, stderr };
+  }
+
+  /**
+   * Run one simple command (a single pipeline stage): env-prefix popping,
+   * `< file` input redirect + trailing `>`/`>>` output redirect extraction,
+   * command lookup and execution. `stdin` feeds `ctx.stdin` (a `< file` overrides
+   * it); `streamStdout` gates whether stdout chunks reach `onChunk` — false for a
+   * non-final pipe stage, whose stdout is captured for the next stage.
+   */
+  private async runSimpleCommand(
+    segmentTokens: Token[],
+    stdin: StdinReader | undefined,
+    streamStdout: boolean,
+    options: RunOptions,
+    signal: AbortSignal,
+    abortPromise: Promise<typeof ABORTED>,
+  ): Promise<RunResult> {
+    if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
     // Pop leading KEY=value env assignments (an operator ends the run).
     let i = 0;
@@ -521,6 +595,18 @@ export class Shell {
       rest.splice(k, 2);
     }
 
+    // Symmetric `< path` input redirect: same right-to-left scan, rightmost wins.
+    // Reads the file as the stage's stdin (overriding any inherited pipe stdin).
+    let redirectFrom: string | null = null;
+    for (let k = rest.length - 1; k >= 0; k--) {
+      const op = rest[k];
+      if (!op || !isOp(op) || op.op !== '<') continue;
+      const target = rest[k + 1];
+      if (!target || isOp(target)) continue; // dangling `<` with no target — leave as-is
+      if (redirectFrom === null) redirectFrom = target.value;
+      rest.splice(k, 2);
+    }
+
     const cmdTok = rest[0];
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
     // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
@@ -534,11 +620,31 @@ export class Shell {
     const emit = (chunk: string, stream: ChunkStream): void => {
       // onChunk first so the terminal sees the chunk before it lands in the blob.
       // Fires even for redirected-stdout writes (diverted to a file later) — by
-      // design, so semantics stay composable; the caller decides what to do.
-      options.onChunk?.(chunk, stream);
+      // design, so semantics stay composable. A non-final pipe stage
+      // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
+      // not the terminal; stderr always streams (bash never pipes stderr).
+      if (stream === 'stderr' || streamStdout) options.onChunk?.(chunk, stream);
       if (stream === 'stdout') stdout += chunk;
       else stderr += chunk;
     };
+
+    // `< file` reads the file as stdin (overrides inherited pipe stdin). A miss
+    // is a clean exit-1 diagnostic and the command does NOT run (bash).
+    let stageStdin = stdin;
+    if (redirectFrom !== null) {
+      try {
+        const inPath = normalizePath(
+          isAbsolute(redirectFrom) ? redirectFrom : joinPath(this._cwd, redirectFrom),
+        );
+        stageStdin = bufferStdin(syncMirror().readFileBytesSync(inPath));
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        const reason = code === 'EISDIR' ? 'Is a directory' : 'No such file or directory';
+        emit(`${cmd}: ${redirectFrom}: ${reason}\n`, 'stderr');
+        return { exitCode: 1, stdout, stderr };
+      }
+    }
+
     const ctx: CommandContext = {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
@@ -552,18 +658,25 @@ export class Shell {
           emit(c, 'stderr');
         },
       },
-      // A redirected (and future piped) sink is never a TTY (ADR-0089): force
-      // isTTY false so `ls --color=auto > f` writes no SGR bytes into the file.
-      isTTY: redirectTo ? false : (options.isTTY ?? false),
+      // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
+      // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
+      isTTY: redirectTo || !streamStdout ? false : (options.isTTY ?? false),
       cols: options.cols,
       rows: options.rows,
-      stdin: options.stdin,
+      stdin: stageStdin,
       signal,
     };
 
     if (!handler) {
       const binPath = resolveBin(this._cwd, cmd);
       if (binPath === null) {
+        // A recognized package manager → a directed npm nudge INSTEAD of the
+        // generic miss + a wrong `Did you mean 'npm'?`.
+        const nudge = packageManagerNudge(cmd);
+        if (nudge) {
+          emit(nudge, 'stderr');
+          return { exitCode: 127, stdout, stderr };
+        }
         emit(`${cmd}: command not found\n`, 'stderr');
         const suggestion = this.suggestCommand(cmd);
         if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
@@ -721,6 +834,38 @@ function splitOnJoiners(tokens: readonly Token[]): Segment[] {
   }
   segments.push({ tokens: current, joiner: null });
   return segments;
+}
+
+/** Split a segment's tokens on `|` into pipeline stages (each a `Token[]`). */
+function splitOnPipe(tokens: readonly Token[]): Token[][] {
+  const stages: Token[][] = [];
+  let current: Token[] = [];
+  for (const t of tokens) {
+    if (isOp(t) && t.op === '|') {
+      stages.push(current);
+      current = [];
+    } else {
+      current.push(t);
+    }
+  }
+  stages.push(current);
+  return stages;
+}
+
+/**
+ * One-shot {@link StdinReader} over `bytes`: yields the buffer once, then EOF
+ * (`null`); empty input reads EOF immediately. This is the buffered pipe
+ * hand-off — a stage's captured stdout becomes the next stage's stdin.
+ */
+function bufferStdin(bytes: Uint8Array): StdinReader {
+  let done = false;
+  return {
+    read(): Promise<Uint8Array | null> {
+      if (done) return Promise.resolve(null);
+      done = true;
+      return Promise.resolve(bytes.length > 0 ? bytes : null);
+    },
+  };
 }
 
 function isJoiner(op: string): op is Exclude<Joiner, null> {

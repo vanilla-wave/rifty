@@ -143,3 +143,11 @@ describe('EditorHost git diff contract', () => {
     expect(source).toContain("setTabs((t) => t.filter((tab) => tab.kind !== 'diff'))");
   });
 });
+
+describe('EditorHost session-guard API (frictionless-first-poke)', () => {
+  it('exposes closeActiveTab — closes the active tab when there is one', () => {
+    expect(source).toContain('closeActiveTab(): boolean;');
+    expect(source).toContain('if (id === NO_ACTIVE_TAB_ID) return false;');
+  });
+  // Cmd+S reuses the existing `flushPendingWrites()` (own SCM-flush + this guard).
+});

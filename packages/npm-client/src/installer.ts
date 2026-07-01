@@ -527,16 +527,30 @@ async function tryEddyFastPath(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
-    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
+    // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
+    // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
+    // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
       const decline = (await response.json().catch(() => null)) as { feature?: string } | null;
       return declineEddy(`resolver declined (${decline?.feature ?? 'unsupported'})`);
     }
+    if (!response.ok) return declineEddy(`resolver returned HTTP ${response.status}`);
 
     const bytes = new Uint8Array(await response.arrayBuffer());
     const { lockfileText, tarballs } = unpackEddyBundle(bytes);
     const lockfile = JSON.parse(lockfileText) as Lockfile;
+
+    // Refuse a non-v3 bundle lockfile BEFORE seeding/writing. Honest eddy always
+    // emits v3 (`linker.ts` hardcode), but a divergent/buggy resolver could send
+    // another shape; writing it would clobber the user's lockfile AND make the
+    // post-seed re-read throw `NotImplementedError(v1/v2)` (installer-lockfile-
+    // reader) — breaking BOTH the never-throw and lockfile-untouched promises.
+    if ((lockfile.lockfileVersion as number) !== 3) {
+      return declineEddy(
+        `bundle lockfile is not v3 (got ${JSON.stringify(lockfile.lockfileVersion)})`,
+      );
+    }
 
     // Mirror-grade trust (ADR-0182 §5): verify each tarball's bytes against the
     // integrity the BUNDLE carries (not npm source-of-truth). Non-disableable.
@@ -616,7 +630,7 @@ function chooseSource(
       subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
       return {
-        source: createLockfileSource(existingLockfile),
+        source: createLockfileSource(existingLockfile, opts),
         dependencies: effectiveDependencies,
         optionalDependencies: effectiveOptionalDependencies,
       };
@@ -948,43 +962,54 @@ async function pinToPackage(
 /**
  * Lockfile-replay source. Walks up the parent's path via `pinnedEntryForParent`
  * and returns the first matching entry. `range` is ignored (the lockfile pins
- * exact versions); `parentName` is ignored (override divergence pre-validated by
- * `subgraphFreeOfOverrideDivergence`). Returns `installPath = <matched lockfile
- * key>` so the walk reproduces the recorded layout regardless of visit order.
+ * exact versions); `name`/`parentName` are override-resolved first so a redirect
+ * target's recorded key is what gets looked up. Returns `installPath = <matched
+ * lockfile key>` so the walk reproduces the recorded layout regardless of visit
+ * order.
  *
  * Throws `EBROKENLOCK` on a missing or malformed (no `resolved`/`integrity`)
  * entry: the contract is "lockfile is authoritative or it's an error".
  * Returning `null` would leave a partial set that reads as network slowness.
  */
-function createLockfileSource(lockfile: Lockfile): ResolutionSource {
+function createLockfileSource(lockfile: Lockfile, opts: InstallOptions): ResolutionSource {
   return {
     async resolve(name, _range, ctx): Promise<ResolvedPin> {
-      const hit = pinnedEntryForParent(lockfile, name, ctx.parentInstallPath);
+      // Apply the same shadow/user override the live-resolve source does
+      // (`createRegistrySource`, ADR-0015 baked table + user `overrides`) BEFORE
+      // the lockfile lookup. The writer stores a redirect under its TARGET key
+      // (`esbuild` → `@esbuild/wasi-preview1`), leaving no `node_modules/esbuild`
+      // entry, so replaying the SOURCE name verbatim would miss the pin and throw
+      // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
+      // esbuild. `subgraphFreeOfOverrideDivergence` cannot pre-empt it: the
+      // source name has no entry, so `lockfileSubgraph` never surfaces it.
+      const override = resolveOverride(name, ctx.parentName, opts.overrides);
+      const effectiveName = override?.name ?? name;
+      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentInstallPath);
       if (!hit) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile coverage gap — '${name}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
+            `EBROKENLOCK: lockfile coverage gap — '${effectiveName}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
           ),
-          { code: 'EBROKENLOCK', packageName: name, reason: 'missing-entry' as const },
+          { code: 'EBROKENLOCK', packageName: effectiveName, reason: 'missing-entry' as const },
         );
       }
       const { entry, installPath } = hit;
       if (!entry.resolved || !entry.integrity) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile entry for '${name}' at '${installPath}' is malformed (missing ${
+            `EBROKENLOCK: lockfile entry for '${effectiveName}' at '${installPath}' is malformed (missing ${
               !entry.resolved ? 'resolved' : 'integrity'
             }). Delete the lockfile and re-install.`,
           ),
           {
             code: 'EBROKENLOCK',
-            packageName: name,
+            packageName: effectiveName,
             reason: 'malformed-entry' as const,
           },
         );
       }
       return {
-        name,
+        name: effectiveName,
         version: entry.version,
         resolved: entry.resolved,
         integrity: entry.integrity,

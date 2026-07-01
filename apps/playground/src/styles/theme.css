@@ -2162,6 +2162,22 @@ body {
   height: 100%;
   white-space: nowrap;
 }
+/* Export is a real button (was a dead "soon" span): reset the native chrome so
+   it reads as a status-bar item, dimming + non-interactive when disabled. */
+button.rf-status__export {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--rf-text-muted);
+  cursor: pointer;
+}
+button.rf-status__export:not(:disabled):hover {
+  color: var(--rf-text);
+}
+button.rf-status__export:disabled {
+  color: var(--rf-text-ghost);
+  cursor: default;
+}
 .rf-status__spacer {
   flex: 1;
 }

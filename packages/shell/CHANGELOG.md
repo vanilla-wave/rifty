@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Shell input redirect `cmd < file`.** A `< file` operand (anywhere in a simple command, rightmost wins — mirrors the `>`/`>>` scan) reads the VFS file as the command's stdin via the same one-shot reader the pipe hand-off uses; an explicit `< file` overrides any inherited pipe stdin. A missing/unreadable file → `cmd: file: No such file or directory` exit 1 and the command does not run. Composes with pipes (`grep x < f | wc -l`). Background `cmd < file &` stays a loud ceiling. Guards: `input-redirect.test.ts`.
+- **Shell pipes `a | b`.** The dispatcher now splits a segment on `|` and runs the stages left→right, BUFFERING each stage's stdout into the next stage's `ctx.stdin` (a one-shot reader). Only the final stage streams stdout to the terminal; every stage's stderr passes through (bash never pipes stderr); pipeline exit = the last stage's exit (POSIX). To make chains work, `cat`/`grep`/`wc`/`head`/`tail` now drain `ctx.stdin` when given no FILE operand (a `-` operand also reads stdin, GNU) — so `cat f | grep x | wc -l`, `ls | wc -l` work. A piped BACKGROUND job (`a | b &`) stays a loud ceiling. `>`/`>>` redirect composes per-stage. Guards: `pipes.test.ts`.
+- **`help` builtin.** `help` lists the live command registry (sorted; includes host-registered `node`/`npm`/`vite`) plus a note that those run programs; `help <cmd>` prints a one-line synopsis, unknown topic → `help: no help topic for '<cmd>'` exit 1. Lists from the live `commandNames()` so it can't drift from the real set. Guards: `help.test.ts`.
 ### Changed
 
 - `git commit`'s empty/no-op refusal classifier now comes from `@riftydev/git`
@@ -11,6 +16,8 @@
 
 ### Fixed
 
+- **No more confidently-wrong `Run <builtin>` for known external tools.** A denylist (`npx`, `yarn`, `pnpm`, `bun`, `sed`, `awk`, `cut`, `tree`, `code`, `vim`, `nano`, `python`, `cls`, `curl`, `wget`) suppresses the fuzzy `Did you mean …?` suggestion that would map e.g. `npx`→`npm`, `cut`→`cat`, `tree`→`true` into a clickable Run of an unrelated command. Recognized package managers (`npx`/`yarn`/`pnpm`/`bun`) instead get a directed `<tool>: not available — rifty wires npm (try: npm install …)` (exit 127). Genuine typos of real builtins within the existing edit-distance threshold still suggest. Guards: `shell.test.ts`, `terminal-quick-fix.test.ts`.
+- **Command substitution `$(…)` / backticks no longer pass through as a silent literal (Fidelity).** The tokenizer now throws a directed `NotImplementedError('shell.command-substitution')` when `$(…)`, `` `…` `` or `$((…))` arithmetic appears in an UNQUOTED or DOUBLE-QUOTED context (where bash would substitute) — previously `echo $(date)` silently printed the literal `$(date)`. Single-quoted forms stay literal (bash-faithful). Surfaces as a clean shell diagnostic via the existing `run()` rejection path. Guards: `shell.test.ts`.
 - **PR #78 review fixes for git porcelain fidelity.** Ambiguous revision/path operands now refuse with real git's `both revision and filename` fatal (including untracked worktree filenames and later `log`/`diff` operands); annotated-tag checkout/reset paths no longer corrupt HEAD via tag/tree objects; `git apply` context failures exit 1 with `patch failed` text while capability ceilings stay `NotImplementedError`; `stash push` no longer persists fallback identity into `.git/config`; merge-commit `show` renders `Merge:` and suppresses the default patch; bare `ls-remote` defaults to `origin`; `clone` with no URL exits 129 with usage; and success output now covers `reset --mixed`, `tag -d`, `git rm`, and clean `cherry-pick`. Guards: `git-cli.test.ts`.
 - **`git` fidelity hardening — no silent false-successes, faithful error surfaces (ADR-0167).**
   - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit).

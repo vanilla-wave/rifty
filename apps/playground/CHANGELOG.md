@@ -2,12 +2,40 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
+  (shareable launch URLs + the perf-benchmark harness,
+  docs/backlog/perf/cold-start-and-install-benchmark). The id is validated
+  against the registry — an unknown id silently falls back to the default;
+  `autorun=1` runs the preset's boot lines (a from-scratch preset installs +
+  starts its dev server), else it lands seeded + active. Drives the cold-boot
+  scratch only. Parser unit-tested; an e2e RED-checked against the default boot.
+
 ### Fixed
 
+- **Reload now relaunches the restored project's dev server (console + preview).**
+  A persisted active project (dirty scratch draft or saved project) reopened on
+  reload re-rooted/adopted the owner but never re-issued the co-resident dev-server
+  pty command that died with the previous page → empty console, no preview
+  (`switchTo`'s `restartDevServer` hook no-ops on a fresh reload — no
+  `devServerSessionId` yet). The boot-decision restore path now runs `runVitePreset`
+  (through the preset-transition queue) over the persisted (OPFS-preloaded) tree once
+  the owner is ready — the same launch a fresh pick performs, never a re-seed.
 - **Starter picks stop the active dev server before reseeding starter files.**
   Project-first picks now stop the current lifecycle-owned dev command before
   resetting `/scratch`, so the old Vite process cannot observe a half-written
   starter while the new queued boot is being prepared.
+- **A rejected terminal run now shows its diagnostic in the terminal, not just the console.** A tokenizer loud-throw (command substitution `$(…)`, `${VAR:-x}`) previously rejected the run and only `console.error`-ed — the terminal showed a bare non-zero exit that read as "broken". The interactive run path now writes the error message to the terminal as stderr.
+- **UI affordance honesty — the dead "Export soon" chip works, the Share toast stops over-claiming.** The status-bar `Export` control is now a real button wired to the already-shipped whole-workspace archive download (`downloadWorkspaceArchive`), disabled only while the dev server is running (with a title explaining why) — no more dead `soon` teaser next to a feature that already exists. The Share success toast now reads `Link copied — opens this playground` instead of implying the user's edits travel with the copied URL (it encodes none; real share-by-link is the M13 item). Guards: `StatusBar.test.tsx`, `App.test.ts`.
+
+### Added
+
+- **Session data-loss guards — `beforeunload` + Cmd+W + Cmd+S.** A reflexive Cmd+R / tab close no longer silently nukes an in-memory session: a `beforeunload` prompt fires ONLY when storage is memory-backed AND there are unsaved/just-debounced edits (OPFS-backed sessions never prompt). Cmd/Ctrl+W closes the active editor tab instead of the browser tab (leaving the browser default when no editor tab is closable); Cmd/Ctrl+S suppresses the browser "Save page" dialog, flushes the debounced editor writes, and pulses a transient "Saved" ack. Extends the single capture-phase keydown handler; new `EditorApi.closeActiveTab()` / `flushPendingWrites()`. Guards: `App.test.ts`, `EditorHost.test.ts`, curious-first-15-min e2e.
+- **Terminal welcome banner.** On a cold load the terminal greets with a two-line dim banner before the first prompt: `rifty · node v24.0.0 · npm in your browser` (version from the live runtime identity, so it can't drift or over-claim) and `try:  node -v   ·   npm install chalk   ·   help`. Prints once per terminal session (not after a user `clear`); supplied via the new content-agnostic `RiftyTerminalOptions.banner`. The boot/project-switch fresh-console (`TerminalManager.freshConsole`) re-emits the banner so the auto-booting dev-server terminal greets too (its clear would otherwise erase the mount banner). Guards: `terminal-welcome-banner.test.ts`, `App.test.ts`, curious-first-15-min e2e.
+- **Cold-boot loading skeleton.** `index.html` now ships a static CSS spinner + `Booting rifty…` line inside `#app` (pure inline HTML/CSS in the critical `<style>`, no JS or font dependency — it paints on the first byte), so a slow first load isn't a blank dark screen. `main.tsx` clears it just before mounting the app; a hard boot failure (e.g. the COI assert) still clears the body and paints its own banner, so the skeleton never masks a real failure. Honors `prefers-reduced-motion`.
+- **`npm` tolerates `-D/--save` flags and aliases `test`/`start`/`stop`/`restart`.** `npm install -D <pkg>` / `--save-dev` records under `devDependencies`; `-S/--save` (default), `-E/--save-exact`, and a bare install record under `dependencies` (save flags are otherwise no-ops); `npm i -g`/`--global` gets a directed `global installs aren't supported in the browser sandbox — install into the project instead` (exit 1) instead of the generic M9-scope line; an unknown install flag still loud-rejects. `npm test`/`start`/`stop`/`restart` now alias to `npm run <name>` (a missing script keeps npm's missing-script message, non-zero). The `unknown subcommand` list advertises the new aliases. Guards: `npm-shell-command.test.ts`.
+- **`node` CLI flags — `-v/--version`, `-e/-p`, and `bad option`.** The `node` command now parses a leading flag before resolving an entry path: `node -v`/`--version` prints `v24.0.0` (the live `process.version`) exit 0; `node -e "<src>"`/`--eval` runs the source through the real module-loader realm (a temp `.cjs` in cwd → CJS `require` faithful, never `new Function`); `node -p "<expr>"`/`--print` prints `util.inspect(result)`; any other leading-`-` arg → `node: bad option: <flag>` exit 9. Previously `node --version` and every `node -e …` threw `Cannot find module '/workspace/--version'` because `args[0]` was absolutized blindly. Bare `node` (REPL) stays the documented ceiling. Guards: `node-entry-resolve.test.ts`, curious-first-15-min e2e.
 - **The `[vite] dev server ready` marker no longer intermittently vanishes from
   the terminal (CI flake).** When a starter pick restarts the dev server, the
   aborted run's late `listen()` IPC could emit the readiness marker AFTER its
