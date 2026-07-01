@@ -6,9 +6,10 @@
 
 - **Oversized request body → `413` JSON, not a torn socket.** A POST over
   `MAX_BODY_BYTES` now replies with `413 {error:'request body too large'}` and
-  destroys the socket only after the response flushes — the old `req.destroy()`
-  mid-stream reset the connection before replying, so the client saw
-  `ECONNRESET` instead of a readable 4xx.
+  DRAINS (discards) the rest of the upload rather than destroying the socket —
+  the old `req.destroy()` reset the connection (client saw `ECONNRESET`;
+  destroying after the reply instead would race the still-arriving upload →
+  `EPIPE`). Memory stays bounded (nothing is buffered past the cap).
 - **`EDDY_TTL_SECONDS` validated at startup (`parseTtlSeconds`).** A junk value
   (`abc`, `30s`) now throws loudly instead of coercing to `NaN` and silently
   killing the mutable-tier cache (every request recomputed). `0` (always

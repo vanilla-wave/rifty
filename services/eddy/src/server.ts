@@ -78,11 +78,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     const statusCode = (err as { statusCode?: number }).statusCode;
     const status = typeof statusCode === 'number' ? statusCode : 400;
     sendJson(res, status, { error: err instanceof Error ? err.message : 'failed to read body' });
-    // Reply first, THEN stop the still-arriving upload — destroying before the
-    // response flushed is what tore the socket (client saw ECONNRESET). The
-    // JSON body carries a Content-Length, so the client has the full 4xx before
-    // this fires; the destroy just caps the wasted upload bandwidth.
-    res.on('finish', () => req.destroy());
+    // Do NOT destroy the socket. `readBody` keeps draining (discarding) the
+    // still-arriving upload, so the client finishes writing and reads the 4xx
+    // cleanly. Destroying mid-upload tore the socket — ECONNRESET if before the
+    // reply, EPIPE (client still writing) if after. Memory stays bounded because
+    // `readBody` discards past the cap; bandwidth of an oversize body is the
+    // trade for a reliable reply (eddy sits behind a proxy with its own limits).
     return;
   }
   let parsed: unknown;
