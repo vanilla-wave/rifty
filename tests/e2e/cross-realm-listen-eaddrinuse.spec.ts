@@ -35,12 +35,12 @@ const SERVER_A_SRC =
 
 // Realm B: a SECOND supervised child that tries to bind the SAME port. In real
 // Node the second cross-process bind fails with EADDRINUSE; rifty must match
-// (ADR-0185) instead of silently double-binding.
+// (ADR-0186) instead of silently double-binding.
 const SERVER_B_SRC =
   'import http from "node:http"; http.createServer((req, res) => res.end("from-B")).listen(4112).on("error", (e) => { console.log("B-ERR:" + e.code); process.exit(1); }).on("listening", () => { console.log("B-LISTENING-UNEXPECTED"); process.exit(0); });';
 
 /**
- * Cross-realm `EADDRINUSE` at `listen()` end-to-end (ADR-0185), chromium/COI.
+ * Cross-realm `EADDRINUSE` at `listen()` end-to-end (ADR-0186), chromium/COI.
  *
  * Proves the REAL two-realm bind conflict the in-process tests cannot: an
  * `http` server in one supervised-child `node` realm holds :4112, and a SECOND
@@ -50,7 +50,7 @@ const SERVER_B_SRC =
  * are proven over the real BroadcastChannel transport in the net unit tests;
  * this e2e covers the real supervised-child hop.)
  */
-test.describe('cross-realm EADDRINUSE between two node realms (ADR-0185)', () => {
+test.describe('cross-realm EADDRINUSE between two node realms (ADR-0186)', () => {
   test('a second realm listen() on a held port is refused with EADDRINUSE', async ({
     page,
     browserName,
