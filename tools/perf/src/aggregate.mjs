@@ -87,7 +87,11 @@ function buildPresetBootMetric(presetBoot, stepMs) {
     if (p.status === 'unmeasured') {
       return { presetId: p.presetId, status: 'unmeasured', note: p.note };
     }
-    return { presetId: p.presetId, ...summarize(p.samples, stepMs), stages: medianStages(p.stageRuns) };
+    return {
+      presetId: p.presetId,
+      ...summarize(p.samples, stepMs),
+      stages: medianStages(p.stageRuns),
+    };
   });
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 // The pure core is `.mjs` so `../bench.mjs` (a zero-dep node runner) imports it
 // directly; the unit suite drives it here.
-import { buildArtifact, median, roundUpMs, SCHEMA_VERSION, summarize } from './aggregate.mjs';
+import { SCHEMA_VERSION, buildArtifact, median, roundUpMs, summarize } from './aggregate.mjs';
 
 describe('bench aggregate core', () => {
   describe('median', () => {
