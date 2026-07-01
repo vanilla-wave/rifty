@@ -266,6 +266,47 @@ describe('RiftyTerminal — Enter and line buffering', () => {
   });
 });
 
+describe('RiftyTerminal — no blank row between output and prompt', () => {
+  function terminalWithOutput(output: string): { term: RiftyTerminal; writes: string[] } {
+    // The command's onInput echoes `output` back through the terminal, exactly
+    // as the host pipes a real command's stdout. The closure runs long after
+    // construction, so the self-reference to `term` is safe.
+    const term: RiftyTerminal = new RiftyTerminal({
+      onInput: () => {
+        term.write(output);
+        return 0;
+      },
+    });
+    const writes = tapWrites(term);
+    return { term, writes };
+  }
+
+  async function runLine(term: RiftyTerminal, line: string): Promise<void> {
+    for (const ch of line) await term.handleInput(ch);
+    await term.handleInput('\r');
+  }
+
+  it('re-prints the prompt on the next line, not after a blank row, when output ends in a newline', async () => {
+    const { term, writes } = terminalWithOutput('v24.0.0\n');
+    await runLine(term, 'node -v');
+    const last = writes.at(-1) ?? '';
+    // bash-style: the output's own trailing newline already put us on a fresh
+    // line, so the prompt must NOT carry a leading CRLF (that is the blank row).
+    expect(last.startsWith('\r\n')).toBe(false);
+    expect(last).toContain('> ');
+    expect(writes.join('')).not.toContain('v24.0.0\r\n\r\n');
+  });
+
+  it('still separates the prompt with one newline when output has no trailing newline', async () => {
+    const { term, writes } = terminalWithOutput('partial');
+    await runLine(term, 'printf partial');
+    const joined = writes.join('');
+    expect(joined).toContain('partial\r\n');
+    expect(joined).not.toContain('partial\r\n\r\n');
+    expect(joined).toContain('> ');
+  });
+});
+
 describe('RiftyTerminal — backspace', () => {
   it('xterm.js DEL (\\x7f) deletes the last buffered char', async () => {
     const { term, rec } = createTerminal();

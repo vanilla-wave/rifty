@@ -574,6 +574,11 @@ export class RiftyTerminal {
   private promptActive = false;
   private busy = false;
   private disposed = false;
+  /** Tracks whether the cursor is at column 0 (last output ended in a line
+   *  break) so {@link writePrompt} re-draws bash-style — no blank row when the
+   *  command's own output already ended the line. Mirrors the write queue
+   *  synchronously (xterm `write()` is async, so `buffer.cursorX` lags). */
+  private atLineStart = false;
 
   constructor(opts: RiftyTerminalOptions) {
     this.opts = opts;
@@ -649,6 +654,11 @@ export class RiftyTerminal {
     this.term.loadAddon(this.fit);
     this.loadWebglAddon();
     this.fit.fit();
+    // xterm measures the glyph cell at open() time. With a self-hosted webfont
+    // (font-display: swap) that is still loading, it measures the FALLBACK →
+    // wrong cell width → the real font swaps in mis-aligned ("strange"). Re-measure
+    // once fonts settle so the grid matches the font actually painted.
+    this.remeasureFontOnLoad();
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.fit?.fit());
       this.resizeObserver.observe(element);
@@ -658,9 +668,32 @@ export class RiftyTerminal {
     // `\r\n` separates it from the prompt, so the banner carries no trailing one.
     if (this.opts.banner && !this.bannerPrinted) {
       this.term.write(this.opts.banner);
+      this.atLineStart = /[\n\r]$/.test(this.opts.banner);
       this.bannerPrinted = true;
     }
     this.writePrompt();
+  }
+
+  /**
+   * Force xterm to re-measure the glyph cell once the terminal font has loaded.
+   * Reassigning `fontFamily` fires the options-change path that re-runs the char
+   * size measurement with the now-available webfont; `fit()` then re-derives
+   * rows/cols. No-op outside a browser (no `document.fonts`).
+   */
+  private remeasureFontOnLoad(): void {
+    const fonts = globalThis.document?.fonts;
+    if (!fonts?.ready) return;
+    void fonts.ready.then(() => {
+      if (this.disposed) return;
+      const family = this.term.options.fontFamily;
+      if (family) {
+        // Toggle to a different-but-equivalent value and back so the change
+        // fires even if the options proxy guards against equal assignments.
+        this.term.options.fontFamily = `${family}, monospace`;
+        this.term.options.fontFamily = family;
+      }
+      this.fit?.fit();
+    });
   }
 
   dispose(): void {
@@ -857,7 +890,9 @@ export class RiftyTerminal {
     }
     const text = osc52.text.replace(/\n/g, '\r\n');
     const rendered = stream === 'stderr' ? `${ANSI_RED}${text}${ANSI_RESET}` : text;
-    this.writeOutput(rendered);
+    // Track line-break on the LOGICAL text: the stderr ANSI wrapper ends in a
+    // reset sequence, not a newline, so `rendered` would mis-report line start.
+    this.writeOutput(rendered, text.endsWith('\n') || text.endsWith('\r'));
   }
 
   writeLine(data: string, stream: TerminalStream = 'stdout'): void {
@@ -963,9 +998,10 @@ export class RiftyTerminal {
     }
   }
 
-  private writeOutput(text: string): void {
+  private writeOutput(text: string, endedAtLineStart: boolean): void {
     if (this.busy || this.reverseSearch != null || !this.promptActive) {
       this.term.write(text);
+      this.atLineStart = endedAtLineStart;
       return;
     }
 
@@ -982,11 +1018,18 @@ export class RiftyTerminal {
     if (tail.length > 0) this.term.write(cursorLeft(cellWidth(tail)));
     this.buffer = buffer;
     this.cursorPos = cursorPos;
+    // Redraw ends on the prompt + restored input, so the caret is not at col 0.
+    this.atLineStart = false;
     this.renderSuggestion();
   }
 
   writePrompt(): void {
-    this.term.write(`\r\n${PROMPT}`);
+    // No leading CRLF when the previous output already ended the line — a
+    // command whose stdout ends in `\n` gets its prompt on the very next row,
+    // not after a blank one. Empty Enter / a non-terminated command still gets
+    // the separating newline (`atLineStart` is false there).
+    this.term.write(`${this.atLineStart ? '' : '\r\n'}${PROMPT}`);
+    this.atLineStart = false;
     this.buffer = '';
     this.cursorPos = 0;
     this.promptActive = true;
@@ -1395,7 +1438,10 @@ export class RiftyTerminal {
     }
     const line = this.buffer;
     this.clearSuggestion();
-    if (line.trim().length > 0) this.term.write('\r\n');
+    if (line.trim().length > 0) {
+      this.term.write('\r\n');
+      this.atLineStart = true;
+    }
     const block = this.beginCommandBlock(line);
     this.buffer = '';
     this.cursorPos = 0;
