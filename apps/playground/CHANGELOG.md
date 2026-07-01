@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **The `[vite] dev server ready` marker no longer intermittently vanishes from
+  the terminal (CI flake).** When a starter pick restarts the dev server, the
+  aborted run's late `listen()` IPC could emit the readiness marker AFTER its
+  `pty:exit` — the page dropped the `pty:chunk` for the already-removed run
+  (`runs.get(rid)` was undefined), so the marker (and only it) was lost while the
+  Vite banner + LIVE pill still showed. `pty-client` now routes a chunk that
+  outlives its run to the session's trailing sink, so it still reaches the
+  terminal (matching the passing render where the marker lands just after the
+  prompt). RED-checked unit test in `pty-client.test.ts`.
 - **Launcher groups node-runtime starters under SERVER, not "Vite dev server".**
   The gallery group is now derived from the resolved template runtime
   (`groupForPreset`) instead of the display category, so every `node-server` /
@@ -118,6 +127,27 @@
 
 ### Fixed
 
+- **CI-only "[vite] dev server ready never appears" e2e flake — root cause.**
+  The `data-terminal-buffer` mirror was serialized *synchronously* after writing
+  to xterm, but `xterm.write()` parses on a deferred macrotask. A final
+  dev-server-ready line (no trailing output to trigger a later refresh) was
+  serialized before xterm parsed it, so it never reached the mirror; under CI
+  load xterm's chunked drain lagged the refresh deadline, and being the last
+  write nothing re-triggered the serialize. `TerminalPanel.refreshTerminalBuffer`
+  now serializes via `RiftyTerminal.snapshotBufferSettled` (an xterm empty-write
+  settle barrier), so the mirror always reflects the final write. Deterministic
+  regression test in `@riftydev/terminal`; the native Vite banner appeared while
+  the marker vanished precisely because the banner had trailing output and the
+  marker did not.
+- **Terminal buffer mirror can no longer starve under streaming output.**
+  `data-terminal-buffer` (the serialized mirror the UI + e2e read) was refreshed
+  by a reset-on-every-write 16ms debounce: while a dev server streams output,
+  every chunk cleared the pending timer, so the mirror could freeze on stale
+  content under unbroken output. The new `createBufferRefreshScheduler` coalesces
+  tight bursts but caps the wait (`maxWaitMs`), guaranteeing a refresh even under
+  a continuous stream; the starvation case is a deterministic unit test.
+  (Perf/coalescing guard — the marker flake itself is fixed by the settle barrier
+  above, not the debounce cap.)
 - **Explorer/SCM file actions now use fresh owner state.** Download and compare
   drain pending editor writes before owner reads, new files compare against an
   empty HEAD side, SCM discard asks for confirmation, and owner batch/write

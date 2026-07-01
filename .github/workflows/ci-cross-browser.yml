@@ -24,8 +24,19 @@ jobs:
         # own engine via the explicit step below.
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
-      - run: pnpm test:e2e:${{ matrix.engine == 'chromium' && '' || matrix.engine }}
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-${{ matrix.engine }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps ${{ matrix.engine }}
+      # chromium → two-lane `test:e2e`; firefox/webkit → full-suite single project.
+      - run: pnpm test:e2e${{ matrix.engine == 'chromium' && '' || format(':{0}', matrix.engine) }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
