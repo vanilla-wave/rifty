@@ -11,6 +11,17 @@ export function getResolverUrl(): string | undefined {
   return undefined;
 }
 
+/**
+ * CDN base for pinned bundle GETs (ADR-0186): the edge won't proxy the POST
+ * resolve, so GET-by-hash may ride a separate CDN hostname while POST stays on
+ * `VITE_RIFTY_RESOLVER_URL`. Default absent → GETs use the resolver URL.
+ */
+export function getEddyBundleBaseUrl(): string | undefined {
+  const value = import.meta.env.VITE_RIFTY_EDDY_BUNDLE_URL;
+  if (typeof value === 'string' && value.length > 0) return value;
+  return undefined;
+}
+
 let warnedMalformedPins = false;
 
 /**

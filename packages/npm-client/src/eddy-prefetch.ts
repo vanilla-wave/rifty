@@ -28,6 +28,9 @@ export interface StartEddyPrefetchOptions {
   /** Pinned closure hash → cacheable `GET /bundle/<hash>`; absent → the
    * CORS-simple POST resolve. */
   closureHash?: string;
+  /** Base URL for the pinned GET (defaults to `resolverUrl`) — a CDN host may
+   * serve GET-by-hash while POST stays on the origin (ADR-0186). */
+  bundleBaseUrl?: string;
   /** Injectable fetch (tests); defaults to the global. */
   fetchImpl?: typeof fetch;
 }
@@ -38,7 +41,7 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
   const body: Record<string, unknown> = { ...opts.request };
   if (opts.prefer) body.prefer = opts.prefer;
   const response = opts.closureHash
-    ? fetchImpl(bundleUrlFor(opts.resolverUrl, opts.closureHash))
+    ? fetchImpl(bundleUrlFor(opts.bundleBaseUrl ?? opts.resolverUrl, opts.closureHash))
     : // Same CORS-simple POST the installer sends (no content-type header).
       fetchImpl(opts.resolverUrl, { method: 'POST', body: JSON.stringify(body) });
   // An untaken failed prefetch must never surface as an unhandled rejection;

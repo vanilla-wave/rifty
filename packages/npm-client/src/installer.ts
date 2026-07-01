@@ -116,14 +116,21 @@ export interface InstallOptions {
    */
   onSubstitution?: (line: string) => void;
   /**
-   * Pinned closure hash: try the cacheable `GET <resolverUrl>/bundle/<hash>`
-   * first (browser-HTTP-cache/CDN friendly, preflight-free); ANY failure —
-   * miss, network, verification — falls through to the POST resolve. The
-   * returned bundle passes the same non-disableable gates as a POSTed one, so
-   * a stale pin degrades to POST, never to a wrong install. Inert without
+   * Pinned closure hash: try the cacheable `GET <base>/bundle/<hash>` first
+   * (browser-HTTP-cache/CDN friendly, preflight-free); ANY failure — miss,
+   * network, verification — falls through to the POST resolve. The returned
+   * bundle passes the same non-disableable gates as a POSTed one, so a stale
+   * pin degrades to POST, never to a wrong install. Inert without
    * `resolverUrl`.
    */
   resolverClosureHash?: string;
+  /**
+   * Base URL for the pinned bundle GET (defaults to `resolverUrl`). Lets a
+   * CDN host serve GET-by-hash while the POST resolve stays on the origin —
+   * Yandex CDN (and most edges) won't proxy POST, so the two bases can
+   * differ (ADR-0186). Inert without `resolverClosureHash`.
+   */
+  resolverBundleBaseUrl?: string;
   /**
    * A bundle prefetch started earlier (`startEddyPrefetch`) so the round-trip
    * overlaps boot work. Consumed at most once, and ONLY when its canonical
@@ -591,7 +598,8 @@ async function tryEddyFastPath(
   const pin = opts.resolverClosureHash;
   // Skip a duplicate GET when the consumed prefetch already WAS this pin's GET.
   if (pin && !(prefetched && opts.resolverPrefetch?.closureHash === pin)) {
-    attempts.push({ label: 'get', run: () => fetch(bundleUrlFor(url, pin)) });
+    const bundleBase = opts.resolverBundleBaseUrl ?? url;
+    attempts.push({ label: 'get', run: () => fetch(bundleUrlFor(bundleBase, pin)) });
   }
   attempts.push({
     label: 'post',

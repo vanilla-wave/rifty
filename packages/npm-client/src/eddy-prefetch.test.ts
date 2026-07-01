@@ -38,6 +38,18 @@ describe('startEddyPrefetch', () => {
     expect(handle.closureHash).toBe('sha256-ab/cd=');
   });
 
+  it('a pinned prefetch GETs from bundleBaseUrl when set (CDN base ≠ POST origin)', () => {
+    const { impl, calls } = fetchSpy(async () => new Response('x'));
+    startEddyPrefetch({
+      resolverUrl: 'http://eddy-origin.test',
+      bundleBaseUrl: 'http://eddy-cdn.test',
+      request: REQUEST,
+      closureHash: 'sha256-abc',
+      fetchImpl: impl,
+    });
+    expect(calls[0]?.input).toBe('http://eddy-cdn.test/bundle/sha256-abc');
+  });
+
   it('take() is one-shot and requires a matching canonical key', async () => {
     const { impl } = fetchSpy(async () => new Response('bundle-bytes'));
     const handle = startEddyPrefetch({

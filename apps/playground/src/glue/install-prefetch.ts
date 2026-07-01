@@ -19,6 +19,8 @@ export function startInstallPrefetch(opts: {
   readonly resolverUrl: string | undefined;
   /** Pinned closure hash (`VITE_RIFTY_EDDY_PINS`) → cacheable GET; absent → POST. */
   readonly closureHash?: string | undefined;
+  /** CDN base for the pinned GET (`VITE_RIFTY_EDDY_BUNDLE_URL`); defaults to the resolver. */
+  readonly bundleBaseUrl?: string | undefined;
   /** Test seam; defaults to the global fetch. */
   readonly fetchImpl?: typeof fetch;
 }): EddyPrefetchHandle | undefined {
@@ -29,6 +31,7 @@ export function startInstallPrefetch(opts: {
     resolverUrl: opts.resolverUrl,
     request,
     ...(opts.closureHash ? { closureHash: opts.closureHash } : {}),
+    ...(opts.bundleBaseUrl ? { bundleBaseUrl: opts.bundleBaseUrl } : {}),
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
   });
 }

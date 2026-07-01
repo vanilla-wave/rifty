@@ -405,6 +405,50 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('resolverBundleBaseUrl: the pinned GET rides the CDN base, the POST fallback stays on the origin', async () => {
+    // Real edges (Yandex CDN) refuse POST, so the two bases can differ: a
+    // CDN-shaped server that ONLY answers GET-by-hash, and the origin that
+    // answers POST. A stale pin on the CDN must fall back to the ORIGIN's POST.
+    const bytes = await buildBundleFor(DEPS);
+    let cdnGets = 0;
+    const cdn = await startRaw((req, res) => {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'method not allowed at the edge' }));
+        return;
+      }
+      cdnGets++;
+      res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ error: 'unknown bundle hash' }));
+    });
+    let originPosts = 0;
+    const origin = await startRaw((req, res) => {
+      expect(req.method).toBe('POST');
+      originPosts++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: origin.url,
+        resolverClosureHash: 'sha256-evicted',
+        resolverBundleBaseUrl: cdn.url,
+      });
+      expect(result.source).toBe('eddy');
+      expect(cdnGets).toBe(1);
+      expect(originPosts).toBe(1);
+    } finally {
+      await closeServer(cdn.server);
+      await closeServer(origin.server);
+    }
+  });
+
   it('resolverPrefetch: a matching prefetch is consumed — the server sees exactly ONE request', async () => {
     const bytes = await buildBundleFor(DEPS);
     let requests = 0;

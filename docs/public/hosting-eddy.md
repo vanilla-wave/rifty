@@ -61,6 +61,13 @@ the cacheable GET (browser HTTP cache / CDN edge) instead of a POST
    header (the smoke command below prints headers with `-D-`).
 2. Set `VITE_RIFTY_EDDY_PINS='{"<preset-slug>":"<closure-hash>"}'` (JSON map) in
    the playground build env, next to `VITE_RIFTY_RESOLVER_URL`.
+3. CDN-fronted GETs need a SEPARATE hostname: edges (Yandex CDN included)
+   refuse the POST resolve, so the CDN cname must not replace the resolver
+   DNS. Set `VITE_RIFTY_EDDY_BUNDLE_URL=https://<cdn-hostname>` — pinned GETs
+   ride it, the POST resolve (and every fallback) stays on
+   `VITE_RIFTY_RESOLVER_URL`. rifty.dev shape: `eddy.rifty.dev` A → VM
+   (origin), `eddy-origin.rifty.dev` A → VM (the CDN's origin host),
+   `eddy-cdn.rifty.dev` CNAME → the CDN provider endpoint.
 
 Re-pin whenever a template's dependencies change, or on a deliberate cadence to
 pick up new transitive releases. A stale pin never rots into a wrong install —

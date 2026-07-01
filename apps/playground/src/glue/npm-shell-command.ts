@@ -70,6 +70,9 @@ export interface NpmShellCommandDeps {
   /** Pinned closure hash for the ACTIVE preset (ADR-0186, `VITE_RIFTY_EDDY_PINS`).
    *  A getter — the active preset can change. Inert without `resolverUrl`. */
   readonly resolverClosureHash?: () => string | undefined;
+  /** CDN base for pinned bundle GETs (`VITE_RIFTY_EDDY_BUNDLE_URL`, ADR-0186);
+   *  the edge won't proxy POST, so GETs may ride a separate hostname. */
+  readonly resolverBundleBaseUrl?: string;
   /** Owner-boot bundle prefetch for the ACTIVE preset (ADR-0186). A getter;
    *  install() consumes the handle at most once and only on a canonical
    *  request match. Inert without `resolverUrl`. */
@@ -455,6 +458,7 @@ async function runInstall(
       registry: deps.registry,
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
       ...(resolverClosureHash ? { resolverClosureHash } : {}),
+      ...(deps.resolverBundleBaseUrl ? { resolverBundleBaseUrl: deps.resolverBundleBaseUrl } : {}),
       ...(resolverPrefetch ? { resolverPrefetch } : {}),
       onPackage: (event) => {
         ctx.stdout.write(

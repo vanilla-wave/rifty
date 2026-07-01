@@ -64,7 +64,7 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
+import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -522,6 +522,7 @@ async function bootShellOwner(opts: {
       packageJsonText: devCfg.packageJson,
       resolverUrl,
       closureHash: getEddyPin(devSlug),
+      bundleBaseUrl: getEddyBundleBaseUrl(),
     });
   }
   void primeInstallPrefetch();
@@ -842,6 +843,7 @@ async function bootShellOwner(opts: {
       // ADR-0186: the ACTIVE preset's pinned closure hash (cacheable GET) and
       // the owner-boot prefetch — getters, the active preset can change.
       resolverClosureHash: () => getEddyPin(devSlug),
+      resolverBundleBaseUrl: getEddyBundleBaseUrl(),
       resolverPrefetch: () => installPrefetch,
     });
     shell.registerCommand('npm', async (args, ctx) => {
