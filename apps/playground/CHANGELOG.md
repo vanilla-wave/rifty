@@ -5,9 +5,9 @@
 ### Added
 
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
-  (shareable launch URLs + the perf-benchmark harness,
-  docs/backlog/perf/cold-start-and-install-benchmark). The id is validated
-  against the registry — an unknown id silently falls back to the default;
+  (shareable launch URLs + the `pnpm bench` perf harness). The id is validated
+  against the registry — an unknown id falls back to the default AND logs a
+  `console.warn` (a typo'd share URL / benchmark preset is no longer silent);
   `autorun=1` runs the preset's boot lines (a from-scratch preset installs +
   starts its dev server), else it lands seeded + active. Drives the cold-boot
   scratch only. Parser unit-tested; an e2e RED-checked against the default boot.
@@ -24,6 +24,15 @@
 - **Cold-boot loading skeleton.** `index.html` now ships a static CSS spinner + `Booting rifty…` line inside `#app` (pure inline HTML/CSS in the critical `<style>`, no JS or font dependency — it paints on the first byte), so a slow first load isn't a blank dark screen. `main.tsx` clears it just before mounting the app; a hard boot failure (e.g. the COI assert) still clears the body and paints its own banner, so the skeleton never masks a real failure. Honors `prefers-reduced-motion`.
 - **`npm` tolerates `-D/--save` flags and aliases `test`/`start`/`stop`/`restart`.** `npm install -D <pkg>` / `--save-dev` records under `devDependencies`; `-S/--save` (default), `-E/--save-exact`, and a bare install record under `dependencies` (save flags are otherwise no-ops); `npm i -g`/`--global` gets a directed `global installs aren't supported in the browser sandbox — install into the project instead` (exit 1) instead of the generic M9-scope line; an unknown install flag still loud-rejects. `npm test`/`start`/`stop`/`restart` now alias to `npm run <name>` (a missing script keeps npm's missing-script message, non-zero). The `unknown subcommand` list advertises the new aliases. Guards: `npm-shell-command.test.ts`.
 - **`node` CLI flags — `-v/--version`, `-e/-p`, and `bad option`.** The `node` command now parses a leading flag before resolving an entry path: `node -v`/`--version` prints `v24.0.0` (the live `process.version`) exit 0; `node -e "<src>"`/`--eval` runs the source through the real module-loader realm (a temp `.cjs` in cwd → CJS `require` faithful, never `new Function`); `node -p "<expr>"`/`--print` prints `util.inspect(result)`; any other leading-`-` arg → `node: bad option: <flag>` exit 9. Previously `node --version` and every `node -e …` threw `Cannot find module '/workspace/--version'` because `args[0]` was absolutized blindly. Bare `node` (REPL) stays the documented ceiling. Guards: `node-entry-resolve.test.ts`, curious-first-15-min e2e.
+- **A reload no longer clobbers an edited starter file.** The on-mount preset
+  seed (`runVitePreset`/`seedViteWorkspace` → `seedWorkspaceOwner`) pushed the
+  preset's starter files into the owner with OVERWRITE semantics on every boot,
+  so a reload reverted a user's edit to a seeded file (e.g. `src/main.js`) back
+  to the seeded source — silent data loss. The boot/reload re-seed now uses the
+  new `ifAbsent` write-frame flag (skip-if-exists, matching the owner's
+  `seedProject`); a preset SWITCH keeps overwrite so it still replaces the
+  outgoing preset. RED-checked e2e `starter-file-edit-survives-reload.spec.ts`;
+  cold-boot / switch / reload legs all verified.
 - **The `[vite] dev server ready` marker no longer intermittently vanishes from
   the terminal (CI flake).** When a starter pick restarts the dev server, the
   aborted run's late `listen()` IPC could emit the readiness marker AFTER its

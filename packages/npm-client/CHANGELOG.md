@@ -13,6 +13,13 @@
   bare source name, miss, and throw `EBROKENLOCK`. This broke eddy's pre-seeded lockfile for
   ANY override package — including `vite` (→ esbuild), the flagship template: `npm install`
   aborted, so `&& npm run dev` never booted. Regression test in `installer.test.ts`.
+- **Lockfile fast-path refuses a stale override target version.** With the override-aware
+  replay above, a moved override RANGE (baked table bump or edited `overrides`, e.g. `foo` →
+  `bar@1.0.0` becoming `foo` → `bar@2.0.0`) left the fast path silently reusing the locked
+  `bar@1.0.0` — `subgraphFreeOfOverrideDivergence` can't catch it (the source name has no entry
+  to surface). `createLockfileSource` now throws `EBROKENLOCK` (reason `override-range-drift`)
+  when the locked target version no longer satisfies the override range, instead of installing
+  stale. Regression test in `installer.test.ts`.
 
 ### Added
 

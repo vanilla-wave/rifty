@@ -19,7 +19,7 @@ A developer opens a from-scratch preset (no lockfile, cold cache), sets a real d
 ## Items
 
 - `npm-client/abbreviated-packuments` — corgi `Accept` header; cuts per-packument BYTES ~2.5x. NOTE (measured 2026-06-28): the waterfall is latency-bound — abbreviated does NOT reduce wall-time on a normal connection; it helps slow/metered links + JSON parse only. Cheap, but not the wall-time win it was first billed as. (ready)
-- `perf/cold-install-metadata-reprofile` — the decision gate: re-decompose cold-install wall-time into transfer-bytes vs round-trip-count AFTER corgi, on the existing `perf/cold-start-and-install-benchmark` harness. (draft)
+- `perf/cold-install-metadata-reprofile` — the decision gate: re-decompose cold-install wall-time into transfer-bytes vs round-trip-count AFTER corgi, on the `pnpm bench` harness (delivered). (draft)
 - `npm-client/persisted-packument-store` — cross-session/cross-project metadata reuse for the "new project, same deps, no lockfile" case. (draft)
 - `perf/install-transport-tuning` — transport hygiene (HTTP/3, preconnect); ride-along, gated on the re-profile. NOTE (measured 2026-06-28): raising the fetch semaphore is INERT in-browser (one coalesced h2 connection per origin); only HTTP/3 is a live lever. (draft)
 

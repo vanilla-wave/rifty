@@ -246,6 +246,14 @@ export function App(props: AppProps) {
     PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
       ? presetDeepLink.presetId
       : undefined;
+  // A provided-but-unknown `?preset=<id>` (typo / stale share URL) would silently
+  // boot+autorun the DEFAULT preset, looking like it worked. Surface it loudly so
+  // a broken link / a benchmark pointed at the wrong preset is visible.
+  if (presetDeepLink.presetId !== undefined && deepLinkStarterId === undefined) {
+    console.warn(
+      `[rifty] unknown preset "${presetDeepLink.presetId}" in ?preset= deep-link — ignoring it and booting the default preset`,
+    );
+  }
   const bootStarterId = deepLinkStarterId ?? DEFAULT_PRESET.id;
 
   const store = createAppProjectStore({
@@ -1800,8 +1808,13 @@ export function App(props: AppProps) {
    * the page holds no authoritative fs). This mirrors the durable owner reset for
    * boot-critical files, but is acked before editor tabs reopen so template files
    * like index.html cannot lag a mid-session starter pick.
+   *
+   * `ifAbsent` (boot/reload re-seed): skip files that already exist so a reload
+   * never clobbers a persisted edit — the owner's own freshRoot-gated
+   * seedStarterBaseline already placed the preset content on a cold boot. A
+   * preset SWITCH keeps overwrite (default) to replace the outgoing preset.
    */
-  async function seedWorkspaceOwner(preset: Preset): Promise<void> {
+  async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
     for (const [path, content] of Object.entries(
@@ -1814,13 +1827,14 @@ export function App(props: AppProps) {
         type: 'write',
         path,
         data: ownerWriteEnc.encode(content),
+        ...(ifAbsent ? { ifAbsent: true } : {}),
       });
     }
   }
 
   // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  async function seedViteWorkspace(preset: Preset): Promise<void> {
-    await seedWorkspaceOwner(preset);
+  async function seedViteWorkspace(preset: Preset, ifAbsent = false): Promise<void> {
+    await seedWorkspaceOwner(preset, ifAbsent);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -1980,7 +1994,13 @@ export function App(props: AppProps) {
     setTsProjectRevision((revision) => revision + 1);
   }
 
-  async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
+  async function runVitePreset(
+    preset: Preset,
+    tsGate?: TsPresetTransitionGate,
+    // Boot/reload re-seed: don't clobber a persisted edit (owner already seeded a
+    // cold boot). A preset SWITCH leaves this false so the new preset overwrites.
+    seedIfAbsent = false,
+  ): Promise<void> {
     try {
       setPresetTransitioning(true);
       setActivePreset(preset.id);
@@ -2005,7 +2025,7 @@ export function App(props: AppProps) {
       // freshly-seeded preset entry the dev server runs (replaces the old
       // discardPendingProgramWrite guard).
       await flushPendingEditorWrites();
-      await seedViteWorkspace(preset);
+      await seedViteWorkspace(preset, seedIfAbsent);
       await waitForActiveSnapshotFrame();
       resetEditorToActiveInitialFiles();
       // Tell the owner which template/runtime the next co-resident dev server boots
@@ -2137,18 +2157,20 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the owner workspace (idempotent) for the cold-boot preset — the
-    // deep-link's (if any) or DEFAULT. The default README is seeded owner-side in
-    // `seedProject` (single store owner — no page store to write).
+    // Seed the owner workspace for the cold-boot preset — the deep-link's (if any)
+    // or DEFAULT. `ifAbsent` so a RELOAD never clobbers a persisted edit (the owner
+    // freshRoot-seeds the preset content on a genuine cold boot); the default
+    // README is seeded owner-side in `seedProject` (single store owner).
     const bootPreset = presetForId(bootStarterId);
-    void seedViteWorkspace(bootPreset).catch(() => {
+    void seedViteWorkspace(bootPreset, true).catch(() => {
       /* best-effort seeding */
     });
     // Default boots + runs; a deep-link preset runs only with autorun=1 (else it is
     // seeded + active and the user runs it). The perf harness uses autorun=1.
+    // `seedIfAbsent=true`: this is a boot/reload run, not a preset switch.
     if (deepLinkStarterId === undefined || presetDeepLink.autorun) {
       initialRunTimer = setTimeout(() => {
-        void queuePresetTransition(() => runVitePreset(bootPreset));
+        void queuePresetTransition(() => runVitePreset(bootPreset, undefined, true));
       }, 0);
     }
   });

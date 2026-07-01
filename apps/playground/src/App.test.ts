@@ -55,7 +55,7 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('const vfs = syncMirror()');
     expect(source).not.toContain('writeText(vfs');
     expect(source).not.toContain("from '@riftydev/vfs/internal'");
-    expect(source).toContain('seedWorkspaceOwner(preset)');
+    expect(source).toContain('seedWorkspaceOwner(preset, ifAbsent)');
   });
 
   it('follows the active preset template instead of hardcoding the default', () => {
@@ -108,9 +108,11 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
     expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
     expect(source).toContain('if (path === rootPackageJsonPath) continue;');
-    expect(source).toContain('async function seedWorkspaceOwner(preset: Preset): Promise<void>');
+    expect(source).toContain(
+      'async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void>',
+    );
     expect(source).toMatch(
-      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),\s*\}\);/s,
+      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),[\s\S]*?\}\);/s,
     );
     // initial editor tabs follow preset data under the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
@@ -122,7 +124,7 @@ describe('App terminal startup wiring', () => {
 
   it('opens ordinary initial editor tabs only after acked seed and fresh owner snapshot', () => {
     const runPreset = source.match(
-      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+      /async function runVitePreset\([\s\S]*?\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
     expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
@@ -132,7 +134,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(runPreset).toMatch(
-      /await seedViteWorkspace\(preset\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
+      /await seedViteWorkspace\(preset, seedIfAbsent\);\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);/,
     );
     expect(source).not.toContain("createSignal('main.js')");
     expect(source).not.toContain("createSignal('javascript')");
@@ -140,7 +142,7 @@ describe('App terminal startup wiring', () => {
 
   it('flushes pending editor writes before seeding a picked preset (no mid-seed entry clobber)', () => {
     const runPreset = source.match(
-      /async function runVitePreset\(preset: Preset, tsGate\?: TsPresetTransitionGate\): Promise<void> \{[\s\S]*?\n {2}\}/,
+      /async function runVitePreset\([\s\S]*?\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(runPreset).toBeDefined();
     // The de-specialized entry rides the ordinary debounced owner-write path; a
@@ -148,7 +150,7 @@ describe('App terminal startup wiring', () => {
     // can't fire mid-seed and overwrite the freshly-seeded preset entry the dev
     // server runs (replaces the old discardPendingProgramWrite guard).
     expect(runPreset).toMatch(
-      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset\);/,
+      /await flushPendingEditorWrites\(\);\s*await seedViteWorkspace\(preset, seedIfAbsent\);/,
     );
   });
 
@@ -166,7 +168,7 @@ describe('App terminal startup wiring', () => {
   });
 
   it('stops an active dev server before writing picked starter files', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     expect(runPresetStart).toBeGreaterThan(-1);
@@ -178,9 +180,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('return lifecycleSessionRunning(devServerSessionId);');
     expect(source).toContain('devServerBootSessionId === sessionId');
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('await seedViteWorkspace(preset);'),
+      runPreset.indexOf('await seedViteWorkspace(preset, seedIfAbsent);'),
     );
-    expect(runPreset.indexOf('await seedViteWorkspace(preset);')).toBeLessThan(
+    expect(runPreset.indexOf('await seedViteWorkspace(preset, seedIfAbsent);')).toBeLessThan(
       runPreset.indexOf(
         'await startDevServerSession(restartSessionId, restartGeneration, preset);',
       ),
@@ -193,14 +195,14 @@ describe('App terminal startup wiring', () => {
     );
     expect(source).not.toContain("terminalStatus(devServerSessionId) === 'running' ||");
     expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
-      runPreset.indexOf('seedViteWorkspace(preset);'),
+      runPreset.indexOf('seedViteWorkspace(preset, seedIfAbsent);'),
     );
     expect(source).not.toContain('await stopRunningTerminalSessions();');
     expect(source).toContain('setPreviewPorts([])');
   });
 
   it('shows a preset-switching loader until the picked starter has booted or failed', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const switchToStart = source.indexOf('async function switchTo(nextActiveId: ActiveId)');
@@ -410,7 +412,7 @@ describe('App terminal startup wiring', () => {
   });
 
   it('waits for picked starter boot before replaying TS documents', () => {
-    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
