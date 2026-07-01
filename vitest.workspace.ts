@@ -9,6 +9,8 @@ export default defineWorkspace([
       include: [
         'packages/*/src/**/*.test.ts',
         'packages/*/tests/**/*.test.ts',
+        'services/*/src/**/*.test.ts',
+        'services/*/tests/**/*.test.ts',
         'tools/*/src/**/*.test.ts',
         'tools/checks/**/*.test.ts',
       ],

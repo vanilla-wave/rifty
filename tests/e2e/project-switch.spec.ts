@@ -162,7 +162,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
     await expectProjectChipName(page, 'Project files scratch');
-    await expectTerminalContains(page, 'starting dev server on port', 30_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 30_000);
 
     // Pick a DIFFERENT starter (node-worker — also the Vite template, instant
     // setup). The store spins a fresh scratch from that starter and the owner
@@ -177,7 +177,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
 
     // The dev server re-boots in the switched-in scratch (the restart path follows
     // the store-derived active starter/root, ADR-0165 §4 — not a frozen preset).
-    await expectTerminalContains(page, 'starting dev server on port', 60_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
   });
 });
 

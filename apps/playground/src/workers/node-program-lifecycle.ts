@@ -58,6 +58,7 @@ type EntryOutcome =
   | { readonly kind: 'threw'; readonly err: unknown };
 
 const DEFAULT_LISTEN_POLL_MS = 25;
+const activePreviewTeardowns = new Set<() => void>();
 
 interface UnrefHandle {
   unref?: () => unknown;
@@ -71,7 +72,7 @@ function wait(ms: number): Promise<void> {
 }
 
 function servePorts(deps: NodeLifecycleDeps, ports: readonly number[]): void {
-  for (const port of ports) deps.servePreview(port);
+  for (const port of ports) activePreviewTeardowns.add(deps.servePreview(port));
   deps.postListening([...ports]);
 }
 

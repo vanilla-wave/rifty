@@ -25,6 +25,8 @@ const c: ParityCase = {
     console.log('getUnpackedSettings', typeof http2.getUnpackedSettings);
     console.log('performServerHandshake', typeof http2.performServerHandshake);
     console.log('sensitiveHeaders', typeof http2.sensitiveHeaders);
+    console.log('Http2ServerRequest', typeof http2.Http2ServerRequest, http2.Http2ServerRequest.name);
+    console.log('Http2ServerResponse', typeof http2.Http2ServerResponse, http2.Http2ServerResponse.name);
 
     // Real spec constants (undici/client-h2.js reads these at module-eval).
     console.log('constants', typeof http2.constants);

@@ -4,6 +4,34 @@
 
 ### Fixed
 
+- **Lockfile fast-path replays shadow/user overrides (eddy on override packages).** The
+  lockfile-replay source (`createLockfileSource`) now applies `resolveOverride` before the
+  entry lookup, matching the live-resolve source. A redirect target is stored under its own
+  key (`esbuild` → `@esbuild/wasi-preview1`, ADR-0015 baked table), leaving no
+  `node_modules/<source>` entry; `lockfileSubgraph` therefore never surfaces the source name
+  so `subgraphFreeOfOverrideDivergence` cannot pre-empt it, and the replay used to look up the
+  bare source name, miss, and throw `EBROKENLOCK`. This broke eddy's pre-seeded lockfile for
+  ANY override package — including `vite` (→ esbuild), the flagship template: `npm install`
+  aborted, so `&& npm run dev` never booted. Regression test in `installer.test.ts`.
+
+### Added
+
+- **Opt-in eddy fast install (`InstallOptions.resolverUrl` / `prefer`, ADR-0182).** When
+  `resolverUrl` is set (env-config only, default OFF) and no covering lockfile already gives the
+  zero-network fast path, `install()` POSTs the dep-set to the resolver, verifies the returned
+  `EddyBundleV1` (each tarball's bytes against the bundle's integrity — non-disableable,
+  mirror-grade trust), pre-seeds the `VfsTarballCache` + writes the lockfile, then the existing
+  ADR-0023 fast path installs with **zero packument network**. `prefer: 'online'` is forwarded to
+  force a fresh server-side recompute. ANY failure (unreachable, HTTP error, malformed bundle,
+  integrity mismatch, lockfile-coverage gap, or a typed `unsupported` decline) → the standard
+  verifying install runs (warns, never throws-because-fast-path-down). `InstallResult.source`
+  (`'eddy' | 'standard'`) reports which path ran. The determinism walk (`walkAndPin`) is untouched.
+- **`EddyBundleV1` codec (`packEddyBundle` / `unpackEddyBundle`) + `parseTarEntries`.** The wire
+  format `@riftydev/eddy` produces and the client consumes — a store tar of the manifest +
+  lockfile + each original gzip tarball. One format definition, both directions.
+
+### Fixed
+
 - **Registry client retries transient failures (429 / 5xx / network).** `RegistryClient`
   now retries a rate-limited or transiently-failing fetch with exponential backoff,
   honoring a `Retry-After` header (real-npm behavior). A single 429 from the shared
@@ -17,6 +45,14 @@
   instead of `… could not be installed: ENATIVEUNSUPPORTED …` — a pack of platform
   bindings no longer looks like a wall of install failures. Genuine optional failures
   (network/missing) keep the louder "could not be installed" wording.
+- **Eddy fast path refuses a non-v3 bundle lockfile.** `tryEddyFastPath` now declines to the
+  standard install if the bundle's `package-lock.json` isn't `lockfileVersion: 3`, BEFORE seeding
+  the cache or writing the lockfile. A divergent resolver returning a v1/v2 shape no longer
+  clobbers the user's lockfile or makes `install()` throw `NotImplementedError` on the post-seed
+  re-read — honoring both the never-throw and lockfile-untouched promises (ADR-0182).
+- **Eddy decline diagnostic names the feature.** A typed `422` decline now warns
+  `resolver declined (<feature>)` instead of the opaque `resolver returned HTTP 422`: the JSON
+  decline body is parsed before the `!response.ok` gate that previously shadowed it.
 
 ### Added
 

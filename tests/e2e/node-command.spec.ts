@@ -4,6 +4,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 // Escape a literal command for a RegExp that matches the terminal's `> <line>`
@@ -88,7 +89,9 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // Let the initial dev-server boot storm settle before interacting: clicks/
     // keystrokes during the mount storm land on replaced nodes (a typed line can
     // be lost). Wait for the boot signal first (mirror owner-shell-async-lifecycle).
-    await expect.poll(() => terminalBuffer(page), { timeout: 90_000 }).toMatch(/\$ vite/);
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 90_000 })
+      .toMatch(viteDevReadyPattern());
 
     // Terminal 2 = a plain idle shell on the persistent owner (Terminal 1 auto-
     // boots the dev server). Both sessions share the owner store.
@@ -138,7 +141,9 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
 
     // Let the initial dev-server boot storm settle before interacting (a typed
     // line can be lost mid-mount-storm otherwise).
-    await expect.poll(() => terminalBuffer(page), { timeout: 90_000 }).toMatch(/\$ vite/);
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 90_000 })
+      .toMatch(viteDevReadyPattern());
 
     await openShellTerminal(page);
 
@@ -221,7 +226,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // The default vite preset boots the co-resident dev server (Terminal 1) on
     // first load (its slot is `npm run dev`). Wait for its boot before adding
     // node servers so the registry already holds the dev slot.
-    await expectTerminalContains(page, 'starting dev server on port', 60_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
 
     await openShellTerminal(page);
 
@@ -299,7 +304,9 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     });
 
     // Dev server boots in Terminal 1 → preview is on.
-    await expect.poll(() => terminalBuffer(page), { timeout: 90_000 }).toMatch(/\$ vite/);
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 90_000 })
+      .toMatch(viteDevReadyPattern());
     const editorArea = page.locator('.rf-editorarea');
     await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 60_000 });
 

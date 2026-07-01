@@ -20,7 +20,7 @@ import { installNodeProcessShim, installNodeRuntime } from './install-process.ts
 const NATIVE_THEN = Promise.prototype.then;
 const ORIGINAL_PROCESS = (globalThis as { process?: unknown }).process;
 const ORIGINAL_BUFFER = (globalThis as { Buffer?: unknown }).Buffer;
-const ORIGINAL_GLOBAL = (globalThis as { global?: unknown }).global;
+const ORIGINAL_GLOBAL_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'global');
 
 function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
   const port = (): MessagePort => new MessageChannel().port1;
@@ -41,18 +41,22 @@ afterEach(() => {
     configurable: true,
   });
   (globalThis as { Buffer?: unknown }).Buffer = ORIGINAL_BUFFER;
-  (globalThis as { global?: unknown }).global = ORIGINAL_GLOBAL;
+  Reflect.deleteProperty(globalThis, 'global');
+  if (ORIGINAL_GLOBAL_DESCRIPTOR) {
+    Object.defineProperty(globalThis, 'global', ORIGINAL_GLOBAL_DESCRIPTOR);
+  }
 });
 
 describe('pre-entry gate (ADR-0157)', () => {
   // MUST be first: asserts the realm is still un-patched.
   it('WASI worker: seeds the process but installs NO Buffer / NO Promise patch', () => {
+    Reflect.deleteProperty(globalThis, 'global');
     installNodeRuntime(spec({ __RIFTY_WASI_WASM_URL: 'https://x/app.wasm' }));
     expect((globalThis as { process?: unknown }).process).toBeInstanceOf(NodeProcess);
     // NEGATIVE: no Node over-implementation for a non-Node worker.
     expect(Promise.prototype.then).toBe(NATIVE_THEN);
     expect((globalThis as { Buffer?: unknown }).Buffer).not.toBe(RiftyBuffer);
-    expect((globalThis as { global?: unknown }).global).toBe(ORIGINAL_GLOBAL);
+    expect(Object.prototype.hasOwnProperty.call(globalThis, 'global')).toBe(false);
   });
 
   it('Node worker: seeds the process AND installs Buffer + global + the nextTick Promise patch', () => {

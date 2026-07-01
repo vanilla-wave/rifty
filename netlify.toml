@@ -25,6 +25,10 @@
   # Production registry proxy is Yandex Cloud Compute; local dev keeps the Vite
   # `/npm-registry` proxy from apps/playground/vite.config.ts.
   VITE_RIFTY_REGISTRY_URL = "https://registry.rifty.dev/npm-registry"
+  # Opt-in fast-install resolver (ADR-0182). Deployed on Yandex Cloud; the
+  # playground seam (glue/resolver-config.ts) reads it → from-scratch presets
+  # install via eddy with auto-fallback. Local dev leaves it unset (eddy OFF).
+  VITE_RIFTY_RESOLVER_URL = "https://eddy.rifty.dev"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
 [[headers]]

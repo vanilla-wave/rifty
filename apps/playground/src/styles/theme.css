@@ -529,6 +529,14 @@ body {
   background: var(--rf-warn);
   animation: rf-blink 1s steps(2) infinite;
 }
+.rf-livepill[data-state="switching"] {
+  border-color: rgba(255, 190, 92, 0.35);
+  color: var(--rf-warn);
+}
+.rf-livepill[data-state="switching"] .rf-livepill__dot {
+  background: var(--rf-warn);
+  animation: rf-blink 1s steps(2) infinite;
+}
 
 /* — command bar — */
 .rf-cmdbar {

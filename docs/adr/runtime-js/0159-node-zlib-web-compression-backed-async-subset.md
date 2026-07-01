@@ -6,9 +6,19 @@ Date: 2026-06
 > TL;DR: `node:zlib` async one-shot `gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` are
 > backed by the host `CompressionStream`/`DecompressionStream` (RFC-1950/1951/1952 wire-compatible with
 > real Node's zlib, both directions). Sync variants, brotli, zstd, and the Transform-stream surface stay
-> loud `NotImplementedError` ceilings; the `windowBits` / `dictionary` / truthy-`info` options throw,
+> loud `NotImplementedError` ceilings; the `flush` / `finishFlush` / `windowBits` / `dictionary` / truthy-`info` options throw,
 > `maxOutputLength` is honored (early-abort `ERR_BUFFER_TOO_LARGE`), size-only knobs
 > (`level`/`memLevel`/`strategy`/…) are accepted no-ops (`info:false` too).
+
+Correction 2026-06-28: ADR-0178 implements the narrow `createGzip()` / `Gzip`
+Transform subset for the Vite preview compression consumer. The rest of the
+Transform-stream surface remains a loud ceiling as described below.
+
+Correction 2026-06-29: `flush` / `finishFlush` are no longer accepted no-ops for
+one-shot calls. Real Node can use `finishFlush` to change truncated decompression
+outcomes (for example `gunzip(truncated, { finishFlush: Z_SYNC_FLUSH })`), so
+silently ignoring it would be a behavior lie. They now throw
+`NotImplementedError('zlib.<fn> option: flush|finishFlush')`.
 
 ## Context
 
@@ -37,14 +47,14 @@ The web API is async-only and exposes no compression-level / dictionary / window
    the legacy top-level `zlib.Z_*` aliases too (Node shape). Surface-pinned by parity.
 
 **Options policy** (the design judgment this ADR records):
-- Size/perf knobs — `level`, `memLevel`, `strategy`, `chunkSize`, `flush`, `finishFlush` — accepted and
+- Size/perf knobs — `level`, `memLevel`, `strategy`, `chunkSize` — accepted and
   ignored. Output stays VALID and round-trips; Node guarantees no specific bytes for a given level
   across versions either, so this is a ratio/perf gap, not a correctness lie.
-- Wire/shape-affecting — `windowBits` (sets the encoder window, encoded in the RFC-1950 zlib header;
+- Wire/shape-affecting — `flush` / `finishFlush` (zlib flush opcodes/finalization), `windowBits` (sets the encoder window, encoded in the RFC-1950 zlib header;
   see the Design notes), `dictionary` (a preset dict changes the compressed wire bytes and needs the
   same dict to inflate), truthy `info` (changes the return shape to `{buffer,engine}`; no engine handle
   exists) — throw `NotImplementedError('zlib.<fn> option: <name>')`. Silently ignoring these WOULD lie
-  about the wire format / return contract. `info: false` (the default) is a no-op.
+  about stream finalization, the wire format, or return contract. `info: false` (the default) is a no-op.
 - `maxOutputLength` — HONORED, not ignored: the output reader aborts EARLY (cancels the stream) and
   throws `RangeError [ERR_BUFFER_TOO_LARGE]` the moment the running total exceeds it — matching Node
   observably AND as a real decompression-bomb guard (not a post-hoc length check). This is the one

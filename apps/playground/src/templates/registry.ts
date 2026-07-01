@@ -7,7 +7,11 @@
  * the wrong runtime.
  */
 import { NotImplementedError } from '@riftydev/vfs';
+import { CLI_REPORT_TEMPLATE } from './cli-report.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
+import { HONO_API_TEMPLATE } from './hono-api.ts';
+import { KOA_API_TEMPLATE } from './koa-api.ts';
+import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
 import type { ProjectSpec } from './project-spec.ts';
 import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
@@ -22,6 +26,10 @@ const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>
   [TYPESCRIPT_TEMPLATE.id, TYPESCRIPT_TEMPLATE],
   [EXPRESS_SQLITE_TEMPLATE.id, EXPRESS_SQLITE_TEMPLATE],
   [SOCKET_LAB_TEMPLATE.id, SOCKET_LAB_TEMPLATE],
+  [HONO_API_TEMPLATE.id, HONO_API_TEMPLATE],
+  [KOA_API_TEMPLATE.id, KOA_API_TEMPLATE],
+  [CLI_REPORT_TEMPLATE.id, CLI_REPORT_TEMPLATE],
+  [MARKDOWN_SSG_TEMPLATE.id, MARKDOWN_SSG_TEMPLATE],
 ]);
 
 /** Resolve a template id to its spec, or throw for an unregistered id. */

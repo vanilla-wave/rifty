@@ -573,6 +573,7 @@ export class RiftyTerminal {
   private resizeObserver: ResizeObserver | null = null;
   private promptActive = false;
   private busy = false;
+  private disposed = false;
 
   constructor(opts: RiftyTerminalOptions) {
     this.opts = opts;
@@ -663,6 +664,7 @@ export class RiftyTerminal {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.resizeObserver?.disconnect();
     for (const disposable of this.disposables.splice(0)) this.safeDispose(disposable);
     this.safeDispose(this.term);
@@ -739,6 +741,25 @@ export class RiftyTerminal {
    */
   snapshotBuffer(options: TerminalSerializeOptions = { excludeModes: true }): string {
     return this.serializeText(options);
+  }
+
+  /**
+   * {@link snapshotBuffer} that resolves only after xterm has parsed every write
+   * issued so far. `term.write()` parses on a deferred macrotask, so a snapshot
+   * taken synchronously after a *final* write (a dev-server "ready" line with no
+   * trailing output) serializes the pre-parse buffer and misses it — the root of
+   * the CI-only `data-terminal-buffer` marker flake. xterm fires the `write`
+   * callback once its buffer drains past that point, so an empty-write barrier
+   * (FIFO after all pending writes) guarantees the snapshot reflects the last
+   * write. Resolves `''` if the terminal is disposed before/while draining.
+   */
+  snapshotBufferSettled(
+    options: TerminalSerializeOptions = { excludeModes: true },
+  ): Promise<string> {
+    if (this.disposed) return Promise.resolve('');
+    return new Promise((resolve) => {
+      this.term.write('', () => resolve(this.disposed ? '' : this.serializeText(options)));
+    });
   }
 
   getCommandBlocks(): TerminalCommandBlock[] {

@@ -51,7 +51,18 @@ type PendingDevConfig = {
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
-type SessionState = { cwd: string; env: Record<string, string>; readyResolvers: (() => void)[] };
+type SessionState = {
+  cwd: string;
+  env: Record<string, string>;
+  readyResolvers: (() => void)[];
+  /**
+   * The most recent run's `onChunk`, kept so a `pty:chunk` that arrives AFTER its
+   * run's `pty:exit` (the owner emitting late — e.g. the dev-server readiness
+   * marker from an async `listen()` message that lands after a restart aborted
+   * the run) still reaches the session's terminal instead of being dropped.
+   */
+  trailingSink?: ExecOptions['onChunk'];
+};
 
 export interface PtyClientDeps {
   /** Posts a page→owner frame over the kernel IPC channel (wired by realVite). */
@@ -149,6 +160,9 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       const rid = `r${++ridCounter}`;
       return new Promise((resolve, reject) => {
         runs.set(rid, { sid, resolve, onChunk: opts.onChunk });
+        // Remember this run's sink so late chunks (owner output racing past
+        // pty:exit) still land in this session's terminal (see trailingSink).
+        session(sid).trailingSink = opts.onChunk;
         opts.onStart?.(rid);
         try {
           deps.send({
@@ -213,7 +227,16 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           return;
         }
         case 'pty:chunk': {
-          runs.get(frame.rid)?.onChunk(dec.decode(frame.data), frame.stream);
+          const run = runs.get(frame.rid);
+          // Active run → its onChunk. A chunk that arrives AFTER its run's
+          // pty:exit (late owner output — the dev-server readiness marker from an
+          // async listen() message racing past a restart-abort) → the session's
+          // trailing sink, so it still reaches the terminal instead of vanishing
+          // (the CI marker flake: `[vite] dev server ready` dropped at this seam).
+          (run?.onChunk ?? sessions.get(frame.sid)?.trailingSink)?.(
+            dec.decode(frame.data),
+            frame.stream,
+          );
           return;
         }
         case 'pty:exit': {

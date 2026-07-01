@@ -105,6 +105,18 @@ function parseOctal(buf: Uint8Array, off: number, len: number): number {
 }
 
 /**
+ * Parse a plain (uncompressed) tar into its regular-file entries, names
+ * verbatim (no `package/` strip). Shared by {@link extractTarGz} (after
+ * gunzip) and the EddyBundleV1 codec, whose outer container is a store tar of
+ * a manifest + lockfile + already-gzipped tarballs.
+ */
+export function parseTarEntries(tar: Uint8Array): Array<{ name: string; data: Uint8Array }> {
+  return parseTar(tar)
+    .filter((e) => e.type === 'file')
+    .map((e) => ({ name: e.name, data: e.data }));
+}
+
+/**
  * Extract a `.tgz` payload into a flat map of paths → bytes.
  *
  * The npm convention is for tarballs to put everything under `package/...`;
@@ -112,10 +124,8 @@ function parseOctal(buf: Uint8Array, off: number, len: number): number {
  */
 export async function extractTarGz(tgz: Uint8Array): Promise<Record<string, Uint8Array>> {
   const tar = await gunzip(tgz);
-  const entries = parseTar(tar);
   const out: Record<string, Uint8Array> = {};
-  for (const e of entries) {
-    if (e.type !== 'file') continue;
+  for (const e of parseTarEntries(tar)) {
     const stripped = e.name.startsWith('package/') ? e.name.slice('package/'.length) : e.name;
     if (!stripped) continue;
     out[stripped] = e.data;

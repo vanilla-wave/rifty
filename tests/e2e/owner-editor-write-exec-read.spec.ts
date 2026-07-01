@@ -4,6 +4,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 /**
@@ -47,7 +48,7 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
     await expect
       .poll(() => terminalBuffer(page, 0), { timeout: 90_000 })
-      .toContain('[vite] dev server ready on port 5174');
+      .toMatch(viteDevReadyPattern());
 
     // A second idle shell on the same persistent owner — the reader.
     await openShellTerminal(page);

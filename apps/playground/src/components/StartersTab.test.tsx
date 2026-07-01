@@ -7,7 +7,7 @@ import { StartersTab } from './StartersTab.tsx';
 // seed/lifecycle entity (id/name/files), NOT a gallery-display shape — the
 // display fields (label/blurb/glyph/setup/category) live on `Preset`. The gallery
 // therefore renders from `Preset[]` directly (exactly as the moved TemplateSwitcher
-// did) and groups by `GROUP_FOR_CATEGORY[preset.category]`.
+// did) and groups via `groupForPreset` (node runtime → SERVER, else category map).
 const props = {
   presets: PRESETS,
   q: '',
@@ -39,17 +39,23 @@ describe('StartersTab — the moved gallery (ADR-0079)', () => {
     expect(html).toContain('npm install');
   });
 
-  it('CATEGORY filter hides non-matching groups (ADR-0165 §9): server/wasm cats empty out today', () => {
-    // Every current preset maps to FRONT-END (GROUP_FOR_CATEGORY), so:
-    //  - cat='frontend' keeps the rows; cat='server' (no server starters yet) shows none.
+  it('CATEGORY filter groups node-runtime starters under SERVER, Vite apps under FRONT-END', () => {
+    // Vite/front-end presets group under FRONT-END; node-server / node-cli
+    // presets (express/socket-lab/hono/koa/markdown-ssg/cli-report) group under
+    // SERVER by their resolved runtime (groupForPreset) — NOT as a Vite dev server.
     const frontend = renderToString(() => StartersTab({ ...props, cat: 'frontend' }));
-    expect(frontend).toContain('data-preset="express-sqlite"');
+    expect(frontend).toContain('data-preset="real-vite"');
     expect(frontend).toContain('FRONT-END');
+    expect(frontend).not.toContain('data-preset="hono-api"');
+    expect(frontend).not.toContain('data-preset="express-sqlite"'); // node-server -> SERVER
 
     const server = renderToString(() => StartersTab({ ...props, cat: 'server' }));
-    expect(server).not.toContain('data-preset="express-sqlite"');
-    expect(server).not.toContain('data-preset="socket-lab"');
-    // the empty group header is hidden too (groups filter on items.length > 0)
+    expect(server).toContain('SERVER');
+    expect(server).toContain('data-preset="hono-api"');
+    expect(server).toContain('data-preset="cli-report"'); // node-cli
+    expect(server).toContain('data-preset="express-sqlite"'); // Express is a node server
+    // Vite presets stay out of the SERVER group, and FRONT-END is not shown here.
+    expect(server).not.toContain('data-preset="real-vite"');
     expect(server).not.toContain('FRONT-END');
   });
 

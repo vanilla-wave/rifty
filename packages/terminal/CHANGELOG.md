@@ -8,6 +8,11 @@
   printed ONCE on the first `mount()`, before the first prompt. The host owns
   the copy (and any ANSI styling / `\r\n`); this package ships none. Not
   reprinted on `clear`; a fresh terminal instance reprints.
+- `RiftyTerminal.snapshotBufferSettled()` — async buffer snapshot that resolves
+  only after xterm has parsed every pending write (empty-write settle barrier).
+  A synchronous `snapshotBuffer()` taken right after a *final* write can miss it:
+  xterm parses on a deferred macrotask. Used by the host's `data-terminal-buffer`
+  mirror to fix the CI-only "[vite] dev server ready never appears" e2e flake.
 - `RiftyTerminalOptions.lineHeight` — optional xterm line-height multiplier
   forwarded to the renderer (defaults to 1). Lets hosts match designed
   terminal type scales (e.g. 12px/19px).

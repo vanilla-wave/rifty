@@ -5,6 +5,14 @@
 ### Added
 
 - **`NODE_PROCESS_IDENTITY` is now a public export** (package root + `@riftydev/runtime-js/builtins/process-identity` for a side-effect-free page import). The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is exposed so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v` and the terminal welcome banner), instead of a drifting hardcode.
+- **`node:zlib` gzip Transform subset (ADR-0178).** `createGzip()` and
+  `new Gzip()` now return a real `Transform` backed by
+  `CompressionStream('gzip')`, producing gzip bytes readable by Node's native
+  zlib. This unblocks Vite preview compression middleware without pretending the
+  whole stream surface is done: `createGunzip`, deflate/inflate stream factories,
+  unzip, brotli/zstd, sync APIs, flush-opcode options (`flush` /
+  `finishFlush`), and unsupported instance APIs such as `bytesWritten` remain
+  loud ceilings.
 
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
@@ -54,6 +62,25 @@
 - **Node 24 is the supported + parity-target version (ADR-0164).** `engines.node` `>=22`→`>=24`; every CI / Netlify pin `22`→`24`; `process.versions.node` impersonation `22.0.0`→`24.0.0` (v8 `12.0.0`→`13.6.0`), tracking the target. The parity gate runs against the CI Node, so it now measures rifty against **Node 24** — the version feature work already targeted — closing the dev(24)/CI(22) split. Fixes the `fs.Dirent.path` parity case that was red on Node 22 (the deprecated alias exists in 22, removed in 24; rifty omits it, correct for 24).
 
 ### Fixed
+
+- **`zlib.Gzip.destroy()` no longer leaks the `CompressionStream`.** Destroying
+  a gzip Transform mid-stream (e.g. an HTTP client aborting a compressed
+  response) now aborts the underlying `CompressionStream` writer, so the
+  internal drain reader rejects and releases its lock instead of awaiting
+  forever — the writer/reader + `CompressionStream` previously leaked for the
+  realm lifetime. Conformance-tested.
+- **Node `global` realm alias uses Node's descriptor (enumerable own property).**
+  The `globalThis.global` alias installed by the kernel pre-entry process shim
+  and `installProcessGlobals()` is now an enumerable, writable, configurable own
+  data property (single-sourced through `installGlobalAlias`) instead of a hidden
+  non-enumerable alias — so `Object.keys(globalThis)` / `for…in` see `global`,
+  matching real Node. Removes the divergent duplicate installer.
+- **`node:zlib` flush-option honesty restored.** `flush` / `finishFlush` now
+  throw `NotImplementedError` on one-shot calls as well as the gzip Transform:
+  real Node can use `finishFlush` to change truncated decompression outcomes,
+  so Web Compression cannot honestly ignore it. `Gzip` instances also expose
+  directed loud ceilings for unsupported `flush`, `params`, `reset`, `close`,
+  and `bytesWritten` instead of leaking plain `TypeError`s or fake counters.
 
 - **PR #76 review gaps recorded explicitly.** Added backlog contracts and
   `TODO(backlog:)` seams for tsconfig `baseUrl` bare-specifier behavior under
@@ -157,7 +184,7 @@
 - **`node:fs` / `node:path` pure-JS completions** (closes backlog/runtime-js/fs-path-pure-js-completions). `fs.readdirSync`/`promises.readdir` `{ recursive: true }` — Node-identical breadth-first full-tree walk — coupled with `fs.Dirent.parentPath` (echoes the dir arg joined with the subdir; no removed-in-v24 `path` alias). `fs.cp`/`cpSync` edge options `{ filter, force, errorOnExist, preserveTimestamps }` (reimplemented over VFS sync primitives when an edge opt is present; plain copies keep the fast VFS path); `dereference` loud-throws `NotImplementedError` (N/A under no-symlink, ADR-0050). `fs.openAsBlob(path[, { type }])` (default type `""`; a missing file rejects with Node's generic `ERR_INVALID_ARG_VALUE`, not raw `ENOENT`). `fs.lutimesSync`/`promises.lutimes` (≡ utimes, no-symlink). `fs.futimesSync`/`fs.futimes` (fd→path, `EBADF` syscall `futime` on a bad fd). `path.toNamespacedPath`/`posix`/`win32` POSIX identity no-op. All parity-pinned vs Node v24. The glob family (`fs.glob`/`globSync`/`promises.glob` + `path.matchesGlob`) is split to backlog/runtime-js/fs-glob-matchesglob-minimatch (full minimatch — a subset would loud-throw on the common `{js,ts}` brace).
 - **`node:assert` / `node:console` / `node:os` completions** (closes backlog/runtime-js/assert-console-os-completions). assert: `match`/`doesNotMatch` (RegExp, `ERR_INVALID_ARG_TYPE` on a non-RegExp pattern), `ifError` (throws non-null wrapped, preserving the original error's stack frames), `rejects`/`doesNotReject` (async, reuse `matchesExpected`), the `throws`/`rejects` Error-INSTANCE + validation-OBJECT expected forms (`matchesExpected` now deep-key-subset compares an object / matches an Error's name+message+own props; a RegExp value tests the field), and `partialDeepStrictEqual` (recursive subset — objects by present keys, arrays as an in-order subsequence, Map/Set by membership, leaves strict). All on both `assert` and `assert/strict`, parity-pinned vs Node v24 (by code, not message prose). `console.dirxml` aliases `log` (non-DOM). os constants (host-divergent → unit-pinned): `os.machine()` = `'wasm'` (mirrors `arch()`, ADR-0026), `os.devNull` = `'/dev/null'`, `os.version()` consistent with `release()`/`type()`.
 - **Web `global` alias + `node:buffer` module-level surface** (closes backlog/runtime-js/web-globals-and-buffer-exports). `globalThis.global = globalThis` (v12) installed beside Buffer/process/timers in the worker boot — the highest-reach single unblock for CJS `global.X` / `typeof global !== 'undefined'` in process-polyfills/webpack-shimmed/jest-style libs (was a `ReferenceError`). `node:buffer` now exports beyond `{ Buffer }`: browser-native `Blob`/`File`/`atob`/`btoa`, `SlowBuffer` (= `allocUnsafeSlow`), `isUtf8`/`isAscii` (reject a DataView with `ERR_INVALID_ARG_TYPE` like Node), and a LIVE `INSPECT_MAX_BYTES` getter/setter driving the new `util.inspect(buf)` `<Buffer …>` truncation (own enumerable props appended, Node parity). `resolveObjectURL` loud-throws `NotImplementedError` (no introspectable cross-realm blob registry — Fidelity, not a silent `undefined`). Buffer prototype/static additions (variable-width int accessors, `toJSON`, `copyBytesFrom`) ship from `@riftydev/io` — see its changelog. The v22-experimental global `scheduler` is deliberately NOT installed: Node v24 exposes none (only `require('node:timers/promises').scheduler`), so adding it would diverge.
-- **`node:zlib` web-compression-backed async subset (ADR-0159).** Real async one-shot `gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host `CompressionStream`/`DecompressionStream` (`'gzip'`/`'deflate'`/`'deflate-raw'` → RFC-1952/1950/1951), wire-compatible with real Node both directions (rifty output reads in Node's native zlib and vice versa — conformance-pinned, not a self round-trip). `(buf[, opts], cb)` shape with `(err, Buffer)` so `util.promisify` works; string/Buffer/TypedArray/ArrayBuffer input. Full real `constants`/`codes` table + legacy top-level constant aliases (non-enumerable, Node shape). Replaces the all-throwing `node:zlib` stub in `null-net-stubs.ts`. Loud ceilings (compat ❌): `*Sync` (async-only API), brotli + zstd (no Web API), `crc32`, the Transform-stream surface (`createGzip`/`Gzip`… — gated behind a future ADR), `unzip` auto-detect; `windowBits` + `dictionary` + truthy-`info` throw — `CompressionStream` emits a fixed max window, so silently honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset dictionary changes the wire bytes; truthy `info` changes the return shape — while size-only knobs (`level`/`strategy`/…) are inert no-ops (`info:false`, the default, too), and `maxOutputLength` is honored (early-abort `ERR_BUFFER_TOO_LARGE` decompression-bomb guard). `zlib.codes` is frozen to match Node. New `docs/public/compat/zlib.md`; 38 conformance + 6 parity cases.
+- **`node:zlib` web-compression-backed async subset (ADR-0159).** Real async one-shot `gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host `CompressionStream`/`DecompressionStream` (`'gzip'`/`'deflate'`/`'deflate-raw'` → RFC-1952/1950/1951), wire-compatible with real Node both directions (rifty output reads in Node's native zlib and vice versa — conformance-pinned, not a self round-trip). `(buf[, opts], cb)` shape with `(err, Buffer)` so `util.promisify` works; string/Buffer/TypedArray/ArrayBuffer input. Full real `constants`/`codes` table + legacy top-level constant aliases (non-enumerable, Node shape). Replaces the all-throwing `node:zlib` stub in `null-net-stubs.ts`. Loud ceilings (compat ❌): `*Sync` (async-only API), brotli + zstd (no Web API), `crc32`, Transform streams beyond the ADR-0178 `createGzip`/`Gzip` subset, `unzip` auto-detect; `windowBits` + `dictionary` + truthy-`info` throw — `CompressionStream` emits a fixed max window, so silently honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset dictionary changes the wire bytes; truthy `info` changes the return shape — while size-only knobs (`level`/`strategy`/…) are inert no-ops (`info:false`, the default, too), and `maxOutputLength` is honored (early-abort `ERR_BUFFER_TOO_LARGE` decompression-bomb guard). `zlib.codes` is frozen to match Node. New `docs/public/compat/zlib.md`; 44 conformance + 6 parity cases.
 - **`awaitDrain` re-exported from the package root** — the serve-capable `node <file>` child bootstrap (ADR-0155) awaits event-loop drain via the public API.
 
 - **ESM module parity guards:** `import.meta.url` and `package.json#imports` (`#name` exact,
@@ -716,6 +743,20 @@
     resolve before a bare (own-property-less) var binding; an assigned `var Map = …`
     still shadows via its own property. Parity:
     `cases/vm/statement-position-var.case.ts`.
+
+- **`node:http2` exposes constructible request/response classes.** The loud
+  browser-ceiling facade now includes `Http2ServerRequest` and
+  `Http2ServerResponse`, matching Node's import surface so HTTP/1 adapters that
+  probe `incoming instanceof Http2ServerRequest` do not throw before their
+  normal path. Surfaced by `@hono/node-server`; guarded by
+  `http2/surface.case.ts`.
+
+- **Process globals now include Node's `global` alias.** Worker-installed
+  `process` shims set `globalThis.global = globalThis`, matching Node code that
+  reads `global.Request` / `global.Buffer` instead of `globalThis.*`. Surfaced
+  by the Hono playground template; guarded by `process-globals.test.ts` and the
+  IPC process install test.
+
 - **PR #21 review fixes (fs/os/fs-RPC contract).**
   - `fs.readSync`/`writeSync`/`read`/`write` treat position `-1` as "current
     position" like Node (was: `RangeError`). Parity:

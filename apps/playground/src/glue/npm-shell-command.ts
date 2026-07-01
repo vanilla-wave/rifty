@@ -63,6 +63,11 @@ export interface NpmShellCommandDeps {
    *  user install). A getter — the active preset can change. Defaults to `''`
    *  (page-side ad-hoc installs no boot reuses). */
   readonly projectSlug?: () => string;
+  /** Opt-in eddy fast-install resolver URL (ADR-0182), env-config only (D-004),
+   *  default OFF. When set, `install()` runs the fast path (with auto-fallback
+   *  to the standard verifying install); the install line reports
+   *  `via eddy (fast)` when the eddy path produced the tree. */
+  readonly resolverUrl?: string;
 }
 
 interface ProjectPackageJson {
@@ -398,6 +403,7 @@ async function runInstall(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
       onPackage: (event) => {
         ctx.stdout.write(
           `npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`,
@@ -407,7 +413,10 @@ async function runInstall(
     const elapsedMs = Math.round(performance.now() - start);
 
     await stampInstalledTree(deps, ctx.cwd, result.packages.length);
-    ctx.stdout.write(`npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms\n`);
+    const via = result.source === 'eddy' ? ' via eddy (fast)' : '';
+    ctx.stdout.write(
+      `npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms${via}\n`,
+    );
     return 0;
   } catch (err) {
     if (pkgSpecs.length > 0) {

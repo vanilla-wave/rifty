@@ -30,11 +30,14 @@ export const PREVIEW_LOCAL_HOST = 'preview.local';
 /**
  * Build the upstream URL the SW forwards to the owning client. `path` is the
  * post-prefix portion of the request (e.g. `/foo` for `/preview/3000/foo`).
- * Scheme is hard-coded `http://`: the hostname is fictitious and the request
- * never leaves the page realm, so there is nothing to negotiate over TLS.
+ * `port` preserves the original preview target in `Host`-derived consumers
+ * such as `@hono/node-server`. Scheme is hard-coded `http://`: the hostname is
+ * fictitious and the request never leaves the page realm, so there is nothing
+ * to negotiate over TLS.
  */
-export function synthesizePreviewUrl(path: string): string {
-  return `http://${PREVIEW_LOCAL_HOST}${path}`;
+export function synthesizePreviewUrl(path: string, port?: number): string {
+  const host = port === undefined ? PREVIEW_LOCAL_HOST : `${PREVIEW_LOCAL_HOST}:${port}`;
+  return `http://${host}${path}`;
 }
 
 /**

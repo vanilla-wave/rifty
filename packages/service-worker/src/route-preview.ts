@@ -99,7 +99,7 @@ export async function routePreview(
   // scheme on both peers in lockstep.
   const serialised: SerializedRequest = {
     port: match.port,
-    url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
+    url: `${synthesizePreviewUrl(match.path, match.port)}${new URL(request.url).search}`,
     method: request.method,
     headers,
     body: bodyBytes,
