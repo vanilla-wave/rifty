@@ -9,7 +9,9 @@
 | `play.rifty.dev` | Netlify (`rifty-playground`) | Cross-origin-isolated playground |
 | `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
 | `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
-| `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182) |
+| `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182): POST resolve + GET-by-hash origin |
+| `eddy-origin.rifty.dev` | Yandex Cloud | CDN origin host for eddy (ADR-0186) |
+| `eddy-cdn.rifty.dev` | Yandex Cloud CDN | Edge-cached `GET /bundle/<closureHash>` (the edge refuses POST, so the resolver stays on the VM) |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for
@@ -26,6 +28,9 @@ play.rifty.dev.  CNAME  rifty-playground.netlify.app.
 registry.rifty.dev.  CNAME  409f80b3d8827091.topology.gslb.yccdn.ru.
 registry-origin.rifty.dev.  A  93.77.177.79
 eddy.rifty.dev.  A  89.169.128.66
+eddy-origin.rifty.dev.  A  89.169.128.66
+eddy-cdn.rifty.dev.  CNAME  409f80b3d8827091.topology.gslb.yccdn.ru.
+_acme-challenge.eddy-cdn.rifty.dev.  CNAME  fpq8rrab6e3n0jo4jlts.cm.yandexcloud.net.
 ```
 
 The playground production build uses

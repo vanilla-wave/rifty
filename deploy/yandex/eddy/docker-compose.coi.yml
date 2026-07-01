@@ -6,7 +6,7 @@
 # headers so they pass through.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.1.0
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.1
     container_name: rifty-eddy
     restart: unless-stopped
     expose:
@@ -38,6 +38,13 @@ services:
         }
 
         eddy.rifty.dev {
+        	reverse_proxy eddy:8788
+        }
+
+        # CDN origin host (ADR-0186): the eddy-cdn.rifty.dev edge fetches over
+        # https with this Host — the edge refuses POST, so the resolver DNS
+        # stays on the VM and only GET-by-hash rides the CDN.
+        eddy-origin.rifty.dev {
         	reverse_proxy eddy:8788
         }
         CADDY

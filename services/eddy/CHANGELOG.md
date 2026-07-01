@@ -11,6 +11,14 @@
   CORS methods now advertise GET; `access-control-allow-headers: content-type` kept for older
   preflighting clients.
 
+### Deploy
+
+- **Cross-platform image build.** The Dockerfile's build stage is pinned to
+  `--platform=$BUILDPLATFORM` (the artifact is a self-contained JS bundle), so
+  an Apple-Silicon `docker buildx build --platform linux/amd64 --push` runs at
+  native speed instead of QEMU-emulating pnpm/tsup. rifty.dev runs `eddy:0.2.1`
+  behind the split-host CDN shape (`hosting-eddy.md` §CDN tier).
+
 ### Fixed
 
 - **Oversized request body → `413` JSON, not a torn socket.** A POST over

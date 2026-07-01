@@ -115,15 +115,20 @@ cross-origin headers itself; a Caddy sidecar only terminates TLS for
 `eddy.rifty.dev`. Caddy's ACME HTTP-01 runs on first boot, so DNS + ports exist
 first.
 
-1. Build + push the image to Yandex Container Registry:
+1. Build + push the image to Yandex Container Registry. The VM is amd64 —
+   from an Apple-Silicon laptop you MUST cross-build (`docker buildx
+   --platform linux/amd64`; a plain `docker build` produces arm64 and the
+   container crash-loops with exec-format-error behind a Caddy 502). The
+   Dockerfile's build stage is `--platform=$BUILDPLATFORM` (the artifact is
+   platform-independent JS), so the cross-build runs at native speed. Bump
+   the TAG on every deploy — the COI VM does not re-pull an existing tag:
 
    ```bash
-   docker build -f deploy/yandex/eddy/Dockerfile -t rifty-eddy:0.1.0 .
-   yc container registry create --name rifty            # once
-   yc container registry configure-docker
+   yc container registry configure-docker                 # once
    REG=$(yc container registry get --name rifty --format json | jq -r .id)
-   docker tag rifty-eddy:0.1.0 cr.yandex/$REG/eddy:0.1.0
-   docker push cr.yandex/$REG/eddy:0.1.0
+   docker buildx build --platform linux/amd64 \
+     -f deploy/yandex/eddy/Dockerfile \
+     -t cr.yandex/$REG/eddy:<new-tag> --push .
    ```
 
 2. A service account the VM uses to pull (COI uses the VM's SA):
@@ -157,5 +162,36 @@ first.
    https). Then set `VITE_RIFTY_RESOLVER_URL=https://eddy.rifty.dev` in the
    playground prod build (`netlify.toml`) so from-scratch presets resolve via
    eddy.
+
+6. Re-deploying a new image: push a NEW tag, update the `docker-compose`
+   metadata key, restart:
+
+   ```bash
+   yc compute instance add-metadata --name rifty-eddy \
+     --metadata-from-file docker-compose=deploy/yandex/eddy/docker-compose.coi.yml
+   yc compute instance restart --name rifty-eddy
+   ```
+
+## CDN tier on rifty.dev (deployed 2026-07-01)
+
+Live resources (ADR-0186; Yandex CDN provider `ourcdn` refuses POST at the
+edge, hence the split-host shape):
+
+- CDN resource `bc8rtmpmtax5opcdex6x`: cname `eddy-cdn.rifty.dev`, origin
+  `https://eddy-origin.rifty.dev` (host header pinned to the origin name),
+  methods GET/HEAD/OPTIONS, `cache-expiration-time-default 300`
+  (origin `Cache-Control` wins — bundles are `immutable`), certificate
+  `fpq8rrab6e3n0jo4jlts` (CM managed LE, DNS-01 via the
+  `_acme-challenge.eddy-cdn` CNAME). Custom-cert propagation to the edge took
+  ~10 min (the default `*.yccdn.cloud.yandex.net` cert answers until then).
+- VM Caddy serves BOTH `eddy.rifty.dev` and `eddy-origin.rifty.dev`
+  (`deploy/yandex/eddy/docker-compose.coi.yml`).
+- Playground env: `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev` +
+  `VITE_RIFTY_EDDY_PINS` (template-id → hash). Measured 2026-07-02
+  (median-of-5, same session): pin@origin == POST on a warm origin
+  (~2.77s install→vite-ready vs standard 4.53s); pin@CDN traded ~+0.8s from a
+  EU vantage (geo transit to the RU POP) for cold-restart immunity — the edge
+  keeps serving pinned bundles when the origin's in-process LRU is empty
+  (a cold-origin POST spiked to ~12.6s in the same session).
 
 Tracked in `docs/backlog/distribution/eddy-package-and-deploy.md`.
