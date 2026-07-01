@@ -59,7 +59,8 @@ export interface PreviewPortScopeOptions {
   /**
    * Optional run-scoped discriminator. A page bridge only talks to worker
    * responders carrying the same scope, preventing stale same-port dev-server
-   * workers from racing replies on the shared BroadcastChannel.
+   * workers from racing replies on the shared BroadcastChannel. Live loopback
+   * ignores this; bind-claim owns port uniqueness.
    */
   readonly scope?: string;
 }
@@ -225,11 +226,15 @@ export function serveCrossRealmPreview(
   const onMessage = async (event: MessageEvent): Promise<void> => {
     const frame = event.data as PreviewPortFrame;
     if (frame.type !== 'request') return;
-    if ((opts.scope !== undefined || frame.scope !== undefined) && frame.scope !== opts.scope)
+    const live = frame.live === true;
+    if (
+      !live &&
+      (opts.scope !== undefined || frame.scope !== undefined) &&
+      frame.scope !== opts.scope
+    )
       return;
     const requestId = frame.requestId;
     const wantsStream = frame.v === PREVIEW_PORT_FRAME_VERSION;
-    const live = frame.live === true;
 
     // ADR-0180 ownership signal: emitted BEFORE dispatch so a slow handler is
     // still recognised as the port owner at once (separates no-listener from

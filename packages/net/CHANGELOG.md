@@ -40,6 +40,9 @@
   now registers only after the cross-realm bind claim wins, so a denied claimant
   never creates a transient local owner. Cross-realm POST forwarding preserves
   request-body chunk boundaries instead of collapsing the body into one buffer.
+  Scoped preview responders no longer reject ADR-0180 live service-to-service
+  loopback requests; bind-claim owns port uniqueness, while page-preview requests
+  remain scope-filtered.
 - **Empty-body `IncomingMessage` reaches EOF for the `req.resume()` discard
   idiom.** The deferred end-of-stream path (which avoids a late-listener missing
   `'end'`) now also fires when the request is `resume()`d with no
