@@ -36,5 +36,10 @@ export function watchServedPorts(deps: PortWatchDeps): () => void {
     }
     deps.post([...current]);
   };
-  return deps.subscribe(reconcile);
+  const unsubscribe = deps.subscribe(reconcile);
+  // Initial reconcile: ports opened BEFORE the watch began (a multi-port entry
+  // listening beyond the seeded boot port) must be served now, not on the next
+  // unrelated registry change.
+  reconcile();
+  return unsubscribe;
 }

@@ -75,6 +75,19 @@
 
 ### Fixed
 
+- **Preset switch/restart no longer spins when a SECOND server is live.** The
+  derived dev-server status is GLOBAL (any listening server keeps it `running` —
+  generic lifecycle), but the switch stops ONE session: with a vite dev server
+  plus a bare `node server.mjs` in another terminal, the stop-wait polled for a
+  global `stopped` that never came and the switch hung on the veil forever. The
+  wait now settles when the stopped session stops OWNING the primary (everything
+  stopped, or the pill moved to another session's server). e2e: dual-server
+  switch case in `generic-dev-server-lifecycle.spec.ts`.
+- **Multi-port entries: ports opened BEFORE the port watch began are now served.**
+  The dev-boot watch subscribes after ready with only the boot port seeded and
+  reconciled only on the NEXT registry change — a second port opened during boot
+  stayed unbridged until an unrelated event. `watchServedPorts` now runs one
+  initial reconcile at start (unit RED-checked).
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**

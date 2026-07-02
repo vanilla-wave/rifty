@@ -48,11 +48,15 @@ export const bakedOverrides: OverrideMap = {
 const SHIM_ESBUILD_VERSION = '0.21.5';
 
 // ONE mode-independent esbuild entry (ADR-0188): the real async WASI transform
-// bridge (dev module serving AND `vite build`), `build({ write:false })` for
-// config bundling, and the tolerant no-op `context()` dev dep-scanning
-// constructs under `optimizeDeps.noDiscovery` (build never calls it — vite
-// production build does not pre-bundle deps here). Everything else loud-throws.
-const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — WASI transform bridge (shadow registry, install-time)
+// bridge (dev module serving AND `vite build`) and `build({ write:false })` for
+// SINGLE-MODULE config bundling. Everything the bridge cannot do for real
+// loud-throws: multi-module bundling (local imports in the entry), a context()
+// with entry points (only the EMPTY dep-optimizer context under
+// `optimizeDeps.noDiscovery` constructs — its empty rebuild IS real esbuild's
+// zero-entry result), non-empty analyzeMetafile. One body, two entries: ESM
+// footer for import, CJS footer for require (real Node `require('esbuild')`
+// works — the rifty loader loud-fails sync require of ESM).
+const SHIM_ESBUILD_BODY = `// rifty: esbuild shim — WASI transform bridge (shadow registry, install-time)
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
     super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
@@ -61,9 +65,9 @@ const NotImplementedError = class extends Error {
   }
 };
 
-export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
+const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
 
-export async function initialize(_opts) {
+async function initialize(_opts) {
   return undefined;
 }
 
@@ -79,7 +83,7 @@ function transformBridge() {
   return bridge;
 }
 
-export async function transform(input, options = {}) {
+async function transform(input, options = {}) {
   const result = await transformBridge()(decodeInput(input), options);
   return {
     code: result.code,
@@ -90,7 +94,7 @@ export async function transform(input, options = {}) {
   };
 }
 
-export function transformSync(_input, _options = {}) {
+function transformSync(_input, _options = {}) {
   throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
 }
 
@@ -114,7 +118,7 @@ async function loadEntryThroughPlugins(opts, entry) {
     onResolve() {
       // The minimal config bridge does not traverse imports. Vite's own
       // externalize plugin may register resolvers; they are relevant only if a
-      // config imports extra modules, which remains a loud gap below.
+      // config imports extra modules — assertSingleModuleOutput keeps that loud.
     },
     onLoad(options, callback) {
       onLoad.push({ filter: options && options.filter, callback });
@@ -136,7 +140,23 @@ async function loadEntryThroughPlugins(opts, entry) {
   throw new NotImplementedError('esbuild.build.onLoad', 'rifty config bundling needs an onLoad result for the entry');
 }
 
-export async function build(opts = {}) {
+function assertSingleModuleOutput(code, entry) {
+  // Real esbuild build() BUNDLES local imports; this bridge transforms ONE
+  // module. Succeeding while the output still imports './x' would hand the
+  // caller a half-loaded config as "bundled" — a silent wrong answer. Bare
+  // specifiers stay (vite's externalize plugin marks them external; real
+  // esbuild leaves externals untouched); only relative/absolute file imports
+  // are the lie, so they refuse loud.
+  const local = /(?:\\bfrom\\s*["']|\\bimport\\s*\\(\\s*["']|\\bimport\\s*["']|\\brequire\\s*\\(\\s*["'])(\\.{1,2}\\/|\\/)/.exec(code);
+  if (local) {
+    throw new NotImplementedError(
+      'esbuild.build.bundle',
+      'rifty config bundling transforms the single entry module (' + entry + '); local file imports are not traversed — inline them or import a package',
+    );
+  }
+}
+
+async function build(opts = {}) {
   if (opts.write !== false) {
     throw new NotImplementedError('esbuild.build.write', 'rifty config bundling supports write:false only');
   }
@@ -149,6 +169,7 @@ export async function build(opts = {}) {
     sourcemap: opts.sourcemap,
   });
   const text = result.code;
+  assertSingleModuleOutput(text, entry);
   return {
     errors: [],
     warnings: result.warnings || [],
@@ -164,40 +185,59 @@ export async function build(opts = {}) {
   };
 }
 
-export function buildSync(_opts) {
+function buildSync(_opts) {
   throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
 }
 
-export async function context(_opts) {
-  // Minimal context that does nothing but lets Vite's dep-pre-bundling code
-  // run to completion without throwing on construction (dev dep-scan with
-  // noDiscovery). Production build never constructs a context here.
+async function context(opts = {}) {
+  // Only the EMPTY dep-optimizer context constructs (dev dep-pre-bundling under
+  // optimizeDeps.noDiscovery finds no entries; production build never gets
+  // here). Its empty rebuild() result IS what real esbuild returns for zero
+  // entry points — honest, not a stub. Entry points would need real
+  // rebuild/watch, which the bridge cannot do: refuse loud at construction.
+  const entryPoints = opts.entryPoints;
+  const empty =
+    entryPoints === undefined ||
+    (Array.isArray(entryPoints) ? entryPoints.length === 0 : Object.keys(entryPoints).length === 0);
+  if (!empty || opts.stdin) {
+    throw new NotImplementedError(
+      'esbuild.context',
+      'rifty esbuild bridge cannot rebuild/watch entry points; only the empty dep-optimizer context (optimizeDeps.noDiscovery) is supported',
+    );
+  }
   return {
     rebuild: async () => ({ errors: [], warnings: [], outputFiles: [], metafile: { inputs: {}, outputs: {} } }),
     watch: async () => undefined,
-    serve: async () => undefined,
+    serve: async () => {
+      throw new NotImplementedError('esbuild.context.serve', 'esbuild serve has no rifty bridge');
+    },
     cancel: async () => undefined,
     dispose: async () => undefined,
   };
 }
 
-export async function analyzeMetafile(_metafile, _opts) {
+function analyzeMetafileSync(metafile, _opts) {
+  const meta = (typeof metafile === 'string' ? JSON.parse(metafile) : metafile) || {};
+  const hasWork = Object.keys(meta.inputs || {}).length > 0 || Object.keys(meta.outputs || {}).length > 0;
+  if (hasWork) {
+    throw new NotImplementedError('esbuild.analyzeMetafile', 'rifty esbuild bridge does not produce bundle analysis');
+  }
   return '';
 }
 
-export function analyzeMetafileSync(_metafile, _opts) {
-  return '';
+async function analyzeMetafile(metafile, opts) {
+  return analyzeMetafileSync(metafile, opts);
 }
 
-export async function formatMessages(messages, _opts) {
+async function formatMessages(messages, _opts) {
   return messages.map((m) => (m && m.text) || '');
 }
 
-export function formatMessagesSync(messages, _opts) {
+function formatMessagesSync(messages, _opts) {
   return messages.map((m) => (m && m.text) || '');
 }
 
-export const default_ = {
+const api = {
   version,
   transform,
   transformSync,
@@ -210,21 +250,43 @@ export const default_ = {
   formatMessagesSync,
   initialize,
 };
-
-export { default_ as default };
 `;
 
+const SHIM_ESBUILD_ESM = `${SHIM_ESBUILD_BODY}
+export {
+  version,
+  initialize,
+  transform,
+  transformSync,
+  build,
+  buildSync,
+  context,
+  analyzeMetafile,
+  analyzeMetafileSync,
+  formatMessages,
+  formatMessagesSync,
+};
+export default api;
+`;
+
+const SHIM_ESBUILD_CJS = `${SHIM_ESBUILD_BODY}
+module.exports = api;
+`;
+
+// `type: module` classifies lib/main.js as ESM; the require condition MUST
+// point at a real .cjs body or sync require('esbuild') loud-fails in the rifty
+// loader while real Node succeeds (the lightningcss dual-entry pattern).
 const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
   {
     name: 'esbuild',
     version: SHIM_ESBUILD_VERSION,
-    main: './lib/main.js',
+    main: './lib/main.cjs',
     module: './lib/main.js',
     type: 'module',
     exports: {
       '.': {
         import: './lib/main.js',
-        require: './lib/main.js',
+        require: './lib/main.cjs',
         default: './lib/main.js',
       },
     },
@@ -327,7 +389,8 @@ export const internalsShims: Record<string, InternalsShim> = {
     into: 'esbuild',
     files: {
       'package.json': SHIM_ESBUILD_PACKAGE_JSON,
-      'lib/main.js': SHIM_ESBUILD_SOURCE,
+      'lib/main.js': SHIM_ESBUILD_ESM,
+      'lib/main.cjs': SHIM_ESBUILD_CJS,
     },
   },
   // Same for `lightningcss` → lightningcss-wasm (pure re-export delegates).

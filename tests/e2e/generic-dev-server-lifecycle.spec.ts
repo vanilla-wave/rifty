@@ -5,6 +5,7 @@ import {
   expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
+  selectPreset,
   terminalBuffer,
 } from './helpers/playground.ts';
 
@@ -128,5 +129,57 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
     await page.keyboard.press('Control+c');
     await runLineConfirmed(page, 'echo freed');
     await expectTerminalContains(page, 'freed', 15_000);
+  });
+});
+
+/**
+ * The derived dev-server status is GLOBAL (any listening server keeps it
+ * 'running'), but stop/restart targets ONE session: a preset switch while a
+ * SECOND server (bare `node`) is live must not wait for a global 'stopped'
+ * that never comes — the switch used to spin forever on it.
+ */
+test.describe('generic dev-server lifecycle — dual-server preset switch', () => {
+  test('switching presets with a second live node server completes (no global-stop spin)', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(240_000);
+    page.on('pageerror', (err) => console.log('[pageerror]', err.message));
+    await bootProjectFiles(page);
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+      timeout: 15_000,
+    });
+    await expectViteDevServerReady(page, 5174, 90_000);
+
+    // Second live server in its OWN session (foreground `node` run).
+    await openShellTerminal(page);
+    await runLineConfirmed(
+      page,
+      'echo \'import http from "node:http"; http.createServer((_q, res) => res.end("SECOND-OK")).listen(4200);\' > /scratch/second.mjs',
+    );
+    await runLineConfirmed(page, 'node /scratch/second.mjs');
+    const fetchPreview = async (path: string): Promise<string> =>
+      page.evaluate(async (p: string) => {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 4_000);
+        try {
+          const r = await fetch(p, { cache: 'no-store', signal: ac.signal });
+          return await r.text();
+        } catch (err) {
+          return String((err as Error).message ?? err);
+        } finally {
+          clearTimeout(timer);
+        }
+      }, path);
+    await expect
+      .poll(() => fetchPreview('/preview/4200/'), { timeout: 90_000, intervals: [1_000, 2_000] })
+      .toContain('SECOND-OK');
+
+    // Switch presets while BOTH servers are live. The switch stops the vite dev
+    // SESSION; the node server keeps the derived status 'running' — the stop
+    // wait must settle on ownership moving, not on a global 'stopped'.
+    await selectPreset(page, 'hono-api');
+    await expect(page.locator('.rf-livepill')).toContainText(':3321', { timeout: 150_000 });
   });
 });

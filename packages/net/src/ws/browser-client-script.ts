@@ -81,6 +81,28 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
     if (bridgeHosts.indexOf(url.hostname) !== -1) return true;
     return remapPort(url) !== null;
   }
+  function guestFrameUrl(url) {
+    // A page-origin URL (document-relative 'ws' resolved against the iframe's
+    // /preview/<port>/ base, or an explicit page-host URL) carries the HOST
+    // page's routing prefix — a path the guest never serves. Strip it, exactly
+    // as the SW does for HTTP. Loopback URLs address the guest directly; their
+    // path is literal.
+    var guestPort = previewPathPort();
+    if (guestPort === null) return url.href;
+    var pageHost;
+    try {
+      pageHost = new URL(window.location.href).host;
+    } catch (_) {
+      return url.href;
+    }
+    if (url.host !== pageHost) return url.href;
+    var prefix = '/preview/' + guestPort;
+    if (url.pathname !== prefix && url.pathname.indexOf(prefix + '/') !== 0) return url.href;
+    var clone = new URL(url.href);
+    var stripped = url.pathname.slice(prefix.length);
+    clone.pathname = stripped === '' ? '/' : stripped;
+    return clone.href;
+  }
   function makeCloseEvent(code, reason, wasClean) {
     try {
       return new CloseEvent('close', { code: code, reason: reason, wasClean: wasClean });
@@ -238,6 +260,9 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         return new NativeWebSocket(rawUrl, protocols);
       }
       this.url = target.href;
+      // .url reports the browser-resolved URL (native parity); the OPEN frame
+      // carries the guest-visible one (page /preview/<port>/ prefix stripped).
+      this.__frameUrl = guestFrameUrl(target);
       this.protocol = '';
       this.extensions = '';
       this.binaryType = 'blob';
@@ -278,7 +303,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         this.__channels[j].postMessage({
           type: 'open',
           cid: this.__cid,
-          url: this.url,
+          url: this.__frameUrl,
           protocols: this.__protocols
         });
       }

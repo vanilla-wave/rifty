@@ -602,6 +602,38 @@ describe('webSocketBridgeClientScript previewPortFromPath remap (ADR-0189)', () 
     }
   });
 
+  it('strips the page /preview/<port>/ prefix from page-base-resolved WS URLs (guest sees its own path)', async () => {
+    const { win, restore } = installWindow({ hostname: 'localhost', pathname: '/preview/9043/' });
+    const peer = ackingPeer(9043);
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+
+      // Document-relative URL (WHATWG WebSocket allows it): resolves against
+      // the iframe's /preview/<port>/ base — that prefix is the HOST page's
+      // routing artifact, never a path the guest serves (the SW strips the
+      // same prefix for HTTP requests).
+      const relative = new BrowserWebSocket('ws');
+      await expect(openOrClose(relative)).resolves.toBe('open');
+      relative.close();
+
+      // Root-relative stays untouched (no prefix in the resolved path).
+      const rootRelative = new BrowserWebSocket('/api/socket');
+      await expect(openOrClose(rootRelative)).resolves.toBe('open');
+      rootRelative.close();
+
+      expect(peer.opens.map((f) => f.url)).toEqual([
+        'ws://localhost:5174/ws',
+        'ws://localhost:5174/api/socket',
+      ]);
+    } finally {
+      peer.close();
+      restore();
+    }
+  });
+
   it('keeps native WebSocket for non-loopback foreign hosts (real egress stays real)', () => {
     const constructed: string[] = [];
     class NativeWebSocket extends EventTarget {

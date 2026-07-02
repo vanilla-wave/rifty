@@ -2126,8 +2126,13 @@ export function App(props: AppProps) {
     }
   }
 
-  async function waitForDevServerStop(): Promise<void> {
-    while (devServerStatus() !== 'stopped') {
+  async function waitForDevServerStop(sessionId: string): Promise<void> {
+    // The derived status is GLOBAL (any listening server keeps it 'running' —
+    // generic lifecycle): with a second server (node/bin) live, waiting for a
+    // global 'stopped' after stopping ONE session spins forever. Wait until
+    // OUR session stops owning the primary: everything stopped, or the pill
+    // moved to another session's server.
+    while (devServerStatus() !== 'stopped' && devServerOwnerSessionId === sessionId) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
   }
@@ -2193,7 +2198,7 @@ export function App(props: AppProps) {
     const stopLifecycleRun = lifecycleSessionRunning(sessionId);
     if (sessionId && stopLifecycleRun) manager.stop(sessionId);
     if (sessionId && stopLifecycleRun && devServerOwnerSessionId === sessionId) {
-      await waitForDevServerStop();
+      await waitForDevServerStop(sessionId);
     }
     if (stopLifecycleRun) {
       await waitForTerminalIdle(sessionId);

@@ -47,7 +47,29 @@ describe('watchServedPorts', () => {
     expect(posts.at(-1)).toEqual([]);
   });
 
-  it('unsubscribe stops reconciliation', () => {
+  it('reconciles ONCE at start: a port already listening when the watch begins is served without waiting for a change', () => {
+    // Multi-port entries can open a second port BEFORE the ready handshake
+    // finishes; the watch begins after ready with only the boot port seeded —
+    // a subscribe-only watch would miss it until some unrelated change.
+    const reg = fakeRegistry([3000, 3100]);
+    const teardowns = new Map<number, ReturnType<typeof vi.fn>>();
+    const posts: number[][] = [];
+    watchServedPorts({
+      listPorts: reg.listPorts,
+      subscribe: reg.subscribe,
+      servePreview: (port) => {
+        const tear = vi.fn();
+        teardowns.set(port, tear);
+        return tear;
+      },
+      post: (ports) => posts.push(ports),
+      served: new Map([[3000, () => {}]]),
+    });
+    expect(teardowns.has(3100)).toBe(true);
+    expect(posts.at(-1)).toEqual([3000, 3100]);
+  });
+
+  it('unsubscribe stops reconciliation (only the initial reconcile posted)', () => {
     const reg = fakeRegistry();
     const posts: number[][] = [];
     const unsubscribe = watchServedPorts({
@@ -58,6 +80,6 @@ describe('watchServedPorts', () => {
     });
     unsubscribe();
     reg.listen(4000);
-    expect(posts).toEqual([]);
+    expect(posts).toEqual([[]]);
   });
 });

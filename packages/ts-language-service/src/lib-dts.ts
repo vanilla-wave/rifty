@@ -197,11 +197,11 @@ export interface WorkspaceTypeScriptEntry {
 }
 
 /**
- * Resolve the workspace `typescript` compiler entry with Node resolution
- * semantics — rifty's own module resolver (package.json `exports`/`main`,
- * node_modules walk-up), never a hardcoded `lib/typescript.js` probe. Dynamic
- * import keeps the module-loader out of bundles that never load a workspace
- * compiler.
+ * Resolve the workspace `typescript` compiler entry through rifty's module
+ * resolver (Node-shaped package.json `exports`/`main` + node_modules walk-up;
+ * its Node deltas are pinned in the resolver's own parity suite) — never a
+ * hardcoded `lib/typescript.js` probe. Dynamic import keeps the module-loader
+ * out of bundles that never load a workspace compiler.
  */
 export async function resolveWorkspaceTypeScriptEntry(
   fsSync: FsSync,
@@ -253,6 +253,11 @@ function loadWorkspaceLibDts(fsSync: FsSync, entryPath: string): ReadonlyMap<str
 }
 
 function evaluateWorkspaceTypeScript(source: string, fileName: string): TypeScriptApi {
+  // `require`/`process` are passed as undefined DELIBERATELY: the ts bundle
+  // probes both behind `typeof` guards to choose its host (ts.sys detection) —
+  // undefined gives it the browser shape it fully supports. A loud-throwing
+  // require would flip `typeof require` to 'function' and steer ts down the
+  // Node sys path into the thrower.
   const module = { exports: {} as unknown };
   const exports = module.exports;
   const run = new Function(

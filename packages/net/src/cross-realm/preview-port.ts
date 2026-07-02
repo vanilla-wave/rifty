@@ -202,6 +202,37 @@ function mediaType(headers: Headers): string | null {
   return ct.split(';', 1)[0]?.trim().toLowerCase() ?? null;
 }
 
+/** `charset` parameter of the content-type header, lowercased; null if absent. */
+function htmlCharset(headers: Headers): string | null {
+  const ct = headers.get('content-type');
+  if (ct === null) return null;
+  const m = /;\s*charset=["']?([^;"']+)/i.exec(ct);
+  return m?.[1] === undefined ? null : m[1].trim().toLowerCase();
+}
+
+/** META-declared charset in the document head (first 1024 chars, browser-like). */
+function metaCharsetOf(text: string): string | null {
+  const m = /<meta[^>]+charset\s*=\s*["']?\s*([\w.:-]+)/i.exec(text.slice(0, 1024));
+  return m?.[1] === undefined ? null : m[1].toLowerCase();
+}
+
+/**
+ * True when the policy's governing script directive exists without
+ * 'unsafe-inline' — conservative "likely blocks" (nonce/hash lists would allow
+ * the PAGE's scripts but never this injected one).
+ */
+function cspBlocksInlineScript(csp: string): boolean {
+  const directives = csp
+    .split(';')
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d.length > 0);
+  const governing =
+    directives.find((d) => d === 'script-src' || d.startsWith('script-src ')) ??
+    directives.find((d) => d === 'default-src' || d.startsWith('default-src '));
+  if (governing === undefined) return false;
+  return !governing.includes("'unsafe-inline'");
+}
+
 /**
  * Body decode plan for the html injection: `null` — identity, inject as-is;
  * `'gzip' | 'deflate'` — decompress then inject; `undefined` — undecodable
@@ -339,31 +370,56 @@ export function serveCrossRealmPreview(
     // still lands; anything else is refused LOUD — a silent uninjected pass
     // would strand the page's loopback WS with no cause in sight.
     if (response.body !== null && isHtml(response.headers)) {
-      const format = htmlDecodeFormat(response.headers);
-      if (format === undefined) {
-        const coding = response.headers.get('content-encoding');
-        const ceiling = new NotImplementedError(
-          'net.preview.ws-bridge-content-encoding',
-          `text/html with content-encoding "${coding}" cannot take the ADR-0189 ws-bridge injection (only gzip/deflate decode here)`,
-        );
-        console.error('[rifty/net] cross-realm preview refusing undecodable html encoding', {
+      const refuse = (feature: string, hint: string): void => {
+        const ceiling = new NotImplementedError(feature, hint);
+        console.error('[rifty/net] cross-realm preview refusing html rewrite', {
           feature: ceiling.feature,
-          coding,
         });
         channel.postMessage({
           type: 'error',
           requestId,
           message: ceiling.message,
         } satisfies PreviewPortFrame);
+      };
+      const format = htmlDecodeFormat(response.headers);
+      if (format === undefined) {
+        refuse(
+          'net.preview.ws-bridge-content-encoding',
+          `text/html with content-encoding "${response.headers.get('content-encoding')}" cannot take the ADR-0189 ws-bridge injection (only gzip/deflate decode here)`,
+        );
+        return;
+      }
+      // Decode with the HEADER-declared charset (HTTP precedence) — a blind
+      // utf-8 decode of a windows-1251 body would mojibake the rewrite. The
+      // re-encode is ALWAYS utf-8 (TextEncoder has no other output), so a
+      // non-utf8 source gets its content-type re-stamped below.
+      const headerCharset = htmlCharset(response.headers);
+      let decoder: TextDecoder;
+      try {
+        decoder = new TextDecoder(headerCharset ?? 'utf-8');
+      } catch {
+        refuse(
+          'net.preview.ws-bridge-charset',
+          `text/html charset "${headerCharset}" has no TextDecoder in this realm — the bridge injection cannot rewrite it`,
+        );
         return;
       }
       let injected: Uint8Array;
       try {
         let raw = await drainBodyWithDeadline(response.body, streamDrainTimeoutMs);
         if (format !== null) raw = await decompressBody(raw, format, streamDrainTimeoutMs);
-        injected = new TextEncoder().encode(
-          injectPreviewWebSocketBridge(new TextDecoder().decode(raw)),
-        );
+        const text = decoder.decode(raw);
+        // No header charset → the browser would honour a META declaration; a
+        // non-utf8 one means our utf-8 decode above was already wrong.
+        const metaCharset = headerCharset === null ? metaCharsetOf(text) : null;
+        if (metaCharset !== null && metaCharset !== 'utf-8' && metaCharset !== 'utf8') {
+          refuse(
+            'net.preview.ws-bridge-charset',
+            `text/html meta-declares charset "${metaCharset}" without a header charset — the bridge injection cannot rewrite it faithfully`,
+          );
+          return;
+        }
+        injected = new TextEncoder().encode(injectPreviewWebSocketBridge(text));
       } catch (err) {
         channel.postMessage({
           type: 'error',
@@ -372,11 +428,26 @@ export function serveCrossRealmPreview(
         } satisfies PreviewPortFrame);
         return;
       }
+      const csp = response.headers.get('content-security-policy');
+      if (csp !== null && cspBlocksInlineScript(csp)) {
+        // Injection still ships (the CSP may allow more than this parse sees),
+        // but a blocked bridge script = dead loopback WS with no other trace.
+        console.error(
+          '[rifty/net] preview document CSP likely blocks the injected WebSocket bridge inline script — loopback WS in this page will fail',
+          { csp },
+        );
+      }
       const headers = Object.fromEntries(
         Object.entries(headersToObject(response.headers)).filter(
           ([key]) => key !== 'content-encoding',
         ),
       );
+      if (headerCharset !== null && headerCharset !== 'utf-8' && headerCharset !== 'utf8') {
+        headers['content-type'] = (headers['content-type'] ?? 'text/html').replace(
+          /charset=[^;]+/i,
+          'charset=utf-8',
+        );
+      }
       if (headers['content-length'] !== undefined) {
         headers['content-length'] = String(injected.byteLength);
       }
