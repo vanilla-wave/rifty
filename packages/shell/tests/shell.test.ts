@@ -784,4 +784,14 @@ describe('Shell — pre-aborted signal (run cancelled before start)', () => {
     expect(syncMirror().existsSync('/never')).toBe(false);
     expect(sh.cwd).toBe('/');
   });
+
+  it('a pre-aborted trailing background (`cmd &`) never starts the job', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const controller = new AbortController();
+    controller.abort();
+    const r = await sh.run('touch /never-bg &', { signal: controller.signal });
+    expect(r.exitCode).toBe(130);
+    await new Promise((resolve) => setTimeout(resolve, 20)); // job would run async
+    expect(syncMirror().existsSync('/never-bg')).toBe(false);
+  });
 });

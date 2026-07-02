@@ -284,6 +284,10 @@ export class Shell {
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
+    // A run cancelled before dispatch starts NOTHING — including a trailing
+    // background job, which would otherwise fork before the segment pre-check.
+    if (options.signal?.aborted) return { exitCode: 130, stdout: '', stderr: '' };
+
     const background = this.trailingBackground(line, tokens);
     if (background) {
       if (background.foregroundTokens.length === 0) {

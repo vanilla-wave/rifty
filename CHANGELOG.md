@@ -35,7 +35,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   fallout failed the next dev-server spec. Reproduced deterministically by
   clearing `.vite`; one throwaway page load in `tests/e2e/global-setup.ts` now
   absorbs the optimize cycle before any spec runs (a warm cache pays one fast
-  page load).
+  page load). Engine-aware: the setup launches the first available engine
+  (chromium → firefox → webkit) — the cross-browser workflow installs only its
+  matrix engine, so a hard chromium dependency would have crashed the
+  firefox/webkit jobs; no engine at all fails loud.
+- **`pnpm bench` refuses non-instant and unknown presets.** `--presets` accepted
+  any id, but `presetBootToPreviewLiveMs` promises an INSTANT boot (no npm
+  install in the path) and the deep-link silently falls back to the default
+  preset on a typo — a from-scratch preset (`real-vite`) or a misspelled id
+  would have measured a lie under the requested name. The harness now fails the
+  preset loud (recorded `unmeasured` + note) when the boot echoes `npm install`
+  or the page warns about an unknown preset id; verified behaviorally
+  (`--presets real-vite,no-such-preset` → both `unmeasured` with honest notes).
+  The aggregation CORE also enforces completeness now: a preset sample/stage set
+  shorter than `runs` degrades to `unmeasured` (contract in `aggregate.mjs`, not
+  only harness discipline; RED-first unit).
 - **`chromium-light` e2e serialized in CI to kill the dev-server contention flake.** On the shared CI runner, ≥2 light-lane specs cold-booting a Vite-WASI dev server (owner + dev-server child + Rolldown WASI pthread pool) concurrently starved the owner worker (0 `emitChunk`, ~15s owner-RPC timeout), so the terminal-readiness poll timed out on a random spec subset (also red on `main`). The light lane now runs `--workers=1` **in CI only** — reproduced locally at `--workers=16` (16 fail) vs `--workers=1` (all pass); the heavy lane already proved single-boot-at-a-time is reliable. Local runs keep parallel (beefy machines don't oversubscribe). Re-enabling light parallelism for speed would need the owner to survive concurrent boots. Closes the `light-lane-dev-server-boot-contention-flake` backlog item.
 - **e2e lanes run as parallel matrix jobs, not sequential steps.** `e2e-chromium`
   is now a `matrix: lane: [heavy, light, prod]` (separate runners) instead of one

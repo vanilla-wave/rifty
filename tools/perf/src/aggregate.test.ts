@@ -178,6 +178,39 @@ describe('bench aggregate core', () => {
       });
     });
 
+    it('a PARTIAL measured sample set (fewer samples than runs) degrades to unmeasured', () => {
+      // Contract lives in the CORE, not only the harness: summarizing 2/3
+      // samples would publish a launch-citable thin median.
+      const art = buildArtifact({
+        ...BASE,
+        presetBoot: [
+          {
+            presetId: 'p',
+            samples: [100, 200],
+            stageRuns: [{ interactiveMs: 10 }, { interactiveMs: 12 }],
+          },
+        ],
+      });
+      const [m] = art.metrics.presetBootToPreviewLiveMs;
+      expect(m.status).toBe('unmeasured');
+      expect(m.note).toContain('2/3');
+      expect(m.median).toBeUndefined();
+    });
+
+    it('a stageRuns count that disagrees with samples also degrades to unmeasured', () => {
+      const art = buildArtifact({
+        ...BASE,
+        presetBoot: [
+          {
+            presetId: 'p',
+            samples: [100, 200, 300],
+            stageRuns: [{ interactiveMs: 10 }, { interactiveMs: 12 }],
+          },
+        ],
+      });
+      expect(art.metrics.presetBootToPreviewLiveMs[0].status).toBe('unmeasured');
+    });
+
     it('omits the key when the phase did not run, records an explicit skip when told to', () => {
       expect(buildArtifact(BASE).metrics.presetBootToPreviewLiveMs).toBeUndefined();
       const skipped = buildArtifact({

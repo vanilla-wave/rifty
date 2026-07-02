@@ -10,8 +10,10 @@
   cancelled before dispatch still executed its first pipeline segment (side
   effects started) and resolved with that segment's exit code. The loop now
   pre-checks per segment; a run whose segments were all cancelled resolves 130
-  (a shell's kill-before-start), empty-tail no-op lines keep exit 0. Guard:
-  `shell.test.ts` pre-aborted case.
+  (a shell's kill-before-start), empty-tail no-op lines keep exit 0. A trailing
+  BACKGROUND job (`cmd &`) is covered too — `run()` refuses a pre-aborted line
+  before the job forks. Guards: `shell.test.ts` pre-aborted cases (foreground +
+  background).
 
 ### Added
 

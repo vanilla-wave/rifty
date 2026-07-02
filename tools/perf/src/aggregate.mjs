@@ -66,7 +66,7 @@ export function buildArtifact({
       coldStartToInteractiveMs: summarize(coldStartSamples, stepMs),
       npmInstallToFirstViteResponseMs: buildInstallMetric(install, stepMs),
       ...(presetBoot !== undefined
-        ? { presetBootToPreviewLiveMs: buildPresetBootMetric(presetBoot, stepMs) }
+        ? { presetBootToPreviewLiveMs: buildPresetBootMetric(presetBoot, stepMs, runs) }
         : {}),
     },
   };
@@ -78,14 +78,23 @@ export function buildArtifact({
  * silent) or per-preset records: measured `{ presetId, samples, stageRuns }` or
  * `{ presetId, status: 'unmeasured', note }`. A stage absent in ANY run
  * aggregates to null — a thin stage median would claim attribution it lacks.
+ * The CORE enforces completeness (not just the harness): a sample/stage set
+ * shorter than `runs` degrades to `unmeasured` — never a thin median.
  */
-function buildPresetBootMetric(presetBoot, stepMs) {
+function buildPresetBootMetric(presetBoot, stepMs, runs) {
   if (!Array.isArray(presetBoot)) {
     return { status: presetBoot.status, ...(presetBoot.note ? { note: presetBoot.note } : {}) };
   }
   return presetBoot.map((p) => {
     if (p.status === 'unmeasured') {
       return { presetId: p.presetId, status: 'unmeasured', note: p.note };
+    }
+    if (p.samples.length !== runs || p.stageRuns.length !== runs) {
+      return {
+        presetId: p.presetId,
+        status: 'unmeasured',
+        note: `partial sample set: ${p.samples.length}/${runs} samples, ${p.stageRuns.length}/${runs} stage runs — refusing a thin median`,
+      };
     }
     return {
       presetId: p.presetId,

@@ -249,6 +249,14 @@ async function runPresetBootOnce(browser, presetId) {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
+    // The deep-link silently falls back to the DEFAULT preset on an unknown id
+    // (with a console.warn) — a typo'd --presets would measure the wrong boot
+    // under the requested name. Surface the warn as a loud failure instead.
+    let unknownPresetWarn = null;
+    page.on('console', (msg) => {
+      const text = msg.text();
+      if (text.includes('unknown preset') && text.includes('?preset=')) unknownPresetWarn = text;
+    });
     const t0 = Date.now();
     await page.goto(`${BASE}/?preset=${presetId}&autorun=1`, { waitUntil: 'commit' });
     await page.waitForFunction(interactivePredicate, null, { timeout: INTERACTIVE_TIMEOUT });
@@ -256,7 +264,18 @@ async function runPresetBootOnce(browser, presetId) {
     const pending = new Map(PRESET_STAGE_MARKERS);
     const deadline = t0 + PRESET_BOOT_TIMEOUT;
     while (Date.now() < deadline) {
+      if (unknownPresetWarn) {
+        throw new Error(`[${presetId}] not a known preset (${unknownPresetWarn})`);
+      }
       const text = (await terminalText(page)).replace(ANSI_SGR, '');
+      // presetBootToPreviewLiveMs promises an INSTANT boot (baked snapshot, no
+      // npm install in the path). A from-scratch preset echoes `npm install` in
+      // its boot line — measuring it here would lie about the metric.
+      if (/\$ [^\n]*npm install/.test(text)) {
+        throw new Error(
+          `[${presetId}] boot ran npm install — a from-scratch preset cannot be measured as presetBootToPreviewLiveMs (instant presets only)`,
+        );
+      }
       for (const [key, re] of pending) {
         if (re.test(text)) {
           stages[key] = Date.now() - t0;
