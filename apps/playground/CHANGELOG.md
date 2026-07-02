@@ -14,6 +14,14 @@
 
 ### Fixed
 
+- **Instant-preset boot no longer sits on a dead-silent terminal.** For an
+  instant preset, `setDevConfig` gates the `$ <boot line>` echo on the baked
+  node_modules snapshot restore (a 9.6-16 MB download in the owner — seconds on
+  a real network), so the console showed nothing and then painted command +
+  result together (measured: banner 2.2s → 11s silence → burst, throttled prod
+  build). The terminal now prints `restoring project dependencies…` when the
+  await is slow (>250 ms; a stamp-satisfied reload stays silent). Root-cause
+  overlap work: `docs/backlog/playground/instant-restore-gates-boot-echo.md`.
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**
