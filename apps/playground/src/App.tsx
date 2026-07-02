@@ -84,7 +84,6 @@ import {
 import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts';
 import type { ScmResourceRow } from './glue/scm-status.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
-import { withSlowProgress } from './glue/slow-progress.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
 import { requestSwitch } from './glue/switch-owner.ts';
@@ -2230,30 +2229,14 @@ export function App(props: AppProps) {
       // gallery pick), matching the owner spawn; `templateId`/`setup` follow the
       // picked preset (the new active starter for this scratch).
       //
-      // This await GATES the `$ <boot line>` echo: for an instant preset the owner
-      // restores the baked node_modules snapshot here (a 9.6-16 MB download — seconds
-      // on a real network), so without a progress line the terminal sits dead-silent
-      // and then paints command + result together. Slow-path affordance only: a
-      // stamp-satisfied reload settles fast and prints nothing.
-      const progressSessionId = restartSessionId ?? session?.id;
-      const writeProgress = (line: string): void => {
-        if (progressSessionId) terminalWriters.get(progressSessionId)?.(line, 'stdout');
-      };
-      await withSlowProgress(
-        workspaceOwner().setDevConfig({
-          templateId: templateForPreset(preset).id,
-          slug: store.activeId(),
-          setup: preset.setup,
-        }),
-        {
-          delayMs: 250,
-          onSlow: () => writeProgress('\x1b[90mrestoring project dependencies…\x1b[0m\n'),
-          onSettledAfterSlow: (elapsedMs) =>
-            writeProgress(
-              `\x1b[90mdependencies restored in ${(elapsedMs / 1000).toFixed(1)}s\x1b[0m\n`,
-            ),
-        },
-      );
+      // The ack is config-assignment only — the deps restore no longer gates it
+      // (the owner's per-run `beforeRun` gate awaits the restore inside the run,
+      // streaming progress), so the `$ <boot line>` echo below paints immediately.
+      await workspaceOwner().setDevConfig({
+        templateId: templateForPreset(preset).id,
+        slug: store.activeId(),
+        setup: preset.setup,
+      });
       if (restartNeeded) {
         if (restartSessionId && restartGeneration !== undefined) {
           const booted = await startDevServerSession(restartSessionId, restartGeneration, preset);

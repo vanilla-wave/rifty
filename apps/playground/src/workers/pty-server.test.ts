@@ -240,4 +240,109 @@ describe('pty-server', () => {
     await run;
     expect(out).toEqual([{ type: 'pty:dev-config-ready', id: 'dc1' }]);
   });
+
+  describe('beforeRun gate (deps restore overlaps the echoed command)', () => {
+    const dec = new TextDecoder();
+    const enc = new TextEncoder();
+    const chunkText = (f: OwnerToPageFrame): string =>
+      f.type === 'pty:chunk' ? dec.decode(f.data) : '';
+
+    it('registers the run, streams the gate progress chunk, and only then runs the command', async () => {
+      const gate = deferred();
+      const out: OwnerToPageFrame[] = [];
+      const server = createPtyServer({
+        send: (f) => out.push(f),
+        makeShell: () => new Shell({ cwd: '/', env: {} }),
+        beforeRun: async (emit) => {
+          emit('restoring project dependencies…\n', 'stdout');
+          await gate.promise;
+        },
+      });
+      server.handleFrame({ type: 'pty:open', sid: 's1' });
+      const run = server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r1',
+        line: 'echo hi',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      await Promise.resolve();
+      // Gate pending: the progress chunk is out, the command has NOT run yet.
+      const midTexts = out
+        .filter((f) => f.type === 'pty:chunk')
+        .map(chunkText)
+        .join('');
+      expect(midTexts).toContain('restoring project dependencies');
+      expect(midTexts).not.toContain('hi\n');
+      expect(out.some((f) => f.type === 'pty:exit')).toBe(false);
+      gate.resolve();
+      await run;
+      const texts = out
+        .filter((f) => f.type === 'pty:chunk')
+        .map(chunkText)
+        .join('');
+      expect(texts.indexOf('restoring project dependencies')).toBeLessThan(texts.indexOf('hi'));
+      const exit = out.find((f) => f.type === 'pty:exit');
+      expect(exit && exit.type === 'pty:exit' && exit.code).toBe(0);
+    });
+
+    it('stdin sent while the gate is pending reaches the command (run registered up front)', async () => {
+      const gate = deferred();
+      const out: OwnerToPageFrame[] = [];
+      const server = createPtyServer({
+        send: (f) => out.push(f),
+        makeShell: () => new Shell({ cwd: '/', env: {} }),
+        beforeRun: () => gate.promise,
+      });
+      server.handleFrame({ type: 'pty:open', sid: 's1' });
+      const run = server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r1',
+        line: 'cat',
+        cols: 80,
+        rows: 24,
+        isTTY: false,
+      });
+      await Promise.resolve();
+      server.handleFrame({ type: 'pty:stdin', sid: 's1', rid: 'r1', data: enc.encode('ping\n') });
+      server.handleFrame({ type: 'pty:stdin-eof', sid: 's1', rid: 'r1' });
+      gate.resolve();
+      await run;
+      const texts = out
+        .filter((f) => f.type === 'pty:chunk')
+        .map(chunkText)
+        .join('');
+      expect(texts).toContain('ping');
+    });
+
+    it('a beforeRun failure fails the run loudly and never executes the command', async () => {
+      const out: OwnerToPageFrame[] = [];
+      const server = createPtyServer({
+        send: (f) => out.push(f),
+        makeShell: () => new Shell({ cwd: '/', env: {} }),
+        beforeRun: () => Promise.reject(new Error('deps gate broke')),
+      });
+      server.handleFrame({ type: 'pty:open', sid: 's1' });
+      await server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r1',
+        line: 'echo hi',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      const exit = out.find((f) => f.type === 'pty:exit');
+      expect(exit && exit.type === 'pty:exit' && exit.code).toBe(1);
+      expect(exit && exit.type === 'pty:exit' && exit.error).toContain('deps gate broke');
+      const texts = out
+        .filter((f) => f.type === 'pty:chunk')
+        .map(chunkText)
+        .join('');
+      expect(texts).not.toContain('hi\n');
+    });
+  });
 });

@@ -556,14 +556,11 @@ describe('App terminal startup wiring', () => {
     expect(reinit).toContain('setTsProjectRevision((revision) => revision + 1);');
     expect(reinit).not.toContain('resetEditorToActiveInitialFiles()');
     expect(runPreset).toContain('templateId: templateForPreset(preset).id,');
-    // setDevConfig stays awaited before the boot lines — wrapped in the
-    // slow-progress affordance (the await gates on the snapshot restore).
-    expect(runPreset).toContain('await withSlowProgress(');
-    expect(runPreset).toContain('workspaceOwner().setDevConfig({');
+    expect(runPreset).toContain('await workspaceOwner().setDevConfig({');
     expect(runPreset).not.toContain('await machine.loadPreset(preset);');
     expect(runPreset).toMatch(/finally \{[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/);
     const sessionReservation = runPreset.indexOf('session = devServerSession();');
-    const setDevConfig = runPreset.indexOf('workspaceOwner().setDevConfig({');
+    const setDevConfig = runPreset.indexOf('await workspaceOwner().setDevConfig({');
     expect(sessionReservation).toBeGreaterThan(-1);
     expect(setDevConfig).toBeGreaterThan(-1);
     expect(sessionReservation).toBeLessThan(setDevConfig);
@@ -574,7 +571,7 @@ describe('App terminal startup wiring', () => {
       /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
-      /await withSlowProgress\(\s*workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
       /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?const booted = await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,

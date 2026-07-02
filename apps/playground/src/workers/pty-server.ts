@@ -94,6 +94,15 @@ export interface PtyServerDeps {
     slug: string;
     setup: 'instant' | 'from-scratch';
   }) => void | Promise<void>;
+  /**
+   * Awaited between run registration and the command itself — the bootstrap's
+   * deps gate (instant-preset snapshot restore overlaps the echoed command
+   * instead of gating the page's `$ <line>` echo). `emit` streams progress
+   * chunks into THIS run's terminal output. The run is already registered, so
+   * stdin/signal frames arriving during the gate queue instead of dropping. A
+   * rejection fails the run loudly (exit 1 + error) and the command never runs.
+   */
+  readonly beforeRun?: (emit: (chunk: string, stream: PtyStream) => void) => void | Promise<void>;
 }
 
 export interface PtyServer {
@@ -148,6 +157,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     let code = 0;
     let error: string | undefined;
     try {
+      await deps.beforeRun?.((chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream));
       const result = await session.shell.run(frame.line, {
         onChunk: (chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream),
         signal: run.controller.signal,

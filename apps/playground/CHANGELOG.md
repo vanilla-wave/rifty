@@ -14,14 +14,20 @@
 
 ### Fixed
 
-- **Instant-preset boot no longer sits on a dead-silent terminal.** For an
-  instant preset, `setDevConfig` gates the `$ <boot line>` echo on the baked
-  node_modules snapshot restore (a 9.6-16 MB download in the owner — seconds on
-  a real network), so the console showed nothing and then painted command +
-  result together (measured: banner 2.2s → 11s silence → burst, throttled prod
-  build). The terminal now prints `restoring project dependencies…` when the
-  await is slow (>250 ms; a stamp-satisfied reload stays silent). Root-cause
-  overlap work: `docs/backlog/playground/instant-restore-gates-boot-echo.md`.
+- **The boot command echoes the moment it runs — the deps restore no longer
+  gates the terminal.** For an instant preset, the `pty:dev-config` ack used to
+  wait for the baked node_modules snapshot restore (a 9.6-16 MB download —
+  seconds on a real network), so the `$ <boot line>` echo and its output painted
+  together after a dead-silent console (measured: banner 2.2s → 11s silence →
+  burst at 13.2-14.1s, throttled prod build). The ack is now config-assignment
+  only; every pty run instead awaits the restore INSIDE the run via the new
+  `beforeRun` gate (pty-server), streaming `restoring project dependencies…` /
+  `dependencies restored in N.Ns` to the run's stdout when slow (>250 ms; a
+  stamp-satisfied ready prints nothing). Same deps guarantee for vite/node/npm
+  boot lines (the old pty:exec queue moved into the run — stdin/signal frames
+  during the gate now queue instead of dropping); the restore also stops being
+  bounded by the page's 60s dev-config timeout. Measured after: echo at 2.6s,
+  progress at 2.9s, restore 10.6s, LIVE 14.2s — console honest the whole way.
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**
