@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Source-grep test ratchet (`pnpm check:source-grep`, epic
+  playground-testable-core).** CI refuses new
+  `expect(source).toContain`-style tests in apps/playground and forces the
+  15-file/888-assert allowlist burn-down to be recorded (exact-count match, both
+  directions). Wired into `pr:check`.
+- **Browser-unit test lane (ADR-0196, epic playground-testable-core).**
+  `pnpm test:browser-unit` — thin Playwright harness (`unit-harness.html`, no App
+  boot) on the playground vite dev server: worker-side modules behaviorally tested
+  against the REAL owner worker under COI (owner ready + pty exec + vfs-write ack +
+  preview republish handshake). Own CI job; serial; isolated port.
+
 ### Fixed
 
 - **`pnpm bench` refuses a partial or foreign-server measurement.** Two Fidelity

@@ -32,10 +32,10 @@ None — playground orchestration, no Node-API surface. Verification = RED-check
 ## Out of scope
 - Lifting the core into a public `@riftydev/workbench*` package — stays `distribution/workbench-controllers`, own ADR, gated on a real non-Solid consumer.
 - Component-file source-greps (EditorHost/PreviewPanel/FileExplorer/TerminalPanel/BottomPanel/ts-ls-monaco-providers-source/bundle-local-buffer) — burned down under the ratchet item's closing gate, no extraction needed.
-- Worker-realm modules (real-vite-bootstrap, dev-server-boot, …) — ride `toolchain-build/browser-mode-unit-lane`.
+- Worker-realm modules (real-vite-bootstrap, dev-server-boot, …) — ride the browser-unit lane (ADR-0196).
 - No behavior changes: any observable playground behavior change found mid-extraction is a bug to stop-and-report, not to fold in.
 
 ## Decisions
 - Solid-reactive core (not framework-free), module location, port seam + test stance: ADR-0195.
-- Port fakes in unit tests are the module's own contract, not a sibling-package mock (ADR-0195 §4); real-fabric coverage stays parity/conformance/e2e + browser-unit lane.
+- Port fakes in unit tests are the module's own contract, not a sibling-package mock (ADR-0195 §4); real-fabric coverage stays parity/conformance/e2e + the browser-unit lane (ADR-0196).
 - Extraction order = dependency spine (slice 1 → 2 → 3 → 4); each slice lands whole (module + behavioral tests + grep deletion + allowlist drop) — no half-extracted slice merges.

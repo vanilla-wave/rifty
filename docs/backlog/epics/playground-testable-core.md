@@ -5,7 +5,7 @@ title: Playground testable core — behavioral tests below e2e for page↔owner 
 created: 2026-07-02
 value: Playground changes stop shipping wiring regressions that only an e2e flake hunt can catch — reload/restore, dev-server lifecycle, LIVE-pill truth become provable in seconds, and the same extraction yields the headless workbench core M11 "Embeddable" needs.
 user_story: As a developer changing playground/owner wiring, I want orchestration behavior provable in a seconds-fast test, but today App.tsx is a ~3.4K-line component whose tests are 392 source-text greps, the page↔owner↔SW fabric runs only under 46 Playwright specs, and every wiring bug costs an e2e retry-hunt (or reaches users).
-items: [playground/app-orchestration-headless-core, toolchain-build/browser-mode-unit-lane, toolchain-build/source-grep-test-ratchet]
+items: [playground/app-orchestration-headless-core]
 ---
 
 ## Outcome
@@ -20,8 +20,8 @@ A developer refactors dev-server lifecycle wiring. `pnpm test` (seconds, no brow
 
 ## Items
 
-- `playground/app-orchestration-headless-core` — split `App()` into a thin Solid shell + xterm/monaco-free orchestration modules with injected ports; each extracted slice replaces its source-greps with RED-checked behavioral tests. The bulk of the value.
-- `toolchain-build/browser-mode-unit-lane` — the missing middle tier for modules that genuinely need a real Worker/COI realm (`real-vite-bootstrap`, `dev-server-boot`, `kernel-worker-entry`). Spike-gated.
-- `toolchain-build/source-grep-test-ratchet` — CI check refusing new source-grep tests + burn-down allowlist of the current 15 (detector at refine corrected the diagnosed 12: +`bundle-local-buffer`, +`TerminalPanel`, +`BottomPanel` — non-`source` variable names hid them); the epic's zero-debt closing gate.
+- `playground/app-orchestration-headless-core` — split `App()` into a thin Solid shell + xterm/monaco-free orchestration modules with injected ports; each extracted slice replaces its source-greps with RED-checked behavioral tests. The bulk of the value. Slice 1 (dev-server lifecycle + LIVE + preview set) DELIVERED (ADR-0195, `src/orchestration/dev-server-lifecycle.ts`, App.test greps 494→432); slices 2-4 open.
+- ~~toolchain-build/browser-mode-unit-lane~~ — DELIVERED (deleted-on-done): ADR-0196 thin-Playwright lane, `pnpm test:browser-unit`, own CI job; owner boot + vfs-write-ack + preview-handshake pinned behaviorally against the real owner worker.
+- ~~toolchain-build/source-grep-test-ratchet~~ — DELIVERED (deleted-on-done): `pnpm check:source-grep` in pr:check; exact-count allowlist = 15 files/888 asserts (detector corrected the diagnosed 12: +`bundle-local-buffer`, +`TerminalPanel`, +`BottomPanel`); burn-down to zero-or-`why` stays THIS epic's closing gate.
 
 Related (not owned here): `distribution/workbench-controllers` — lifting the extracted core into a public package stays IRREVERSIBLE (own ADR) and gated on a real non-Solid consumer; this epic removes its App.tsx-untangling blocker.

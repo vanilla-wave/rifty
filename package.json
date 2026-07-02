@@ -32,6 +32,7 @@
     "test:e2e:heavy": "playwright test --project=chromium-heavy --workers=1",
     "test:e2e:light": "playwright test --project=chromium-light",
     "test:e2e:prod": "playwright test --config playwright.prod.config.ts --project=chromium",
+    "test:browser-unit": "playwright test --config playwright.browser-unit.config.ts",
     "test:e2e:all": "playwright test",
     "test:e2e:firefox": "playwright test --project=firefox",
     "test:e2e:webkit": "playwright test --project=webkit",

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Browser-unit lane (SPIKE): thin Playwright harness that serves
+ * Browser-unit lane (ADR-0196): thin Playwright harness that serves
  * `apps/playground/unit-harness.html` via the REAL playground vite dev server
  * (COI headers ship in apps/playground/vite.config.ts) and behaviorally tests
  * worker-side playground modules under real cross-origin isolation + real

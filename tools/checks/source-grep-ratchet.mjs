@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Source-grep test ratchet (backlog: toolchain-build/source-grep-test-ratchet,
- * epic playground-testable-core).
+ * Source-grep test ratchet (epic playground-testable-core).
  *
  * A "source-grep test" readFileSync's a first-party `.ts`/`.tsx` module and
  * asserts on the text (`expect(source).toContain(...)`) — it pins strings,
@@ -14,8 +13,8 @@
  * (`const read = (p) => readFileSync(…)` used as `read('./x.ts')`), plus
  * derived bindings (`const tail = source.slice(…)`), propagated to fixpoint.
  * Doc reads (`.md`) and fixture reads don't count — only `.ts`/`.tsx` sources.
- * Known under-approximation is accepted (backlog item §Decisions); new evasion
- * variants get added here when seen.
+ * Known under-approximation is accepted (recorded at refine, epic
+ * playground-testable-core); new evasion variants get added here when seen.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';

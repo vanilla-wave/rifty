@@ -9,7 +9,7 @@
  * `no-ui-imports-in-playground-orchestration`); every side effect goes through
  * the injected ports below, which are also the behavioral-test seam.
  */
-import { createSignal } from 'solid-js';
+import { createSignal, untrack } from 'solid-js';
 import type { PreviewPortEntry, PtyDevServer, PtyPreview } from '../glue/pty-protocol.ts';
 import type { Preset } from '../presets.ts';
 import type { ProjectSpec } from '../templates/project-spec.ts';
@@ -208,19 +208,25 @@ export function createDevServerLifecycle<S extends DevServerSessionLike>(
   }
 
   function attachOwner(owner: DevServerOwnerPort): void {
-    unsubscribeDevServer?.();
-    unsubscribePreview?.();
-    currentOwner = owner;
-    unsubscribeDevServer = owner.onDevServer(onDevServerFrame);
-    // Mirror the owner's full preview-port set (ADR-0155) + (re)request it on
-    // subscribe — recovers a `pty:preview` push that predates this listener (same
-    // handshake discipline as the dev-server-req; never a one-shot push).
-    unsubscribePreview = owner.onPreview((frame) => {
-      setPreviewPorts(frame.ports);
+    // untrack: this body reads previewPorts() (bridge reconcile) — a caller's
+    // effect must key on the OWNER signal alone, or every pty:preview frame
+    // would re-attach and its requestPreview re-publish loops the cycle forever
+    // (broke the SW preview fetch — caught by e2e fullstack/ts-ls, 2026-07-02).
+    untrack(() => {
+      unsubscribeDevServer?.();
+      unsubscribePreview?.();
+      currentOwner = owner;
+      unsubscribeDevServer = owner.onDevServer(onDevServerFrame);
+      // Mirror the owner's full preview-port set (ADR-0155) + (re)request it on
+      // subscribe — recovers a `pty:preview` push that predates this listener (same
+      // handshake discipline as the dev-server-req; never a one-shot push).
+      unsubscribePreview = owner.onPreview((frame) => {
+        setPreviewPorts(frame.ports);
+        reconcileBridges();
+      });
+      owner.requestPreview();
       reconcileBridges();
     });
-    owner.requestPreview();
-    reconcileBridges();
   }
 
   function dispose(): void {

@@ -939,6 +939,7 @@ export function App(props: AppProps) {
   });
   // The ONLY reactive glue the lifecycle needs: (re)bind on every owner swap
   // (switch respawn re-runs this like every other bridge effect) + teardown.
+  // Keyed on the owner signal alone — attachOwner untracks its own body.
   createEffect(() => {
     devServer.attachOwner(workspaceOwner());
   });

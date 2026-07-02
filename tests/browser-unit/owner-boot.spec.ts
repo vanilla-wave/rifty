@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * SPIKE — browser-unit lane over a thin Playwright harness.
+ * Browser-unit lane (ADR-0196) — owner boot over the thin Playwright harness.
  *
- * Proves worker-side playground modules are behaviorally testable WITHOUT
+ * Worker-side playground modules are behaviorally testable WITHOUT
  * booting the App: the harness page (apps/playground/unit-harness.html) wires
  * only the worker-URL seams; specs dynamically import the REAL module under
  * test (`/src/glue/realVite.ts` — vite dev transforms TS on the fly) and boot
@@ -32,7 +32,7 @@ async function bootOwnerAndExec(page: import('@playwright/test').Page) {
     // Mirrors App.tsx createHiddenEmptyWorkspaceOwner (the lightest REAL boot
     // App performs on every cold page load).
     const handle = realVite.startWorkspaceOwner({
-      workspaceId: 'browser-unit-spike',
+      workspaceId: 'browser-unit-owner-boot',
       root: '/scratch',
       template: hiddenEmpty.HIDDEN_EMPTY_TEMPLATE,
       slug: 'scratch',

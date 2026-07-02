@@ -1,13 +1,13 @@
 import { chromium } from '@playwright/test';
 
 /**
- * Browser-unit lane globalSetup (spike):
+ * Browser-unit lane globalSetup (ADR-0196):
  * 1. Measures dev-server cold start (config-eval → server-reachable; T0 is
  *    stamped in playwright.browser-unit.config.ts at module eval).
  * 2. One throwaway harness load + a realVite.ts dynamic import, absorbing the
  *    cold dev server's dep-optimize RELOAD (dev-only artifact) so the first
  *    spec never loses its evaluate() execution context mid-import.
- * Logs raw timings to stdout — the spike's criterion-3 numbers.
+ * Logs raw timings to stdout (cold-start visibility in CI logs).
  */
 export default async function globalSetup(): Promise<void> {
   const t0 = Number(process.env.RIFTY_BROWSER_UNIT_T0 ?? Date.now());

@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **Dev-server lifecycle extracted to a headless orchestration core (ADR-0195,
+  epic playground-testable-core, slice 1).** `App()`'s owner-frame mirror (LIVE
+  status, dev-command persist/clear, session bookkeeping), the preview-port set +
+  per-port SW bridges and the boot/stop/restart wait loops now live in
+  `src/orchestration/dev-server-lifecycle.ts` behind injected ports (owner,
+  terminal, exec funnel, persistence, bridge wiring); App binds the real ports and
+  a one-line `attachOwner` effect. Behavior-preserving; contracts now pinned by
+  RED-checked behavioral node-vitest tests (26) instead of ~60 `expect(source)`
+  greps (App.test.ts source-asserts 494 → 432, 8 grep tests deleted). dep-cruiser
+  rule `no-ui-imports-in-playground-orchestration` guards the core against
+  xterm/monaco/components/adapters imports.
+
 - **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
   net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
   rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config
