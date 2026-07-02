@@ -268,6 +268,27 @@ async function runPresetBootOnce(browser, presetId) {
       );
       if (live) {
         const liveMs = Date.now() - t0;
+        // Harness-level false-live guard (independent of the app's warmup fix):
+        // LIVE must mean the preview DOCUMENT answers ok — the SW serves an
+        // honest 503 error page that still commits into the iframe, and a
+        // measurement of that page would be a launch-citable lie. Runs after
+        // the sample is taken, so it never inflates the number.
+        const doc = await page.evaluate(async () => {
+          const el = document.querySelector('[data-testid="preview"] iframe');
+          const url = el?.src;
+          if (!url) return { ok: false, note: 'no preview iframe src' };
+          try {
+            const res = await fetch(url, { cache: 'no-store' });
+            return { ok: res.ok, note: `status ${res.status}` };
+          } catch (err) {
+            return { ok: false, note: String(err) };
+          }
+        });
+        if (!doc.ok) {
+          throw new Error(
+            `[${presetId}] preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
+          );
+        }
         // One final scan: a marker's terminal PAINT can lag preview-live by a
         // beat (the preview probe races the pty chunk); its cause precedes live,
         // so a marker visible now is real — anything still missing is null.

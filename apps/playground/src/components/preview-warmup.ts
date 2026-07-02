@@ -5,9 +5,11 @@
  *     wait `warmupIntervalMs` OR an external `wake()` (dev-server announce),
  *     whichever first. A probe launched before the preview bridge is wired can
  *     hang in the SW ready-wait up to its cap; waking on the announce re-probes
- *     immediately instead of paying that cap + interval.
- *  2. NAVIGATE the frame (even after a probe timeout — the commit phase is the
- *     arbiter, matching the old inline loop), then confirm the document
+ *     immediately instead of paying that cap + interval. A deadline with NO ok
+ *     probe is `error` — never navigate: the SW's 503 error page commits like a
+ *     real document, so the commit phase cannot arbitrate a dead route (a dead
+ *     dev server used to show a LIVE preview and measure as a real boot).
+ *  2. NAVIGATE the frame after an ok probe, then confirm the document
  *     committed — checked immediately and on every wake/interval tick.
  */
 export interface PreviewWarmupHooks {
@@ -39,6 +41,7 @@ export async function runPreviewWarmup(
 ): Promise<'live' | 'error' | 'cancelled'> {
   const probeDeadline = hooks.now() + cfg.warmupTimeoutMs;
   const WAKE = Symbol('wake');
+  let reachable = false;
   while (isAlive() && hooks.now() < probeDeadline) {
     // ONE wake arm per iteration, shared by the probe race AND the interval
     // sleep below — two arms would leave a gap (probe settled, sleep not yet
@@ -55,7 +58,10 @@ export async function runPreviewWarmup(
       clearTimeout(cap);
     }
     if (!isAlive()) return 'cancelled';
-    if (raced === true) break;
+    if (raced === true) {
+      reachable = true;
+      break;
+    }
     if (raced === WAKE) {
       ac.abort();
       continue;
@@ -63,6 +69,7 @@ export async function runPreviewWarmup(
     await Promise.race([hooks.sleep(cfg.warmupIntervalMs), wake]);
   }
   if (!isAlive()) return 'cancelled';
+  if (!reachable) return 'error';
   await hooks.navigate();
   const commitDeadline = hooks.now() + cfg.commitTimeoutMs;
   while (isAlive()) {

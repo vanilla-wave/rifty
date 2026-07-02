@@ -357,6 +357,10 @@ export class Shell {
           // `;` or null: always run
         }
 
+        // An abort that landed BEFORE this segment (incl. a pre-aborted host
+        // signal) cancels it outright — a cancelled command must not start.
+        if (controller.signal.aborted) break;
+
         const segResult = await this.runSegment(
           seg.tokens,
           options,
@@ -375,9 +379,11 @@ export class Shell {
       if (host) host.removeEventListener('abort', forwardAbort);
     }
 
-    // Theoretically unreachable (empty token list handled above); explicit for clarity.
     if (!executedAny) {
-      return { exitCode: 0, stdout: '', stderr: '' };
+      // Nothing ran: either every segment was empty (trailing `;` tails — exit
+      // 0) or the run was aborted before its first segment — SIGINT's 130,
+      // matching a shell's kill-before-start.
+      return { exitCode: controller.signal.aborted ? 130 : 0, stdout: '', stderr: '' };
     }
 
     return { exitCode: lastExitCode, stdout, stderr };

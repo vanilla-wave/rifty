@@ -14,6 +14,14 @@
 
 ### Fixed
 
+- **A true first run opens the chooser instantly.** The index-driven chooser
+  (below) traded the flash for a first-visit delay: a brand-new user waited for
+  the first owner index publish (~1.5-3s dev, more hosted) staring at a dead
+  page. A page-side presence hint (`localStorage`, kept current by every index
+  publish) now distinguishes the cases: no hint → open the gallery immediately
+  (the publish still arbitrates and would close a stale-hint chooser); hint
+  present → index-driven as below, no flash. Helpers unit-tested incl. denied
+  storage (private mode → treated as first run).
 - **The first-run chooser no longer flashes over a restoring project.** The
   chooser used to open on a blind 1s beat and be CLOSED by the first owner index
   publish when it showed an active project — on a hosted (slow-network) load the
@@ -56,6 +64,16 @@
   the probe and re-probes immediately, and one wake arm per iteration covers
   both races (two arms left a gap that could drop an announce). RED-first in
   `preview-warmup.test.ts`.
+- **A dead preview route can no longer show LIVE.** After the probe deadline the
+  warmup used to navigate the iframe anyway and let the commit phase arbitrate —
+  but the SW's honest 503 error page COMMITS like a real document, so a dead dev
+  server rendered a LIVE pill (and `pnpm bench` measured it as a real preset
+  boot). Probes that never see `res.ok` now end the warmup in `error` without
+  navigating. Regression-tested in `preview-warmup.test.ts` (committed 503 must
+  not count); `tools/perf/bench.mjs` additionally refuses a LIVE whose preview
+  document does not answer ok (post-sample fetch — the harness-level guard), so
+  a false live records the preset `unmeasured` and the CI smoke (which requires
+  `measured`) fails.
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**

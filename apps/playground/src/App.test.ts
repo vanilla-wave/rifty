@@ -544,6 +544,15 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('}, FIRST_RUN_LAUNCHER_FALLBACK_MS);');
   });
 
+  it('a TRUE first run opens the chooser instantly via the page-side presence hint', () => {
+    // Index-driven-only made a first visit wait ~1.5-3s for the first owner
+    // publish (a dead page beat). No hint recorded → open NOW; the publish still
+    // arbitrates. Every publish keeps the hint current for the NEXT cold boot.
+    expect(source).toContain('} else if (!hasPersistedProjectHint(globalThis.localStorage)) {');
+    expect(source).toContain('openFirstRunLauncher();');
+    expect(source).toContain('recordProjectPresenceHint(idx, globalThis.localStorage);');
+  });
+
   it('waits for picked starter boot before replaying TS documents', () => {
     const runPresetStart = source.indexOf('async function runVitePreset(');
     const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);

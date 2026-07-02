@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A pre-aborted `run()` never starts segment 0 and resolves 130.** The
+  documented contract ("resolves immediately when already aborted") was
+  violated: the segment loop checked the abort AFTER `runSegment`, so a run
+  cancelled before dispatch still executed its first pipeline segment (side
+  effects started) and resolved with that segment's exit code. The loop now
+  pre-checks per segment; a run whose segments were all cancelled resolves 130
+  (a shell's kill-before-start), empty-tail no-op lines keep exit 0. Guard:
+  `shell.test.ts` pre-aborted case.
+
 ### Added
 
 - **Shell input redirect `cmd < file`.** A `< file` operand (anywhere in a simple command, rightmost wins — mirrors the `>`/`>>` scan) reads the VFS file as the command's stdin via the same one-shot reader the pipe hand-off uses; an explicit `< file` overrides any inherited pipe stdin. A missing/unreadable file → `cmd: file: No such file or directory` exit 1 and the command does not run. Composes with pipes (`grep x < f | wc -l`). Background `cmd < file &` stays a loud ceiling. Guards: `input-redirect.test.ts`.

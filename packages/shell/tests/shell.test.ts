@@ -772,3 +772,16 @@ describe('touch — mtime is updated for existing files', () => {
     expect(syncMirror().existsSync('/new-file')).toBe(true);
   });
 });
+
+describe('Shell — pre-aborted signal (run cancelled before start)', () => {
+  it('never executes segment 0 and resolves 130 (contract: resolves immediately when already aborted)', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const controller = new AbortController();
+    controller.abort();
+    const r = await sh.run('mkdir -p /never && cd /never', { signal: controller.signal });
+    expect(r.exitCode).toBe(130);
+    // No side effects: the first segment must not have run.
+    expect(syncMirror().existsSync('/never')).toBe(false);
+    expect(sh.cwd).toBe('/');
+  });
+});
