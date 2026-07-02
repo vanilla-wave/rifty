@@ -291,15 +291,16 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     const { WebSocketServer } = requireFromHere('ws') as {
       WebSocketServer: RealWsServerCtor;
     };
-    const port = 4110;
+    const port = 4111; // NOT 4110 — the double-listen EADDRINUSE test above holds that claim
     const httpServer = createServer();
     const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
     wss.on('connection', (socket) => {
       socket.send('remap-ok');
     });
     httpServer.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    // 'listening' is gated on the async cross-realm bind-claim (ADR-0186) —
+    // the upgrade channel subscribes only after it; a microtask is not enough.
+    await new Promise<void>((resolve) => httpServer.on('listening', () => resolve()));
 
     const channel = new BroadcastChannel(portChannelNameForPort(port));
     const seen: Array<{ type?: string; data?: unknown }> = [];

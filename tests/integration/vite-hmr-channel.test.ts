@@ -168,6 +168,9 @@ describe('real Vite HMR over rifty HTTP WebSocket upgrade', () => {
     const port = await getEphemeralPort();
     const hmrHttpServer = createHttpServer();
     hmrHttpServer.listen({ port });
+    // 'listening' is gated on the async cross-realm bind-claim (ADR-0186) —
+    // the upgrade channel subscribes only after it.
+    await new Promise<void>((resolve) => hmrHttpServer.on('listening', () => resolve()));
     const seen: HmrPayload[] = [];
     let server: ViteDevServer | null = null;
     const restoreWindow = installPreviewWindow(port);
