@@ -1,6 +1,6 @@
 ---
 area: perf
-status: draft
+status: ready
 title: eddy cold-origin resolve floor — server-side levers for unseen dep sets
 created: 2026-07-02
 why: first-ever POST for an arbitrary dep set (express+eslint, 137 pkgs) takes 17.3s through the deployed stack — WORSE than the warm-edge standard path (7.1s); the fast path must not be a cold-path regression
@@ -26,13 +26,24 @@ sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, service
 4. **Bundle store = Object Storage behind the CDN; origin stateless** — REPLACES both the in-process immutable LRU (256 entries × 3–7MB ≈ up to ~1.5GB RSS risk) and any VM-disk idea. POST wire unchanged: origin streams the bundle inline AND async-writes `bundles/<npmClientVersion>/<closureHash>` to the bucket off the critical path; `eddy-cdn.rifty.dev` origin re-points VM → bucket, the VM stops serving GET bytes. Content-addressed immutable = perfect CDN fit (no invalidation). Origin keeps only reconstructible RAM caches (mutable links, packuments) → hosts >1 scale trivially (no shared disk, no sticky routing; per-host recompute once per TTL is cheap with lever 3, shared KV only if it ever hurts), deploys/restarts lose nothing, egress moves off the VM. Known trade (measured 2026-07-01): CDN GET +0.8s vs direct origin from an EU vantage — CDN buys offload+durability, not latency everywhere; already accepted for pins. Corrupt/missing object self-heals: client-side verify fails → POST → re-resolve re-seeds.
 5. **Walk concurrency bump server-side** — minor at DC RTTs (measured −10% locally), cheap; only after 1–2 land.
 
+## Decisions (pre-resolved — ADR-0194)
+
+- Levers 1+3+4 land now; lever 3 is SUBSUMED by the shared tarball cache (TTL recompute refetches packuments only, re-packs tarballs from cache) — no separate resolve-only mode. Lever 2 (upstream A/B from the VM) deferred: env `REGISTRY_BASE_URL` already suffices, RU-routing must be measured ON the VM. Lever 5 rejected (measured −10%, depth-bound).
+- Packument cache TTL 300s (= npmjs `max-age=300`), env `EDDY_PACKUMENT_TTL_SECONDS`; `prefer:'online'` bypasses reads, writes through.
+- Tarball cache byte-bounded LRU, env `EDDY_TARBALL_CACHE_MAX_BYTES`, layered per-request (local→shared) so eviction can't break a harvest.
+- Single-flight per depSetKey; `'online'` never joins, its flight is joinable.
+- `BundleStore` = `MemoryBundleStore` (default, byte-bounded, env `EDDY_BUNDLE_MEMORY_MAX_BYTES`) | `S3BundleStore` (env-gated all-or-none `EDDY_S3_*`; GET/HEAD plain fetch on public-read bucket, PUT hand-rolled SigV4, no new deps). Object key `bundle/<hash>` RAW — client `bundleUrlFor` unchanged when the CDN re-points to the bucket.
+- Cold POST awaits `store.put` (durable-before-link); store-hit skips put; failed put = log + serve + no link, never 500.
+
 ## Acceptance
 
 - Cold-origin POST for an unseen-but-overlapping dep set (express+eslint after any prior resolve sharing transitive deps) ≤ warm standard path on the same vantage.
-- No fidelity trade: bundle lockfile still equals a client live-resolve by construction (same `install()`); packument cache policy recorded (ADR if it changes observable resolution freshness).
+- No fidelity trade: bundle lockfile still equals a client live-resolve by construction (same `install()`); packument cache policy recorded (ADR-0194: TTL 300s = npmjs edge freshness class; `prefer:'online'` still bypasses).
+- Server restart with the S3 store configured: previously resolved hash still serves via GET (bucket), POST re-links without recompute of tarball downloads.
 - Numbers re-measured via probe (unquantized printed ms), not bench medians.
 
-## Out of scope
+## Out of scope (loud, not silent)
 
 - Wire-protocol changes (delta bundles, client-known-tarball exclusion) — separate item if pursued.
 - h3 transport (perf/eddy-http3-cold-validation).
+- Partial `EDDY_S3_*` config → loud throw at boot, never a half-configured store.
