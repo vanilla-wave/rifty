@@ -23,8 +23,12 @@ sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, service
 1. **Cross-request packument cache in the server** — `createRegistrySource` news a per-`install()` cache; eddy calls `resolveBundle` per request with a fresh memory VFS, so EVERY cold set re-fetches all packuments. A process-wide packument cache (TTL policy decision: e.g. = mutable-tier TTL, or shorter) collapses cold-SET resolve to ~tarball time for sets overlapping anything seen before. Biggest win, server-only, no wire change. (Server-side twin of `npm-client/persisted-packument-store`; corgi is orthogonal — `npm-client/abbreviated-packuments` already records bytes-only, re-confirmed today at 137-pkg scale.)
 2. **Upstream A/B from the VM** — CDN proxy (`registry.rifty.dev`) exists for browser CORS; the server needs no CORS. Direct `registry.npmjs.org` avoids cold-edge double hops, BUT RU-region routing to npmjs needs measurement ON the VM before switching (may be slower/throttled). Measure both, pick per data.
 3. **Resolve-only TTL refresh** — mutable tier expires in 1800s; recompute re-downloads all tarballs into a fresh VFS even when the closure is unchanged. Resolution needs packuments only (integrity comes from packument dist); if recomputed closureHash hits the immutable tier, skip tarball fetches entirely.
-4. **Disk-backed immutable bundle cache** — in-memory today; VM restart = 12.6s POST spike (measured 2026-07-01). A volume-backed tier makes restarts warm. (CDN split-host already covers PINNED templates; this covers arbitrary sets.)
+4. **Byte-bounded RAM LRU** — immutable tier caps ENTRIES (256 × 3–7MB bundles ≈ up to ~1.5GB) not bytes; bound by bytes. Optional cheap warmup: re-resolve pinned template sets at server boot (closes the post-deploy spike for the head sets).
 5. **Walk concurrency bump server-side** — minor at DC RTTs (measured −10% locally), cheap; only after 1–2 land.
+
+## Rejected (for now): disk-backed immutable tier
+
+Steady-state it speeds up NOTHING (POST bottleneck = TLS+transfer, RAM≈disk). It only covers (a) restarts — but restart ≈ deploy ≈ npm-client bump, which legitimately invalidates old-version bundles (format tied to `npmClientVersion`), and CDN already makes pinned GETs restart-immune while POST self-heals at ~2–3s once lever 1 lands; (b) LRU eviction — no traffic to trigger it today. Re-open only if tier-hit metrics show real eviction/restart pain.
 
 ## Acceptance
 
