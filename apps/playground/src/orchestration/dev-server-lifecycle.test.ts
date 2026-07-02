@@ -1,5 +1,5 @@
 /**
- * Behavioral contract of the extracted dev-server lifecycle core (ADR-0195) —
+ * Behavioral contract of the extracted dev-server lifecycle core (ADR-0197) —
  * replaces the App.test.ts source-greps for the dev-server + preview groups.
  * Drives the module through its injected ports; these ARE its public contract
  * (the real fabric is covered by e2e + the browser-unit lane).

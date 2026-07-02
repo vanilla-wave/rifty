@@ -6,11 +6,11 @@ created: 2026-07-02
 epic: playground-testable-core
 why: App.tsx = ~3.6K-line single component (~75 signals/effects, largest file in repo) transitively importing xterm → unrenderable in node vitest; its contract pinned by ~494 expect(source) greps that catch no behavior
 user_story: As a developer changing boot/restore/switch/dev-server wiring, I want to prove the behavior in node vitest in seconds, but today the orchestration lives in one unrenderable closure and its tests grep source text.
-sources: [App.test.ts tail ADAPTED-comment, ADR-0195, ADR-0003 (D-002)]
+sources: [App.test.ts tail ADAPTED-comment, ADR-0197, ADR-0003 (D-002)]
 code: [apps/playground/src/App.tsx, apps/playground/src/glue/app-project-store.ts]
 ---
 ## Context
-Working in-repo pattern to extend: `glue/app-project-store.ts` — extracted, behaviorally tested via `createRoot` in node vitest. Solid primitives ARE node-testable; the blocker is xterm/monaco imports, not solid. Target shape per ADR-0195: `src/orchestration/*` modules that import no UI, side effects behind module-declared injected ports (owner RPC, terminal dispatch, storage, editor host); `App.tsx` shrinks to binding.
+Working in-repo pattern to extend: `glue/app-project-store.ts` — extracted, behaviorally tested via `createRoot` in node vitest. Solid primitives ARE node-testable; the blocker is xterm/monaco imports, not solid. Target shape per ADR-0197: `src/orchestration/*` modules that import no UI, side effects behind module-declared injected ports (owner RPC, terminal dispatch, storage, editor host); `App.tsx` shrinks to binding.
 
 Slices (from the 2026-07-02 App.tsx map), in dependency-spine order:
 1. **dev-server lifecycle + LIVE + preview set** — devServerStatus/presetTransitioning/session-id signals, onDevServer/onPreview mirrors, wait loops (stop/idle/boot), start/stop/restart, preview-port set. Retires the "dev-server lifecycle" (~38) + "preview & port bridging" (~22) grep groups.
@@ -36,6 +36,6 @@ None — playground orchestration, no Node-API surface. Verification = RED-check
 - No behavior changes: any observable playground behavior change found mid-extraction is a bug to stop-and-report, not to fold in.
 
 ## Decisions
-- Solid-reactive core (not framework-free), module location, port seam + test stance: ADR-0195.
-- Port fakes in unit tests are the module's own contract, not a sibling-package mock (ADR-0195 §4); real-fabric coverage stays parity/conformance/e2e + the browser-unit lane (ADR-0196).
+- Solid-reactive core (not framework-free), module location, port seam + test stance: ADR-0197.
+- Port fakes in unit tests are the module's own contract, not a sibling-package mock (ADR-0197 §4); real-fabric coverage stays parity/conformance/e2e + the browser-unit lane (ADR-0196).
 - Extraction order = dependency spine (slice 1 → 2 → 3 → 4); each slice lands whole (module + behavioral tests + grep deletion + allowlist drop) — no half-extracted slice merges.

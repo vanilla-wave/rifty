@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Dev-server lifecycle extracted to a headless orchestration core (ADR-0195,
+- **Dev-server lifecycle extracted to a headless orchestration core (ADR-0197,
   epic playground-testable-core, slice 1).** `App()`'s owner-frame mirror (LIVE
   status, dev-command persist/clear, session bookkeeping), the preview-port set +
   per-port SW bridges and the boot/stop/restart wait loops now live in

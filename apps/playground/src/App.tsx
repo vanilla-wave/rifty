@@ -872,7 +872,7 @@ export function App(props: AppProps) {
   const machine = useMode({});
 
   // Dev-server lifecycle is OWNER-driven (ADR-0148) and lives in the extracted
-  // orchestration core (`orchestration/dev-server-lifecycle.ts`, ADR-0195); the
+  // orchestration core (`orchestration/dev-server-lifecycle.ts`, ADR-0197); the
   // `devServer` binding below (after the manager) wires its ports to the real
   // owner/terminal/machine.
   const [presetTransitioning, setPresetTransitioning] = createSignal(false);
@@ -909,7 +909,7 @@ export function App(props: AppProps) {
     },
   });
 
-  // Headless dev-server lifecycle core (ADR-0195) bound to the REAL ports: the
+  // Headless dev-server lifecycle core (ADR-0197) bound to the REAL ports: the
   // reactive owner handle, the page terminal manager (+ visibility state), the
   // exec funnel, the persisted dev command and the SW preview bridge. Effect
   // creation order is preserved (these mirrors precede every later bridge effect).

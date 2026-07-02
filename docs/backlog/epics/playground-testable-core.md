@@ -20,7 +20,7 @@ A developer refactors dev-server lifecycle wiring. `pnpm test` (seconds, no brow
 
 ## Items
 
-- `playground/app-orchestration-headless-core` — split `App()` into a thin Solid shell + xterm/monaco-free orchestration modules with injected ports; each extracted slice replaces its source-greps with RED-checked behavioral tests. The bulk of the value. Slice 1 (dev-server lifecycle + LIVE + preview set) DELIVERED (ADR-0195, `src/orchestration/dev-server-lifecycle.ts`, App.test greps 494→432); slices 2-4 open.
+- `playground/app-orchestration-headless-core` — split `App()` into a thin Solid shell + xterm/monaco-free orchestration modules with injected ports; each extracted slice replaces its source-greps with RED-checked behavioral tests. The bulk of the value. Slice 1 (dev-server lifecycle + LIVE + preview set) DELIVERED (ADR-0197, `src/orchestration/dev-server-lifecycle.ts`, App.test greps 494→432); slices 2-4 open.
 - ~~toolchain-build/browser-mode-unit-lane~~ — DELIVERED (deleted-on-done): ADR-0196 thin-Playwright lane, `pnpm test:browser-unit`, own CI job; owner boot + vfs-write-ack + preview-handshake pinned behaviorally against the real owner worker.
 - ~~toolchain-build/source-grep-test-ratchet~~ — DELIVERED (deleted-on-done): `pnpm check:source-grep` in pr:check; exact-count allowlist = 15 files/888 asserts (detector corrected the diagnosed 12: +`bundle-local-buffer`, +`TerminalPanel`, +`BottomPanel`); burn-down to zero-or-`why` stays THIS epic's closing gate.
 

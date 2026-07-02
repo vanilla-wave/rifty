@@ -1,6 +1,6 @@
 /**
  * Dev-server lifecycle orchestration — headless core extracted from App.tsx
- * (ADR-0195, epic playground-testable-core). Owns the page mirror of the
+ * (ADR-0197, epic playground-testable-core). Owns the page mirror of the
  * owner-driven dev-server state (ADR-0148 co-resident dev server): LIVE status,
  * the preview-port set + per-port SW bridges (ADR-0155/0157), dev-session
  * bookkeeping, boot/stop/restart sequencing and their wait loops.
@@ -78,7 +78,7 @@ export interface DevServerLifecycle<S extends DevServerSessionLike> {
    * discipline — never a one-shot push) and reconcile the SW bridges under the
    * new owner. App calls this from a one-line `createEffect` on the owner
    * signal; explicit (not an internal effect) because the node test runtime is
-   * solid-server, where `createEffect` never runs (ADR-0195 §4).
+   * solid-server, where `createEffect` never runs (ADR-0197 §4).
    */
   attachOwner(owner: DevServerOwnerPort): void;
   /** Unsubscribe from the owner and tear every live preview bridge. */

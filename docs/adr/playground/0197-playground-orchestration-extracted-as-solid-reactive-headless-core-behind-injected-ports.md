@@ -1,4 +1,4 @@
-# ADR 0195: Playground orchestration extracted as solid-reactive headless core behind injected ports
+# ADR 0197: Playground orchestration extracted as solid-reactive headless core behind injected ports
 
 Status: Accepted (2026-07-02)
 Date: 2026-07

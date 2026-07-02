@@ -142,7 +142,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0179 | Expose git status classifier from git facade |
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
-| 0195 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
+| 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 
 ### toolchain-build
 
