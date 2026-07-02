@@ -4,6 +4,19 @@
 
 ### Changed
 
+- **Boot/restore + project switch extracted to headless orchestration cores
+  (ADR-0197, epic playground-testable-core, slice 2).** The workspace-owner
+  start gate (`ensureStarted`), the sequential project switch (teardown →
+  respawn, ADR-0165 §3) with tracking/recovery, and the reload restore
+  (re-root/adopt + dev-server relaunch) now live in
+  `src/orchestration/workspace-lifecycle.ts`; the page project-index mirror,
+  store-hydrate flow, §56 eventually-consistent delete tracking and the
+  one-shot boot decision (first-run chooser / deep link / degraded fallback
+  beat) in `src/orchestration/project-index-boot.ts` — both behind injected
+  ports, App binds the real ones. Behavior-preserving; contracts pinned by
+  RED-checked behavioral node-vitest tests (31) instead of ~45 `expect(source)`
+  greps (App.test.ts source-asserts 432 → 387).
+
 - **Dev-server lifecycle extracted to a headless orchestration core (ADR-0197,
   epic playground-testable-core, slice 1).** `App()`'s owner-frame mirror (LIVE
   status, dev-command persist/clear, session bookkeeping), the preview-port set +

@@ -51,8 +51,9 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
-  it('gates a clean first-run boot behind the launcher while a hidden empty workspace owns the shell', () => {
-    expect(source).toContain('needsProjectChoiceOnBoot');
+  it('cold boot spawns the hidden empty workspace owner (no visible project until a pick)', () => {
+    // Launcher gating + the one-shot boot decision are pinned behaviorally in
+    // orchestration/project-index-boot.test.ts; here only the App-side spawn glue.
     expect(source).toContain('function createHiddenEmptyWorkspaceOwner(): WorkspaceOwnerHandle');
     expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
     expect(source).toContain('hiddenEmptyBoot: true');
@@ -60,67 +61,8 @@ describe('App terminal startup wiring', () => {
     expect(source).toMatch(/createSignal<WorkspaceOwnerHandle>\(initialOwnerHandle\)/);
     expect(source).not.toContain('startProjectIndexOwner');
     expect(source).toContain('const machine = useMode({});');
-    expect(source).toContain("store.setLauncherTab('starters')");
-    expect(source).toContain('store.openLauncher()');
-    expect(source).toContain('function closeLauncher(): void');
-    expect(source).toContain('initialBootDecisionMade = true;');
-    expect(source).toContain('onClose={closeLauncher}');
-    expect(source).toContain('await ensureWorkspaceOwnerStarted(false);');
-    expect(source).toContain('await durableNewScratch(id, { preserveDirtySameStarter: true });');
-    expect(source).toContain('setWorkspaceOwnerReady(true);');
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
     expect(source).not.toContain('seedViteWorkspace(DEFAULT_PRESET);');
-  });
-
-  it('retries the project-index request until the owner bridge answers', () => {
-    expect(source).toContain('let sawIndexReply = false;');
-    expect(source).toContain('sawIndexReply = true;');
-    expect(source).toContain('const retryRequest = setInterval(() => {');
-    expect(source).toContain('if (!sawIndexReply) void mirror.request();');
-    expect(source).toContain('clearInterval(retryRequest);');
-  });
-
-  it('re-roots the owner to a persisted project on boot AND relaunches its dev server', () => {
-    // The cold-boot hidden owner is rooted at /scratch; a project-active index
-    // (Save-as-project then reload) must respawn at /projects/<id> — the started
-    // short-circuit in ensureWorkspaceOwnerStarted never re-roots, so the boot
-    // decision switches on a root mismatch, else adopts the started hidden owner.
-    // THEN it relaunches the co-resident dev server (a pty command that died with
-    // the previous page): runVitePreset over the persisted tree, else the reopened
-    // project shows an empty console + no preview.
-    const restore = source.match(
-      /async function restoreActiveProjectOnReload\(idx: ProjectIndex\): Promise<void> \{[\s\S]*?\n {2}\}/,
-    )?.[0];
-    expect(restore).toBeDefined();
-    expect(restore).toContain('if (workspaceOwner().root !== rootForId(idx.activeId)) {');
-    expect(restore).toContain('if (!(await trackSwitch(switchTo(idx.activeId)))) return;');
-    expect(restore).toContain('await ensureWorkspaceOwnerStarted(true);');
-    // The relaunch — over the persisted (OPFS-preloaded) tree, never a re-seed —
-    // serialized through the preset-transition queue like every other launch. It
-    // replays the RECORDED dev command of the previously running session (a fork
-    // may have swapped the dev tool), falling back to template boot lines.
-    expect(restore).toContain('void queuePresetTransition(() =>');
-    expect(restore).toContain(
-      'restoreBootLines(props.terminalPersistence.initialState.devCommand, preset, activeRoot())',
-    );
-    // The boot decision delegates to the restore path (still boot-gated once).
-    const bootEffect = source.match(
-      /if \(!idx \|\| initialBootDecisionMade\) return;[\s\S]*?\n {2}\}\);/,
-    )?.[0];
-    expect(bootEffect).toBeDefined();
-    expect(bootEffect).toContain('void restoreActiveProjectOnReload(idx);');
-  });
-
-  it('flushes pending editor writes before a project switch tears the owner down', () => {
-    const switchTo = source.match(
-      /async function switchTo\(nextActiveId: ActiveId\): Promise<boolean> \{[\s\S]*?\n {2}\}/,
-    )?.[0];
-    expect(switchTo).toBeDefined();
-    // Flush must precede the not-started flip so the write lands on the still-alive
-    // owner rather than being dropped while the tab is marked clean (silent data loss).
-    expect(switchTo).toMatch(
-      /await flushPendingEditorWrites\(\);[\s\S]*?workspaceOwnerStarted = false;/,
-    );
   });
 
   it('awaits the memory-mode starter seed before the dev server boots', () => {
@@ -129,17 +71,6 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain(
       'if (saveAffordance(storageMode).ephemeral) await seedViteWorkspace(presetForId(id));',
     );
-  });
-
-  it('recovers workspaceOwnerStarted from the live owner when a switch fails', () => {
-    // A switch that throws before restartDevServer set the flag true must not wedge
-    // every later write behind the "choose a project" guard for the session.
-    const trackSwitch = source.match(
-      /function trackSwitch\(run: Promise<boolean>\): Promise<boolean> \{[\s\S]*?\n {2}\}/,
-    )?.[0];
-    expect(trackSwitch).toBeDefined();
-    expect(trackSwitch).toContain('if (!workspaceOwnerStarted && workspaceOwner().isAlive()) {');
-    expect(trackSwitch).toContain('workspaceOwnerStarted = true;');
   });
 
   it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
@@ -242,7 +173,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(pickStarter).toMatch(
-      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await devServer\.stopBeforeStarterWrite\(\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
+      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?indexBoot\.setEditorProjectContextReady\(true\);[\s\S]*?await devServer\.stopBeforeStarterWrite\(\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?workspace\.setOwnerReady\(true\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
     );
     expect(runPreset).not.toContain('await loadPresetUi(preset);');
     expect(runPreset).not.toContain('seedViteWorkspace(preset);');
@@ -277,7 +208,7 @@ describe('App terminal startup wiring', () => {
 
   it('stops an active dev server before writing picked starter files', () => {
     const runPresetStart = source.indexOf('async function runVitePreset(');
-    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPresetEnd = source.indexOf('  onMount(() =>', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
     const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
@@ -302,12 +233,12 @@ describe('App terminal startup wiring', () => {
   });
 
   it('shows a preset-switching loader until the picked starter has booted or failed', () => {
+    // The switch-path veil (begin → requestSwitch → end-in-finally) is pinned
+    // behaviorally in orchestration/workspace-lifecycle.test.ts; here the preset
+    // boot path + the JSX surfaces that render the transition.
     const runPresetStart = source.indexOf('async function runVitePreset(');
-    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPresetEnd = source.indexOf('  onMount(() =>', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
-    const switchToStart = source.indexOf('async function switchTo(nextActiveId: ActiveId)');
-    const switchToEnd = source.indexOf('  onMount(() =>', switchToStart);
-    const switchTo = source.slice(switchToStart, switchToEnd);
     expect(source).toContain(
       'const [presetTransitioning, setPresetTransitioning] = createSignal(false)',
     );
@@ -323,22 +254,11 @@ describe('App terminal startup wiring', () => {
     expect(source).toMatch(
       /presetTransitioning\(\)\s*\?\s*`\$\{activeTemplate\(\)\.displayName\} · switching`/,
     );
-    expect(switchTo).toMatch(
-      /try \{[\s\S]*?setPresetTransitioning\(true\);[\s\S]*?const switched = await requestSwitch/,
-    );
-    expect(switchTo).toMatch(/if \(switched\) \{[\s\S]*?resetEditorToActiveInitialFiles\(\);/);
-    expect(switchTo).toMatch(/finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?\}/);
   });
 
-  it('switch + palette target only the lifecycle-owned dev session (stale terminals untouched)', () => {
-    // The stale-terminal semantics are pinned behaviorally in
-    // orchestration/dev-server-lifecycle.test.ts; here the App-side bindings.
-    expect(source).toContain(
-      'const restartDevServerSessionId = devServer.lifecycleRunning() ? devServer.sessionId() : null;',
-    );
-    expect(source).toContain(
-      'if (restartDevServerSessionId) manager.clear(restartDevServerSessionId);',
-    );
+  it('palette stop targets only the lifecycle-owned dev session (stale terminals untouched)', () => {
+    // The stale-terminal + switch-path session capture semantics are pinned
+    // behaviorally in orchestration/{dev-server,workspace}-lifecycle.test.ts.
     expect(source).toContain('const stoppableDevServerSessionId = devServer.stoppableSessionId();');
   });
 
@@ -347,8 +267,8 @@ describe('App terminal startup wiring', () => {
     // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
     // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
-    expect(source).toContain('devServer.markStopped();');
-    expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
+    expect(source).toContain('markStopped: () => devServer.markStopped(),');
+    expect(source).toContain('rebindTerminal: (owner) => manager.rebindOwner(owner),');
     // the restart path's fresh console lives in the lifecycle core (welcomeBanner
     // port — behavioral test); the page-side pick path still greets here:
     expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
@@ -362,7 +282,7 @@ describe('App terminal startup wiring', () => {
     expect(switchEnd).toBeGreaterThan(switchStart);
     expect(switchBody).toContain('if (!prompted && ownerNeedsSwitch)');
     expect(switchBody).toContain('} else if (!prompted) {');
-    expect(switchBody).toContain('void ensureWorkspaceOwnerStarted(true);');
+    expect(switchBody).toContain('void workspace.ensureStarted(true);');
   });
 
   // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
@@ -420,7 +340,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
     // frame gating/edge detection is the lifecycle core's contract (behavioral);
     // the App binds its callbacks to the real signals:
-    expect(source).toContain('onOwnerAlive: () => setWorkspaceOwnerReady(true),');
+    expect(source).toContain('onOwnerAlive: () => workspace.setOwnerReady(true),');
     expect(source).toContain(
       'onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),',
     );
@@ -431,34 +351,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('await diagnosticSync.refreshOpenDiagnostics();');
   });
 
-  it('opens the first-run chooser from the first owner index publish, not a blind beat', () => {
-    // The blind 1s open raced slow owner boots (hosted stand: first index publish
-    // ~2-3s) and FLASHED the chooser over a project about to restore — it opened
-    // at 1s, then the index effect closed it on publish. The chooser is
-    // index-driven (the index effect opens it on a needs-choice publish); the
-    // timer survives only as a degraded fallback when NO index arrives at all.
-    expect(source).not.toMatch(
-      /if \(!initialBootDecisionMade\) openFirstRunLauncher\(\);\s*\}, 1000\)/,
-    );
-    expect(source).toContain('const FIRST_RUN_LAUNCHER_FALLBACK_MS = 8_000;');
-    expect(source).toContain(
-      'if (!initialBootDecisionMade && projectIndex() === null) openFirstRunLauncher();',
-    );
-    expect(source).toContain('}, FIRST_RUN_LAUNCHER_FALLBACK_MS);');
-  });
-
-  it('a TRUE first run opens the chooser instantly via the page-side presence hint', () => {
-    // Index-driven-only made a first visit wait ~1.5-3s for the first owner
-    // publish (a dead page beat). No hint recorded → open NOW; the publish still
-    // arbitrates. Every publish keeps the hint current for the NEXT cold boot.
-    expect(source).toContain('} else if (!hasPersistedProjectHint(globalThis.localStorage)) {');
-    expect(source).toContain('openFirstRunLauncher();');
-    expect(source).toContain('recordProjectPresenceHint(idx, globalThis.localStorage);');
-  });
-
   it('waits for picked starter boot before replaying TS documents', () => {
     const runPresetStart = source.indexOf('async function runVitePreset(');
-    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPresetEnd = source.indexOf('  onMount(() =>', runPresetStart);
     const runPreset = source.slice(runPresetStart, runPresetEnd);
     const pickStarterStart = source.indexOf('async function onPickStarter(id: string)');
     const pickStarterEnd = source.indexOf('  // Switch active root', pickStarterStart);
@@ -787,16 +682,15 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('function switchToSavedProjectAfterSave(');
     expect(source).toContain('if (saveAffordance(storageMode).ephemeral) return;');
     expect(source).toContain('if (pendingSaveAutoSwitchId !== id) return;');
-    expect(source).toContain('if (pendingSwitch) return;');
+    expect(source).toContain('if (workspace.switchPending()) return;');
     expect(source).toContain('if (store.activeId() !== id) return;');
-    expect(source).toContain('void trackSwitch(switchTo(id));');
+    expect(source).toContain('void workspace.trackSwitch(workspace.switchTo(id));');
     expect(source).toContain('pendingSaveAutoSwitchId = id;');
     expect(source).toContain('} else if (!ephemeral) {');
     expect(source).toContain('void switchToSavedProjectAfterSave(id, saveWait.durable);');
     expect(source).toContain('pendingSaveAutoSwitchId = null;');
-    expect(source).toMatch(
-      /const switched = await requestSwitch\([\s\S]*?if \(switched\) \{\s*await waitForActiveSnapshotFrame\(\);\s*resetEditorToActiveInitialFiles\(\);\s*\}/,
-    );
+    // The switch sequencing itself (teardown → respawn → rewire → snapshot →
+    // editor reset) is pinned behaviorally in orchestration/workspace-lifecycle.test.ts.
   });
 
   it('opens GIT rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
@@ -973,31 +867,19 @@ describe('App project wiring', () => {
   });
 });
 
-describe('App wires the sequential switch + index mirror (ADR-0165 §3)', () => {
-  it('switches through requestSwitch (the sequential orchestrator), not an inline respawn', () => {
-    expect(source).toContain('requestSwitch(');
-    // the new owner is created via startWorkspaceOwner inside the orchestrator's spawn
-    expect(source).toContain('spawn: ({ root, slug }) =>');
-    expect(source).toContain('startWorkspaceOwner({');
-  });
-
-  it('awaits the old owner exit before respawn (closed promise threaded into the switch)', () => {
-    expect(source).toContain('currentOwner:');
-    expect(source).toContain('awaitReady:');
-    expect(source).toContain('rewireBridges:');
-    expect(source).toContain('restartDevServer:');
-  });
-
-  it('hydrates the page project-index mirror from the owner at ready', () => {
-    expect(source).toContain('bridgeProjectIndex(');
-    expect(source).toContain('.request()'); // subscribe-handshake re-publish
-  });
-
-  it('hydrates owner index without subscribing to local dirty scratch changes', () => {
-    expect(source).toMatch(
-      /untrack\(\(\) => \{[\s\S]*?store\.hydrateIndex\(idx\);[\s\S]*?const wasReady = editorProjectContextReady\(\);[\s\S]*?const ready = !needsProjectChoiceOnBoot\(idx\);[\s\S]*?setEditorProjectContextReady\(ready\);[\s\S]*?if \(ready && !wasReady\) resetEditorToActiveInitialFiles\(\);[\s\S]*?\}\);/,
+describe('App binds the slice-2 orchestration cores (ADR-0197)', () => {
+  // Switch/restore/index-boot BEHAVIOR is pinned in orchestration/
+  // {workspace-lifecycle,project-index-boot}.test.ts; here only the one-line
+  // bindings to the real ports and JSX gates.
+  it('binds the workspace lifecycle + index-boot cores to the real ports', () => {
+    expect(source).toContain('const workspace = createWorkspaceLifecycle<WorkspaceOwnerHandle>({');
+    expect(source).toContain(
+      'indexBoot.attachOwner(bridgeProjectIndex(workspaceOwner().snapshotPort));',
     );
-    expect(source).toContain('<Show when={editorProjectContextReady()}>');
+    expect(source).toContain('onCleanup(() => indexBoot.dispose());');
+    expect(source).toContain('<Show when={indexBoot.editorProjectContextReady()}>');
+    expect(source).toContain('onDiskDelete: (id) => indexBoot.recordOnDiskDelete(id),');
+    expect(source).toContain('onCleanup(indexBoot.startBootPolicy(deepLinkStarterId));');
   });
 
   it('does not label a missing active project as the scratch in the header', () => {
