@@ -111,17 +111,63 @@ describe('cross-realm preview — text/html WS bridge injection (ADR-0189)', () 
     expect(await response.text()).toBe(payload);
   });
 
-  it('leaves content-encoded html byte-identical (cannot rewrite compressed bytes)', async () => {
-    const compressedish = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02]);
+  it('decompresses gzip html, injects, and re-serves identity (content-length honest)', async () => {
+    const html = '<!doctype html><html><head></head><body>zipped</body></html>';
+    const gzipped = await compressBytes(new TextEncoder().encode(html), 'gzip');
     cleanup.add(
       serveCrossRealmPreview(5114, async () => {
-        return new Response(compressedish, {
+        return new Response(gzipped, {
           status: 200,
-          headers: { 'content-type': 'text/html', 'content-encoding': 'gzip' },
+          headers: {
+            'content-type': 'text/html',
+            'content-encoding': 'gzip',
+            'content-length': String(gzipped.byteLength),
+          },
         });
       }),
     );
     const handler = bridgeCrossRealmPreview(5114);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain('<script data-rifty-ws-bridge>');
+    expect(body).toContain('<body>zipped</body>');
+    expect(response.headers.get('content-encoding')).toBeNull();
+    expect(Number(response.headers.get('content-length'))).toBe(
+      new TextEncoder().encode(body).byteLength,
+    );
+  });
+
+  it('refuses html with an undecodable content-encoding LOUD (no silent uninjected pass)', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5115, async () => {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'text/html', 'content-encoding': 'br' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5115);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('content-encoding');
+  });
+
+  it('leaves content-encoded non-HTML byte-identical', async () => {
+    const compressedish = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02]);
+    cleanup.add(
+      serveCrossRealmPreview(5116, async () => {
+        return new Response(compressedish, {
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream', 'content-encoding': 'gzip' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5116);
     cleanup.add(handler.dispose);
 
     const response = await handler(new Request('http://preview.local/'));
@@ -806,3 +852,13 @@ describe('cross-realm preview port — SSE ceiling (ADR-0048)', () => {
     expect(await settled.r.text()).toContain('net.preview.cross-realm-unbounded-body');
   });
 });
+
+async function compressBytes(
+  bytes: Uint8Array,
+  format: 'gzip' | 'deflate',
+): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([bytes as unknown as BlobPart])
+    .stream()
+    .pipeThrough(new CompressionStream(format));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}

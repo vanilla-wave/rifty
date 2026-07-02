@@ -81,7 +81,7 @@ const CAPABILITIES = [
     expected: 'supported',
     probe: 'auto',
     label: 'Plain preview page native WebSocket',
-    evidence: 'Every preview page gets the generic WebSocket bridge injected; new WebSocket(location.host) reaches the worker port.',
+    evidence: 'Every preview page gets the generic WebSocket bridge injected; new WebSocket(location.host) reaches the worker port and server close(code, reason) lands as a faithful CloseEvent.',
   },
   {
     id: 'net-real-tcp-socket-semantics',
@@ -167,7 +167,15 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (socket) => {
   socket.on('message', (data) => {
-    socket.send('echo:' + bufferToText(data));
+    const text = bufferToText(data);
+    // 'close:<code>:<reason>' -> server-initiated close; browser probes assert
+    // the CloseEvent lands faithful through the bridge (close parity).
+    const close = /^close:(\\d{4}):(.*)$/.exec(text);
+    if (close) {
+      socket.close(Number(close[1]), close[2]);
+      return;
+    }
+    socket.send('echo:' + text);
   });
 });
 
@@ -657,11 +665,16 @@ async function probeBrowserPreviewWs() {
   if (!row) return;
   // Stock browser shape: aim at location.host (the host page origin) — the
   // injected generic bridge remaps to the guest port from /preview/<port>/.
+  // Pass = echo round-trip AND a server-initiated close(code, reason) landing
+  // as a faithful CloseEvent (bridge close parity).
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = proto + '//' + location.host + '/ws';
   const payload = 'preview-probe';
+  const closeCode = 4321;
+  const closeReason = 'lab-close';
   const outcome = await new Promise((resolve) => {
     let settled = false;
+    let echoed = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
@@ -671,22 +684,41 @@ async function probeBrowserPreviewWs() {
       const ws = new WebSocket(url);
       const timer = setTimeout(() => {
         ws.close();
-        finish({ outcome: 'fail', evidence: 'no echo from ' + url + ' within 3s' });
-      }, 3000);
+        finish({
+          outcome: 'fail',
+          evidence: (echoed ? 'no close event' : 'no echo') + ' from ' + url + ' within 5s',
+        });
+      }, 5000);
       ws.onopen = () => ws.send(payload);
       ws.onmessage = (event) => {
-        clearTimeout(timer);
         const message = String(event.data);
-        ws.close();
+        if (message !== 'echo:' + payload) {
+          clearTimeout(timer);
+          ws.close();
+          finish({ outcome: 'fail', evidence: 'unexpected echo: ' + message });
+          return;
+        }
+        echoed = true;
+        ws.send('close:' + closeCode + ':' + closeReason);
+      };
+      ws.onclose = (event) => {
+        if (!echoed) return;
+        clearTimeout(timer);
         finish(
-          message === 'echo:' + payload
-            ? { outcome: 'pass', evidence: 'round-trip via ' + url + ' -> ' + message }
-            : { outcome: 'fail', evidence: 'unexpected echo: ' + message },
+          event.code === closeCode && event.reason === closeReason && event.wasClean
+            ? {
+                outcome: 'pass',
+                evidence: 'echo + faithful close via ' + url + ' -> code=' + event.code + ' reason=' + event.reason,
+              }
+            : {
+                outcome: 'fail',
+                evidence: 'close parity broken: code=' + event.code + ' reason=' + event.reason + ' wasClean=' + event.wasClean,
+              },
         );
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        finish({ outcome: 'fail', evidence: 'browser WS errored before echo (' + url + ')' });
+        finish({ outcome: 'fail', evidence: 'browser WS errored (' + url + ')' });
       };
     } catch (err) {
       finish({ outcome: 'fail', evidence: String(err && err.message ? err.message : err) });

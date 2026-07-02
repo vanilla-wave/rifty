@@ -202,10 +202,30 @@ function mediaType(headers: Headers): string | null {
   return ct.split(';', 1)[0]?.trim().toLowerCase() ?? null;
 }
 
-/** True when the body bytes are uncompressed (rewritable as text). */
-function isIdentityEncoding(headers: Headers): boolean {
+/**
+ * Body decode plan for the html injection: `null` — identity, inject as-is;
+ * `'gzip' | 'deflate'` — decompress then inject; `undefined` — undecodable
+ * (br/zstd/multi-coding), the caller refuses loud.
+ */
+function htmlDecodeFormat(headers: Headers): 'gzip' | 'deflate' | null | undefined {
   const encoding = headers.get('content-encoding');
-  return encoding === null || encoding.trim().toLowerCase() === 'identity';
+  if (encoding === null) return null;
+  const token = encoding.trim().toLowerCase();
+  if (token === '' || token === 'identity') return null;
+  if (token === 'gzip' || token === 'x-gzip') return 'gzip';
+  if (token === 'deflate') return 'deflate';
+  return undefined;
+}
+
+async function decompressBody(
+  bytes: Uint8Array,
+  format: 'gzip' | 'deflate',
+  timeoutMs: number,
+): Promise<Uint8Array> {
+  const stream = new Blob([bytes as unknown as BlobPart])
+    .stream()
+    .pipeThrough(new DecompressionStream(format));
+  return drainBodyWithDeadline(stream, timeoutMs);
 }
 
 let counter = 0;
@@ -313,17 +333,34 @@ export function serveCrossRealmPreview(
     // ADR-0189: every text/html preview document gets the generic WebSocket
     // bridge script injected (buffered v1 — the body must be whole to rewrite,
     // so html always takes the buffered `reply`, which every peer decodes).
-    // Content-encoded bodies pass through untouched: rewriting compressed
-    // bytes as utf-8 would corrupt the document (the request already strips
-    // accept-encoding, so this only guards an unconditional compressor).
-    if (
-      response.body !== null &&
-      isHtml(response.headers) &&
-      isIdentityEncoding(response.headers)
-    ) {
+    // The request hop already strips accept-encoding, so a content-encoded
+    // html body means an unconditional compressor: decodable codings
+    // (gzip/deflate) are decompressed and re-served identity so the injection
+    // still lands; anything else is refused LOUD — a silent uninjected pass
+    // would strand the page's loopback WS with no cause in sight.
+    if (response.body !== null && isHtml(response.headers)) {
+      const format = htmlDecodeFormat(response.headers);
+      if (format === undefined) {
+        const coding = response.headers.get('content-encoding');
+        const ceiling = new NotImplementedError(
+          'net.preview.ws-bridge-content-encoding',
+          `text/html with content-encoding "${coding}" cannot take the ADR-0189 ws-bridge injection (only gzip/deflate decode here)`,
+        );
+        console.error('[rifty/net] cross-realm preview refusing undecodable html encoding', {
+          feature: ceiling.feature,
+          coding,
+        });
+        channel.postMessage({
+          type: 'error',
+          requestId,
+          message: ceiling.message,
+        } satisfies PreviewPortFrame);
+        return;
+      }
       let injected: Uint8Array;
       try {
-        const raw = await drainBodyWithDeadline(response.body, streamDrainTimeoutMs);
+        let raw = await drainBodyWithDeadline(response.body, streamDrainTimeoutMs);
+        if (format !== null) raw = await decompressBody(raw, format, streamDrainTimeoutMs);
         injected = new TextEncoder().encode(
           injectPreviewWebSocketBridge(new TextDecoder().decode(raw)),
         );
@@ -335,7 +372,11 @@ export function serveCrossRealmPreview(
         } satisfies PreviewPortFrame);
         return;
       }
-      const headers = headersToObject(response.headers);
+      const headers = Object.fromEntries(
+        Object.entries(headersToObject(response.headers)).filter(
+          ([key]) => key !== 'content-encoding',
+        ),
+      );
       if (headers['content-length'] !== undefined) {
         headers['content-length'] = String(injected.byteLength);
       }

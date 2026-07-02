@@ -18,7 +18,11 @@
   tracked in the backlog item). New env `RIFTY_VITE_CLI_HMR_OFF=1` threads only the
   ADR-0161 Vite 8 hmr-off pin. A user `--config` path now also threads to the dev
   wrapper (was preview-only). Socket-lab `browser-preview-websocket` flips to
-  `supported` with a real round-trip probe; instrumentation keys renamed
+  `supported` with a real round-trip probe — the probe also asserts close parity:
+  the lab `/ws` server honours a `close:<code>:<reason>` trigger and the browser
+  CloseEvent must land faithful (code/reason/wasClean) through the bridge (backlog
+  parity case 2 on the preview path; `preview-websocket-bridge.spec.ts` pins the
+  same over an explicit `ws://localhost` URL). Instrumentation keys renamed
   (`data-rifty-ws-bridge`, `__riftyWsBridgeOpen`, `rifty:ws:*`).
 
 - **`node:sqlite` works in any project — preset flag deleted.** Worker realms

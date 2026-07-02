@@ -1,6 +1,6 @@
 # ADR 0189: Preview loopback WebSocket bridge
 
-Status: Proposed
+Status: Accepted (2026-07-02)
 Date: 2026-07
 
 > TL;DR: Inject the existing `webSocketBridgeClientScript` into EVERY `text/html` preview response (tool-agnostic, at the cross-realm preview path) with loopback/current-origin WS URLs remapped to the guest port derived from the `/preview/<port>/` prefix — so ANY dev tool's stock WS client (vite HMR, webpack HMR, socket.io) reaches the guest server, and the vite-keyed HMR config wrapper dies.

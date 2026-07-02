@@ -35,27 +35,48 @@ test.describe('preview WebSocket bridge — non-vite ws echo', () => {
       timeout: 30_000,
     });
 
-    const echoed = await frame.locator('body').evaluate(
+    // One connection, full lifecycle: echo round-trip, then a SERVER-initiated
+    // close(code, reason) whose CloseEvent must arrive faithful through the
+    // bridge (backlog parity case 2 extended to the preview path).
+    const result = await frame.locator('body').evaluate(
       (_el, port) =>
-        new Promise<string>((resolve, reject) => {
-          const ws = new WebSocket(`ws://localhost:${port}/ws`);
-          const timer = setTimeout(() => {
-            ws.close();
-            reject(new Error('no echo within 15s'));
-          }, 15_000);
-          ws.onopen = () => ws.send('bridge-probe');
-          ws.onmessage = (event) => {
-            clearTimeout(timer);
-            ws.close();
-            resolve(String(event.data));
-          };
-          ws.onerror = () => {
-            clearTimeout(timer);
-            reject(new Error('websocket error before echo'));
-          };
-        }),
+        new Promise<{ echo: string; code: number; reason: string; wasClean: boolean }>(
+          (resolve, reject) => {
+            const ws = new WebSocket(`ws://localhost:${port}/ws`);
+            let echo = '';
+            const timer = setTimeout(() => {
+              ws.close();
+              reject(new Error(echo === '' ? 'no echo within 15s' : 'no close event within 15s'));
+            }, 15_000);
+            ws.onopen = () => ws.send('bridge-probe');
+            ws.onmessage = (event) => {
+              echo = String(event.data);
+              ws.send('close:4321:e2e-close');
+            };
+            ws.onerror = () => {
+              clearTimeout(timer);
+              reject(new Error('websocket error before echo'));
+            };
+            ws.onclose = (event) => {
+              clearTimeout(timer);
+              if (echo === '') {
+                reject(new Error(`closed before echo: code=${event.code}`));
+                return;
+              }
+              resolve({
+                echo,
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean,
+              });
+            };
+          },
+        ),
       PORT,
     );
-    expect(echoed).toBe('echo:bridge-probe');
+    expect(result.echo).toBe('echo:bridge-probe');
+    expect(result.code).toBe(4321);
+    expect(result.reason).toBe('e2e-close');
+    expect(result.wasClean).toBe(true);
   });
 });
