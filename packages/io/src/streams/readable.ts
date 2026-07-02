@@ -24,6 +24,7 @@
 
 import { Buffer } from '../buffer.ts';
 import { EventEmitter } from '../event-emitter.ts';
+import { getDefaultHighWaterMark } from './default-highwatermark.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -65,6 +66,13 @@ export interface ReadableState {
   destroyed: boolean;
   /** Error from `destroy(err)` if any. */
   errored: Error | null;
+  /**
+   * Explicit "disturbed" bit (Node's `kIsDisturbed`) backing `isDisturbed`.
+   * Set `true` once data has actually been consumed (a `read()` returning a
+   * chunk, or a `'data'` emit in flowing mode) OR the stream is destroyed.
+   * Fidelity: an EXPLICIT bit, never inferred from other state.
+   */
+  disturbed: boolean;
   /**
    * Coalescing flag: at most one `flow()` microtask is pending. A burst of
    * push() calls in one tick schedules one flow turn, not one per push (flow()
@@ -357,17 +365,19 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
   constructor(opts: ReadableOptions = {}) {
     super();
+    const objectMode = opts.objectMode ?? false;
     this._readableState = {
       buffer: [],
       length: 0,
-      highWaterMark: opts.highWaterMark ?? 16 * 1024,
-      objectMode: opts.objectMode ?? false,
+      highWaterMark: opts.highWaterMark ?? getDefaultHighWaterMark(objectMode),
+      objectMode,
       flowing: null,
       ended: false,
       endEmitted: false,
       reading: false,
       destroyed: false,
       errored: null,
+      disturbed: false,
       flowScheduled: false,
     };
     this.readImpl = opts.read;
@@ -527,6 +537,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         return null;
       }
       const all = takeAll(state);
+      state.disturbed = true;
       if (!state.ended) this.maybeRead();
       else if (state.length === 0 && !state.endEmitted) {
         state.endEmitted = true;
@@ -547,6 +558,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
       const v = state.buffer.shift();
       state.length -= 1;
+      state.disturbed = true;
       if (!state.ended && state.length < state.highWaterMark) this.maybeRead();
       return v ?? null;
     }
@@ -560,6 +572,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         if (state.ended) {
           if (state.length > 0) {
             const partial = takeAll(state);
+            state.disturbed = true;
             if (!state.endEmitted) {
               state.endEmitted = true;
               queueMicrotask(() => this.emit('end'));
@@ -577,6 +590,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     }
     const slice = sliceBuffer(state, n);
+    state.disturbed = true;
     if (state.length === 0 && state.ended && !state.endEmitted) {
       state.endEmitted = true;
       // Final `readable` so the consumer observes EOF before `end` fires.
@@ -630,7 +644,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       const out = this.applyEncoding(chunk);
       // A streaming decoder returns '' while it buffers an incomplete multi-byte
       // sequence — Node does not surface an empty `'data'` in that case.
-      if (out !== '') this.emit('data', out);
+      if (out !== '') {
+        // Delivering a chunk disturbs the stream (flowing-mode consumption).
+        state.disturbed = true;
+        this.emit('data', out);
+      }
     }
     this.finishIfDone();
     if (
@@ -775,6 +793,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const state = this._readableState;
     if (state.destroyed) return this;
     state.destroyed = true;
+    // Destroying disturbs the stream (Node: a destroyed stream is disturbed
+    // even if never read from).
+    state.disturbed = true;
     if (err) state.errored = err;
     // Emit on next tick so synchronous chained `destroy(err)` calls can attach
     // listeners before the event fires (matches Node's `process.nextTick`).
@@ -799,6 +820,18 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    * implement `return()` and `throw()` to run the same cleanup path.
    */
   [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
+    return this.createAsyncIterator(true);
+  }
+
+  /**
+   * The hand-rolled async iterator shared by `[Symbol.asyncIterator]` and
+   * `iterator({ destroyOnReturn })`. `destroyOnReturn` (default `true` for the
+   * Symbol path) controls whether an early `return()`/`break`/`throw` ALSO
+   * destroys the source: `true` mirrors Node's default (signal the producer the
+   * consumer is gone); `false` detaches the listeners but leaves the stream
+   * undestroyed and resumable (Node's `destroyOnReturn:false`).
+   */
+  private createAsyncIterator(destroyOnReturn: boolean): AsyncIterableIterator<unknown> {
     let resolveNext: ((v: IteratorResult<unknown>) => void) | null = null;
     let rejectNext: ((err: unknown) => void) | null = null;
     const pending: unknown[] = [];
@@ -850,9 +883,12 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       this.off('error', onError);
       // Pause to stop emitting; if iteration ended before the consumer drained,
       // also destroy — Node's iterator return() does this so the producer
-      // learns the consumer is gone.
+      // learns the consumer is gone. `destroyOnReturn:false` skips the destroy
+      // (the stream stays resumable), but still detaches the listeners above.
       this.pause();
-      if (!naturallyDrained && !error && !this._readableState.destroyed) this.destroy();
+      if (destroyOnReturn && !naturallyDrained && !error && !this._readableState.destroyed) {
+        this.destroy();
+      }
     };
 
     this.on('data', onData);
@@ -899,6 +935,237 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       },
     };
     return iter;
+  }
+
+  // ──────────────────── async-iterator helpers (v17→v22) ────────────────────
+  // Lazy transforms over `[Symbol.asyncIterator]()`. Stream-returning helpers
+  // (`map`/`filter`/`flatMap`/`take`/`drop`) wrap a lazy async generator in
+  // `Readable.from(gen, {objectMode:true})`; promise-returning helpers
+  // (`forEach`/`reduce`/`toArray`/`some`/`every`/`find`) drain the iterator.
+  // `map`/`filter`/`forEach`/`flatMap` accept `{ concurrency, signal }`:
+  // concurrency>1 runs N callbacks at once but emits/observes results in INPUT
+  // order; `signal` aborts mid-iteration with an `AbortError` (`ABORT_ERR`).
+  // All probed head-to-head against real Node v24.
+
+  /**
+   * `readable.iterator({ destroyOnReturn })` — the async iterator with explicit
+   * cleanup control. Default `destroyOnReturn:true` matches `[Symbol.asyncIterator]`
+   * (an early `return()` destroys the source); `false` detaches the listeners but
+   * leaves the stream undestroyed and resumable (Node parity).
+   */
+  iterator(options: { destroyOnReturn?: boolean } = {}): AsyncIterableIterator<unknown> {
+    return this.createAsyncIterator(options.destroyOnReturn ?? true);
+  }
+
+  /**
+   * `readable.wrap(stream)` (Node's streams1 adapter) — subscribe a legacy
+   * (`'data'`/`'end'`) source and `push()` its chunks, honoring backpressure via
+   * the legacy `pause()`/`resume()` (when `push()` reports the buffer is full we
+   * pause the source; a drain or a `read()` resumes it). `'error'` on the legacy
+   * source destroys this Readable. Returns `this`. Verified vs real Node v24.
+   */
+  wrap(stream: LegacyStreamSource): this {
+    let paused = false;
+    const resumeLegacy = (): void => {
+      if (paused && typeof stream.resume === 'function') {
+        paused = false;
+        stream.resume();
+      }
+    };
+    const onData = (chunk: unknown): void => {
+      const more = this.push(chunk);
+      if (more === false && !paused && typeof stream.pause === 'function') {
+        paused = true;
+        stream.pause();
+      }
+    };
+    const onEnd = (): void => {
+      this.push(null);
+    };
+    const onError = (err: unknown): void => {
+      if (!this._readableState.destroyed) this.destroy(err as Error);
+    };
+    // A drain on our side (buffer fell below HWM in flowing mode) resumes the
+    // legacy source.
+    this.on('data', () => {
+      if (this._readableState.length < this._readableState.highWaterMark) resumeLegacy();
+    });
+    // Install a `_read` so a paused-mode consumer's `read()` resumes the legacy
+    // source (Node's wrap installs a `_read` that calls `stream.resume()`).
+    this.readImpl = (): void => {
+      resumeLegacy();
+    };
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    return this;
+  }
+
+  /** `readable.map(fn, opts?)` → object-mode Readable of mapped values (concurrency/signal aware). */
+  map(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    return Readable.from(mappedGenerator(this, fn, opts), { objectMode: true });
+  }
+
+  /** `readable.filter(fn, opts?)` → object-mode Readable keeping values where `fn` is truthy. */
+  filter(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    const KEEP = filterSentinel;
+    const gen = mappedGenerator(
+      this,
+      async (value, index) => ((await fn(value, index)) ? value : KEEP),
+      opts,
+    );
+    return Readable.from(droppingSentinel(gen, KEEP), { objectMode: true });
+  }
+
+  /** `readable.flatMap(fn, opts?)` → object-mode Readable flattening each mapped iterable. */
+  flatMap(fn: (value: unknown, index: number) => unknown, options?: AsyncHelperOptions): Readable {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    return Readable.from(flatMappedGenerator(this, fn, opts), { objectMode: true });
+  }
+
+  /** `readable.take(n)` → object-mode Readable of the first `n` values. */
+  take(count: number): Readable {
+    assertCount(count);
+    const source = this;
+    async function* gen(): AsyncGenerator<unknown> {
+      if (count <= 0) {
+        // Honour early-termination cleanup of the source (destroy on return).
+        const it = source[Symbol.asyncIterator]();
+        await it.return?.();
+        return;
+      }
+      let taken = 0;
+      for await (const value of source) {
+        yield value;
+        if (++taken >= count) break;
+      }
+    }
+    return Readable.from(gen(), { objectMode: true });
+  }
+
+  /** `readable.drop(n)` → object-mode Readable skipping the first `n` values. */
+  drop(count: number): Readable {
+    assertCount(count);
+    const source = this;
+    async function* gen(): AsyncGenerator<unknown> {
+      let dropped = 0;
+      for await (const value of source) {
+        if (dropped < count) {
+          dropped++;
+          continue;
+        }
+        yield value;
+      }
+    }
+    return Readable.from(gen(), { objectMode: true });
+  }
+
+  /** `readable.forEach(fn, opts?)` → Promise<void>; runs `fn` per value (concurrency/signal aware). */
+  async forEach(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<void> {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    // Drive the same ordered engine; discard outputs.
+    for await (const _ of mappedGenerator(this, fn, opts)) {
+      void _;
+    }
+  }
+
+  /** `readable.toArray(opts?)` → Promise of all values as an array. */
+  async toArray(options?: { signal?: AbortSignal }): Promise<unknown[]> {
+    const signal = options?.signal;
+    throwIfAborted(signal);
+    const out: unknown[] = [];
+    for await (const value of this) {
+      throwIfAborted(signal);
+      out.push(value);
+    }
+    return out;
+  }
+
+  /**
+   * `readable.reduce(fn, initial?)` → Promise of the accumulated value. With no
+   * `initial`, the first element seeds the accumulator; an EMPTY stream with no
+   * `initial` rejects `ERR_MISSING_ARGS` (TypeError), exactly like Node.
+   */
+  async reduce(
+    fn: (accumulator: unknown, value: unknown, index: number) => unknown,
+    // Default to the `NO_INITIAL` sentinel (not `undefined`) so a caller passing
+    // an explicit `undefined` initial is distinguished from omitting it — without
+    // reading `arguments` (Node distinguishes the two).
+    initial: unknown = noInitial,
+    options?: { signal?: AbortSignal },
+  ): Promise<unknown> {
+    assertHelperFn(fn);
+    const signal = options?.signal;
+    throwIfAborted(signal);
+    const hasInitial = initial !== noInitial;
+    let acc = hasInitial ? initial : undefined;
+    let seeded = hasInitial;
+    let index = 0;
+    for await (const value of this) {
+      throwIfAborted(signal);
+      if (!seeded) {
+        acc = value;
+        seeded = true;
+        index++;
+        continue;
+      }
+      acc = await fn(acc, value, index++);
+    }
+    if (!seeded) {
+      const err = new TypeError(
+        'Reduce of an empty stream requires an initial value',
+      ) as TypeError & { code?: string };
+      err.code = 'ERR_MISSING_ARGS';
+      throw err;
+    }
+    return acc;
+  }
+
+  /** `readable.some(fn, opts?)` → Promise<boolean>; short-circuits on the first truthy. */
+  async some(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<boolean> {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    // A hit (truthy predicate) → `true`; no hit (sentinel) → `false`. Compare
+    // against the sentinel, NOT `find`'s output (which maps the sentinel away).
+    return (await firstMatch(this, fn, opts)) !== undefinedSentinel;
+  }
+
+  /** `readable.every(fn, opts?)` → Promise<boolean>; short-circuits on the first falsy. */
+  async every(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<boolean> {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    // `every(fn)` is `!some(!fn)`; reuse the ordered short-circuit engine.
+    const failed = await firstMatch(this, async (v, i) => !(await fn(v, i)), opts);
+    return failed === undefinedSentinel;
+  }
+
+  /**
+   * `readable.find(fn, opts?)` → Promise of the first value where `fn` is truthy
+   * (or `undefined`). Short-circuits.
+   */
+  async find(
+    fn: (value: unknown, index: number) => unknown,
+    options?: AsyncHelperOptions,
+  ): Promise<unknown> {
+    assertHelperFn(fn);
+    const opts = validateHelperOptions(options);
+    const hit = await firstMatch(this, fn, opts);
+    return hit === undefinedSentinel ? undefined : hit;
   }
 
   /**
@@ -971,38 +1238,44 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       resolvedMode = true;
     }
 
+    let pulling = false;
+    let done = false;
     const r = new Readable({
       highWaterMark: options.highWaterMark,
       objectMode: resolvedMode,
       encoding: options.encoding,
+      read(): void {
+        void pump();
+      },
     });
 
-    void (async () => {
+    const pump = async (): Promise<void> => {
+      if (pulling || done || r.destroyed) return;
+      pulling = true;
       try {
-        // Push the peeked first chunk (sync-iterator branch only).
-        if (firstResult !== null && !(firstResult as IteratorResult<unknown>).done) {
-          r.push((firstResult as IteratorResult<unknown>).value);
-        }
-        if (isAsync) {
-          const ai = iterator as AsyncIterator<unknown>;
-          while (true) {
-            const step = await ai.next();
-            if (step.done) break;
-            r.push(step.value);
+        while (!r.destroyed && r._readableState.length < r._readableState.highWaterMark) {
+          let step: IteratorResult<unknown>;
+          if (firstResult !== null) {
+            step = firstResult as IteratorResult<unknown>;
+            firstResult = null;
+          } else if (isAsync) {
+            step = await (iterator as AsyncIterator<unknown>).next();
+          } else {
+            step = (iterator as Iterator<unknown>).next();
           }
-        } else {
-          const si = iterator as Iterator<unknown>;
-          while (true) {
-            const step = si.next();
-            if (step.done) break;
-            r.push(step.value);
+          if (step.done) {
+            done = true;
+            r.push(null);
+            return;
           }
+          if (!r.push(step.value)) return;
         }
-        r.push(null);
       } catch (err) {
         r.destroy(err as Error);
+      } finally {
+        pulling = false;
       }
-    })();
+    };
     return r;
   }
 
@@ -1029,15 +1302,13 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const r = new Readable(options);
     let closed = false;
 
-    const abort = (): void => {
-      r.destroy(abortError());
-    };
-    options.signal?.addEventListener('abort', abort, { once: true });
+    // Abort→destroy wiring shared with `stream.addAbortSignal` (its `'close'`/
+    // `'end'` cleanup detaches the listener; the pump no longer removes it).
+    if (options.signal) addAbortSignal(options.signal, r);
 
     r.once('close', () => {
       if (closed) return;
       closed = true;
-      options.signal?.removeEventListener('abort', abort);
       void reader.cancel().catch(() => {});
     });
 
@@ -1047,15 +1318,15 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           const { done, value } = await reader.read();
           if (done) break;
           if (value === undefined) continue;
-          if (!r.push(value)) await waitForReadableDemand(r);
+          const chunk =
+            !r.readableObjectMode && typeof value === 'string' ? Buffer.from(value) : value;
+          if (!r.push(chunk)) await waitForReadableDemand(r);
         }
         closed = true;
-        options.signal?.removeEventListener('abort', abort);
         reader.releaseLock();
         r.push(null);
       } catch (err) {
         closed = true;
-        options.signal?.removeEventListener('abort', abort);
         try {
           reader.releaseLock();
         } catch {
@@ -1070,6 +1341,17 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
 export interface ReadableFromWebOptions extends ReadableOptions {
   signal?: AbortSignal;
+}
+
+/**
+ * Minimal legacy (streams1) source shape `Readable.wrap` adapts: an event
+ * emitter that emits `'data'`/`'end'`/`'error'` and (optionally) supports
+ * `pause()`/`resume()` for backpressure.
+ */
+export interface LegacyStreamSource {
+  on(event: 'data' | 'end' | 'error', listener: (...args: unknown[]) => void): unknown;
+  pause?(): unknown;
+  resume?(): unknown;
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -1111,4 +1393,283 @@ function waitForReadableDemand(r: Readable): Promise<void> {
     r.on('error', onError);
     queueMicrotask(onProgress);
   });
+}
+
+/** Minimal shape `addAbortSignal` drives: anything with Node's `destroy(err)`. */
+interface AbortableStream {
+  destroy(err?: Error): unknown;
+  once(event: 'close' | 'end', listener: () => void): unknown;
+  off(event: 'close' | 'end', listener: () => void): unknown;
+}
+
+/**
+ * `stream.addAbortSignal(signal, stream)` (Node v15.4) — destroy `stream` with
+ * an `AbortError` (`code:'ABORT_ERR'`) when `signal` aborts; an already-aborted
+ * signal destroys synchronously, matching Node's immediate branch.
+ * Returns `stream`. The abort listener is detached when the stream finishes
+ * (`'close'` or `'end'`) so it does not leak.
+ *
+ * Extracted from `Readable.fromWeb`'s inline abort wiring (which now reuses it).
+ */
+export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, stream: T): T {
+  if (signal.aborted) {
+    stream.destroy(abortError());
+    return stream;
+  }
+  const onAbort = (): void => {
+    stream.destroy(abortError());
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  const cleanup = (): void => {
+    signal.removeEventListener('abort', onAbort);
+  };
+  stream.once('close', cleanup);
+  stream.once('end', cleanup);
+  return stream;
+}
+
+// ─────────────────── async-iterator helper machinery ────────────────────────
+// Shared by `Readable.prototype.{map,filter,flatMap,forEach,some,every,find}`.
+
+/** `{ concurrency, signal }` accepted by the concurrent helpers. */
+export interface AsyncHelperOptions {
+  /** Max in-flight callbacks (default 1). Output stays in INPUT order regardless. */
+  concurrency?: number;
+  /** Abort mid-iteration → reject with an `AbortError` (`code:'ABORT_ERR'`). */
+  signal?: AbortSignal;
+}
+
+interface ResolvedHelperOptions {
+  concurrency: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Unique markers (never collide with user data): `filterSentinel` flags a
+ * filtered-out value inside the shared map engine; `undefinedSentinel` is the
+ * "no match" result for `find`/`some`/`every` (so a genuine `undefined` value
+ * found by `find` is distinguishable from "not found"). Frozen objects, never
+ * exposed.
+ */
+const filterSentinel: unique symbol = Symbol('rifty/io:filtered-out');
+const undefinedSentinel: unique symbol = Symbol('rifty/io:no-match');
+/** `reduce`'s "no initial value provided" marker (distinct from `undefined`). */
+const noInitial: unique symbol = Symbol('rifty/io:no-initial');
+
+/** Node's `ERR_INVALID_ARG_TYPE` for a non-function helper callback (sync throw). */
+function assertHelperFn(fn: unknown): asserts fn is (...args: never[]) => unknown {
+  if (typeof fn !== 'function') {
+    const err = new TypeError(
+      `The "fn" argument must be of type function. Received ${fn === null ? 'null' : typeof fn}`,
+    ) as TypeError & { code?: string };
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+  }
+}
+
+/** Node's `ERR_OUT_OF_RANGE` (RangeError) for a bad `take`/`drop` count (sync throw). */
+function assertCount(count: number): void {
+  if (typeof count !== 'number' || Number.isNaN(count) || count < 0) {
+    const err = new RangeError(
+      `The value of "number" is out of range. It must be a non-negative number. Received ${String(count)}`,
+    ) as RangeError & { code?: string };
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+  }
+}
+
+/**
+ * Validate `{ concurrency, signal }`. `concurrency` must be a number `> 0`
+ * (1.5 accepted; 0/-1/'x' → `ERR_OUT_OF_RANGE`, RangeError — sync throw, Node
+ * parity). Returns the resolved options (default concurrency 1).
+ */
+function validateHelperOptions(options?: AsyncHelperOptions): ResolvedHelperOptions {
+  const concurrency = options?.concurrency ?? 1;
+  if (typeof concurrency !== 'number' || Number.isNaN(concurrency) || concurrency <= 0) {
+    const err = new RangeError(
+      `The value of "concurrency" is out of range. It must be a positive number. Received ${String(concurrency)}`,
+    ) as RangeError & { code?: string };
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+  }
+  return { concurrency, signal: options?.signal };
+}
+
+/** Throw the `AbortError` (`ABORT_ERR`) if the signal is aborted. */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+/**
+ * Ordered concurrency engine for `map`/`filter`/`forEach`. Pulls from `source`
+ * up to `concurrency` callbacks in flight, but YIELDS results in INPUT order
+ * (the mandatory guarantee): result for input #i is yielded only once its
+ * callback settles, while the window stays full of later inputs. A callback
+ * throw (or a signal abort) fails fast — the in-flight work is abandoned and the
+ * error propagates on the next `next()`.
+ *
+ * `filter` passes a wrapper that resolves to `filterSentinel` for dropped
+ * values; the caller strips them via {@link droppingSentinel} (so the drop still
+ * happens in order, after the concurrent predicate resolves).
+ */
+async function* mappedGenerator(
+  source: Readable,
+  fn: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): AsyncGenerator<unknown> {
+  const { concurrency, signal } = opts;
+  throwIfAborted(signal);
+  const iterator = source[Symbol.asyncIterator]();
+
+  // Abort handle: a never-resolving promise that rejects with the AbortError the
+  // moment the signal fires, so an in-flight head await unblocks immediately.
+  let abortListener: (() => void) | null = null;
+  const abortPromise = signal
+    ? new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(abortError());
+        else {
+          abortListener = (): void => reject(abortError());
+          signal.addEventListener('abort', abortListener, { once: true });
+        }
+      })
+    : null;
+  abortPromise?.catch(() => {}); // never an unhandled rejection on the clean path
+
+  const cleanup = async (): Promise<void> => {
+    if (abortListener && signal) signal.removeEventListener('abort', abortListener);
+    await iterator.return?.();
+  };
+
+  // The pool keeps up to `concurrency` callbacks in flight. Each in-flight task
+  // settles to `{ index, value }`; we buffer settled results by index and yield
+  // them in INPUT order, refilling a slot the instant ANY task settles (Node
+  // starts the next input on a peer's COMPLETION, not on the head's yield).
+  //
+  // CRUCIAL: each task's promise resolves to its OWN tag and is removed from the
+  // pool only inside the race loop (by identity), so a result is never dropped —
+  // a settled-but-unraced promise (e.g. a SYNCHRONOUS `fn` whose promise settles
+  // during a `fillPool`) is still pending in the pool until the race consumes it.
+  interface Settled {
+    readonly index: number;
+    readonly value: unknown;
+    readonly self: Promise<Settled>;
+  }
+  const pool = new Set<Promise<Settled>>();
+  const ready = new Map<number, unknown>();
+  let inputIndex = 0;
+  let nextToYield = 0;
+  let sourceDone = false;
+
+  const spawn = (value: unknown, index: number): void => {
+    const self: Promise<Settled> = Promise.resolve(fn(value, index)).then((mapped) => ({
+      index,
+      value: mapped,
+      self,
+    }));
+    pool.add(self);
+  };
+
+  // Pull inputs until the pool is full or the source is exhausted. Racing the
+  // abort means a slow `iterator.next()` still unblocks on abort.
+  const fillPool = async (): Promise<void> => {
+    while (!sourceDone && pool.size < concurrency) {
+      const step = await (abortPromise
+        ? Promise.race([iterator.next(), abortPromise])
+        : iterator.next());
+      if (step.done) {
+        sourceDone = true;
+        return;
+      }
+      spawn(step.value, inputIndex++);
+    }
+  };
+
+  try {
+    throwIfAborted(signal);
+    await fillPool();
+    while (pool.size > 0 || ready.has(nextToYield)) {
+      // Emit every in-order result already buffered, refilling the freed slots.
+      while (ready.has(nextToYield)) {
+        const value = ready.get(nextToYield);
+        ready.delete(nextToYield);
+        nextToYield++;
+        yield value;
+        await fillPool();
+      }
+      if (pool.size === 0) break;
+      // Wait for the next task to settle (any of them); remove exactly that
+      // promise from the pool, buffer its result, and refill — mirroring Node's
+      // complete-then-pull ordering.
+      const settled = await (abortPromise
+        ? Promise.race([Promise.race(pool), abortPromise])
+        : Promise.race(pool));
+      pool.delete(settled.self);
+      ready.set(settled.index, settled.value);
+      await fillPool();
+    }
+  } finally {
+    await cleanup();
+  }
+}
+
+/** Strip `filterSentinel` markers from a generator's output (order-preserving). */
+async function* droppingSentinel(
+  gen: AsyncGenerator<unknown>,
+  sentinel: symbol,
+): AsyncGenerator<unknown> {
+  for await (const value of gen) {
+    if (value !== sentinel) yield value;
+  }
+}
+
+/**
+ * `flatMap` engine: map each input through `fn` (concurrency/signal aware, input
+ * order), then flatten each result. A returned iterable/async-iterable is spread
+ * in order; a scalar is yielded as-is (Node flattens one level).
+ */
+async function* flatMappedGenerator(
+  source: Readable,
+  fn: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): AsyncGenerator<unknown> {
+  for await (const mapped of mappedGenerator(source, fn, opts)) {
+    if (mapped != null && typeof mapped === 'object') {
+      const asyncIt = (mapped as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator];
+      const syncIt = (mapped as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+      if (typeof asyncIt === 'function' || typeof syncIt === 'function') {
+        for await (const sub of mapped as AsyncIterable<unknown> | Iterable<unknown>) yield sub;
+        continue;
+      }
+    }
+    yield mapped;
+  }
+}
+
+/**
+ * Shared short-circuit driver for `find`/`some`/`every`: return the first value
+ * whose `predicate` resolves truthy (concurrency/signal aware, input order), or
+ * {@link undefinedSentinel} if none. Stops pulling the source once a hit is
+ * found (and destroys it via the iterator's `return`).
+ */
+async function firstMatch(
+  source: Readable,
+  predicate: (value: unknown, index: number) => unknown,
+  opts: ResolvedHelperOptions,
+): Promise<unknown> {
+  // Reuse the ordered map engine: map each value to `{ hit, value }`, then scan
+  // in order for the first hit. Concurrency still runs the predicate ahead, but
+  // the FIRST in-order hit wins (matches Node's documented order).
+  const tagged = mappedGenerator(
+    source,
+    async (value, index) => ({ hit: Boolean(await predicate(value, index)), value }),
+    opts,
+  );
+  for await (const entry of tagged) {
+    const { hit, value } = entry as { hit: boolean; value: unknown };
+    if (hit) {
+      await tagged.return?.(undefined);
+      return value;
+    }
+  }
+  return undefinedSentinel;
 }

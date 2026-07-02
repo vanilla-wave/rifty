@@ -10,19 +10,25 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 |---|---|---|
 | `Readable` push/data/end | ✅ | Object mode and byte/string chunks |
 | Readable async iteration | ✅ | `for await` over readable chunks |
+| Readable async-iterator helpers | ✅ | `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested |
 | `Readable.from(iterable)` | ✅ | Iterable source support plus options parity cases |
 | `Writable` write/end/finish | ✅ | Backpressure surface via `highWaterMark` |
 | `Transform` | ✅ | `_transform` callback path |
 | `PassThrough` | ✅ | Forwards chunks unchanged |
 | `pipeline` | ✅ | Promise/callback chaining, multi-stage, destroy-on-error parity |
 | `finished` | ✅ | Resolves on readable end and cleanup cases |
+| `compose` / `Duplex.from` / `Readable.wrap` | ✅ | `compose(...stages)` → a `Duplex` wired via `pipeline` (Transform/Duplex or async-gen-function stages; error destroys every stage); `Duplex.from(src)` over `{readable,writable}`/body-fn/iterable/async-iterable/string/Promise (unknown shape → `ERR_INVALID_ARG_TYPE`); `Readable.wrap(legacy)` adapts a streams1 source. Returns `instanceof Duplex` (`Duplexify` NAME out of scope) — parity-tested |
 | `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
 | `Readable.fromWeb` | ✅ | WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested |
-| `Readable.toWeb` | ✅ | Node Readable → WHATWG ReadableStream; preserves emitted chunk identity/type, forwards strategy, cancel destroys source |
-| `node:stream/web` export | ❌ | WHATWG stream interop tracked separately |
-| `Writable.toWeb` | ❌ | Writable bridge remains unclaimed |
+| `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
+| `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |
+| `Writable.toWeb` / `Writable.fromWeb` / `Duplex.toWeb` / `Duplex.fromWeb` | ✅ | Writable/Duplex WHATWG bridge: `toWeb` drain-gated backpressure, `fromWeb` error propagation both ways; `Duplex` carries `allowHalfOpen` (bare default `true`, `fromWeb` default `false`); non-WHATWG arg → sync TypeError (parity-tested) |
+| `isReadable` / `isWritable` / `isErrored` / `isDisturbed` | ✅ | Predicates over the existing state machine; `isDisturbed` backed by an explicit bit; non-stream input never throws (parity-tested truth tables) |
+| `getDefaultHighWaterMark` / `setDefaultHighWaterMark` | ✅ | Module-level default HWM read by the Readable/Writable ctors (explicit `{ highWaterMark }` still wins); parity-tested |
+| `addAbortSignal` | ✅ | Aborting the signal destroys the stream with an `AbortError` (`code:ABORT_ERR`); already-aborted destroys immediately (parity-tested) |
+| `Writable` `cork` / `uncork` / `_writev` | ✅ | Cork defers writes (nested counter); uncork flushes the batch in ONE `_writev` (Node `{chunk,encoding}` shape) — real `writev` option, sequential `_write` fallback, backpressure + `drain` preserved (parity-tested) |
 
 ## Test Sources
 
@@ -30,6 +36,13 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/stream-legacy.test.ts`
 - `tests/conformance/builtins/stream-consumers.test.ts`
 - `packages/io/src/streams/readable.from.test.ts`
+- `packages/io/src/streams/readable.to-web.test.ts`
+- `packages/io/src/streams/writable.to-web.test.ts`
+- `packages/io/src/streams/duplex.web-bridge.test.ts`
+- `packages/io/src/streams/readable.async-iter-helpers.test.ts`
+- `packages/io/src/streams/compose-wrap-from.test.ts`
+- `packages/io/src/streams/predicates-and-defaults.test.ts`
+- `packages/io/src/streams/writable.cork-writev.test.ts`
 - `packages/net/src/http/response.test.ts`
 - `tools/node-parity-runner/cases/stream/*.case.ts`
 

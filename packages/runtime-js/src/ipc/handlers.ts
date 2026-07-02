@@ -1,10 +1,16 @@
 /**
- * Runtime-js sync RPC handler(s) (ADR-0011 phase 3, ADR-0039).
+ * Runtime-js sync RPC handler(s) (ADR-0011 phase 3, ADR-0039, ADR-0137).
  *
  * Owns the Node-API knowledge that used to live in
  * `@riftydev/kernel/ipc/default-handlers.ts`: parsing `node <script>` command
- * lines, resolving the script's bytes from the VFS sync mirror, and
- * recursively spawning a kernel Worker to run the child.
+ * lines and recursively running the child. The handler PASSES THE SCRIPT PATH to
+ * the runner (no longer the bytes — ADR-0137): the runner reads the source
+ * through the module loader so a `#!` shebang is stripped and relative
+ * `import`/`require` resolve against the VFS, like `child_process.spawn('node',
+ * …)`. The handler keeps the `node <script>` validation + an ENOENT pre-check
+ * (the resolver returning `null`); the entry-KIND decision (browser `kind:'url'`
+ * node-entry child vs Node in-process loader-run) belongs to the runner, its
+ * browser-vs-Node injection seam.
  *
  * Registration is explicit (`child_process` calls
  * {@link installRuntimeJsExecSyncHandler} at module load) because per ADR-0039
@@ -12,8 +18,9 @@
  * it auto-registered `'execSync'` from `getKernelDispatcher()`.
  */
 
-import type { SyncRpcDispatcher, WorkerEntryDescriptor } from '@riftydev/kernel';
-import { type RecursiveRunResult, makeRecursiveRunner } from './recursive-runner.ts';
+import type { SyncRpcDispatcher } from '@riftydev/kernel';
+import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { type NodeEntryRunner, makeRecursiveRunner } from './recursive-runner.ts';
 
 /** Argument shape the runtime-js `execSync` shim writes into the request. */
 export interface ExecSyncPayload {
@@ -31,30 +38,35 @@ export interface ExecSyncPayload {
 }
 
 /**
- * Caller-supplied script loader: path in the child's VFS to bytes (`null` when
- * absent). Runtime-js wraps `syncMirror()` so the SAB path reads the same
- * source of truth as the in-realm fallback.
+ * Caller-supplied existence probe: path in the store to its bytes (`null` when
+ * absent). The handler uses it ONLY to surface a proper `ENOENT` before
+ * spawning — the runner re-reads the source through the module loader, so the
+ * bytes returned here are not what runs (the resolver may return any non-`null`
+ * sentinel; production wraps `syncMirror()` so the probe matches the store the
+ * child reads).
  */
 export type ScriptResolver = (path: string) => Uint8Array | null;
 
 /** Optional inputs to {@link installRuntimeJsExecSyncHandler}. */
 export interface InstallRuntimeJsExecSyncOptions {
-  /** Override the recursive runner (test substitution). */
-  readonly runWorker?: (spec: {
-    readonly entry: WorkerEntryDescriptor;
-    readonly argv: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
-    readonly cwd: string;
-  }) => Promise<RecursiveRunResult>;
+  /**
+   * Override the runner (test / Node-conformance substitution). The handler
+   * passes the resolved script PATH (`entryPath`) plus argv/env/cwd; the runner
+   * owns the entry-kind decision (browser `kind:'url'` node-entry child vs Node
+   * in-process loader-run). Defaults to {@link makeRecursiveRunner} (browser).
+   */
+  readonly runWorker?: NodeEntryRunner;
 }
 
 /**
  * Register the runtime-js `'execSync'` handler on `dispatcher`. Idempotent:
  * re-registering replaces the previous handler (per
  * {@link SyncRpcDispatcher.register}). The handler parses the command line,
- * resolves script bytes via `resolveScript`, spawns a recursive kernel Worker,
- * and resolves with the child's stdout as raw `Uint8Array` bytes (ADR-0084 #23
- * — carried byte-exact on a binary frame, so non-UTF-8 stdout is not mangled).
+ * ENOENT-checks the script via `resolveScript`, then hands the runner the script
+ * PATH (not the bytes — ADR-0137: the runner reads it through the module loader
+ * so a shebang/relative-import entry runs like `child_process.spawn('node', …)`),
+ * and resolves with the child's stdout as raw `Uint8Array` bytes (ADR-0084 #23 —
+ * carried byte-exact on a binary frame, so non-UTF-8 stdout is not mangled).
  */
 export function installRuntimeJsExecSyncHandler(
   dispatcher: SyncRpcDispatcher,
@@ -71,28 +83,39 @@ export function installRuntimeJsExecSyncHandler(
         code: 'EUNSUPPORTED',
       });
     }
-    const scriptPath = tokens[1] ?? '';
-    const sourceBytes = resolveScript(scriptPath);
-    if (sourceBytes === null) {
+    const cwd = payload.opts?.cwd ?? '/workspace';
+    // Absolutize the entry against cwd, mirroring the `node <file>` shell command
+    // (`resolveNodeEntry`, ADR-0155): the module loader treats a bare `build.js`
+    // as a PACKAGE specifier (Node-faithful), so `execSync('node build.js')` must
+    // resolve it to `<cwd>/build.js` before the runner — exactly Node's `argv[1]`.
+    const rawArg = tokens[1] ?? '';
+    const scriptPath = normalizePath(isAbsolute(rawArg) ? rawArg : joinPath(cwd, rawArg));
+    // ENOENT pre-check ONLY: a missing script surfaces a proper ENOENT here
+    // rather than as an opaque child loader miss. The bytes are discarded — the
+    // runner re-reads the source through the module loader (ADR-0137: shebang
+    // strip + relative `import`/`require` resolution), so `execSync('node x.js')`
+    // runs x.js exactly like `spawn('node', ['x.js'])`.
+    if (resolveScript(scriptPath) === null) {
       throw Object.assign(new Error(`execSync: script not found: ${scriptPath}`), {
         code: 'ENOENT',
       });
     }
-    // TODO(backlog: runtime-js/execsync-node-entry-loader) — route this child
-    // through the node-entry bootstrap (ADR-0137) like child_process.spawn, so
-    // a shebang'd / relative-import `node <script>` runs via the module loader.
-    // Blocked: the conformance recursive-runner executes this spec in Node (no
-    // kernel Worker / `kind:'url'` bootstrap), so the kind can't simply flip.
-    const source = new TextDecoder().decode(sourceBytes);
     const result = await runWorker({
-      entry: { kind: 'source', code: source, sourceUrl: scriptPath },
+      entryPath: scriptPath,
       argv: ['rifty', scriptPath, ...tokens.slice(2)],
       env: payload.opts?.env ?? {},
-      cwd: payload.opts?.cwd ?? '/workspace',
+      cwd,
     });
     if (result.exitCode !== 0) {
+      // Surface the child's stderr in the failure message (Node's `execSync`
+      // attaches the child stderr to the thrown error on failure). The recursive
+      // runner captured it; decode for the message tail (kept short).
+      const stderrText =
+        result.stderr && result.stderr.byteLength > 0
+          ? `\n${new TextDecoder().decode(result.stderr).trimEnd()}`
+          : '';
       throw Object.assign(
-        new Error(`Command failed with exit code ${result.exitCode}: ${payload.cmd}`),
+        new Error(`Command failed with exit code ${result.exitCode}: ${payload.cmd}${stderrText}`),
         { code: 'ECHILDFAILED', exitCode: result.exitCode },
       );
     }

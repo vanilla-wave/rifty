@@ -32,6 +32,10 @@ function readClientResponse(opts: Parameters<typeof request>[0]): Promise<{
   });
 }
 
+function listenOn(server: ReturnType<typeof createServer>, port: number): Promise<void> {
+  return new Promise((resolve) => server.listen(port, () => resolve()));
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -42,10 +46,13 @@ describe('http.request — local registered port loopback', () => {
   it('routes localhost URL requests through the in-process port registry', async () => {
     const port = 4301;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end(`local ${req.url}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(`local ${req.url}`);
+      }),
+      port,
+    );
 
     const response = await readClientResponse(`http://localhost:${port}/health?ready=1`);
 
@@ -53,12 +60,44 @@ describe('http.request — local registered port loopback', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it('delivers response body chunks as Buffers so the canonical `b += chunk` idiom yields utf8 (Node parity)', async () => {
+    const port = 4320;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('loopback must not hit fetch'));
+    await listenOn(
+      createServer((_req, res) => {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('héllo wörld'); // multi-byte utf8 — a Uint8Array would stringify to CSV bytes
+      }),
+      port,
+    );
+
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = get(`http://localhost:${port}/`, (res) => {
+        let b = '';
+        // The canonical Node http-client idiom: concatenate chunks with `+=`, no
+        // explicit decode. It yields utf8 only because chunks are Buffers (whose
+        // toString is utf8) — a raw Uint8Array stringifies to CSV byte values.
+        res.on('data', (chunk) => {
+          b += String(chunk);
+        });
+        res.on('end', () => resolve(b));
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+    });
+
+    expect(body).toBe('héllo wörld');
+  });
+
   it('routes loopback option requests for 127.0.0.1 and 0.0.0.0', async () => {
     const port = 4302;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.end(`hit ${req.url}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`hit ${req.url}`);
+      }),
+      port,
+    );
 
     await expect(
       readClientResponse({ hostname: '127.0.0.1', port, path: '/ipv4' }),
@@ -72,9 +111,12 @@ describe('http.request — local registered port loopback', () => {
   it('routes IPv6 loopback option requests through the in-process port registry', async () => {
     const port = 4307;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.end(`ipv6 ${req.url}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`ipv6 ${req.url}`);
+      }),
+      port,
+    );
 
     const response = await readClientResponse({ hostname: '::1', port, path: '/ipv6' });
 
@@ -82,11 +124,34 @@ describe('http.request — local registered port loopback', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it('routes IPv4-mapped IPv6 loopback through the registry instead of fetch egress', async () => {
+    const port = 4309;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`mapped ${req.url}`);
+      }),
+      port,
+    );
+
+    const response = await readClientResponse({
+      hostname: '::ffff:127.0.0.1',
+      port,
+      path: '/mapped',
+    });
+
+    expect(response).toEqual({ statusCode: 200, body: 'mapped /mapped' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('keeps external hosts on fetch even when the port is registered', async () => {
     const port = 4303;
-    createServer((_req, res) => {
-      res.end('local');
-    }).listen(port);
+    await listenOn(
+      createServer((_req, res) => {
+        res.end('local');
+      }),
+      port,
+    );
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('external'));
 
     const response = await readClientResponse(`http://example.com:${port}/health`);
@@ -97,9 +162,12 @@ describe('http.request — local registered port loopback', () => {
 
   it('keeps option-object host aliases on fetch when the host is external', async () => {
     const port = 4306;
-    createServer((_req, res) => {
-      res.end('local');
-    }).listen(port);
+    await listenOn(
+      createServer((_req, res) => {
+        res.end('local');
+      }),
+      port,
+    );
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('external host'));
 
     const response = await readClientResponse({
@@ -134,9 +202,12 @@ describe('http.request — local registered port loopback', () => {
   it('routes the whole 127.0.0.0/8 block through the registry', async () => {
     const port = 4308;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.end(`block ${req.url}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`block ${req.url}`);
+      }),
+      port,
+    );
 
     const response = await readClientResponse({ hostname: '127.1.2.3', port, path: '/block' });
 
@@ -146,9 +217,12 @@ describe('http.request — local registered port loopback', () => {
 
   it('keeps non-http protocols on fetch even when the port is registered', async () => {
     const port = 4305;
-    createServer((_req, res) => {
-      res.end('local');
-    }).listen(port);
+    await listenOn(
+      createServer((_req, res) => {
+        res.end('local');
+      }),
+      port,
+    );
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('https egress'));
 
     const response = await readClientResponse({ protocol: 'https:', hostname: 'localhost', port });
@@ -162,9 +236,12 @@ describe('http.get — request sugar', () => {
   it('ends the request immediately and routes registered loopback ports', async () => {
     const port = 4304;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.end(`get ${req.url}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`get ${req.url}`);
+      }),
+      port,
+    );
 
     const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const req = get(`http://localhost:${port}/via-get`, (res) => {
@@ -192,9 +269,12 @@ describe('http.request — Node ClientRequest call shapes', () => {
   it('supports the 3-arg request(url, options, cb) form with method/header overrides', async () => {
     const port = 4310;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      res.end(`${req.method} ${req.url} x=${req.headers['x-probe']}`);
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        res.end(`${req.method} ${req.url} x=${req.headers['x-probe']}`);
+      }),
+      port,
+    );
 
     const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const req = request(
@@ -218,14 +298,17 @@ describe('http.request — Node ClientRequest call shapes', () => {
     const port = 4311;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
     const bodies: string[] = [];
-    createServer((req, res) => {
-      const chunks: string[] = [];
-      req.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
-      req.on('end', () => {
-        bodies.push(chunks.join(''));
-        res.end('ok');
-      });
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        const chunks: string[] = [];
+        req.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
+        req.on('end', () => {
+          bodies.push(chunks.join(''));
+          res.end('ok');
+        });
+      }),
+      port,
+    );
 
     let finishCalled = false;
     const response = await new Promise<{ statusCode: number }>((resolve, reject) => {
@@ -249,10 +332,13 @@ describe('http.request — Node ClientRequest call shapes', () => {
     const port = 4312;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
     let hits = 0;
-    createServer((_req, res) => {
-      hits += 1;
-      res.end('once');
-    }).listen(port);
+    await listenOn(
+      createServer((_req, res) => {
+        hits += 1;
+        res.end('once');
+      }),
+      port,
+    );
 
     const statusCode = await new Promise<number>((resolve, reject) => {
       const req = request({ hostname: 'localhost', port, method: 'POST', path: '/' }, (res) => {
@@ -274,9 +360,12 @@ describe('http.request — Node ClientRequest call shapes', () => {
   it('emits ERR_STREAM_WRITE_AFTER_END for write()/end(chunk) after end', async () => {
     const port = 4313;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((_req, res) => {
-      res.end('ok');
-    }).listen(port);
+    await listenOn(
+      createServer((_req, res) => {
+        res.end('ok');
+      }),
+      port,
+    );
 
     const errors: Array<Error & { code?: string }> = [];
     await new Promise<void>((resolve) => {
@@ -301,10 +390,13 @@ describe('http.request — Node ClientRequest call shapes', () => {
     const port = 4314;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
     const observed: string[] = [];
-    createServer((req, res) => {
-      req.on('data', (chunk) => observed.push(decoder.decode(chunk as Uint8Array)));
-      req.on('end', () => res.end(observed.join('|')));
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        req.on('data', (chunk) => observed.push(decoder.decode(chunk as Uint8Array)));
+        req.on('end', () => res.end(observed.join('|')));
+      }),
+      port,
+    );
 
     const response = new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const req = request(
@@ -332,10 +424,13 @@ describe('http.request — Node ClientRequest call shapes', () => {
   it('returns false while the live request body stream is full and emits drain after pull', async () => {
     const port = 4315;
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
-    createServer((req, res) => {
-      req.on('data', () => {});
-      req.on('end', () => res.end('ok'));
-    }).listen(port);
+    await listenOn(
+      createServer((req, res) => {
+        req.on('data', () => {});
+        req.on('end', () => res.end('ok'));
+      }),
+      port,
+    );
 
     const drains: string[] = [];
     await new Promise<void>((resolve, reject) => {

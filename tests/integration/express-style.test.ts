@@ -1,4 +1,4 @@
-import { http, dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
+import { http, dispatchToPort, listPorts, releasePort, unregisterPort } from '@riftydev/net';
 /**
  * Express-style integration smoke. Builds a minimal Express-shaped router
  * (without taking on the actual express package) on top of node:http.
@@ -8,7 +8,10 @@ import { http, dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(() => {
-  for (const p of listPorts()) unregisterPort(p);
+  for (const p of listPorts()) {
+    releasePort(p);
+    unregisterPort(p);
+  }
 });
 
 type Handler = (
@@ -19,7 +22,7 @@ type Handler = (
 function makeApp(): {
   get(path: string, h: Handler): void;
   post(path: string, h: Handler): void;
-  listen(port: number): unknown;
+  listen(port: number, cb?: () => void): unknown;
 } {
   const routes: Record<string, Handler> = {};
   const server = http.createServer(async (req, res) => {
@@ -62,17 +65,21 @@ function makeApp(): {
     post(path, h) {
       routes[`POST ${path}`] = h;
     },
-    listen(port) {
-      return server.listen(port);
+    listen(port, cb) {
+      return server.listen(port, cb);
     },
   };
+}
+
+function listenApp(app: ReturnType<typeof makeApp>, port: number): Promise<void> {
+  return new Promise((resolve) => app.listen(port, () => resolve()));
 }
 
 describe('integration — Express-style on rifty', () => {
   it('GET / returns hello world', async () => {
     const app = makeApp();
     app.get('/', (_req, res) => res.send('Hello from Express'));
-    app.listen(3010);
+    await listenApp(app, 3010);
     const r = await dispatchToPort(3010, new Request('http://x/'));
     expect(r.status).toBe(200);
     expect(await r.text()).toBe('Hello from Express');
@@ -81,7 +88,7 @@ describe('integration — Express-style on rifty', () => {
   it('POST /echo with JSON body parses and returns', async () => {
     const app = makeApp();
     app.post('/echo', (req, res) => res.json({ got: req.body }));
-    app.listen(3011);
+    await listenApp(app, 3011);
     const r = await dispatchToPort(
       3011,
       new Request('http://x/echo', {

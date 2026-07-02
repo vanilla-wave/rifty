@@ -47,6 +47,9 @@ afterEach(() => {
 const listenZero = (s: ReturnType<typeof createServer>): Promise<void> =>
   new Promise<void>((resolve) => s.listen(0, () => resolve()));
 
+const listenOn = (s: ReturnType<typeof createServer>, port: number): Promise<void> =>
+  new Promise<void>((resolve) => s.listen({ port }, () => resolve()));
+
 describe('http module static surface (backlog net/http-server-introspection)', () => {
   it('exposes http.METHODS as a sorted array including the common verbs', () => {
     expect(Array.isArray(httpDefault.METHODS)).toBe(true);
@@ -117,12 +120,13 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.on('listening', () => {
       listened = true;
     });
-    s.listen({ port: 4097 }, () => {});
-    // `listening` + the callback fire on a queued microtask; await past it.
-    await Promise.resolve();
-    await Promise.resolve();
+    // The port registers synchronously (intra-realm fast-path is unchanged); the
+    // callback/`'listening'` are gated on the cross-realm bind-claim (ADR-0186),
+    // so await the callback rather than a fixed microtask count.
+    await new Promise<void>((resolve) => s.listen({ port: 4097 }, () => resolve()));
     expect(listPorts()).toContain(4097);
     expect(listened).toBe(true);
+    s.close();
   });
 
   it('listen(port) bare-number form is unchanged', async () => {
@@ -131,17 +135,17 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.on('listening', () => {
       listened = true;
     });
-    s.listen(4098, () => {});
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => s.listen(4098, () => resolve()));
     expect(listPorts()).toContain(4098);
     expect(listened).toBe(true);
+    s.close();
   });
 
-  it('address() reflects the numeric port from the options form', () => {
+  it('address() reflects the numeric port from the options form after listening', async () => {
     const s = createServer();
-    s.listen({ port: 4099 });
+    await new Promise<void>((resolve) => s.listen({ port: 4099 }, () => resolve()));
     expect(s.address()).toEqual({ port: 4099 });
+    s.close();
   });
 
   // ADR-0157 review C3: a second listen on a bound port emits an async `'error'`
@@ -149,9 +153,7 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
   // `'listening'` never fires) instead of silently overwriting the registry.
   it('second listen on a bound port emits an EADDRINUSE error, not a silent overwrite', async () => {
     const first = createServer();
-    first.listen({ port: 4110 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => first.listen({ port: 4110 }, () => resolve()));
 
     const second = createServer();
     let secondListened = false;
@@ -190,14 +192,13 @@ describe('createServer — options plus request listener', () => {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('ok');
     });
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}/`));
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toBe('text/plain');
     expect(await resp.text()).toBe('ok');
+    s.close();
   });
 
   it('throws NotImplementedError for non-empty ServerOptions instead of silently ignoring them', () => {
@@ -231,14 +232,13 @@ describe('HttpServer — no-handler createServer + on(request) buffered (P3 firs
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ version: 'x' }));
     });
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}/version`));
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toBe('application/json');
     expect(await resp.text()).toBe(JSON.stringify({ version: 'x' }));
+    s.close();
   });
 });
 
@@ -259,9 +259,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       serverBufferedAmount = (socket as unknown as { bufferedAmount: number }).bufferedAmount;
       socket.on('message', (data) => socket.send(`echo:${String(data)}`));
     });
-    httpServer.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(httpServer, port);
 
     const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`, 'probe');
     const seen: string[] = [];
@@ -293,9 +291,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     wss.on('connection', (socket) => {
       socket.terminate();
     });
-    httpServer.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(httpServer, port);
 
     const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`);
     const closeEvent = await new Promise<CloseEvent>((resolve, reject) => {
@@ -329,9 +325,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     wss.on('connection', (socket) => {
       socket.send('ok');
     });
-    httpServer.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(httpServer, port);
 
     const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`, ['a', 'b']);
     const seen: string[] = [];
@@ -371,9 +365,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
         ].join('\r\n'),
       );
     });
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const ws = new BridgedWebSocket(`wss://localhost:${port}/secure`);
     await new Promise<void>((resolve, reject) => {
@@ -431,9 +423,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       });
     });
 
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const ws = new BridgedWebSocket(`ws://localhost:${port}/socket?room=1`, 'chat');
     const seen: string[] = [];
@@ -481,9 +471,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
         }
       });
     });
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const a = new BridgedWebSocket(`ws://localhost:${port}/a`);
     const b = new BridgedWebSocket(`ws://localhost:${port}/b`);
@@ -529,9 +517,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       );
       socket.write(encodeServerFrame(0x1, Buffer.from('masked'), { masked: true }));
     });
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const ws = new BridgedWebSocket(`ws://localhost:${port}/socket`);
     const closeEvent = await new Promise<CloseEvent>((resolve) =>
@@ -550,9 +536,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     const upgradeArgs: unknown[][] = [];
     s.on('request', (...args: unknown[]) => requestArgs.push(args));
     s.on('upgrade', (...args: unknown[]) => upgradeArgs.push(args));
-    s.listen({ port });
-    await Promise.resolve();
-    await Promise.resolve();
+    await listenOn(s, port);
 
     const response = await dispatchToPort(
       port,

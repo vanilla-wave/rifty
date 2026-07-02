@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 Refine the given piece of value (epic, item, or raw idea) to `ready`.
 
+**Target = the `draft` doc itself.** A `ready` epic with `draft` children is the designed shape, not a defect — refine the draft child (it leans on the epic's scenario), never re-refine the `ready` epic. The epic is the target only when its own doc is `draft`, or its shape is wrong (overlap, bad split).
+
 ## Lead with the user scenario
 Write the concrete developer scenario first: the **real npm package / Node program** the user runs, the exact call, what they observe — re-derived from the user's POV, not inherited from the item's (often mechanism-first) framing. Can't name real software it unblocks? Not user value — off-mission or `process-meta` test/tooling debt: say so and stop. The scenario is the spine: every question sharpens one branch of it.
 

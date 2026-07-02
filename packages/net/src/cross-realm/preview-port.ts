@@ -53,12 +53,14 @@ export const PREVIEW_PORT_FRAME_VERSION = '2';
 const MAX_CHUNK_BYTES = 64 * 1024;
 const DEFAULT_STREAM_DRAIN_TIMEOUT_MS = 30_000;
 const STREAM_DRAIN_TIMEOUT = Symbol('preview-port-stream-drain-timeout');
+type PreviewRequestBody = Uint8Array | readonly Uint8Array[] | null;
 
 export interface PreviewPortScopeOptions {
   /**
    * Optional run-scoped discriminator. A page bridge only talks to worker
    * responders carrying the same scope, preventing stale same-port dev-server
-   * workers from racing replies on the shared BroadcastChannel.
+   * workers from racing replies on the shared BroadcastChannel. Live loopback
+   * ignores this; bind-claim owns port uniqueness.
    */
   readonly scope?: string;
 }
@@ -85,7 +87,7 @@ export function previewPortChannelUrl(port: number): string {
  * `BroadcastChannel` structured-clones and `Headers` isn't cloneable
  * everywhere.
  */
-type PreviewPortFrame =
+export type PreviewPortFrame =
   | {
       readonly type: 'request';
       readonly v?: string;
@@ -93,8 +95,43 @@ type PreviewPortFrame =
       readonly method: string;
       readonly url: string;
       readonly headers: Readonly<Record<string, string>>;
-      readonly body: Uint8Array | null;
+      readonly body: PreviewRequestBody;
+      // ADR-0180: a service-to-service client consumes chunks LIVE (pushes them
+      // into its IncomingMessage as they arrive). When set, the server streams
+      // all non-null bodies including SSE — no SSE refusal, no buffered-drain
+      // deadline (those protect the page consumer, which buffers until end).
+      readonly live?: boolean;
+      // Run-scoped discriminator (origin/main): a page bridge only talks to
+      // worker responders carrying the same scope — stale same-port dev-server
+      // workers can't race replies on the shared channel.
       readonly scope?: string;
+    }
+  | {
+      // ADR-0180: ownership probe. A realm receiving a `request` for a port it
+      // OWNS emits this IMMEDIATELY (before running the handler), so the client
+      // separates "no realm owns the port" (→ ECONNREFUSED) from "slow handler".
+      readonly type: 'accept';
+      readonly v: string;
+      readonly requestId: string;
+    }
+  | {
+      // ADR-0186: cross-realm bind-claim. A realm broadcasts this at `listen(port)`
+      // before registering; an existing owner replies `claim-deny`, a concurrent
+      // claimant tie-breaks by `id` (lower wins). Additive (ADR-0031): a pre-0186
+      // peer never sends/answers it, so it just never participates. `id` is a
+      // per-claim, lexicographically-orderable unique string.
+      readonly type: 'claim';
+      readonly v: string;
+      readonly port: number;
+      readonly id: string;
+    }
+  | {
+      // ADR-0186: the owner's (or a winning concurrent claimant's) refusal of a
+      // `claim`, echoing the loser's `id` so only that claimant backs off.
+      readonly type: 'claim-deny';
+      readonly v: string;
+      readonly port: number;
+      readonly id: string;
     }
   | {
       readonly type: 'reply';
@@ -162,6 +199,10 @@ function nextRequestId(): string {
   return `r${++counter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function plainResponse(text: string, status: number): Response {
+  return new Response(text, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
 /**
  * Worker side. Open the bridge channel and serve every `request` frame through
  * `dispatch`. Per ADR-0048 the reply mode is chosen PER REQUEST from the
@@ -185,19 +226,32 @@ export function serveCrossRealmPreview(
   const onMessage = async (event: MessageEvent): Promise<void> => {
     const frame = event.data as PreviewPortFrame;
     if (frame.type !== 'request') return;
-    if ((opts.scope !== undefined || frame.scope !== undefined) && frame.scope !== opts.scope)
+    const live = frame.live === true;
+    if (
+      !live &&
+      (opts.scope !== undefined || frame.scope !== undefined) &&
+      frame.scope !== opts.scope
+    )
       return;
     const requestId = frame.requestId;
     const wantsStream = frame.v === PREVIEW_PORT_FRAME_VERSION;
+
+    // ADR-0180 ownership signal: emitted BEFORE dispatch so a slow handler is
+    // still recognised as the port owner at once (separates no-listener from
+    // slow-app on the client). Harmlessly ignored by the page preview consumer.
+    channel.postMessage({
+      type: 'accept',
+      v: PREVIEW_PORT_FRAME_VERSION,
+      requestId,
+    } satisfies PreviewPortFrame);
 
     const headers = Object.fromEntries(
       Object.entries(frame.headers).filter(([key]) => key !== 'accept-encoding'),
     );
     const requestInit: RequestInit = { method: frame.method, headers };
     if (frame.body !== null && frame.method !== 'GET' && frame.method !== 'HEAD') {
-      const copy = new ArrayBuffer(frame.body.byteLength);
-      new Uint8Array(copy).set(frame.body);
-      requestInit.body = copy;
+      requestInit.body = bodyStreamFromChunks(frame.body);
+      (requestInit as RequestInit & { duplex?: 'half' }).duplex = 'half';
     }
 
     let response: Response;
@@ -220,7 +274,11 @@ export function serveCrossRealmPreview(
     // unending media type is refused immediately; every other body is bounded by
     // `streamDrainTimeoutMs` so a chunked log tail / NDJSON feed fails loud
     // instead of keeping the page accumulator alive forever.
-    if (response.body !== null && isEventStream(response.headers)) {
+    // A buffering consumer (the page preview) would accumulate an unending SSE
+    // body until `end` that never comes — refuse it loud. A `live` consumer
+    // (ADR-0180 service-to-service) reads chunks as they arrive, so SSE streams
+    // fine and is NOT refused.
+    if (response.body !== null && isEventStream(response.headers) && !live) {
       const ceiling = new NotImplementedError(
         'net.preview.cross-realm-sse-drain',
         'text/event-stream needs true end-to-end streaming (M12, ADR-0017); the cross-realm preview bridge buffers until end',
@@ -276,11 +334,17 @@ export function serveCrossRealmPreview(
     } satisfies PreviewPortFrame);
 
     const reader = response.body.getReader();
-    const deadline = createDrainDeadline(streamDrainTimeoutMs);
+    // Live (service-to-service) consumers read chunks as they arrive, so there
+    // is no buffered-until-end accumulator to bound — skip the drain deadline so
+    // a long-lived SSE/NDJSON feed streams indefinitely (the client's own
+    // no-progress timer reaps a dead peer).
+    const deadline = live ? null : createDrainDeadline(streamDrainTimeoutMs);
     let seq = 0;
     try {
       for (;;) {
-        const read = await Promise.race([reader.read(), deadline.promise]);
+        const read = deadline
+          ? await Promise.race([reader.read(), deadline.promise])
+          : await reader.read();
         if (read === STREAM_DRAIN_TIMEOUT) {
           const ceiling = unboundedBodyError(streamDrainTimeoutMs);
           await reader.cancel(ceiling).catch(() => {});
@@ -317,7 +381,7 @@ export function serveCrossRealmPreview(
         message: err instanceof Error ? err.message : String(err),
       } satisfies PreviewPortFrame);
     } finally {
-      deadline.clear();
+      deadline?.clear();
       reader.releaseLock();
     }
   };
@@ -411,7 +475,7 @@ export interface PreviewDispatchStruct {
   readonly url: string;
   readonly method: string;
   readonly headers: Readonly<Record<string, string>>;
-  readonly body: Uint8Array | null;
+  readonly body: PreviewRequestBody;
 }
 
 export interface CrossRealmPortHandler extends PortHandler {
@@ -473,7 +537,9 @@ export function bridgeCrossRealmPreview(
 
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as PreviewPortFrame;
-    if (frame.type === 'request') return; // not ours
+    // `request` is inbound to the worker; `claim`/`claim-deny` are the bind-claim
+    // protocol (ADR-0186) on the same channel — none is a reply this bridge awaits.
+    if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
     const waiter = pending.get(frame.requestId);
     if (!waiter) return; // unknown/late frame, or another bridge instance's
 
@@ -575,7 +641,7 @@ export function bridgeCrossRealmPreview(
     method: string,
     url: string,
     headers: Readonly<Record<string, string>>,
-    bodyBytes: Uint8Array | null,
+    bodyBytes: PreviewRequestBody,
   ): Promise<Response> => {
     const requestId = nextRequestId();
     const frame: PreviewPortFrame = {
@@ -604,7 +670,7 @@ export function bridgeCrossRealmPreview(
     const bodyBytes =
       request.method === 'GET' || request.method === 'HEAD'
         ? null
-        : new Uint8Array(await request.arrayBuffer());
+        : [new Uint8Array(await request.arrayBuffer())];
     return post(request.method, request.url, headersToObject(request.headers), bodyBytes);
   }) as CrossRealmPortHandler;
 
@@ -630,4 +696,202 @@ export function bridgeCrossRealmPreview(
   };
 
   return handler;
+}
+
+/**
+ * CLIENT side of cross-realm `http.request`/`get` loopback (ADR-0180). Called by
+ * `routeClientRequest`'s `{kind:'refused'}` branch (a loopback port with no
+ * LOCAL handler) BEFORE it decides `ECONNREFUSED`. Posts a `request` frame
+ * declaring `live` consumption and resolves:
+ *
+ *  - the owning realm's `Response` — once an `accept` frame confirms a realm
+ *    owns the port and the reply lands. A streamed reply's body is a LIVE
+ *    `ReadableStream` fed from `reply-stream-*` frames AS THEY ARRIVE, so an
+ *    SSE/NDJSON service-to-service feed reaches the caller chunk-by-chunk
+ *    (the caller wraps it in `IncomingMessageFromFetch`, which pushes each
+ *    chunk to the Node `Readable`); or
+ *  - `null` when NO realm emits `accept` within `probeTimeoutMs` — the caller
+ *    then emits Node-shaped `ECONNREFUSED` (the realm-local registry IS the
+ *    whole namespace; an unowned port is a dead end).
+ *
+ * The caller MUST consult the local registry first (`{kind:'local'}`); this
+ * fires only on a local miss (ADR-0180 D4). Same-origin only (BroadcastChannel).
+ *
+ * Note (M12, ADR-0017): no cross-realm backpressure/cancel yet — if the caller
+ * cancels mid-stream the client stops listening, but the owning realm keeps
+ * draining its body until it ends.
+ */
+export function dispatchCrossRealmLoopback(
+  port: number,
+  req: PreviewDispatchStruct,
+  opts: { readonly probeTimeoutMs?: number; readonly idleTimeoutMs?: number } = {},
+): Promise<Response | null> {
+  const probeTimeoutMs = opts.probeTimeoutMs ?? 1000;
+  const idleTimeoutMs = opts.idleTimeoutMs ?? 30_000;
+  const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
+  const requestId = nextRequestId();
+  const bodyBytes = req.method === 'GET' || req.method === 'HEAD' ? null : req.body;
+
+  return new Promise<Response | null>((resolve) => {
+    let settled = false;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let nextSeq = 0;
+    // One timer across two phases: the bounded ownership probe (no accept →
+    // refuse) and, once accepted, the no-progress idle timer (re-armed per frame).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const teardown = (): void => {
+      if (timer) clearTimeout(timer);
+      channel.removeEventListener('message', onMessage as unknown as EventListener);
+      channel.close();
+    };
+    const settleWith = (value: Response | null): void => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    // No-progress timer (ADR-0048 D4): re-armed on accept + every stream frame,
+    // so a live stream never trips it, but a peer that dies after accepting is
+    // reaped. Mid-stream death errors the open body; a stall before any reply
+    // surfaces a 502 (owner accepted but produced nothing).
+    const armIdle = (): void => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (streamController) {
+          streamController.error(new Error('cross-realm loopback stream stalled'));
+          streamController = null;
+        } else if (!settled) {
+          settleWith(plainResponse('cross-realm loopback accepted but no reply', 502));
+        }
+        teardown();
+      }, idleTimeoutMs);
+    };
+
+    const onMessage = (event: MessageEvent): void => {
+      const frame = event.data as PreviewPortFrame;
+      // `request` is the outbound probe; `claim`/`claim-deny` belong to the
+      // bind-claim protocol (ADR-0186) on the same channel — neither is ours.
+      if (frame.type === 'request' || frame.type === 'claim' || frame.type === 'claim-deny') return;
+      if (frame.requestId !== requestId) return; // another request / bridge instance
+
+      switch (frame.type) {
+        case 'accept':
+          // Owner confirmed — switch the probe timer to the no-progress idle timer.
+          armIdle();
+          return;
+        case 'reply': {
+          const body: BodyInit | null = frame.body
+            ? (() => {
+                const copy = new ArrayBuffer(frame.body.byteLength);
+                new Uint8Array(copy).set(frame.body);
+                return copy;
+              })()
+            : null;
+          settleWith(
+            new Response(body, {
+              status: frame.status,
+              statusText: frame.statusText,
+              headers: frame.headers,
+            }),
+          );
+          teardown();
+          return;
+        }
+        case 'error':
+          if (streamController) {
+            streamController.error(new Error(frame.message));
+            streamController = null;
+          } else {
+            settleWith(plainResponse(frame.message, 502));
+          }
+          teardown();
+          return;
+        case 'reply-stream-start': {
+          if (frame.v !== PREVIEW_PORT_FRAME_VERSION) {
+            settleWith(plainResponse('cross-realm loopback frame version mismatch', 503));
+            teardown();
+            return;
+          }
+          nextSeq = 0;
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              streamController = controller;
+            },
+            cancel() {
+              // Caller cancelled — stop listening (no cross-realm cancel; M12).
+              streamController = null;
+              teardown();
+            },
+          });
+          armIdle();
+          settleWith(
+            new Response(stream, {
+              status: frame.status,
+              statusText: frame.statusText,
+              headers: frame.headers,
+            }),
+          );
+          return;
+        }
+        case 'reply-stream-chunk':
+          if (!streamController || frame.seq !== nextSeq) {
+            streamController?.error(new Error('cross-realm loopback frame loss detected'));
+            streamController = null;
+            teardown();
+            return;
+          }
+          streamController.enqueue(frame.data);
+          nextSeq++;
+          armIdle();
+          return;
+        case 'reply-stream-end':
+          if (streamController && frame.seq === nextSeq) streamController.close();
+          else streamController?.error(new Error('cross-realm loopback frame loss detected'));
+          streamController = null;
+          teardown();
+          return;
+        case 'reply-stream-error':
+          streamController?.error(new Error(frame.message));
+          streamController = null;
+          teardown();
+          return;
+      }
+    };
+
+    channel.addEventListener('message', onMessage as unknown as EventListener);
+    timer = setTimeout(() => {
+      settleWith(null);
+      teardown();
+    }, probeTimeoutMs);
+    channel.postMessage({
+      type: 'request',
+      v: PREVIEW_PORT_FRAME_VERSION,
+      requestId,
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      body: bodyBytes,
+      live: true,
+    } satisfies PreviewPortFrame);
+  });
+}
+
+function bodyChunks(body: Exclude<PreviewRequestBody, null>): readonly Uint8Array[] {
+  return body instanceof Uint8Array ? [body] : body;
+}
+
+function cloneChunk(chunk: Uint8Array): Uint8Array {
+  const copy = new Uint8Array(chunk.byteLength);
+  copy.set(chunk);
+  return copy;
+}
+
+function bodyStreamFromChunks(body: Exclude<PreviewRequestBody, null>): ReadableStream<Uint8Array> {
+  const chunks = bodyChunks(body).map(cloneChunk);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
 }

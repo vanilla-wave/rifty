@@ -16,6 +16,49 @@
 
 ### Added
 
+- **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —
+  `require('node:stream').compose(a, b)`, `Duplex.from(src)`, and
+  `readable.wrap(legacyStream)` (Node v16, owned by `@riftydev/io`) now resolve.
+
+- **`node:stream` Readable carries the async-iterator helpers** —
+  `readable.map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/
+  `some`/`every`/`find`/`iterator` (v17→v22, owned by `@riftydev/io`), so
+  `require('node:stream').Readable.from([...]).map(fn).toArray()` works (incl.
+  `{ concurrency, signal }`).
+
+- **`node:stream` exposes the Writable/Duplex WHATWG bridge** —
+  `Writable.toWeb`/`Writable.fromWeb` and `Duplex.toWeb`/`Duplex.fromWeb` (Node
+  v17, owned by `@riftydev/io`) — so `require('node:stream').Writable.toWeb(w)`
+  etc. resolve, completing the read-half bridge already shipped. `Duplex` now
+  also exposes `allowHalfOpen`.
+
+- **`execSync('node <script>')` routes its child through the node-entry module
+  loader** (ADR-0137/0143/0150), like `child_process.spawn('node', …)` already
+  does — so a `#!` shebang is STRIPPED (not a `SyntaxError`), relative
+  `import`/`require` RESOLVE against the store, and a sibling `fs.readFileSync`
+  reads it. The recursive runner (its browser-vs-Node injection seam) owns the
+  entry-kind decision: a realm that serves `fs.*` (the owner) spawns a node-entry
+  child `kind:'url'` with `RIFTY_REMOTE_FS=1` reading the owner store over the
+  P6a `fs.*` sync-RPC; a Node-hosted conformance run loader-runs the source
+  in-process. The handler stops embedding the script BYTES — it passes the path.
+  Non-UTF-8 stdout stays byte-exact (ADR-0084 #23) and a failed child's stderr is
+  now surfaced on the thrown error (Node parity). (Previously execSync's child
+  ran the raw bytes through `new AsyncFunction`, choking on a shebang, unable to
+  resolve relatives, reading an empty realm mirror.)
+
+- **`node:stream` exposes the modern statics** `isReadable`/`isWritable`/
+  `isErrored`/`isDisturbed`, `getDefaultHighWaterMark`/`setDefaultHighWaterMark`,
+  and `addAbortSignal` (re-exported from `@riftydev/io`, which owns them) — so
+  `require('node:stream').isReadable(x)` etc. resolve.
+
+- **`node:stream/web` module registered** in the builtin registry beside
+  `stream`/`stream/promises`/`stream/consumers`. Re-exports the host (Chromium)
+  WHATWG globals — Node's own implementation IS the WHATWG API — so each named
+  export (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/
+  `TextEncoderStream`/`TextDecoderStream`) is `=== globalThis.<Name>`. A
+  genuinely-absent host member is a loud `NotImplementedError('stream/web.<Name>')`
+  at access, never an `undefined`-export lie. Parity-proven (module keys +
+  identities) vs real Node.
 - **`NODE_PROCESS_IDENTITY` is now a public export** (package root + `@riftydev/runtime-js/builtins/process-identity` for a side-effect-free page import). The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is exposed so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v` and the terminal welcome banner), instead of a drifting hardcode.
 - **`node:zlib` gzip Transform subset (ADR-0178).** `createGzip()` and
   `new Gzip()` now return a real `Transform` backed by
@@ -75,6 +118,12 @@
 
 ### Fixed
 
+- **`execSync` recursive-runner seams are loud and exercised.** A host that calls
+  the browser recursive runner without configuring the node-entry Worker URL now
+  throws a directed setup error instead of falling into a silent empty-mirror
+  child, and conformance now wires the public `installRuntimeJsExecSyncHandler`
+  through `makeInProcessNodeEntryRunner()` so the Node-hosted loader-run seam is
+  covered end-to-end.
 - **`zlib.Gzip.destroy()` no longer leaks the `CompressionStream`.** Destroying
   a gzip Transform mid-stream (e.g. an HTTP client aborting a compressed
   response) now aborts the underlying `CompressionStream` writer, so the

@@ -89,6 +89,8 @@ const TOMBSTONES = new Set([
   'docs/backlog/playground/react-preset-dev-boot-gaps.md', // done → ADR-0192
   'docs/backlog/playground/react-vite-preset.md', // done 2026-07-02 → react-vite preset + tests/e2e/react-vite-preset.spec.ts
   'docs/backlog/distribution/agent-bench-harness.md', // done 2026-07-02 → ADR-0191 + tools/agent-bench
+  'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
+  'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)
 ]);
 
 const errors = [];
