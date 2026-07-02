@@ -860,6 +860,9 @@ async function bootShellOwner(opts: {
     const npmCommand = createNpmShellCommand({
       vfs,
       registry,
+      // Durable-on-exit (npm parity): one post-stamp drain so a reload right
+      // after `npm install` cannot lose the tree (owner-snapshot-restore-exec).
+      flush: flushSyncMirror,
       // Stamp the install for the CURRENT project slug (same key the dev-server
       // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
       // this tree — otherwise the arrival re-runs and replaces node_modules,

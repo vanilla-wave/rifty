@@ -73,12 +73,14 @@
   through the sync mirror (the prefetch gate stays sync by design). New seam:
   `NpmShellCommandDeps.learnedPins`.
 
-- **`npm install` returns without draining the OPFS write-through (ADR-0187).** The install
-  stamp (and the snapshot-restore stamp) no longer flush the queue around the stamp write —
-  the write-through FIFO already lands the stamp after every tree write, so "durable stamp
-  implies durable tree" holds while the command skips the ~490ms drain (the dev line starts
-  that much earlier). `NpmShellCommandDeps.flush` / `EnsureProjectDepsOptions.flush` removed;
-  reload-critical drains (dev-ready, eval boundary) unchanged.
+- **Leaner install-stamp durability (ADR-0187).** The write-through FIFO lands the stamp
+  after every tree write, so "durable stamp implies durable tree" needs no pre-stamp drain:
+  the snapshot-restore stamp is now fully non-blocking (`EnsureProjectDepsOptions.flush`
+  removed — restore is idempotent, the dev line starts ~0.5s earlier), and the visible
+  `npm install` keeps ONE post-stamp drain instead of the old flush→stamp→flush pair —
+  npm parity, an immediate reload cannot lose the install (e2e-pinned by
+  `owner-snapshot-restore-exec`). Reload-critical drains (dev-ready, eval boundary)
+  unchanged.
 - **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0195).** For the active
   from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
   overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes

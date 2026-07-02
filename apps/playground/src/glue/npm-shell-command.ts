@@ -16,11 +16,12 @@
  * into the terminal via `Shell.run`'s `onChunk` callback. Per-package lines
  * stream live through `InstallOptions.onPackage` (ADR-0134).
  *
- * After a successful install the tree is stamped (ADR-0135) so the real-vite
- * worker bootstrap can skip its redundant install. The stamp does NOT drain
- * the OPFS write-through (ADR-0187): the queue is FIFO, so the stamp — enqueued
- * after every tree write — lands durably after the tree by construction, and
- * the command returns without paying the drain.
+ * After a successful install the tree is stamped (ADR-0135) and the OPFS
+ * write-through is drained ONCE, after the stamp (ADR-0187): the queue is
+ * FIFO, so the stamp — enqueued after every tree write — lands after the tree
+ * by construction, and the single post-stamp drain makes both durable before
+ * the command returns (npm parity: an immediate reload cannot lose the
+ * install).
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -58,6 +59,12 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
+  /** Drains the VFS write-through before the command returns (npm parity: when
+   *  `npm install` exits the tree IS on disk — an immediate reload must not
+   *  lose it; e2e-pinned by owner-snapshot-restore-exec). ONE drain, after the
+   *  stamp: the FIFO write-through (ADR-0187) lands the tree before the stamp,
+   *  so a single post-stamp drain makes both durable. */
+  readonly flush?: () => Promise<void>;
   /** The owner's project slug (preset id) the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
@@ -550,11 +557,13 @@ async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<str
 }
 
 /**
- * Stamp the freshly installed tree (ADR-0135). Non-blocking (ADR-0187): the
- * stamp rides the FIFO write-through — enqueued after every tree write, so a
- * durable stamp still implies a durable tree while the command skips the
- * ~490ms drain. Best-effort — a stamp failure costs the worker's skip
- * optimization, never the install's success.
+ * Stamp the freshly installed tree (ADR-0135), then drain the write-through
+ * ONCE. The single post-stamp drain (vs the historical flush→stamp→flush pair)
+ * rides the FIFO ordering pin (ADR-0187): the stamp is enqueued after every
+ * tree write, so one drain lands stamp AND tree together — npm parity, a
+ * reload right after the command cannot lose the install. Best-effort — a
+ * stamp/drain failure costs the worker's skip optimization, never the
+ * install's success.
  */
 async function stampInstalledTree(
   deps: NpmShellCommandDeps,
@@ -563,6 +572,7 @@ async function stampInstalledTree(
 ): Promise<void> {
   try {
     await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
+    await deps.flush?.();
   } catch (err) {
     console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
   }

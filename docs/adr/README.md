@@ -144,7 +144,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0179 | Expose git status classifier from git facade |
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
-| 0187 | Install-stamp durability via write-through FIFO order (non-blocking stamp) |
+| 0187 | Install-stamp durability via write-through FIFO order (single post-stamp drain) |
 
 ### toolchain-build
 

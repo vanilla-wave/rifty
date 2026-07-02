@@ -1030,29 +1030,36 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     );
   });
 
-  it('writes the install stamp WITHOUT draining the write-through (ADR-0187 non-blocking stamp)', async () => {
+  it('drains the write-through ONCE, after the stamp — durable-on-exit npm parity', async () => {
+    // A reload right after `npm install` must not lose the tree
+    // (owner-snapshot-restore-exec e2e). ONE drain suffices: the FIFO
+    // write-through (ADR-0187) lands the tree before the stamp, so a durable
+    // stamp implies a durable tree — no pre-stamp flush.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
     const shell = new Shell({ cwd: '/proj' });
-    // Tripwire: `flush` is no longer part of NpmShellCommandDeps — durability
-    // ordering is the write-through FIFO (ADR-0187, pinned in opfs-sync.test.ts).
-    // If a future change re-awaits a drain around the stamp, this never-resolving
-    // flush hangs the command and the test times out RED.
-    const hangingFlush = { flush: () => new Promise<void>(() => {}) };
+    const events: string[] = [];
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
         registry: fakeRegistry,
         install,
-        ...(hangingFlush as Partial<Parameters<typeof createNpmShellCommand>[0]>),
+        flush: async () => {
+          events.push(
+            (await vfs.exists('/proj/node_modules/.rifty-install-stamp.json'))
+              ? 'flush-after-stamp'
+              : 'flush-before-stamp',
+          );
+        },
       }),
     );
 
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
+    expect(events).toEqual(['flush-after-stamp']);
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
