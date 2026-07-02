@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **TerminalPanel/BottomPanel source-greps converted to behavioral tests (epic
+  playground-testable-core).** Overlay-absence pins now assert on
+  `renderToString(TerminalPanel)` output; caret/typography constants extracted
+  to `components/terminal-appearance.ts` (spread into the `RiftyTerminal`
+  options) and pinned by value. Source-asserts: TerminalPanel.test 6 → 1,
+  BottomPanel.test 2 → 1 — each residual is a recorded client-only pin (xterm
+  ctor options live in `onMount`; `<For>` keyed reconciliation is unobservable
+  under the solid server runtime).
+
 - **Preset boot extracted to a headless orchestration core (ADR-0197, epic
   playground-testable-core, slice 3).** The preset-transition veil + one
   serialization queue, the TS-request gate over an in-flight transition, the

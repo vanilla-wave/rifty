@@ -23,6 +23,7 @@ import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { Icon } from './icons.tsx';
+import { TERMINAL_APPEARANCE } from './terminal-appearance.ts';
 import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */
@@ -348,9 +349,7 @@ export function TerminalPanel(props: {
       onBusyInput: showBusyNotice,
       theme: preferredTerminalTheme(),
       fontFamily: MONO_FONT_STACK,
-      fontSize: 13,
-      lineHeight: 18 / 13,
-      cursorStyle: 'bar',
+      ...TERMINAL_APPEARANCE,
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
       webgl: navigator.webdriver ? false : undefined,
       onSignal: props.onSignal ? () => props.onSignal?.() : undefined,
