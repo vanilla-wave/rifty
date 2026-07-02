@@ -56,6 +56,11 @@ function makeHarness(): Harness {
     fileWritten: (path, content) => {
       writes.push([path, content]);
     },
+    // fs tools never touch preview/ts-LS; honest node-env absences, not stubs.
+    preview: { frame: () => null, ports: () => [] },
+    tsDiagnostics: () =>
+      Promise.reject(new Error('ts language service is not available in this test harness')),
+    agentBench: null,
   };
   const tools = new Map(buildFsTools(ctx).map((d) => [d.tool.name, d.tool]));
   return { ctx, tools, writes, republish };

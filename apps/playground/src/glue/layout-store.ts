@@ -8,6 +8,13 @@ import { clampSize } from './splitter-size.ts';
 
 export type SidebarView = 'explorer' | 'presets' | 'scm';
 
+/**
+ * AI mode view (ADR-0190): 'chat' (+chat) = full IDE + chat panel; 'vibe' =
+ * chat + preview only (editor/terminal/sidebar hidden). Layout-only
+ * difference — one runtime path (everything stays mounted, CSS hides chrome).
+ */
+export type AiView = 'chat' | 'vibe';
+
 export interface LayoutState {
   /** Sidebar width, px. */
   sidebarW: number;
@@ -21,6 +28,8 @@ export interface LayoutState {
   consoleCollapsed: boolean;
   /** AI mode panel visibility (persists like the other panel state). */
   aiChatOpen: boolean;
+  /** Which AI layout is active when the panel is open. */
+  aiView: AiView;
   view: SidebarView;
 }
 
@@ -45,6 +54,7 @@ export const LAYOUT_DEFAULTS: LayoutState = {
   sidebarCollapsed: false,
   consoleCollapsed: false,
   aiChatOpen: false,
+  aiView: 'chat',
   // Explorer is the boot default — the file manager is the headline feature.
   // TODO(backlog: playground/sidebar-boot-default-view)
   view: 'explorer',
@@ -71,6 +81,10 @@ export function clampLayout(state: LayoutState): LayoutState {
 
 function isView(v: unknown): v is SidebarView {
   return v === 'explorer' || v === 'presets' || v === 'scm';
+}
+
+function isAiView(v: unknown): v is AiView {
+  return v === 'chat' || v === 'vibe';
 }
 
 /**
@@ -104,6 +118,7 @@ export function loadLayout(storage: StorageLike | undefined): LayoutState {
           : LAYOUT_DEFAULTS.consoleCollapsed,
       aiChatOpen:
         typeof parsed.aiChatOpen === 'boolean' ? parsed.aiChatOpen : LAYOUT_DEFAULTS.aiChatOpen,
+      aiView: isAiView(parsed.aiView) ? parsed.aiView : LAYOUT_DEFAULTS.aiView,
       view: isView(parsed.view) ? parsed.view : LAYOUT_DEFAULTS.view,
     });
   } catch {

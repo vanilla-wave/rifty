@@ -8,8 +8,8 @@
 // typebox comes via Pi's re-export (ADR-0190 decision) — never @sinclair/typebox.
 import { Type } from '@earendil-works/pi-ai';
 import { looksBinary } from '../../glue/fs-ops.ts';
+import { resolveWorkspacePath, workspaceRelative } from '../../glue/workspace-path.ts';
 import type { AiAppContext } from '../app-context.ts';
-import { resolveWorkspacePath, workspaceRelative } from '../paths.ts';
 import { planUnifiedPatch } from './apply-patch.ts';
 import { type DefinedAiTool, cappedResult, defineAiTool } from './tool-def.ts';
 

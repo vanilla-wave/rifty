@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { bootProjectFiles } from './helpers/playground.ts';
+import { pickStarter } from './helpers/playground.ts';
 
 /**
  * AI mode PASS 1 (docs/backlog/distribution/ai-mode-playground.md, ADR-0190),
@@ -79,7 +79,14 @@ test('AI mode: mocked endpoint drives write_file + shell; trace exports without 
     if (request.url().includes('/src/ai/')) aiModuleRequests.push(request.url());
   });
 
-  await bootProjectFiles(page);
+  await page.goto('/');
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+    timeout: 20_000,
+  });
+  // The project-first chooser auto-opens ~1s after a cold boot — out-wait it
+  // so pickStarter never races the opening animation (react-vite spec pattern).
+  await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 15_000 });
+  await pickStarter(page, 'project-files');
   expect(aiModuleRequests, 'ai module must not load before AI mode opens').toEqual([]);
 
   // Scripted OpenAI-compatible SSE endpoint (same-origin via relative baseUrl).
@@ -103,6 +110,9 @@ test('AI mode: mocked endpoint drives write_file + shell; trace exports without 
       body,
     });
   });
+
+  // Without ?agentBench=1 the bench namespace must be absent entirely (ADR-0191).
+  expect(await page.evaluate(() => '__riftyAgentBench' in globalThis)).toBe(false);
 
   // Open AI mode (lazy import fires now) and configure the mocked endpoint.
   await page.click('[data-testid="ai-toggle"]');
@@ -149,6 +159,21 @@ test('AI mode: mocked endpoint drives write_file + shell; trace exports without 
   await expect(
     page.locator('.rf-row[role="treeitem"][data-kind="file"]', { hasText: 'hello.txt' }).first(),
   ).toBeVisible({ timeout: 30_000 });
+
+  // Vibe view (ADR-0190): layout-only switch — chat + preview stay, IDE
+  // chrome hides, and the SAME session/panel survives the toggle.
+  await page.click('[data-testid="ai-view-vibe"]');
+  await expect(page.locator('.rf-shell')).toHaveAttribute('data-ai-view', 'vibe');
+  await expect(page.locator('.rf-editorhost')).toBeHidden();
+  await expect(page.locator('.rf-console')).toBeHidden();
+  await expect(page.locator('.rf-sidebar')).toBeHidden();
+  await expect(page.locator('[data-testid="ai-panel"]')).toBeVisible();
+  await expect(page.locator('[data-testid="preview"]')).toBeVisible();
+  // The transcript (same session) is still there.
+  await expect(writeCard).toBeVisible();
+  await page.click('[data-testid="ai-view-chat"]');
+  await expect(page.locator('.rf-shell')).toHaveAttribute('data-ai-view', 'chat');
+  await expect(page.locator('.rf-editorhost')).toBeVisible();
 
   // Export session → parse the downloaded trace JSON.
   const downloadPromise = page.waitForEvent('download');

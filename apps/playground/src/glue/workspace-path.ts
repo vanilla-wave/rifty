@@ -1,7 +1,8 @@
 /**
- * Workspace-scoped path resolution for AI tools. Every tool path — absolute
- * or workspace-relative — must land inside the active workspace root;
- * escaping it is an error (the agent operates on the open project only).
+ * Workspace-scoped path resolution (glue, Pi-free): AI tools and the
+ * agent-bench seed hook resolve user paths through this guard — absolute or
+ * workspace-relative, always inside the active workspace root; escaping it
+ * is an error.
  */
 
 export function resolveWorkspacePath(root: string, input: string): string {

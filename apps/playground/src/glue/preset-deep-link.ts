@@ -21,3 +21,10 @@ export function parsePresetDeepLink(search: string): PresetDeepLink {
 function isTruthy(value: string | null): boolean {
   return value === '1' || value === 'true';
 }
+
+// agent-bench hook: external validation harness only. Not public API.
+// `?agentBench=1` (ADR-0191) gates the `globalThis.__riftyAgentBench`
+// observation namespace; without the flag the namespace is absent entirely.
+export function parseAgentBenchFlag(search: string): boolean {
+  return isTruthy(new URLSearchParams(search).get('agentBench'));
+}

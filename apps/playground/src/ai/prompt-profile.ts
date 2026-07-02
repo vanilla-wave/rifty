@@ -32,7 +32,8 @@ function riftyAdapterBlock(): string {
 - File tools (read_file, write_file, edit_file, apply_patch, list_files, grep, glob) operate on the open workspace only; paths resolve against the workspace root and may not escape it. node_modules is not listed or searchable through these tools — use the shell for anything under node_modules.
 - edit_file replaces one EXACT, UNIQUE occurrence of the old string — no fuzzy matching. apply_patch takes a standard unified diff and rejects on any hunk mismatch.
 - Tool results are capped at 16 KiB with an explicit [truncated N bytes] marker; narrow your reads (offset/limit, tighter grep) instead of re-running the same call.
-- A dev server may already be running and hot-reloads on file writes; do not start a second one. After changing user-visible behavior, verify the result (run the code, or check the dev server output) before declaring it done.`;
+- The preview_* tools operate on the live preview the user sees: preview_fetch GETs a path from the running dev server; preview_query/preview_click/preview_type act on the preview DOM as it is RIGHT NOW (no implicit waiting). diagnostics returns TypeScript errors for a file, same as the Problems panel.
+- A dev server may already be running and hot-reloads on file writes; do not start a second one. After changing user-visible behavior, verify the result in the preview (preview_fetch/preview_query) or by running the code before declaring it done.`;
 }
 
 /**

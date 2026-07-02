@@ -8,6 +8,7 @@
  */
 import { createSignal } from 'solid-js';
 import {
+  type AiView,
   LAYOUT_BOUNDS,
   LAYOUT_DEFAULTS,
   type LayoutState,
@@ -33,6 +34,8 @@ export interface LayoutController {
   sidebarCollapsed(): boolean;
   consoleCollapsed(): boolean;
   aiChatOpen(): boolean;
+  aiView(): AiView;
+  setAiView(v: AiView): void;
   view(): SidebarView;
   setSidebarW(px: number): void;
   setConsoleH(px: number): void;
@@ -64,6 +67,7 @@ export function useLayout(): LayoutController {
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(initial.sidebarCollapsed);
   const [consoleCollapsed, setConsoleCollapsed] = createSignal(initial.consoleCollapsed);
   const [aiChatOpen, setAiChatOpen] = createSignal(initial.aiChatOpen);
+  const [aiView, setAiView] = createSignal<AiView>(initial.aiView);
   const [view, setView] = createSignal<SidebarView>(initial.view);
 
   const snapshot = (): LayoutState => ({
@@ -74,6 +78,7 @@ export function useLayout(): LayoutController {
     sidebarCollapsed: sidebarCollapsed(),
     consoleCollapsed: consoleCollapsed(),
     aiChatOpen: aiChatOpen(),
+    aiView: aiView(),
     view: view(),
   });
   const persist = (): void => saveLayout(storage, snapshot());
@@ -86,6 +91,11 @@ export function useLayout(): LayoutController {
     sidebarCollapsed,
     consoleCollapsed,
     aiChatOpen,
+    aiView,
+    setAiView(v) {
+      setAiView(v);
+      persist();
+    },
     view,
     setSidebarW,
     setConsoleH,

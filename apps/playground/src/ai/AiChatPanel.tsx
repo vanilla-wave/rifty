@@ -8,6 +8,7 @@
 import type { AgentEvent } from '@earendil-works/pi-agent-core';
 import { For, Show, createSignal, onCleanup } from 'solid-js';
 import { Icon } from '../components/icons.tsx';
+import type { AiView } from '../glue/layout-store.ts';
 import type { AiAppContext } from './app-context.ts';
 import { PROMPT_PROFILE_ID } from './prompt-profile.ts';
 import { type AiRunStatus, type AiSession, createAiSession } from './session.ts';
@@ -59,7 +60,13 @@ function safeLocalStorage(): StorageLike | undefined {
   }
 }
 
-export function AiChatPanel(props: { ctx: AiAppContext; onClose(): void }) {
+export function AiChatPanel(props: {
+  ctx: AiAppContext;
+  /** Active AI layout: '+chat' (full IDE) or 'vibe' (chat + preview only). */
+  view: AiView;
+  onViewChange(view: AiView): void;
+  onClose(): void;
+}) {
   const storage = safeLocalStorage();
   const [settings, setSettings] = createSignal<AiSettings>(loadAiSettings(storage));
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -175,9 +182,22 @@ export function AiChatPanel(props: { ctx: AiAppContext; onClose(): void }) {
     }
   }
 
-  function bindSession(next: AiSession): void {
+  function bindSession(next: AiSession, sessionSettings: AiSettings): void {
     unsubscribe?.();
     setSession(next);
+    // agent-bench hook: external validation harness only. Not public API.
+    // Metadata reflects the settings the SESSION was created with (key-free).
+    props.ctx.agentBench?.registerSession({
+      exportTrace: () => next.exportTrace(),
+      sessionMetadata: () => ({
+        promptProfile: PROMPT_PROFILE_ID,
+        model: sessionSettings.model,
+        limits: {
+          maxToolCalls: sessionSettings.maxToolCalls,
+          runTimeoutMs: sessionSettings.runTimeoutMs,
+        },
+      }),
+    });
     unsubscribe = next.subscribe((event) => {
       if (event.type === 'agent') {
         onAgentEvent(event.event);
@@ -198,6 +218,8 @@ export function AiChatPanel(props: { ctx: AiAppContext; onClose(): void }) {
     unsubscribe = null;
     session()?.dispose();
     setSession(null);
+    // agent-bench hook: external validation harness only. Not public API.
+    props.ctx.agentBench?.registerSession(null);
   }
   onCleanup(disposeSession);
 
@@ -206,12 +228,14 @@ export function AiChatPanel(props: { ctx: AiAppContext; onClose(): void }) {
     if (text === '' || status() === 'running') return;
     if (session() === null) {
       try {
+        const sessionSettings = settings();
         bindSession(
           createAiSession({
             ctx: props.ctx,
-            settings: settings(),
+            settings: sessionSettings,
             origin: globalThis.location?.origin ?? 'http://localhost',
           }),
+          sessionSettings,
         );
       } catch (err) {
         pushItem({ kind: 'notice', tone: 'error', text: (err as Error).message });
@@ -278,6 +302,31 @@ export function AiChatPanel(props: { ctx: AiAppContext; onClose(): void }) {
           <Icon name="zap" size={13} />
           AI agent
         </span>
+        {/* View switch (ADR-0190): layout-only — one runtime path either way. */}
+        <div class="rf-ai__viewswitch" role="tablist" aria-label="AI layout">
+          <button
+            type="button"
+            role="tab"
+            class="rf-ai__viewtab"
+            aria-selected={props.view === 'chat'}
+            data-testid="ai-view-chat"
+            title="Full IDE + chat"
+            onClick={() => props.onViewChange('chat')}
+          >
+            +chat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="rf-ai__viewtab"
+            aria-selected={props.view === 'vibe'}
+            data-testid="ai-view-vibe"
+            title="Chat + preview only"
+            onClick={() => props.onViewChange('vibe')}
+          >
+            vibe
+          </button>
+        </div>
         <span
           class="rf-ai__status"
           data-status={status()}

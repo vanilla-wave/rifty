@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveWorkspacePath, workspaceRelative } from './paths.ts';
+import { resolveWorkspacePath, workspaceRelative } from './workspace-path.ts';
 
 describe('resolveWorkspacePath', () => {
   it('resolves relative paths against the workspace root', () => {

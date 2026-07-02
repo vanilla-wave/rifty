@@ -3327,3 +3327,61 @@ body.rf-resizing iframe {
   background: rgba(240, 136, 90, 0.85);
   color: rgba(0, 0, 0, 0.85);
 }
+
+/* ====================================================================== */
+/* AI "vibe" view (ADR-0190): chat + preview ONLY — editor / terminal /    */
+/* sidebar hidden. Layout-only: everything stays mounted (one runtime      */
+/* path); display:none removes chrome from the grids.                      */
+/* ====================================================================== */
+
+.rf-shell[data-ai-view="vibe"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rf-shell[data-ai-view="vibe"] > .rf-sidebar,
+.rf-shell[data-ai-view="vibe"] > .rf-splitter {
+  display: none;
+}
+.rf-shell[data-ai-view="vibe"] .rf-main {
+  grid-template-rows: minmax(0, 1fr);
+}
+.rf-shell[data-ai-view="vibe"] .rf-main > .rf-splitter,
+.rf-shell[data-ai-view="vibe"] .rf-console {
+  display: none;
+}
+.rf-shell[data-ai-view="vibe"] .rf-editorhost,
+.rf-shell[data-ai-view="vibe"] .rf-editorarea > .rf-splitter[aria-label="Resize preview"] {
+  display: none;
+}
+/* Visible children with a preview: preview | splitter | chat. */
+.rf-shell[data-ai-view="vibe"] .rf-editorarea[data-preview="on"][data-ai="on"] {
+  grid-template-columns: minmax(0, 1fr) var(--rf-split) var(--rf-ai-w);
+}
+/* No preview (dev server stopped): chat fills the stage. */
+.rf-shell[data-ai-view="vibe"]
+  .rf-editorarea[data-preview="off"]
+  > .rf-splitter[aria-label="Resize AI chat"] {
+  display: none;
+}
+.rf-shell[data-ai-view="vibe"] .rf-editorarea[data-preview="off"][data-ai="on"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* — AI view switch (+chat | vibe) — */
+.rf-ai__viewswitch {
+  display: inline-flex;
+  border: 1px solid var(--rf-line-inner);
+  border-radius: var(--rf-r-xs);
+  overflow: hidden;
+}
+.rf-ai__viewtab {
+  border: none;
+  background: transparent;
+  color: var(--rf-text-faint);
+  font: 500 10.5px / 14px var(--rf-font-mono);
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.rf-ai__viewtab[aria-selected="true"] {
+  background: var(--rf-accent-sel);
+  color: var(--rf-accent-text-2);
+}

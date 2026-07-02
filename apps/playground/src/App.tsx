@@ -46,6 +46,8 @@ import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
+// agent-bench hook: external validation harness only. Not public API.
+import { installAgentBench } from './glue/agent-bench.ts';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
@@ -63,7 +65,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
-import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
+import { parseAgentBenchFlag, parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import { needsProjectChoiceOnBoot } from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
@@ -107,6 +109,8 @@ import {
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
 import { readHeadWorkdirDiff } from './glue/workspace-diff.ts';
+// Pure path guard (glue, Pi-free) shared with the AI tools' fs surface.
+import { resolveWorkspacePath } from './glue/workspace-path.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -1263,6 +1267,32 @@ export function App(props: AppProps) {
     return readHeadWorkdirDiff(owner.snapshotPort);
   }
 
+  // ts-LS diagnostics provider for the AI `diagnostics` tool — installed by
+  // the LS wiring effect below (same client + readiness gate the Problems
+  // panel uses), null while no editor/owner has brought the service up.
+  let aiTsDiagnostics: ((path: string) => Promise<readonly Diagnostic[]>) | null = null;
+
+  // agent-bench hook: external validation harness only. Not public API.
+  // Installed ONLY under `?agentBench=1` (ADR-0191); seed writes through the
+  // same acked owner path the explorer uses.
+  const agentBenchRegistrar = parseAgentBenchFlag(globalThis.location?.search ?? '')
+    ? installAgentBench({
+        seedFiles: async (files) => {
+          const root = activeRoot();
+          const entries = Object.entries(files).map(([rel, content]) => ({
+            path: resolveWorkspacePath(root, rel),
+            data: ownerWriteEnc.encode(content),
+            recursive: true,
+          }));
+          await ownerRpcFs.writeFiles(entries);
+          for (const [rel, content] of Object.entries(files)) {
+            notifyFileWritten(resolveWorkspacePath(root, rel), content);
+          }
+        },
+        presetId: activeStarterId,
+      })
+    : null;
+
   const aiAppContext: AiAppContext = {
     root: activeRoot,
     snapshot: snapshotFs,
@@ -1270,6 +1300,29 @@ export function App(props: AppProps) {
     runShellLine: runAgentShellLine,
     gitDiff: aiGitDiff,
     fileWritten: notifyFileWritten,
+    preview: {
+      // The REAL iframe the user sees (PreviewPanel keeps exactly one mounted).
+      frame: () =>
+        globalThis.document?.querySelector<HTMLIFrameElement>(
+          '[data-testid="preview"] iframe.rf-preview__frame',
+        ) ?? null,
+      ports: () => {
+        const ports = previewPorts().map((entry) => entry.port);
+        const devPort = devServerRunning() ? machine.realVitePort() : null;
+        if (devPort !== null && !ports.includes(devPort)) ports.push(devPort);
+        return ports;
+      },
+    },
+    tsDiagnostics: async (path) => {
+      const provider = aiTsDiagnostics;
+      if (!provider) {
+        throw new Error(
+          'TypeScript language service is not running — it starts with the workspace editor; open a project first',
+        );
+      }
+      return provider(path);
+    },
+    agentBench: agentBenchRegistrar,
   };
 
   type AiModule = typeof import('./ai/index.ts');
@@ -1408,6 +1461,37 @@ export function App(props: AppProps) {
     const providers = registerTsLanguageServiceProviders(client, api, {
       beforeRequest: waitForTsReady,
     });
+
+    // AI `diagnostics` tool provider (ADR-0190 PASS 2): the SAME client +
+    // readiness gate the Problems panel uses; a failed init rejects loudly.
+    // The service's program = tsconfig scan at init + OPEN overlays, so a file
+    // the editor doesn't have open (e.g. just written by the agent) is opened
+    // from its on-disk bytes for the query and closed after — exactly the
+    // membership mechanism the Problems panel rides on. An editor-open path is
+    // queried as-is (its live overlay must never be clobbered).
+    aiTsDiagnostics = async (path: string): Promise<readonly Diagnostic[]> => {
+      await waitForTsRequestGate();
+      const initialized = await ready;
+      if (!initialized) {
+        throw new Error(
+          'TypeScript language service is unavailable for this project — service init failed or this template does not run the ts language service',
+        );
+      }
+      const editorOpen = api.openPathsUnder(path).includes(path);
+      if (!editorOpen) {
+        const text = fatalDec.decode(snapshotFs.readFileBytesSync(path));
+        await client.open(path, text);
+      }
+      try {
+        const [syntactic, semantic] = await Promise.all([
+          client.getSyntacticDiagnostics(path),
+          client.getSemanticDiagnostics(path),
+        ]);
+        return [...syntactic, ...semantic];
+      } finally {
+        if (!editorOpen) await client.close(path);
+      }
+    };
 
     async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
@@ -1843,6 +1927,7 @@ export function App(props: AppProps) {
 
     onCleanup(() => {
       disposed = true;
+      aiTsDiagnostics = null;
       diagnosticSync.dispose();
       unsubscribe();
       providers.dispose();
@@ -3359,6 +3444,7 @@ export function App(props: AppProps) {
         <div
           class="rf-shell"
           data-sidebar={layout.sidebarCollapsed() ? 'collapsed' : 'open'}
+          data-ai-view={layout.aiChatOpen() ? layout.aiView() : 'off'}
           style={{
             '--rf-sidebar-w': `${layout.sidebarW()}px`,
             '--rf-console-h': `${layout.consoleH()}px`,
@@ -3516,7 +3602,12 @@ export function App(props: AppProps) {
                   fallback={<div class="rf-ai rf-ai--loading rf-card">Loading AI mode…</div>}
                 >
                   {(mod) => (
-                    <mod.AiChatPanel ctx={aiAppContext} onClose={() => layout.toggleAiChat()} />
+                    <mod.AiChatPanel
+                      ctx={aiAppContext}
+                      view={layout.aiView()}
+                      onViewChange={(v) => layout.setAiView(v)}
+                      onClose={() => layout.toggleAiChat()}
+                    />
                   )}
                 </Show>
               </Show>
