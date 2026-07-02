@@ -5,7 +5,7 @@ title: AI mode MVP — diagnostic quality bench for rifty as an AI coding enviro
 created: 2026-07-02
 value: measured, classified answer to "where does rifty lose coding-agent quality vs a real local environment" — plus a hands-on AI mode anyone can try
 user_story: As the rifty maintainer, I want a built-in AI mode over the playground plus an external bench running the same tasks in rifty and in a local reference environment, but today agent quality on rifty is anecdote — no agent, no realistic React preset, no harness, no measurement
-items: [distribution/ai-mode-playground, distribution/agent-bench-harness]
+items: [distribution/ai-mode-playground]
 ---
 
 ## Outcome
@@ -32,11 +32,16 @@ local-reference delta, failure class + evidence per run.
 
 ## Items
 
-- `distribution/ai-mode-playground` — the agent: chat + vibe views, Pi loop, tools, trace.
+- `distribution/ai-mode-playground` — the agent: chat + vibe views, Pi loop, tools,
+  trace. IMPLEMENTED 2026-07-02; item stays open on ONE acceptance line — manual
+  streaming check against a real OpenAI-compatible endpoint (PR-author step),
+  delete-on-done after it.
 - ~~react-vite preset~~ — the arena: DELIVERED 2026-07-02 (`react-vite` preset +
   `tests/e2e/react-vite-preset.spec.ts`; unblocked by ADR-0192 esbuild-wasm; known
   preview-model gap recorded: `service-worker/preview-entry-subpath-loss`).
-- `distribution/agent-bench-harness` — the measurement: runner, tasks, judge, report.
+- ~~agent-bench harness~~ — the measurement: DELIVERED 2026-07-02
+  (`tools/agent-bench`, ADR-0191; both lanes smoke-proven end-to-end with the
+  mock model incl. browser judging — judge evidence byte-identical across lanes).
 
 ## Decisions (grilled 2026-07-02; ratified: ADR-0190 — Pi loop + AI-outside-runtime, ADR-0191 — bench design)
 
