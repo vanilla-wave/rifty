@@ -1,4 +1,3 @@
-import { type LogEntry, porcelainXY } from '@riftydev/git';
 import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
@@ -9,7 +8,7 @@ import {
 } from '@riftydev/terminal/history';
 import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import { basename, joinPath } from '@riftydev/vfs';
+import { joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
@@ -45,7 +44,6 @@ import {
   storageModeFromBoot,
 } from './glue/degraded-storage.ts';
 import { readChildren } from './glue/file-tree.ts';
-import { looksBinary } from './glue/fs-ops.ts';
 import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';
 import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';
 import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';
@@ -73,8 +71,6 @@ import {
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
-import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts';
-import type { ScmResourceRow } from './glue/scm-status.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
@@ -95,8 +91,11 @@ import {
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
+import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
+import { createScm } from './orchestration/scm.ts';
+import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
 import {
   DEFAULT_PRESET,
@@ -356,387 +355,6 @@ export function App(props: AppProps) {
     return presetBoot.transitioning() || devServer.status() !== 'stopped';
   }
 
-  async function downloadWorkspaceArchive(): Promise<void> {
-    if (workspaceArchiveBlocked()) {
-      flashError('Stop the dev server to archive the editable workspace');
-      return;
-    }
-    const doc = globalThis.document;
-    if (!doc) {
-      flashError('Workspace archive download is unavailable here');
-      return;
-    }
-    try {
-      // Single store owner, page holds no authoritative fs: serialize the OWNER
-      // tree (the single store), not a page copy — so the archive includes
-      // shell/CLI-authored files, full content (no cap).
-      const archive = await workspaceOwner().exportArchive();
-      const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
-      const url = URL.createObjectURL(blob);
-      const a = doc.createElement('a');
-      a.href = url;
-      a.download = 'rifty-workspace.json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      flashToast('Workspace archive downloaded', 'success');
-    } catch (err) {
-      flashError(`Archive download failed: ${(err as Error).message}`);
-    }
-  }
-
-  async function importWorkspaceArchiveFile(file: File): Promise<void> {
-    try {
-      // Single store owner, page holds no authoritative fs: apply into the OWNER
-      // tree, then pull a fresh snapshot so the explorer/editor reflect it (no
-      // page store to write).
-      await workspaceOwner().importArchive(await file.text());
-      requestVfsSnapshot(workspaceOwner().snapshotPort);
-      flashToast('Workspace archive imported', 'success');
-    } catch (err) {
-      flashError(`Import failed: ${(err as Error).message}`);
-    }
-  }
-
-  function assertWorkspaceFileOwnerAlive(
-    owner: WorkspaceOwnerHandle,
-    path: string,
-    action: string,
-  ): void {
-    const current = workspaceOwner();
-    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT || !owner.isAlive()) {
-      throw new Error(`workspace owner is unavailable — cannot ${action} ${basename(path)}`);
-    }
-    if (
-      current !== owner ||
-      current.root !== owner.root ||
-      current.snapshotPort !== owner.snapshotPort
-    ) {
-      throw new Error(`workspace owner changed while ${action}ing ${basename(path)}`);
-    }
-  }
-
-  async function readWorkspaceFileBytesFromOwner(
-    owner: WorkspaceOwnerHandle,
-    path: string,
-    action: string,
-  ): Promise<Uint8Array> {
-    assertWorkspaceFileOwnerAlive(owner, path, action);
-    const bytes = await owner.readFileBytes(path);
-    assertWorkspaceFileOwnerAlive(owner, path, action);
-    return bytes;
-  }
-
-  async function readWorkspaceFileForDownload(path: string): Promise<Uint8Array> {
-    return readWorkspaceFileBytesFromOwner(workspaceOwner(), path, 'download');
-  }
-
-  async function downloadWorkspaceFile(path: string): Promise<void> {
-    try {
-      await flushPendingEditorWrites();
-      const bytes = await readWorkspaceFileForDownload(path);
-      const doc = globalThis.document;
-      if (!doc) throw new Error('file download is unavailable without a document');
-      const blobBuffer = new ArrayBuffer(bytes.byteLength);
-      new Uint8Array(blobBuffer).set(bytes);
-      const blob = new Blob([blobBuffer], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = doc.createElement('a');
-      a.href = url;
-      a.download = basename(path);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      flashToast(`${basename(path)} downloaded`, 'success');
-    } catch (err) {
-      flashError(`Download failed: ${(err as Error).message}`);
-    }
-  }
-
-  function decodeTextBlob(label: string, bytes: Uint8Array): string {
-    if (looksBinary(bytes)) throw new Error(`${label} is binary; text diff is unavailable`);
-    try {
-      return fatalDec.decode(bytes);
-    } catch {
-      throw new Error(`${label} is not valid UTF-8; text diff is unavailable`);
-    }
-  }
-
-  function compareDiffId(kind: string, left: string, right: string): string {
-    return `diff:${kind}:${encodeURIComponent(left)}:${encodeURIComponent(right)}`;
-  }
-
-  async function readGitOriginalText(input: {
-    readonly path: string;
-    readonly ref: string;
-  }): Promise<string> {
-    const owner = workspaceOwner();
-    const root = owner.root;
-    const snapshotPort = owner.snapshotPort;
-    const relative = input.path.startsWith(`${root}/`) ? input.path.slice(root.length + 1) : '';
-    if (!relative) throw new Error(`Cannot read git original outside ${root}`);
-    if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
-      throw new Error('git original read failed: workspace owner is unavailable');
-    }
-    assertWorkspaceFileOwnerAlive(owner, input.path, 'read git original');
-    const git = bridgeGitOwnerRpc(snapshotPort);
-    try {
-      const original = await git.show(`${input.ref}:${relative}`);
-      const currentOwner = workspaceOwner();
-      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
-        throw new Error(`workspace owner changed while reading ${input.ref}:${relative}`);
-      }
-      if (original.type !== 'blob') throw new Error(`${input.ref}:${relative} is not a blob`);
-      return decodeTextBlob(`${input.ref}:${relative}`, original.content);
-    } finally {
-      git.dispose();
-    }
-  }
-
-  async function openWorkingFileCompare(leftPath: string, rightPath: string): Promise<void> {
-    try {
-      await flushPendingEditorWrites();
-      const owner = workspaceOwner();
-      const [leftBytes, rightBytes] = await Promise.all([
-        readWorkspaceFileBytesFromOwner(owner, leftPath, 'compare'),
-        readWorkspaceFileBytesFromOwner(owner, rightPath, 'compare'),
-      ]);
-      editorApi?.openTextDiff({
-        id: compareDiffId('working', leftPath, rightPath),
-        path: rightPath,
-        title: `${basename(leftPath)} ↔ ${basename(rightPath)}`,
-        originalTitle: basename(leftPath),
-        modifiedTitle: basename(rightPath),
-        original: decodeTextBlob(leftPath, leftBytes),
-        modified: decodeTextBlob(rightPath, rightBytes),
-      });
-    } catch (err) {
-      flashError(`Compare failed: ${(err as Error).message}`);
-    }
-  }
-
-  async function openWorkingHeadCompare(path: string): Promise<void> {
-    try {
-      await flushPendingEditorWrites();
-      const owner = workspaceOwner();
-      const root = owner.root;
-      const snapshotPort = owner.snapshotPort;
-      const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
-      if (!relative) {
-        flashError(`Cannot compare outside ${root}`);
-        return;
-      }
-      if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
-        flashError('Compare failed: workspace owner is unavailable');
-        return;
-      }
-      assertWorkspaceFileOwnerAlive(owner, path, 'compare');
-      const working = await readWorkspaceFileBytesFromOwner(owner, path, 'compare');
-      editorApi?.openWorkingDiff({
-        path,
-        ref: 'HEAD',
-        hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),
-        modified: decodeTextBlob(relative, working),
-      });
-    } catch (err) {
-      flashError(`Compare failed: ${(err as Error).message}`);
-    }
-  }
-
-  async function headBlobExistsForCurrentStatus(
-    owner: WorkspaceOwnerHandle,
-    path: string,
-    relative: string,
-  ): Promise<boolean> {
-    assertWorkspaceFileOwnerAlive(owner, path, 'compare');
-    const git = bridgeGitOwnerRpc(owner.snapshotPort);
-    try {
-      const status = await git.status();
-      assertWorkspaceFileOwnerAlive(owner, path, 'compare');
-      const entry = status.find((candidate) => candidate.filepath === relative);
-      return statusCodeHasHeadBlob(entry ? (porcelainXY(entry.status) ?? undefined) : undefined);
-    } finally {
-      git.dispose();
-    }
-  }
-
-  async function readGitIndexText(
-    git: ReturnType<typeof bridgeGitOwnerRpc>,
-    relative: string,
-  ): Promise<string> {
-    const index = await git.show(`:${relative}`);
-    if (index.type !== 'blob') throw new Error(`:${relative} is not a blob`);
-    return decodeTextBlob(`:${relative}`, index.content);
-  }
-
-  async function readGitHeadText(
-    git: ReturnType<typeof bridgeGitOwnerRpc>,
-    relative: string,
-  ): Promise<string> {
-    const original = await git.show(`HEAD:${relative}`);
-    if (original.type !== 'blob') throw new Error(`HEAD:${relative} is not a blob`);
-    return decodeTextBlob(`HEAD:${relative}`, original.content);
-  }
-
-  async function openScmResourceDiff(row: ScmResourceRow): Promise<void> {
-    await flushPendingEditorWrites();
-    const path = row.path;
-    const owner = workspaceOwner();
-    const root = owner.root;
-    const snapshotPort = owner.snapshotPort;
-    const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
-    if (!relative) {
-      flashError(`Cannot open git diff outside ${root}`);
-      return;
-    }
-    if (snapshotPort === UNAVAILABLE_OWNER_PORT) {
-      flashError('Open changes failed: workspace owner is unavailable');
-      return;
-    }
-    assertWorkspaceFileOwnerAlive(owner, path, 'open Git changes');
-    const git = bridgeGitOwnerRpc(snapshotPort);
-    try {
-      const currentOwner = workspaceOwner();
-      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
-        throw new Error(`workspace owner changed while opening ${relative}`);
-      }
-      const plan = scmDiffPlan(row);
-      const original =
-        plan.original === 'head'
-          ? await readGitHeadText(git, relative)
-          : plan.original === 'index'
-            ? await readGitIndexText(git, relative)
-            : '';
-      const modified =
-        plan.modified === 'index'
-          ? await readGitIndexText(git, relative)
-          : plan.modified === 'working'
-            ? decodeTextBlob(
-                relative,
-                await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes'),
-              )
-            : '';
-      const idScope = row.side === 'index' ? `scm-index-${row.code}` : `scm-worktree-${row.code}`;
-      editorApi?.openTextDiff({
-        id: compareDiffId(idScope, row.side === 'index' ? 'HEAD' : row.relativePath, path),
-        path,
-        title: `${basename(path)} ↔ ${plan.modifiedTitle}`,
-        originalTitle: plan.originalTitle,
-        modifiedTitle: plan.modifiedTitle,
-        original,
-        modified,
-      });
-    } catch (err) {
-      flashError(`Open changes failed: ${(err as Error).message}`);
-    } finally {
-      git.dispose();
-    }
-  }
-
-  function assertScmOwner(owner: WorkspaceOwnerHandle): void {
-    const current = workspaceOwner();
-    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT || !owner.isAlive()) {
-      throw new Error('workspace owner is unavailable');
-    }
-    if (
-      current !== owner ||
-      current.root !== owner.root ||
-      current.snapshotPort !== owner.snapshotPort
-    ) {
-      throw new Error('workspace owner changed while applying Git action');
-    }
-  }
-
-  async function runScmOwnerAction(
-    label: string,
-    action: (git: ReturnType<typeof bridgeGitOwnerRpc>) => Promise<void>,
-    opts: { readonly refreshVfs?: boolean } = {},
-  ): Promise<void> {
-    await flushPendingEditorWrites();
-    const owner = workspaceOwner();
-    assertScmOwner(owner);
-    const git = bridgeGitOwnerRpc(owner.snapshotPort);
-    try {
-      await action(git);
-      assertScmOwner(owner);
-      requestGitStatus(owner.snapshotPort);
-      if (opts.refreshVfs) requestVfsSnapshot(owner.snapshotPort);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      flashError(`${label} failed: ${error.message}`);
-      throw error;
-    } finally {
-      git.dispose();
-    }
-  }
-
-  function stageDeletesWorkingBlob(row: ScmResourceRow): boolean {
-    return row.badge === 'D';
-  }
-
-  async function stageScmRow(row: ScmResourceRow): Promise<void> {
-    await runScmOwnerAction(`Stage ${row.relativePath}`, async (git) => {
-      if (stageDeletesWorkingBlob(row)) await git.remove(row.relativePath);
-      else await git.add(row.relativePath);
-    });
-  }
-
-  async function unstageScmRow(row: ScmResourceRow): Promise<void> {
-    await runScmOwnerAction(`Unstage ${row.relativePath}`, (git) => git.unstage(row.relativePath));
-  }
-
-  async function discardScmRow(row: ScmResourceRow): Promise<void> {
-    if (row.badge === 'U') {
-      const error = new Error('untracked files are not discardable through git restore');
-      flashError(`Discard ${row.relativePath} failed: ${error.message}`);
-      throw error;
-    }
-    const confirmed =
-      globalThis.confirm?.(`Discard changes in ${row.relativePath}? This cannot be undone.`) ??
-      false;
-    if (!confirmed) return;
-    await runScmOwnerAction(
-      `Discard ${row.relativePath}`,
-      async (git) => {
-        await git.restore([row.relativePath]);
-      },
-      { refreshVfs: true },
-    );
-    // The owner working file is now back at HEAD. Drop any open editor model so
-    // its (discarded) buffer cannot be re-flushed to the owner on the next edit,
-    // silently resurrecting the change. Re-open reads the restored owner bytes.
-    editorApi?.closePath(row.path);
-  }
-
-  async function commitScm(message: string): Promise<void> {
-    await runScmOwnerAction('Commit', async (git) => {
-      const oid = await git.commitResolvedIdentity({ message });
-      flashToast(`Committed ${oid.slice(0, 7)}`, 'success');
-    });
-  }
-
-  function chooseWorkspaceArchive(): void {
-    if (workspaceArchiveBlocked()) {
-      flashError('Stop the dev server to import into the editable workspace');
-      return;
-    }
-    const doc = globalThis.document;
-    if (!doc) {
-      flashError('Workspace archive import is unavailable here');
-      return;
-    }
-    const input = doc.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json,application/vnd.rifty.workspace+json';
-    input.addEventListener(
-      'change',
-      () => {
-        const file = input.files?.[0];
-        if (file) void importWorkspaceArchiveFile(file);
-      },
-      { once: true },
-    );
-    input.click();
-  }
-
   // Active real-project template (ADR-0078): follows the ACTIVE STARTER (store-
   // derived, ADR-0165 §4), so a node-server project boots ITS worker runtime, not
   // the registry default — and the template stays coherent after a switch. Chip +
@@ -821,18 +439,6 @@ export function App(props: AppProps) {
       for (const { path } of entries) editorApi?.closePath(path);
     },
   };
-  const [gitStatusMap, setGitStatusMap] = createSignal<ReadonlyMap<string, string>>(new Map());
-  type GitScmReads = {
-    readonly root: string;
-    readonly branch?: string;
-    readonly history: readonly LogEntry[];
-  };
-  const emptyGitScm = (root = activeRoot()): GitScmReads => ({ root, history: [] });
-  const [gitScmReads, setGitScmReads] = createSignal<GitScmReads>(emptyGitScm());
-  const activeGitScm = createMemo(() =>
-    gitScmReads().root === activeRoot() ? gitScmReads() : emptyGitScm(),
-  );
-
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
   const machine = useMode({});
@@ -1038,7 +644,90 @@ export function App(props: AppProps) {
     ensureOwnerStarted: () => workspace.ensureStarted(false),
     establishScratch: (id, opts) => durableNewScratch(id, opts),
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
-    seedWorkspace: (preset) => seedViteWorkspace(preset),
+    seedWorkspace: (preset) => files.seedOwner(preset),
+  });
+
+  // Guarded owner byte reads shared by the files + SCM cores (ADR-0197 slice 4):
+  // every read re-asserts the LIVE owner so a switch mid-read fails loud.
+  const ownerFileReader = createOwnerFileReader<WorkspaceOwnerHandle>({
+    currentOwner: () => workspaceOwner(),
+    ownerUnavailable: (owner) => owner.snapshotPort === UNAVAILABLE_OWNER_PORT,
+  });
+
+  // Headless workspace files/archive core (ADR-0197 slice 4) bound to the REAL
+  // ports: the owner write/read/archive surface, the §57 dirty notifier and the
+  // DOM blob/picker affordances.
+  const files = createWorkspaceFiles<WorkspaceOwnerHandle>({
+    currentOwner: () => workspaceOwner(),
+    reader: ownerFileReader,
+    started: () => workspace.started(),
+    notifyFileWritten,
+    flushEditorWrites: () => flushPendingEditorWrites(),
+    archiveBlocked: () => workspaceArchiveBlocked(),
+    requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
+    activeRoot: () => activeRoot(),
+    saveFile: (name, mime, data) => {
+      const doc = globalThis.document;
+      if (!doc) return false;
+      const blob =
+        typeof data === 'string'
+          ? new Blob([data], { type: mime })
+          : (() => {
+              const blobBuffer = new ArrayBuffer(data.byteLength);
+              new Uint8Array(blobBuffer).set(data);
+              return new Blob([blobBuffer], { type: mime });
+            })();
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      return true;
+    },
+    pickArchiveFile: (onPick) => {
+      const doc = globalThis.document;
+      if (!doc) return false;
+      const input = doc.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json,application/vnd.rifty.workspace+json';
+      input.addEventListener(
+        'change',
+        () => {
+          const file = input.files?.[0];
+          if (file) onPick(() => file.text());
+        },
+        { once: true },
+      );
+      input.click();
+      return true;
+    },
+    showError: flashError,
+    showSuccess: (message) => flashToast(message, 'success'),
+  });
+
+  // Headless owner-backed SCM core (ADR-0197 slice 4, ADR-0185) bound to the
+  // REAL ports: the owner git RPC bridge, the status feed, the editor diff
+  // surface and the shared guarded reader.
+  const scm = createScm<WorkspaceOwnerHandle>({
+    currentOwner: () => workspaceOwner(),
+    ownerUnavailable: (owner) => owner.snapshotPort === UNAVAILABLE_OWNER_PORT,
+    reader: ownerFileReader,
+    bridgeGit: (owner) => bridgeGitOwnerRpc(owner.snapshotPort),
+    subscribeStatus: (owner, cb) => subscribeGitStatus(owner.snapshotPort, cb),
+    requestStatus: (owner) => requestGitStatus(owner.snapshotPort),
+    requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
+    joinRootPath: (root, path) => joinPath(root, path),
+    editor: {
+      openTextDiff: (spec) => editorApi?.openTextDiff(spec),
+      openWorkingDiff: (spec) => editorApi?.openWorkingDiff(spec),
+      closePath: (path) => editorApi?.closePath(path),
+    },
+    flushEditorWrites: () => flushPendingEditorWrites(),
+    confirmDiscard: (message) => globalThis.confirm?.(message) ?? false,
+    showError: flashError,
+    showSuccess: (message) => flashToast(message, 'success'),
+    activeRoot: () => activeRoot(),
   });
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
@@ -1257,43 +946,14 @@ export function App(props: AppProps) {
     onCleanup(unsubscribe);
   });
 
+  // (Re)bind the owner-backed SCM core (git-status feed + branch/history reads
+  // + actions, ADR-0185) to the LIVE owner: an owner respawn (switch) re-runs
+  // this like every other bridge effect. Keyed on the owner signal alone —
+  // attachOwner untracks its own body (ADR-0197 §1).
   createEffect(() => {
-    const owner = workspaceOwner();
-    const root = owner.root;
-    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) {
-      setGitStatusMap(new Map());
-      setGitScmReads(emptyGitScm(root));
-      return;
-    }
-    const git = bridgeGitOwnerRpc(owner.snapshotPort);
-    let disposed = false;
-    async function refreshScmReads(): Promise<void> {
-      try {
-        const [branch, history] = await Promise.all([git.currentBranch(), git.log({ depth: 20 })]);
-        if (disposed) return;
-        setGitScmReads({ root, branch, history });
-      } catch (err) {
-        if (disposed) return;
-        setGitScmReads(emptyGitScm(root));
-        console.warn('[scm] read failed', (err as Error).message);
-      }
-    }
-    void refreshScmReads();
-    const unsubscribe = subscribeGitStatus(owner.snapshotPort, (frame) => {
-      const next = new Map<string, string>();
-      for (const entry of frame.entries) next.set(joinPath(root, entry.path), entry.code);
-      setGitStatusMap(next);
-      void refreshScmReads();
-    });
-    setGitStatusMap(new Map());
-    onCleanup(() => {
-      disposed = true;
-      unsubscribe();
-      git.dispose();
-      setGitStatusMap(new Map());
-      setGitScmReads(emptyGitScm());
-    });
+    scm.attachOwner(workspaceOwner());
   });
+  onCleanup(() => scm.dispose());
 
   // Lazy node_modules read bridge + cache (ADR-0080), against the persistent
   // owner. Available for the whole session (the owner serves it on `serve:true`).
@@ -1923,57 +1583,6 @@ export function App(props: AppProps) {
     });
   }
 
-  // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
-  // authoritative fs): editor writes flow to the OWNER — the single
-  // store the dev server (HMR), shell, and archive export all read. No page copy.
-  async function writeWorkspaceFile(path: string, content: string): Promise<void> {
-    if (!workspace.started()) {
-      flashError('Choose a project before editing files');
-      return;
-    }
-    await workspaceOwner().writeFrameAcked({
-      type: 'write',
-      path,
-      data: ownerWriteEnc.encode(content),
-    });
-    notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
-  }
-
-  /**
-   * Push starter files into the persistent owner realm (ADR-0146
-   * owner-resident shell; the owner is the single authoritative store owner and
-   * the page holds no authoritative fs). This mirrors the durable owner reset for
-   * boot-critical files, but is acked before editor tabs reopen so template files
-   * like index.html cannot lag a mid-session starter pick.
-   *
-   * `ifAbsent` (boot/reload re-seed): skip files that already exist so a reload
-   * never clobbers a persisted edit — the owner's own freshRoot-gated
-   * seedStarterBaseline already placed the preset content on a cold boot. A
-   * preset SWITCH keeps overwrite (default) to replace the outgoing preset.
-   */
-  async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void> {
-    const root = activeRoot();
-    const rootPackageJsonPath = `${root}/package.json`;
-    for (const [path, content] of Object.entries(
-      seedFilesForStarter(starterById(preset.id), root),
-    )) {
-      // package.json is install-owned after boot; rewriting it here drops
-      // npm-installed deps on reload while the owner/index reset already seeds it.
-      if (path === rootPackageJsonPath) continue;
-      await workspaceOwner().writeFrameAcked({
-        type: 'write',
-        path,
-        data: ownerWriteEnc.encode(content),
-        ...(ifAbsent ? { ifAbsent: true } : {}),
-      });
-    }
-  }
-
-  // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
-  async function seedViteWorkspace(preset: Preset, ifAbsent = false): Promise<void> {
-    await seedWorkspaceOwner(preset, ifAbsent);
-  }
-
   function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
@@ -2056,17 +1665,11 @@ export function App(props: AppProps) {
     await editorApi?.flushPendingWrites();
   }
 
-  function requestActiveGitStatus(): void {
-    const owner = workspaceOwner();
-    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
-    requestGitStatus(owner.snapshotPort);
-  }
-
   async function selectSidebarView(view: 'explorer' | 'scm'): Promise<void> {
     const willShow = layout.view() !== view || layout.sidebarCollapsed();
     if (view === 'scm' && willShow) {
       await flushPendingEditorWrites();
-      requestActiveGitStatus();
+      scm.requestActiveGitStatus();
     }
     layout.selectView(view);
   }
@@ -2592,7 +2195,7 @@ export function App(props: AppProps) {
         ? 'Stop the dev server to archive the editable workspace'
         : undefined,
       icon: 'file-output',
-      run: () => void downloadWorkspaceArchive(),
+      run: () => void files.downloadArchive(),
     });
     items.push({
       id: 'act:import-workspace',
@@ -2602,7 +2205,7 @@ export function App(props: AppProps) {
         ? 'Stop the dev server to import into the editable workspace'
         : undefined,
       icon: 'folder-open',
-      run: () => chooseWorkspaceArchive(),
+      run: () => files.chooseArchive(),
     });
     items.push({
       id: 'act:github',
@@ -2837,25 +2440,25 @@ export function App(props: AppProps) {
                   nodeModules={nodeModulesProp()}
                   visible={!layout.sidebarCollapsed()}
                   activePath={activeFilePath()}
-                  gitStatus={gitStatusMap()}
+                  gitStatus={scm.gitStatus()}
                   onOpenFile={(path) => editorApi?.openFile(path)}
-                  onDownloadFile={(path) => void downloadWorkspaceFile(path)}
-                  onCompareFiles={(left, right) => void openWorkingFileCompare(left, right)}
-                  onCompareWithHead={(path) => void openWorkingHeadCompare(path)}
+                  onDownloadFile={(path) => void files.downloadFile(path)}
+                  onCompareFiles={(left, right) => void scm.openWorkingFileCompare(left, right)}
+                  onCompareWithHead={(path) => void scm.openWorkingHeadCompare(path)}
                   onNotify={(message, tone) => flashToast(message, tone)}
                 />
               }
             >
               <ScmPanel
                 root={activeRoot()}
-                branch={activeGitScm().branch}
-                status={gitStatusMap()}
-                history={activeGitScm().history}
-                onOpenChange={(row) => void openScmResourceDiff(row)}
-                onStage={stageScmRow}
-                onUnstage={unstageScmRow}
-                onDiscard={discardScmRow}
-                onCommit={commitScm}
+                branch={scm.activeScm().branch}
+                status={scm.gitStatus()}
+                history={scm.activeScm().history}
+                onOpenChange={(row) => void scm.openScmResourceDiff(row)}
+                onStage={scm.stageRow}
+                onUnstage={scm.unstageRow}
+                onDiscard={scm.discardRow}
+                onCommit={scm.commit}
               />
             </Show>
           </aside>
@@ -2889,10 +2492,10 @@ export function App(props: AppProps) {
                     setActiveLang(info.language);
                     setActiveFilePath(info.path);
                   }}
-                  onFileWritten={writeWorkspaceFile}
+                  onFileWritten={(path, content) => files.writeFile(path, content)}
                   readNodeModulesFile={readNodeModulesFile()}
-                  readGitOriginalText={readGitOriginalText}
-                  gitStatus={gitStatusMap}
+                  readGitOriginalText={scm.readGitOriginalText}
+                  gitStatus={scm.gitStatus}
                   previewUrl={previewUrl}
                   onOpenPreviewTab={openPreviewTab}
                   onError={flashError}
@@ -2998,14 +2601,14 @@ export function App(props: AppProps) {
           activeName={activeName()}
           activeStarter={activeGlyph().label}
           dirty={store.dirty()}
-          onExport={() => void downloadWorkspaceArchive()}
+          onExport={() => void files.downloadArchive()}
           exportDisabled={workspaceArchiveBlocked()}
           exportTitle={
             workspaceArchiveBlocked()
               ? 'Stop the dev server to archive the editable workspace'
               : 'Download the editable workspace as a .json archive'
           }
-          gitBranch={activeGitScm().branch}
+          gitBranch={scm.activeScm().branch}
         />
       </Show>
 

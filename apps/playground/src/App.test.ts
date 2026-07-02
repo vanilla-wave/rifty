@@ -60,7 +60,7 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('const vfs = syncMirror()');
     expect(source).not.toContain('writeText(vfs');
     expect(source).not.toContain("from '@riftydev/vfs/internal'");
-    expect(source).toContain('seedWorkspaceOwner(preset, ifAbsent)');
+    expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(preset),');
   });
 
   it('follows the active preset template instead of hardcoding the default', () => {
@@ -83,42 +83,12 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
-  it('routes editor writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
-    // The preview worker is gone; editor edits flow to the ONE owner so
-    // the co-resident dev server HMR-updates against the same store it serves.
-    expect(source).toContain('const ownerWriteEnc = new TextEncoder();');
-    expect(source).toContain('async function writeWorkspaceFile(path: string, content: string)');
-    // ADR-0165 §3: the owner is a reassignable signal holder (respawned on switch),
-    // so member access goes through the `workspaceOwner()` accessor.
-    expect(source).toMatch(
-      /await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),\s*\}\);/,
-    );
-    expect(source).not.toContain('function writeProgramFile');
-    expect(source).not.toContain('scheduleProgramWrite');
-    expect(source).not.toContain('pendingProgramWrite');
-    expect(source).not.toContain('programMirrorPath');
-    expect(source).not.toContain('onProgramChange');
-    expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
-    // explorer + editor read the owner snapshot, not a vite-gated swap
-    expect(source).not.toContain('const activeVfs');
-    expect(source).not.toContain('syncPresetFilesToWorker');
-    expect(source).not.toContain('.updateEntry(');
-  });
-
-  it('seeds picked starter files to the active root before booting dev server without clobbering package.json', () => {
-    // A mid-session starter pick must update index.html as well as the entry;
-    // otherwise a TypeScript template can write src/main.ts while Vite still
-    // serves the old src/main.js HTML. The root package.json is install-owned
-    // after boot, so reload seeding must preserve user-added deps.
-    expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
-    expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
-    expect(source).toContain('if (path === rootPackageJsonPath) continue;');
-    expect(source).toContain(
-      'async function seedWorkspaceOwner(preset: Preset, ifAbsent = false): Promise<void>',
-    );
-    expect(source).toMatch(
-      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*await workspaceOwner\(\)\.writeFrameAcked\(\{\s*type: 'write',\s*path,\s*data: ownerWriteEnc\.encode\(content\),[\s\S]*?\}\);/s,
-    );
+  it('threads the starter seed + editor writes through the workspace-files core', () => {
+    // Seed semantics (package.json install-owned, ifAbsent reload re-seed) and
+    // the owner-routed editor write are pinned behaviorally in
+    // orchestration/workspace-files.test.ts; here the App-side bindings.
+    expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(preset),');
+    expect(source).toContain('onFileWritten={(path, content) => files.writeFile(path, content)}');
     // initial editor tabs follow preset data under the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
     expect(source).toContain('initialEditorFiles={publishedInitialEditorFiles}');
@@ -276,47 +246,16 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('await diagnosticSync.refreshOpenDiagnostics();');
   });
 
-  it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
-    // Single-store-owner invariant (one authoritative store; page holds no
-    // authoritative fs): the archive reads/writes the OWNER tree (the single
-    // store), not a page copy.
-    expect(source).toContain('workspaceOwner().exportArchive()');
-    expect(source).toContain('workspaceOwner().importArchive(');
+  it('routes workspace archive export and import through the workspace-files core', () => {
+    // Owner-tree export/import + the dev-server gate are pinned behaviorally in
+    // orchestration/workspace-files.test.ts; here the App-side bindings.
     expect(source).toContain("id: 'act:export-workspace'");
     expect(source).toContain("id: 'act:import-workspace'");
     expect(source).toContain('function workspaceArchiveBlocked(): boolean');
     expect(source).toContain(
       "return presetBoot.transitioning() || devServer.status() !== 'stopped';",
     );
-    expect(source).toContain('Stop the dev server to archive the editable workspace');
-  });
-
-  it('routes single-file downloads through fresh owner bytes after pending editor writes', () => {
-    const downloadStart = source.indexOf('async function downloadWorkspaceFile(path: string)');
-    const downloadEnd = source.indexOf('  function decodeTextBlob', downloadStart);
-    const downloadBlock = source.slice(downloadStart, downloadEnd);
-    expect(downloadStart).toBeGreaterThan(-1);
-    expect(downloadEnd).toBeGreaterThan(downloadStart);
-    expect(source).toContain('function assertWorkspaceFileOwnerAlive(');
-    expect(source).toContain('!owner.isAlive()');
-    expect(source).toContain('current !== owner');
-    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
-    expect(source).toContain('async function readWorkspaceFileForDownload(path: string)');
-    expect(source).toContain(
-      "return readWorkspaceFileBytesFromOwner(workspaceOwner(), path, 'download')",
-    );
-    expect(source).not.toContain('async function readWorkspaceFileForOwner(');
-    expect(source).toContain('const bytes = await owner.readFileBytes(path);');
-    expect(source).toMatch(
-      /const bytes = await owner\.readFileBytes\(path\);\s+assertWorkspaceFileOwnerAlive\(owner, path, action\);\s+return bytes;/,
-    );
-    expect(downloadBlock).toContain('await flushPendingEditorWrites();');
-    expect(downloadBlock).toContain('const bytes = await readWorkspaceFileForDownload(path);');
-    expect(source).toContain('const blobBuffer = new ArrayBuffer(bytes.byteLength);');
-    expect(source).toContain('new Uint8Array(blobBuffer).set(bytes);');
-    expect(source).toContain('new Blob([blobBuffer], { type:');
-    expect(source).toContain('a.download = basename(path);');
-    expect(source).toContain('onDownloadFile={(path) => void downloadWorkspaceFile(path)}');
+    expect(source).toContain('archiveBlocked: () => workspaceArchiveBlocked(),');
   });
 
   it('mounts the preview for a node-only port (dev stopped) + un-gates previewUrl (ADR-0157 C1)', () => {
@@ -345,7 +284,7 @@ describe('App terminal startup wiring', () => {
 
 describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
   it('wires the status-bar Export button to the real archive download', () => {
-    expect(source).toContain('onExport={() => void downloadWorkspaceArchive()}');
+    expect(source).toContain('onExport={() => void files.downloadArchive()}');
     expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
   });
 
@@ -504,29 +443,37 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     );
   });
 
-  it('subscribes to the owner git-status feed and threads it into FileExplorer', () => {
+  it('binds the SCM core to the owner feed and threads it into the panels', () => {
+    // Feed subscription, path mapping, stale-root guard, diffs and actions are
+    // pinned behaviorally in orchestration/scm.test.ts; here the JSX bindings.
+    expect(source).toContain('scm.attachOwner(workspaceOwner());');
+    expect(source).toContain('onCleanup(() => scm.dispose());');
     expect(source).toContain(
-      "import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';",
+      'subscribeStatus: (owner, cb) => subscribeGitStatus(owner.snapshotPort, cb),',
     );
-    expect(source).toContain('const [gitStatusMap, setGitStatusMap] = createSignal');
-    expect(source).toContain('const owner = workspaceOwner();\n    const root = owner.root;');
-    expect(source).toContain('subscribeGitStatus(owner.snapshotPort');
-    expect(source).toContain('gitStatus={gitStatusMap()}');
+    expect(source).toContain('gitStatus={scm.gitStatus()}');
+    expect(source).toContain('gitStatus={scm.gitStatus}');
+    expect(source).toContain('readGitOriginalText={scm.readGitOriginalText}');
   });
 
-  it('wires the GIT panel to the shared status feed and owner git RPC reads', () => {
+  it('wires the GIT panel to the SCM core', () => {
     expect(source).toContain("import { ScmPanel } from './components/ScmPanel.tsx';");
-    expect(source).toContain("import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';");
-    expect(source).toContain('const [gitScmReads, setGitScmReads] = createSignal');
-    expect(source).toContain('const activeGitScm = createMemo');
-    expect(source).toContain('gitScmReads().root === activeRoot()');
-    expect(source).toContain('const git = bridgeGitOwnerRpc(owner.snapshotPort');
-    expect(source).toContain('git.currentBranch()');
-    expect(source).toContain('git.log({ depth: 20 })');
     expect(source).toContain('<ScmPanel');
     expect(source).toContain("layout.view() === 'scm'");
-    expect(source).toContain('branch={activeGitScm().branch}');
-    expect(source).toContain('gitBranch={activeGitScm().branch}');
+    expect(source).toContain('branch={scm.activeScm().branch}');
+    expect(source).toContain('status={scm.gitStatus()}');
+    expect(source).toContain('history={scm.activeScm().history}');
+    expect(source).toContain('onOpenChange={(row) => void scm.openScmResourceDiff(row)}');
+    expect(source).toContain('onStage={scm.stageRow}');
+    expect(source).toContain('onUnstage={scm.unstageRow}');
+    expect(source).toContain('onDiscard={scm.discardRow}');
+    expect(source).toContain('onCommit={scm.commit}');
+    expect(source).toContain('gitBranch={scm.activeScm().branch}');
+    expect(source).toContain(
+      'onCompareFiles={(left, right) => void scm.openWorkingFileCompare(left, right)}',
+    );
+    expect(source).toContain('onCompareWithHead={(path) => void scm.openWorkingHeadCompare(path)}');
+    expect(source).toContain('onDownloadFile={(path) => void files.downloadFile(path)}');
   });
 
   it('flushes pending editor writes before opening GIT status', () => {
@@ -536,7 +483,7 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('await editorApi?.flushPendingWrites();');
     expect(source).toContain("if (view === 'scm' && willShow) {");
     expect(source).toContain('await flushPendingEditorWrites();');
-    expect(source).toContain('requestActiveGitStatus();');
+    expect(source).toContain('scm.requestActiveGitStatus();');
     expect(source).toContain("onClick={() => void selectSidebarView('scm')}");
   });
 
@@ -554,115 +501,6 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('pendingSaveAutoSwitchId = null;');
     // The switch sequencing itself (teardown → respawn → rewire → snapshot →
     // editor reset) is pinned behaviorally in orchestration/workspace-lifecycle.test.ts.
-  });
-
-  it('opens GIT rows as side-aware blob-vs-blob Monaco diffs from owner HEAD/index/worktree bytes', () => {
-    expect(source).toContain('async function openScmResourceDiff(row: ScmResourceRow)');
-    expect(source).toContain('await flushPendingEditorWrites();');
-    expect(source).toContain('const path = row.path;');
-    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
-    expect(source).toContain('function decodeTextBlob(label: string, bytes: Uint8Array): string');
-    expect(source).toContain("new TextDecoder('utf-8', { fatal: true })");
-    expect(source).toContain('if (looksBinary(bytes))');
-    expect(source).toContain('is not valid UTF-8; text diff is unavailable');
-    expect(source).toContain('async function readGitOriginalText(');
-    expect(source).toContain('const original = await git.show(`${input.ref}:${relative}`);');
-    expect(source).toContain('const index = await git.show(`:${relative}`);');
-    // Blob selection is delegated to the tested scm-diff-plan planner, not
-    // re-derived inline (covered behaviorally by scm-diff-plan.test.ts).
-    expect(source).toContain('const plan = scmDiffPlan(row);');
-    expect(source).toContain("plan.original === 'head'");
-    expect(source).toContain("plan.modified === 'index'");
-    expect(source).toContain('originalTitle: plan.originalTitle,');
-    expect(source).toContain('modifiedTitle: plan.modifiedTitle,');
-    expect(source).toContain(
-      "await readWorkspaceFileBytesFromOwner(owner, path, 'open Git changes')",
-    );
-    expect(source).not.toContain("readWorkspaceFileForOwner(owner, path, 'open Git changes')");
-    expect(source).toContain('currentOwner.snapshotPort !== snapshotPort');
-    expect(source).toContain("if (original.type !== 'blob')");
-    expect(source).toContain('editorApi?.openTextDiff({');
-    expect(source).not.toContain('modified: workingDiffText(row)');
-    expect(source).not.toContain('hasOriginal: !rowHasNoHeadBlob(row)');
-    expect(source).toContain('readGitOriginalText={readGitOriginalText}');
-    expect(source).toContain('gitStatus={gitStatusMap}');
-    expect(source).toContain('onOpenChange={(row) => void openScmResourceDiff(row)}');
-    expect(source).not.toContain('git.diff(');
-  });
-
-  it('wires Explorer compare/upload affordances to owner bytes and generic Monaco text diffs', () => {
-    const compareStart = source.indexOf(
-      'async function openWorkingFileCompare(leftPath: string, rightPath: string)',
-    );
-    const compareEnd = source.indexOf('  async function openWorkingHeadCompare', compareStart);
-    const compareBlock = source.slice(compareStart, compareEnd);
-    const headStart = source.indexOf('async function openWorkingHeadCompare(path: string)');
-    const headEnd = source.indexOf('  async function headBlobExistsForCurrentStatus', headStart);
-    const headBlock = source.slice(headStart, headEnd);
-    expect(compareStart).toBeGreaterThan(-1);
-    expect(compareEnd).toBeGreaterThan(compareStart);
-    expect(headStart).toBeGreaterThan(-1);
-    expect(headEnd).toBeGreaterThan(headStart);
-    expect(source).toContain('function assertWorkspaceFileOwnerAlive(');
-    expect(source).toContain('async function readWorkspaceFileBytesFromOwner(');
-    expect(compareBlock).toContain('await flushPendingEditorWrites();');
-    expect(compareBlock).toContain("readWorkspaceFileBytesFromOwner(owner, leftPath, 'compare')");
-    expect(compareBlock).toContain("readWorkspaceFileBytesFromOwner(owner, rightPath, 'compare')");
-    expect(source).toContain('editorApi?.openTextDiff({');
-    expect(source).toContain("id: compareDiffId('working', leftPath, rightPath)");
-    expect(headBlock).toContain('await flushPendingEditorWrites();');
-    expect(headBlock).toContain("readWorkspaceFileBytesFromOwner(owner, path, 'compare')");
-    expect(headBlock).toContain("ref: 'HEAD'");
-    expect(headBlock).toContain(
-      'hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),',
-    );
-    expect(headBlock).not.toContain('const code = gitStatusMap().get(path);');
-    expect(source).toContain(
-      "import { scmDiffPlan, statusCodeHasHeadBlob } from './glue/scm-diff-plan.ts'",
-    );
-    expect(source).toContain('async function headBlobExistsForCurrentStatus(');
-    expect(source).toContain('const status = await git.status();');
-    expect(source).toContain('porcelainXY(entry.status)');
-    expect(source).toContain(
-      'onCompareFiles={(left, right) => void openWorkingFileCompare(left, right)}',
-    );
-    expect(source).toContain('onCompareWithHead={(path) => void openWorkingHeadCompare(path)}');
-  });
-
-  it('wires GIT actions through owner git RPC and refreshes owner status after ack', () => {
-    expect(source).toContain(
-      "import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';",
-    );
-    expect(source).toContain('function assertScmOwner(owner: WorkspaceOwnerHandle): void');
-    expect(source).toContain('async function runScmOwnerAction(');
-    expect(source).toContain('await flushPendingEditorWrites();');
-    expect(source).toContain('requestGitStatus(owner.snapshotPort)');
-    expect(source).toContain('if (opts.refreshVfs) requestVfsSnapshot(owner.snapshotPort)');
-    expect(source).toContain('async function stageScmRow(row: ScmResourceRow)');
-    expect(source).toContain(
-      'if (stageDeletesWorkingBlob(row)) await git.remove(row.relativePath);',
-    );
-    expect(source).toContain('else await git.add(row.relativePath);');
-    expect(source).toContain('async function unstageScmRow(row: ScmResourceRow)');
-    expect(source).toContain('git.unstage(row.relativePath)');
-    expect(source).toContain('async function discardScmRow(row: ScmResourceRow)');
-    expect(source).toContain('untracked files are not discardable through git restore');
-    expect(source).toContain(
-      'globalThis.confirm?.(`Discard changes in ${row.relativePath}? This cannot be undone.`)',
-    );
-    expect(source).toContain('if (!confirmed) return;');
-    expect(source).toContain('await git.restore([row.relativePath]);');
-    // Discard must drop the open editor model so the discarded buffer can't be
-    // re-flushed to the owner on the next edit, resurrecting the change.
-    expect(source).toMatch(
-      /await git\.restore\(\[row\.relativePath\]\);[\s\S]*?editorApi\?\.closePath\(row\.path\);/,
-    );
-    expect(source).toContain('async function commitScm(message: string)');
-    expect(source).toContain('await git.commitResolvedIdentity({ message })');
-    expect(source).toContain('onStage={stageScmRow}');
-    expect(source).toContain('onUnstage={unstageScmRow}');
-    expect(source).toContain('onDiscard={discardScmRow}');
-    expect(source).toContain('onCommit={commitScm}');
   });
 
   it('does not use an App-level clean hook for ordinary editor file writes', () => {

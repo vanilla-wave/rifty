@@ -4,6 +4,19 @@
 
 ### Changed
 
+- **Owner file/archive + SCM flows extracted to headless orchestration cores
+  (ADR-0197, epic playground-testable-core, slice 4a).** The guarded owner byte
+  read (owner-change-mid-read fails loud) in
+  `src/orchestration/owner-file-read.ts`; owner-routed editor writes, the
+  starter re-seed (package.json install-owned), single-file download and the
+  archive export/import flows in `src/orchestration/workspace-files.ts`; the
+  git-status feed mirror + branch/history reads and every GIT action/diff flow
+  (stage/unstage/discard/commit, side-aware SCM diffs, explorer compares,
+  git-original reads) in `src/orchestration/scm.ts` (ADR-0185) — all behind
+  injected ports (DOM affordances injected too); App binds the real ones.
+  Behavior-preserving; contracts pinned by RED-checked behavioral node-vitest
+  tests (38) instead of ~103 `expect(source)` greps (App.test.ts 331 → 228).
+
 - **TerminalPanel/BottomPanel source-greps converted to behavioral tests (epic
   playground-testable-core).** Overlay-absence pins now assert on
   `renderToString(TerminalPanel)` output; caret/typography constants extracted

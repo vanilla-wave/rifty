@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
  *  greps to behavioral tests. At epic close every entry is gone or carries a
  *  `why` (the recorded why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
-  { file: 'apps/playground/src/App.test.ts', count: 331 },
+  { file: 'apps/playground/src/App.test.ts', count: 228 },
   { file: 'apps/playground/src/glue/realVite.test.ts', count: 8 },
   { file: 'apps/playground/src/glue/ts-ls-monaco-providers-source.test.ts', count: 63 },
   { file: 'apps/playground/src/components/BottomPanel.test.ts', count: 1, why: 'keyed <For> reconciliation is client-only (SSR renders once); the grep pins the per-session keyed slots' },
