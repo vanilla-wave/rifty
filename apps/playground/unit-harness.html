@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>rifty browser-unit harness</title>
+  </head>
+  <body>
+    <!--
+      Thin browser-unit harness (spike: browser-unit test lane).
+      Deliberately does NOT import main.tsx / App.tsx — no Solid render, no #app
+      mount, no xterm/monaco. It wires ONLY the two worker-URL seams main.tsx
+      wires (setKernelWorkerUrl / setNodeEntryWorkerUrl), so specs can
+      dynamically import worker-side playground modules (e.g. startWorkspaceOwner)
+      and boot REAL workers under the dev server's COI headers.
+    -->
+    <main id="browser-unit-harness" data-status="wiring">rifty browser-unit harness</main>
+    <script type="module">
+      import { setKernelWorkerUrl } from '@riftydev/kernel';
+      import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
+      import kernelWorkerUrl from '/src/workers/kernel-worker-entry.ts?worker&url';
+      import nodeEntryBootstrapUrl from '/src/workers/node-entry-bootstrap.ts?worker&url';
+
+      setKernelWorkerUrl(kernelWorkerUrl);
+      setNodeEntryWorkerUrl(nodeEntryBootstrapUrl);
+
+      const el = document.getElementById('browser-unit-harness');
+      el.dataset.coi = String(globalThis.crossOriginIsolated === true);
+      el.dataset.status = 'ready';
+    </script>
+  </body>
+</html>

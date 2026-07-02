@@ -64,6 +64,7 @@ const TASKS = [
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',
+  'check:source-grep',
   'backlog:check',
   'refs:check',
   'test:run',

@@ -22,6 +22,7 @@
     "check:arch": "depcruise packages apps tools services",
     "check:parity-coverage": "node tools/checks/parity-coverage.mjs",
     "check:e2e-coverage": "node tools/checks/e2e-coverage.mjs",
+    "check:source-grep": "node tools/checks/source-grep-ratchet.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:parity": "tsx tools/node-parity-runner/src/cli.ts",

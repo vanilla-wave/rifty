@@ -86,6 +86,16 @@ const forbidden = [
     from: { pathNot: '(?:^|/)playground/' },
     to: { path: '(?:^|/)solid-js(?:/|$)|(?:^|/)@solidjs/' },
   },
+  {
+    name: 'no-ui-imports-in-playground-orchestration',
+    severity: 'error',
+    comment:
+      'ADR-0195: orchestration/* is the headless core — no xterm/monaco/components/adapters (node-vitest testability is the point)',
+    from: { path: '(?:^|/)playground/src/orchestration/' },
+    to: {
+      path: '(?:^|/)@xterm/|(?:^|/)monaco-editor(?:/|$)|(?:^|/)playground/src/(?:components|adapters)/|(?:^|/)playground/src/App\\.tsx$',
+    },
+  },
 ];
 
 module.exports = { TIERS, seg, options, forbidden };

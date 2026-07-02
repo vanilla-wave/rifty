@@ -242,7 +242,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setPublishedInitialEditorFiles(paths);');
     expect(source).toContain('editorApi?.openInitialFiles(paths)');
     expect(pickStarter).toMatch(
-      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await stopDevServerBeforeStarterWrite\(\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
+      /await paintPickedStarterUi\(presetForId\(id\)\);[\s\S]*?setEditorProjectContextReady\(true\);[\s\S]*?await devServer\.stopBeforeStarterWrite\(\);[\s\S]*?await durableNewScratch\(id, \{ preserveDirtySameStarter: true \}\);[\s\S]*?setWorkspaceOwnerReady\(true\);[\s\S]*?await runVitePreset\(presetForId\(id\), tsGate\);/,
     );
     expect(runPreset).not.toContain('await loadPresetUi(preset);');
     expect(runPreset).not.toContain('seedViteWorkspace(preset);');
@@ -286,29 +286,19 @@ describe('App terminal startup wiring', () => {
     expect(runPresetEnd).toBeGreaterThan(runPresetStart);
     expect(pickStarterStart).toBeGreaterThan(-1);
     expect(pickStarterEnd).toBeGreaterThan(pickStarterStart);
-    expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
-    expect(source).toContain('async function stopDevServerBeforeStarterWrite(): Promise<void>');
-    expect(source).toContain('function lifecycleDevServerRunning(): boolean');
-    expect(source).toContain('let devServerBootSessionId: string | null = null;');
-    expect(source).toContain('let devServerOwnerSessionId: string | null = null;');
-    expect(source).toContain('return lifecycleSessionRunning(devServerSessionId);');
-    expect(source).toContain('devServerBootSessionId === sessionId');
-    expect(pickStarter.indexOf('await stopDevServerBeforeStarterWrite();')).toBeLessThan(
+    // stop/lifecycle mechanics live in orchestration/dev-server-lifecycle.ts —
+    // behaviorally pinned there; here only the App-side ORDERING contract.
+    expect(pickStarter.indexOf('await devServer.stopBeforeStarterWrite();')).toBeLessThan(
       pickStarter.indexOf('await durableNewScratch(id, { preserveDirtySameStarter: true });'),
     );
-    expect(pickStarter.indexOf('await stopDevServerBeforeStarterWrite();')).toBeLessThan(
+    expect(pickStarter.indexOf('await devServer.stopBeforeStarterWrite();')).toBeLessThan(
       pickStarter.indexOf('await seedViteWorkspace(presetForId(id));'),
     );
     expect(source).not.toContain('async function stopRunningTerminalSessions(): Promise<void>');
     expect(source).not.toContain('function anyTerminalRunning(): boolean');
-    expect(runPreset).toContain('const restartNeeded = lifecycleDevServerRunning();');
-    expect(runPreset).not.toContain(
-      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
-    );
-    expect(source).not.toContain("terminalStatus(devServerSessionId) === 'running' ||");
+    expect(runPreset).toContain('const restartNeeded = devServer.lifecycleRunning();');
     expect(runPreset).not.toContain('seedViteWorkspace(preset);');
     expect(source).not.toContain('await stopRunningTerminalSessions();');
-    expect(source).toContain('setPreviewPorts([])');
   });
 
   it('shows a preset-switching loader until the picked starter has booted or failed', () => {
@@ -328,7 +318,7 @@ describe('App terminal startup wiring', () => {
     expect(runPreset).toMatch(
       /finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/,
     );
-    expect(source).toContain("presetTransitioning() ? 'switching' : devServerStatus()");
+    expect(source).toContain("presetTransitioning() ? 'switching' : devServer.status()");
     expect(source).toMatch(/presetTransitioning\(\)\s*\?\s*'SWITCHING'/);
     expect(source).toMatch(
       /presetTransitioning\(\)\s*\?\s*`\$\{activeTemplate\(\)\.displayName\} · switching`/,
@@ -340,100 +330,16 @@ describe('App terminal startup wiring', () => {
     expect(switchTo).toMatch(/finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?\}/);
   });
 
-  it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
-    // ADR-0148 (co-resident dev server in the owner): the owner reports
-    // start/stop + port via a structured frame (owner-tree republish handshake
-    // discipline, ADR-0146) — no stdout string-match, no one-shot push.
-    expect(source).toContain('workspaceOwner().onDevServer(');
-    expect(source).toContain("if (frame.status === 'stopped') {");
-    expect(source).toContain('devServerOwnerSessionId = null;');
-    expect(source).toMatch(
-      /if \(frame\.sid === undefined \|\| frame\.sid === devServerBootSessionId\) \{[\s\S]*?devServerBootSessionId = null;/,
-    );
-    expect(source).toContain('devServerOwnerSessionId = frame.sid ?? null;');
-    expect(source).toContain('setDevServerStatus(frame.status)');
-    expect(source).not.toContain('node_modules read bridge ready');
-  });
-
-  it('waits for node-cli presets to finish as terminal commands, not preview servers', () => {
-    expect(source).toContain('async function waitForPresetBoot(');
-    expect(source).toContain("if (spec.runtime === 'node-cli')");
-    expect(source).toContain('await waitForTerminalIdle(sessionId)');
-    expect(source).toMatch(
-      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
-    );
-  });
-
-  it('starts Vite in an ordinary active terminal instead of a named vite tab', () => {
-    expect(source).toContain('function devServerSession()');
-    expect(source).toContain('manager.snapshot(manager.activeSessionId())');
-    expect(source).not.toContain("title === 'vite'");
-    expect(source).not.toContain("manager.createSession('vite')");
-    expect(source).not.toContain('function viteSession()');
-  });
-
-  it('waits for the existing dev-server terminal to reboot without awaiting the long-running dev line', () => {
-    expect(source).toContain('function restartDevServer(sessionId: string)');
-    expect(source).toContain('await stopDevServerSession(devServerSessionId)');
-    expect(source).toContain('await waitForTerminalIdle(sessionId)');
+  it('switch + palette target only the lifecycle-owned dev session (stale terminals untouched)', () => {
+    // The stale-terminal semantics are pinned behaviorally in
+    // orchestration/dev-server-lifecycle.test.ts; here the App-side bindings.
     expect(source).toContain(
-      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
-    );
-    expect(source).toMatch(
-      /return waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
-    );
-    expect(source).toContain('const restartNeeded = lifecycleDevServerRunning();');
-    expect(source).not.toContain('anyTerminalRunning()');
-    expect(source).toContain('if (restartNeeded)');
-    expect(source).toContain('devServerSessionId = session.id');
-    expect(source).not.toContain('acceptRunningStatus');
-    // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
-    // interim activePreset signal — so a switch boots the destination's template.
-    expect(source).toContain(
-      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
-    );
-  });
-
-  it('does not treat an already-running foreign dev server as the picked preset boot', () => {
-    expect(source).toContain(
-      'async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean>',
-    );
-    expect(source).toMatch(
-      /devServerStatus\(\) === 'running' && devServerOwnerSessionId === sessionId[\s\S]*?return true;/,
-    );
-    expect(source).toMatch(
-      /if \(terminalStatus\(sessionId\) === 'idle'\) \{[\s\S]*?clearDevServerBootSession\(sessionId\);[\s\S]*?return false;/,
-    );
-    expect(source).toMatch(/const booted = await waitForPresetBoot\(/);
-    expect(source).toContain('if (!booted) return;');
-    expect(source).toMatch(
-      /return waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
-    );
-    expect(source).toMatch(
-      /await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
-    );
-  });
-
-  it('does not stop a stale dev-server terminal after its lifecycle frame stopped', () => {
-    expect(source).toContain('function lifecycleSessionRunning(sessionId: string | null): boolean');
-    expect(source).toMatch(
-      /sessionId !== null &&[\s\S]*?devServerBootSessionId === sessionId[\s\S]*?\(terminalStatus\(sessionId\) === 'running' \|\| devServerOwnerSessionId === sessionId\)/,
-    );
-    expect(source).toMatch(
-      /const stopLifecycleRun = lifecycleSessionRunning\(sessionId\);[\s\S]*?if \(sessionId && stopLifecycleRun\) manager\.stop\(sessionId\);/,
-    );
-    expect(source).toContain('devServerBootSessionId = targetSessionId;');
-    expect(source).toContain('devServerBootSessionId = session.id;');
-    expect(source).toContain('clearDevServerBootSession(sessionId);');
-    expect(source).toContain(
-      'const restartDevServerSessionId = lifecycleDevServerRunning() ? devServerSessionId : null;',
+      'const restartDevServerSessionId = devServer.lifecycleRunning() ? devServer.sessionId() : null;',
     );
     expect(source).toContain(
       'if (restartDevServerSessionId) manager.clear(restartDevServerSessionId);',
     );
-    expect(source).toContain(
-      'const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;',
-    );
+    expect(source).toContain('const stoppableDevServerSessionId = devServer.stoppableSessionId();');
   });
 
   it('tags the worker with the project slug and clears the console on a project switch', () => {
@@ -441,9 +347,10 @@ describe('App terminal startup wiring', () => {
     // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
     // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
     expect(source).toContain('slug: store.activeId(),');
-    expect(source).toContain("setDevServerStatus('stopped')");
+    expect(source).toContain('devServer.markStopped();');
     expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
-    expect(source).toContain('manager.freshConsole(targetSessionId, terminalWelcomeBanner)');
+    // the restart path's fresh console lives in the lifecycle core (welcomeBanner
+    // port — behavioral test); the page-side pick path still greets here:
     expect(source).toContain('manager.freshConsole(session.id, terminalWelcomeBanner)');
   });
 
@@ -456,13 +363,6 @@ describe('App terminal startup wiring', () => {
     expect(switchBody).toContain('if (!prompted && ownerNeedsSwitch)');
     expect(switchBody).toContain('} else if (!prompted) {');
     expect(switchBody).toContain('void ensureWorkspaceOwnerStarted(true);');
-  });
-
-  it('does not restart Vite inside a hidden stale terminal session', () => {
-    expect(source).toContain('function isVisibleTerminalSession(id: string): boolean');
-    expect(source).toContain(
-      'const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;',
-    );
   });
 
   // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
@@ -480,22 +380,13 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('wirePreviewBridge(frame.port');
   });
 
-  it('keys non-dev preview bridges by port and preview scope', () => {
-    expect(source).toContain('function previewBridgeKey(port: number, previewScope?: string)');
-    expect(source).toContain('return JSON.stringify([port, previewScope ?? null])');
-    expect(source).toContain('const key = previewBridgeKey(p.port, p.previewScope)');
-    expect(source).toMatch(/nodePortBridges\.set\(\s*key,\s*wirePreviewBridge/s);
-    expect(source).toContain(
-      'wirePreviewBridge(p.port, workspaceOwner().previewOwnerToken, p.previewScope)',
-    );
-  });
-
   it('runs npm + dev scripts in the owner (no page-side dev interception)', () => {
     expect(source).not.toContain('runTerminalScript');
     expect(source).not.toContain('npmRunDevBody');
-    // dev-server status is owner-reported (frame-driven), not page-flipped
-    expect(source).toContain('setDevServerStatus(frame.status)');
-    expect(source).toContain('const devServerRunning = (): boolean');
+    // dev-server status is owner-reported (frame-driven, pinned behaviorally in
+    // the lifecycle core); the page only binds the owner signal to the core:
+    expect(source).toContain('devServer.attachOwner(workspaceOwner());');
+    expect(source).toContain('onCleanup(() => devServer.dispose());');
   });
 
   it('loads and persists terminal environment state', () => {
@@ -527,9 +418,12 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const [tsProjectRevision, setTsProjectRevision] = createSignal(0)');
     expect(source).toContain('tsProjectRevision();');
     expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
-    expect(source).toContain("if (frame.status !== 'stopped') setWorkspaceOwnerReady(true);");
-    expect(source).toContain("const wasRunning = devServerStatus() === 'running';");
-    expect(source).toContain("if (frame.status === 'running' && !wasRunning)");
+    // frame gating/edge detection is the lifecycle core's contract (behavioral);
+    // the App binds its callbacks to the real signals:
+    expect(source).toContain('onOwnerAlive: () => setWorkspaceOwnerReady(true),');
+    expect(source).toContain(
+      'onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),',
+    );
     expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
     expect(source).toContain(
       'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
@@ -593,22 +487,19 @@ describe('App terminal startup wiring', () => {
     expect(runPreset).toContain('await workspaceOwner().setDevConfig({');
     expect(runPreset).not.toContain('await machine.loadPreset(preset);');
     expect(runPreset).toMatch(/finally \{[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/);
-    const sessionReservation = runPreset.indexOf('session = devServerSession();');
+    const sessionReservation = runPreset.indexOf('session = devServer.pickSession();');
     const setDevConfig = runPreset.indexOf('await workspaceOwner().setDevConfig({');
     expect(sessionReservation).toBeGreaterThan(-1);
     expect(setDevConfig).toBeGreaterThan(-1);
     expect(sessionReservation).toBeLessThan(setDevConfig);
-    expect(source).toContain(
-      "throw new Error('Unable to reserve an idle terminal for the dev server')",
+    expect(runPreset).toMatch(
+      /session = await devServer\.reserveSession\(session\);\s*devServer\.claimSession\(session\.id\);\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
-      /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await devServer\.startSession\(\s*restartSessionId,\s*restartGeneration,\s*preset,\s*bootLinesOverride,\s*\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
-      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(\s*restartSessionId,\s*restartGeneration,\s*preset,\s*bootLinesOverride,\s*\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
-    );
-    expect(runPreset).toMatch(
-      /void runTerminalSequence\(\s*session\.id,\s*bootLinesOverride \?\? presetBootLines\(preset, activeRoot\(\)\),\s*\);[\s\S]*?const booted = await waitForPresetBoot\(session\.id, generation, templateForPreset\(preset\)\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
+      /void runTerminalSequence\(\s*session\.id,\s*bootLinesOverride \?\? presetBootLines\(preset, activeRoot\(\)\),\s*\);[\s\S]*?const booted = await devServer\.waitForPresetBoot\([\s\S]*?\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 
@@ -638,7 +529,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain("id: 'act:export-workspace'");
     expect(source).toContain("id: 'act:import-workspace'");
     expect(source).toContain('function workspaceArchiveBlocked(): boolean');
-    expect(source).toContain("return presetTransitioning() || devServerStatus() !== 'stopped';");
+    expect(source).toContain("return presetTransitioning() || devServer.status() !== 'stopped';");
     expect(source).toContain('Stop the dev server to archive the editable workspace');
   });
 
@@ -674,21 +565,14 @@ describe('App terminal startup wiring', () => {
     // C1: hasPreview ORs the node-server port set, so `node server.js` shows a
     // preview even with the dev server stopped.
     expect(source).toContain(
-      "const hasPreview = (): boolean => devServerStatus() !== 'stopped' || previewPorts().length > 0;",
+      "devServer.status() !== 'stopped' || devServer.previewPorts().length > 0;",
     );
     // C1: previewUrl is membership-gated (any registered preview port), not gated on
     // devServerRunning() — so a node-only "open in new tab" no longer silently no-ops.
-    expect(source).toContain('previewPorts().some((p) => p.port === port)');
+    expect(source).toContain('devServer.previewPorts().some((p) => p.port === port)');
     expect(source).toContain(
       'const previewUrl = (port = machine.realVitePort()): string | undefined =>',
     );
-  });
-
-  it('wires page-side bridges for EVERY previewable port through the one set path', () => {
-    // The pty:preview set (deduped by port in the owner registry) is the single
-    // wiring source — no dev-source/devPort exclusions, no second wiring path.
-    expect(source).toContain('const entries = previewPorts();');
-    expect(source).not.toContain(".filter((p) => p.source !== 'dev-server'");
   });
 
   it('keeps worker snapshots from reloading the preview iframe', () => {
@@ -802,10 +686,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
 
   it('threads activeRoot() through the owner spawn, seed, writes, explorer, and boot lines', () => {
     expect(source).toContain('root: activeRoot()'); // startWorkspaceOwner spawn
-    // ADR-0165 §4: the restart path's boot lines follow the store-derived starter.
-    expect(source).toContain(
-      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
-    );
+    // ADR-0165 §4: the restart path's boot lines follow the store-derived starter —
+    // behavioral in the lifecycle core; the App injects the store-derived port:
+    expect(source).toContain('activeStarterPreset: () => presetForId(activeStarterId()),');
     expect(source).toContain('presetBootLines(preset, activeRoot())');
     expect(source).toContain('root={activeRoot()}'); // FileExplorer prop
     // node_modules prop + preset-path seeding read the dynamic root

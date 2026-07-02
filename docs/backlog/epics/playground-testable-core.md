@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: ready
+status: in-progress
 title: Playground testable core — behavioral tests below e2e for page↔owner orchestration
 created: 2026-07-02
 value: Playground changes stop shipping wiring regressions that only an e2e flake hunt can catch — reload/restore, dev-server lifecycle, LIVE-pill truth become provable in seconds, and the same extraction yields the headless workbench core M11 "Embeddable" needs.
@@ -22,6 +22,6 @@ A developer refactors dev-server lifecycle wiring. `pnpm test` (seconds, no brow
 
 - `playground/app-orchestration-headless-core` — split `App()` into a thin Solid shell + xterm/monaco-free orchestration modules with injected ports; each extracted slice replaces its source-greps with RED-checked behavioral tests. The bulk of the value.
 - `toolchain-build/browser-mode-unit-lane` — the missing middle tier for modules that genuinely need a real Worker/COI realm (`real-vite-bootstrap`, `dev-server-boot`, `kernel-worker-entry`). Spike-gated.
-- `toolchain-build/source-grep-test-ratchet` — CI check refusing new source-grep tests + burn-down allowlist of the current 12; the epic's zero-debt closing gate.
+- `toolchain-build/source-grep-test-ratchet` — CI check refusing new source-grep tests + burn-down allowlist of the current 15 (detector at refine corrected the diagnosed 12: +`bundle-local-buffer`, +`TerminalPanel`, +`BottomPanel` — non-`source` variable names hid them); the epic's zero-debt closing gate.
 
 Related (not owned here): `distribution/workbench-controllers` — lifting the extracted core into a public package stays IRREVERSIBLE (own ADR) and gated on a real non-Solid consumer; this epic removes its App.tsx-untangling blocker.

@@ -80,7 +80,6 @@ import {
   setActiveIndex,
 } from './glue/project-index-port.ts';
 import { type ActiveId, type ProjectIndex, rootForId } from './glue/project-index.ts';
-import type { PreviewPortEntry } from './glue/pty-protocol.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
@@ -108,6 +107,7 @@ import {
   requestVfsSnapshot,
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
+import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
 import {
   DEFAULT_PRESET,
   PRESETS,
@@ -387,7 +387,7 @@ export function App(props: AppProps) {
   }
 
   function workspaceArchiveBlocked(): boolean {
-    return presetTransitioning() || devServerStatus() !== 'stopped';
+    return presetTransitioning() || devServer.status() !== 'stopped';
   }
 
   async function downloadWorkspaceArchive(): Promise<void> {
@@ -871,16 +871,12 @@ export function App(props: AppProps) {
   // visible `vite` terminal command.
   const machine = useMode({});
 
-  // Dev-server lifecycle is OWNER-driven now (ADR-0148 co-resident dev server):
-  // the `vite` / `npm run dev` line runs in the owner over the pty channel; the owner reports
-  // start/stop + the listen port via `pty:dev-server` frames. The page only
-  // mirrors that state + (un)wires the preview SW route.
-  const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
-    'stopped',
-  );
+  // Dev-server lifecycle is OWNER-driven (ADR-0148) and lives in the extracted
+  // orchestration core (`orchestration/dev-server-lifecycle.ts`, ADR-0195); the
+  // `devServer` binding below (after the manager) wires its ports to the real
+  // owner/terminal/machine.
   const [presetTransitioning, setPresetTransitioning] = createSignal(false);
   let presetTransitionChain: Promise<void> = Promise.resolve();
-  const devServerRunning = (): boolean => devServerStatus() === 'running';
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
   interface TsPresetTransitionGate {
     resolve(): void;
@@ -901,100 +897,6 @@ export function App(props: AppProps) {
     return presetTransitionChain;
   }
 
-  // ALL live previewable ports (ADR-0155): the dev-server port + each `node
-  // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
-  // the PreviewPanel switcher. The dev-server port's SW bridge is wired by the
-  // `onDevServer` path above; this set drives the per-node-port bridges (below).
-  const [previewPorts, setPreviewPorts] = createSignal<PreviewPortEntry[]>([]);
-  let devServerSessionId: string | null = null;
-  let devServerBootSessionId: string | null = null;
-  let devServerOwnerSessionId: string | null = null;
-  let devServerRestartGeneration = 0;
-
-  // Mirror the owner's dev-server state (ADR-0148 co-resident dev server). The
-  // frames are DERIVED from the owner's listening-port set (backlog:
-  // playground/generic-dev-server-lifecycle) — the pill/status here, but the SW
-  // bridge wiring lives SOLELY on the `pty:preview` set effect below: every
-  // derived-running port is also a set entry, so wiring here too would
-  // transiently double-bridge the same `/preview/<port>/` route (the C3 clobber).
-  createEffect(() => {
-    const unsubscribe = workspaceOwner().onDevServer((frame) => {
-      const wasRunning = devServerStatus() === 'running';
-      if (frame.status === 'stopped') {
-        devServerOwnerSessionId = null;
-        if (frame.sid === undefined || frame.sid === devServerBootSessionId) {
-          devServerBootSessionId = null;
-        }
-      } else {
-        devServerOwnerSessionId = frame.sid ?? null;
-      }
-      setDevServerStatus(frame.status);
-      if (frame.status !== 'stopped') setWorkspaceOwnerReady(true);
-      if (frame.status === 'running' && !wasRunning) {
-        setTsProjectRevision((revision) => revision + 1);
-      }
-      // Record/clear the dev command for reload-restore: 'running' pins the line
-      // that started this server; a REAL running→stopped without error (Ctrl-C /
-      // server.close) clears it. An errored stop (owner crash/exit) keeps it — a
-      // reload should relaunch; nor does a boot-time 'stopped' re-publish clear.
-      if (frame.status === 'running' && frame.sid !== undefined) {
-        const executed = lastExecutedLine.get(frame.sid);
-        // cwd: prefer the OWNER-reported command cwd — the page session cache
-        // reflects the last pty:exit ('/' before any), not the running command.
-        if (executed) persistDevCommand({ line: executed.line, cwd: frame.cwd ?? executed.cwd });
-      } else if (frame.status === 'stopped' && frame.error === undefined && wasRunning) {
-        persistDevCommand(undefined);
-      }
-      if (frame.port !== undefined) machine.setRealVitePort(frame.port);
-    });
-    onCleanup(() => {
-      unsubscribe();
-    });
-  });
-
-  // Mirror the owner's full preview-port set (ADR-0155) + (re)request it on
-  // subscribe — recovers a `pty:preview` push that predates this listener (same
-  // handshake discipline as the dev-server-req above; never a one-shot push).
-  createEffect(() => {
-    const unsubscribe = workspaceOwner().onPreview((frame) => setPreviewPorts(frame.ports));
-    workspaceOwner().requestPreview();
-    onCleanup(unsubscribe);
-  });
-
-  // Per-port SW preview bridge — the ONE wiring path for EVERY previewable port
-  // (dev server, `vite preview`, node/bin servers alike): the `pty:preview` set
-  // is the single source, so no port can ever be double-bridged (ADR-0157 review
-  // C3 — a second clobbering bridge's teardown deletes the shared route; the set
-  // itself dedups by port). Diff the live port+scope bridges against active
-  // teardowns: wire a newly-present port, tear a departed one. `onCleanup` all.
-  function previewBridgeKey(port: number, previewScope?: string): string {
-    return JSON.stringify([port, previewScope ?? null]);
-  }
-  const nodePortBridges = new Map<string, () => void>();
-  createEffect(() => {
-    const entries = previewPorts();
-    const live = new Set(entries.map((p) => previewBridgeKey(p.port, p.previewScope)));
-    for (const [key, tear] of nodePortBridges) {
-      if (!live.has(key)) {
-        tear();
-        nodePortBridges.delete(key);
-      }
-    }
-    for (const p of entries) {
-      const key = previewBridgeKey(p.port, p.previewScope);
-      if (!nodePortBridges.has(key)) {
-        nodePortBridges.set(
-          key,
-          wirePreviewBridge(p.port, workspaceOwner().previewOwnerToken, p.previewScope),
-        );
-      }
-    }
-  });
-  onCleanup(() => {
-    for (const tear of nodePortBridges.values()) tear();
-    nodePortBridges.clear();
-  });
-
   // The terminal shell + cwd/env + npm + bin all live in the persistent
   // workspace owner now (ADR-0146 owner-resident shell); the manager is a thin pty-channel client.
   const manager = createTerminalManager({
@@ -1006,6 +908,41 @@ export function App(props: AppProps) {
       env: props.terminalPersistence.initialState.env,
     },
   });
+
+  // Headless dev-server lifecycle core (ADR-0195) bound to the REAL ports: the
+  // reactive owner handle, the page terminal manager (+ visibility state), the
+  // exec funnel, the persisted dev command and the SW preview bridge. Effect
+  // creation order is preserved (these mirrors precede every later bridge effect).
+  const devServer = createDevServerLifecycle<TerminalSessionSnapshot>({
+    terminal: {
+      snapshot: (id) => manager.snapshot(id),
+      activeSessionId: () => manager.activeSessionId(),
+      select: (id) => manager.select(id),
+      stop: (id) => manager.stop(id),
+      freshConsole: (id, banner) => manager.freshConsole(id, banner),
+      createSession: () => createSession(),
+      refreshState: () => refreshTerminalState(),
+      visibleSessions: () => visibleSessions(),
+      isHidden: (id) => hiddenSessionIds.has(id),
+    },
+    runBootSequence: (id, lines) => runTerminalSequence(id, lines),
+    executedLine: (sid) => lastExecutedLine.get(sid),
+    persistDevCommand: (command) => persistDevCommand(command),
+    setRealVitePort: (port) => machine.setRealVitePort(port),
+    onOwnerAlive: () => setWorkspaceOwnerReady(true),
+    onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),
+    wirePreviewBridge,
+    bootLines: (preset) => presetBootLines(preset, activeRoot()),
+    activeStarterPreset: () => presetForId(activeStarterId()),
+    templateForPreset,
+    welcomeBanner: terminalWelcomeBanner,
+  });
+  // The ONLY reactive glue the lifecycle needs: (re)bind on every owner swap
+  // (switch respawn re-runs this like every other bridge effect) + teardown.
+  createEffect(() => {
+    devServer.attachOwner(workspaceOwner());
+  });
+  onCleanup(() => devServer.dispose());
   let workspaceOwnerStarted = initialOwnerHandle.workspaceId !== 'unavailable';
   let workspaceOwnerStart: Promise<WorkspaceOwnerHandle> | null = null;
   const [workspaceOwnerReady, setWorkspaceOwnerReady] = createSignal(false);
@@ -2084,177 +2021,6 @@ export function App(props: AppProps) {
     await seedWorkspaceOwner(preset, ifAbsent);
   }
 
-  function devServerSession(): TerminalSessionSnapshot {
-    if (devServerSessionId) {
-      const previous = manager.snapshot(devServerSessionId);
-      if (previous.status === 'idle' && !hiddenSessionIds.has(previous.id)) {
-        manager.select(previous.id);
-        refreshTerminalState();
-        return previous;
-      }
-    }
-    const active = manager.snapshot(manager.activeSessionId());
-    if (active.status === 'idle') return active;
-    const idle = visibleSessions().find((session) => session.status === 'idle');
-    if (idle) {
-      manager.select(idle.id);
-      refreshTerminalState();
-      return idle;
-    }
-    return createSession();
-  }
-
-  function usableDevServerSession(id: string): TerminalSessionSnapshot | undefined {
-    try {
-      const session = manager.snapshot(id);
-      return session.status === 'idle' && !hiddenSessionIds.has(session.id) ? session : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async function ensureReservedDevServerSession(
-    session: TerminalSessionSnapshot,
-  ): Promise<TerminalSessionSnapshot> {
-    const reserved = usableDevServerSession(session.id);
-    if (reserved) return reserved;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const replacement = createSession();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      const usable = usableDevServerSession(replacement.id);
-      if (usable) return usable;
-    }
-    throw new Error('Unable to reserve an idle terminal for the dev server');
-  }
-
-  function isVisibleTerminalSession(id: string): boolean {
-    try {
-      manager.snapshot(id);
-      return !hiddenSessionIds.has(id);
-    } catch {
-      return false;
-    }
-  }
-
-  async function waitForDevServerStop(sessionId: string): Promise<void> {
-    // The derived status is GLOBAL (any listening server keeps it 'running' —
-    // generic lifecycle): with a second server (node/bin) live, waiting for a
-    // global 'stopped' after stopping ONE session spins forever. Wait until
-    // OUR session stops owning the primary: everything stopped, or the pill
-    // moved to another session's server.
-    while (devServerStatus() !== 'stopped' && devServerOwnerSessionId === sessionId) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
-  function terminalStatus(id: string | null): TerminalSessionSnapshot['status'] | undefined {
-    if (!id) return undefined;
-    try {
-      return manager.snapshot(id).status;
-    } catch {
-      return undefined;
-    }
-  }
-
-  function clearDevServerBootSession(sessionId: string): void {
-    if (devServerBootSessionId === sessionId) devServerBootSessionId = null;
-  }
-
-  function lifecycleSessionRunning(sessionId: string | null): boolean {
-    return (
-      sessionId !== null &&
-      devServerBootSessionId === sessionId &&
-      (terminalStatus(sessionId) === 'running' || devServerOwnerSessionId === sessionId)
-    );
-  }
-
-  function lifecycleDevServerRunning(): boolean {
-    return lifecycleSessionRunning(devServerSessionId);
-  }
-
-  async function waitForTerminalIdle(id: string | null): Promise<void> {
-    while (terminalStatus(id) === 'running') {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
-  async function waitForDevServerBoot(sessionId: string, generation: number): Promise<boolean> {
-    while (generation === devServerRestartGeneration) {
-      if (devServerStatus() === 'running' && devServerOwnerSessionId === sessionId) return true;
-      if (terminalStatus(sessionId) === 'idle') {
-        clearDevServerBootSession(sessionId);
-        return false;
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    }
-    clearDevServerBootSession(sessionId);
-    return false;
-  }
-
-  async function waitForPresetBoot(
-    sessionId: string,
-    generation: number,
-    spec: ProjectSpec,
-  ): Promise<boolean> {
-    if (spec.runtime === 'node-cli') {
-      await waitForTerminalIdle(sessionId);
-      clearDevServerBootSession(sessionId);
-      return true;
-    }
-    return waitForDevServerBoot(sessionId, generation);
-  }
-
-  async function stopDevServerSession(sessionId: string | null): Promise<void> {
-    const stopLifecycleRun = lifecycleSessionRunning(sessionId);
-    if (sessionId && stopLifecycleRun) manager.stop(sessionId);
-    if (sessionId && stopLifecycleRun && devServerOwnerSessionId === sessionId) {
-      await waitForDevServerStop(sessionId);
-    }
-    if (stopLifecycleRun) {
-      await waitForTerminalIdle(sessionId);
-      if (sessionId) clearDevServerBootSession(sessionId);
-      // No local setPreviewPorts([]): the set is OWNER-derived (pty:preview) —
-      // a local wipe would tear a second live server's preview bridge; the
-      // owner's devStopped emit delivers the truthful remainder.
-    }
-  }
-
-  async function stopDevServerBeforeStarterWrite(): Promise<void> {
-    const sessionId = lifecycleDevServerRunning()
-      ? (devServerSessionId ?? devServerSession().id)
-      : null;
-    await stopDevServerSession(sessionId);
-  }
-
-  async function startDevServerSession(
-    sessionId: string,
-    generation: number,
-    preset: Preset,
-    bootLinesOverride?: readonly string[],
-  ): Promise<boolean> {
-    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
-    devServerSessionId = targetSessionId;
-    devServerBootSessionId = targetSessionId;
-    manager.freshConsole(targetSessionId, terminalWelcomeBanner); // fresh console + greeting
-    void runTerminalSequence(
-      targetSessionId,
-      bootLinesOverride ?? presetBootLines(preset, activeRoot()),
-    );
-    return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
-  }
-
-  async function restartDevServer(sessionId: string): Promise<void> {
-    const generation = ++devServerRestartGeneration;
-    // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
-    // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
-    await stopDevServerSession(devServerSessionId);
-    if (generation !== devServerRestartGeneration) return;
-    // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
-    // switch the store has re-pointed to the destination project's starter, so a
-    // restart boots ITS template — never the stale picked-preset starter.
-    await startDevServerSession(sessionId, generation, presetForId(activeStarterId()));
-  }
-
   function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
@@ -2280,19 +2046,19 @@ export function App(props: AppProps) {
       // The caller already painted the starter UI and, for OPFS, established the
       // owner tree via durableNewScratch(). Re-loading/re-seeding here can erase
       // edits made during the boot window.
-      const restartNeeded = lifecycleDevServerRunning();
+      const restartNeeded = devServer.lifecycleRunning();
       const restartSessionId = restartNeeded
-        ? (devServerSessionId ?? devServerSession().id)
+        ? (devServer.sessionId() ?? devServer.pickSession().id)
         : undefined;
-      const restartGeneration = restartNeeded ? ++devServerRestartGeneration : undefined;
-      if (restartNeeded) await stopDevServerSession(restartSessionId ?? null);
-      if (restartGeneration !== undefined && restartGeneration !== devServerRestartGeneration) {
+      const restartGeneration = restartNeeded ? devServer.nextGeneration() : undefined;
+      if (restartNeeded) await devServer.stopSession(restartSessionId ?? null);
+      if (restartGeneration !== undefined && restartGeneration !== devServer.currentGeneration()) {
         return;
       }
       let session: TerminalSessionSnapshot | undefined;
       if (!restartNeeded) {
-        session = devServerSession();
-        devServerSessionId = session.id;
+        session = devServer.pickSession();
+        devServer.claimSession(session.id);
       }
       // Tell the owner which template/runtime the next co-resident dev server boots
       // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
@@ -2311,7 +2077,7 @@ export function App(props: AppProps) {
       });
       if (restartNeeded) {
         if (restartSessionId && restartGeneration !== undefined) {
-          const booted = await startDevServerSession(
+          const booted = await devServer.startSession(
             restartSessionId,
             restartGeneration,
             preset,
@@ -2323,16 +2089,20 @@ export function App(props: AppProps) {
         return;
       }
       if (!session) return;
-      session = await ensureReservedDevServerSession(session);
-      devServerSessionId = session.id;
+      session = await devServer.reserveSession(session);
+      devServer.claimSession(session.id);
       manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
-      const generation = ++devServerRestartGeneration;
-      devServerBootSessionId = session.id;
+      const generation = devServer.nextGeneration();
+      devServer.beginBoot(session.id);
       void runTerminalSequence(
         session.id,
         bootLinesOverride ?? presetBootLines(preset, activeRoot()),
       );
-      const booted = await waitForPresetBoot(session.id, generation, templateForPreset(preset));
+      const booted = await devServer.waitForPresetBoot(
+        session.id,
+        generation,
+        templateForPreset(preset),
+      );
       if (!booted) return;
       reinitializeTsForPickedPreset();
     } finally {
@@ -2373,7 +2143,7 @@ export function App(props: AppProps) {
       if (!saveAffordance(storageMode).ephemeral) {
         await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
       }
-      const restartDevServerSessionId = lifecycleDevServerRunning() ? devServerSessionId : null;
+      const restartDevServerSessionId = devServer.lifecycleRunning() ? devServer.sessionId() : null;
       const switched = await requestSwitch({
         currentOwner: workspaceOwner(),
         nextRoot: rootForId(nextActiveId),
@@ -2421,12 +2191,12 @@ export function App(props: AppProps) {
           }),
         rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
         restartDevServer: async () => {
-          setDevServerStatus('stopped');
+          devServer.markStopped();
           await manager.rebindOwner(workspaceOwner());
           workspaceOwnerStarted = true;
           setWorkspaceOwnerReady(true);
           if (restartDevServerSessionId) {
-            await restartDevServer(restartDevServerSessionId);
+            await devServer.restart(restartDevServerSessionId);
           }
         },
         clearTerminal: () => {
@@ -2614,7 +2384,7 @@ export function App(props: AppProps) {
         setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
-        await stopDevServerBeforeStarterWrite();
+        await devServer.stopBeforeStarterWrite();
         await durableNewScratch(id, { preserveDirtySameStarter: true });
         // Memory mode has no durable index → durableNewScratch is a no-op, so this is
         // the ONLY owner-tree seed. AWAIT it before runVitePreset boots vite, else the
@@ -2846,8 +2616,9 @@ export function App(props: AppProps) {
   async function refreshActiveAfterReset(): Promise<void> {
     await waitForActiveSnapshotFrame();
     resetEditorToActiveInitialFiles();
-    if (lifecycleDevServerRunning() && devServerSessionId) {
-      void restartDevServer(devServerSessionId);
+    const activeDevServerSessionId = devServer.sessionId();
+    if (devServer.lifecycleRunning() && activeDevServerSessionId) {
+      void devServer.restart(activeDevServerSessionId);
     }
   }
 
@@ -2923,7 +2694,7 @@ export function App(props: AppProps) {
         setEditorProjectContextReady(true);
         if (!workspaceOwnerStarted) starterGeneratedBaselinePendingForNextOwner = true;
         await ensureWorkspaceOwnerStarted(false);
-        await stopDevServerBeforeStarterWrite();
+        await devServer.stopBeforeStarterWrite();
         await durableNewScratch(pendingStarter);
         // Memory mode: AWAIT the seed before vite boots (see onPickStarter) — the
         // only owner-tree seed in the ephemeral path.
@@ -2967,7 +2738,8 @@ export function App(props: AppProps) {
   // server's port is added on listen). Membership-only — a non-registered port
   // never yields a URL — while still un-gating from devServerRunning() so a
   // node-only preview's "open in new tab" no longer silently no-ops (Fidelity).
-  const isLivePreviewPort = (port: number): boolean => previewPorts().some((p) => p.port === port);
+  const isLivePreviewPort = (port: number): boolean =>
+    devServer.previewPorts().some((p) => p.port === port);
   const previewUrl = (port = machine.realVitePort()): string | undefined =>
     isLivePreviewPort(port) ? `/preview/${port}/` : undefined;
 
@@ -3097,7 +2869,7 @@ export function App(props: AppProps) {
       icon: 'folder',
       run: () => layout.toggleSidebar(),
     });
-    if (devServerRunning()) {
+    if (devServer.running()) {
       items.push({
         id: 'act:open-preview',
         section: 'Commands',
@@ -3106,8 +2878,8 @@ export function App(props: AppProps) {
         run: () => openPreviewTab(),
       });
     }
-    const stoppableDevServerSessionId = devServerOwnerSessionId ?? devServerBootSessionId;
-    if (devServerStatus() !== 'stopped' && stoppableDevServerSessionId) {
+    const stoppableDevServerSessionId = devServer.stoppableSessionId();
+    if (devServer.status() !== 'stopped' && stoppableDevServerSessionId) {
       const sessionId = stoppableDevServerSessionId;
       items.push({
         id: 'act:stop-server',
@@ -3234,9 +3006,9 @@ export function App(props: AppProps) {
   const livePillLabel = (): string =>
     presetTransitioning()
       ? 'SWITCHING'
-      : devServerStatus() === 'running'
+      : devServer.status() === 'running'
         ? `LIVE :${machine.realVitePort()}`
-        : devServerStatus() === 'starting'
+        : devServer.status() === 'starting'
           ? 'STARTING'
           : 'STOPPED';
 
@@ -3246,9 +3018,9 @@ export function App(props: AppProps) {
       : machine.mode() === 'real-vite'
         ? presetTransitioning()
           ? `${activeTemplate().displayName} · switching`
-          : devServerStatus() === 'running'
+          : devServer.status() === 'running'
             ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
-            : `${activeTemplate().displayName} · ${devServerStatus()}`
+            : `${activeTemplate().displayName} · ${devServer.status()}`
         : activeTemplate().displayName;
 
   const terminalModeHint = (): TerminalModeHint => ({
@@ -3259,7 +3031,8 @@ export function App(props: AppProps) {
   // registered a port (ADR-0155 §3 / ADR-0157 review C1): a `node server.js` with
   // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
   // disjunct so the panel shows during the dev 'starting' window (before the slot lands).
-  const hasPreview = (): boolean => devServerStatus() !== 'stopped' || previewPorts().length > 0;
+  const hasPreview = (): boolean =>
+    devServer.status() !== 'stopped' || devServer.previewPorts().length > 0;
   const isOpfs = storageMode === 'opfs';
 
   return (
@@ -3299,7 +3072,7 @@ export function App(props: AppProps) {
 
         <span
           class="rf-livepill"
-          data-state={presetTransitioning() ? 'switching' : devServerStatus()}
+          data-state={presetTransitioning() ? 'switching' : devServer.status()}
           title={modeLabel()}
         >
           <span class="rf-livepill__dot" aria-hidden="true" />
@@ -3459,10 +3232,10 @@ export function App(props: AppProps) {
                   else the dev port. */}
               <Show when={hasPreview()}>
                 <PreviewPanel
-                  initialPort={previewPorts().at(-1)?.port ?? machine.realVitePort()}
+                  initialPort={devServer.previewPorts().at(-1)?.port ?? machine.realVitePort()}
                   onOpenTab={openPreviewTab}
                   onNotify={flashToast}
-                  ports={previewPorts}
+                  ports={devServer.previewPorts}
                 />
               </Show>
             </div>
