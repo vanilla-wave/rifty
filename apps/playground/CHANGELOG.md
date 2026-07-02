@@ -4,6 +4,19 @@
 
 ### Added
 
+- **`react-vite` preset — React 19 issue-tracker SPA** (template + instant baked
+  snapshot + chooser card + deep-link): ordinary React + TS + Vite 7 + React
+  Router 7 + `@vitejs/plugin-react` app, portable by unit-tested contract
+  (standard `dev`/`build`/`preview` scripts, zero rifty references; templates
+  gained an optional non-lifecycle `scripts` field for that). KNOWN GAP — the
+  dev server does not boot in-browser yet, loudly: (A) the esbuild build-shim
+  does not traverse the config-wrapper's relative `vite.config.ts` import
+  (ModuleLoadError from `.vite-temp`), and (B) plugin-react's injected
+  `optimizeDeps.include` drives Vite 7's optimizer into `esbuild.context`
+  (`NotImplementedError`) — CJS-only react/react-dom need that pre-bundle.
+  E2E acceptance committed but fixme-gated on backlog:
+  playground/react-preset-dev-boot-gaps.
+
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
   (shareable launch URLs + the `pnpm bench` perf harness). The id is validated
   against the registry — an unknown id falls back to the default AND logs a

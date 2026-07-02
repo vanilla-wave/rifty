@@ -14,6 +14,7 @@ import { HONO_API_TEMPLATE } from './hono-api.ts';
 import { KOA_API_TEMPLATE } from './koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
 import type { ProjectSpec } from './project-spec.ts';
+import { REACT_VITE_TEMPLATE } from './react-vite.ts';
 import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
@@ -25,6 +26,7 @@ const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>
   [HIDDEN_EMPTY_TEMPLATE.id, HIDDEN_EMPTY_TEMPLATE],
   [VITE_TEMPLATE.id, VITE_TEMPLATE],
   [VITE8_TEMPLATE.id, VITE8_TEMPLATE],
+  [REACT_VITE_TEMPLATE.id, REACT_VITE_TEMPLATE],
   [TYPESCRIPT_TEMPLATE.id, TYPESCRIPT_TEMPLATE],
   [EXPRESS_SQLITE_TEMPLATE.id, EXPRESS_SQLITE_TEMPLATE],
   [SOCKET_LAB_TEMPLATE.id, SOCKET_LAB_TEMPLATE],

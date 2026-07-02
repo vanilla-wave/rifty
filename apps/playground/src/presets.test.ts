@@ -11,6 +11,7 @@ import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite.ts';
 import { resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -110,11 +111,20 @@ describe('playground presets', () => {
       'node-worker',
       'typescript-ls',
       'real-vite',
+      'react-vite',
     ]);
     for (const preset of browserVitePresets) {
-      expect(presetText(preset)).toContain('import.meta.hot.accept');
+      // react-vite's HMR boundaries come from @vitejs/plugin-react (Fast
+      // Refresh), not hand-written accept handlers — asserted separately below.
+      if (preset.id !== 'react-vite') {
+        expect(presetText(preset)).toContain('import.meta.hot.accept');
+      }
       expect(presetText(preset)).not.toContain('location.reload');
     }
+    const reactVite = PRESETS.find((preset) => preset.id === 'react-vite');
+    expect(reactVite && presetFileContent(reactVite, 'vite.config.ts')).toContain(
+      '@vitejs/plugin-react',
+    );
   });
 
   // Revised pin (node-server template ADR): the honesty invariant — preset
@@ -172,6 +182,42 @@ describe('playground presets', () => {
     expect(vite8.setup).toBe('instant');
     expect(vite8.templateId).toBe('vite8');
     expect(vite8.blurb).toMatch(/Vite 8|Rolldown/i);
+  });
+
+  it('ships the React issue tracker wired to its react-vite template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'react-vite');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe(REACT_VITE_TEMPLATE.id);
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('instant');
+    expect(demo.category).toBe('Live preview');
+
+    const entryPath = REACT_VITE_TEMPLATE.entry.relativePath.replace(/^\/+/, '');
+    expect(presetFileContent(demo, entryPath)).toBe(REACT_VITE_TEMPLATE.entry.content);
+    // the page-side explorer shows the same files the worker seeds, in lockstep
+    const extraFiles: Readonly<Record<string, string>> = REACT_VITE_TEMPLATE.extraFiles;
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      if (file.path === entryPath) continue;
+      expect(extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+
+    expect(demo.openFiles).toEqual([
+      'src/App.tsx',
+      'src/pages/IssueList.tsx',
+      'src/data/issues.ts',
+    ]);
+    expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
+
+    // the ordinary-React-app shape the bench relies on
+    const text = presetText(demo);
+    expect(text).toContain('react-router-dom');
+    expect(text).toContain('createRoot');
+    expect(presetFileContent(demo, 'src/App.tsx')).toContain('/issues/:id');
   });
 
   it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {
