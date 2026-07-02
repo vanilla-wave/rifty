@@ -34,6 +34,7 @@ export {
   type InstallOptions,
   type InstallProgressEvent,
   type InstallResult,
+  type PackumentCacheLike,
 } from './installer.ts';
 export {
   TARBALL_CACHE_ROOT,

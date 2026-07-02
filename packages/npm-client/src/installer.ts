@@ -66,13 +66,23 @@ import {
 import { extractTarGz, parseTarEntries } from './unpacker.ts';
 import { Semaphore } from './utils/semaphore.ts';
 
+/**
+ * Minimal packument-cache surface (`Map` satisfies it structurally). Widened
+ * from `Map<string, Packument>` (ADR-0194) so callers can inject policy-aware
+ * caches — e.g. eddy's process-wide TTL cache — without a Map subclass.
+ */
+export interface PackumentCacheLike {
+  get(name: string): Packument | undefined;
+  set(name: string, packument: Packument): void;
+}
+
 export interface InstallOptions {
   vfs: Vfs;
   cwd: string;
   registry: RegistryClient;
   overrides?: OverrideMap;
   /** Cache of already-loaded packuments (lets multiple installs share). */
-  packumentCache?: Map<string, Packument>;
+  packumentCache?: PackumentCacheLike;
   /**
    * Tarball cache (ADR-0023). Defaults to a {@link VfsTarballCache} at
    * `/.rifty/tarball-cache/` inside `opts.vfs`. Pass an explicit instance to
@@ -177,6 +187,13 @@ export interface InstallResult {
    * (test fakes) stay valid — read it as `result.source ?? 'standard'`.
    */
   source?: 'eddy' | 'standard';
+  /**
+   * The adopted bundle's `manifest.asOf.closureHash` — set iff
+   * `source === 'eddy'` (ADR-0194). Callers persist it as a learned pin:
+   * `requestKey → closureHash` turns the next install of the same dep set into
+   * a cacheable `GET /bundle/<hash>`.
+   */
+  closureHash?: string;
 }
 
 /**
@@ -293,18 +310,19 @@ export async function install(
   // every check passes, so any failure leaves the pre-existing lockfile
   // untouched and the standard verifying install runs (warn, never throw).
   let source: 'eddy' | 'standard' = 'standard';
+  let eddyClosureHash: string | null = null;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
   ) {
-    const seeded = await tryEddyFastPath(
+    eddyClosureHash = await tryEddyFastPath(
       opts,
       rootName,
       dependencies,
       optionalDependencies,
       tarballCache,
     );
-    if (seeded) {
+    if (eddyClosureHash !== null) {
       source = 'eddy';
       existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
     }
@@ -339,7 +357,13 @@ export async function install(
   const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return { packages, lockfile, conflicts: [], source };
+  return {
+    packages,
+    lockfile,
+    conflicts: [],
+    source,
+    ...(eddyClosureHash === null ? {} : { closureHash: eddyClosureHash }),
+  };
 }
 
 async function normalizeInstallArgs(
@@ -558,10 +582,11 @@ function hasLockfileFastPath(
  * ADR-0182 opt-in fast path. Obtain an `EddyBundleV1` from the resolver, verify
  * it (bytes vs the bundle integrity — NON-disableable, mirror-grade trust),
  * check the bundle lockfile covers the request, seed the tarball cache, write
- * the lockfile. Returns `true` on success (the existing lockfile fast path then
- * runs with zero packument network); on ANY failure it warns and returns
- * `false`, leaving the pre-existing lockfile untouched so the standard
- * verifying install runs. Never throws.
+ * the lockfile. Returns the adopted bundle's closureHash on success (the
+ * existing lockfile fast path then runs with zero packument network; the hash
+ * feeds learned pins, ADR-0194); on ANY failure it warns and returns `null`,
+ * leaving the pre-existing lockfile untouched so the standard verifying
+ * install runs. Never throws.
  *
  * The bundle can arrive via THREE attempts, first survivor wins, each failure
  * falls through to the next: a prefetched response (`resolverPrefetch`,
@@ -574,9 +599,9 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<boolean> {
+): Promise<string | null> {
   const url = opts.resolverUrl;
-  if (!url) return false;
+  if (!url) return null;
 
   const body: EddyRequestBody = { dependencies, optionalDependencies };
   if (opts.overrides) body.overrides = opts.overrides;
@@ -623,7 +648,7 @@ async function tryEddyFastPath(
         opts,
         tarballCache,
       );
-      if (outcome === true) return true;
+      if (typeof outcome !== 'string') return outcome.closureHash;
       reasons.push(`${attempt.label}: ${outcome}`);
     } catch (err) {
       reasons.push(`${attempt.label}: ${err instanceof Error ? err.message : String(err)}`);
@@ -641,8 +666,9 @@ async function* bufferedTarEntries(
 }
 
 /**
- * Verify + adopt ONE bundle response; `true` on success, a decline reason
- * otherwise. The bundle is consumed AS A STREAM (network overlaps hash + cache
+ * Verify + adopt ONE bundle response; `{adopted, closureHash}` on success, a
+ * decline reason string otherwise (ADR-0194 threads the hash out for learned
+ * pins). The bundle is consumed AS A STREAM (network overlaps hash + cache
  * writes): the format/v3/coverage gates run on the manifest + lockfile members
  * — the first two, by bundle contract — so a decline cancels the download
  * before tarball bytes transfer. Each tarball is verified against the
@@ -657,7 +683,7 @@ async function consumeEddyResponse(
   effectiveRequest: Record<string, string>,
   opts: InstallOptions,
   tarballCache: TarballCache,
-): Promise<true | string> {
+): Promise<{ adopted: true; closureHash: string } | string> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
@@ -726,12 +752,12 @@ async function consumeEddyResponse(
     return 'bundle is missing tarball member(s) named by its manifest';
   }
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return true;
+  return { adopted: true, closureHash: manifest.asOf.closureHash };
 }
 
-function declineEddy(reason: string): false {
+function declineEddy(reason: string): null {
   console.warn(`npm: fast install (eddy) unavailable, using standard install — ${reason}`);
-  return false;
+  return null;
 }
 
 /**
