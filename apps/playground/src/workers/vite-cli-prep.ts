@@ -32,6 +32,8 @@ const VITE_CLI_PREVIEW_PATCH = `configFile: false,
 				strictPort: options.strictPort,
 				host: options.host,
 				open: options.open,
+				// Request dispatch hangs without it (same class as the dev wrapper's
+				// server.allowedHosts force) — see mergeRiftyConfig.
 				allowedHosts: true,
 				// TODO(backlog: playground/vite-preview-cors-middleware-parity)
 				cors: false
@@ -143,10 +145,23 @@ function mergeRiftyConfig(userConfig) {
   const user = objectOrEmpty(userConfig);
   const userServer = objectOrEmpty(user.server);
   const userOptimizeDeps = objectOrEmpty(user.optimizeDeps);
+  // Retired forces (each with its e2e proof, backlog net/preview-websocket-bridge):
+  // base './' (SW port-context routes root-relative requests, ADR-0097),
+  // appType 'spa' (vite's own default), server.strictPort (port-derived
+  // lifecycle follows any port), server.host (the SW preview path stamps Host
+  // localhost:<port>, ADR-0189 D3 — the generic fix any dev server benefits
+  // from; fork e2e pins the Host). TWO forces remain:
+  // - optimizeDeps.noDiscovery — dep discovery/prebundle needs a real bundling
+  //   esbuild; re-tested 2026-07-02 with the force dropped: zero-config
+  //   "npm i vite && npm run dev" lights LIVE but the optimizer breaks page
+  //   serving (the WASI bridge shim loud-refuses entry-point contexts). Retire
+  //   when real esbuild-wasm replaces the shim.
+  // - server.allowedHosts — re-tested 2026-07-02 WITH Host localhost:<port>:
+  //   guest vite request dispatch HANGS without allowedHosts:true (preview
+  //   bridge timeout, not a 403 — vite's host-middleware path stalls under
+  //   rifty net; root cause untraced). Keep forced until traced.
   return {
     ...user,
-    base: user.base ?? './',
-    appType: user.appType ?? 'spa',
     optimizeDeps: {
       ...userOptimizeDeps,
       noDiscovery: true,
@@ -154,8 +169,6 @@ function mergeRiftyConfig(userConfig) {
     },
     server: {
       ...userServer,
-      strictPort: userServer.strictPort ?? true,
-      host: userServer.host ?? true,
       allowedHosts: userServer.allowedHosts ?? true,
       ${forcedHmr}
     },

@@ -24,7 +24,6 @@
  */
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
-import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import {
   type SpawnWorkerSpec,
   type WorkerProcessHandle,
@@ -330,9 +329,8 @@ function resolveCliPath(cwd: string, path: string): string {
 function withViteCliArgs(binPath: string, args: readonly string[], ctx: CommandContext): string[] {
   if (binNameOf(binPath) !== 'vite') return [...args];
   const mode = viteCliMode(args);
-  if (mode === 'preview') {
-    return [...args, '--host', PREVIEW_LOCAL_HOST];
-  }
+  // No preview-mode '--host': the SW preview path stamps Host localhost:<port>
+  // (ADR-0189 D3), which vite's default allowedHosts accepts.
   if (mode !== 'dev') return [...args];
   return [
     ...withoutViteConfigArgs(args),

@@ -29,8 +29,8 @@
  * require a bump — receiver treats `undefined` as the default (ADR-0031
  * SemVer-major rule, frame side).
  *
- * Does NOT cover the URL convention (`/preview/<port>/...`) or the
- * synthetic `preview.local` host — those are pinned by
+ * Does NOT cover the URL convention (`/preview/<port>/...`) or the upstream
+ * `localhost:<port>` Host synthesis — those are pinned by
  * {@link SW_ROUTING_VERSION} (they live in `@riftydev/io/preview-protocol`).
  */
 export const SW_FRAME_VERSION = '1';
@@ -74,7 +74,9 @@ export const SW_FRAME_VERSION = '1';
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '5';
+// '6': synthesizePreviewUrl host preview.local -> localhost:<port> (generic
+// dev-server Host allow-lists pass without config injection, ADR-0189 D3).
+export const SW_ROUTING_VERSION = '6';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

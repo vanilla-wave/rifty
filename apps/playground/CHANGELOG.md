@@ -4,6 +4,20 @@
 
 ### Changed
 
+- **Vite wrapper forces retired to two (backlog net/preview-websocket-bridge,
+  acceptance 4 partial).** With the preview path now stamping `Host: localhost:<port>`
+  (`@riftydev/io`, ADR-0189 D3), the dev config wrapper no longer forces
+  `base './'` (the SW routes root-relative requests by port context, ADR-0097),
+  `appType` (vite's own default), `server.strictPort` (the port-derived lifecycle
+  follows any port), or `server.host`; the preview-mode `--host preview.local` CLI
+  arg is gone too. Proofs: m10-hmr, manual-vite (bare `vite`, zero config/args),
+  vite7-build-preview, generic-lifecycle (asserts `host=localhost:<port>` reaches
+  the guest). TWO forces survive with recorded re-tests: `optimizeDeps.noDiscovery`
+  (dropping it: LIVE lights but the optimizer breaks page serving — the WASI-bridge
+  esbuild loud-refuses entry-point contexts; needs real esbuild-wasm) and
+  `server.allowedHosts` (dispatch HANGS without it even with the localhost Host —
+  untraced vite host-middleware stall; also kept in the vite-preview cli patch).
+
 - **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
   net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
   rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config

@@ -5,13 +5,17 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(fileURLToPath(new URL('./vite-cli-prep.ts', import.meta.url)), 'utf8');
 
 describe('prepareViteCli', () => {
+  it('module parses and loads (a stray backtick in a template-literal comment breaks the worker fetch)', async () => {
+    await expect(import('./vite-cli-prep.ts')).resolves.toBeDefined();
+  });
+
   it('patches Vite CLI async actions into the child keepalive', () => {
     expect(source).toContain('trackKeepalivePromise');
     expect(source).toContain('this.runMatchedCommand();');
     expect(source).toContain('__riftyTrackCliPromise(__riftyAction)');
   });
 
-  it('installs a Vite dev CLI config wrapper for forced options + the server handle (stock HMR, ADR-0189)', () => {
+  it('installs a Vite dev CLI config wrapper for the LAST forced option + the server handle (stock HMR, ADR-0189)', () => {
     expect(source).toContain('writeViteCliConfigWrapper');
     expect(source).toContain("if (mode === 'dev') writeViteCliConfigWrapper(root, opts)");
     expect(source).toContain('installEsbuildTransformBridge(root)');
@@ -27,6 +31,19 @@ describe('prepareViteCli', () => {
     expect(source).not.toContain('clientPort');
     expect(source).toContain('hmrOff');
     expect(source).toContain('hmr: false');
+  });
+
+  it('retired forces stay retired: Host is generic (localhost:<port>), routing is port-derived', () => {
+    // base './' (SW routes root-relative, ADR-0097), appType (vite default),
+    // strictPort (port-derived lifecycle), host (SW stamps Host
+    // localhost:<port>, ADR-0189 D3) — each proven by the vite preset e2e.
+    // allowedHosts stays: dispatch HANGS without it even with Host localhost
+    // (re-tested 2026-07-02, untraced vite host-middleware stall).
+    expect(source).not.toContain("base: user.base ?? './'");
+    expect(source).not.toContain('appType:');
+    expect(source).not.toContain('strictPort: userServer.strictPort');
+    expect(source).not.toContain('host: userServer.host');
+    expect(source).toContain('allowedHosts: userServer.allowedHosts ?? true');
   });
 
   it('patches Vite preview inline config without loading Vite config files', () => {

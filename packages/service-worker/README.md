@@ -17,8 +17,8 @@ that port. The default owner binding is port-aware (ADR-0123): a Worker client
 that announces the controlling window's `ownerToken` plus `ports: [port]` wins,
 otherwise routing falls back to the historical first controlled window bridge.
 
-- URL convention + `preview.local` synthetic host: `@riftydev/io/preview-protocol`,
-  ADR-0036.
+- URL convention + upstream `localhost:<port>` Host synthesis:
+  `@riftydev/io/preview-protocol`, ADR-0036 (+ ADR-0189 D3).
 - SW-side wiring: `installPreviewInterceptor(self)` in `sw.ts` /
   `preview-bridge.ts`.
 - Main-side wiring: `setupPreviewBridge(handler)` posts the
