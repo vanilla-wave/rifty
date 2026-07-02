@@ -39,6 +39,7 @@ import {
 import { copyToClipboard } from '../glue/clipboard.ts';
 import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
+import { runPreviewWarmup } from './preview-warmup.ts';
 
 type Phase = 'starting' | 'live' | 'error';
 
@@ -143,6 +144,14 @@ export function PreviewPanel(props: {
     }
   }
 
+  // Re-probe/commit-check NOW when the live-port set updates (a dev-server
+  // announce) — event-driven readiness; the poll interval is the fallback.
+  let wakeWarmup: (() => void) | null = null;
+  createEffect(() => {
+    entries();
+    wakeWarmup?.();
+  });
+
   // (Re)run warm-up on port change or Reload retry. `alive` guards against a
   // stale loop writing state after unmount / a later run.
   createEffect(() => {
@@ -150,46 +159,51 @@ export function PreviewPanel(props: {
     retry();
     let alive = true;
     setPhase('starting');
-    void (async () => {
-      const deadline = Date.now() + WARMUP_TIMEOUT_MS;
-      while (alive && Date.now() < deadline) {
-        const ac = new AbortController();
-        const cap = setTimeout(() => ac.abort(), WARMUP_FETCH_TIMEOUT_MS);
-        try {
-          const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: ac.signal });
-          await res.body?.cancel().catch(() => {});
-          if (res.ok) break;
-        } catch {
-          // server/SW not ready, or probe aborted — keep polling
-        } finally {
-          clearTimeout(cap);
-        }
-        await new Promise((r) => setTimeout(r, WARMUP_INTERVAL_MS));
-      }
-      if (!alive) return;
-      // Route reachable — load into the frame, then poll for an actual commit
-      // (cross-browser: fast where the nav commits, falls through to `error`
-      // where the sub-frame nav aborts).
-      if (frame) {
-        remountFrame();
-        await new Promise((r) => setTimeout(r, 0));
-        const nextFrame = frame;
-        if (!alive || !nextFrame) return;
-        nextFrame.src = url;
-      }
-      const commitDeadline = Date.now() + COMMIT_TIMEOUT_MS;
-      let ok = false;
-      while (alive && Date.now() < commitDeadline) {
-        await new Promise((r) => setTimeout(r, COMMIT_INTERVAL_MS));
-        if (committed()) {
-          ok = true;
-          break;
-        }
-      }
-      if (alive) setPhase(ok ? 'live' : 'error');
-    })();
+    void runPreviewWarmup(
+      {
+        probe: async (signal) => {
+          try {
+            const res = await fetch(url, { method: 'GET', cache: 'no-store', signal });
+            await res.body?.cancel().catch(() => {});
+            return res.ok;
+          } catch {
+            return false; // server/SW not ready, or probe aborted — keep polling
+          }
+        },
+        // Route reachable — load into the frame; the frame's load event wakes
+        // the commit check (cross-browser: fast where the nav commits, falls
+        // through to `error` where the sub-frame nav aborts).
+        navigate: async () => {
+          if (!frame) return;
+          remountFrame();
+          await new Promise((r) => setTimeout(r, 0));
+          const nextFrame = frame;
+          if (!alive || !nextFrame) return;
+          nextFrame.addEventListener('load', () => wakeWarmup?.(), { once: true });
+          nextFrame.src = url;
+        },
+        committed,
+        wake: () =>
+          new Promise<void>((resolve) => {
+            wakeWarmup = resolve;
+          }),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        now: Date.now,
+      },
+      {
+        warmupTimeoutMs: WARMUP_TIMEOUT_MS,
+        warmupIntervalMs: WARMUP_INTERVAL_MS,
+        probeTimeoutMs: WARMUP_FETCH_TIMEOUT_MS,
+        commitTimeoutMs: COMMIT_TIMEOUT_MS,
+        commitIntervalMs: COMMIT_INTERVAL_MS,
+      },
+      () => alive,
+    ).then((result) => {
+      if (result !== 'cancelled') setPhase(result);
+    });
     onCleanup(() => {
       alive = false;
+      wakeWarmup?.(); // release a warmup parked on wake() so it observes alive=false
     });
   });
 

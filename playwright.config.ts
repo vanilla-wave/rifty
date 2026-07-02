@@ -24,6 +24,10 @@ const HEAVY_SPECS = [
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // One throwaway page load after the webServer is up: absorbs the cold dev
+  // server's dep-optimize page RELOAD (dev-only), which otherwise lands on the
+  // suite's FIRST spec mid-starter-pick and silently drops the pick.
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   // Lane parallelism is set per invocation, not globally: `chromium-heavy` runs
   // with --workers=1 (package.json `test:e2e:heavy`); `chromium-light` uses

@@ -111,12 +111,18 @@ describe('vite command — real installed bin routing', () => {
     expect(source).toContain('scriptCtx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
   });
 
-  it('waits for preset dev-config dependency restore before running the next pty command', () => {
+  it('gates every pty run on the preset dependency restore INSIDE the run (echo never waits)', () => {
     expect(source).toContain('let devConfigReady: Promise<void> = Promise.resolve()');
     expect(source).toContain('devConfigReady = prepareActiveDevConfigDeps()');
-    expect(source).toContain('return devConfigReady');
-    expect(source).toContain("if (frame.type === 'pty:exec')");
-    expect(source).toContain('void devConfigReady.then(() => server.handleFrame(frame))');
+    // The dev-config ack must NOT await the restore — that gated the page's
+    // `$ <line>` echo behind the snapshot download (dead-silent terminal).
+    expect(source).not.toContain('return devConfigReady');
+    expect(source).not.toContain('void devConfigReady.then(() => server.handleFrame(frame))');
+    // The per-run gate replaces the old pty:exec queue: same deps guarantee for
+    // vite/node/npm boot lines, with progress streamed to the run's stdout.
+    expect(source).toContain('beforeRun: (emit) =>');
+    expect(source).toContain('withSlowProgress(devConfigReady, {');
+    expect(source).toContain('restoring project dependencies');
   });
 
   it('waits for preset dev-config dependency restore before relaying TS-LSP requests', () => {

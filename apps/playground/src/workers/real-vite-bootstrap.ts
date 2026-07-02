@@ -65,6 +65,7 @@ import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
+import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import {
   amendStarterGeneratedBaseline,
@@ -928,14 +929,33 @@ async function bootShellOwner(opts: {
     onPreviewReq: () => previews.publish(),
     // Re-resolve the dev-server config for the current preset (ADR-0148) so a
     // node-server preset boots its OWN runtime/port, not the spawn-time default.
+    // The ack does NOT wait for the deps restore: gating it made the page's
+    // `$ <boot line>` echo sit behind a 9.6-16 MB snapshot download (dead-silent
+    // terminal, then command + result in one burst) and bounded the restore by
+    // the page's 60s dev-config timeout. Runs await `devConfigReady` via
+    // `beforeRun` instead — config assignment stays synchronous, so the ack is
+    // still ordering-correct for the boot line that follows.
     onDevConfig: (config) => {
       devSpec = resolveProjectSpec(config.templateId);
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
       devConfigReady = prepareActiveDevConfigDeps();
-      return devConfigReady;
     },
+    // Deps gate per run: every pty command waits for the active preset's deps
+    // (instant snapshot restore) INSIDE the run — echo/dispatch never wait, the
+    // terminal shows honest progress when the restore is slow (>250 ms; a
+    // stamp-satisfied ready resolves fast and prints nothing).
+    beforeRun: (emit) =>
+      withSlowProgress(devConfigReady, {
+        delayMs: 250,
+        onSlow: () => emit('\x1b[90mrestoring project dependencies…\x1b[0m\r\n', 'stdout'),
+        onSettledAfterSlow: (elapsedMs) =>
+          emit(
+            `\x1b[90mdependencies restored in ${(elapsedMs / 1000).toFixed(1)}s\x1b[0m\r\n`,
+            'stdout',
+          ),
+      }),
   });
 
   // ADR-0166 P1.9a — TS language-service child + page↔LS relay. There is no
@@ -988,13 +1008,11 @@ async function bootShellOwner(opts: {
   kernelIpc.onMessage?.((message) => {
     if (isPtyIpcMessage(message)) {
       // Only page→owner frames are inbound here; ignore a stray owner→page echo.
+      // pty:exec no longer queues behind devConfigReady here: the run registers
+      // immediately (stdin/signal frames stop dropping while deps restore) and
+      // awaits the gate inside `beforeRun`, with progress on the run's stdout.
       if (isPageToOwner(message.frame)) {
-        const frame = message.frame;
-        if (frame.type === 'pty:exec') {
-          void devConfigReady.then(() => server.handleFrame(frame));
-          return;
-        }
-        void server.handleFrame(frame);
+        void server.handleFrame(message.frame);
       }
       return;
     }
