@@ -49,7 +49,7 @@ const enc = new TextEncoder();
 const INLINE_SOURCEMAP =
   /\/\/# sourceMappingURL=data:application\/json(?:;charset=utf-8)?;base64,([A-Za-z0-9+/=]+)\s*$/;
 
-let wasmPromise: Promise<ArrayBuffer> | null = null;
+let wasmModulePromise: Promise<WebAssembly.Module> | null = null;
 const SUPPORTED_OPTIONS = new Set([
   'charset',
   'define',
@@ -81,14 +81,17 @@ function sourceText(input: string | Uint8Array): string {
   return typeof input === 'string' ? input : dec.decode(input);
 }
 
-async function loadEsbuildWasm(): Promise<ArrayBuffer> {
-  wasmPromise ??= fetch(esbuildWasmUrl).then(async (response) => {
+/** Compile esbuild.wasm ONCE per realm and reuse the Module across transforms —
+ * a fresh WASI instance per run keeps process semantics, but re-compiling the
+ * ~19 MB binary per transform dominated dev-server transform latency. */
+async function loadEsbuildModule(): Promise<WebAssembly.Module> {
+  wasmModulePromise ??= fetch(esbuildWasmUrl).then(async (response) => {
     if (!response.ok) {
       throw new Error(`esbuild WASI fetch failed: HTTP ${response.status}`);
     }
-    return response.arrayBuffer();
+    return WebAssembly.compile(await response.arrayBuffer());
   });
-  return wasmPromise;
+  return wasmModulePromise;
 }
 
 function pushStringOption(args: string[], flag: string, value: unknown): void {
@@ -222,7 +225,7 @@ function esbuildArgs(options: EsbuildTransformOptions): string[] {
 export function createEsbuildTransformBridge(workspace: string): EsbuildTransformBridge {
   return async (input, options = {}) => {
     const args = esbuildArgs(options);
-    const wasm = await loadEsbuildWasm();
+    const wasm = await loadEsbuildModule();
     const source = enc.encode(sourceText(input));
     let delivered = false;
     const stderrChunks: string[] = [];

@@ -61,7 +61,11 @@ import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
 import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
-import { needsProjectChoiceOnBoot } from './glue/project-boot-policy.ts';
+import {
+  hasPersistedProjectHint,
+  needsProjectChoiceOnBoot,
+  recordProjectPresenceHint,
+} from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
@@ -114,6 +118,9 @@ import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts'
 export { createAppProjectStore } from './glue/app-project-store.ts';
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
+// Degraded-path beat for the first-run chooser: the chooser is index-driven
+// (first owner publish), this only fires when NO index arrived at all.
+const FIRST_RUN_LAUNCHER_FALLBACK_MS = 8_000;
 const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
@@ -1797,6 +1804,9 @@ export function App(props: AppProps) {
   createEffect(() => {
     const idx = projectIndex();
     if (!idx) return;
+    // Keep the page-side presence hint current: the NEXT cold boot opens the
+    // first-run chooser instantly when this says no project survived.
+    recordProjectPresenceHint(idx, globalThis.localStorage);
     untrack(() => {
       store.hydrateIndex(idx);
       const wasReady = editorProjectContextReady();
@@ -2228,6 +2238,10 @@ export function App(props: AppProps) {
       // stamp/RIFTY_RFV_SLUG to the ACTIVE ROOT (store.activeId — 'scratch' on a
       // gallery pick), matching the owner spawn; `templateId`/`setup` follow the
       // picked preset (the new active starter for this scratch).
+      //
+      // The ack is config-assignment only — the deps restore no longer gates it
+      // (the owner's per-run `beforeRun` gate awaits the restore inside the run,
+      // streaming progress), so the `$ <boot line>` echo below paints immediately.
       await workspaceOwner().setDevConfig({
         templateId: templateForPreset(preset).id,
         slug: store.activeId(),
@@ -2370,10 +2384,23 @@ export function App(props: AppProps) {
       // awaits) so a fast owner index publish can't flash the first-run launcher.
       initialBootDecisionMade = true;
       void onPickStarter(deepLinkStarterId);
+    } else if (!hasPersistedProjectHint(globalThis.localStorage)) {
+      // TRUE first run (no page-side presence hint): open the chooser NOW —
+      // waiting for the first owner index publish (~1.5-3s dev, more hosted)
+      // reads as a dead page. The publish still arbitrates: needs-choice keeps
+      // it open; a stale hint (project exists) closes it and restores.
+      openFirstRunLauncher();
     } else {
+      // Returning user: the chooser is INDEX-DRIVEN — the first owner index
+      // publish decides (the index effect opens the chooser on a needs-choice
+      // publish, restores otherwise). A blind 1s open raced slow owner boots
+      // (hosted stand: first publish ~2-3s) and FLASHED the chooser over a
+      // project about to restore. The timer survives only as a degraded
+      // fallback: no index AT ALL within the beat = owner boot is broken —
+      // surface the gallery rather than a blank IDE (a late publish overrides).
       const timer = setTimeout(() => {
-        if (!initialBootDecisionMade) openFirstRunLauncher();
-      }, 1000);
+        if (!initialBootDecisionMade && projectIndex() === null) openFirstRunLauncher();
+      }, FIRST_RUN_LAUNCHER_FALLBACK_MS);
       onCleanup(() => clearTimeout(timer));
     }
   });

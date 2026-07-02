@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`runWasi` accepts a precompiled `WebAssembly.Module` (ADR-0193):** callers
+  can compile once and reuse the Module across runs (a fresh instance per run
+  keeps WASI one-process-per-run semantics). Bytes input unchanged. Form
+  detection branches on the `WebAssembly.instantiate` RESULT shape, not
+  realm-local `instanceof` on the input — a Module from another realm (node:vm,
+  structured-clone) runs correctly; pinned by a cross-realm unit test.
+
 - **Node `wasi` shape for Vite 8/Rolldown:** `Wasi` now exposes `wasiImport`,
   `getImportObject()`, and `initialize(instance)` aliases matching Node's
   `node:wasi` contract while preserving the existing preview1 syscall surface.

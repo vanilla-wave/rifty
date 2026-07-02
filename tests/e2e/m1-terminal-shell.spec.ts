@@ -92,6 +92,11 @@ test.describe('M1 - terminal shell', () => {
   test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
     await bootProjectFiles(page);
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    // Anchor past the deps-restore window: the `$ vite` echo now paints BEFORE
+    // the baked snapshot restore (per-run gate), whose progress line would
+    // otherwise land inside the 250 ms quiet window below. Once Vite is ready,
+    // the terminal is in the steady streaming state this contract is about.
+    await expectDefaultViteReady(page);
     const before = await terminalBuffer(page);
 
     await page.locator('[data-testid="terminal"]').click();
