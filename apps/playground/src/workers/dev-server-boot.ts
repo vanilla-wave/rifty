@@ -11,17 +11,11 @@
  * IMPORTANT: NO top-level side effects (only declarations + `const enc`).
  * `registerNetBuiltins`/`registerSqliteBuiltin` stay in the ENTRY modules, never here.
  */
-import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import {
-  createHmrBridgeToken,
-  createHmrBridgeVitePlugin,
-  hmrBridgeUrl,
-} from '../glue/hmr-bridge.ts';
 import type {
   BootstrapConfig,
   NodeServerBootstrapConfig,
@@ -41,14 +35,8 @@ interface ViteUserConfig {
     port?: number;
     strictPort?: boolean;
     middlewareMode?: boolean;
-    hmr?:
-      | false
-      | {
-          protocol: 'ws';
-          host: string;
-          clientPort: number;
-          path: string;
-        };
+    /** `undefined` = vite's stock HMR (ADR-0189); `false` = pinned off (ADR-0161, Vite 8). */
+    hmr?: false | undefined;
     host?: boolean;
     allowedHosts?: boolean;
   };
@@ -259,13 +247,6 @@ export async function bootDevServer(opts: {
     )) as unknown as {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
-    // Only wire (and announce) the HMR bridge when HMR is actually enabled. With
-    // the Vite 8 template HMR is OFF (ADR-0161), so don't mint a token or log a
-    // "bridge ready" line for a bridge that is never installed (no false signal).
-    const hmrBridgeToken = cfg.hmrEnabled ? createHmrBridgeToken() : null;
-    if (hmrBridgeToken !== null) {
-      log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
-    }
     log(`[real-vite/worker] starting dev server on port ${port}…\n`);
     const server = await viteNs.createServer({
       root,
@@ -274,14 +255,10 @@ export async function bootDevServer(opts: {
         port,
         strictPort: cfg.server.strictPort,
         middlewareMode: false,
-        hmr: hmrBridgeToken
-          ? {
-              protocol: 'ws',
-              host: PREVIEW_LOCAL_HOST,
-              clientPort: port,
-              path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`,
-            }
-          : false,
+        // Stock vite HMR (ADR-0189): the generic preview-path WS bridge carries
+        // vite's own server.ws — no rifty token/plugin/endpoint rewrite.
+        // `false` stays only for templates pinned off (Vite 8, ADR-0161).
+        hmr: cfg.hmrEnabled ? undefined : false,
         host: cfg.server.host,
         allowedHosts: cfg.server.allowedHosts,
       },
@@ -294,7 +271,7 @@ export async function bootDevServer(opts: {
       optimizeDeps: (cfg.server.optimizeDepsDisabled
         ? { noDiscovery: true, include: [] }
         : {}) as unknown as ViteUserConfig['optimizeDeps'],
-      plugins: hmrBridgeToken ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
+      plugins: [],
     });
     await server.listen();
     activeServer = server;

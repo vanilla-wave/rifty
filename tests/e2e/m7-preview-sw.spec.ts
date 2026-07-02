@@ -61,7 +61,9 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(probe.contentType).toContain('text/html');
     expect(probe.body).toContain('rifty + real Vite (worker)');
     expect(probe.body).toContain('src/main.js');
-    expect(probe.body).toContain('data-rifty-hmr-bridge');
+    // ADR-0189: the generic preview WS bridge is injected into every text/html
+    // response at the cross-realm preview path (no per-tool plugin).
+    expect(probe.body).toContain('data-rifty-ws-bridge');
   });
 
   // Regression: the test above proves the dev server SERVES the shell HTML, but a

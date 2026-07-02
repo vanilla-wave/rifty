@@ -4,6 +4,23 @@
 
 ### Changed
 
+- **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
+  net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
+  rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config
+  flows through and vite's stock client rides the generic preview-path WS bridge
+  (`@riftydev/net` injects it into every text/html preview response — webpack/socket.io
+  get the same transport for free). Deleted: `RIFTY_VITE_CLI_HMR`/`RIFTY_VITE_CLI_PORT`
+  env plumbing, `viteHmrClientScript`/`createHmrBridgeVitePlugin` (+ structural plugin
+  types), the dev-server-boot bespoke hmr wiring. The wrapper keeps a minimal
+  `configureServer` plugin (sets `__riftyActiveViteServer` for editor-write HMR
+  invalidation — the VFS has no watcher events) and its OTHER forced options
+  (allowedHosts/host/strictPort/base/optimizeDeps — remaining wrapper retirement is
+  tracked in the backlog item). New env `RIFTY_VITE_CLI_HMR_OFF=1` threads only the
+  ADR-0161 Vite 8 hmr-off pin. A user `--config` path now also threads to the dev
+  wrapper (was preview-only). Socket-lab `browser-preview-websocket` flips to
+  `supported` with a real round-trip probe; instrumentation keys renamed
+  (`data-rifty-ws-bridge`, `__riftyWsBridgeOpen`, `rifty:ws:*`).
+
 - **`node:sqlite` works in any project — preset flag deleted.** Worker realms
   install a sync sql.js wasm provider at boot (bytes via sync XHR of the bundled
   asset); the builtin self-initializes at the first `require('node:sqlite')`

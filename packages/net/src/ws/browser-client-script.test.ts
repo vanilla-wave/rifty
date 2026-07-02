@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { webSocketBridgeClientScript } from './browser-client-script.ts';
-import { channelNameFor, portChannelNameFor } from './channel.ts';
+import { channelNameFor, portChannelNameFor, portChannelNameForPort } from './channel.ts';
 import { WebSocketServer } from './in-process.ts';
 
 interface BrowserWindowLike {
   WebSocket?: unknown;
-  location: { href: string; hostname: string };
+  location: { href: string; hostname: string; pathname: string };
   __riftyWebSocketBridgeInstalled?: boolean;
   __riftyHmrOpen?: boolean;
   __riftyHmrLastMessage?: unknown;
@@ -36,7 +36,9 @@ interface ServerSocketLike {
   close(code?: number, reason?: string): void;
 }
 
-function installWindow(opts: { hostname?: string; nativeWebSocket?: unknown } = {}): {
+function installWindow(
+  opts: { hostname?: string; pathname?: string; nativeWebSocket?: unknown } = {},
+): {
   readonly win: BrowserWindowLike;
   readonly restore: () => void;
 } {
@@ -44,9 +46,10 @@ function installWindow(opts: { hostname?: string; nativeWebSocket?: unknown } = 
   const previousWindow = globalWithWindow.window;
   const events = new EventTarget();
   const hostname = opts.hostname ?? 'preview.local';
+  const pathname = opts.pathname ?? '/';
   const win: BrowserWindowLike = {
     WebSocket: opts.nativeWebSocket,
-    location: { href: `http://${hostname}:5174/`, hostname },
+    location: { href: `http://${hostname}:5174${pathname}`, hostname, pathname },
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
     dispatchEvent: events.dispatchEvent.bind(events),
@@ -501,6 +504,170 @@ describe('webSocketBridgeClientScript', () => {
       expect(closeEvent.wasClean).toBe(false);
     } finally {
       server.close();
+      restore();
+    }
+  });
+});
+
+describe('webSocketBridgeClientScript previewPortFromPath remap (ADR-0189)', () => {
+  interface OpenFrame {
+    readonly type?: string;
+    readonly cid?: string;
+    readonly url?: string;
+    readonly protocols?: readonly string[];
+  }
+
+  function ackingPeer(guestPort: number): {
+    readonly opens: OpenFrame[];
+    readonly close: () => void;
+  } {
+    const peer = new BroadcastChannel(portChannelNameForPort(guestPort));
+    const opens: OpenFrame[] = [];
+    const onPeer = (e: MessageEvent): void => {
+      const f = e.data as OpenFrame;
+      if (f?.type === 'open') {
+        opens.push(f);
+        peer.postMessage({ type: 'open-ack', cid: f.cid, protocol: f.protocols?.[0] ?? '' });
+      }
+    };
+    peer.addEventListener('message', onPeer);
+    return {
+      opens,
+      close(): void {
+        peer.removeEventListener('message', onPeer);
+        peer.close();
+      },
+    };
+  }
+
+  async function openOrClose(ws: BrowserWebSocketLike): Promise<'open' | 'close'> {
+    return new Promise((resolve) => {
+      ws.addEventListener('open', () => resolve('open'), { once: true });
+      ws.addEventListener('close', () => resolve('close'), { once: true });
+    });
+  }
+
+  it('bridges a loopback URL to the guest port from /preview/<port>/ regardless of the URL port', async () => {
+    const { win, restore } = installWindow({ hostname: 'localhost', pathname: '/preview/9040/' });
+    const peer = ackingPeer(9040);
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      // Stock dev-client shape: aims at the page origin (playground host:port),
+      // NOT the guest port — only the /preview/<port>/ prefix knows the guest.
+      const ws = new BrowserWebSocket('ws://localhost:5174/ws', 'vite-hmr');
+
+      await expect(openOrClose(ws)).resolves.toBe('open');
+      expect(ws.protocol).toBe('vite-hmr');
+      // The original URL travels in the open frame; only the channel is remapped.
+      expect(peer.opens).toEqual([
+        expect.objectContaining({ url: 'ws://localhost:5174/ws', protocols: ['vite-hmr'] }),
+      ]);
+      ws.close();
+    } finally {
+      peer.close();
+      restore();
+    }
+  });
+
+  it('bridges 127.0.0.1 and the page hostname; deep preview paths still resolve the prefix port', async () => {
+    const { win, restore } = installWindow({
+      hostname: 'rifty.example',
+      pathname: '/preview/9041/nested/page',
+    });
+    const peer = ackingPeer(9041);
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+
+      const viaLoopbackIp = new BrowserWebSocket('ws://127.0.0.1:5273/a');
+      await expect(openOrClose(viaLoopbackIp)).resolves.toBe('open');
+      viaLoopbackIp.close();
+
+      const viaPageHost = new BrowserWebSocket('wss://rifty.example/b');
+      await expect(openOrClose(viaPageHost)).resolves.toBe('open');
+      viaPageHost.close();
+
+      expect(peer.opens.map((f) => f.url)).toEqual([
+        'ws://127.0.0.1:5273/a',
+        'wss://rifty.example/b',
+      ]);
+    } finally {
+      peer.close();
+      restore();
+    }
+  });
+
+  it('keeps native WebSocket for non-loopback foreign hosts (real egress stays real)', () => {
+    const constructed: string[] = [];
+    class NativeWebSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      constructor(url: string) {
+        super();
+        constructed.push(url);
+      }
+
+      send(): void {}
+      close(): void {}
+    }
+    const { win, restore } = installWindow({
+      hostname: 'localhost',
+      pathname: '/preview/9042/',
+      nativeWebSocket: NativeWebSocket,
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('wss://echo.example.com/socket');
+
+      expect(ws).toBeInstanceOf(NativeWebSocket);
+      expect(constructed).toEqual(['wss://echo.example.com/socket']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not remap outside a /preview/<port>/ path (loopback falls through to native)', () => {
+    const constructed: string[] = [];
+    class NativeWebSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      constructor(url: string) {
+        super();
+        constructed.push(url);
+      }
+
+      send(): void {}
+      close(): void {}
+    }
+    const { win, restore } = installWindow({
+      hostname: 'localhost',
+      pathname: '/not-preview/9043/',
+      nativeWebSocket: NativeWebSocket,
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://localhost:9043/ws');
+
+      expect(ws).toBeInstanceOf(NativeWebSocket);
+      expect(constructed).toEqual(['ws://localhost:9043/ws']);
+    } finally {
       restore();
     }
   });

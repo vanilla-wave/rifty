@@ -64,6 +64,87 @@ describe('previewPortChannelUrl', () => {
   });
 });
 
+describe('cross-realm preview — text/html WS bridge injection (ADR-0189)', () => {
+  it('injects the marker-guarded bridge script into text/html responses (content-length honest)', async () => {
+    const html = '<!doctype html><html><head></head><body>app</body></html>';
+    const bytes = new TextEncoder().encode(html);
+    cleanup.add(
+      serveCrossRealmPreview(5111, async () => {
+        return new Response(bytes, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-length': String(bytes.byteLength),
+          },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5111);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain('<script data-rifty-ws-bridge>');
+    expect(body).toContain('__riftyWebSocketBridgeInstalled');
+    expect(body).toContain('<body>app</body>');
+    expect(Number(response.headers.get('content-length'))).toBe(
+      new TextEncoder().encode(body).byteLength,
+    );
+  });
+
+  it('leaves non-HTML responses byte-identical', async () => {
+    const payload = JSON.stringify({ rows: [1, 2, 3] });
+    cleanup.add(
+      serveCrossRealmPreview(5112, async () => {
+        return new Response(payload, {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5112);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/api'));
+    expect(await response.text()).toBe(payload);
+  });
+
+  it('leaves content-encoded html byte-identical (cannot rewrite compressed bytes)', async () => {
+    const compressedish = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02]);
+    cleanup.add(
+      serveCrossRealmPreview(5114, async () => {
+        return new Response(compressedish, {
+          status: 200,
+          headers: { 'content-type': 'text/html', 'content-encoding': 'gzip' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5114);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(compressedish);
+  });
+
+  it('does not double-inject an already-marked document', async () => {
+    const html = '<html><head><script data-rifty-ws-bridge>/* here */</script></head></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5113, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5113);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(await response.text()).toBe(html);
+  });
+});
+
 describe('cross-realm preview port — happy path', () => {
   it('round-trips a GET → Response across the BroadcastChannel hop', async () => {
     cleanup.add(

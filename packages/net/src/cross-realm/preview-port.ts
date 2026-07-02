@@ -34,6 +34,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { PortHandler } from '../registry.ts';
 import { channelNameFor } from '../ws/bridge.ts';
+import { injectPreviewWebSocketBridge } from './preview-html-inject.ts';
 
 /**
  * Version of the page↔worker preview-port wire-frame. Net-local — see the
@@ -150,9 +151,24 @@ function headersToObject(h: Headers): Record<string, string> {
 
 /** True when the response media type is `text/event-stream` (ignoring params). */
 function isEventStream(headers: Headers): boolean {
+  return mediaType(headers) === 'text/event-stream';
+}
+
+/** True when the response media type is `text/html` (ignoring params). */
+function isHtml(headers: Headers): boolean {
+  return mediaType(headers) === 'text/html';
+}
+
+function mediaType(headers: Headers): string | null {
   const ct = headers.get('content-type');
-  if (ct === null) return false;
-  return ct.split(';', 1)[0]?.trim().toLowerCase() === 'text/event-stream';
+  if (ct === null) return null;
+  return ct.split(';', 1)[0]?.trim().toLowerCase() ?? null;
+}
+
+/** True when the body bytes are uncompressed (rewritable as text). */
+function isIdentityEncoding(headers: Headers): boolean {
+  const encoding = headers.get('content-encoding');
+  return encoding === null || encoding.trim().toLowerCase() === 'identity';
 }
 
 let counter = 0;
@@ -232,6 +248,47 @@ export function serveCrossRealmPreview(
         type: 'error',
         requestId,
         message: ceiling.message,
+      } satisfies PreviewPortFrame);
+      return;
+    }
+
+    // ADR-0189: every text/html preview document gets the generic WebSocket
+    // bridge script injected (buffered v1 — the body must be whole to rewrite,
+    // so html always takes the buffered `reply`, which every peer decodes).
+    // Content-encoded bodies pass through untouched: rewriting compressed
+    // bytes as utf-8 would corrupt the document (the request already strips
+    // accept-encoding, so this only guards an unconditional compressor).
+    if (
+      response.body !== null &&
+      isHtml(response.headers) &&
+      isIdentityEncoding(response.headers)
+    ) {
+      let injected: Uint8Array;
+      try {
+        const raw = await drainBodyWithDeadline(response.body, streamDrainTimeoutMs);
+        injected = new TextEncoder().encode(
+          injectPreviewWebSocketBridge(new TextDecoder().decode(raw)),
+        );
+      } catch (err) {
+        channel.postMessage({
+          type: 'error',
+          requestId,
+          message: err instanceof Error ? err.message : String(err),
+        } satisfies PreviewPortFrame);
+        return;
+      }
+      const headers = headersToObject(response.headers);
+      if (headers['content-length'] !== undefined) {
+        headers['content-length'] = String(injected.byteLength);
+      }
+      channel.postMessage({
+        type: 'reply',
+        v: PREVIEW_PORT_FRAME_VERSION,
+        requestId,
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+        body: injected,
       } satisfies PreviewPortFrame);
       return;
     }

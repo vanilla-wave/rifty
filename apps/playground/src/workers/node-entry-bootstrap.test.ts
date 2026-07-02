@@ -13,11 +13,11 @@ describe('node-entry bootstrap server-capable bin path', () => {
     expect(source).toContain('bin: proc.env.RIFTY_BIN ===');
   });
 
-  it('passes Vite CLI browser prep env into prepareViteCli', () => {
-    expect(source).toContain('RIFTY_VITE_CLI_HMR');
-    expect(source).toContain('RIFTY_VITE_CLI_PORT');
+  it('passes Vite CLI browser prep env into prepareViteCli (stock HMR — no endpoint rewrite env, ADR-0189)', () => {
+    expect(source).toContain('RIFTY_VITE_CLI_HMR_OFF');
     expect(source).toContain('RIFTY_VITE_CLI_USER_CONFIG');
     expect(source).toContain('viteCliPrepareOptionsFromEnv(proc.env)');
+    expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
   });
 
   it('forwards owner file-change messages into the active Vite CLI server', () => {

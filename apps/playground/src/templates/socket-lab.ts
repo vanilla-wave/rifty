@@ -78,10 +78,10 @@ const CAPABILITIES = [
   {
     id: 'browser-preview-websocket',
     band: 'WebSocket',
-    expected: 'not-yet',
+    expected: 'supported',
     probe: 'auto',
     label: 'Plain preview page native WebSocket',
-    evidence: 'A node-server page is not auto-injected with the generic bridge; native browser WS cannot reach the worker port.',
+    evidence: 'Every preview page gets the generic WebSocket bridge injected; new WebSocket(location.host) reaches the worker port.',
   },
   {
     id: 'net-real-tcp-socket-semantics',
@@ -655,8 +655,11 @@ async function boot() {
 async function probeBrowserPreviewWs() {
   const row = state.get('browser-preview-websocket');
   if (!row) return;
+  // Stock browser shape: aim at location.host (the host page origin) — the
+  // injected generic bridge remaps to the guest port from /preview/<port>/.
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = proto + '//' + location.host + '/ws';
+  const payload = 'preview-probe';
   const outcome = await new Promise((resolve) => {
     let settled = false;
     const finish = (result) => {
@@ -668,23 +671,25 @@ async function probeBrowserPreviewWs() {
       const ws = new WebSocket(url);
       const timer = setTimeout(() => {
         ws.close();
-        finish({ outcome: 'expected-error', evidence: 'native browser WS did not reach ' + location.host });
-      }, 700);
-      ws.onopen = () => {
+        finish({ outcome: 'fail', evidence: 'no echo from ' + url + ' within 3s' });
+      }, 3000);
+      ws.onopen = () => ws.send(payload);
+      ws.onmessage = (event) => {
         clearTimeout(timer);
+        const message = String(event.data);
         ws.close();
-        finish({ outcome: 'fail', evidence: 'browser WS reached worker; update this row to supported' });
+        finish(
+          message === 'echo:' + payload
+            ? { outcome: 'pass', evidence: 'round-trip via ' + url + ' -> ' + message }
+            : { outcome: 'fail', evidence: 'unexpected echo: ' + message },
+        );
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        finish({ outcome: 'expected-error', evidence: 'native browser WS rejected before the bridge' });
-      };
-      ws.onclose = () => {
-        clearTimeout(timer);
-        finish({ outcome: 'expected-error', evidence: 'native browser WS closed without bridge reachability' });
+        finish({ outcome: 'fail', evidence: 'browser WS errored before echo (' + url + ')' });
       };
     } catch (err) {
-      finish({ outcome: 'expected-error', evidence: String(err && err.message ? err.message : err) });
+      finish({ outcome: 'fail', evidence: String(err && err.message ? err.message : err) });
     }
   });
   row.result = { id: row.id, ...outcome };

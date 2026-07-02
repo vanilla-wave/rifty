@@ -6,6 +6,16 @@ export interface WebSocketBridgeInstrumentation {
 
 export interface WebSocketBridgeClientScriptOptions {
   readonly bridgeHosts?: readonly string[];
+  /**
+   * ADR-0189 preview remap: derive the GUEST port from the page's
+   * `/preview/<port>/` pathname prefix and key the bridge discovery channel by
+   * IT for any `ws:`/`wss:` URL whose hostname is loopback (`localhost`,
+   * `127.0.0.1`) or the page's own hostname — regardless of the URL's port (a
+   * stock dev client aims at `location.host`, the host page origin). The
+   * original URL still travels in the `open` frame; the guest server validates
+   * path/protocols. Non-matching hosts keep the native WebSocket.
+   */
+  readonly previewPortFromPath?: boolean;
   readonly instrumentation?: WebSocketBridgeInstrumentation;
 }
 
@@ -18,6 +28,7 @@ export interface WebSocketBridgeClientScriptOptions {
  */
 export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOptions = {}): string {
   const bridgeHosts = [...new Set(opts.bridgeHosts ?? [])];
+  const previewPortFromPath = opts.previewPortFromPath === true;
   const eventPrefix = opts.instrumentation?.eventPrefix ?? '';
   const openFlag = opts.instrumentation?.openFlag ?? '';
   const lastMessageFlag = opts.instrumentation?.lastMessageFlag ?? '';
@@ -29,6 +40,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   var NativeWebSocket = window.WebSocket;
   var CHANNEL_PREFIX = 'rifty:ws:';
   var bridgeHosts = ${JSON.stringify(bridgeHosts)};
+  var previewPortFromPath = ${JSON.stringify(previewPortFromPath)};
   var eventPrefix = ${JSON.stringify(eventPrefix)};
   var openFlag = ${JSON.stringify(openFlag)};
   var lastMessageFlag = ${JSON.stringify(lastMessageFlag)};
@@ -42,13 +54,32 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   function channelNameFor(url) {
     return CHANNEL_PREFIX + url.host + url.pathname;
   }
+  function portChannelNameForPort(port) {
+    return channelNameFor(new URL('ws://websocket-port.local:' + port + '/__rifty_ws'));
+  }
   function portChannelNameFor(url) {
     var port = url.port || (url.protocol === 'wss:' ? '443' : '80');
-    return channelNameFor(new URL('ws://websocket-port.local:' + port + '/__rifty_ws'));
+    return portChannelNameForPort(port);
+  }
+  function previewPathPort() {
+    if (!previewPortFromPath) return null;
+    var pathname = (window.location && window.location.pathname) || '';
+    var m = /^\\/preview\\/(\\d+)(?:\\/|$)/.exec(pathname);
+    return m ? m[1] : null;
+  }
+  function remapPort(url) {
+    var guestPort = previewPathPort();
+    if (guestPort === null) return null;
+    var hostname = url.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      if (!window.location || window.location.hostname !== hostname) return null;
+    }
+    return guestPort;
   }
   function shouldBridge(url) {
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return false;
-    return bridgeHosts.indexOf(url.hostname) !== -1;
+    if (bridgeHosts.indexOf(url.hostname) !== -1) return true;
+    return remapPort(url) !== null;
   }
   function makeCloseEvent(code, reason, wasClean) {
     try {
@@ -228,7 +259,15 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       this.__sendQueue = [];
       this.__sendPumping = false;
       this.__onMessage = (e) => this.__handleMessage(e);
-      var names = [channelNameFor(target), portChannelNameFor(target)];
+      // Explicit bridgeHosts keep the legacy host+path / URL-port discovery
+      // pair; the ADR-0189 preview remap keys discovery by the GUEST port from
+      // the /preview/<port>/ prefix (the URL port is the host page's origin).
+      var names;
+      if (bridgeHosts.indexOf(target.hostname) !== -1) {
+        names = [channelNameFor(target), portChannelNameFor(target)];
+      } else {
+        names = [portChannelNameForPort(remapPort(target))];
+      }
       for (var i = 0; i < names.length; i++) {
         if (names.indexOf(names[i]) !== i) continue;
         var channel = new BroadcastChannel(names[i]);

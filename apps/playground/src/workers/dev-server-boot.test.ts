@@ -25,17 +25,13 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
     expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
     expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');
-    // The bridge token + plugin + "bridge ready" log are gated on HMR being
-    // enabled — no token minted and no false "bridge ready" signal when HMR is off
-    // (Vite 8 template, ADR-0161).
-    expect(source).toContain(
-      'const hmrBridgeToken = cfg.hmrEnabled ? createHmrBridgeToken() : null',
-    );
-    expect(source).toContain(
-      'plugins: hmrBridgeToken ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : []',
-    );
-    expect(source).toContain('host: PREVIEW_LOCAL_HOST');
-    expect(source).toContain('path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`');
+    // Stock vite HMR (ADR-0189): the generic preview-path bridge carries vite's
+    // own server.ws — no rifty token/plugin/endpoint rewrite. `hmr: false`
+    // stays only for templates pinned off (Vite 8, ADR-0161).
+    expect(source).toContain('hmr: cfg.hmrEnabled ? undefined : false');
+    expect(source).not.toContain('createHmrBridgeToken');
+    expect(source).not.toContain('createHmrBridgeVitePlugin');
+    expect(source).not.toContain('__hmr/');
     expect(source).not.toContain('channels:');
     expect(source).not.toContain('ws: false');
   });
@@ -117,9 +113,8 @@ describe('node-server runtime branch', () => {
     expect(source).toContain('await waitForListeningPort(cfg.port');
   });
 
-  it('keeps the HMR bridge a vite-only concern', () => {
-    // The browser WebSocket bridge injection must not leak into node-server boot.
+  it('carries no bespoke WS bridge — preview HTML injection is generic (ADR-0189)', () => {
     expect(source).not.toContain('setupHmrBridge(');
-    expect(source.split('createHmrBridgeVitePlugin(').length - 1).toBe(1);
+    expect(source).not.toContain('webSocketBridgeClientScript');
   });
 });

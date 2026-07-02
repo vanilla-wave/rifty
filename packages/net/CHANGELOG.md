@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Generic preview WebSocket bridge (ADR-0189, backlog net/preview-websocket-bridge, partial).**
+  `serveCrossRealmPreview` now injects the `window.WebSocket` bridge script into every
+  `text/html` response (marker `data-rifty-ws-bridge`, head-prepend, buffered v1 —
+  html replies always take the buffered `reply` frame; `content-length` re-stamped).
+  `webSocketBridgeClientScript` gains `previewPortFromPath`: `ws:`/`wss:` URLs whose
+  hostname is loopback (`localhost`, `127.0.0.1`) or the page's own hostname are
+  bridged with the discovery channel keyed by the GUEST port from the iframe's
+  `/preview/<port>/` prefix — regardless of the URL's own port (stock dev clients aim
+  at `location.host`); the original URL still travels in the `open` frame; non-matching
+  hosts keep native WebSocket. `HttpServer` upgrade accept drops the URL-port equality
+  check (the port-keyed discovery channel IS the port intent), so a stock vite
+  `server.ws` / npm `ws` accepts the remapped open frame on its default path.
+
 - **Synchronous `node:sqlite` engine bring-up + lazy provider seam** (backlog/net/sqlite-lazy-engine). New `initSqliteEngineSync(wasmBytes)` brings the sql.js engine up FULLY synchronously from caller-supplied wasm bytes (emscripten `instantiateWasm` hook + sync `WebAssembly.Module`/`Instance`; spike-proven: sql.js attaches `Database` to the config object before `initSqlJs` returns). New `setSqliteEngineSyncProvider(() => bytes)` seam: host realms install it at boot (no wasm cost), and the `node:sqlite` builtin factory self-initializes on first `require('node:sqlite')` — no preset flag, no ahead-of-time await. Memo interplay pinned: ready engine reused by either path; sync call during a PENDING async init throws loud (sql.js glue memoises one module per realm); no provider + not ready keeps the loud constructor error, now naming the seam. Byte sourcing stays with the caller (no hardcoded asset URL, D-004); sync-compile legality in worker realms is a browser fact for e2e.
 - **Virtual ephemeral ports for `server.listen(0)`** (closes backlog/net/listen-zero-ephemeral-ports). `listen(0)` / `listen({ port: 0 })` on both `node:http` and `node:net` servers now allocate a free port from the realm port registry (IANA dynamic range, no OS socket) instead of registering port `0` literally; `server.address().port` reflects the chosen port until `close()` frees it. Allocation scans the range for the first unbound port, so concurrent `listen(0)` servers get distinct, independently routable ports, while explicit fixed-port + `EADDRINUSE` semantics are unchanged. New `allocateEphemeralPort()` registry helper. Parity-pinned (`listen(0)` round-trip, two-distinct) + unit-tested across `http`/`net`/registry.
 - **`node:http` ServerResponse header introspection** (closes backlog/net/http-server-introspection). Adds `res.getHeaders()` (null-proto clone, value TYPES preserved — numbers stay numbers like Node), `res.getHeaderNames()`, `res.hasHeader()` (case-insensitive), and `res.appendHeader()` (array-merge of repeated values), plus `http.METHODS` (static verb list beside `STATUS_CODES`) and `http.maxHeaderSize` (16384, ADVISORY — never enforced; compat ⚠️). Outgoing header values are now stored with their original type and stringified only at wire-flush, so `getHeader('x')` returns the number it was set with. Post-flush header mutation throws `ERR_HTTP_HEADERS_SENT`. The interim/trailer surfaces `writeContinue` / `writeEarlyHints` / `addTrailers` loud-throw `NotImplementedError` (unmodelable over the single-final-status fetch/SW Response bridge — compat ❌). Parity-pinned head-to-head vs Node v24 + unit-tested.

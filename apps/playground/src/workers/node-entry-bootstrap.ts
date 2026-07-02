@@ -111,26 +111,14 @@ function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
     : null;
 }
 
-function parsePort(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
-}
-
 function viteCliPrepareOptionsFromEnv(
   env: Record<string, string | undefined>,
 ): ViteCliPrepareOptions {
-  const port = parsePort(env.RIFTY_VITE_CLI_PORT);
   const userConfigPath = env.RIFTY_VITE_CLI_USER_CONFIG;
   return {
-    ...(port === null
-      ? {}
-      : {
-          hmr: {
-            enabled: env.RIFTY_VITE_CLI_HMR === '1',
-            port,
-          },
-        }),
+    // ADR-0161: Vite 8 templates pin server.hmr:false; stock HMR otherwise
+    // (the generic preview bridge carries vite's own server.ws, ADR-0189).
+    ...(env.RIFTY_VITE_CLI_HMR_OFF === '1' ? { hmrOff: true } : {}),
     ...(userConfigPath ? { userConfigPath } : {}),
   };
 }

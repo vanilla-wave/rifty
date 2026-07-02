@@ -117,7 +117,6 @@ import {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const VITE_DEFAULT_DEV_PORT = 5173;
 const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
@@ -278,12 +277,6 @@ function viteCliMode(args: readonly string[]): ViteCliMode {
   return 'dev';
 }
 
-function parsePositivePort(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
-}
-
 function createPreviewScope(): string {
   return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
 }
@@ -302,17 +295,6 @@ function withPreviewScope(ctx: CommandContext, previewScope?: string): CommandCo
       RIFTY_PREVIEW_SCOPE: previewScope ?? ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope(),
     },
   };
-}
-
-function viteCliPort(args: readonly string[], fallback: number): number {
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === undefined) continue;
-    if (arg === '--port' || arg === '-p') return parsePositivePort(args[i + 1]) ?? fallback;
-    if (arg.startsWith('--port='))
-      return parsePositivePort(arg.slice('--port='.length)) ?? fallback;
-  }
-  return fallback;
 }
 
 function viteConfigArg(args: readonly string[]): string | null {
@@ -363,8 +345,8 @@ function withViteCliEnv(
   args: readonly string[],
   ctx: CommandContext,
   opts?: {
-    readonly hmrEnabled: boolean;
-    readonly port: number;
+    /** ADR-0161: the active template pins Vite 8 server.hmr:false. */
+    readonly hmrOff: boolean;
   },
 ): CommandContext {
   if (binNameOf(binPath) !== 'vite') return ctx;
@@ -383,14 +365,10 @@ function withViteCliEnv(
       ...(previewMode
         ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
         : {}),
-      ...(mode === 'dev' && opts
-        ? {
-            RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
-            RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
-            ...userConfigEnv,
-          }
-        : {}),
-      ...(mode === 'preview' ? userConfigEnv : {}),
+      // Stock HMR needs no env (ADR-0189 — the generic preview bridge carries
+      // vite's own server.ws); only the ADR-0161 hmr-off pin is threaded.
+      ...(mode === 'dev' && opts?.hmrOff ? { RIFTY_VITE_CLI_HMR_OFF: '1' } : {}),
+      ...(previewMode ? userConfigEnv : {}),
     },
   };
 }
@@ -654,9 +632,10 @@ async function bootShellOwner(opts: {
   // Live foreground bin children — editor writes are forwarded to EVERY one so
   // HMR invalidation is not keyed on a bin name; a child without an active vite
   // server ignores the frame (node-entry-bootstrap's isViteFileChangeMessage
-  // handler no-ops). The vite-NAMED part of HMR (config wrapper env) stays in
+  // handler no-ops). HMR itself is stock (ADR-0189 generic preview WS bridge);
+  // the vite-NAMED remainder is the wrapper's forced options in
   // withViteCliArgs/withViteCliEnv below — owned by backlog:
-  // net/preview-websocket-bridge.
+  // net/preview-websocket-bridge (acceptance: per-option retirement).
   const liveBinChildren = new Set<BinWorkerHandle>();
   // Editor writes land via the vfs-write bridge; forward them to the running dev
   // server's HMR (the virtual FS fires no real watcher events) + republish.
@@ -714,12 +693,7 @@ async function bootShellOwner(opts: {
       binPath,
       args,
       ctx,
-      devCfg.runtime === 'vite'
-        ? {
-            hmrEnabled: devCfg.hmrEnabled,
-            port: VITE_DEFAULT_DEV_PORT,
-          }
-        : undefined,
+      devCfg.runtime === 'vite' && !devCfg.hmrEnabled ? { hmrOff: true } : undefined,
     );
     return childBinExecutor(binPath, viteArgs, withPreviewScope(viteCtx));
   };

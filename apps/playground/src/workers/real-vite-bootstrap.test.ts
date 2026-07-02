@@ -24,11 +24,11 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('flushSyncMirror,\n    publishOwnerState,');
   });
 
-  it('passes browser HMR config to real vite .bin dev children', () => {
-    expect(source).toContain('const VITE_DEFAULT_DEV_PORT = 5173');
-    expect(source).toContain('RIFTY_VITE_CLI_HMR');
-    expect(source).toContain('RIFTY_VITE_CLI_PORT');
+  it('pins hmr-off (ADR-0161) on vite .bin dev children; the endpoint-rewrite env is gone (ADR-0189)', () => {
     expect(source).toContain('withViteCliArgs');
+    expect(source).toContain('RIFTY_VITE_CLI_HMR_OFF');
+    expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
+    expect(source).not.toContain('VITE_DEFAULT_DEV_PORT');
   });
 
   it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
@@ -36,7 +36,7 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
     expect(source).toContain("if (mode !== 'dev') return [...args]");
     expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
-    expect(source).toContain("...(mode === 'preview' ? userConfigEnv : {})");
+    expect(source).toContain('...(previewMode ? userConfigEnv : {})');
   });
 
   it('forwards editor writes into every live bin child (no bin-name keying)', () => {

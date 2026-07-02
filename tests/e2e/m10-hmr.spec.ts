@@ -27,22 +27,21 @@
  *
  * Manual verification steps (no env flag needed):
  *   1. `pnpm dev` → open `http://localhost:5273`.
- *   2. Wait for the visible terminal's `vite` command to print
- *      `[real-vite/worker] vite is listening on internal port 5174`.
+ *   2. Pick the Project files starter and wait for the LIVE :5174 pill.
  *   3. Confirm the preview iframe shows the seeded "Hello from real Vite"
  *      message.
  *   4. Open DevTools → `Application` → `Frames` → drill into the preview
  *      iframe; in its Console run
- *         document.querySelector('script[data-rifty-hmr-bridge]') !== null
- *      and confirm it is `true`. That proves
- *      {@link createHmrBridgeVitePlugin} injected the inline WebSocket bridge.
+ *         document.querySelector('script[data-rifty-ws-bridge]') !== null
+ *      and confirm it is `true`. That proves the generic preview-path
+ *      injection (ADR-0189) installed the inline WebSocket bridge.
  *   5. Edit the editor pane to change the body text. Save (Cmd/Ctrl-S in
  *      the editor or wait the implicit auto-update).
  *   6. The iframe should update within the file-watcher poll interval without
  *      losing `globalThis` state; the terminal logs no errors.
  */
 import { type Locator, expect, test } from '@playwright/test';
-import { pickStarter } from './helpers/playground.ts';
+import { bootProjectFiles, expectViteDevServerReady } from './helpers/playground.ts';
 
 const enabled = process.env.RIFTY_E2E_HMR === '1';
 const HMR_EVENT_KEY = '__rifty_e2e_hmr';
@@ -52,21 +51,17 @@ test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
 
   test('preview iframe patches src/main.js without a full reload', async ({ page }) => {
     test.setTimeout(120_000);
-    await page.goto('/');
     // Project-first: pick the real-vite starter to boot the dev server (main used to
     // auto-boot it on load; the chooser now gates that behind an explicit pick).
-    await pickStarter(page, 'project-files');
+    await bootProjectFiles(page);
+    await expectViteDevServerReady(page, 5174, 90_000);
 
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('importing vite', { timeout: 30_000 });
-    await expect(term).toContainText('[real-vite/worker] vite is listening on internal port 5174', {
-      timeout: 60_000,
-    });
-
-    // The preview iframe must mount and load the bridge client.
-    const previewFrame = page.frameLocator('iframe').first();
+    // The preview iframe must mount and load the bridge client (ADR-0189
+    // generic preview-path injection). Key the frame by its stable title —
+    // `.first()` breaks if another iframe ever precedes it in DOM order.
+    const previewFrame = page.frameLocator('iframe[title="Preview port 5174"]');
     const previewBody = previewFrame.locator('body');
-    await expect(previewFrame.locator('script[data-rifty-hmr-bridge]')).toHaveCount(1, {
+    await expect(previewFrame.locator('script[data-rifty-ws-bridge]')).toHaveCount(1, {
       timeout: 30_000,
     });
     await previewBody.evaluate((_, key) => {
@@ -79,7 +74,7 @@ test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
       globalThis.addEventListener('beforeunload', () => {
         localStorage.setItem(`${key}:beforeunload`, '1');
       });
-      globalThis.addEventListener('rifty:hmr:message', (event: Event) => {
+      globalThis.addEventListener('rifty:ws:message', (event: Event) => {
         const detail = (event as CustomEvent<unknown>).detail;
         const messagesKey = `${key}:messages`;
         const messages = JSON.parse(localStorage.getItem(messagesKey) ?? '[]') as unknown[];
@@ -92,8 +87,8 @@ test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
       .poll(
         () =>
           previewFrame.locator('body').evaluate(() => {
-            const global = globalThis as unknown as { __riftyHmrOpen?: unknown };
-            return global.__riftyHmrOpen === true;
+            const global = globalThis as unknown as { __riftyWsBridgeOpen?: unknown };
+            return global.__riftyWsBridgeOpen === true;
           }),
         { timeout: 10_000 },
       )
@@ -212,15 +207,15 @@ async function describeHmrProbeState(
   return previewBody.evaluate(
     (body, args) => {
       const global = globalThis as typeof globalThis & {
-        __riftyHmrOpen?: unknown;
+        __riftyWsBridgeOpen?: unknown;
         __riftyHmrSentinel?: string;
-        __riftyHmrLastMessage?: unknown;
+        __riftyWsBridgeLastMessage?: unknown;
       };
       return JSON.stringify({
         beforeunload: localStorage.getItem(`${args.key}:beforeunload`),
         messages: JSON.parse(localStorage.getItem(`${args.key}:messages`) ?? '[]'),
-        lastMessage: global.__riftyHmrLastMessage,
-        open: global.__riftyHmrOpen,
+        lastMessage: global.__riftyWsBridgeLastMessage,
+        open: global.__riftyWsBridgeOpen,
         sentinel: global.__riftyHmrSentinel,
         storedSentinel: localStorage.getItem(`${args.key}:sentinel`),
         bodyText: body.textContent,
