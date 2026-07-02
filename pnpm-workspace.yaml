@@ -16,4 +16,9 @@ pmOnFail: warn
 # legacy `onlyBuiltDependencies` list is ignored in pnpm 11.
 allowBuilds:
   '@biomejs/biome': true
+  # Transitive deps of @earendil-works/pi-ai (ADR-0190). Their postinstall
+  # codegen is never needed here: the provider SDKs that pull them load only
+  # via never-taken lazy chunks (rifty speaks openai-completions only).
+  '@google/genai': false
   esbuild: true
+  protobufjs: false

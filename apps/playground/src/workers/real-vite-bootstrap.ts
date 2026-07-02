@@ -376,6 +376,7 @@ function withViteCliEnv(
   opts?: {
     readonly hmrEnabled: boolean;
     readonly port: number;
+    readonly noDepDiscovery: boolean;
   },
 ): CommandContext {
   if (binNameOf(binPath) !== 'vite') return ctx;
@@ -398,6 +399,11 @@ function withViteCliEnv(
         ? {
             RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
             RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
+            // Template-declared dep-discovery opt-out (server.optimizeDepsDisabled):
+            // vite8's Rolldown WASI bundler breaks on pre-bundling; zero-dep
+            // templates keep esbuild-wasm off their boot path. Dep-carrying
+            // templates run the REAL optimizer (ADR-0192).
+            ...(opts.noDepDiscovery ? { RIFTY_VITE_CLI_NO_DEP_DISCOVERY: '1' } : {}),
             ...userConfigEnv,
           }
         : {}),
@@ -761,6 +767,7 @@ async function bootShellOwner(opts: {
         ? {
             hmrEnabled: devCfg.hmrEnabled,
             port: VITE_DEFAULT_DEV_PORT,
+            noDepDiscovery: devCfg.server.optimizeDepsDisabled,
           }
         : undefined,
     );

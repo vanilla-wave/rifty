@@ -154,6 +154,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0164 | Node 24 as the supported and parity-target version |
 | 0166 | In-browser TS language service over VFS |
 | 0177 | Workspace TypeScript is required for TS language service |
+| 0192 | Real esbuild JS API for in-browser Vite via esbuild-wasm |
 
 ### protocol
 
@@ -206,6 +207,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0116 | Persisted terminal session state |
 | 0120 | AI command suggestions |
 | 0122 | Raw stdin and mouse reporting |
+
+### distribution
+
+| # | Title |
+|---|---|
+| 0190 | AI mode on Pi agent loop as a playground app-level consumer |
+| 0191 | agent-bench: external two-lane validation harness over the playground |
 
 ## Superseded (removed)
 

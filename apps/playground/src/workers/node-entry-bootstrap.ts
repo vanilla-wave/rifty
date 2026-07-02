@@ -130,6 +130,7 @@ function viteCliPrepareOptionsFromEnv(
           },
         }),
     ...(userConfigPath ? { userConfigPath } : {}),
+    ...(env.RIFTY_VITE_CLI_NO_DEP_DISCOVERY === '1' ? { noDepDiscovery: true } : {}),
   };
 }
 

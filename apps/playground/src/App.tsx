@@ -1,4 +1,4 @@
-import { type LogEntry, porcelainXY } from '@riftydev/git';
+import { type DiffEntry, type LogEntry, porcelainXY } from '@riftydev/git';
 import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
@@ -26,6 +26,9 @@ import {
 } from './adapters/terminal-manager.ts';
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
+// Type-only (erased): the AI module itself loads via dynamic import() on first
+// open — a session that never opens AI mode downloads none of it (ADR-0190).
+import type { AgentShellResult, AiAppContext } from './ai/app-context.ts';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './boot.ts';
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
@@ -43,6 +46,8 @@ import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
+// agent-bench hook: external validation harness only. Not public API.
+import { installAgentBench } from './glue/agent-bench.ts';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
@@ -60,7 +65,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
-import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
+import { parseAgentBenchFlag, parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import {
   hasPersistedProjectHint,
   needsProjectChoiceOnBoot,
@@ -107,6 +112,9 @@ import {
   requestVfsSnapshot,
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
+import { readHeadWorkdirDiff } from './glue/workspace-diff.ts';
+// Pure path guard (glue, Pi-free) shared with the AI tools' fs surface.
+import { resolveWorkspacePath } from './glue/workspace-path.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -1104,10 +1112,17 @@ export function App(props: AppProps) {
     id: string,
     write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
   ): void {
-    manager.attachWriter(id, write);
+    // Tee every chunk into the AI capture tap (when one is armed for this
+    // session): the shell tool needs the command's output while the terminal
+    // panel keeps rendering it — same bytes, two sinks.
+    const wrapped = (chunk: string, stream?: 'stdout' | 'stderr'): void => {
+      write(chunk, stream);
+      aiShellTaps.get(id)?.(chunk);
+    };
+    manager.attachWriter(id, wrapped);
     // Also held PAGE-side so `runTerminalSequence` can echo `$ <line>` for boot
     // sequences (the owner pty does not echo the programmatic line).
-    terminalWriters.set(id, write);
+    terminalWriters.set(id, wrapped);
   }
 
   /**
@@ -1194,6 +1209,160 @@ export function App(props: AppProps) {
   function writeTerminalStdin(id: string, data: TerminalRawInput): void {
     manager.writeStdin(id, data);
   }
+
+  // ── AI mode (ADR-0190) — app-level consumer over EXISTING adapters. The AI
+  // module (Pi agent loop, tools, chat UI) is dynamically imported on first
+  // open; here lives only the context seam: the dedicated agent terminal
+  // session, output capture, and the git-diff read for trace export.
+
+  /** Output taps for the AI shell tool, keyed by session id (see attachTerminalWriter). */
+  const aiShellTaps = new Map<string, (chunk: string) => void>();
+  let aiShellSessionId: string | null = null;
+  let aiShellQueue: Promise<unknown> = Promise.resolve();
+
+  function ensureAiShellSession(): string {
+    if (aiShellSessionId && manager.sessions().some((s) => s.id === aiShellSessionId)) {
+      // Un-hide if the user closed the tab; the tool keeps its commands visible.
+      hiddenSessionIds.delete(aiShellSessionId);
+      refreshTerminalState();
+      return aiShellSessionId;
+    }
+    const session = manager.createSession('AI agent');
+    aiShellSessionId = session.id;
+    // Arm a manager-level writer immediately so output emitted before the
+    // panel's xterm mounts still reaches the capture tap; the panel's later
+    // attach replaces it with the tee in attachTerminalWriter.
+    attachTerminalWriter(session.id, () => {});
+    refreshTerminalState();
+    return session.id;
+  }
+
+  /**
+   * Run one AI shell line in the visible "AI agent" session — the SAME
+   * pty/manager path a typed command takes (parity: identical stdout/exit
+   * code). Commands are serialized; `signal` forwards a cooperative SIGINT.
+   */
+  function runAgentShellLine(line: string, signal?: AbortSignal): Promise<AgentShellResult> {
+    const run = aiShellQueue.then(async (): Promise<AgentShellResult> => {
+      if (signal?.aborted) throw new Error('shell: run aborted before the command started');
+      const id = ensureAiShellSession();
+      // Echo before arming the tap so the prompt line is visible but not captured.
+      terminalWriters.get(id)?.(`$ ${line}\n`);
+      let output = '';
+      aiShellTaps.set(id, (chunk) => {
+        output += chunk;
+      });
+      const onAbort = (): void => stopSession(id);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      try {
+        const exitCode = (await runTerminalLine(id, line)) ?? 1;
+        return { exitCode, output };
+      } finally {
+        signal?.removeEventListener('abort', onAbort);
+        aiShellTaps.delete(id);
+      }
+    });
+    aiShellQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  async function aiGitDiff(): Promise<readonly DiffEntry[]> {
+    const owner = workspaceOwner();
+    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) {
+      throw new Error('git diff unavailable: workspace owner is not running');
+    }
+    return readHeadWorkdirDiff(owner.snapshotPort);
+  }
+
+  // ts-LS diagnostics provider for the AI `diagnostics` tool — installed by
+  // the LS wiring effect below (same client + readiness gate the Problems
+  // panel uses), null while no editor/owner has brought the service up.
+  let aiTsDiagnostics: ((path: string) => Promise<readonly Diagnostic[]>) | null = null;
+
+  // agent-bench hook: external validation harness only. Not public API.
+  // Installed ONLY under `?agentBench=1` (ADR-0191); seed writes through the
+  // same acked owner path the explorer uses.
+  const agentBenchRegistrar = parseAgentBenchFlag(globalThis.location?.search ?? '')
+    ? installAgentBench({
+        seedFiles: async (files) => {
+          const root = activeRoot();
+          const entries = Object.entries(files).map(([rel, content]) => ({
+            path: resolveWorkspacePath(root, rel),
+            data: ownerWriteEnc.encode(content),
+            recursive: true,
+          }));
+          await ownerRpcFs.writeFiles(entries);
+          for (const [rel, content] of Object.entries(files)) {
+            notifyFileWritten(resolveWorkspacePath(root, rel), content);
+          }
+        },
+        readFile: async (rel) => {
+          const path = resolveWorkspacePath(activeRoot(), rel);
+          const bytes = await readWorkspaceFileBytesFromOwner(
+            workspaceOwner(),
+            path,
+            'agent-bench read',
+          );
+          return new TextDecoder().decode(bytes);
+        },
+        presetId: activeStarterId,
+      })
+    : null;
+
+  const aiAppContext: AiAppContext = {
+    root: activeRoot,
+    snapshot: snapshotFs,
+    fs: ownerRpcFs,
+    runShellLine: runAgentShellLine,
+    gitDiff: aiGitDiff,
+    fileWritten: notifyFileWritten,
+    preview: {
+      // The REAL iframe the user sees (PreviewPanel keeps exactly one mounted).
+      frame: () =>
+        globalThis.document?.querySelector<HTMLIFrameElement>(
+          '[data-testid="preview"] iframe.rf-preview__frame',
+        ) ?? null,
+      ports: () => {
+        const ports = previewPorts().map((entry) => entry.port);
+        const devPort = devServerRunning() ? machine.realVitePort() : null;
+        if (devPort !== null && !ports.includes(devPort)) ports.push(devPort);
+        return ports;
+      },
+    },
+    tsDiagnostics: async (path) => {
+      const provider = aiTsDiagnostics;
+      if (!provider) {
+        throw new Error(
+          'TypeScript language service is not running — it starts with the workspace editor; open a project first',
+        );
+      }
+      return provider(path);
+    },
+    agentBench: agentBenchRegistrar,
+  };
+
+  type AiModule = typeof import('./ai/index.ts');
+  const [aiModule, setAiModule] = createSignal<AiModule | null>(null);
+  let aiModuleLoading = false;
+  function ensureAiModuleLoaded(): void {
+    if (aiModule() !== null || aiModuleLoading) return;
+    aiModuleLoading = true;
+    void import('./ai/index.ts').then(
+      (mod) => setAiModule(mod),
+      (err: unknown) => {
+        aiModuleLoading = false;
+        flashError(`AI mode failed to load: ${(err as Error).message}`);
+      },
+    );
+  }
+  function toggleAiMode(): void {
+    layout.toggleAiChat();
+    if (layout.aiChatOpen()) ensureAiModuleLoaded();
+  }
+  // Persisted-open (reload with AI mode on) still lazy-loads on mount.
+  createEffect(() => {
+    if (layout.aiChatOpen()) ensureAiModuleLoaded();
+  });
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
   // contents but flags presence, gating the lazy row.
@@ -1308,6 +1477,37 @@ export function App(props: AppProps) {
     const providers = registerTsLanguageServiceProviders(client, api, {
       beforeRequest: waitForTsReady,
     });
+
+    // AI `diagnostics` tool provider (ADR-0190 PASS 2): the SAME client +
+    // readiness gate the Problems panel uses; a failed init rejects loudly.
+    // The service's program = tsconfig scan at init + OPEN overlays, so a file
+    // the editor doesn't have open (e.g. just written by the agent) is opened
+    // from its on-disk bytes for the query and closed after — exactly the
+    // membership mechanism the Problems panel rides on. An editor-open path is
+    // queried as-is (its live overlay must never be clobbered).
+    aiTsDiagnostics = async (path: string): Promise<readonly Diagnostic[]> => {
+      await waitForTsRequestGate();
+      const initialized = await ready;
+      if (!initialized) {
+        throw new Error(
+          'TypeScript language service is unavailable for this project — service init failed or this template does not run the ts language service',
+        );
+      }
+      const editorOpen = api.openPathsUnder(path).includes(path);
+      if (!editorOpen) {
+        const text = fatalDec.decode(snapshotFs.readFileBytesSync(path));
+        await client.open(path, text);
+      }
+      try {
+        const [syntactic, semantic] = await Promise.all([
+          client.getSyntacticDiagnostics(path),
+          client.getSemanticDiagnostics(path),
+        ]);
+        return [...syntactic, ...semantic];
+      } finally {
+        if (!editorOpen) await client.close(path);
+      }
+    };
 
     async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
@@ -1743,6 +1943,7 @@ export function App(props: AppProps) {
 
     onCleanup(() => {
       disposed = true;
+      aiTsDiagnostics = null;
       diagnosticSync.dispose();
       unsubscribe();
       providers.dispose();
@@ -3246,6 +3447,19 @@ export function App(props: AppProps) {
 
         <span class="rf-spacer" />
 
+        <button
+          type="button"
+          class="rf-aitoggle"
+          data-action="toggle-ai"
+          data-testid="ai-toggle"
+          aria-pressed={layout.aiChatOpen()}
+          title={layout.aiChatOpen() ? 'Close AI mode' : 'Open AI mode (chat panel)'}
+          onClick={toggleAiMode}
+        >
+          <Icon name="zap" size={13} />
+          AI
+        </button>
+
         <a
           class="rf-iconbtn"
           href="https://github.com/vanilla-wave/rifty"
@@ -3266,10 +3480,12 @@ export function App(props: AppProps) {
         <div
           class="rf-shell"
           data-sidebar={layout.sidebarCollapsed() ? 'collapsed' : 'open'}
+          data-ai-view={layout.aiChatOpen() ? layout.aiView() : 'off'}
           style={{
             '--rf-sidebar-w': `${layout.sidebarW()}px`,
             '--rf-console-h': `${layout.consoleH()}px`,
             '--rf-preview-w': `${layout.previewW()}px`,
+            '--rf-ai-w': `${layout.aiChatW()}px`,
           }}
         >
           <aside class="rf-sidebar rf-card">
@@ -3343,7 +3559,11 @@ export function App(props: AppProps) {
           />
 
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
-            <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
+            <div
+              class="rf-editorarea"
+              data-preview={hasPreview() ? 'on' : 'off'}
+              data-ai={layout.aiChatOpen() ? 'on' : 'off'}
+            >
               <Show when={editorProjectContextReady()}>
                 <EditorHost
                   initialEditorFiles={publishedInitialEditorFiles}
@@ -3394,6 +3614,38 @@ export function App(props: AppProps) {
                   onNotify={flashToast}
                   ports={previewPorts}
                 />
+              </Show>
+
+              {/* AI chat panel (ADR-0190 "+chat" view): right-side, coexists
+                  with the preview. The module arrives via dynamic import on
+                  first open — the fallback shows only during that fetch. */}
+              <Show when={layout.aiChatOpen()}>
+                <Splitter
+                  orientation="vertical"
+                  value={layout.aiChatW()}
+                  min={layout.bounds.aiChatW[0]}
+                  max={layout.bounds.aiChatW[1]}
+                  defaultValue={380}
+                  dir={-1}
+                  ariaLabel="Resize AI chat"
+                  onInput={(px) => layout.setAiChatW(px)}
+                  onCommit={() => layout.persist()}
+                  onReset={() => layout.resetAiChatW()}
+                />
+                <Show
+                  when={aiModule()}
+                  keyed
+                  fallback={<div class="rf-ai rf-ai--loading rf-card">Loading AI mode…</div>}
+                >
+                  {(mod) => (
+                    <mod.AiChatPanel
+                      ctx={aiAppContext}
+                      view={layout.aiView()}
+                      onViewChange={(v) => layout.setAiView(v)}
+                      onClose={() => layout.toggleAiChat()}
+                    />
+                  )}
+                </Show>
               </Show>
             </div>
 

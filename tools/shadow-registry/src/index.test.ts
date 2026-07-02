@@ -23,13 +23,40 @@ describe('shadow-registry', () => {
     expect(bakedOverrides.lightningcss).toBe('lightningcss-wasm@1.32.0');
   });
 
-  it('esbuildShimFiles exposes a bridge-backed package.json + main.js', () => {
-    expect(esbuildShimFiles['/workspace/node_modules/esbuild/package.json']).toContain('"esbuild"');
+  it('esbuildShimFiles delegates the real esbuild JS API to the host bridge (ADR-0192)', () => {
+    const pkg = esbuildShimFiles['/workspace/node_modules/esbuild/package.json'] ?? '';
+    expect(pkg).toContain('"esbuild"');
+    // Real version — the exact esbuild-wasm pin, never an invented string.
+    expect(pkg).toContain('"version": "0.27.7"');
     const main = esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js'] ?? '';
-    expect(main).toContain('export const version');
-    expect(main).toContain('__riftyEsbuildTransform');
-    expect(main).toContain("NotImplementedError('esbuild.transform'");
-    expect(main).not.toContain('Pass-through');
+    expect(main).toContain('globalThis.__riftyEsbuild');
+    // Real surface: version from the host instance + full async API delegation.
+    expect(main).toContain('export const version = hostEsbuild().version');
+    for (const member of [
+      'transform',
+      'build',
+      'context',
+      'formatMessages',
+      'analyzeMetafile',
+      'stop',
+    ]) {
+      expect(main).toContain(`hostEsbuild().${member}(`);
+    }
+    // esbuild-wasm has no synchronous API in a browser realm — loud throws.
+    for (const feature of [
+      'esbuild.transformSync',
+      'esbuild.buildSync',
+      'esbuild.formatMessagesSync',
+      'esbuild.analyzeMetafileSync',
+    ]) {
+      expect(main).toContain(`NotImplementedError('${feature}'`);
+    }
+    // The fakes are gone: no invented version, no transform-only build()
+    // emulation, no do-nothing context stub, no WASI transform bridge.
+    expect(main).not.toContain('0.21.5');
+    expect(main).not.toContain('loadEntryThroughPlugins');
+    expect(main).not.toContain('__riftyEsbuildTransform');
+    expect(main).not.toContain('rebuild: async () => ({');
   });
 
   it('rollupShimFiles overlays dist/native.js', () => {
@@ -52,18 +79,12 @@ describe('shadow-registry', () => {
     expect(devNative).toContain('emptyProgram');
   });
 
-  it('viteBuildShimFiles delegates esbuild transform/config-build to the injected async WASI bridge', () => {
+  it('dev and build share ONE honest esbuild delegation shim (ADR-0192)', () => {
     const buildEsbuild = viteBuildShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
     const devEsbuild = viteBrowserShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
 
-    expect(buildEsbuild).toContain('__riftyEsbuildTransform');
-    expect(buildEsbuild).toContain('NotImplementedError');
-    expect(buildEsbuild).toContain('esbuild.transformSync');
-    expect(buildEsbuild).toContain('loadEntryThroughPlugins');
-    expect(buildEsbuild).toContain('opts.write !== false');
-    expect(buildEsbuild).not.toBe(devEsbuild);
-    expect(devEsbuild).toContain('__riftyEsbuildTransform');
-    expect(devEsbuild).toContain('dev-server did not install the WASI transform bridge');
+    expect(buildEsbuild).toBe(devEsbuild);
+    expect(buildEsbuild).toContain('globalThis.__riftyEsbuild');
   });
 
   it('lightningcssShimFiles exposes the native package name backed by lightningcss-wasm', () => {

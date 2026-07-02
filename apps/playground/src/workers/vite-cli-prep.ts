@@ -3,7 +3,7 @@ import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { viteBrowserShimFiles, viteBuildShimFiles } from '../glue/esbuild-shim.ts';
 import { viteHmrClientScript } from '../glue/hmr-bridge.ts';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
@@ -50,6 +50,15 @@ export interface ViteCliPrepareOptions {
     readonly port: number;
   };
   readonly userConfigPath?: string;
+  /**
+   * Template-declared dep-discovery opt-out (`server.optimizeDepsDisabled`,
+   * threaded via `RIFTY_VITE_CLI_NO_DEP_DISCOVERY`). vite8: Rolldown's WASI
+   * bundler breaks on dep pre-bundling (ADR-0161 territory); vanilla zero-dep
+   * templates: keeps esbuild-wasm entirely off their boot path. Never a
+   * blanket default — react-vite and other dep-carrying templates run the
+   * REAL optimizer (ADR-0192).
+   */
+  readonly noDepDiscovery?: boolean;
 }
 
 declare global {
@@ -147,6 +156,7 @@ function wrapperSource(opts: {
   readonly hmrEnabled: boolean;
   readonly port: number;
   readonly token: string;
+  readonly noDepDiscovery: boolean;
 }): string {
   const userImport =
     opts.userConfigPath === null
@@ -166,6 +176,13 @@ function wrapperSource(opts: {
   const mergedHmr = opts.hmrEnabled
     ? `userHmr === false ? false : { ...${hmrConfig}, ...objectOrEmpty(userHmr) }`
     : 'false';
+  // Template-gated dep-discovery opt-out (see ViteCliPrepareOptions.noDepDiscovery);
+  // by default optimizeDeps passes through untouched and the REAL optimizer runs
+  // on the host esbuild-wasm bridge (ADR-0192).
+  const optimizeDepsOverride = opts.noDepDiscovery
+    ? `
+    optimizeDeps: { ...objectOrEmpty(user.optimizeDeps), noDiscovery: true, include: [] },`
+    : '';
   return `${userImport}
 
 ${pluginSource(opts.port, opts.token)}
@@ -182,17 +199,11 @@ function pluginArray(value) {
 function mergeRiftyConfig(userConfig) {
   const user = objectOrEmpty(userConfig);
   const userServer = objectOrEmpty(user.server);
-  const userOptimizeDeps = objectOrEmpty(user.optimizeDeps);
   const userHmr = userServer.hmr;
   return {
     ...user,
     base: user.base ?? './',
-    appType: user.appType ?? 'spa',
-    optimizeDeps: {
-      ...userOptimizeDeps,
-      noDiscovery: true,
-      include: Array.isArray(userOptimizeDeps.include) ? userOptimizeDeps.include : [],
-    },
+    appType: user.appType ?? 'spa',${optimizeDepsOverride}
     server: {
       ...userServer,
       strictPort: userServer.strictPort ?? true,
@@ -230,6 +241,7 @@ function writeViteCliConfigWrapper(root: string, opts: ViteCliPrepareOptions): v
         hmrEnabled: opts.hmr?.enabled ?? false,
         port: opts.hmr?.port ?? 5173,
         token: globalThis.crypto?.randomUUID?.() ?? `hmr-${Date.now().toString(36)}`,
+        noDepDiscovery: opts.noDepDiscovery ?? false,
       }),
     ),
   );
@@ -242,7 +254,9 @@ export async function prepareViteCli(
 ): Promise<void> {
   if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
   installCliActionPatches(root, mode);
+  // Every mode overlays the esbuild delegation shim, so every mode installs the
+  // host bridge — the shim reads the real `version` at import time (ADR-0192).
+  installEsbuildBridge();
   overlayShims(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
-  if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
 }

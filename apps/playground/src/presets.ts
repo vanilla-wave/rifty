@@ -9,6 +9,7 @@ import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -420,6 +421,36 @@ const VITE8_PRESET: Preset = {
 };
 
 /**
+ * React issue-tracker SPA (backlog: playground/react-vite-preset): an ordinary
+ * React 19 + TS + React Router app on the react-vite template — instant boot
+ * from its baked snapshot; Fast Refresh comes from @vitejs/plugin-react, not
+ * hand-written `import.meta.hot.accept` boundaries.
+ */
+const REACT_VITE_PRESET: Preset = {
+  id: 'react-vite',
+  label: 'React issue tracker',
+  category: 'Live preview',
+  icon: 'zap',
+  mode: 'real-vite',
+  setup: 'instant',
+  templateId: REACT_VITE_TEMPLATE.id,
+  blurb: 'An ordinary React 19 + TypeScript SPA: Router, filters, plain CSS, mock data.',
+  glyph: { text: 'RE', color: '#61DAFB' },
+  tag: { text: 'instant', tone: 'live' },
+  openFiles: ['src/App.tsx', 'src/pages/IssueList.tsx', 'src/data/issues.ts'],
+  files: [
+    {
+      path: REACT_VITE_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: REACT_VITE_TEMPLATE.entry.content,
+    },
+    ...Object.entries(REACT_VITE_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+/**
  * Fullstack demo (node-server template, see the node-server template ADR):
  * The opened tabs are ordinary seeded files. The server entry is just one file
  * in the preset bundle; public assets mirror the worker-seeded `extraFiles` so
@@ -580,6 +611,7 @@ export const PRESETS: readonly Preset[] = [
   TYPESCRIPT_LS_PRESET,
   REAL_VITE_PRESET,
   VITE8_PRESET,
+  REACT_VITE_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
   HONO_API_PRESET,

@@ -4,6 +4,59 @@
 
 ### Added
 
+- **AI mode — `distribution/ai-mode-playground` complete (ADR-0190/0191).**
+  In-playground coding agent on the Pi loop (`@earendil-works/pi-agent-core` +
+  `@earendil-works/pi-ai@0.80.3`, exact-pinned; provider access only via the
+  `api/openai-completions` subpath), app-level consumer in `src/ai/` — zero AI in
+  `@riftydev/*`. Two views, one runtime path: "+chat" right-side panel and
+  "vibe" (chat + preview only, IDE chrome CSS-hidden), switchable in the panel
+  header, persisted in the layout store. Chat: streamed deltas, tool cards
+  name+args+expandable result (errors marked), Stop/Reset, settings
+  baseUrl/apiKey/model with plaintext-storage caveat (`rf.ai.v1` localStorage).
+  Full tool surface: `shell` (dedicated visible "AI agent" pty session,
+  serialized) + `read_file` / `write_file` (acked owner RPC) / `edit_file`
+  (exact-unique, loud errors) / `apply_patch` (strict unified diff, rejects
+  naming the hunk) / `list_files` / `grep` / `glob` + `preview_fetch` /
+  `preview_query` / `preview_click` / `preview_type` (the REAL same-origin
+  preview iframe; loud error when no dev server) + `diagnostics` (ts-LS, same
+  data as the Problems panel) — all results 16 KiB head+tail capped with
+  explicit `[truncated N bytes]` markers; per-run budgets (max tool calls, wall
+  clock) end as a distinct `budget-exceeded` state; session trace JSON
+  (transcript, tool calls, timings, usage, agent terminal output, final git
+  diff, key-free config) via "Export session"; prompt profile
+  `pi-baseline+rifty-adapter-v1` (vendored Pi baseline, MIT + rifty adapter
+  block); dev CORS proxy `/ai-proxy` gated on `RIFTY_AI_PROXY_TARGET` (D-004);
+  whole module lazy-loads on first open (split chunks — a session that never
+  opens AI mode downloads none of it). agent-bench hooks (ADR-0191):
+  `globalThis.__riftyAgentBench` (`seed`/`readFile`/`exportTrace`/`sessionMetadata`) exists
+  ONLY under `?agentBench=1`. e2e: mocked OpenAI-compatible SSE sessions cover
+  write_file + shell + vibe + trace export (light lane) and the parity cases on
+  react-vite — shell≡user-terminal stdout, write_file→HMR (Fast Refresh, no
+  reload), edit_file loud mismatch, diagnostics≡Problems panel, all four
+  preview tools, bench hooks (heavy lane).
+
+- **`react-vite` preset — React 19 issue-tracker SPA** (template + instant baked
+  snapshot + chooser card + deep-link): ordinary React + TS + Vite 7 + React
+  Router 7 + `@vitejs/plugin-react` app, portable by unit-tested contract
+  (standard `dev`/`build`/`preview` scripts, zero rifty references; templates
+  gained an optional non-lifecycle `scripts` field for that). Boots LIVE
+  end-to-end (e2e un-fixme'd + build parity spec) on the real esbuild bridge
+  below.
+
+- **Real esbuild JS API in-browser via `esbuild-wasm@0.27.7` (ADR-0192).** New
+  host bridge (`workers/esbuild-host.ts`, `globalThis.__riftyEsbuild`): one
+  lazily-initialized inline esbuild-wasm service per worker realm with a
+  wasm_exec fs facade over the VFS (fd-routed around the lib's stdio protocol)
+  and JS-side `outputFiles` writes (browser esbuild never writes) — vite's
+  config bundling (`vite.config.ts` with relative imports) and the Vite 7 dep
+  optimizer (CJS react pre-bundle, `needsInterop` metadata) now run for real.
+  The per-call WASI transform bridge (`esbuild-wasi-transform.ts`,
+  `__riftyEsbuildTransform`) is removed from the vite path (the vendored
+  `@esbuild/wasi-preview1` conformance surface stays, ADR-0047). The vite CLI
+  wrapper no longer force-suppresses dep discovery — suppression is now
+  template-gated (`server.optimizeDepsDisabled` → vite8/Rolldown + zero-dep
+  templates); react-vite runs the real optimizer.
+
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
   (shareable launch URLs + the `pnpm bench` perf harness). The id is validated
   against the registry — an unknown id falls back to the default AND logs a

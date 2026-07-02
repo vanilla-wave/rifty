@@ -228,6 +228,9 @@ export const TYPESCRIPT_TEMPLATE = {
   server: {
     appType: 'spa',
     strictPort: true,
+    // Zero runtime deps (the seeded @rifty/example-types package is types-only,
+    // unresolvable as a runtime dep) — discovery has nothing real to optimize.
+    // Dep-carrying templates run the real optimizer (react-vite, ADR-0192).
     optimizeDepsDisabled: true,
     host: true,
     allowedHosts: true,

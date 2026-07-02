@@ -42,6 +42,10 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   server: {
     appType: 'spa',
     strictPort: true,
+    // Zero deps + plain-JS sources: dep discovery would drag the 13.5 MB
+    // esbuild-wasm onto the default preset's boot path for an empty result
+    // (ADR-0192 lazy-init contract). Dep-carrying templates run the real
+    // optimizer (react-vite).
     optimizeDepsDisabled: true,
     host: true,
     allowedHosts: true,

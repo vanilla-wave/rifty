@@ -3,7 +3,7 @@ import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { viteBuildShimFiles } from '../glue/esbuild-shim.ts';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
@@ -96,8 +96,8 @@ export async function bootBuild(opts: {
 }): Promise<void> {
   const { root, log } = opts;
   assertNoUserViteConfig(root);
+  installEsbuildBridge();
   overlayBuildShims(root);
-  installEsbuildTransformBridge(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
 
@@ -127,6 +127,9 @@ export async function bootPreview(opts: {
   const { root, port, previewScope, log } = opts;
   assertNoUserViteConfig(root);
   assertBuiltDist(root);
+  // Preview never transforms, but the overlaid shim resolves the host bridge
+  // at import time — install it wherever the shim is overlaid (ADR-0192).
+  installEsbuildBridge();
   overlayBuildShims(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);

@@ -6,7 +6,7 @@ created: 2026-06-13
 closed: 2026-06-22
 why: @riftydev/git over the VFS, shell `git`, offline-faithful porcelain (commit-SHA == canonical git), smart-HTTP network + corsProxy/onAuth, and the achievable agent/dev porcelain cluster are landed. Remaining absences are explicit compat ceilings, never silent stubs.
 user_story: As a developer at the rifty shell prompt (and the M12 agent's git tool), I want real git local workflow over my VFS project plus smart-HTTP clone/fetch/pull/push for reachable repos. DELIVERED to the current browser/VFS hard ceiling.
-sources: [M12, ADR-0167, ADR-0093, ADR-0010, ADR-0005, D-004, docs/backlog/distribution/ai-ide-pi-agent-harness.md, docs/public/compat/git.md]
+sources: [M12, ADR-0167, ADR-0093, ADR-0010, ADR-0005, D-004, ADR-0190, docs/public/compat/git.md]
 code: [packages/git/src/git.ts, packages/git/src/fs-adapter.ts, packages/git/src/http-plugin.ts, packages/shell/src/commands/git.ts]
 ---
 

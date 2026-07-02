@@ -5,7 +5,7 @@ title: M12 — subagent / task orchestration over the embeddable Pi loop
 created: 2026-06-13
 why: the one genuine opencode-richer feature that survives the browser ceiling — agents dispatching focused sub-tasks with isolated context
 user_story: As a dev embedding the rifty AI-IDE, I want my agent to dispatch a focused sub-task via a `task` tool running a nested `runAgentLoop` with its own fresh `InMemorySessionRepo`/tool-subset and `Promise.all` parallelism, but today no such AgentTool exists — no context isolation, depth/cost caps, or `onUpdate` nested progress.
-sources: [M12, docs/backlog/distribution/ai-ide-pi-agent-harness.md]
+sources: [M12, ADR-0190]
 ---
 
 ## Context

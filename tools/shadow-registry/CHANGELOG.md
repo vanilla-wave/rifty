@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **esbuild overlay shim = ONE honest delegation to the host esbuild-wasm
+  instance (ADR-0192):** real `version` (0.27.7), real
+  `transform`/`build`/`context`/`formatMessages`/`analyzeMetafile`/`stop` via
+  `globalThis.__riftyEsbuild`; `*Sync` keep loud `NotImplementedError`. Deleted
+  the fake `0.21.5` version, the transform-only `build()` emulation
+  (`loadEntryThroughPlugins`), the do-nothing `context()` stub, and the
+  separate build-path shim (`esbuildBuildShimFiles`) — dev and build share the
+  same shim; `viteBuildShimFiles` now differs from dev only in the rollup
+  overlay.
+
 ### Added
 
 - `viteBuildShimFiles` adds a production-build overlay: Rollup's native entry

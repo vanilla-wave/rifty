@@ -45,6 +45,13 @@ interface ProjectSpecBase {
   readonly install: Readonly<Record<string, string>>;
   /** npm devDependencies to install into the worker-local node_modules. */
   readonly devDependencies?: Readonly<Record<string, string>>;
+  /**
+   * Extra package.json scripts (e.g. `build`/`preview`) seeded verbatim.
+   * NOT lifecycle-owning: `npm run <name>` for these routes through the real
+   * shell/.bin path ({@link isDevScriptName} keys off {@link projectScripts}
+   * only). On a name collision the lifecycle alias wins.
+   */
+  readonly scripts?: Readonly<Record<string, string>>;
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
@@ -232,7 +239,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
 } {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
-  const scripts = projectScripts(spec);
+  const scripts = { ...(spec.scripts ?? {}), ...projectScripts(spec) };
   const json = `${JSON.stringify(
     {
       name,

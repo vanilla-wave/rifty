@@ -20,6 +20,10 @@ const HEAVY_SPECS = [
   '**/project-management.spec.ts',
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
+  '**/react-vite-preset.spec.ts',
+  '**/react-vite-build.spec.ts',
+  // Boots react-vite (dev server + ts-LS) and drives a full mocked AI session.
+  '**/ai-mode-parity.spec.ts',
 ];
 
 export default defineConfig({

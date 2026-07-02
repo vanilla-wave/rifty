@@ -11,15 +11,29 @@ describe('prepareViteCli', () => {
     expect(source).toContain('__riftyTrackCliPromise(__riftyAction)');
   });
 
-  it('installs a Vite dev CLI config wrapper for browser HMR and dep-scan ceilings', () => {
+  it('installs a Vite dev CLI config wrapper for browser HMR', () => {
     expect(source).toContain('writeViteCliConfigWrapper');
     expect(source).toContain("if (mode === 'dev') writeViteCliConfigWrapper(root, opts)");
-    expect(source).toContain('installEsbuildTransformBridge(root)');
     expect(source).toContain('data-rifty-hmr-bridge');
     expect(source).toContain('__riftyActiveViteServer');
     expect(source).toContain('configureServer(server)');
-    expect(source).toContain('optimizeDeps');
-    expect(source).toContain('noDiscovery: true');
+  });
+
+  it('installs the host esbuild bridge before the shim overlay, for every CLI mode (ADR-0192)', () => {
+    expect(source).toContain("import { installEsbuildBridge } from './esbuild-host.ts'");
+    expect(source.indexOf('installEsbuildBridge()')).toBeLessThan(
+      source.indexOf('overlayShims(root, mode)'),
+    );
+  });
+
+  it('dep-discovery suppression is template-gated, never a blanket wrapper default (ADR-0192)', () => {
+    // The old unconditional `optimizeDeps: { noDiscovery: true, include: [] }`
+    // existed only to dodge the fake esbuild context(). Now the real optimizer
+    // runs by default (plugin-react's injected include + discovery pass
+    // through); only a template's server.optimizeDepsDisabled opts out.
+    expect(source).toMatch(/opts\.noDepDiscovery\s*\n?\s*\?/);
+    expect(source.split('noDiscovery: true').length - 1).toBe(1); // gated branch only
+    expect(source).toContain(": ''");
   });
 
   it('patches Vite preview inline config without loading Vite config files', () => {

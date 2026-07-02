@@ -38,8 +38,11 @@ describe('loadLayout', () => {
       sidebarW: 300,
       consoleH: 260,
       previewW: 520,
+      aiChatW: 420,
       sidebarCollapsed: true,
       consoleCollapsed: false,
+      aiChatOpen: true,
+      aiView: 'vibe',
       view: 'scm',
     };
     saveLayout(storage, state);
@@ -63,6 +66,15 @@ describe('loadLayout', () => {
     const storage = fakeStorage({ [LAYOUT_KEY]: JSON.stringify({ view: 'nope' }) });
     expect(loadLayout(storage).view).toBe(LAYOUT_DEFAULTS.view);
   });
+
+  it('ignores an invalid aiView value and keeps a valid one', () => {
+    expect(
+      loadLayout(fakeStorage({ [LAYOUT_KEY]: JSON.stringify({ aiView: 'nope' }) })).aiView,
+    ).toBe('chat');
+    expect(
+      loadLayout(fakeStorage({ [LAYOUT_KEY]: JSON.stringify({ aiView: 'vibe' }) })).aiView,
+    ).toBe('vibe');
+  });
 });
 
 describe('clampLayout', () => {
@@ -71,10 +83,19 @@ describe('clampLayout', () => {
       sidebarW: 9999,
       consoleH: 1,
       previewW: 9999,
+      aiChatW: 9999,
       sidebarCollapsed: true,
       consoleCollapsed: true,
+      aiChatOpen: true,
+      aiView: 'vibe',
       view: 'scm',
     });
-    expect(out).toMatchObject({ sidebarCollapsed: true, consoleCollapsed: true, view: 'scm' });
+    expect(out).toMatchObject({
+      sidebarCollapsed: true,
+      consoleCollapsed: true,
+      aiChatOpen: true,
+      view: 'scm',
+    });
+    expect(out.aiChatW).toBe(720);
   });
 });

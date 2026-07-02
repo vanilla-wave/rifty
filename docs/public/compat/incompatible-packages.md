@@ -32,7 +32,7 @@ natives are rare.)
 | `better-sqlite3` | node-gyp native addon. | ❌ — use `sql.js` / `@sqlite.org/sqlite-wasm` via an `override` (D-005). |
 | `bcrypt` | Native addon. | ✅ auto-shimmed → `bcryptjs` (baked override). |
 | `fsevents` | macOS-only native; always an `optionalDependency`. | ⏭️ skipped with warning (non-fatal). |
-| `@esbuild/<platform>` | esbuild's platform binaries (optional deps of `esbuild`). | ⏭️ skipped; the `esbuild` JS entry is overlaid by a pass-through WASI shim (ADR-0047). Note: **Vite 8 transforms via oxc/Rolldown, not esbuild** — the esbuild overlay is NOT on the Vite 8 transform path (backlog: `playground/vite8-prune-dead-shim-overlays`). |
+| `@esbuild/<platform>` | esbuild's platform binaries (optional deps of `esbuild`). | ⏭️ skipped; the `esbuild` JS entry is overlaid by a shim delegating the real esbuild JS API to the host `esbuild-wasm` instance (ADR-0192; the vendored WASI binary stays the CLI conformance surface, ADR-0047). Note: **Vite 8 transforms via oxc/Rolldown, not esbuild** — the esbuild overlay is NOT on the Vite 8 transform path (backlog: `playground/vite8-prune-dead-shim-overlays`). |
 | `@rollup/rollup-<platform>` | rollup's optional native binaries. | ⏭️ skipped; rollup JS entry overlaid. Vite 8 parses via `rolldown/parseAst`, not rollup — the rollup overlay is likewise off the Vite 8 path. |
 | `@rolldown/binding-<platform>` | Rolldown's native platform bindings. | ⏭️ skipped for native platforms; `@rolldown/binding-wasm32-wasi` installs and is wired through `node:wasi` + kernel-backed `worker_threads`; full createServer/transform proof requires a SAB + kernel-worker browser harness. |
 

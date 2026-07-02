@@ -13,6 +13,8 @@
     "snapshots:bake": "tsx tools/bake-dep-snapshots.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.80.3",
+    "@earendil-works/pi-ai": "0.80.3",
     "@rifty-examples/vite-like-dev": "workspace:*",
     "@riftydev/git": "workspace:*",
     "@riftydev/io": "workspace:*",
@@ -34,6 +36,7 @@
   },
   "devDependencies": {
     "@types/sql.js": "^1.4.11",
+    "esbuild-wasm": "0.27.7",
     "vite": "^5.4.0",
     "vite-plugin-solid": "^2.11.0"
   }

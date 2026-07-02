@@ -1,0 +1,1 @@
+When I set the status or assignee filter on the Issues page and then reload or share the link, the filters are lost. Persist the Issues page filters in the URL: the address bar should update when I change a filter, and opening that URL should restore the same filtered view.
