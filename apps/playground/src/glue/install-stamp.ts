@@ -201,7 +201,7 @@ const stampDecoder = new TextDecoder('utf-8');
 
 /**
  * Sync twin of {@link installStampSatisfiedForPackageJson} over the sync
- * mirror. Exists for the owner-boot eddy prefetch gate (ADR-0186): an ASYNC
+ * mirror. Exists for the owner-boot eddy prefetch gate (ADR-0195): an ASYNC
  * gate starves behind the owner's busy boot loop, so the prefetch used to fire
  * AFTER the install it was meant to feed — a sync gate lets the fetch start
  * before any boot work blocks the realm.

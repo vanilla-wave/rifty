@@ -32,7 +32,7 @@ function registryProxyPrefix(override: string | undefined): string {
 }
 
 /** The registry base the playground actually fetches from (env override or the
- * npm-client default) — the boot preconnect target (ADR-0186). */
+ * npm-client default) — the boot preconnect target (ADR-0195). */
 export function getRegistryProxyPrefix(): string {
   return registryProxyPrefix(undefined);
 }

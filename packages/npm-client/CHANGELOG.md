@@ -27,7 +27,7 @@
   `{get, set}`; `Map` satisfies it structurally) so callers — eddy's process-wide TTL
   cache — can inject policy-aware caches without a Map subclass.
 
-### Added (eddy wire protocol v1.1, ADR-0186)
+### Added (eddy wire protocol v1.1, ADR-0195)
 
 - **`InstallOptions.resolverClosureHash` — pinned GET-by-hash.** The fast path first tries the
   cacheable `GET <resolverUrl>/bundle/<hash>` (browser-HTTP-cache/CDN friendly, preflight-free);
@@ -49,7 +49,7 @@
 
 - **Eddy POST is CORS-simple.** No `content-type` header (string body → `text/plain`), so a
   cross-origin browser client skips the OPTIONS preflight — one RTT off the cold install path
-  (ADR-0186 §2). The server always parsed the body unconditionally.
+  (ADR-0195 §2). The server always parsed the body unconditionally.
 
 ### Fixed
 

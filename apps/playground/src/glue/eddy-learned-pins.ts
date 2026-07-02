@@ -14,7 +14,7 @@
  *
  * Sync reader exists for `primeInstallPrefetch`, which is sync BY DESIGN (an
  * async gate starves behind the owner boot loop — measured double-POST,
- * ADR-0186).
+ * ADR-0195).
  */
 import { canonicalEddyRequestKey, eddyRequestFromPackageJson } from '@riftydev/npm-client';
 import type { Vfs } from '@riftydev/vfs';

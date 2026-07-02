@@ -1,4 +1,4 @@
-# ADR 0186: Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam
+# ADR 0195: Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam
 
 Status: Accepted
 Date: 2026-07

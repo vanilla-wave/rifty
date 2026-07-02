@@ -29,7 +29,7 @@ export interface StartEddyPrefetchOptions {
    * CORS-simple POST resolve. */
   closureHash?: string;
   /** Base URL for the pinned GET (defaults to `resolverUrl`) — a CDN host may
-   * serve GET-by-hash while POST stays on the origin (ADR-0186). */
+   * serve GET-by-hash while POST stays on the origin (ADR-0195). */
   bundleBaseUrl?: string;
   /** Injectable fetch (tests); defaults to the global. */
   fetchImpl?: typeof fetch;

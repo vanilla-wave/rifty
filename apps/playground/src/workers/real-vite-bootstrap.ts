@@ -443,7 +443,7 @@ async function bootShellOwner(opts: {
   let lastDevRoot: string | null = null;
   let devConfigReady: Promise<void> = Promise.resolve();
 
-  // Owner-boot eddy prefetch (ADR-0186), FIRST thing in the boot — before the
+  // Owner-boot eddy prefetch (ADR-0195), FIRST thing in the boot — before the
   // seed/git work blocks the realm — so the bundle download runs concurrently
   // with the rest of owner boot and the boot line's `npm install` consumes the
   // buffered bytes (canonically keyed — a drifted package.json makes install()
@@ -870,7 +870,7 @@ async function bootShellOwner(opts: {
       // resolver URL is configured the visible `npm install` uses eddy's bundle
       // + auto-fallback; inert (byte-identical) when unset.
       resolverUrl: getResolverUrl(),
-      // ADR-0186: the ACTIVE template's pinned closure hash (cacheable GET) and
+      // ADR-0195: the ACTIVE template's pinned closure hash (cacheable GET) and
       // the owner-boot prefetch — getters, the active preset can change. Keyed
       // on the TEMPLATE id, not the slug (the template owns the dep-set).
       resolverClosureHash: () => getEddyPin(devSpec.id),
@@ -1006,7 +1006,7 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
-      // Re-prime the eddy prefetch for the NEW preset (ADR-0186) — the boot
+      // Re-prime the eddy prefetch for the NEW preset (ADR-0195) — the boot
       // line's `npm install` follows this config change.
       primeInstallPrefetch();
       devConfigReady = prepareActiveDevConfigDeps();

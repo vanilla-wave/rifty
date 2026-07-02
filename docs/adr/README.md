@@ -111,9 +111,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0175 | Bounded-concurrency packument prefetch in npm install |
 | 0176 | Cache headers for npm registry proxy |
 | 0182 | Eddy opt-in fast-install resolver |
-| 0186 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0188 | Install-time shadow internals shims with companion pins and substitution provenance |
 | 0194 | eddy v1.2 — stateless bundle store, shared resolve caches, learned pins |
+| 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 
 ### playground
 

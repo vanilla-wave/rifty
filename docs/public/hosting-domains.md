@@ -10,7 +10,7 @@
 | `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
 | `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
 | `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182): POST resolve + GET-by-hash origin |
-| `eddy-origin.rifty.dev` | Yandex Cloud | CDN origin host for eddy (ADR-0186) |
+| `eddy-origin.rifty.dev` | Yandex Cloud | CDN origin host for eddy (ADR-0195) |
 | `eddy-cdn.rifty.dev` | Yandex Cloud CDN | Edge-cached `GET /bundle/<closureHash>` (the edge refuses POST, so the resolver stays on the VM) |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 

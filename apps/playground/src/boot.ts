@@ -149,7 +149,7 @@ export interface BootstrapPlaygroundDeps {
 }
 
 /**
- * Preconnect to the configured registry + eddy origins (ADR-0186): DNS+TCP+TLS
+ * Preconnect to the configured registry + eddy origins (ADR-0195): DNS+TCP+TLS
  * warm during boot instead of serializing into the first install fetch.
  * Best-effort — a DOM-less realm or a throwing DOM never breaks boot.
  */

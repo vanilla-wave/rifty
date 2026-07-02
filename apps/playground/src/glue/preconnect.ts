@@ -1,6 +1,6 @@
 /**
  * `<link rel="preconnect" crossorigin>` for the configured registry + resolver
- * origins (ADR-0186): DNS+TCP+TLS leave the install critical path during page
+ * origins (ADR-0195): DNS+TCP+TLS leave the install critical path during page
  * boot instead of serializing into the first registry/eddy fetch. Origins come
  * from env-config only (D-004) — nothing configured → no tags. Idempotent per
  * origin; malformed URLs are skipped (a bad env value must not break boot).

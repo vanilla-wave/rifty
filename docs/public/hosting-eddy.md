@@ -96,7 +96,7 @@ store), so the re-point can happen any time after the env lands.
 
 A playground deploy can pin a preset's resolved closure so its install rides
 the cacheable GET (browser HTTP cache / CDN edge) instead of a POST
-(ADR-0186 §5):
+(ADR-0195 §5):
 
 1. POST the preset's dep-set once and read the `x-eddy-closure-hash` response
    header (the smoke command below prints headers with `-D-`).
@@ -221,7 +221,7 @@ first.
 
 ## CDN tier on rifty.dev (deployed 2026-07-01)
 
-Live resources (ADR-0186; Yandex CDN provider `ourcdn` refuses POST at the
+Live resources (ADR-0195; Yandex CDN provider `ourcdn` refuses POST at the
 edge, hence the split-host shape):
 
 - CDN resource `bc8rtmpmtax5opcdex6x`: cname `eddy-cdn.rifty.dev`, origin

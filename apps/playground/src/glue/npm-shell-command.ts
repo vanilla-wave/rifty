@@ -69,13 +69,13 @@ export interface NpmShellCommandDeps {
    *  to the standard verifying install); the install line reports
    *  `via eddy (fast)` when the eddy path produced the tree. */
   readonly resolverUrl?: string;
-  /** Pinned closure hash for the ACTIVE preset (ADR-0186, `VITE_RIFTY_EDDY_PINS`).
+  /** Pinned closure hash for the ACTIVE preset (ADR-0195, `VITE_RIFTY_EDDY_PINS`).
    *  A getter — the active preset can change. Inert without `resolverUrl`. */
   readonly resolverClosureHash?: () => string | undefined;
-  /** CDN base for pinned bundle GETs (`VITE_RIFTY_EDDY_BUNDLE_URL`, ADR-0186);
+  /** CDN base for pinned bundle GETs (`VITE_RIFTY_EDDY_BUNDLE_URL`, ADR-0195);
    *  the edge won't proxy POST, so GETs may ride a separate hostname. */
   readonly resolverBundleBaseUrl?: string;
-  /** Owner-boot bundle prefetch for the ACTIVE preset (ADR-0186). A getter;
+  /** Owner-boot bundle prefetch for the ACTIVE preset (ADR-0195). A getter;
    *  install() consumes the handle at most once and only on a canonical
    *  request match. Inert without `resolverUrl`. */
   readonly resolverPrefetch?: () => EddyPrefetchHandle | undefined;

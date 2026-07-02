@@ -138,7 +138,7 @@ export interface InstallOptions {
    * Base URL for the pinned bundle GET (defaults to `resolverUrl`). Lets a
    * CDN host serve GET-by-hash while the POST resolve stays on the origin —
    * Yandex CDN (and most edges) won't proxy POST, so the two bases can
-   * differ (ADR-0186). Inert without `resolverClosureHash`.
+   * differ (ADR-0195). Inert without `resolverClosureHash`.
    */
   resolverBundleBaseUrl?: string;
   /**

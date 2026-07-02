@@ -79,7 +79,7 @@
   implies durable tree" holds while the command skips the ~490ms drain (the dev line starts
   that much earlier). `NpmShellCommandDeps.flush` / `EnsureProjectDepsOptions.flush` removed;
   reload-critical drains (dev-ready, eval boundary) unchanged.
-- **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0186).** For the active
+- **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0195).** For the active
   from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
   overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes
   it only on a canonical dep-set match. `VITE_RIFTY_EDDY_PINS` (JSON `preset-slug →

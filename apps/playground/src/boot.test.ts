@@ -140,7 +140,7 @@ describe('assertCrossOriginIsolated', () => {
 });
 
 describe('bootstrapPlayground', () => {
-  it('injects registry+resolver preconnects right after the COI gate (ADR-0186)', async () => {
+  it('injects registry+resolver preconnects right after the COI gate (ADR-0195)', async () => {
     const order: string[] = [];
     await bootstrapPlayground({
       assertCoi: () => order.push('coi'),

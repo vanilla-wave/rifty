@@ -1,5 +1,5 @@
 /**
- * Owner-boot eddy bundle prefetch (ADR-0186): start the bundle fetch for a
+ * Owner-boot eddy bundle prefetch (ADR-0195): start the bundle fetch for a
  * from-scratch preset BEFORE its `npm install` boot line runs, so the resolver
  * round-trip overlaps owner boot work (git init, seeding, pty/shell setup).
  *

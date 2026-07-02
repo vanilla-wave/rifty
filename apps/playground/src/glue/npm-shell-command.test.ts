@@ -1144,7 +1144,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(rec.stdout.join('')).toContain('via eddy (fast)');
   });
 
-  it('forwards the ACTIVE preset pin + prefetch handle into install() (ADR-0186)', async () => {
+  it('forwards the ACTIVE preset pin + prefetch handle into install() (ADR-0195)', async () => {
     const vfs = await projVfs();
     const prefetchHandle = { take: () => null };
     let seen: Pick<InstallOptions, 'resolverClosureHash' | 'resolverPrefetch'> | null = null;

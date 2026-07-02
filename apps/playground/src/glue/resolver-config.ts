@@ -12,7 +12,7 @@ export function getResolverUrl(): string | undefined {
 }
 
 /**
- * CDN base for pinned bundle GETs (ADR-0186): the edge won't proxy the POST
+ * CDN base for pinned bundle GETs (ADR-0195): the edge won't proxy the POST
  * resolve, so GET-by-hash may ride a separate CDN hostname while POST stays on
  * `VITE_RIFTY_RESOLVER_URL`. Default absent → GETs use the resolver URL.
  */
@@ -25,7 +25,7 @@ export function getEddyBundleBaseUrl(): string | undefined {
 let warnedMalformedPins = false;
 
 /**
- * Per-template pinned closure hash (ADR-0186 §5). `VITE_RIFTY_EDDY_PINS` is a
+ * Per-template pinned closure hash (ADR-0195 §5). `VITE_RIFTY_EDDY_PINS` is a
  * JSON map `template-id → closureHash` set at deploy time (D-004, default
  * absent) — keyed on the TEMPLATE id because the template owns the dep-set
  * (the runtime slug is the root id, ADR-0165). A pin turns the preset's

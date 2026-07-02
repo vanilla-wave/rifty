@@ -191,7 +191,7 @@ describe('install stamp (ADR-0135)', () => {
 
   it('installStampSatisfiedForPackageJsonSync mirrors the async predicate (owner-boot prefetch gate)', async () => {
     // The sync twin exists so the eddy prefetch gate never awaits (an async
-    // gate starves behind the busy boot loop, ADR-0186). Same verdicts as the
+    // gate starves behind the busy boot loop, ADR-0195). Same verdicts as the
     // async predicate over the same tree.
     const vfs = new MemoryVfs();
     await seedProject(vfs);

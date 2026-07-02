@@ -18,7 +18,7 @@ function fetchSpy() {
   return { impl, calls };
 }
 
-describe('startInstallPrefetch (ADR-0186 owner-boot prefetch)', () => {
+describe('startInstallPrefetch (ADR-0195 owner-boot prefetch)', () => {
   it('returns a handle whose key matches the request install() derives from the SAME package.json', () => {
     const { impl, calls } = fetchSpy();
     const handle = startInstallPrefetch({
