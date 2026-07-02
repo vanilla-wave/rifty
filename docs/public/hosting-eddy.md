@@ -39,17 +39,58 @@ Once `@riftydev/eddy` is published to npm, a thin image is just
 | `PORT` | `8788` | Listen port |
 | `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (point at your registry proxy to share one trust boundary, ADR-0163) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
+| `EDDY_PACKUMENT_TTL_SECONDS` | `300` | Process-wide packument cache (ADR-0194 §1; `300` = npmjs edge `max-age`); `0` = off |
+| `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap (ADR-0194 §2) |
+| `EDDY_BUNDLE_MEMORY_MAX_BYTES` | `536870912` | Memory bundle-store byte cap (only without `EDDY_S3_*`) |
+| `EDDY_S3_ENDPOINT` `EDDY_S3_BUCKET` `EDDY_S3_REGION` `EDDY_S3_ACCESS_KEY_ID` `EDDY_S3_SECRET_ACCESS_KEY` | unset | All-or-none: bundles live in an S3-compatible public-read bucket (ADR-0194 §4); partial config refuses to boot |
 
-Caching is two layers (ADR-0182 §6 + ADR-0186): eddy's **in-process LRU**
-(bounded, per-process; a repeat identical dep-set is served from memory, the
-mutable `dep-set → closure-hash` lookup honors the TTL), plus the
-content-addressed **`GET /bundle/<closure-hash>`** route serving the immutable
-tier with `Cache-Control: public, max-age=31536000, immutable`. Any CDN you
-front eddy with — and every browser's HTTP cache — holds those bytes forever; a
-miss is a 404 `no-store`, and the client falls back to POST, which re-seeds the
-tier (self-healing after a restart or LRU eviction). Every bundle carries an
-as-of stamp in `x-eddy-resolved-at` / `x-eddy-closure-hash` /
+Caching (ADR-0182 §6, restructured by ADR-0194): the mutable
+`dep-set → closure-hash` link honors the TTL and single-flights concurrent
+identical requests; cold resolves share process-wide packument (TTL) and
+immutable tarball caches, so an unseen-but-overlapping dep set refetches only
+its novel packages. The immutable `closure-hash → bundle` tier is a
+**BundleStore** — byte-bounded memory by default, an Object-Storage bucket
+with `EDDY_S3_*` (below) — served content-addressed by
+**`GET /bundle/<closure-hash>`** with
+`Cache-Control: public, max-age=31536000, immutable`. Any CDN you front eddy
+with — and every browser's HTTP cache — holds those bytes forever; a miss is a
+404 `no-store`, and the client falls back to POST, which re-seeds the tier
+(self-healing after a restart or eviction). Every bundle carries an as-of
+stamp in `x-eddy-resolved-at` / `x-eddy-closure-hash` /
 `x-eddy-npm-client-version` headers.
+
+## Object-Storage bundle store (`EDDY_S3_*`, stateless origin)
+
+With `EDDY_S3_*` set, a cold POST writes the bundle to the bucket BEFORE
+linking it (durable-before-link, ADR-0194 §5) and the origin keeps only
+reconstructible RAM caches — restarts/deploys lose nothing durable, extra
+hosts need no shared disk, and the CDN can serve GET bytes straight from the
+bucket. Object key = `bundle/<closure-hash>` with the hash RAW (base64 `/`
+`=` as-is): the client percent-encodes and S3 percent-decodes, so re-pointing
+the CDN origin from the VM to the bucket needs no client/wire change.
+
+Yandex Object Storage recipe (operator, confirm-first — spend):
+
+```bash
+yc storage bucket create --name eddy-bundles --public-read
+yc iam service-account create --name rifty-eddy-s3
+yc storage bucket grant-access --name eddy-bundles \
+  --role storage.uploader --service-account-name rifty-eddy-s3
+yc iam access-key create --service-account-name rifty-eddy-s3   # prints key id + secret
+```
+
+VM env (compose): `EDDY_S3_ENDPOINT=https://storage.yandexcloud.net`,
+`EDDY_S3_BUCKET=eddy-bundles`, `EDDY_S3_REGION=ru-central1`, plus the static
+key pair. Only PUT is signed (hand-rolled SigV4, no SDK dep); GET/HEAD ride
+the public-read bucket exactly like the CDN does.
+
+CDN re-point: change the `eddy-cdn.rifty.dev` resource's origin from
+`eddy-origin.rifty.dev` to the bucket
+(`eddy-bundles.storage.yandexcloud.net`, host header pinned to the bucket
+host). Keep 404/negative caching OFF at the edge — a miss must stay
+`no-store` so the client's next POST can re-seed the very same hash. The
+origin's own `GET /bundle/<hash>` keeps working either way (it reads the same
+store), so the re-point can happen any time after the env lands.
 
 ## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
 
@@ -73,6 +114,12 @@ Re-pin whenever a template's dependencies change, or on a deliberate cadence to
 pick up new transitive releases. A stale pin never rots into a wrong install —
 the client verifies coverage + integrity and degrades to POST; unpinned presets
 simply keep POSTing.
+
+Beyond env pins, the playground LEARNS pins automatically (ADR-0194): after a
+successful eddy install it persists `request-key → closure-hash`
+(`/.rifty/eddy-learned-pins.json`, TTL = the server's mutable tier), so ANY
+repeat dep set — ad-hoc `npm install` included — rides the cacheable GET on the
+next fresh profile. No operator work; env pins take priority.
 
 ## Cold-spike knobs
 

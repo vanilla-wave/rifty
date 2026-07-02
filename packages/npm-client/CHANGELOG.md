@@ -17,6 +17,16 @@
   ADR-0051)` and `npm: rollup@<v> internals patched from shadow registry`. User `overrides` do
   not print (`resolveOverride` now returns `source: 'user' | 'baked'`). Tests in
   `installer-shadow-shims.test.ts`.
+### Added (eddy v1.2, ADR-0194)
+
+- **`InstallResult.closureHash`.** Set iff `source === 'eddy'` — the adopted bundle's
+  `manifest.asOf.closureHash`, threaded out of `consumeEddyResponse` → `tryEddyFastPath`
+  so callers can persist learned pins (`requestKey → closureHash`) and turn the next
+  identical dep set into a cacheable `GET /bundle/<hash>`.
+- **`InstallOptions.packumentCache` widened to `PackumentCacheLike`** (minimal
+  `{get, set}`; `Map` satisfies it structurally) so callers — eddy's process-wide TTL
+  cache — can inject policy-aware caches without a Map subclass.
+
 ### Added (eddy wire protocol v1.1, ADR-0186)
 
 - **`InstallOptions.resolverClosureHash` — pinned GET-by-hash.** The fast path first tries the

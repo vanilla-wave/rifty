@@ -64,6 +64,15 @@
   Node semantics, no longer a `lib/typescript.js` probe).
 ### Performance
 
+- **Learned eddy pins (ADR-0194).** After a successful eddy install the owner persists
+  `canonicalEddyRequestKey → closureHash` at `/.rifty/eddy-learned-pins.json` (TTL = the
+  server's mutable tier, cap 64, corrupt = absent), so ANY repeat dep set — ad-hoc
+  `npm install` included, not just env-pinned templates — becomes a cacheable
+  `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an origin POST. Env pins
+  (`VITE_RIFTY_EDDY_PINS`) keep priority; the owner-boot prefetch reads the learned pin
+  through the sync mirror (the prefetch gate stays sync by design). New seam:
+  `NpmShellCommandDeps.learnedPins`.
+
 - **`npm install` returns without draining the OPFS write-through (ADR-0187).** The install
   stamp (and the snapshot-restore stamp) no longer flush the queue around the stamp write —
   the write-through FIFO already lands the stamp after every tree write, so "durable stamp

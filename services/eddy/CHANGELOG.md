@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Added (eddy v1.2, ADR-0194)
+
+- **Shared resolve caches + single-flight.** Cold resolves now share a process-wide
+  packument cache (TTL `EDDY_PACKUMENT_TTL_SECONDS`, default 300s = npmjs edge
+  `max-age`; `prefer:'online'` bypasses reads, writes through) and a byte-bounded
+  immutable tarball cache (`EDDY_TARBALL_CACHE_MAX_BYTES`) layered under a
+  per-request view — an unseen-but-overlapping dep set refetches only its novel
+  packages, and a mutable-TTL recompute re-packs tarballs without re-downloading.
+  Concurrent identical dep-sets single-flight into one compute.
+- **`BundleStore` — stateless-restartable origin.** The immutable
+  `closure-hash → bundle` tier moved out of the entry-capped in-process LRU into a
+  store abstraction: `MemoryBundleStore` (byte-bounded LRU,
+  `EDDY_BUNDLE_MEMORY_MAX_BYTES`; local/test default) or `S3BundleStore`
+  (`EDDY_S3_*` env group, all-or-none — partial config refuses to boot). A cold
+  POST awaits the store put BEFORE linking (durable-before-link); a failed put
+  logs, skips the link and still serves the bundle. S3 reads are plain fetches
+  against the public-read bucket; only PUT is signed — hand-rolled SigV4
+  regression-locked to the published AWS example vectors, no SDK dependency.
+  Object key `bundle/<hash>` (RAW base64) keeps the client's `bundleUrlFor`
+  working unchanged when the CDN origin re-points to the bucket.
+- **GET route hardened.** `GET /bundle/<hash>` with a failing store answers
+  `500` JSON instead of dying on an unhandled rejection.
+
 ### Added
 
 - **`GET /bundle/<closureHash>` (ADR-0186).** Content-addressed immutable-tier lookup serving
