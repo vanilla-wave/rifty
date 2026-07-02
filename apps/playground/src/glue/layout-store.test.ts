@@ -38,8 +38,10 @@ describe('loadLayout', () => {
       sidebarW: 300,
       consoleH: 260,
       previewW: 520,
+      aiChatW: 420,
       sidebarCollapsed: true,
       consoleCollapsed: false,
+      aiChatOpen: true,
       view: 'scm',
     };
     saveLayout(storage, state);
@@ -71,10 +73,18 @@ describe('clampLayout', () => {
       sidebarW: 9999,
       consoleH: 1,
       previewW: 9999,
+      aiChatW: 9999,
       sidebarCollapsed: true,
       consoleCollapsed: true,
+      aiChatOpen: true,
       view: 'scm',
     });
-    expect(out).toMatchObject({ sidebarCollapsed: true, consoleCollapsed: true, view: 'scm' });
+    expect(out).toMatchObject({
+      sidebarCollapsed: true,
+      consoleCollapsed: true,
+      aiChatOpen: true,
+      view: 'scm',
+    });
+    expect(out.aiChatW).toBe(720);
   });
 });

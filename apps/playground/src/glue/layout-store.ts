@@ -15,8 +15,12 @@ export interface LayoutState {
   consoleH: number;
   /** Preview pane width, px (dev/real-vite only). */
   previewW: number;
+  /** AI chat panel width, px (ADR-0190 "+chat" view). */
+  aiChatW: number;
   sidebarCollapsed: boolean;
   consoleCollapsed: boolean;
+  /** AI mode panel visibility (persists like the other panel state). */
+  aiChatOpen: boolean;
   view: SidebarView;
 }
 
@@ -37,8 +41,10 @@ export const LAYOUT_DEFAULTS: LayoutState = {
   sidebarW: 232,
   consoleH: 280,
   previewW: 560,
+  aiChatW: 380,
   sidebarCollapsed: false,
   consoleCollapsed: false,
+  aiChatOpen: false,
   // Explorer is the boot default — the file manager is the headline feature.
   // TODO(backlog: playground/sidebar-boot-default-view)
   view: 'explorer',
@@ -49,6 +55,7 @@ export const LAYOUT_BOUNDS = {
   sidebarW: [180, 560] as const,
   consoleH: [120, 900] as const,
   previewW: [320, 1280] as const,
+  aiChatW: [300, 720] as const,
 };
 
 /** Clamp the numeric fields into {@link LAYOUT_BOUNDS}; leave flags/view as-is. */
@@ -58,6 +65,7 @@ export function clampLayout(state: LayoutState): LayoutState {
     sidebarW: clampSize(state.sidebarW, LAYOUT_BOUNDS.sidebarW[0], LAYOUT_BOUNDS.sidebarW[1]),
     consoleH: clampSize(state.consoleH, LAYOUT_BOUNDS.consoleH[0], LAYOUT_BOUNDS.consoleH[1]),
     previewW: clampSize(state.previewW, LAYOUT_BOUNDS.previewW[0], LAYOUT_BOUNDS.previewW[1]),
+    aiChatW: clampSize(state.aiChatW, LAYOUT_BOUNDS.aiChatW[0], LAYOUT_BOUNDS.aiChatW[1]),
   };
 }
 
@@ -85,6 +93,7 @@ export function loadLayout(storage: StorageLike | undefined): LayoutState {
       sidebarW: typeof parsed.sidebarW === 'number' ? parsed.sidebarW : LAYOUT_DEFAULTS.sidebarW,
       consoleH: typeof parsed.consoleH === 'number' ? parsed.consoleH : LAYOUT_DEFAULTS.consoleH,
       previewW: typeof parsed.previewW === 'number' ? parsed.previewW : LAYOUT_DEFAULTS.previewW,
+      aiChatW: typeof parsed.aiChatW === 'number' ? parsed.aiChatW : LAYOUT_DEFAULTS.aiChatW,
       sidebarCollapsed:
         typeof parsed.sidebarCollapsed === 'boolean'
           ? parsed.sidebarCollapsed
@@ -93,6 +102,8 @@ export function loadLayout(storage: StorageLike | undefined): LayoutState {
         typeof parsed.consoleCollapsed === 'boolean'
           ? parsed.consoleCollapsed
           : LAYOUT_DEFAULTS.consoleCollapsed,
+      aiChatOpen:
+        typeof parsed.aiChatOpen === 'boolean' ? parsed.aiChatOpen : LAYOUT_DEFAULTS.aiChatOpen,
       view: isView(parsed.view) ? parsed.view : LAYOUT_DEFAULTS.view,
     });
   } catch {

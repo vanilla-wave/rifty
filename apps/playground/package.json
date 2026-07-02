@@ -13,6 +13,8 @@
     "snapshots:bake": "tsx tools/bake-dep-snapshots.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.80.3",
+    "@earendil-works/pi-ai": "0.80.3",
     "@rifty-examples/vite-like-dev": "workspace:*",
     "@riftydev/git": "workspace:*",
     "@riftydev/io": "workspace:*",

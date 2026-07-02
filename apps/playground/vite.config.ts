@@ -32,6 +32,12 @@ const crossOriginIsolationHeaders = {
 // side; playwright.config.ts reads the same env. Default stays 5273.
 const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 
+// Dev-only CORS escape hatch for AI mode (ADR-0190; D-004 — target from env,
+// never a hardcoded URL): `RIFTY_AI_PROXY_TARGET=<provider origin> pnpm dev`
+// serves `/ai-proxy/*` → the provider, so an AI settings baseUrl of
+// `/ai-proxy/v1` stays same-origin. The settings UI names this env var.
+const aiProxyTarget = process.env.RIFTY_AI_PROXY_TARGET;
+
 export default defineConfig({
   customLogger: quietLogger,
   plugins: [solid(), rifySwPlugin()],
@@ -46,6 +52,15 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/npm-registry/, ''),
       },
+      ...(aiProxyTarget
+        ? {
+            '/ai-proxy': {
+              target: aiProxyTarget,
+              changeOrigin: true,
+              rewrite: (path) => path.replace(/^\/ai-proxy/, ''),
+            },
+          }
+        : {}),
     },
   },
   preview: {
@@ -91,6 +106,13 @@ export default defineConfig({
     // Pre-bundle upfront: sql.js is CJS and first imported from the real-vite
     // worker chunk — discovering it lazily makes dev Vite re-optimize and
     // FULL-RELOAD the page mid-session (drops the selected preset/dev server).
-    include: ['sql.js'],
+    // The Pi deps load via dynamic import() only when AI mode first opens
+    // (ADR-0190) — same lazy-discovery reload trap, same fix.
+    include: [
+      'sql.js',
+      '@earendil-works/pi-agent-core',
+      '@earendil-works/pi-ai',
+      '@earendil-works/pi-ai/api/openai-completions',
+    ],
   },
 });

@@ -4,6 +4,28 @@
 
 ### Added
 
+- **AI mode — PASS 1 of `distribution/ai-mode-playground` (ADR-0190).** In-playground
+  coding agent on the Pi loop (`@earendil-works/pi-agent-core` +
+  `@earendil-works/pi-ai@0.80.3`, exact-pinned; provider access only via the
+  `api/openai-completions` subpath), app-level consumer in `src/ai/` — zero AI in
+  `@riftydev/*`. Ships: "+chat" right-side panel (streamed deltas, tool cards
+  name+args+expandable result, Stop/Reset, settings baseUrl/apiKey/model with
+  plaintext-storage caveat, `rf.ai.v1` localStorage), tool surface
+  `shell` (dedicated visible "AI agent" pty session, serialized) + `read_file` /
+  `write_file` (acked owner RPC) / `edit_file` (exact-unique, loud errors) /
+  `apply_patch` (strict unified diff, rejects naming the hunk) / `list_files` /
+  `grep` / `glob` — all results 16 KiB head+tail capped with explicit
+  `[truncated N bytes]` markers; per-run budgets (max tool calls, wall clock) end
+  as a distinct `budget-exceeded` state; session trace JSON (transcript, tool
+  calls, timings, usage, agent terminal output, final git diff, key-free config)
+  via "Export session"; prompt profile `pi-baseline+rifty-adapter-v1` (vendored
+  Pi baseline, MIT + rifty adapter block); dev CORS proxy `/ai-proxy` gated on
+  `RIFTY_AI_PROXY_TARGET` (D-004); whole module lazy-loads on first open (split
+  chunks — a session that never opens AI mode downloads none of it). e2e: mocked
+  OpenAI-compatible SSE endpoint drives write_file + shell + trace export.
+  PASS 2 (vibe view, preview_* tools, diagnostics, `__riftyAgentBench`) is not
+  in this entry.
+
 - **`react-vite` preset — React 19 issue-tracker SPA** (template + instant baked
   snapshot + chooser card + deep-link): ordinary React + TS + Vite 7 + React
   Router 7 + `@vitejs/plugin-react` app, portable by unit-tested contract
