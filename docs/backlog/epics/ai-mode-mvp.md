@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: in-progress
 title: AI mode MVP — diagnostic quality bench for rifty as an AI coding environment
 created: 2026-07-02
 value: measured, classified answer to "where does rifty lose coding-agent quality vs a real local environment" — plus a hands-on AI mode anyone can try
@@ -36,7 +36,7 @@ local-reference delta, failure class + evidence per run.
 - `playground/react-vite-preset` — the arena: realistic SPA, portable to local Vite.
 - `distribution/agent-bench-harness` — the measurement: runner, tasks, judge, report.
 
-## Decisions (grilled 2026-07-02)
+## Decisions (grilled 2026-07-02; ratified: ADR-0190 — Pi loop + AI-outside-runtime, ADR-0191 — bench design)
 
 - MVP = measurement stand; product IDE (ai-ide-product-ui) comes after the numbers.
 - Built on the existing playground, not a side lab; preview mandatory.

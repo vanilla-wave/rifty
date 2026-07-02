@@ -205,6 +205,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0120 | AI command suggestions |
 | 0122 | Raw stdin and mouse reporting |
 
+### distribution
+
+| # | Title |
+|---|---|
+| 0190 | AI mode on Pi agent loop as a playground app-level consumer |
+| 0191 | agent-bench: external two-lane validation harness over the playground |
+
 ## Superseded (removed)
 
 ADRs below were removed; load-bearing context grafted into the successor. See git history.

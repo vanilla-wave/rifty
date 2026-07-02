@@ -116,7 +116,7 @@ tools as plain pluggable functions. **AI lives outside rifty** — a consumer of
 rifty grows only AI-agnostic capabilities (TS language service, git over VFS). Positioning:
 `docs/research/open-webcontainers-alternative-2026-06.md`.
 open:
-- `docs/backlog/distribution/ai-ide-pi-agent-harness` — embed Pi + the `pi-ai` openai subpath + rifty-tool bindings; records the Pi-over-opencode + AI-outside-rifty direction.
+- `docs/backlog/epics/ai-mode-mvp` — AI mode in the playground + react-vite arena + agent-bench two-lane measurement; Pi-over-opencode + AI-outside-rifty direction ratified in ADR-0190, bench design in ADR-0191.
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
