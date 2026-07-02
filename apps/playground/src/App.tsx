@@ -114,6 +114,9 @@ import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts'
 export { createAppProjectStore } from './glue/app-project-store.ts';
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
+// Degraded-path beat for the first-run chooser: the chooser is index-driven
+// (first owner publish), this only fires when NO index arrived at all.
+const FIRST_RUN_LAUNCHER_FALLBACK_MS = 8_000;
 const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
@@ -2375,9 +2378,16 @@ export function App(props: AppProps) {
       initialBootDecisionMade = true;
       void onPickStarter(deepLinkStarterId);
     } else {
+      // Project-first chooser is INDEX-DRIVEN: the first owner index publish
+      // decides (the index effect opens the chooser on a needs-choice publish,
+      // restores otherwise). A blind 1s open raced slow owner boots (hosted
+      // stand: first publish ~2-3s) and FLASHED the chooser over a project
+      // about to restore. The timer survives only as a degraded fallback: no
+      // index AT ALL within the beat = owner boot is broken — surface the
+      // gallery rather than a blank IDE (a late publish still overrides it).
       const timer = setTimeout(() => {
-        if (!initialBootDecisionMade) openFirstRunLauncher();
-      }, 1000);
+        if (!initialBootDecisionMade && projectIndex() === null) openFirstRunLauncher();
+      }, FIRST_RUN_LAUNCHER_FALLBACK_MS);
       onCleanup(() => clearTimeout(timer));
     }
   });

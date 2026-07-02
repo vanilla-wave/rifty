@@ -14,6 +14,15 @@
 
 ### Fixed
 
+- **The first-run chooser no longer flashes over a restoring project.** The
+  chooser used to open on a blind 1s beat and be CLOSED by the first owner index
+  publish when it showed an active project — on a hosted (slow-network) load the
+  publish lands at ~2-3s, so the chooser visibly flashed. It is now index-driven:
+  the first publish either opens it (needs-choice) or restores the project; the
+  timer survives only as an 8s degraded fallback when NO index arrives at all
+  (broken owner boot — a gallery beats a blank IDE). Verified under network
+  throttle: first-run opens once and stays; a reload with a persisted project
+  never shows it.
 - **The boot command echoes the moment it runs — the deps restore no longer
   gates the terminal.** For an instant preset, the `pty:dev-config` ack used to
   wait for the baked node_modules snapshot restore (a 9.6-16 MB download —
