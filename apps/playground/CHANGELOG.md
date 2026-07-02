@@ -67,6 +67,66 @@
 
 ### Fixed
 
+- **A true first run opens the chooser instantly.** The index-driven chooser
+  (below) traded the flash for a first-visit delay: a brand-new user waited for
+  the first owner index publish (~1.5-3s dev, more hosted) staring at a dead
+  page. A page-side presence hint (`localStorage`, kept current by every index
+  publish) now distinguishes the cases: no hint → open the gallery immediately
+  (the publish still arbitrates and would close a stale-hint chooser); hint
+  present → index-driven as below, no flash. Helpers unit-tested incl. denied
+  storage (private mode → treated as first run).
+- **The first-run chooser no longer flashes over a restoring project.** The
+  chooser used to open on a blind 1s beat and be CLOSED by the first owner index
+  publish when it showed an active project — on a hosted (slow-network) load the
+  publish lands at ~2-3s, so the chooser visibly flashed. It is now index-driven:
+  the first publish either opens it (needs-choice) or restores the project; the
+  timer survives only as an 8s degraded fallback when NO index arrives at all
+  (broken owner boot — a gallery beats a blank IDE). Verified under network
+  throttle: first-run opens once and stays; a reload with a persisted project
+  never shows it.
+- **The boot command echoes the moment it runs — the deps restore no longer
+  gates the terminal.** For an instant preset, the `pty:dev-config` ack used to
+  wait for the baked node_modules snapshot restore (a 9.6-16 MB download —
+  seconds on a real network), so the `$ <boot line>` echo and its output painted
+  together after a dead-silent console (measured: banner 2.2s → 11s silence →
+  burst at 13.2-14.1s, throttled prod build). The ack is now config-assignment
+  only; every pty run instead awaits the restore INSIDE the run via the new
+  `beforeRun` gate (pty-server), streaming `restoring project dependencies…` /
+  `dependencies restored in N.Ns` to the run's stdout when slow (>250 ms; a
+  stamp-satisfied ready prints nothing). Same deps guarantee for vite/node/npm
+  boot lines (the old pty:exec queue moved into the run — stdin/signal frames
+  during the gate now queue instead of dropping); the restore also stops being
+  bounded by the page's 60s dev-config timeout. Measured after: echo at 2.6s,
+  progress at 2.9s, restore 10.6s, LIVE 14.2s — console honest the whole way.
+- **The `beforeRun` deps gate is abort-aware and blank-line-free.** Three review
+  gaps in the gate above: (1) Ctrl-C/`pty:close` during the restore used to wait
+  the gate out AND still invoke the command afterwards (a stopped `vite`/`npm`
+  could start seconds after the user killed it, and the terminal stayed
+  `busy` for the whole restore — the light-lane CI regression: a spec Ctrl-C'ing
+  the echoed-but-still-gated vite left `terminal is busy` refusing its next
+  commands). An abort now settles the run immediately (exit 130), never runs the
+  command, and mutes further gate progress chunks. (2) An empty Enter no longer
+  invokes the gate at all — a blank line is a shell no-op needing no deps (it
+  used to print `restoring project dependencies…` mid-prompt). (3) The m1
+  quiet-terminal spec anchors past the restore window (waits Vite ready) since
+  the echo now legitimately precedes the restore progress line. All RED-first in
+  `pty-server.test.ts`.
+- **A dev-server announce interrupts an in-flight preview probe.** The warmup's
+  `wake()` only raced the interval sleep, so an announce landing while a probe
+  hung in the SW ready-wait still waited out the probe cap; the wake now aborts
+  the probe and re-probes immediately, and one wake arm per iteration covers
+  both races (two arms left a gap that could drop an announce). RED-first in
+  `preview-warmup.test.ts`.
+- **A dead preview route can no longer show LIVE.** After the probe deadline the
+  warmup used to navigate the iframe anyway and let the commit phase arbitrate —
+  but the SW's honest 503 error page COMMITS like a real document, so a dead dev
+  server rendered a LIVE pill (and `pnpm bench` measured it as a real preset
+  boot). Probes that never see `res.ok` now end the warmup in `error` without
+  navigating. Regression-tested in `preview-warmup.test.ts` (committed 503 must
+  not count); `tools/perf/bench.mjs` additionally refuses a LIVE whose preview
+  document does not answer ok (post-sample fetch — the harness-level guard), so
+  a false live records the preset `unmeasured` and the CI smoke (which requires
+  `measured`) fails.
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**
@@ -151,6 +211,15 @@
 
 ### Changed
 
+- Preview readiness is event-driven: a dev-server announce and the iframe load
+  event wake the warm-up probe/commit checks immediately (poll intervals remain
+  as fallback; commit is now checked before the first sleep). Logic extracted to
+  `preview-warmup.ts` with deterministic unit tests.
+- esbuild WASI transform bridge compiles `esbuild.wasm` once per realm and
+  reuses the `WebAssembly.Module` across transforms. Measured (V8, single TS
+  transform): ~38-99 ms/call from bytes → ~7-10 ms/call from the shared Module;
+  compounds across TS/JSX module graphs and HMR re-transforms (a small preset's
+  boot has too few transforms for the win to clear session noise).
 - Byte-honest SCM diff blob selection moved out of `App` into a tested
   `scm-diff-plan` module (`scm-diff-plan.test.ts`) so the blob-vs-blob choice for
   every status code is covered behaviorally, not by source-text guards.
