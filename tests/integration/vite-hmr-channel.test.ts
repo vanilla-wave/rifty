@@ -79,7 +79,7 @@ describe('real Vite HMR over rifty HTTP WebSocket upgrade', () => {
     const port = await getEphemeralPort();
     const token = createHmrBridgeToken();
     const hmrHttpServer = createHttpServer();
-    hmrHttpServer.listen({ port });
+    await new Promise<void>((resolve) => hmrHttpServer.listen({ port }, () => resolve()));
     const seen: HmrPayload[] = [];
     let client: BridgedWebSocket | null = null;
     let server: ViteDevServer | null = null;

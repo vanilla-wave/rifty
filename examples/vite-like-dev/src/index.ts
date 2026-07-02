@@ -384,7 +384,17 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
     })();
   });
 
-  http.listen(opts.port);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (err: unknown): void => {
+      http.off('error', onError);
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+    http.once('error', onError);
+    http.listen(opts.port, () => {
+      http.off('error', onError);
+      resolve();
+    });
+  });
 
   // Watch the project root recursively (we only have a non-recursive watcher;
   // watch root + src as the demo's "interesting" subtree).
@@ -410,7 +420,7 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
     async close() {
       for (const w of watchers) w.close();
       wss.close();
-      http.close();
+      await new Promise<void>((resolve) => http.close(() => resolve()));
     },
   };
 }

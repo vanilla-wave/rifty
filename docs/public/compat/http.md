@@ -15,10 +15,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
 | Length-less bodied request framing | ✅ | Adds Node-shaped body framing for body parsers |
 | `server.close()` | ✅ | Unregisters port and callback fires |
-| `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157) |
+| `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`. Catches an intra-realm double-listen (ADR-0157) AND a cross-realm one (ADR-0186): a bind-claim broadcast over the per-port BroadcastChannel refuses a port a sibling Worker realm already owns |
 | `listen(0)` / `listen({ port: 0 })` ephemeral | ✅ | Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
+| Cross-realm `http.request` loopback | ✅ | A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180) |
+| Cross-realm `EADDRINUSE` at `listen()` | ✅ | Two supervised-child realms cannot silently double-bind a port: `listen(port)` broadcasts a bind-claim on the per-port BroadcastChannel and the existing owner (or a lower-id concurrent claimant) wins, the loser gets Node-shaped `EADDRINUSE` (ADR-0186). Explicit ports only — ephemeral `listen(0)` and non-`listen` owners (the Vite preview) stay unclaimed |
 | External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
@@ -28,7 +30,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `http.METHODS` | ✅ | Static verb list beside `STATUS_CODES` for per-verb routers |
 | `http.maxHeaderSize` | ⚠️ | Exposes the 16384 default but ADVISORY ONLY — header framing is the SW/fetch bridge’s, never enforced from this value |
 | `writeContinue` / `writeEarlyHints` / `addTrailers` | ❌ | Interim 100/103 + trailers are unmodelable over the single-status fetch/SW Response bridge — throw `NotImplementedError` (never fake-ack) |
-| `https` module surface | ❌ | Import resolves, but `createServer`, `request`, `get`, and `Agent` throw `NotImplementedError` |
+| `https.request` / `https.get` client | ✅ | Client `request`/`get` over a normal `https:` URL route through the browser-validated `fetch` (reuses the `node:http` external-`https` path); POST body, `drain` backpressure, 3-arg merge, 204/304 null-body; `globalAgent` is a readable config object (ADR-0181) |
+| `https` TLS server / socket surface | ❌ | `createServer`, `new Agent()`, TLS/socket options (`cert`/`key`/`ca`/`rejectUnauthorized:false`/custom `agent`), and loopback `https:` throw `NotImplementedError` — no in-browser TLS server/socket layer (ADR-0010 ceiling, ADR-0181) |
 | Real OS sockets | ❌ | Browser runtime uses port registry, not kernel TCP sockets |
 | HTTP/2 implementation | ❌ | `node:http2` is only a loud surface stub today |
 
@@ -37,15 +40,20 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/http.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
 - `tests/conformance/builtins/https.test.ts`
+- `packages/net/src/https.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`
+- `packages/net/src/http/cross-realm-request.test.ts`
 - `packages/service-worker/src/body-transport.test.ts`
 - `packages/net/src/cross-realm/preview-port.test.ts`
+- `packages/net/src/cross-realm/cross-realm-loopback.test.ts`
+- `packages/net/src/cross-realm/port-claim.test.ts`
+- `packages/net/src/cross-realm/listen-eaddrinuse.test.ts`
 
 ## Known Limitations
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
 - Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.
 - Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.
-- `node:https` cannot promise real TLS egress inside the local runtime without host integration.
+- `node:https` client `request`/`get` egress runs over the browser-validated `fetch`; TLS server/socket controls (`createServer`/`Agent`/cert material/`rejectUnauthorized:false`) and loopback `https:` remain out of reach and throw.

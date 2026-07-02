@@ -1,0 +1,72 @@
+/**
+ * Cross-realm bind-claim (ADR-0186) — in-process proof over real
+ * `BroadcastChannel`. Two channel instances with the same name deliver to each
+ * other (but never to self), so a single process can simulate two realms: a
+ * second `claimPort` for the same port is denied by the first's owner-answerer,
+ * and a crafted competing `claim` frame exercises the deterministic tie-break.
+ * The REAL two-realm (two supervised children) hop is the browser e2e.
+ */
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { channelNameFor } from '../ws/channel.ts';
+import { __resetPortClaims, claimPort, releasePort } from './port-claim.ts';
+import { PREVIEW_PORT_FRAME_VERSION, previewPortChannelUrl } from './preview-port.ts';
+
+afterEach(() => {
+  __resetPortClaims();
+});
+
+describe('claimPort (ADR-0186 cross-realm bind-claim)', () => {
+  it('wins a free port (no owner replies within the window)', async () => {
+    const won = await claimPort(7301, { windowMs: 40 });
+    expect(won).toBe(true);
+  });
+
+  it('loses to an existing owner (second claim for a held port is denied)', async () => {
+    const first = await claimPort(7302, { windowMs: 40 });
+    expect(first).toBe(true); // becomes the owner, now answers claims
+    const second = await claimPort(7302, { windowMs: 80 });
+    expect(second).toBe(false); // owner-answerer denied it
+  });
+
+  it('a released port can be claimed again (owner gone → no denier)', async () => {
+    expect(await claimPort(7303, { windowMs: 40 })).toBe(true);
+    releasePort(7303);
+    expect(await claimPort(7303, { windowMs: 40 })).toBe(true);
+  });
+
+  it('a different port is never denied by an owner of another port', async () => {
+    expect(await claimPort(7304, { windowMs: 40 })).toBe(true);
+    expect(await claimPort(7305, { windowMs: 40 })).toBe(true);
+  });
+
+  it('tie-break: loses to a concurrent claim with a LOWER id', async () => {
+    const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(7306)));
+    const p = claimPort(7306, { windowMs: 120 });
+    // A competing claim whose id sorts below any counter-prefixed id (which
+    // starts at base36 '1') → this realm must lose.
+    channel.postMessage({
+      type: 'claim',
+      v: PREVIEW_PORT_FRAME_VERSION,
+      port: 7306,
+      id: '0-rival',
+    });
+    expect(await p).toBe(false);
+    channel.close();
+  });
+
+  it('tie-break: wins over a concurrent claim with a HIGHER id', async () => {
+    const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(7307)));
+    const p = claimPort(7307, { windowMs: 120 });
+    // A competing claim whose id sorts above any base36 id ('z' is the max
+    // digit) → this realm keeps the port.
+    channel.postMessage({
+      type: 'claim',
+      v: PREVIEW_PORT_FRAME_VERSION,
+      port: 7307,
+      id: '~-rival',
+    });
+    expect(await p).toBe(true);
+    channel.close();
+  });
+});

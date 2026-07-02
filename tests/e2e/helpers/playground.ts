@@ -266,6 +266,28 @@ export async function expectTerminalContains(
   await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(terminalPattern(text));
 }
 
+// `viteDevReadyPattern` (the rifty-authored `[vite] dev server ready` marker) is
+// GONE — the runtime no longer prints it (generic dev-server lifecycle); wait on
+// the LIVE pill via expectViteDevServerReady instead.
+export type InitialTerminalState = 'vite-booted' | 'idle-shell';
+
+export async function waitForViteBootOrIdleShell(
+  page: Page,
+  opts: { readonly viteTimeout?: number; readonly promptTimeout?: number } = {},
+): Promise<InitialTerminalState> {
+  try {
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: opts.viteTimeout ?? 60_000 })
+      .toMatch(/\$ vite/u);
+    return 'vite-booted';
+  } catch {
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: opts.promptTimeout ?? 10_000 })
+      .toMatch(/>\s*$/u);
+    return 'idle-shell';
+  }
+}
+
 export interface CapturedPageProblems {
   readonly messages: readonly string[];
   assertNoViteImportErrors(): void;

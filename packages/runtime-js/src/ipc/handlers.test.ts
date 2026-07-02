@@ -18,7 +18,7 @@
 import { SyncRpcDispatcher } from '@riftydev/kernel';
 import { describe, expect, it } from 'vitest';
 import { installRuntimeJsExecSyncHandler } from './handlers.ts';
-import type { RecursiveRunResult } from './recursive-runner.ts';
+import type { NodeEntryRunner } from './recursive-runner.ts';
 
 /**
  * Install the handler and capture the `'execSync'` callback so tests can
@@ -28,12 +28,7 @@ import type { RecursiveRunResult } from './recursive-runner.ts';
  */
 function installAndCapture(
   resolveScript: (path: string) => Uint8Array | null,
-  runWorker?: (spec: {
-    readonly entry: { readonly kind: 'source'; readonly code: string; readonly sourceUrl: string };
-    readonly argv: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
-    readonly cwd: string;
-  }) => Promise<RecursiveRunResult>,
+  runWorker?: NodeEntryRunner,
 ): (payload: unknown) => unknown | Promise<unknown> {
   const dispatcher = new SyncRpcDispatcher();
   let captured: ((payload: unknown) => unknown | Promise<unknown>) | null = null;
@@ -47,13 +42,7 @@ function installAndCapture(
   installRuntimeJsExecSyncHandler(
     dispatcher,
     resolveScript,
-    runWorker === undefined
-      ? {}
-      : {
-          // The handler's runWorker is structurally typed; the test's
-          // narrower `entry.kind: 'source'` is a valid subtype.
-          runWorker: runWorker as never,
-        },
+    runWorker === undefined ? {} : { runWorker },
   );
   if (captured === null) throw new Error('installAndCapture: execSync handler not registered');
   return captured;
@@ -79,24 +68,25 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     });
   });
 
-  it('runs the recursive runner and returns its stdout as raw bytes (ADR-0084 #23)', async () => {
-    // ADR-0084 #23 contract change: the handler now returns the child's stdout
-    // as a raw Uint8Array (not a decoded UTF-8 string), so the dispatcher can
-    // carry it byte-exact on a v2 binary frame — the old string path mangled
-    // non-UTF-8 stdout to U+FFFD. The byte-exact behaviour is independently
-    // proven against real Node by `tests/conformance/builtins/child_process.test.ts`
-    // and the `binary-stdout-exec` hex parity case.
+  it('hands the runner the script PATH (not the bytes) + argv, returns stdout bytes (ADR-0137 / ADR-0084 #23)', async () => {
+    // ADR-0137 contract: the handler PASSES THE PATH — the runner re-reads the
+    // source through the module loader (shebang strip + relative resolve), so
+    // the handler must NOT embed `{kind:'source', code}` bytes. ADR-0084 #23:
+    // the returned stdout is a raw Uint8Array (byte-exact on a v2 binary frame).
+    // The shebang/relative + byte-exact behaviors are proven independently by
+    // `in-process-node-entry-runner.test.ts`, the conformance suite, and the
+    // `binary-stdout-exec` hex parity case.
     const enc = new TextEncoder();
     const handler = installAndCapture(
-      (path) => (path === '/run.js' ? enc.encode('void 0;') : null),
+      // The resolver is an ENOENT pre-check only — any non-null sentinel passes;
+      // its bytes are discarded (the runner reads the real source).
+      (path) => (path === '/run.js' ? new Uint8Array() : null),
       async (spec) => {
-        // Sanity: the handler hands us the resolved source and a sane argv.
-        expect(spec.entry).toEqual({
-          kind: 'source',
-          code: 'void 0;',
-          sourceUrl: '/run.js',
-        });
+        // The handler hands us the resolved PATH and a sane argv — NOT the
+        // source code (no `entry`/`code`/`sourceUrl` field exists on the spec).
+        expect(spec.entryPath).toBe('/run.js');
         expect(spec.argv).toEqual(['rifty', '/run.js']);
+        expect(spec).not.toHaveProperty('entry');
         return { stdout: enc.encode('hello-from-child'), exitCode: 0 };
       },
     );

@@ -15,6 +15,7 @@
  */
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
+import { claimPort, releasePort } from './cross-realm/port-claim.ts';
 import {
   addrInUseError,
   allocateEphemeralPort,
@@ -122,6 +123,7 @@ export interface NetListenOptions {
 
 export class Server extends EventEmitter {
   private listenedPort: number | null = null;
+  private pendingPort: number | null = null;
   private readonly connectionHandler?: (socket: HttpFramedSocket) => void;
 
   constructor(connectionHandler?: (socket: HttpFramedSocket) => void) {
@@ -152,54 +154,75 @@ export class Server extends EventEmitter {
     }
     // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
     // the realm registry, exposed via `address().port` until close (no OS socket).
-    const resolvedPort = requested === 0 ? allocateEphemeralPort() : requested;
-    this.listenedPort = resolvedPort;
-    registerPort(resolvedPort, async (request) => {
-      const socket = new HttpFramedSocket();
-      this.emit('connection', socket);
-      this.connectionHandler?.(socket);
-      // Feed raw request bytes through the socket for the HTTP server to parse.
-      const headers: string[] = [];
-      for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
-      const body = new Uint8Array(await request.arrayBuffer());
-      const u = new URL(request.url);
-      const head = `${request.method} ${u.pathname + u.search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
-      socket.push(UTF8_ENCODER.encode(head));
-      if (body.byteLength > 0) socket.push(body);
-      // Resolve from a 'response' event, else synthesise a Response from socket writes.
-      return await new Promise<Response>((resolve) => {
-        const writeBufs: Uint8Array[] = [];
-        socket.on('write', (chunk) => writeBufs.push(chunk as Uint8Array));
-        socket.on('response', (res) => resolve(res as Response));
-        socket.on('end', () => {
-          if (writeBufs.length === 0) {
-            resolve(new Response('', { status: 200 }));
-            return;
-          }
-          const all = concat(writeBufs);
-          const text = UTF8_DECODER.decode(all);
-          const sep = text.indexOf('\r\n\r\n');
-          if (sep === -1) {
-            resolve(new Response(all as unknown as BodyInit, { status: 200 }));
-            return;
-          }
-          const headPart = text.slice(0, sep);
-          const bodyStr = text.slice(sep + 4);
-          const lines = headPart.split('\r\n');
-          const status = Number((lines[0] ?? '').split(' ')[1] ?? 200);
-          const headers = new Headers();
-          for (const line of lines.slice(1)) {
-            const colon = line.indexOf(':');
-            if (colon === -1) continue;
-            headers.set(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
-          }
-          resolve(new Response(bodyStr, { status, headers }));
+    const register = (resolvedPort: number): void => {
+      this.listenedPort = resolvedPort;
+      registerPort(resolvedPort, async (request) => {
+        const socket = new HttpFramedSocket();
+        this.emit('connection', socket);
+        this.connectionHandler?.(socket);
+        // Feed raw request bytes through the socket for the HTTP server to parse.
+        const headers: string[] = [];
+        for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
+        const body = new Uint8Array(await request.arrayBuffer());
+        const u = new URL(request.url);
+        const head = `${request.method} ${u.pathname + u.search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
+        socket.push(UTF8_ENCODER.encode(head));
+        if (body.byteLength > 0) socket.push(body);
+        // Resolve from a 'response' event, else synthesise a Response from socket writes.
+        return await new Promise<Response>((resolve) => {
+          const writeBufs: Uint8Array[] = [];
+          socket.on('write', (chunk) => writeBufs.push(chunk as Uint8Array));
+          socket.on('response', (res) => resolve(res as Response));
+          socket.on('end', () => {
+            if (writeBufs.length === 0) {
+              resolve(new Response('', { status: 200 }));
+              return;
+            }
+            const all = concat(writeBufs);
+            const text = UTF8_DECODER.decode(all);
+            const sep = text.indexOf('\r\n\r\n');
+            if (sep === -1) {
+              resolve(new Response(all as unknown as BodyInit, { status: 200 }));
+              return;
+            }
+            const headPart = text.slice(0, sep);
+            const bodyStr = text.slice(sep + 4);
+            const lines = headPart.split('\r\n');
+            const status = Number((lines[0] ?? '').split(' ')[1] ?? 200);
+            const headers = new Headers();
+            for (const line of lines.slice(1)) {
+              const colon = line.indexOf(':');
+              if (colon === -1) continue;
+              headers.set(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+            }
+            resolve(new Response(bodyStr, { status, headers }));
+          });
         });
       });
-    });
-    queueMicrotask(() => {
-      this.emit('listening');
-      callback?.();
+    };
+    const resolvedPort = requested === 0 ? allocateEphemeralPort() : requested;
+    if (requested === 0) {
+      register(resolvedPort);
+      queueMicrotask(() => {
+        this.emit('listening');
+        callback?.();
+      });
+      return this;
+    }
+    this.pendingPort = resolvedPort;
+    void claimPort(resolvedPort).then((won) => {
+      if (this.pendingPort !== resolvedPort) {
+        if (won) releasePort(resolvedPort);
+        return;
+      }
+      this.pendingPort = null;
+      if (won) {
+        register(resolvedPort);
+        this.emit('listening');
+        callback?.();
+      } else {
+        this.emit('error', addrInUseError('127.0.0.1', resolvedPort));
+      }
     });
     return this;
   }
@@ -210,9 +233,11 @@ export class Server extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.listenedPort !== null) {
+      releasePort(this.listenedPort); // stop answering cross-realm claims (ADR-0186 D4)
       unregisterPort(this.listenedPort);
       this.listenedPort = null;
     }
+    this.pendingPort = null;
     queueMicrotask(() => {
       this.emit('close');
       cb?.();

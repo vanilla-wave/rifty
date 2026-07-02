@@ -30,6 +30,7 @@ import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
+import streamWebModule from './stream-web.ts';
 import streamModule, { streamConsumers } from './stream.ts';
 import stringDecoderModule from './string_decoder.ts';
 import timersModule, { timersPromises } from './timers.ts';
@@ -95,6 +96,9 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
     finished: streamModule.finished,
   }));
   registerBuiltin('stream/consumers', () => streamConsumers);
+  // `node:stream/web` re-exports the host WHATWG globals (Node's impl IS the
+  // WHATWG API). Registered beside `stream`/`stream/promises`/`stream/consumers`.
+  registerBuiltin('stream/web', () => streamWebModule);
   // #26 PART B: install the execSync SAB handler on first require, not at startup.
   registerBuiltin('child_process', () => {
     ensureExecSyncHandlerInstalled();

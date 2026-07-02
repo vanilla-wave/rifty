@@ -7,17 +7,20 @@
  * code).
  *
  * Client: `http.request()` loops back through the registry for registered local
- * ports; loopback ports with no listener fail with Node-shaped `ECONNREFUSED`;
- * everything else (external hosts, non-http protocols) issues through the host
- * `fetch`. The returned emitter carries `'response'` with an
+ * ports; a loopback port with no LOCAL handler is probed across sibling Worker
+ * realms via the preview broker (ADR-0180) before failing with Node-shaped
+ * `ECONNREFUSED`; everything else (external hosts, non-http protocols) issues
+ * through the host `fetch`. The returned emitter carries `'response'` with an
  * `IncomingMessageFromFetch`.
  *
- * Scope gotcha: the port registry is realm-local (per Worker process). A server
- * listening in another Worker is NOT reachable via loopback here — see
- * docs/backlog/net/cross-realm-http-loopback.
+ * Scope: the port registry is realm-local (per Worker process); cross-realm
+ * loopback bridges realms over the per-port preview `BroadcastChannel`
+ * (`cross-realm/preview-port.ts`, ADR-0180).
  */
 
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
+import { claimPort, releasePort } from '../cross-realm/port-claim.ts';
+import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import {
   addrInUseError,
   allocateEphemeralPort,
@@ -74,6 +77,7 @@ function assertSupportedServerOptions(options: ServerOptions | undefined): void 
 
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
+  private pendingPort: number | null = null;
   private readonly handler: RequestListener;
   private readonly upgradeChannels: BroadcastChannel[] = [];
   private readonly upgradeSockets: Map<string, WebSocketUpgradeSocket> = new Map();
@@ -122,26 +126,47 @@ export class HttpServer extends EventEmitter {
     }
     // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
     // the realm registry (no OS socket), exposed via `address().port` until close.
+    const register = (port: number): void => {
+      this.port = port;
+      registerPort(port, (request) => {
+        if (isWebSocketUpgradeRequest(request)) {
+          return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: { 'content-type': 'text/plain' },
+          });
+        }
+        const req = new IncomingMessage(request);
+        const res = new ServerResponse();
+        this.handler(req, res);
+        this.emit('request', req, res);
+        return res.toResponse();
+      });
+      this.listenForWebSocketUpgrades(port);
+    };
     const port = requested === 0 ? allocateEphemeralPort() : requested;
-    this.port = port;
-    registerPort(port, (request) => {
-      if (isWebSocketUpgradeRequest(request)) {
-        return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: { 'content-type': 'text/plain' },
-        });
+    if (requested === 0) {
+      register(port);
+      queueMicrotask(() => {
+        this.emit('listening');
+        callback?.();
+      });
+      return this;
+    }
+    this.pendingPort = port;
+    void claimPort(port).then((won) => {
+      if (this.pendingPort !== port) {
+        if (won) releasePort(port);
+        return;
       }
-      const req = new IncomingMessage(request);
-      const res = new ServerResponse();
-      this.handler(req, res);
-      this.emit('request', req, res);
-      return res.toResponse();
-    });
-    this.listenForWebSocketUpgrades(port);
-    queueMicrotask(() => {
-      this.emit('listening');
-      callback?.();
+      this.pendingPort = null;
+      if (won) {
+        register(port);
+        this.emit('listening');
+        callback?.();
+      } else {
+        this.emit('error', addrInUseError('127.0.0.1', port));
+      }
     });
     return this;
   }
@@ -152,9 +177,11 @@ export class HttpServer extends EventEmitter {
 
   close(cb?: () => void): this {
     if (this.port !== null) {
+      releasePort(this.port); // stop answering cross-realm claims (ADR-0186 D4)
       unregisterPort(this.port);
       this.port = null;
     }
+    this.pendingPort = null;
     for (const socket of this.upgradeSockets.values()) socket.destroy();
     this.upgradeSockets.clear();
     for (const channel of this.upgradeChannels) {
@@ -257,7 +284,7 @@ export function createServer(
   return new HttpServer(handler);
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: string;
   host?: string;
   hostname?: string;
@@ -266,6 +293,8 @@ interface RequestOptions {
   headers?: Record<string, string>;
   protocol?: string;
 }
+
+type RequestUrlInput = string | URL;
 
 export type ClientRequest = EventEmitter & {
   write(chunk: Uint8Array | string): boolean;
@@ -278,10 +307,32 @@ export type ClientResponse = IncomingMessageFromFetch;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '0.0.0.0', '::1', '[::1]']);
 
+// Bounded ownership-probe window for a cross-realm loopback miss (ADR-0180): an
+// owning realm's `accept` is one BroadcastChannel round-trip away (single-digit
+// ms), so this is generous headroom; no `accept` within it → ECONNREFUSED. The
+// no-listener case pays this latency vs Node's instant refuse (ADR-0180 accepts
+// it — loopback-only, in-browser).
+const CROSS_REALM_PROBE_MS = 500;
+
 // Whole 127.0.0.0/8 block is loopback (Node connects any 127.x.y.z locally).
-function isLoopbackHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
+// Exported so `https.ts` refuses loopback `https:` against the SAME definition
+// (no in-browser TLS server) instead of duplicating the predicate.
+export function isLoopbackHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
   if (LOOPBACK_HOSTS.has(lower)) return true;
+  if (lower.startsWith('::ffff:')) {
+    const mapped = lower.slice('::ffff:'.length);
+    if (/^127(\.\d{1,3}){3}$/.test(mapped)) return true;
+    const parts = mapped.split(':');
+    if (parts.length === 2) {
+      const hi = Number.parseInt(parts[0] ?? '', 16);
+      const lo = Number.parseInt(parts[1] ?? '', 16);
+      if (Number.isInteger(hi) && Number.isInteger(lo)) {
+        const firstOctet = (hi >> 8) & 0xff;
+        return firstOctet === 127;
+      }
+    }
+  }
   return /^127(\.\d{1,3}){3}$/.test(lower);
 }
 
@@ -291,7 +342,7 @@ function bracketIpv6Host(host: string): string {
   return colonCount > 1 ? `[${host}]` : host;
 }
 
-function buildRequestUrl(opts: RequestOptions): string {
+export function buildRequestUrl(opts: RequestOptions): string {
   const protocol = opts.protocol ?? 'http:';
   const path = opts.path ?? '/';
   if (opts.hostname !== undefined) {
@@ -386,7 +437,7 @@ function connectionHasToken(value: string | null | undefined, token: string): bo
  * boundaries are preserved through to the server-side `IncomingMessage`.
  */
 export function request(
-  urlOrOpts: string | RequestOptions,
+  urlOrOpts: RequestUrlInput | RequestOptions,
   optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
   maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {
@@ -394,12 +445,16 @@ export function request(
   const overrides = typeof optsOrCb === 'object' ? optsOrCb : undefined;
   const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
   let url: string;
-  if (typeof urlOrOpts === 'string') {
-    url = overrides ? buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...overrides }) : urlOrOpts;
+  if (typeof urlOrOpts === 'string' || urlOrOpts instanceof URL) {
+    url = overrides
+      ? buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...overrides })
+      : urlOrOpts instanceof URL
+        ? urlOrOpts.href
+        : urlOrOpts;
   } else {
     url = buildRequestUrl(urlOrOpts);
   }
-  const base = typeof urlOrOpts === 'string' ? undefined : urlOrOpts;
+  const base = typeof urlOrOpts === 'string' || urlOrOpts instanceof URL ? undefined : urlOrOpts;
   const method = overrides?.method ?? base?.method ?? 'GET';
   const headers = overrides?.headers ?? base?.headers ?? {};
 
@@ -526,7 +581,29 @@ export function request(
         init.duplex = 'half';
       }
       if (route.kind === 'refused') {
-        emitter.emit('error', connRefusedError(route.address, route.port));
+        // Loopback miss in THIS realm. Probe sibling realms via the preview
+        // broker before refusing (ADR-0180): an owning realm serves the reply
+        // (streamed bodies stay live, chunk-by-chunk); no owner within the probe
+        // window → Node-shaped ECONNREFUSED. The local registry was already
+        // consulted first (routeClientRequest returns 'local'), so this never
+        // shadows a same-realm server.
+        try {
+          const bodyBytes = requestBody === null ? null : await drainRequestBodyChunks(requestBody);
+          const crossRealm = await dispatchCrossRealmLoopback(
+            route.port,
+            { url, method, headers, body: bodyBytes },
+            { probeTimeoutMs: CROSS_REALM_PROBE_MS },
+          );
+          if (crossRealm === null) {
+            emitter.emit('error', connRefusedError(route.address, route.port));
+            return;
+          }
+          const incoming = new IncomingMessageFromFetch(crossRealm);
+          cb?.(incoming);
+          emitter.emit('response', incoming);
+        } catch (err) {
+          emitter.emit('error', err);
+        }
         return;
       }
       try {
@@ -593,6 +670,26 @@ export function request(
     },
   });
   return req;
+}
+
+async function drainRequestBodyChunks(
+  body: ReadableStream<Uint8Array>,
+): Promise<readonly Uint8Array[]> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined || value.byteLength === 0) continue;
+      const copy = new Uint8Array(value.byteLength);
+      copy.set(value);
+      chunks.push(copy);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return chunks;
 }
 
 function openWebSocketClientUpgrade(opts: {
@@ -873,9 +970,9 @@ function isValidWebSocketKey(key: string | undefined): key is string {
   }
 }
 
-function optionsFromUrl(url: string): RequestOptions {
+export function optionsFromUrl(url: RequestUrlInput): RequestOptions {
   try {
-    const parsed = new URL(url);
+    const parsed = url instanceof URL ? url : new URL(url);
     return {
       protocol: parsed.protocol,
       hostname: parsed.hostname,
@@ -888,7 +985,7 @@ function optionsFromUrl(url: string): RequestOptions {
 }
 
 export function get(
-  urlOrOpts: string | RequestOptions,
+  urlOrOpts: RequestUrlInput | RequestOptions,
   optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
   maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {

@@ -88,4 +88,14 @@ emit(`BLOCKED=${new TextDecoder().decode(blocked)}`);
 const out = execSync('node /child.js');
 emit(`HEX=${toHex(out)}`);
 
+// 3. ADR-0137 acceptance: the recursive child runs through the node-entry
+//    bootstrap + module loader. `/scripts/build.js` starts with a `#!` shebang
+//    (stripped, not a SyntaxError), does a relative `import './config.js'`
+//    (resolved against the owner store over fs.* RPC), and reads `./pkg.json`
+//    via `fs.readFileSync` (the owner store, not an empty mirror). Result is
+//    `built:demo-pkg`. The OLD raw `kind:'source'` path threw on the shebang,
+//    could not resolve the import, and read an empty mirror — this is the gap.
+const built = execSync('node /scripts/build.js');
+emit(`LOADER=${new TextDecoder().decode(built)}`);
+
 emit('DONE');

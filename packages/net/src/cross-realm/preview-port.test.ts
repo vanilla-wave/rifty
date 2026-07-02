@@ -22,6 +22,7 @@ import {
   type CrossRealmPortHandler,
   PREVIEW_PORT_FRAME_VERSION,
   bridgeCrossRealmPreview,
+  dispatchCrossRealmLoopback,
   previewPortChannelUrl,
   serveCrossRealmPreview,
 } from './preview-port.ts';
@@ -362,6 +363,29 @@ describe('cross-realm preview port — ADR-0086 dispatchStruct fast-path', () =>
     });
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('current-worker');
+  });
+
+  it('live loopback reaches a scoped port owner without page-preview scope', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5307, async () => new Response('live-owner', { status: 200 }), {
+        scope: 'api-run',
+      }),
+    );
+
+    const response = await dispatchCrossRealmLoopback(
+      5307,
+      {
+        url: 'http://localhost:5307/users',
+        method: 'GET',
+        headers: {},
+        body: null,
+      },
+      { probeTimeoutMs: 500 },
+    );
+
+    expect(response).not.toBeNull();
+    expect(response?.status).toBe(200);
+    expect(await response?.text()).toBe('live-owner');
   });
 
   it('dispatchStruct after dispose → 502', async () => {
