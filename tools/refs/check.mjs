@@ -87,6 +87,7 @@ const TOMBSTONES = new Set([
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
   'docs/backlog/playground/react-preset-dev-boot-gaps.md', // done → ADR-0192
+  'docs/backlog/playground/react-vite-preset.md', // done 2026-07-02 → react-vite preset + tests/e2e/react-vite-preset.spec.ts
 ]);
 
 const errors = [];

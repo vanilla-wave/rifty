@@ -6,7 +6,7 @@ created: 2026-07-02
 why: without measurement the AI mode is anecdote; the bench must separate "rifty environment loses quality" from "model can't code"
 user_story: As the rifty maintainer, I want to run one task suite through built-in AI mode AND a local Pi reference and get per-run failure classes, but today there is no runner, no tasks, no judge, no report
 epic: ai-mode-mvp
-blocked_by: [distribution/ai-mode-playground, playground/react-vite-preset]
+blocked_by: [distribution/ai-mode-playground]
 sources: [ADR-0191, docs/backlog/epics/ai-mode-mvp.md, tests/e2e/helpers/playground.ts]
 code: [playwright.config.ts, apps/playground/src/glue/preset-deep-link.ts]
 ---
