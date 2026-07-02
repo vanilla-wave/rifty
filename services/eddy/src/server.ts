@@ -14,6 +14,7 @@ import { type IncomingMessage, type ServerResponse, createServer } from 'node:ht
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { EddyBundleManifestV1, Fetcher } from '@riftydev/npm-client';
+import type { BundleStore } from './bundle-store.ts';
 import { EddyCache } from './cache.ts';
 import type { EddyResolveRequest } from './resolver.ts';
 
@@ -25,6 +26,12 @@ export interface EddyServerOptions {
   /** Mutable-tier TTL seconds (default 1800; 0 = always recompute). */
   ttlSeconds?: number;
   maxEntries?: number;
+  /** Shared packument cache TTL seconds (ADR-0194 §1; default 300, 0 = off). */
+  packumentTtlSeconds?: number;
+  /** Shared tarball cache byte cap (ADR-0194 §2). */
+  tarballCacheMaxBytes?: number;
+  /** Immutable bundle tier (ADR-0194 §4). Default: byte-bounded memory LRU. */
+  store?: BundleStore;
   /** Injectable resolution timestamp. */
   now?: () => string;
 }
@@ -44,6 +51,9 @@ export function createEddyServer(opts: EddyServerOptions): EddyServer {
     resolver: { registryBaseUrl: opts.registryBaseUrl, fetch: opts.fetch, now: opts.now },
     ttlSeconds: opts.ttlSeconds,
     maxEntries: opts.maxEntries,
+    packumentTtlSeconds: opts.packumentTtlSeconds,
+    tarballCacheMaxBytes: opts.tarballCacheMaxBytes,
+    store: opts.store,
   });
   const server = createServer((req, res) => {
     void handle(req, res, cache);
@@ -79,7 +89,15 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     }
     // The closure hash is `sha256-<base64>` — base64 carries `/`+`=`, so the
     // path segment arrives percent-encoded.
-    const hit = cache.getBundle(decodeURIComponent(match[1] as string));
+    let hit: Awaited<ReturnType<EddyCache['getBundle']>>;
+    try {
+      hit = await cache.getBundle(decodeURIComponent(match[1] as string));
+    } catch (err) {
+      // An S3-backed store can fail at runtime (bucket outage) — answer 500,
+      // never leave an unhandled rejection to kill the process (ADR-0194).
+      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
     if (!hit) {
       // no-store: a shared cache must never pin a miss — the next POST may
       // re-seed this very hash.

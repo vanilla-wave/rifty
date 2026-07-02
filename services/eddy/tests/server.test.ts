@@ -172,4 +172,32 @@ describe('eddy HTTP server', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('GET /bundle/<hash> with a throwing store → 500 JSON, server stays alive (ADR-0194)', async () => {
+    // An S3-backed store can fail at runtime (bucket outage). The GET route
+    // must answer 500 — not leave an unhandled rejection that kills the
+    // process — and the next request must work.
+    const broken = createEddyServer({
+      registryBaseUrl: LOCAL_REGISTRY_BASE_URL,
+      fetch: makeLocalFetcher().fetch,
+      store: {
+        get: async () => {
+          throw new Error('bucket down');
+        },
+        has: async () => false,
+        put: async () => {},
+      },
+    });
+    await broken.listen(0);
+    const url = `http://127.0.0.1:${(broken.address() as AddressInfo).port}`;
+    try {
+      const res = await fetch(`${url}/bundle/sha256-x`);
+      expect(res.status).toBe(500);
+      expect(res.headers.get('content-type')).toMatch(/application\/json/);
+      const again = await fetch(`${url}/bundle/sha256-x`);
+      expect(again.status).toBe(500); // still answering — no crash
+    } finally {
+      await broken.close();
+    }
+  });
 });

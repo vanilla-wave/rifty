@@ -11,7 +11,9 @@ import {
   type EddyBundleManifestV1,
   type EddyBundleTarballEntry,
   type Fetcher,
+  type PackumentCacheLike,
   RegistryClient,
+  type TarballCache,
   VfsTarballCache,
   install,
   packEddyBundle,
@@ -19,6 +21,7 @@ import {
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { closureHashOf } from './closure-hash.ts';
 import { readNpmClientVersion } from './npm-client-version.ts';
+import { layeredTarballCache, packumentOverlay } from './shared-caches.ts';
 
 /** A dep-set to resolve (the shapes `package.json` carries). */
 export interface EddyResolveRequest {
@@ -37,6 +40,12 @@ export interface EddyResolverDeps {
   fetch?: Fetcher;
   /** Injectable resolution timestamp (tests pin it). */
   now?: () => string;
+  /** Process-wide packument cache (ADR-0194 §1); read through a per-request
+   *  overlay, bypassed on reads for `prefer:'online'`. */
+  packumentCache?: PackumentCacheLike;
+  /** Process-wide immutable tarball cache (ADR-0194 §2); layered under a
+   *  per-request VFS cache so a shared eviction can't break the harvest. */
+  tarballCache?: TarballCache;
 }
 
 export type EddyResolveResult =
@@ -58,12 +67,24 @@ export async function resolveBundle(
   if (req.overrides) pkgJson.overrides = req.overrides;
   await vfs.writeFile(`${ROOT}/package.json`, JSON.stringify(pkgJson));
 
-  const tarballCache = new VfsTarballCache(vfs);
+  const localTarballs = new VfsTarballCache(vfs);
+  const tarballCache = deps.tarballCache
+    ? layeredTarballCache(localTarballs, deps.tarballCache)
+    : localTarballs;
+  const packumentCache = deps.packumentCache
+    ? packumentOverlay(deps.packumentCache, req.prefer !== 'online')
+    : undefined;
   const registry = new RegistryClient({ baseUrl: deps.registryBaseUrl, fetch: deps.fetch });
 
   let result: Awaited<ReturnType<typeof install>>;
   try {
-    result = await install({ vfs, cwd: ROOT, registry, tarballCache });
+    result = await install({
+      vfs,
+      cwd: ROOT,
+      registry,
+      tarballCache,
+      ...(packumentCache ? { packumentCache } : {}),
+    });
   } catch (err) {
     return declineFor(err);
   }

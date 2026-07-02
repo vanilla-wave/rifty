@@ -301,6 +301,42 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('returns the adopted bundle closureHash on the eddy path; absent on standard/fallback (ADR-0194)', async () => {
+    // Expected hash = the manifest hash of a locally built bundle for the same
+    // deps (the fixture registry is deterministic, so eddy computes the same).
+    const { manifest } = unpackEddyBundle(await buildBundleFor(DEPS));
+
+    const fastVfs = new MemoryVfs();
+    await writePackageJson(fastVfs, DEPS);
+    const fast = await install({
+      vfs: fastVfs,
+      cwd: '/app',
+      registry: makeRegistry().registry,
+      resolverUrl: eddyUrl,
+    });
+    expect(fast.source).toBe('eddy');
+    expect(fast.closureHash).toBe(manifest.asOf.closureHash);
+
+    // Standard install (resolver off) — no hash, key for learned pins staying
+    // eddy-only.
+    const stdVfs = new MemoryVfs();
+    await writePackageJson(stdVfs, DEPS);
+    const std = await install({ vfs: stdVfs, cwd: '/app', registry: makeRegistry().registry });
+    expect(std.closureHash).toBeUndefined();
+
+    // Fallback (resolver unreachable) — standard install, no hash.
+    const fbVfs = new MemoryVfs();
+    await writePackageJson(fbVfs, DEPS);
+    const fb = await install({
+      vfs: fbVfs,
+      cwd: '/app',
+      registry: makeRegistry().registry,
+      resolverUrl: 'http://127.0.0.1:1',
+    });
+    expect(fb.source).toBe('standard');
+    expect(fb.closureHash).toBeUndefined();
+  });
+
   it('is inert when resolverUrl is unset (source standard, identical to today)', async () => {
     const vfs = new MemoryVfs();
     await writePackageJson(vfs, DEPS);
