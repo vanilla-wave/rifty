@@ -62,15 +62,13 @@ describe('dev-server boot preview routing', () => {
     expect(source).not.toContain('setupPreviewBridge(');
   });
 
-  it('re-roots the esbuild/rollup shim overlay onto the active root, not /workspace (ADR-0165 §4)', () => {
-    // The shim files are keyed on the historical `/workspace/node_modules/...`
-    // path; ADR-0165 moved the dev root to `/scratch` | `/projects/<id>`. The
-    // overlay MUST re-root onto the active root, else the REAL native rollup loads
-    // (Rollup throws on the rifty/wasm platform) and every Vite dev boot breaks.
-    expect(source).toContain('overlayShims(root)'); // passes the active root
-    expect(source).toContain('reRootShimPath'); // and re-roots the /workspace key
-    // overlayShims writes the RE-ROOTED path, never the verbatim /workspace key.
-    expect(source).toContain('reRootShimPath(path, root)');
+  it('carries zero shim glue — internals shims are applied at install time (ADR-0188)', () => {
+    // The esbuild/rollup/lightningcss shims are written by the npm-client
+    // installer into the actual installed dirs; a boot-time overlay would
+    // mask a broken install path (backlog npm-client/install-time-shadow-shims).
+    expect(source).not.toContain('overlayShims');
+    expect(source).not.toContain('reRootShimPath');
+    expect(source).not.toContain('ShimFiles');
   });
 
   it('installs the real esbuild WASI transform bridge before Vite imports esbuild', () => {
@@ -94,12 +92,12 @@ describe('node-server runtime branch', () => {
     expect(source).toContain('node-cli templates run through the owner node executor');
   });
 
-  it('brings the node:sqlite WASM engine up from a same-origin asset', () => {
-    // engine bytes come from the bundled asset (CORP-correct, D-001 — no CDN),
-    // passed as wasmBinary so the emscripten glue never probes fs/fetch paths
-    expect(source).toContain("from 'sql.js/dist/sql-wasm.wasm?url'");
-    expect(source).toContain('initSqliteEngine(config)');
-    expect(source).toContain('wasmBinary');
+  it('carries no eager node:sqlite bring-up — the builtin self-initializes at first require', () => {
+    // the lazy node:sqlite engine — the realm installs a sync wasm provider
+    // (glue/sqlite-wasm-provider.ts); no preset flag, no boot-time engine cost.
+    expect(source).not.toContain('initSqliteEngine');
+    expect(source).not.toContain('cfg.sqlite');
+    expect(source).not.toContain('sql.js/dist/sql-wasm.wasm');
   });
 
   it('runs the entry as the server program', () => {

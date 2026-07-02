@@ -11,14 +11,23 @@
  * harness-local-registration choice ratified provisionally in Q-2026-05-31-302
  * (Option A), mirroring the `net`/`https` registration precedent.
  *
- * The factory exposes only the `DatabaseSync` class. The engine must be brought
- * up (`initSqliteEngine()` awaited) before a `DatabaseSync` is constructed — the
- * synchronous constructor depends on the resolved engine handle (ADR-0065 D1).
- * Registration itself is synchronous and does not touch the engine.
+ * The factory exposes only the `DatabaseSync` class. Engine bring-up is LAZY:
+ * on first `require('node:sqlite')` the factory self-initializes via the
+ * host-installed `setSqliteEngineSyncProvider` seam (sync wasm bring-up, paid
+ * once at first require — no preset flag, no ahead-of-time await). No provider
+ * + not ready → require still succeeds and the first `DatabaseSync`
+ * construction throws the loud "engine not initialized" error naming the seam
+ * (ADR-0065 D4). Registration itself stays synchronous and engine-free.
+ *
+ * Registry caching caveat: the namespace is cached after the first successful
+ * factory run, so a provider installed AFTER a no-provider require will not
+ * retrigger the factory — hosts install the provider at boot. A THROWING
+ * factory (provider/bytes failure) is not cached; the next require retries.
  */
 // TODO(backlog: net/sqlite-registration-path) — exact node:sqlite builtin registration module path
 import { registerBuiltin } from '@riftydev/io';
 import { DatabaseSync } from './database-sync.ts';
+import { ensureSqliteEngineFromProvider } from './engine.ts';
 
 let sqliteBuiltinRegistered = false;
 
@@ -26,7 +35,10 @@ export function registerSqliteBuiltin(): void {
   if (sqliteBuiltinRegistered) return;
   sqliteBuiltinRegistered = true;
 
-  registerBuiltin('sqlite', () => ({ DatabaseSync }));
+  registerBuiltin('sqlite', () => {
+    ensureSqliteEngineFromProvider();
+    return { DatabaseSync };
+  });
 }
 
 registerSqliteBuiltin();

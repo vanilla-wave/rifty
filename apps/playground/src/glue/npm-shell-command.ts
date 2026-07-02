@@ -451,6 +451,11 @@ async function runInstall(
           `npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`,
         );
       },
+      // Shadow-registry provenance lines (ADR-0188) belong in the npm output,
+      // not the worker devtools console.
+      onSubstitution: (line) => {
+        ctx.stdout.write(`${line}\n`);
+      },
     });
     const elapsedMs = Math.round(performance.now() - start);
 

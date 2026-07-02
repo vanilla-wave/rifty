@@ -1,14 +1,12 @@
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { viteBrowserShimFiles, viteBuildShimFiles } from '../glue/esbuild-shim.ts';
 import { viteHmrClientScript } from '../glue/hmr-bridge.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const SHIM_ROOT_PREFIX = '/workspace';
 const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const VITE_CLI_KEEPALIVE_NEEDLE = 'this.runMatchedCommand();';
 const VITE_CLI_KEEPALIVE_PATCH = `var __riftyAction = this.runMatchedCommand();
@@ -58,22 +56,10 @@ declare global {
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
 }
 
-function reRootShimPath(shimPath: string, root: string): string {
-  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
-    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
-    : shimPath;
-}
-
-function overlayShims(root: string, mode: ViteCliMode): void {
-  const fs = syncMirror();
-  const files = mode === 'build' || mode === 'dev' ? viteBuildShimFiles : viteBrowserShimFiles;
-  for (const [path, content] of Object.entries(files)) {
-    const np = normalizePath(reRootShimPath(path, root));
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
-
+// NOT shadow-registry shims (those apply at install time, ADR-0188): these
+// patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
+// keepalive pin (CAC never awaits async actions) and the preview inline-config
+// (executes only under `vite preview`; needle-guarded, loud on drift).
 function installCliActionPatches(root: string, mode: ViteCliMode): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
@@ -242,7 +228,6 @@ export async function prepareViteCli(
 ): Promise<void> {
   if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
   installCliActionPatches(root, mode);
-  overlayShims(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
   if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
 }

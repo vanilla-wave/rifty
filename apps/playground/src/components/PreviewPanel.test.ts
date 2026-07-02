@@ -102,22 +102,31 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
   });
 });
 
-describe('reconcileSelectedPort (auto-select-last)', () => {
-  it('keeps the current selection when it is still live', () => {
-    expect(reconcileSelectedPort(TWO_PORTS, 5174)).toBe(5174);
-    expect(reconcileSelectedPort(TWO_PORTS, 3000)).toBe(3000);
+describe('reconcileSelectedPort (auto-select newly appended)', () => {
+  const known = (ports: readonly number[]): ReadonlySet<number> => new Set(ports);
+
+  it('keeps the current selection when it is still live and nothing new appeared', () => {
+    expect(reconcileSelectedPort(TWO_PORTS, 5174, known([5174, 3000]))).toBe(5174);
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([5174, 3000]))).toBe(3000);
   });
 
-  it('snaps to a newly added production preview even while the dev server is live', () => {
-    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174)).toBe(4173);
+  it('snaps to a NEWLY appended server — generic, any source (was: preview-source only)', () => {
+    // `vite preview` appended :4173 → auto-select it…
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174, 3000]))).toBe(4173);
+    // …and a freshly started node/bin server auto-selects the same way.
+    expect(reconcileSelectedPort(TWO_PORTS, 5174, known([5174]))).toBe(3000);
+  });
+
+  it('does not re-snap to an already-known last entry', () => {
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174, 3000, 4173]))).toBe(5174);
   });
 
   it('snaps to the LAST entry when the current selection is gone', () => {
-    expect(reconcileSelectedPort(TWO_PORTS, 9999)).toBe(3000);
-    expect(reconcileSelectedPort(TWO_PORTS.toReversed(), 9999)).toBe(5174);
+    expect(reconcileSelectedPort(TWO_PORTS, 9999, known([5174, 3000]))).toBe(3000);
+    expect(reconcileSelectedPort(TWO_PORTS.toReversed(), 9999, known([5174, 3000]))).toBe(5174);
   });
 
   it('leaves the current selection untouched when the set is empty', () => {
-    expect(reconcileSelectedPort([], 8080)).toBe(8080);
+    expect(reconcileSelectedPort([], 8080, known([]))).toBe(8080);
   });
 });

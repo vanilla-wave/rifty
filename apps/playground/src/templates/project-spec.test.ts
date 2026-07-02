@@ -22,7 +22,6 @@ const NODE_FIXTURE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: 'console.log("server")\n' },
   defaultPort: 3210,
   estimatedBootSeconds: 15,
-  sqlite: true,
   extraFiles: {
     '/public/index.html': '<!doctype html><title>fixture</title>\n',
     '/public/client.js': 'console.log("client")\n',
@@ -48,7 +47,9 @@ describe('resolveBootstrapConfig', () => {
     if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
 
     expect(cfg.entryPath).toBe('/workspace/src/main.js');
-    expect(cfg.installDeps).toEqual({ vite: '^7.0.0', '@rollup/wasm-node': '4.62.2' });
+    // @rollup/wasm-node is no longer hand-pinned: the installer injects it as
+    // rollup's same-version shadow-shim companion (ADR-0188).
+    expect(cfg.installDeps).toEqual({ vite: '^7.0.0' });
     expect(cfg.runtimeSpecifier).toBe('vite');
     expect(cfg.server.appType).toBe('spa');
     expect(cfg.server.optimizeDepsDisabled).toBe(true);
@@ -223,7 +224,6 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
     const cfg = resolveBootstrapConfig(NODE_FIXTURE, 3210, '/workspace');
     expect(cfg.runtime).toBe('node-server');
     if (cfg.runtime !== 'node-server') throw new Error('unreachable');
-    expect(cfg.sqlite).toBe(true);
   });
 
   it('keeps the vite runtime discriminant on the vite config', () => {

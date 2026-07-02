@@ -50,6 +50,9 @@ export type PtyDevServer = {
   status: DevServerStatus;
   /** Owning terminal session. Present for lifecycle frames emitted by a pty run. */
   sid?: string;
+  /** cwd of the command that started the server (owner-authoritative — the page
+   * session cache is stale mid-run; used to record the reload-restore command). */
+  cwd?: string;
   /** Internal listen port — defined once `status` reaches 'running'. */
   port?: number;
   /** Run-scoped preview bridge discriminator for the page↔worker hop. */

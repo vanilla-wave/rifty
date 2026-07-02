@@ -32,4 +32,12 @@ describe('prepareViteCli', () => {
     expect(source).toContain('TODO(backlog: playground/vite-preview-cors-middleware-parity)');
     expect(source).not.toContain('...objectOrEmpty(user.preview)');
   });
+
+  it('carries zero shim glue — internals shims are applied at install time (ADR-0188)', () => {
+    // Only the vite CLI runtime patches (keepalive + preview inline config)
+    // remain here; package-content substitution is the installer's job.
+    expect(source).not.toContain('overlayShims');
+    expect(source).not.toContain('reRootShimPath');
+    expect(source).not.toContain('ShimFiles');
+  });
 });

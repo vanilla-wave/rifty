@@ -12,15 +12,11 @@
  * `registerNetBuiltins`/`registerSqliteBuiltin` stay in the ENTRY modules, never here.
  */
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
-import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
-import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
+import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import type { SqlJsConfig } from 'sql.js';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { viteBrowserShimFiles } from '../glue/esbuild-shim.ts';
 import {
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
@@ -80,90 +76,55 @@ export async function flushSyncMirror(): Promise<void> {
   if (typeof mirror.flush === 'function') await mirror.flush();
 }
 
-// The esbuild/rollup shim files (`@riftydev/shadow-registry`) are keyed on the
-// historical `/workspace/node_modules/...` path. The dev server now boots at the
-// ACTIVE ROOT (ADR-0165 §4: `/scratch` or `/projects/<id>`), so the shim MUST be
-// re-rooted to `<root>/node_modules/...` — else it overlays a dead `/workspace`
-// path and the REAL native rollup/esbuild loads (Rollup throws "platform 'rifty'
-// arch 'wasm' not supported by the native build"), breaking every Vite dev boot.
-const SHIM_ROOT_PREFIX = '/workspace';
-/**
- * Re-root a `/workspace/...`-keyed shim path onto the ACTIVE root (ADR-0165 §4).
- * Exported for the unit guard; a path that isn't `/workspace`-prefixed is returned
- * verbatim (defensive — no shim file should escape the prefix).
- */
-export function reRootShimPath(shimPath: string, root: string): string {
-  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
-    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
-    : shimPath;
-}
-function overlayShims(root: string): void {
-  const fs = syncMirror();
-  for (const [path, content] of Object.entries(viteBrowserShimFiles)) {
-    const np = normalizePath(reRootShimPath(path, root));
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
+// No shim glue here (ADR-0188): the esbuild/rollup/lightningcss internals shims
+// are written by the npm-client installer into the actual installed dirs.
 
 type Loader = ReturnType<typeof createModuleLoader>;
 
 /**
  * Wait for the entry to register `port` with the net registry (its
- * `listen(port)` call). Polled briefly: a top-level `await` in the entry may
- * defer the listen past the import's resolution.
+ * `listen(port)` call). Event-sourced from the registry's register events (a
+ * top-level `await` in the entry may defer the listen past the import's
+ * resolution); the timeout is the only timer.
  */
 async function waitForListeningPort(port: number, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (listPorts().includes(port)) return;
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-  }
-  // A listen() landing during the final sleep must not read as a dead server.
   if (listPorts().includes(port)) return;
-  throw new Error(
-    `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
-  );
+  let unsubscribe: () => void = () => {};
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      unsubscribe = onRegistryChange((changed, action) => {
+        if (action === 'register' && changed === port) resolve();
+      });
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
+            ),
+          ),
+        timeoutMs,
+      );
+      // A listen() that landed between the head check and the subscription.
+      if (listPorts().includes(port)) resolve();
+    });
+  } finally {
+    unsubscribe();
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /**
- * Node-server tail: optionally bring up the `node:sqlite` engine, then run the
- * ENTRY as the server program and wait for its `listen(port)`.
+ * Node-server tail: run the ENTRY as the server program and wait for its
+ * `listen(port)`. `node:sqlite` needs NO eager bring-up here — the builtin
+ * self-initializes at first require via the realm's sync wasm provider
+ * (glue/sqlite-wasm-provider.ts).
  */
 async function bootNodeServer(
   cfg: NodeServerBootstrapConfig,
   loader: Loader,
   log: (chunk: string) => void,
 ): Promise<void> {
-  if (cfg.sqlite) {
-    // wasmBinary (not locateFile): the bundled same-origin asset is fetched
-    // here, so the emscripten glue never walks its Node fs / web fetch
-    // environment-detection paths inside the worker realm.
-    log('[real-vite/worker] bringing up the node:sqlite WASM engine…\n');
-    const wasmResponse = await fetch(sqlWasmUrl);
-    if (!wasmResponse.ok) {
-      throw new Error(`[real-vite/worker] sql.js wasm fetch failed: HTTP ${wasmResponse.status}`);
-    }
-    const wasmBinary = await wasmResponse.arrayBuffer();
-    log(`[real-vite/worker] sql.js wasm fetched: ${wasmBinary.byteLength} bytes\n`);
-    // locateFile must ALSO be pinned: the emscripten glue computes the wasm
-    // path eagerly even when wasmBinary is provided, and the engine's default
-    // (import.meta.resolve on a bare specifier) throws inside a bundled worker.
-    const config: SqlJsConfig & { readonly wasmBinary: ArrayBuffer } = {
-      wasmBinary,
-      locateFile: () => sqlWasmUrl,
-    };
-    // Diagnosable failure over a silent stall: surface WHERE the engine died.
-    const engineTimeout = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error('[real-vite/worker] node:sqlite engine bring-up timed out (30s)')),
-        30_000,
-      );
-    });
-    await Promise.race([initSqliteEngine(config), engineTimeout]);
-    log('[real-vite/worker] node:sqlite engine ready\n');
-  }
-
   // Node parity: console.log IS stdout. Route the server program's console into
   // the dev-run's terminal stream (ADR-0148/0150 P6b: the dev server runs in a
   // supervised child; its boot AND async request logs land in the playground
@@ -290,7 +251,6 @@ export async function bootDevServer(opts: {
 
   if (cfg.runtime === 'vite') {
     assertNoUserViteConfig(root);
-    overlayShims(root);
     installEsbuildTransformBridge(root);
     log(`importing ${cfg.runtimeSpecifier}…\n`);
     const viteNs = (await loader.import(
@@ -338,10 +298,10 @@ export async function bootDevServer(opts: {
     });
     await server.listen();
     activeServer = server;
+    // No rifty-authored `[vite] … ready` marker: readiness is signaled
+    // out-of-band (the child posts its port set; the page pill/e2e read
+    // data-state), and the terminal carries only tool-authored output.
     log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
-    // User-facing readiness line (the terminal/e2e wait on it): the server is up
-    // and the preview route is about to be served on the public port.
-    log(`[vite] dev server ready on port ${port}\n`);
     publishSnapshot();
     server.watcher?.on('change', (file) => {
       const modulePath = normalizePath(file);

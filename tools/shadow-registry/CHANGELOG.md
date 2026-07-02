@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Shim data restructured for install-time application (ADR-0188).** New `internalsShims`
+  table keyed by the INSTALLED trigger package with package-relative file paths, a proven
+  `range`, alias `into` (esbuild/lightningcss import names), and `companions` (rollup →
+  `@rollup/wasm-node`, same-version lockstep). Replaces the `/workspace`-path-keyed
+  `browserShimFileSets`/`viteBrowserShimFiles`/`viteBuildShimFiles` exports (removed; the
+  npm-client installer is now the only applier). The rollup dev empty-Program stub is deleted —
+  ONE mode-independent `dist/native.js` always delegates to the real `@rollup/wasm-node` parser;
+  the unified esbuild shim keeps the bridge-backed `transform`/`build(write:false)` plus the
+  tolerant no-op `context()` dev dep-scanning constructs.
+
 ### Added
 
 - `viteBuildShimFiles` adds a production-build overlay: Rollup's native entry

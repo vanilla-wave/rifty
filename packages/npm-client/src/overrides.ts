@@ -16,16 +16,24 @@ export interface OverrideMap {
   [key: string]: string;
 }
 
+export interface ResolvedOverrideTarget {
+  name: string;
+  range: string | null;
+  /** Provenance (ADR-0188): only `'baked'` redirects print the shadow-registry
+   * substitution line — a user-authored override is not a silent substitution. */
+  source: 'user' | 'baked';
+}
+
 export function resolveOverride(
   name: string,
   parent: string | undefined,
   userOverrides: OverrideMap = {},
-): { name: string; range: string | null } | null {
+): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return parseTarget(userMatch);
+  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
   const builtin = bakedOverrides[name];
-  if (builtin) return parseTarget(builtin);
+  if (builtin) return { ...parseTarget(builtin), source: 'baked' };
   return null;
 }
 

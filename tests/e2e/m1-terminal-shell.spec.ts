@@ -213,7 +213,9 @@ test.describe('M1 - terminal shell', () => {
   }) => {
     await bootProjectFiles(page);
     // ADR-0148: the chosen project-files starter boots its dev server in the owner — wait up.
-    await expectTerminalContains(page, 'starting dev server on port', 15_000);
+    // Readiness = the LIVE pill (derived from the listening-port set), never a
+    // rifty-authored terminal marker.
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');

@@ -921,7 +921,6 @@ export const SOCKET_LAB_TEMPLATE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: SOCKET_LAB_SERVER_SOURCE },
   defaultPort: 3220,
   estimatedBootSeconds: 12,
-  sqlite: false,
   extraFiles: {
     '/public/index.html': INDEX_HTML,
     '/public/client.js': CLIENT_JS,

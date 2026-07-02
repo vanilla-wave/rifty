@@ -126,6 +126,33 @@ describe('createOwnerChildDevServer', () => {
     expect(fake.killed).toBe('SIGTERM');
   });
 
+  it('forwards post-ready rifty:dev-ports to onPortsChanged; pre-ready frames are ignored', async () => {
+    const fake = new FakeHandle();
+    const driver = createOwnerChildDevServer('blob:dev-url', () => fake);
+    const changes: Array<readonly number[]> = [];
+    const bootPromise = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: {
+        templateId: 'm7-preview-sw',
+        slug: 'm7-preview-sw',
+        setup: 'instant',
+        root: '/workspace',
+        devPort: 5174,
+      },
+      onSnapshotDirty: () => {},
+      onPortsChanged: (ports) => changes.push(ports),
+    });
+    // Pre-ready: boot resolution owns the first port — port frames are ignored.
+    fake.emitMessage({ type: 'rifty:dev-ports', ports: [5174] });
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    await bootPromise;
+    // Post-ready: the entry closed its server → the pill must leave running.
+    fake.emitMessage({ type: 'rifty:dev-ports', ports: [] });
+    fake.emitMessage({ type: 'rifty:dev-ports', ports: [5175] });
+    expect(changes).toEqual([[], [5175]]);
+  });
+
   // P6b regression (owner-persistence-reload): the child's install writes land in
   // the OWNER's OPFS write-through queue over fs.* RPC; the child's own flush is a
   // no-op. Boot MUST drain the owner queue (await `flush`) BEFORE resolving — so

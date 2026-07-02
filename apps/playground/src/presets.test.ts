@@ -5,6 +5,7 @@ import {
   PRESETS,
   type Preset,
   presetBootLines,
+  restoreBootLines,
 } from './presets.ts';
 import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
@@ -389,5 +390,27 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     for (const preset of PRESETS) {
       expect(preset.tag?.text).toBe(preset.setup === 'instant' ? 'instant' : 'npm install');
     }
+  });
+});
+
+describe('restoreBootLines (reload-restore replays the recorded dev command)', () => {
+  const vite = PRESETS.find((preset) => preset.id === 'real-vite') as Preset;
+
+  it('falls back to presetBootLines without a recorded dev command', () => {
+    expect(restoreBootLines(undefined, vite, '/workspace')).toEqual(
+      presetBootLines(vite, '/workspace'),
+    );
+  });
+
+  it('replays the recorded line as-is when its cwd is the active root', () => {
+    expect(
+      restoreBootLines({ line: 'npm run start:webpack', cwd: '/workspace' }, vite, '/workspace'),
+    ).toEqual(['npm run start:webpack']);
+  });
+
+  it('prefixes cd when the recorded cwd differs from the active root', () => {
+    expect(
+      restoreBootLines({ line: 'node server.mjs', cwd: '/workspace/fork' }, vite, '/workspace'),
+    ).toEqual(['cd /workspace/fork && node server.mjs']);
   });
 });

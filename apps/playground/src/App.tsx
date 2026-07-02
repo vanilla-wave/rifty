@@ -7,6 +7,7 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
+import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { basename, joinPath } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
@@ -103,7 +104,13 @@ import {
   requestVfsSnapshot,
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
-import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
+import {
+  DEFAULT_PRESET,
+  PRESETS,
+  type Preset,
+  presetBootLines,
+  restoreBootLines,
+} from './presets.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
@@ -897,11 +904,13 @@ export function App(props: AppProps) {
   let devServerOwnerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
-  // Mirror the owner's dev-server state + wire the page-side preview SW route on
-  // the reported port (ADR-0148 co-resident dev server). The owner serves `/preview/<port>/`; the
-  // page only (un)registers the matching cross-realm bridge on start/stop.
+  // Mirror the owner's dev-server state (ADR-0148 co-resident dev server). The
+  // frames are DERIVED from the owner's listening-port set (backlog:
+  // playground/generic-dev-server-lifecycle) — the pill/status here, but the SW
+  // bridge wiring lives SOLELY on the `pty:preview` set effect below: every
+  // derived-running port is also a set entry, so wiring here too would
+  // transiently double-bridge the same `/preview/<port>/` route (the C3 clobber).
   createEffect(() => {
-    let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
       const wasRunning = devServerStatus() === 'running';
       if (frame.status === 'stopped') {
@@ -917,15 +926,21 @@ export function App(props: AppProps) {
       if (frame.status === 'running' && !wasRunning) {
         setTsProjectRevision((revision) => revision + 1);
       }
+      // Record/clear the dev command for reload-restore: 'running' pins the line
+      // that started this server; a REAL running→stopped without error (Ctrl-C /
+      // server.close) clears it. An errored stop (owner crash/exit) keeps it — a
+      // reload should relaunch; nor does a boot-time 'stopped' re-publish clear.
+      if (frame.status === 'running' && frame.sid !== undefined) {
+        const executed = lastExecutedLine.get(frame.sid);
+        // cwd: prefer the OWNER-reported command cwd — the page session cache
+        // reflects the last pty:exit ('/' before any), not the running command.
+        if (executed) persistDevCommand({ line: executed.line, cwd: frame.cwd ?? executed.cwd });
+      } else if (frame.status === 'stopped' && frame.error === undefined && wasRunning) {
+        persistDevCommand(undefined);
+      }
       if (frame.port !== undefined) machine.setRealVitePort(frame.port);
-      tearPreview?.();
-      tearPreview =
-        frame.status === 'running' && frame.port !== undefined
-          ? wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken, frame.previewScope)
-          : undefined;
     });
     onCleanup(() => {
-      tearPreview?.();
       unsubscribe();
     });
   });
@@ -939,22 +954,18 @@ export function App(props: AppProps) {
     onCleanup(unsubscribe);
   });
 
-  // Per-port SW preview bridge for non-dev-server ports (node + vite preview). The dev-server
-  // port keeps its existing bridge from the `onDevServer` path above — never
-  // double-wire it. Diff the live port+scope bridges against active teardowns: wire a
-  // newly-present port, tear down + drop one that left the set. `onCleanup` tears
-  // down all.
+  // Per-port SW preview bridge — the ONE wiring path for EVERY previewable port
+  // (dev server, `vite preview`, node/bin servers alike): the `pty:preview` set
+  // is the single source, so no port can ever be double-bridged (ADR-0157 review
+  // C3 — a second clobbering bridge's teardown deletes the shared route; the set
+  // itself dedups by port). Diff the live port+scope bridges against active
+  // teardowns: wire a newly-present port, tear a departed one. `onCleanup` all.
   function previewBridgeKey(port: number, previewScope?: string): string {
     return JSON.stringify([port, previewScope ?? null]);
   }
   const nodePortBridges = new Map<string, () => void>();
   createEffect(() => {
-    // Never wire a node bridge for the ACTIVE dev-server port (ADR-0157 review C3):
-    // the `onDevServer` path already owns that `/preview/<port>/` route, so a node
-    // server that picked the same port must not register a second (clobbering)
-    // bridge whose teardown would delete the shared route.
-    const devPort = devServerRunning() ? machine.realVitePort() : null;
-    const entries = previewPorts().filter((p) => p.source !== 'dev-server' && p.port !== devPort);
+    const entries = previewPorts();
     const live = new Set(entries.map((p) => previewBridgeKey(p.port, p.previewScope)));
     for (const [key, tear] of nodePortBridges) {
       if (!live.has(key)) {
@@ -1041,9 +1052,30 @@ export function App(props: AppProps) {
     void props.terminalPersistence.saveHistory(next);
   }
 
+  // Recorded dev command (reload-restore): the shell line that produced the
+  // RUNNING dev server + its exec-time cwd. Persisted alongside cwd/env so a
+  // reload relaunches the REAL command (a fork may have swapped vite for another
+  // server), not the preset template's boot line.
+  let savedDevCommand: TerminalDevCommand | undefined =
+    props.terminalPersistence.initialState.devCommand;
+  let savedShellState: { cwd: string; env: Record<string, string> } = {
+    cwd: props.terminalPersistence.initialState.cwd,
+    env: props.terminalPersistence.initialState.env,
+  };
+
+  function persistTerminalSnapshot(): void {
+    void props.terminalPersistence.saveState({ ...savedShellState, devCommand: savedDevCommand });
+  }
+
   function persistTerminalState(id: string): void {
     const session = manager.snapshot(id);
-    void props.terminalPersistence.saveState({ cwd: session.cwd, env: session.env });
+    savedShellState = { cwd: session.cwd, env: session.env };
+    persistTerminalSnapshot();
+  }
+
+  function persistDevCommand(next: TerminalDevCommand | undefined): void {
+    savedDevCommand = next;
+    persistTerminalSnapshot();
   }
 
   function refreshTerminalState(): void {
@@ -1103,12 +1135,18 @@ export function App(props: AppProps) {
     terminalWriters.set(id, write);
   }
 
+  // Last EXECUTED line per session + its exec-time cwd — the single exec funnel
+  // (boot sequences AND user-typed lines) feeds it; when the owner later reports
+  // a dev server running in that session, this is the command that started it.
+  const lastExecutedLine = new Map<string, TerminalDevCommand>();
+
   /**
    * Run one terminal line in the owner shell over the pty channel (ADR-0148
    * co-resident dev server): EVERY line — including the dev-server `vite` / `npm run dev` — runs in the
    * owner now (the owner hosts the co-resident dev server).
    */
   function dispatchLine(id: string, line: string, dims?: TerminalRunDimensions): Promise<number> {
+    lastExecutedLine.set(id, { line, cwd: manager.snapshot(id).cwd });
     return manager.runLine(id, line, dims);
   }
 
@@ -1848,7 +1886,16 @@ export function App(props: AppProps) {
     }
     // Serialize through the preset-transition queue like every other launch
     // (onPickStarter / applyPending) so a concurrent pick/archive can't race the boot.
-    void queuePresetTransition(() => runVitePreset(presetForId(activeStarterId())));
+    // The boot replays the RECORDED dev command of the previously running session
+    // (a fork may have swapped the dev tool) — template boot lines only when none.
+    const preset = presetForId(activeStarterId());
+    void queuePresetTransition(() =>
+      runVitePreset(
+        preset,
+        undefined,
+        restoreBootLines(props.terminalPersistence.initialState.devCommand, preset, activeRoot()),
+      ),
+    );
   }
 
   createEffect(() => {
@@ -2166,12 +2213,16 @@ export function App(props: AppProps) {
     sessionId: string,
     generation: number,
     preset: Preset,
+    bootLinesOverride?: readonly string[],
   ): Promise<boolean> {
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
     devServerBootSessionId = targetSessionId;
     manager.freshConsole(targetSessionId, terminalWelcomeBanner); // fresh console + greeting
-    void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
+    void runTerminalSequence(
+      targetSessionId,
+      bootLinesOverride ?? presetBootLines(preset, activeRoot()),
+    );
     return waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
   }
 
@@ -2202,7 +2253,11 @@ export function App(props: AppProps) {
     await loadPresetUi(preset);
   }
 
-  async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
+  async function runVitePreset(
+    preset: Preset,
+    tsGate?: TsPresetTransitionGate,
+    bootLinesOverride?: readonly string[],
+  ): Promise<void> {
     try {
       setPresetTransitioning(true);
       // The caller already painted the starter UI and, for OPFS, established the
@@ -2235,7 +2290,12 @@ export function App(props: AppProps) {
       });
       if (restartNeeded) {
         if (restartSessionId && restartGeneration !== undefined) {
-          const booted = await startDevServerSession(restartSessionId, restartGeneration, preset);
+          const booted = await startDevServerSession(
+            restartSessionId,
+            restartGeneration,
+            preset,
+            bootLinesOverride,
+          );
           if (!booted) return;
         }
         reinitializeTsForPickedPreset();
@@ -2247,7 +2307,10 @@ export function App(props: AppProps) {
       manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
       const generation = ++devServerRestartGeneration;
       devServerBootSessionId = session.id;
-      void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
+      void runTerminalSequence(
+        session.id,
+        bootLinesOverride ?? presetBootLines(preset, activeRoot()),
+      );
       const booted = await waitForPresetBoot(session.id, generation, templateForPreset(preset));
       if (!booted) return;
       reinitializeTsForPickedPreset();

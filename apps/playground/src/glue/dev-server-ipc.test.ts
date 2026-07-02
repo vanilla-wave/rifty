@@ -20,10 +20,18 @@ describe('dev-server-ipc guards', () => {
     };
     const error: DevServerChildMessage = { type: 'rifty:dev-error', message: 'boom' };
     const snap: DevServerChildMessage = { type: 'rifty:dev-snapshot' };
+    const ports: DevServerChildMessage = { type: 'rifty:dev-ports', ports: [] };
+    const portsFull: DevServerChildMessage = {
+      type: 'rifty:dev-ports',
+      ports: [5174, 5175],
+      previewScope: 'dev-scope',
+    };
     expect(isDevServerChildMessage(ready)).toBe(true);
     expect(isDevServerChildMessage(preview)).toBe(true);
     expect(isDevServerChildMessage(error)).toBe(true);
     expect(isDevServerChildMessage(snap)).toBe(true);
+    expect(isDevServerChildMessage(ports)).toBe(true);
+    expect(isDevServerChildMessage(portsFull)).toBe(true);
   });
 
   it('accepts owner→child frames', () => {
@@ -43,6 +51,9 @@ describe('dev-server-ipc guards', () => {
       false,
     ); // scope wrong type
     expect(isDevServerChildMessage({ type: 'rifty:dev-error', message: null })).toBe(false); // message wrong type
+    expect(isDevServerChildMessage({ type: 'rifty:dev-ports' })).toBe(false); // missing ports
+    expect(isDevServerChildMessage({ type: 'rifty:dev-ports', ports: [5174, 'x'] })).toBe(false); // port wrong type
+    expect(isDevServerChildMessage({ type: 'rifty:dev-ports', ports: [1.5] })).toBe(false); // non-integer port
     expect(isDevServerChildMessage(null)).toBe(false);
     expect(isDevServerOwnerMessage({ type: 'rifty:dev-file-changed' })).toBe(false); // missing path
     expect(isDevServerOwnerMessage({ type: 'rifty:dev-file-changed', path: 42 })).toBe(false); // path wrong type

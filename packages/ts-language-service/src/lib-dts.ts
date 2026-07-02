@@ -179,26 +179,62 @@ function parentDir(path: string): string {
   return i <= 0 ? '/' : path.slice(0, i);
 }
 
-function findWorkspaceTypeScriptRoot(fsSync: FsSync, projectRoot: string): string | undefined {
+/** Workspace `typescript` package dir (walk-up existence probe, error-message use only). */
+function findWorkspaceTypeScriptDir(fsSync: FsSync, projectRoot: string): string | undefined {
   let dir = projectRoot;
   for (;;) {
     const candidate = `${dir === '/' ? '' : dir}/node_modules/typescript`;
-    const compiler = fsSync.statSyncOrNull(`${candidate}/lib/typescript.js`);
-    if (compiler?.isFile) return candidate;
-    const packageJson = fsSync.statSyncOrNull(`${candidate}/package.json`);
-    const packageDir = fsSync.statSyncOrNull(candidate);
-    if (packageJson?.isFile || packageDir?.isDirectory) return candidate;
+    if (fsSync.statSyncOrNull(candidate)?.isDirectory) return candidate;
     if (dir === '/') return undefined;
     dir = parentDir(dir);
   }
 }
 
-function loadWorkspaceLibDts(fsSync: FsSync, packageRoot: string): ReadonlyMap<string, string> {
-  const libDir = `${packageRoot}/lib`;
-  const stat = fsSync.statSyncOrNull(libDir);
-  if (!stat?.isDirectory) {
-    throw new Error(`workspace TypeScript at ${packageRoot} has no lib/ directory`);
+export interface WorkspaceTypeScriptEntry {
+  readonly entryPath: string;
+  readonly source: string;
+  readonly packageRoot: string;
+}
+
+/**
+ * Resolve the workspace `typescript` compiler entry with Node resolution
+ * semantics — rifty's own module resolver (package.json `exports`/`main`,
+ * node_modules walk-up), never a hardcoded `lib/typescript.js` probe. Dynamic
+ * import keeps the module-loader out of bundles that never load a workspace
+ * compiler.
+ */
+export async function resolveWorkspaceTypeScriptEntry(
+  fsSync: FsSync,
+  projectRoot: string,
+): Promise<WorkspaceTypeScriptEntry> {
+  const { createModuleLoader } = await import('@riftydev/runtime-js/loader');
+  const { resolver } = createModuleLoader(fsSync);
+  try {
+    const resolved = resolver.resolve('typescript', { fromFile: projectRoot, esm: false });
+    return {
+      entryPath: resolved.id,
+      source: resolved.source,
+      packageRoot: resolved.packageRoot ?? parentDir(resolved.id),
+    };
+  } catch (err) {
+    const packageDir = findWorkspaceTypeScriptDir(fsSync, projectRoot);
+    if (packageDir === undefined) {
+      throw new Error('TypeScript is not installed in this project; run npm install -D typescript');
+    }
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `workspace TypeScript at ${packageDir} has no resolvable compiler entry (package.json exports/main): ${detail}`,
+    );
   }
+}
+
+/**
+ * Std lib `.d.ts` next to the resolved compiler entry — tsc's own rule
+ * (`getDefaultLibFilePath` = dirname of the executing file), so relocated
+ * builds keep their matching lib set.
+ */
+function loadWorkspaceLibDts(fsSync: FsSync, entryPath: string): ReadonlyMap<string, string> {
+  const libDir = parentDir(entryPath);
   const libRe = /^lib(\.[^.]+)*\.d\.ts$/;
   const map = new Map<string, string>();
   for (const entry of fsSync.readdirSync(libDir)) {
@@ -209,7 +245,9 @@ function loadWorkspaceLibDts(fsSync: FsSync, packageRoot: string): ReadonlyMap<s
     map.set(entry.name, text);
   }
   if (map.size === 0) {
-    throw new Error(`workspace TypeScript at ${packageRoot} has no lib*.d.ts files`);
+    throw new Error(
+      `workspace TypeScript has no lib*.d.ts files next to its compiler entry (${libDir})`,
+    );
   }
   return map;
 }
@@ -251,20 +289,12 @@ export async function loadTypeScriptCompilerForProject(
   fsSync: FsSync,
   projectRoot: string,
 ): Promise<LoadedTypeScriptCompiler> {
-  const workspaceRoot = findWorkspaceTypeScriptRoot(fsSync, projectRoot);
-  if (!workspaceRoot) {
-    throw new Error('TypeScript is not installed in this project; run npm install -D typescript');
-  }
-
-  const compilerPath = `${workspaceRoot}/lib/typescript.js`;
-  const source = readFileUtf8(fsSync, compilerPath);
-  if (source === undefined) {
-    throw new Error(`workspace TypeScript compiler unreadable: ${compilerPath}`);
-  }
+  const entry = await resolveWorkspaceTypeScriptEntry(fsSync, projectRoot);
+  const ts = evaluateWorkspaceTypeScript(entry.source, entry.entryPath);
   return {
-    ts: evaluateWorkspaceTypeScript(source, compilerPath),
-    libMap: loadWorkspaceLibDts(fsSync, workspaceRoot),
+    ts,
+    libMap: loadWorkspaceLibDts(fsSync, entry.entryPath),
     source: 'workspace',
-    packageRoot: workspaceRoot,
+    packageRoot: entry.packageRoot,
   };
 }

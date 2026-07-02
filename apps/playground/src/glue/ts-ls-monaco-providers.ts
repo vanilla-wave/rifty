@@ -68,7 +68,7 @@ const FIX_ALL_KIND = 'source.fixAll.ts';
 const APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND = 'rifty.ts.applyCompletionWorkspaceEdit';
 const MISSING_WORKSPACE_TYPESCRIPT_ERROR =
   'TypeScript is not installed in this project; run npm install -D typescript';
-const BROKEN_WORKSPACE_TYPESCRIPT_ERROR = 'workspace TypeScript compiler unreadable';
+const BROKEN_WORKSPACE_TYPESCRIPT_ERROR = 'has no resolvable compiler entry';
 const UNREADABLE_WORKSPACE_TYPESCRIPT_LIB_ERROR = 'workspace TypeScript lib unreadable';
 
 /** The minimal editor seam the providers need (subset of `EditorApi`). */

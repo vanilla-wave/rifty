@@ -16,7 +16,7 @@ export {
   type EddyBundleTarballEntry,
 } from './eddy-bundle.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
-export { resolveOverride, type OverrideMap } from './overrides.ts';
+export { resolveOverride, type OverrideMap, type ResolvedOverrideTarget } from './overrides.ts';
 export {
   install,
   type InstallOptions,

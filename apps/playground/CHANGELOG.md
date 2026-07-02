@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`node:sqlite` works in any project — preset flag deleted.** Worker realms
+  install a sync sql.js wasm provider at boot (bytes via sync XHR of the bundled
+  asset); the builtin self-initializes at the first `require('node:sqlite')`
+  (sync bring-up, `@riftydev/net`). The `sqlite: true` template flag and the
+  eager 30s engine boot in the node-server dev path are gone — `node server.mjs`
+  using `node:sqlite` now works in a scratch project too.
+
+- **Zero boot-time shim glue (ADR-0188).** `overlayShims`/`reRootShimPath` (dev-server-boot,
+  vite-cli-prep) + `overlayBuildShims` (build-boot) + `glue/esbuild-shim.ts` deleted — the
+  npm-client installer writes the shadow-registry internals shims at install time, so
+  hand-installed `npm i vite` works identically to the presets and the vite8 tree no longer
+  gets dead esbuild/rollup overlay files. The vite template drops its hand-pinned
+  `@rollup/wasm-node` (installer injects it as rollup's same-version companion); snapshots
+  rebaked with the shims + companion baked in. The playground `npm` command streams the new
+  substitution provenance lines (`… substituted from shadow registry …`) into its output.
+
+- **Generic dev-server lifecycle — no vite keying.** The LIVE pill + preview
+  derive from the guest's LISTENING-PORT SET (net-registry register/unregister
+  events, relayed child→owner→page): any server — vite, webpack-dev-server, a
+  bare `node:http` — lights LIVE + preview; `server.close()` drops it without a
+  process exit. The `binNameOf === 'vite'` lifecycle dispatch, the synthesized
+  `[vite] dev server ready` / `[vite] preview ready` terminal markers, and the
+  preview-source auto-select special case are gone (terminal carries only
+  tool-authored output; a newly appended port auto-selects generically; e2e
+  readiness asserts LIVE-pill `data-state`). Editor HMR file-change frames fan
+  out to every live bin child instead of one vite-named handle.
+- **Reload-restore replays the recorded dev command.** The page records the
+  shell line that produced the RUNNING dev server (+ exec-time cwd) in the
+  persisted terminal state and relaunches THAT on reload — `cd`-prefixed when
+  it ran outside the active root — instead of the preset template's boot line,
+  so a fork that swapped vite for another server survives a page reload.
+  Cleared on a real running→stopped without error (Ctrl-C / `server.close()`);
+  an errored stop (owner crash/exit) keeps it, so reload still relaunches.
+- **TS-unavailable provider matcher follows the new resolver error.** Monaco
+  providers now classify the broken-workspace-TypeScript reject by the ts-LS
+  "has no resolvable compiler entry" message (compiler entry is resolved with
+  Node semantics, no longer a `lib/typescript.js` probe).
+
 ### Added
 
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset

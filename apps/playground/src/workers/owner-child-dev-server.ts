@@ -94,6 +94,11 @@ export interface DevServerChildBootOpts {
   /** Owner re-publishes its snapshot when the child reports its store changed. */
   readonly onSnapshotDirty: () => void;
   /**
+   * Post-ready listening-port changes (`rifty:dev-ports`): the entry called
+   * `server.close()` / re-listened. `ports` is the child's FULL current set.
+   */
+  readonly onPortsChanged?: (ports: readonly number[], previewScope?: string) => void;
+  /**
    * Drain the OWNER realm's OPFS write-through before boot resolves (ADR-0072 /
    * ADR-0150 P6b). The child writes node_modules into the owner store over fs.*
    * RPC, filling the owner's async write-through queue; the child's own
@@ -200,6 +205,10 @@ export function createOwnerChildDevServer(
             );
           } else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
           else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();
+          else if (m.type === 'rifty:dev-ports' && settled) {
+            // Only meaningful after ready (boot resolution owns the first port).
+            opts.onPortsChanged?.(m.ports, m.previewScope);
+          }
         });
 
         // Boot-window only: a child exit BEFORE ready rejects boot. A post-ready

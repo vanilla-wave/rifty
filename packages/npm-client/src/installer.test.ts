@@ -422,7 +422,12 @@ describe('install — package.json defaults', () => {
       '@esbuild/wasi-preview1@0.28.0',
     ]);
     expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
-    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
+    // ADR-0188: the installer now materializes the `esbuild` import name from
+    // the shadow-registry alias shim (was a playground boot-overlay concern).
+    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
+    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.js')).toContain(
+      '__riftyEsbuildTransform',
+    );
   });
 
   it('replays a transitive baked-override dep on the fast path without EBROKENLOCK', async () => {

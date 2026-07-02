@@ -244,9 +244,11 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     const switcher = page.locator('.rf-preview__switcher');
     await expect(switcher).toBeVisible({ timeout: 60_000 });
 
-    // The switcher lists at least the dev slot (`npm run dev`) + the node :4001
-    // server: two distinct previewable ports.
-    await expect(switcher.locator('option', { hasText: 'npm run dev' })).toHaveCount(1, {
+    // The switcher lists at least the dev server's port + the node :4001
+    // server: two distinct previewable ports. The dev entry is labeled by its
+    // REAL command (`vite :5174` — the bin that ran), not a synthesized
+    // `npm run dev` slot (generic lifecycle: every server is a uniform entry).
+    await expect(switcher.locator('option', { hasText: ':5174' })).toHaveCount(1, {
       timeout: 60_000,
     });
     await expect(switcher.locator('option', { hasText: ':4001' })).toHaveCount(1, {

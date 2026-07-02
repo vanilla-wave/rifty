@@ -27,6 +27,7 @@ import {
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { isDevServerOwnerMessage } from '../glue/dev-server-ipc.ts';
+import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
@@ -39,6 +40,9 @@ import {
 async function bootstrapDevServerChild(): Promise<void> {
   registerNetBuiltins();
   registerSqliteBuiltin();
+  // node:sqlite self-initializes at first require (sync wasm provider) — no
+  // preset flag, no eager bring-up.
+  installSqliteWasmSyncProvider();
 
   // Realign globalThis.Buffer with THIS bundle's `require('buffer')` (the one
   // express builds chunks with) — else etag reads the kernel-worker-entry bundle's
@@ -134,6 +138,32 @@ async function bootstrapDevServerChild(): Promise<void> {
       type: 'rifty:dev-ready',
       port: handle.port,
       ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
+    });
+    // Post-ready port tracking:
+    // the entry may `server.close()` / re-listen — repost the FULL set on every
+    // net-registry change so the owner's pill follows reality. The boot port's
+    // bridge is owned by the stop handle (no-op teardown seeded); a NEW port gets
+    // its own cross-realm bridge here.
+    const { onRegistryChange, listPorts, serveCrossRealmPreview, dispatchToPort } = await import(
+      '@riftydev/net'
+    );
+    const { watchServedPorts } = await import('./port-watch.ts');
+    watchServedPorts({
+      listPorts,
+      subscribe: (cb) => onRegistryChange(cb),
+      servePreview: (port) =>
+        serveCrossRealmPreview(
+          port,
+          async (request) => dispatchToPort(port, request),
+          c.previewScope === undefined ? {} : { scope: c.previewScope },
+        ),
+      post: (ports) =>
+        send({
+          type: 'rifty:dev-ports',
+          ports,
+          ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
+        }),
+      served: new Map([[handle.port, () => {}]]),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

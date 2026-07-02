@@ -1,8 +1,15 @@
 export const TERMINAL_STATE_PATH = '/workspace/.rifty/terminal-state.json';
 
+/** Last shell line that produced a running dev server + its exec-time cwd; reload-restore replays it. */
+export interface TerminalDevCommand {
+  readonly line: string;
+  readonly cwd: string;
+}
+
 export interface TerminalState {
   readonly cwd: string;
   readonly env: Record<string, string>;
+  readonly devCommand?: TerminalDevCommand;
 }
 
 export interface TerminalStateFs {
@@ -43,20 +50,30 @@ function parseEnv(value: unknown): Record<string, string> {
   return out;
 }
 
+function parseDevCommand(value: unknown): TerminalDevCommand | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const cmd = value as { line?: unknown; cwd?: unknown };
+  if (typeof cmd.line !== 'string' || cmd.line.length === 0) return undefined;
+  if (typeof cmd.cwd !== 'string' || !cmd.cwd.startsWith('/')) return undefined;
+  return { line: cmd.line, cwd: cmd.cwd };
+}
+
 function normalizeState(state: TerminalState): TerminalState {
   return {
     cwd: state.cwd.startsWith('/') ? state.cwd : '/',
     env: parseEnv(state.env),
+    devCommand: parseDevCommand(state.devCommand),
   };
 }
 
 function parseState(raw: string, defaultCwd: string): TerminalState {
   const parsed = JSON.parse(raw) as unknown;
   if (!parsed || typeof parsed !== 'object') return { cwd: defaultCwd, env: {} };
-  const state = parsed as { cwd?: unknown; env?: unknown };
+  const state = parsed as { cwd?: unknown; env?: unknown; devCommand?: unknown };
   return {
     cwd: typeof state.cwd === 'string' && state.cwd.startsWith('/') ? state.cwd : defaultCwd,
     env: parseEnv(state.env),
+    devCommand: parseDevCommand(state.devCommand),
   };
 }
 

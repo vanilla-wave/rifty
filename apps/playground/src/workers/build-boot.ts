@@ -1,12 +1,10 @@
 import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { viteBuildShimFiles } from '../glue/esbuild-shim.ts';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
-const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 type Loader = ReturnType<typeof createModuleLoader>;
@@ -32,22 +30,7 @@ interface VitePreviewServer {
   httpServer?: { close(cb?: (err?: Error) => void): void };
 }
 
-const SHIM_ROOT_PREFIX = '/workspace';
-
-export function reRootBuildShimPath(shimPath: string, root: string): string {
-  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
-    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
-    : shimPath;
-}
-
-function overlayBuildShims(root: string): void {
-  const fs = syncMirror();
-  for (const [path, content] of Object.entries(viteBuildShimFiles)) {
-    const np = normalizePath(reRootBuildShimPath(path, root));
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
+// No shim glue here (ADR-0188): internals shims are applied at install time.
 
 function installCreateRequire(loader: Loader, root: string): void {
   __setCreateRequireImpl((from: string) => {
@@ -96,7 +79,6 @@ export async function bootBuild(opts: {
 }): Promise<void> {
   const { root, log } = opts;
   assertNoUserViteConfig(root);
-  overlayBuildShims(root);
   installEsbuildTransformBridge(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
@@ -127,7 +109,6 @@ export async function bootPreview(opts: {
   const { root, port, previewScope, log } = opts;
   assertNoUserViteConfig(root);
   assertBuiltDist(root);
-  overlayBuildShims(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
 
