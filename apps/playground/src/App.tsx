@@ -2203,7 +2203,9 @@ export function App(props: AppProps) {
     if (stopLifecycleRun) {
       await waitForTerminalIdle(sessionId);
       if (sessionId) clearDevServerBootSession(sessionId);
-      setPreviewPorts([]);
+      // No local setPreviewPorts([]): the set is OWNER-derived (pty:preview) —
+      // a local wipe would tear a second live server's preview bridge; the
+      // owner's devStopped emit delivers the truthful remainder.
     }
   }
 

@@ -67,11 +67,31 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
     var m = /^\\/preview\\/(\\d+)(?:\\/|$)/.exec(pathname);
     return m ? m[1] : null;
   }
+  function isLoopbackHostname(hostname) {
+    // Mirrors the http server's isLoopbackHost (packages/net/src/http/server.ts):
+    // localhost, 0.0.0.0, ::1 (bracketed or not), all of 127.0.0.0/8, and
+    // IPv4-mapped loopback (::ffff:127.x.x.x, dotted or hex halves).
+    var lower = hostname.toLowerCase();
+    var bracketed = /^\\[(.*)\\]$/.exec(lower);
+    if (bracketed) lower = bracketed[1];
+    if (lower === 'localhost' || lower === '0.0.0.0' || lower === '::1') return true;
+    if (lower.indexOf('::ffff:') === 0) {
+      var mapped = lower.slice(7);
+      if (/^127(\\.\\d{1,3}){3}$/.test(mapped)) return true;
+      var parts = mapped.split(':');
+      if (parts.length === 2) {
+        var hi = parseInt(parts[0], 16);
+        var lo = parseInt(parts[1], 16);
+        if (!isNaN(hi) && !isNaN(lo)) return ((hi >> 8) & 0xff) === 127;
+      }
+    }
+    return /^127(\\.\\d{1,3}){3}$/.test(lower);
+  }
   function remapPort(url) {
     var guestPort = previewPathPort();
     if (guestPort === null) return null;
     var hostname = url.hostname;
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    if (!isLoopbackHostname(hostname)) {
       if (!window.location || window.location.hostname !== hostname) return null;
     }
     return guestPort;

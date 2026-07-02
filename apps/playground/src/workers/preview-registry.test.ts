@@ -221,6 +221,22 @@ describe('preview-registry derived dev-server lifecycle', () => {
     });
   });
 
+  it('devBootFailed with ANOTHER server live keeps the derived running status (error still carried)', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    reg.addNode('node-1', [3000], 'scope-1', { ptySid: 'term-1' });
+    reg.devStarting('term-2');
+    reg.devBootFailed('boom', 'term-2');
+    // A live server keeps the derived status truthful — a forced global
+    // 'stopped' would flip the page pill off while :3000 still serves.
+    expect(devFrames(sent).at(-1)).toMatchObject({
+      status: 'running',
+      port: 3000,
+      sid: 'term-1',
+      error: 'boom',
+    });
+  });
+
   it('a listening port wins over a concurrent starting phase (running > starting)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });

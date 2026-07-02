@@ -82,7 +82,13 @@
   global `stopped` that never came and the switch hung on the veil forever. The
   wait now settles when the stopped session stops OWNING the primary (everything
   stopped, or the pill moved to another session's server). e2e: dual-server
-  switch case in `generic-dev-server-lifecycle.spec.ts`.
+  switch case in `generic-dev-server-lifecycle.spec.ts`. Two siblings of the
+  same bug: the page no longer locally wipes the OWNER-derived preview-port set
+  after a dev stop (a local `[]` tore the second live server's preview bridge;
+  the owner's devStopped emit delivers the truthful remainder), and
+  `devBootFailed` no longer forces a global `stopped` frame while another
+  server's port still serves — the status stays snapshot-derived, the boot
+  error still rides the frame (unit RED-checked).
 - **Multi-port entries: ports opened BEFORE the port watch began are now served.**
   The dev-boot watch subscribes after ready with only the boot port seeded and
   reconciled only on the NEXT registry change — a second port opened during boot

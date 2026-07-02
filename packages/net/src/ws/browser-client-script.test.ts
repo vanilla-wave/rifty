@@ -602,6 +602,34 @@ describe('webSocketBridgeClientScript previewPortFromPath remap (ADR-0189)', () 
     }
   });
 
+  it('bridges the full loopback family like the http server predicate (127/8, [::1], 0.0.0.0)', async () => {
+    const { win, restore } = installWindow({
+      hostname: 'rifty.example',
+      pathname: '/preview/9044/',
+    });
+    const peer = ackingPeer(9044);
+
+    try {
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+
+      for (const url of ['ws://127.0.0.5:3000/a', 'ws://[::1]:3000/b', 'ws://0.0.0.0:4000/c']) {
+        const ws = new BrowserWebSocket(url);
+        await expect(openOrClose(ws), url).resolves.toBe('open');
+        ws.close();
+      }
+      expect(peer.opens.map((f) => f.url)).toEqual([
+        'ws://127.0.0.5:3000/a',
+        'ws://[::1]:3000/b',
+        'ws://0.0.0.0:4000/c',
+      ]);
+    } finally {
+      peer.close();
+      restore();
+    }
+  });
+
   it('strips the page /preview/<port>/ prefix from page-base-resolved WS URLs (guest sees its own path)', async () => {
     const { win, restore } = installWindow({ hostname: 'localhost', pathname: '/preview/9043/' });
     const peer = ackingPeer(9043);

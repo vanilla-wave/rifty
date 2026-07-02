@@ -45,7 +45,11 @@ export const bakedOverrides: OverrideMap = {
   lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
-const SHIM_ESBUILD_VERSION = '0.21.5';
+// MUST equal the bakedOverrides trigger pin: the alias package.json + the
+// shim's `version` export claim this — a drifted static value would lie to
+// version-sniffing consumers. The exact-pin `range` below enforces the couple
+// (a bumped override outside it loud-throws at install until this moves too).
+const SHIM_ESBUILD_VERSION = '0.28.0';
 
 // ONE mode-independent esbuild entry (ADR-0188): the real async WASI transform
 // bridge (dev module serving AND `vite build`) and `build({ write:false })` for
@@ -384,8 +388,10 @@ export const internalsShims: Record<string, InternalsShim> = {
   },
   // bakedOverrides installs `@esbuild/wasi-preview1` under its own name; this
   // materializes the `esbuild` import name, delegating to the WASI bridge.
+  // EXACT-pin range: the alias files statically claim SHIM_ESBUILD_VERSION —
+  // any trigger version drift must loud-throw, not ship a lying package.json.
   '@esbuild/wasi-preview1': {
-    range: '^0.28.0',
+    range: '0.28.0',
     into: 'esbuild',
     files: {
       'package.json': SHIM_ESBUILD_PACKAGE_JSON,

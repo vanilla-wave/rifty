@@ -63,6 +63,18 @@ describe('shadow-registry', () => {
     expect(main).not.toContain('Pass-through');
   });
 
+  it('esbuild alias version matches the bakedOverrides trigger pin exactly (no lying metadata)', () => {
+    const shim = internalsShims['@esbuild/wasi-preview1'];
+    const pinned = bakedOverrides.esbuild?.split('@').at(-1);
+    const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as { version?: string };
+    // The alias package.json + the shim's `version` export are STATIC claims;
+    // they must equal the version the override actually installs, and the
+    // exact-pin range must refuse any drifted trigger at install time.
+    expect(pkg.version).toBe(pinned);
+    expect(shim?.files['lib/main.js']).toContain(`const version = "${pinned}"`);
+    expect(shim?.range).toBe(pinned);
+  });
+
   it('esbuild alias serves BOTH module systems: ESM entry + CJS entry (require("esbuild") is real Node behavior)', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as {

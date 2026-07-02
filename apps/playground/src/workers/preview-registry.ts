@@ -205,12 +205,21 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     },
     devBootFailed(message, ptySid) {
       starting = null;
-      const stopped: DerivedDev = {
-        status: 'stopped',
-        ...(ptySid === undefined ? {} : { sid: ptySid }),
-      };
-      lastDev = stopped;
-      deps.send(devFrame(stopped, message));
+      const next = currentDev();
+      // Status stays DERIVED: with another server live, forcing a global
+      // 'stopped' would flip the pill off while its port still serves. The
+      // failed boot's error rides the frame either way.
+      if (next.status === 'stopped') {
+        const stopped: DerivedDev = {
+          status: 'stopped',
+          ...(ptySid === undefined ? {} : { sid: ptySid }),
+        };
+        lastDev = stopped;
+        deps.send(devFrame(stopped, message));
+        return;
+      }
+      lastDev = next;
+      deps.send(devFrame(next, message));
     },
     publish() {
       deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });

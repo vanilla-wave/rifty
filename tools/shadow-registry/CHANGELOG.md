@@ -20,7 +20,11 @@
   files (`esbuild.build.bundle` — the bridge transforms one module; real esbuild would bundle);
   `context()` constructs only with EMPTY entry points (its empty `rebuild()` matches real
   esbuild's zero-entry result; entries refuse at construction, `serve()` refuses always);
-  `analyzeMetafile*()` refuses non-empty metafiles instead of returning `''`.
+  `analyzeMetafile*()` refuses non-empty metafiles instead of returning `''`. The alias
+  metadata no longer lies about its version: package.json + the `version` export claim
+  0.28.0 (the exact `bakedOverrides` trigger pin — was a stale static `0.21.5`), and the
+  shim `range` is the same EXACT pin so a bumped override loud-throws at install until
+  the static claims move with it (guard test pins the coupling).
 
 ### Added
 

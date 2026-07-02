@@ -221,6 +221,44 @@ describe('cross-realm preview — text/html WS bridge injection (ADR-0189)', () 
     expect(await response.text()).toContain('charset');
   });
 
+  it('refuses the http-equiv META form of a non-utf8 charset LOUD too', async () => {
+    const html =
+      '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1251"></head><body>x</body></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5121, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5121);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('charset');
+  });
+
+  it('a META utf-8 declaration (either form) injects normally', async () => {
+    const html =
+      '<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>x</body></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5122, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5122);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('<script data-rifty-ws-bridge>');
+  });
+
   it('warns LOUD when the document CSP would block the injected inline script (still injects)', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {

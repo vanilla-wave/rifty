@@ -27,4 +27,4 @@ Delivered (closed 2026-07-02; unit + full e2e lanes green):
 
 Open:
 
-- `net/preview-websocket-bridge` — generic loopback WS for the preview frame; deletes the vite `--config` wrapper + HMR plugin, the last vite-keyed branch. Ground truth updated: guest-side `ws` upgrade already works (socket-lab `ws-server-local-upgrade` = supported); the gap is the iframe→guest duplex + injected `window.WebSocket` patch + per-forced-option wrapper retirement. (draft → needs ADR)
+- `net/preview-websocket-bridge` (ready; design ratified in ADR-0189, Accepted) — CORE DELIVERED: generic text/html injection at the preview path + guest-port remap in the injected `window.WebSocket` patch, wrapper HMR half deleted, socket-lab `browser-preview-websocket` = supported (echo + server-close parity). REMAINING (item acceptance 4): per-forced-option wrapper retirement (allowedHosts/host, strictPort, `base './'`, `optimizeDeps.noDiscovery`, user-config discovery env) → delete `withViteCliArgs`/`withViteCliEnv` + the wrapper file; re-home the `configureServer` invalidation plugin + `RIFTY_VITE_CLI_HMR_OFF` (ADR-0161 pin). Details: the item's Phase state block.
