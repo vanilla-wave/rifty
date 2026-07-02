@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-07-01T10:40:31.413Z",
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-02T12:09:22.453Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,44 +11,82 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        681,
-        672,
-        670,
-        662,
-        668
+        753,
+        711,
+        721,
+        747,
+        713
       ],
-      "median": 670,
-      "displayMs": 700
+      "median": 721,
+      "displayMs": 800
     },
     "npmInstallToFirstViteResponseMs": {
       "status": "measured",
       "count": 5,
       "samples": [
-        2266,
-        2517,
-        2267,
-        2518,
-        2518
+        2777,
+        2792,
+        2773,
+        2775,
+        2769
       ],
-      "median": 2517,
-      "displayMs": 2600,
+      "median": 2775,
+      "displayMs": 2800,
       "registryUrl": "https://registry.rifty.dev/npm-registry",
       "resolverUrl": "https://eddy.rifty.dev",
       "baseline": {
         "status": "measured",
         "count": 5,
         "samples": [
-          5049,
-          4284,
-          4028,
-          4523,
-          4284
+          4537,
+          4778,
+          4786,
+          4783,
+          4780
         ],
-        "median": 4284,
-        "displayMs": 4300,
+        "median": 4780,
+        "displayMs": 4800,
         "label": "standard"
       },
-      "speedupX": 1.7
-    }
+      "speedupX": 1.72
+    },
+    "presetBootToPreviewLiveMs": [
+      {
+        "presetId": "project-files",
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          2938,
+          2870,
+          2864,
+          2859,
+          2867
+        ],
+        "median": 2867,
+        "displayMs": 2900,
+        "stages": {
+          "interactiveMs": 806,
+          "viteReadyMs": null
+        }
+      },
+      {
+        "presetId": "typescript-ls",
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          3382,
+          3558,
+          3451,
+          3271,
+          3469
+        ],
+        "median": 3451,
+        "displayMs": 3500,
+        "stages": {
+          "interactiveMs": 879,
+          "viteReadyMs": 3348
+        }
+      }
+    ]
   }
 }
