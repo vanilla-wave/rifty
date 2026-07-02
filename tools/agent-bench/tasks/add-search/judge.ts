@@ -9,6 +9,7 @@ import {
   type JudgeVerdict,
   verdictFromProbes,
 } from '../../src/judge/context.ts';
+import { openIssuesPage } from '../../src/judge/nav.ts';
 
 const MATCHING_TITLE = 'Dark mode: table stripes are unreadable';
 const OTHER_TITLE = 'Webhook retries hammer the endpoint without backoff';
@@ -17,7 +18,7 @@ const QUERY = 'table stripes';
 export async function judge(ctx: JudgeContext): Promise<JudgeVerdict> {
   const probes: JudgeProbe[] = [];
   const { page } = ctx;
-  await page.goto(new URL('/issues', ctx.previewUrl).href, { waitUntil: 'load' });
+  await openIssuesPage(ctx);
   await page.getByText(MATCHING_TITLE).first().waitFor({ state: 'visible', timeout: 10_000 });
 
   const bothVisible =

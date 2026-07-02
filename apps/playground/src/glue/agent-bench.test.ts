@@ -19,24 +19,27 @@ describe('parseAgentBenchFlag', () => {
 });
 
 describe('installAgentBench', () => {
-  it('installs the single namespace and routes seed to the host', async () => {
+  it('installs the single namespace and routes seed/readFile to the host', async () => {
     const seeded: Record<string, string>[] = [];
     installAgentBench({
       seedFiles: (files) => {
         seeded.push(files);
         return Promise.resolve();
       },
+      readFile: (relPath) => Promise.resolve(`owner-bytes:${relPath}`),
       presetId: () => 'react-vite',
     });
     const bench = (globalThis as BenchGlobal).__riftyAgentBench;
     expect(bench).toBeDefined();
     await bench?.seed({ 'src/x.txt': 'seeded' });
     expect(seeded).toEqual([{ 'src/x.txt': 'seeded' }]);
+    await expect(bench?.readFile('package.json')).resolves.toBe('owner-bytes:package.json');
   });
 
   it('exportTrace / sessionMetadata throw loudly without a session, then observe the registered one', async () => {
     const registrar = installAgentBench({
       seedFiles: () => Promise.resolve(),
+      readFile: () => Promise.resolve(''),
       presetId: () => 'react-vite',
     });
     const bench = (globalThis as BenchGlobal).__riftyAgentBench;

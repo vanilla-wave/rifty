@@ -11,13 +11,21 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile as fsReadFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import type { BenchConfig, EndpointConfig } from '../config.ts';
 import { writeFileTree } from '../fs-tree.ts';
+import {
+  freePort,
+  killChild,
+  runOrThrow,
+  runToCompletion,
+  spawnLoggedServer,
+  tailOf,
+  waitHttpReady,
+} from '../proc.ts';
 import { overlaySeed } from '../seed.ts';
 import type { BenchTask } from '../tasks.ts';
 import { templateSpec, templateWorkspaceFiles } from '../templates.ts';
@@ -33,138 +41,10 @@ const SERVER_READY_TIMEOUT_MS = 120_000;
  *  the rifty profile `pi-baseline+rifty-adapter-v1` (ADR-0190). */
 export const LOCAL_REFERENCE_PROMPT_PROFILE = 'pi-baseline';
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.once('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const address = srv.address();
-      if (address === null || typeof address === 'string') {
-        srv.close();
-        reject(new Error('agent-bench: could not allocate a free port'));
-        return;
-      }
-      const { port } = address;
-      srv.close((err) => (err ? reject(err) : resolve(port)));
-    });
-  });
-}
-
-interface RunResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
-function runToCompletion(
-  cmd: string,
-  args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
-): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
-      cwd: opts.cwd,
-      env: opts.env ?? process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString();
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
-    });
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(
-        new Error(
-          `agent-bench: \`${cmd} ${args.join(' ')}\` timed out after ${opts.timeoutMs}ms\n${stderr.slice(-2000)}`,
-        ),
-      );
-    }, opts.timeoutMs);
-    child.once('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.once('exit', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, stdout, stderr });
-    });
-  });
-}
-
-async function runOrThrow(
-  cmd: string,
-  args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
-): Promise<RunResult> {
-  const result = await runToCompletion(cmd, args, opts);
-  if (result.code !== 0) {
-    throw new Error(
-      `agent-bench: \`${cmd} ${args.join(' ')}\` exited ${result.code}\nstdout: ${result.stdout.slice(-2000)}\nstderr: ${result.stderr.slice(-2000)}`,
-    );
-  }
-  return result;
-}
-
-async function waitHttpReady(url: string, timeoutMs: number, what: string): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError = 'no attempt made';
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url, { redirect: 'manual' });
-      if (res.status < 500) return;
-      lastError = `HTTP ${res.status}`;
-    } catch (err) {
-      lastError = (err as Error).message;
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`agent-bench: ${what} not ready at ${url} after ${timeoutMs}ms (${lastError})`);
-}
-
-function tailOf(path: string, bytes: number): string {
-  try {
-    const text = readFileSync(path, 'utf8');
-    return text.length > bytes ? text.slice(-bytes) : text;
-  } catch {
-    return `(no output captured at ${path})`;
-  }
-}
-
 interface DevServer {
   child: ChildProcess;
   port: number;
   logPath: string;
-}
-
-function spawnLoggedServer(
-  cmd: string,
-  args: string[],
-  opts: { cwd: string; env: NodeJS.ProcessEnv; logPath: string },
-): ChildProcess {
-  writeFileSync(opts.logPath, `$ ${cmd} ${args.join(' ')}\n`, 'utf8');
-  const child = spawn(cmd, args, {
-    cwd: opts.cwd,
-    env: opts.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const append = (d: Buffer): void => appendFileSync(opts.logPath, d.toString(), 'utf8');
-  child.stdout?.on('data', append);
-  child.stderr?.on('data', append);
-  return child;
-}
-
-function killChild(child: ChildProcess | null): Promise<void> {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    child.once('exit', () => resolve());
-    child.kill('SIGTERM');
-    setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    }, 2000).unref();
-  });
 }
 
 function piVersion(): string {

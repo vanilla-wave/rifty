@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import type { Browser } from '@playwright/test';
 import type { BenchConfig } from './config.ts';
 import type { JudgeContext, JudgeVerdict, TaskJudge } from './judge/context.ts';
-import type { LaneAdapter, PreparedRun } from './lanes/types.ts';
+import type { JudgePageHandle, LaneAdapter, PreparedRun } from './lanes/types.ts';
 import {
   type BenchReport,
   type ReportHeader,
@@ -43,24 +43,22 @@ async function loadJudge(task: BenchTask): Promise<TaskJudge> {
 }
 
 async function judgeRun(
-  browser: Browser,
+  pageHandle: JudgePageHandle,
   task: BenchTask,
   prepared: PreparedRun,
 ): Promise<JudgeVerdict> {
   const judge = await loadJudge(task);
-  const context = await browser.newContext();
-  const page = await context.newPage();
   try {
     const ctx: JudgeContext = {
       previewUrl: prepared.previewUrl,
-      page,
+      page: pageHandle.page,
       readFile: (relPath) => prepared.readFile(relPath),
       gitDiff: () => prepared.gitDiff(),
       terminalTail: () => prepared.terminalTail(),
     };
     return await judge(ctx);
   } finally {
-    await context.close();
+    await pageHandle.close();
   }
 }
 
@@ -129,11 +127,20 @@ export async function runBench(
                 `[agent-bench] dry-judge: would run ${task.slug}/judge.ts against ${prepared.previewUrl}`,
               );
             } else {
-              if (!browser) {
-                const { chromium } = await import('@playwright/test');
-                browser = await chromium.launch();
+              // Lane-provided judge page (rifty: the preview lives in the
+              // run's own context) or a fresh context in the shared chromium.
+              let pageHandle: JudgePageHandle;
+              if (prepared.createJudgePage) {
+                pageHandle = await prepared.createJudgePage();
+              } else {
+                if (!browser) {
+                  const { chromium } = await import('@playwright/test');
+                  browser = await chromium.launch();
+                }
+                const context = await browser.newContext();
+                pageHandle = { page: await context.newPage(), close: () => context.close() };
               }
-              const verdict = await judgeRun(browser, task, prepared);
+              const verdict = await judgeRun(pageHandle, task, prepared);
               probes = verdict.probes;
               outcome = verdict.pass ? 'pass' : 'fail';
             }

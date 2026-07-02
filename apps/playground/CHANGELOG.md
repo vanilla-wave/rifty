@@ -28,7 +28,7 @@
   block); dev CORS proxy `/ai-proxy` gated on `RIFTY_AI_PROXY_TARGET` (D-004);
   whole module lazy-loads on first open (split chunks — a session that never
   opens AI mode downloads none of it). agent-bench hooks (ADR-0191):
-  `globalThis.__riftyAgentBench` (`seed`/`exportTrace`/`sessionMetadata`) exists
+  `globalThis.__riftyAgentBench` (`seed`/`readFile`/`exportTrace`/`sessionMetadata`) exists
   ONLY under `?agentBench=1`. e2e: mocked OpenAI-compatible SSE sessions cover
   write_file + shell + vibe + trace export (light lane) and the parity cases on
   react-vite — shell≡user-terminal stdout, write_file→HMR (Fast Refresh, no

@@ -11,6 +11,7 @@ import {
   type JudgeVerdict,
   verdictFromProbes,
 } from '../../src/judge/context.ts';
+import { openIssuesPage } from '../../src/judge/nav.ts';
 
 async function countIssueEntries(page: Page): Promise<number> {
   // Links to an issue detail (/issues/<id>) are how this app renders list
@@ -44,7 +45,7 @@ function submitControl(page: Page) {
 export async function judge(ctx: JudgeContext): Promise<JudgeVerdict> {
   const probes: JudgeProbe[] = [];
   const { page } = ctx;
-  await page.goto(new URL('/issues', ctx.previewUrl).href, { waitUntil: 'load' });
+  await openIssuesPage(ctx);
   await page
     .getByText('Webhook retries hammer the endpoint without backoff')
     .first()

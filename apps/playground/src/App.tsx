@@ -1289,6 +1289,15 @@ export function App(props: AppProps) {
             notifyFileWritten(resolveWorkspacePath(root, rel), content);
           }
         },
+        readFile: async (rel) => {
+          const path = resolveWorkspacePath(activeRoot(), rel);
+          const bytes = await readWorkspaceFileBytesFromOwner(
+            workspaceOwner(),
+            path,
+            'agent-bench read',
+          );
+          return new TextDecoder().decode(bytes);
+        },
         presetId: activeStarterId,
       })
     : null;

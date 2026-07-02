@@ -1,14 +1,20 @@
 /**
- * Lane adapter contract — the seam pass B's `rifty` lane slots into.
- * One suite, two implementations (ADR-0191): the runner is lane-agnostic and
- * only ever talks to this interface.
+ * Lane adapter contract — one suite, two implementations (ADR-0191): the
+ * runner is lane-agnostic and only ever talks to this interface.
  */
+import type { Page } from '@playwright/test';
 import type { BenchTask } from '../tasks.ts';
 
 export type LaneId = 'rifty' | 'local-reference';
 
 /** Outcome of waiting for the agent run; judging turns 'done' into pass/fail. */
 export type RunOutcome = 'done' | 'budget-exceeded';
+
+/** A page the judge may navigate freely; `close()` after the verdict. */
+export interface JudgePageHandle {
+  readonly page: Page;
+  close(): Promise<void>;
+}
 
 export interface LaneTrace {
   /** Completed model turns observed during the run. */
@@ -25,7 +31,7 @@ export interface LaneTrace {
 
 /** A prepared cold-start run: fresh workspace + live preview, agent not yet prompted. */
 export interface PreparedRun {
-  /** Project root: fs path (local lane) / VFS root (rifty lane, pass B). */
+  /** Project root: fs path (local lane) / VFS workspace label (rifty lane). */
   readonly workspace: string;
   readonly previewUrl: string;
   /** Deliver the prompt verbatim (parity: byte-identical across lanes) and start the agent. */
@@ -35,10 +41,17 @@ export interface PreparedRun {
   collectTrace(): Promise<LaneTrace>;
   /** Tail of the run's terminal output (dev server + agent stderr for the local lane). */
   terminalTail(): Promise<string>;
-  /** Diff of the workspace vs the pre-run baseline commit (includes untracked files). */
+  /** Diff of the workspace vs the pre-run baseline (includes untracked files). */
   gitDiff(): Promise<string>;
   /** Read a workspace file (judge-facing). */
   readFile(relPath: string): Promise<string>;
+  /**
+   * Lane-provided judge page. The rifty preview is served by the run's OWN
+   * browser context (service worker + workspace owner live there), so its
+   * judge page must come from that context; absent → the runner uses its own
+   * chromium (local lane).
+   */
+  createJudgePage?(): Promise<JudgePageHandle>;
   /** Kill leftover processes / drop the temp workspace. Artifacts in runDir survive. */
   cleanup(): Promise<void>;
 }
@@ -51,4 +64,6 @@ export interface LaneAdapter {
   laneVersions(): Promise<Record<string, string>>;
   /** Cold start: fresh workspace per run; artifacts go under `runDir`. */
   prepare(task: BenchTask, runDir: string): Promise<PreparedRun>;
+  /** Release lane-level resources (browser, spawned playground server). */
+  dispose?(): Promise<void>;
 }

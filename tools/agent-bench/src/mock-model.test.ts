@@ -69,4 +69,44 @@ describe('mock model server', () => {
     expect(res.status).toBe(404);
     expect((await res.json()).error).toContain('no route');
   });
+
+  it('answers CORS preflight and marks responses ACAO * (browser rifty lane)', async () => {
+    server = await startMockModelServer();
+    const preflight = await fetch(`${server.baseUrl}/chat/completions`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:5321',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type, x-stainless-os',
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preflight.headers.get('access-control-allow-headers')).toBe(
+      'authorization, content-type, x-stainless-os',
+    );
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('POST');
+
+    const res = await fetch(`${server.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:5321' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'x' }] }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    await res.text();
+  });
+
+  it('emits read_file when only the rifty tool surface is offered', async () => {
+    server = await startMockModelServer();
+    const events = await complete(server.baseUrl, {
+      model: server.model,
+      stream: true,
+      tools: [{ type: 'function', function: { name: 'read_file', parameters: {} } }],
+      messages: [{ role: 'user', content: 'do something' }],
+    });
+    const parsed = events.slice(0, -1).map((e) => JSON.parse(e));
+    const toolDelta = parsed.find((p) => p.choices?.[0]?.delta?.tool_calls);
+    expect(toolDelta.choices[0].delta.tool_calls[0].function.name).toBe('read_file');
+  });
 });

@@ -138,6 +138,17 @@ test.describe('AI mode parity on react-vite', () => {
       page.locator('.rf-row[role="treeitem"][data-kind="file"]', { hasText: 'seed-marker.txt' }),
     ).toBeVisible({ timeout: 30_000 });
 
+    // ── readFile hook: judge-facing full-byte owner read round-trips the seed.
+    expect(
+      await page.evaluate(() =>
+        (
+          globalThis as typeof globalThis & {
+            __riftyAgentBench: { readFile(relPath: string): Promise<string> };
+          }
+        ).__riftyAgentBench.readFile('seed-marker.txt'),
+      ),
+    ).toBe('bench-seeded\n');
+
     // ── Scripted model. Registered AFTER boot (page.route during cold boot
     // breaks owner-worker fetches under COI — see ai-mode.spec.ts).
     const script: ((postData: string) => string)[] = [

@@ -5,8 +5,9 @@
  * observation namespace, installed as `globalThis.__riftyAgentBench` when the
  * page loads with `?agentBench=1` (parseAgentBenchFlag). It grants the agent
  * nothing — `seed` writes through the same acked owner path the explorer
- * uses; `exportTrace`/`sessionMetadata` only observe the live AI session.
- * Without the flag the namespace is never installed.
+ * uses; `readFile` is the judge's full-byte owner read (same bridge as file
+ * downloads); `exportTrace`/`sessionMetadata` only observe the live AI
+ * session. Without the flag the namespace is never installed.
  */
 
 export interface AgentBenchSessionMetadata {
@@ -25,12 +26,16 @@ export interface AgentBenchSessionBridge {
 export interface AgentBenchHost {
   /** Acked pre-run file overlay (workspace-relative paths → text). */
   seedFiles(files: Record<string, string>): Promise<void>;
+  /** Judge-facing full-byte workspace read (workspace-relative path). */
+  readFile(relPath: string): Promise<string>;
   /** Active starter id (bench report header). */
   presetId(): string;
 }
 
 export interface AgentBenchNamespace {
   seed(files: Record<string, string>): Promise<void>;
+  /** Judge-facing workspace file read — full owner bytes, never a capped snapshot. */
+  readFile(relPath: string): Promise<string>;
   /** The SAME object the "Export session" button downloads. */
   exportTrace(): Promise<unknown>;
   sessionMetadata(): AgentBenchSessionMetadata & { readonly presetId: string };
@@ -52,6 +57,7 @@ export function installAgentBench(host: AgentBenchHost): AgentBenchRegistrar {
 
   const namespace: AgentBenchNamespace = {
     seed: (files) => host.seedFiles(files),
+    readFile: (relPath) => host.readFile(relPath),
     // async so a missing session REJECTS (awaitable by the harness), never
     // throws synchronously out of a promise-shaped API.
     exportTrace: async () => requireSession().exportTrace(),

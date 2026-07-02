@@ -10,6 +10,7 @@ import {
   type JudgeVerdict,
   verdictFromProbes,
 } from '../../src/judge/context.ts';
+import { openIssuesPage } from '../../src/judge/nav.ts';
 
 const RESOLVED_TITLE = 'API returns 500 when the page size is zero'; // status: resolved
 const OPEN_TITLE = 'Webhook retries hammer the endpoint without backoff'; // status: open
@@ -17,8 +18,7 @@ const OPEN_TITLE = 'Webhook retries hammer the endpoint without backoff'; // sta
 export async function judge(ctx: JudgeContext): Promise<JudgeVerdict> {
   const probes: JudgeProbe[] = [];
   const { page } = ctx;
-  const issuesUrl = new URL('/issues', ctx.previewUrl).href;
-  await page.goto(issuesUrl, { waitUntil: 'load' });
+  await openIssuesPage(ctx);
   await page.getByText(OPEN_TITLE).first().waitFor({ state: 'visible', timeout: 10_000 });
   const urlBefore = page.url();
 
@@ -77,8 +77,11 @@ export async function judge(ctx: JudgeContext): Promise<JudgeVerdict> {
   });
   if (urlAfter === urlBefore) return verdictFromProbes(probes);
 
-  // Cold-load the captured URL: the filtered view must be restored.
-  await page.goto(urlAfter, { waitUntil: 'load' });
+  // Cold-load the captured URL: the filtered view must be restored. The
+  // referer keeps the rifty preview's SW port context on the reload (root
+  // requests with a /preview/<port>/ referrer route to that port); harmless
+  // for the local lane.
+  await page.goto(urlAfter, { waitUntil: 'load', referer: ctx.previewUrl });
   await page.getByText(RESOLVED_TITLE).first().waitFor({ state: 'visible', timeout: 10_000 });
   const resolvedVisible = await page.getByText(RESOLVED_TITLE).first().isVisible();
   const openVisible = await page.getByText(OPEN_TITLE).first().isVisible();

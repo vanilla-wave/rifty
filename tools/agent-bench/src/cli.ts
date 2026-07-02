@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { type BenchConfig, loadConfig } from './config.ts';
 import { createLocalReferenceLane } from './lanes/local-reference.ts';
-import { RIFTY_LANE_NOT_WIRED } from './lanes/rifty.ts';
+import { createRiftyLane } from './lanes/rifty.ts';
 import type { LaneAdapter } from './lanes/types.ts';
 import { MOCK_ENV_KEY, MOCK_MODEL_ID, startMockModelServer } from './mock-model.ts';
 import { regenerateSummary } from './report.ts';
@@ -40,7 +40,6 @@ Options (run):
   --mock-model      run against a local scripted OpenAI-compatible SSE server
                     (no tokens spent; plumbing smoke)
   --dry-judge       skip page-based judging; record what WOULD be judged
-                    (pass-A scaffolding)
 
 The endpoint API key is read from the env var named by endpoint.envKey
 (default OPENAI_API_KEY) by the pi CLI itself — never stored anywhere.
@@ -79,9 +78,6 @@ async function runCommand(argv: string[]): Promise<void> {
   if (!['rifty', 'local-reference', 'both'].includes(laneArg)) {
     fail(`agent-bench: --lane must be rifty|local-reference|both, got '${laneArg}'`);
   }
-  // Pass B refusal happens up front — a rifty selection must never produce a
-  // partial/stub result.
-  if (laneArg === 'rifty' || laneArg === 'both') fail(RIFTY_LANE_NOT_WIRED);
 
   let config: BenchConfig = loadConfig(values.config);
 
@@ -109,7 +105,11 @@ async function runCommand(argv: string[]): Promise<void> {
     fail(`agent-bench: --runs must be a positive integer, got '${values.runs}'`);
   }
 
-  const lanes: LaneAdapter[] = [createLocalReferenceLane(config)];
+  const lanes: LaneAdapter[] = [];
+  if (laneArg === 'local-reference' || laneArg === 'both') {
+    lanes.push(createLocalReferenceLane(config));
+  }
+  if (laneArg === 'rifty' || laneArg === 'both') lanes.push(createRiftyLane(config));
   const runId = makeRunId();
   const reportDir = join(BENCH_ROOT, 'reports', runId);
 
@@ -133,6 +133,9 @@ async function runCommand(argv: string[]): Promise<void> {
     );
     console.log(`[agent-bench] report: ${reportPath}`);
   } finally {
+    for (const lane of lanes) {
+      if (lane.dispose) await lane.dispose();
+    }
     if (mockClose) await mockClose();
   }
 }
