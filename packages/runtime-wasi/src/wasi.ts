@@ -168,10 +168,13 @@ export async function runWasi(
   opts: WasiOptions = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const wasi = new Wasi(opts);
-  const instance =
-    wasm instanceof WebAssembly.Module
-      ? await WebAssembly.instantiate(wasm, wasi.imports)
-      : (await WebAssembly.instantiate(wasm, wasi.imports)).instance;
+  // Branch on the RESULT, not the input: `wasm instanceof WebAssembly.Module` is
+  // realm-local (a Module from node:vm / a structured-clone boundary fails it,
+  // yet instantiate() accepts it and returns a bare Instance). The Instance is
+  // always created by THIS realm's WebAssembly, so its instanceof is reliable.
+  const result: WebAssembly.Instance | WebAssembly.WebAssemblyInstantiatedSource =
+    await WebAssembly.instantiate(wasm as BufferSource, wasi.imports);
+  const instance = result instanceof WebAssembly.Instance ? result : result.instance;
   let exitCode = 0;
   try {
     exitCode = wasi.start(instance);

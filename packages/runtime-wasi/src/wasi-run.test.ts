@@ -55,4 +55,16 @@ describe('runWasi input forms', () => {
     expect(first.exitCode).toBe(0);
     expect(second.exitCode).toBe(0);
   });
+
+  it('runs a Module compiled in ANOTHER realm — instanceof is realm-local', async () => {
+    const vm = await import('node:vm');
+    const module = vm.runInNewContext('new WebAssembly.Module(bytes)', {
+      bytes: TRIVIAL_WASI_START,
+    }) as WebAssembly.Module;
+    // The trap this test pins: a cross-realm Module fails the local instanceof,
+    // and WebAssembly.instantiate(module) returns an Instance (NOT {instance}).
+    expect(module instanceof WebAssembly.Module).toBe(false);
+    const result = await runWasi(module);
+    expect(result.exitCode).toBe(0);
+  });
 });
