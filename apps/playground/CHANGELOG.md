@@ -37,6 +37,25 @@
   during the gate now queue instead of dropping); the restore also stops being
   bounded by the page's 60s dev-config timeout. Measured after: echo at 2.6s,
   progress at 2.9s, restore 10.6s, LIVE 14.2s — console honest the whole way.
+- **The `beforeRun` deps gate is abort-aware and blank-line-free.** Three review
+  gaps in the gate above: (1) Ctrl-C/`pty:close` during the restore used to wait
+  the gate out AND still invoke the command afterwards (a stopped `vite`/`npm`
+  could start seconds after the user killed it, and the terminal stayed
+  `busy` for the whole restore — the light-lane CI regression: a spec Ctrl-C'ing
+  the echoed-but-still-gated vite left `terminal is busy` refusing its next
+  commands). An abort now settles the run immediately (exit 130), never runs the
+  command, and mutes further gate progress chunks. (2) An empty Enter no longer
+  invokes the gate at all — a blank line is a shell no-op needing no deps (it
+  used to print `restoring project dependencies…` mid-prompt). (3) The m1
+  quiet-terminal spec anchors past the restore window (waits Vite ready) since
+  the echo now legitimately precedes the restore progress line. All RED-first in
+  `pty-server.test.ts`.
+- **A dev-server announce interrupts an in-flight preview probe.** The warmup's
+  `wake()` only raced the interval sleep, so an announce landing while a probe
+  hung in the SW ready-wait still waited out the probe cap; the wake now aborts
+  the probe and re-probes immediately, and one wake arm per iteration covers
+  both races (two arms left a gap that could drop an announce). RED-first in
+  `preview-warmup.test.ts`.
 - **`npm -h` / `npm --help` / `npm help` / bare `npm` now print the command list**, one command per line (usage + one-line summary), instead of hitting the "unknown subcommand" path. The list is the honest browser subset (install/run/test/start/stop/restart/help — no fake `publish`/`access`). `npm help` exits 0; bare `npm` / help flags keep npm's usage exit 1; unsupported help topics throw `NotImplementedError('npm.help.topic')`. An unknown subcommand still errors but points at `npm help` instead of inlining a comma-joined list. Guard: `npm-shell-command.test.ts`.
 - **`npm install` reports its elapsed time human-readably** — seconds (one decimal) at ≥1s, milliseconds below (`installed 12 package(s) in 2.5s`), matching real npm's `added N packages in 3s`. Exported `formatInstallDuration`, unit-tested.
 - **Reload now relaunches the restored project's dev server (console + preview).**

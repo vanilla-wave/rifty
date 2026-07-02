@@ -119,6 +119,14 @@ function publicEnv(env: Record<string, string>): Record<string, string> {
   return out;
 }
 
+/** Resolves when the signal aborts (immediately for an already-aborted one). */
+function abortSettled(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
+
 export function createPtyServer(deps: PtyServerDeps): PtyServer {
   const sessions = new Map<string, Session>();
 
@@ -157,16 +165,41 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     let code = 0;
     let error: string | undefined;
     try {
-      await deps.beforeRun?.((chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream));
-      const result = await session.shell.run(frame.line, {
-        onChunk: (chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream),
-        signal: run.controller.signal,
-        isTTY: frame.isTTY,
-        cols: frame.cols,
-        rows: frame.rows,
-        stdin: run.stdin,
-      });
-      code = result.exitCode;
+      // A blank line is a shell no-op — nothing it runs needs deps, so it skips
+      // the gate (instant prompt, no restore-progress noise on empty Enter).
+      if (frame.line.trim() !== '') {
+        const gate = deps.beforeRun?.((chunk, stream) => {
+          // Progress from a gate the user already aborted is noise at the next
+          // prompt (the page routes post-exit chunks to the terminal).
+          if (!run.controller.signal.aborted) emitChunk(sid, run, frame.rid, chunk, stream);
+        });
+        if (gate !== undefined) {
+          // Abort-aware gate: pty:signal/pty:close during a slow deps restore
+          // settles the run NOW (the restore keeps running for the next run —
+          // it is shared state, not owned by this run). Waiting it out left the
+          // terminal `busy` for the whole restore after a Ctrl-C.
+          const gatePromise = Promise.resolve(gate);
+          await Promise.race([gatePromise, abortSettled(run.controller.signal)]);
+          // A gate failure AFTER the abort won the race has no run to fail —
+          // swallow it so it cannot surface as an unhandled rejection.
+          gatePromise.catch(() => {});
+        }
+      }
+      if (run.controller.signal.aborted) {
+        // pty:signal / pty:close landed while the gate was pending: the user
+        // stopped the run before it started — never invoke the command.
+        code = 130;
+      } else {
+        const result = await session.shell.run(frame.line, {
+          onChunk: (chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream),
+          signal: run.controller.signal,
+          isTTY: frame.isTTY,
+          cols: frame.cols,
+          rows: frame.rows,
+          stdin: run.stdin,
+        });
+        code = result.exitCode;
+      }
     } catch (err) {
       code = 1;
       error = err instanceof Error ? err.message : String(err);

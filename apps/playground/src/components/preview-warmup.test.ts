@@ -57,6 +57,31 @@ describe('runPreviewWarmup', () => {
     expect(hooks.probe).toHaveBeenCalledTimes(2);
   });
 
+  it('a wake() DURING a hung probe aborts it and re-probes immediately', async () => {
+    // A probe launched before the preview bridge is wired hangs in the SW
+    // ready-wait up to probeTimeoutMs; the dev-server announce must not wait it out.
+    let firstProbeSignal: AbortSignal | undefined;
+    let probeCalls = 0;
+    const { hooks, fireWake } = makeWorld({
+      probe: vi.fn((signal: AbortSignal) => {
+        probeCalls += 1;
+        if (probeCalls > 1) return Promise.resolve(true);
+        firstProbeSignal = signal;
+        return new Promise<boolean>((resolve) => {
+          signal.addEventListener('abort', () => resolve(false), { once: true });
+        });
+      }),
+      sleep: vi.fn(() => new Promise<void>(() => {})), // interval never elapses
+    });
+    const result = runPreviewWarmup(hooks, CFG, () => true);
+    await vi.waitFor(() => expect(hooks.wake).toHaveBeenCalled());
+    fireWake();
+    await expect(result).resolves.toBe('live');
+    expect(firstProbeSignal?.aborted).toBe(true);
+    expect(probeCalls).toBe(2);
+    expect(hooks.sleep).not.toHaveBeenCalled();
+  });
+
   it('a timed-out probe phase still navigates, then errors when nothing commits', async () => {
     const { hooks } = makeWorld({
       probe: vi.fn(async () => false),

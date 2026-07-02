@@ -38,18 +38,29 @@ export async function runPreviewWarmup(
   isAlive: () => boolean,
 ): Promise<'live' | 'error' | 'cancelled'> {
   const probeDeadline = hooks.now() + cfg.warmupTimeoutMs;
+  const WAKE = Symbol('wake');
   while (isAlive() && hooks.now() < probeDeadline) {
+    // ONE wake arm per iteration, shared by the probe race AND the interval
+    // sleep below — two arms would leave a gap (probe settled, sleep not yet
+    // awaited) where an announce resolves an abandoned promise and is lost.
+    const wake = hooks.wake().then(() => WAKE);
     const ac = new AbortController();
     const cap = setTimeout(() => ac.abort(), cfg.probeTimeoutMs);
-    let ok: boolean;
+    let raced: boolean | symbol;
     try {
-      ok = await hooks.probe(ac.signal);
+      // A probe hung in the SW ready-wait must not make the announce wait out
+      // probeTimeoutMs — the wake aborts it and re-probes immediately.
+      raced = await Promise.race([hooks.probe(ac.signal), wake]);
     } finally {
       clearTimeout(cap);
     }
     if (!isAlive()) return 'cancelled';
-    if (ok) break;
-    await Promise.race([hooks.sleep(cfg.warmupIntervalMs), hooks.wake()]);
+    if (raced === true) break;
+    if (raced === WAKE) {
+      ac.abort();
+      continue;
+    }
+    await Promise.race([hooks.sleep(cfg.warmupIntervalMs), wake]);
   }
   if (!isAlive()) return 'cancelled';
   await hooks.navigate();
