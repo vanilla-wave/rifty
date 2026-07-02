@@ -31,11 +31,13 @@
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
-import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
+import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
+import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
+import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
 import {
@@ -109,26 +111,14 @@ function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
     : null;
 }
 
-function parsePort(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
-}
-
 function viteCliPrepareOptionsFromEnv(
   env: Record<string, string | undefined>,
 ): ViteCliPrepareOptions {
-  const port = parsePort(env.RIFTY_VITE_CLI_PORT);
   const userConfigPath = env.RIFTY_VITE_CLI_USER_CONFIG;
   return {
-    ...(port === null
-      ? {}
-      : {
-          hmr: {
-            enabled: env.RIFTY_VITE_CLI_HMR === '1',
-            port,
-          },
-        }),
+    // ADR-0161: Vite 8 templates pin server.hmr:false; stock HMR otherwise
+    // (the generic preview bridge carries vite's own server.ws, ADR-0189).
+    ...(env.RIFTY_VITE_CLI_HMR_OFF === '1' ? { hmrOff: true } : {}),
     ...(userConfigPath ? { userConfigPath } : {}),
   };
 }
@@ -163,6 +153,10 @@ const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
 // branch additionally registers net builtins + the stdin guard (not needed there).
 if (proc.env.RIFTY_NODE_SERVE === '1') {
   registerNetBuiltins();
+  // node:sqlite for any user program — registered always, engine paid only at
+  // first require via the sync wasm provider.
+  registerSqliteBuiltin();
+  installSqliteWasmSyncProvider();
   // Interactive stdin is not forwarded to a `node <file>` child (ADR-0155 §5,
   // ADR-0157 §4): make the consume surface throw loudly instead of hanging on
   // input that never arrives (Fidelity — no silent divergence).
@@ -177,6 +171,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
         bin: proc.env.RIFTY_BIN === '1',
       }),
     listPorts: () => listPorts(),
+    onPortsChange: (cb) => onRegistryChange(cb),
     awaitDrain: () => awaitDrain(),
     servePreview: (port) =>
       serveCrossRealmPreview(

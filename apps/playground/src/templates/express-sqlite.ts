@@ -404,7 +404,6 @@ export const EXPRESS_SQLITE_TEMPLATE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: EXPRESS_SQLITE_SERVER_SOURCE },
   defaultPort: 3210,
   estimatedBootSeconds: 15,
-  sqlite: true,
   extraFiles: {
     '/public/index.html': INDEX_HTML,
     '/public/client.js': CLIENT_JS,

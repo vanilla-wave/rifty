@@ -2,17 +2,17 @@
  * Shadow-registry — consolidated data tables for in-browser substitutions.
  *
  * Per ADR 0015, all shim/override *data* lives in this package. Consumer-side
- * adapter code stays where it is used (`packages/npm-client/src/overrides.ts`
- * for npm overrides, `apps/playground/src/glue/esbuild-shim.ts` for the
- * VFS overlay).
+ * adapter code stays in `@riftydev/npm-client` (`src/overrides.ts` for package
+ * redirects, `src/shadow-shims.ts` for install-time internals shims, ADR-0188).
  *
  * Two tables are exposed:
  *
  *   - `bakedOverrides` — full-package substitutions consumed by the npm
  *     installer's override hook (D-005).
- *   - `browserShimFileSets` / `collectBrowserShimFiles` — typed VFS-path-keyed
- *     source bundles overlaid by the playground after install, replacing
- *     packages whose native binaries cannot run in a browser realm.
+ *   - `internalsShims` — install-time file-sets keyed by the INSTALLED trigger
+ *     package, written by `install()` into the actual installed package dir
+ *     (nested/hoisted-aware). One content per (name, version-range) — never
+ *     run-mode-dependent (ADR-0188).
  *
  * The `OverrideMap` type is structurally identical to the one re-exported
  * from `@riftydev/npm-client` (an open `Record<string, string>`). It is declared
@@ -28,7 +28,8 @@ export interface OverrideMap {
 
 /**
  * Built-in package substitutions. Source of truth for what the npm installer
- * silently redirects when no user override matches.
+ * redirects (loudly — every application prints a shadow-registry provenance
+ * line, ADR-0188) when no user override matches.
  *
  * Add an entry here when a popular npm package ships native bindings that
  * cannot load in a browser realm AND a drop-in pure-JS alternative exists.
@@ -37,16 +38,29 @@ export const bakedOverrides: OverrideMap = {
   // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
   bcrypt: 'bcryptjs',
   // Real esbuild's registry package runs a native-binary postinstall. The
-  // playground overlays node_modules/esbuild with a browser-safe shim later.
+  // installer materializes the `esbuild` import name from the shim below.
   esbuild: '@esbuild/wasi-preview1@0.28.0',
   // Vite 8 imports lightningcss lazily. The native package loads `.node`
   // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
   lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
-const SHIM_ESBUILD_VERSION = '0.21.5';
+// MUST equal the bakedOverrides trigger pin: the alias package.json + the
+// shim's `version` export claim this — a drifted static value would lie to
+// version-sniffing consumers. The exact-pin `range` below enforces the couple
+// (a bumped override outside it loud-throws at install until this moves too).
+const SHIM_ESBUILD_VERSION = '0.28.0';
 
-const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — transform delegated to the dev-server WASI bridge
+// ONE mode-independent esbuild entry (ADR-0188): the real async WASI transform
+// bridge (dev module serving AND `vite build`) and `build({ write:false })` for
+// SINGLE-MODULE config bundling. Everything the bridge cannot do for real
+// loud-throws: multi-module bundling (local imports in the entry), a context()
+// with entry points (only the EMPTY dep-optimizer context under
+// `optimizeDeps.noDiscovery` constructs — its empty rebuild IS real esbuild's
+// zero-entry result), non-empty analyzeMetafile. One body, two entries: ESM
+// footer for import, CJS footer for require (real Node `require('esbuild')`
+// works — the rifty loader loud-fails sync require of ESM).
+const SHIM_ESBUILD_BODY = `// rifty: esbuild shim — WASI transform bridge (shadow registry, install-time)
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
     super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
@@ -55,119 +69,9 @@ const NotImplementedError = class extends Error {
   }
 };
 
-export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
+const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
 
-export async function initialize(_opts) {
-  return undefined;
-}
-
-export async function transform(input, options = {}) {
-  const bridge = globalThis.__riftyEsbuildTransform;
-  if (typeof bridge !== 'function') {
-    throw new NotImplementedError('esbuild.transform', 'rifty dev-server did not install the WASI transform bridge');
-  }
-  return bridge(input, options);
-}
-
-export function transformSync(_input, _options = {}) {
-  throw new NotImplementedError('esbuild.transformSync', 'the real WASI transform is async');
-}
-
-export async function build(_opts) {
-  throw new NotImplementedError('esbuild.build', 'use the WASI runner');
-}
-
-export function buildSync(_opts) {
-  throw new NotImplementedError('esbuild.buildSync', 'use the WASI runner');
-}
-
-export async function context(_opts) {
-  // Minimal context that does nothing but lets Vite's dep-pre-bundling code
-  // run to completion without throwing on construction.
-  return {
-    rebuild: async () => ({ errors: [], warnings: [], outputFiles: [], metafile: { inputs: {}, outputs: {} } }),
-    watch: async () => undefined,
-    serve: async () => undefined,
-    cancel: async () => undefined,
-    dispose: async () => undefined,
-  };
-}
-
-export async function analyzeMetafile(_metafile, _opts) {
-  return '';
-}
-
-export function analyzeMetafileSync(_metafile, _opts) {
-  return '';
-}
-
-export async function formatMessages(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
-}
-
-export function formatMessagesSync(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
-}
-
-export const default_ = {
-  version,
-  transform,
-  transformSync,
-  build,
-  buildSync,
-  context,
-  analyzeMetafile,
-  analyzeMetafileSync,
-  formatMessages,
-  formatMessagesSync,
-  initialize,
-};
-
-export { default_ as default };
-`;
-
-const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'esbuild',
-    version: SHIM_ESBUILD_VERSION,
-    main: './lib/main.js',
-    module: './lib/main.js',
-    type: 'module',
-    exports: {
-      '.': {
-        import: './lib/main.js',
-        require: './lib/main.js',
-        default: './lib/main.js',
-      },
-    },
-  },
-  null,
-  2,
-);
-
-/**
- * VFS overlay for the `esbuild` npm package. The playground writes these
- * paths into the sync mirror after install so that any `import 'esbuild'`
- * resolves to a browser-safe transform bridge instead of the real package's
- * binary launcher.
- */
-export const esbuildShimFiles: Record<string, string> = {
-  '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
-  '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
-};
-
-const SHIM_ESBUILD_BUILD_SOURCE = `// rifty: esbuild shim — BUILD path, real async WASI transform bridge
-const NotImplementedError = class extends Error {
-  constructor(feature, hint) {
-    super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
-    this.name = 'NotImplementedError';
-    this.feature = feature;
-  }
-};
-
-export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
-
-export async function initialize(_opts) {
+async function initialize(_opts) {
   return undefined;
 }
 
@@ -178,12 +82,12 @@ function decodeInput(input) {
 function transformBridge() {
   const bridge = globalThis.__riftyEsbuildTransform;
   if (typeof bridge !== 'function') {
-    throw new NotImplementedError('esbuild.transform', 'rifty build WASI bridge not installed');
+    throw new NotImplementedError('esbuild.transform', 'rifty runtime did not install the WASI transform bridge');
   }
   return bridge;
 }
 
-export async function transform(input, options = {}) {
+async function transform(input, options = {}) {
   const result = await transformBridge()(decodeInput(input), options);
   return {
     code: result.code,
@@ -194,7 +98,7 @@ export async function transform(input, options = {}) {
   };
 }
 
-export function transformSync(_input, _options = {}) {
+function transformSync(_input, _options = {}) {
   throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
 }
 
@@ -218,7 +122,7 @@ async function loadEntryThroughPlugins(opts, entry) {
     onResolve() {
       // The minimal config bridge does not traverse imports. Vite's own
       // externalize plugin may register resolvers; they are relevant only if a
-      // config imports extra modules, which remains a loud gap below.
+      // config imports extra modules — assertSingleModuleOutput keeps that loud.
     },
     onLoad(options, callback) {
       onLoad.push({ filter: options && options.filter, callback });
@@ -240,7 +144,23 @@ async function loadEntryThroughPlugins(opts, entry) {
   throw new NotImplementedError('esbuild.build.onLoad', 'rifty config bundling needs an onLoad result for the entry');
 }
 
-export async function build(opts = {}) {
+function assertSingleModuleOutput(code, entry) {
+  // Real esbuild build() BUNDLES local imports; this bridge transforms ONE
+  // module. Succeeding while the output still imports './x' would hand the
+  // caller a half-loaded config as "bundled" — a silent wrong answer. Bare
+  // specifiers stay (vite's externalize plugin marks them external; real
+  // esbuild leaves externals untouched); only relative/absolute file imports
+  // are the lie, so they refuse loud.
+  const local = /(?:\\bfrom\\s*["']|\\bimport\\s*\\(\\s*["']|\\bimport\\s*["']|\\brequire\\s*\\(\\s*["'])(\\.{1,2}\\/|\\/)/.exec(code);
+  if (local) {
+    throw new NotImplementedError(
+      'esbuild.build.bundle',
+      'rifty config bundling transforms the single entry module (' + entry + '); local file imports are not traversed — inline them or import a package',
+    );
+  }
+}
+
+async function build(opts = {}) {
   if (opts.write !== false) {
     throw new NotImplementedError('esbuild.build.write', 'rifty config bundling supports write:false only');
   }
@@ -253,6 +173,7 @@ export async function build(opts = {}) {
     sourcemap: opts.sourcemap,
   });
   const text = result.code;
+  assertSingleModuleOutput(text, entry);
   return {
     errors: [],
     warnings: result.warnings || [],
@@ -268,31 +189,59 @@ export async function build(opts = {}) {
   };
 }
 
-export function buildSync(_opts) {
+function buildSync(_opts) {
   throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
 }
 
-export async function context(_opts) {
-  throw new NotImplementedError('esbuild.context', 'vite production build does not use dep pre-bundling here');
+async function context(opts = {}) {
+  // Only the EMPTY dep-optimizer context constructs (dev dep-pre-bundling under
+  // optimizeDeps.noDiscovery finds no entries; production build never gets
+  // here). Its empty rebuild() result IS what real esbuild returns for zero
+  // entry points — honest, not a stub. Entry points would need real
+  // rebuild/watch, which the bridge cannot do: refuse loud at construction.
+  const entryPoints = opts.entryPoints;
+  const empty =
+    entryPoints === undefined ||
+    (Array.isArray(entryPoints) ? entryPoints.length === 0 : Object.keys(entryPoints).length === 0);
+  if (!empty || opts.stdin) {
+    throw new NotImplementedError(
+      'esbuild.context',
+      'rifty esbuild bridge cannot rebuild/watch entry points; only the empty dep-optimizer context (optimizeDeps.noDiscovery) is supported',
+    );
+  }
+  return {
+    rebuild: async () => ({ errors: [], warnings: [], outputFiles: [], metafile: { inputs: {}, outputs: {} } }),
+    watch: async () => undefined,
+    serve: async () => {
+      throw new NotImplementedError('esbuild.context.serve', 'esbuild serve has no rifty bridge');
+    },
+    cancel: async () => undefined,
+    dispose: async () => undefined,
+  };
 }
 
-export async function analyzeMetafile(_metafile, _opts) {
+function analyzeMetafileSync(metafile, _opts) {
+  const meta = (typeof metafile === 'string' ? JSON.parse(metafile) : metafile) || {};
+  const hasWork = Object.keys(meta.inputs || {}).length > 0 || Object.keys(meta.outputs || {}).length > 0;
+  if (hasWork) {
+    throw new NotImplementedError('esbuild.analyzeMetafile', 'rifty esbuild bridge does not produce bundle analysis');
+  }
   return '';
 }
 
-export function analyzeMetafileSync(_metafile, _opts) {
-  return '';
+async function analyzeMetafile(metafile, opts) {
+  return analyzeMetafileSync(metafile, opts);
 }
 
-export async function formatMessages(messages, _opts) {
+async function formatMessages(messages, _opts) {
   return messages.map((m) => (m && m.text) || '');
 }
 
-export function formatMessagesSync(messages, _opts) {
+function formatMessagesSync(messages, _opts) {
   return messages.map((m) => (m && m.text) || '');
 }
 
-export const default_ = {
+const api = {
   version,
   transform,
   transformSync,
@@ -305,14 +254,50 @@ export const default_ = {
   formatMessagesSync,
   initialize,
 };
-
-export { default_ as default };
 `;
 
-export const esbuildBuildShimFiles: Record<string, string> = {
-  '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
-  '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_BUILD_SOURCE,
+const SHIM_ESBUILD_ESM = `${SHIM_ESBUILD_BODY}
+export {
+  version,
+  initialize,
+  transform,
+  transformSync,
+  build,
+  buildSync,
+  context,
+  analyzeMetafile,
+  analyzeMetafileSync,
+  formatMessages,
+  formatMessagesSync,
 };
+export default api;
+`;
+
+const SHIM_ESBUILD_CJS = `${SHIM_ESBUILD_BODY}
+module.exports = api;
+`;
+
+// `type: module` classifies lib/main.js as ESM; the require condition MUST
+// point at a real .cjs body or sync require('esbuild') loud-fails in the rifty
+// loader while real Node succeeds (the lightningcss dual-entry pattern).
+const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
+  {
+    name: 'esbuild',
+    version: SHIM_ESBUILD_VERSION,
+    main: './lib/main.cjs',
+    module: './lib/main.js',
+    type: 'module',
+    exports: {
+      '.': {
+        import: './lib/main.js',
+        require: './lib/main.cjs',
+        default: './lib/main.js',
+      },
+    },
+  },
+  null,
+  2,
+);
 
 const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
 
@@ -352,79 +337,11 @@ export default lightningcss;
 const SHIM_LIGHTNINGCSS_CJS = `module.exports = require('lightningcss-wasm');
 `;
 
-/**
- * VFS overlay for the `lightningcss` npm package. Vite imports the native
- * package name, while the actual implementation comes from lightningcss-wasm.
- */
-export const lightningcssShimFiles: Record<string, string> = {
-  '/workspace/node_modules/lightningcss/package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
-  '/workspace/node_modules/lightningcss/index.mjs': SHIM_LIGHTNINGCSS_ESM,
-  '/workspace/node_modules/lightningcss/index.cjs': SHIM_LIGHTNINGCSS_CJS,
-};
-
-const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim
-function emptyProgram(code) {
-  return {
-    type: 'Program',
-    start: 0,
-    end: typeof code === 'string' ? code.length : 0,
-    body: [],
-    sourceType: 'module',
-  };
-}
-
-function shortHash(input) {
-  const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input;
-  let h1 = 0x811c9dc5, h2 = 0x1505;
-  for (let i = 0; i < bytes.length; i++) {
-    h1 = Math.imul(h1 ^ bytes[i], 0x01000193) >>> 0;
-    h2 = ((h2 << 5) + h2 + bytes[i]) >>> 0;
-  }
-  return ((BigInt(h1) << 32n) | BigInt(h2)).toString(36);
-}
-
-exports.parse = function parse(code, _opts) {
-  // Real Rollup returns a Uint8Array of an ESTree-serialised AST. Vite reads
-  // it via the parseAst wrapper. Returning an object directly skips the
-  // serialisation layer — most Vite paths that hit parseAst tolerate a stub
-  // because they only inspect imports/exports when present.
-  return emptyProgram(code);
-};
-
-exports.parseAsync = async function parseAsync(code, _opts) {
-  return emptyProgram(code);
-};
-
-exports.xxhashBase64Url = function xxhashBase64Url(input) {
-  const h = shortHash(input);
-  return h.padEnd(11, '0').slice(0, 11);
-};
-
-exports.xxhashBase36 = function xxhashBase36(input) {
-  return shortHash(input).padEnd(13, '0').slice(0, 13);
-};
-
-exports.xxhashBase16 = function xxhashBase16(input) {
-  const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input;
-  let h = 0x811c9dc5;
-  for (let i = 0; i < bytes.length; i++) {
-    h = Math.imul(h ^ bytes[i], 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-};
-`;
-
-/**
- * VFS overlay for Rollup's `dist/native.js`. Rollup ships platform-specific
- * binary bindings; we substitute a pure-JS stub that returns a minimal
- * ESTree Program plus deterministic short hashes so Vite's `parseAst` /
- * dep-graph code can proceed.
- */
-export const rollupShimFiles: Record<string, string> = {
-  '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_SHIM,
-};
-
-const ROLLUP_NATIVE_BUILD_SHIM = `// rifty: rollup native bindings shim — BUILD path, real WASM parser
+// ONE mode-independent rollup native entry (ADR-0188): always the real WASM
+// parser. `@rollup/wasm-node` is guaranteed resolvable by the `companions`
+// lockstep pin below — the dev empty-Program stub is gone (build needs the real
+// serialized AST buffer; dev is simply more faithful with it).
+const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim — real WASM parser (shadow registry, install-time)
 const native = require('@rollup/wasm-node/dist/native.js');
 
 exports.parse = native.parse;
@@ -435,35 +352,61 @@ exports.xxhashBase16 = native.xxhashBase16;
 `;
 
 /**
- * Build-only Rollup overlay. Production build needs the real serialized AST
- * buffer; the dev path keeps the cheap stub above.
+ * Install-time internals shim (ADR-0188). Applied by `@riftydev/npm-client`
+ * whenever the KEY package installs at a version inside `range`; outside the
+ * range the installer loud-throws `NotImplementedError('shadow-registry.<publicName>@<version>')`
+ * — never a stale shim silently applied.
  */
-export const rollupBuildShimFiles: Record<string, string> = {
-  '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_BUILD_SHIM,
-};
-
-export interface BrowserShimFileSet {
-  readonly packageName: string;
+export interface InternalsShim {
+  /** Semver range of installed trigger versions the files are proven against. */
+  readonly range: string;
+  /**
+   * Alias mode: write `files` into a SIBLING package dir of this name (same
+   * `node_modules` scope as the trigger) instead of into the trigger itself —
+   * materializes the ORIGINAL import name for a name-changing baked override.
+   * Absent → in-place patch of the trigger package.
+   */
+  readonly into?: string;
+  /** Files keyed by package-relative path (e.g. `dist/native.js`). */
   readonly files: Record<string, string>;
+  /**
+   * Packages the shim files require at EXACTLY the trigger's version
+   * (lockstep); the installer injects them into the dep walk (ADR-0188).
+   */
+  readonly companions?: readonly string[];
 }
 
-export const browserShimFileSets = {
-  esbuild: { packageName: 'esbuild', files: esbuildShimFiles },
-  lightningcss: { packageName: 'lightningcss', files: lightningcssShimFiles },
-  rollup: { packageName: 'rollup', files: rollupShimFiles },
-} satisfies Record<string, BrowserShimFileSet>;
-
-export type BrowserShimName = keyof typeof browserShimFileSets;
-
-export function collectBrowserShimFiles(names: readonly BrowserShimName[]): Record<string, string> {
-  const files: Record<string, string> = {};
-  for (const name of names) Object.assign(files, browserShimFileSets[name].files);
-  return files;
-}
-
-export const viteBrowserShimFiles = collectBrowserShimFiles(['esbuild', 'lightningcss', 'rollup']);
-export const viteBuildShimFiles: Record<string, string> = {
-  ...esbuildBuildShimFiles,
-  ...lightningcssShimFiles,
-  ...rollupBuildShimFiles,
+/** Install-time internals shims keyed by the INSTALLED trigger package name. */
+export const internalsShims: Record<string, InternalsShim> = {
+  // Rollup ships platform-native bindings rifty can never run; the shim
+  // delegates to @rollup/wasm-node, companion-pinned to rollup's own version
+  // (the serialized AST buffer layout is version-coupled).
+  rollup: {
+    range: '^4.0.0',
+    companions: ['@rollup/wasm-node'],
+    files: { 'dist/native.js': ROLLUP_NATIVE_SHIM },
+  },
+  // bakedOverrides installs `@esbuild/wasi-preview1` under its own name; this
+  // materializes the `esbuild` import name, delegating to the WASI bridge.
+  // EXACT-pin range: the alias files statically claim SHIM_ESBUILD_VERSION —
+  // any trigger version drift must loud-throw, not ship a lying package.json.
+  '@esbuild/wasi-preview1': {
+    range: '0.28.0',
+    into: 'esbuild',
+    files: {
+      'package.json': SHIM_ESBUILD_PACKAGE_JSON,
+      'lib/main.js': SHIM_ESBUILD_ESM,
+      'lib/main.cjs': SHIM_ESBUILD_CJS,
+    },
+  },
+  // Same for `lightningcss` → lightningcss-wasm (pure re-export delegates).
+  'lightningcss-wasm': {
+    range: '^1.32.0',
+    into: 'lightningcss',
+    files: {
+      'package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
+      'index.mjs': SHIM_LIGHTNINGCSS_ESM,
+      'index.cjs': SHIM_LIGHTNINGCSS_CJS,
+    },
+  },
 };

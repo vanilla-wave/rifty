@@ -54,13 +54,19 @@ const COMMIT_TIMEOUT_MS = 4_000;
 const COMMIT_INTERVAL_MS = 200;
 
 // Which port the switcher should show given the live set + current selection
-// (ADR-0155). Empty set → keep current (manual-input fallback owns it). Current
-// still live → keep it. Otherwise snap to the LAST (most-recently-added) entry,
-// so a fresh server auto-selects and a removed one falls back.
-export function reconcileSelectedPort(entries: PreviewPortEntry[], current: number): number {
+// (ADR-0155). Empty set → keep current (manual-input fallback owns it). A port
+// NEWLY appended since the previous reconcile auto-selects (the user just
+// started that server — `vite preview`, webpack, a node server alike; replaces
+// the old `source === 'preview'` special case, backlog:
+// playground/generic-dev-server-lifecycle). Else current-if-live, else last.
+export function reconcileSelectedPort(
+  entries: PreviewPortEntry[],
+  current: number,
+  knownPorts?: ReadonlySet<number>,
+): number {
   const last = entries.at(-1);
   if (!last) return current;
-  if (last.source === 'preview') return last.port;
+  if (knownPorts && !knownPorts.has(last.port)) return last.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }
@@ -84,12 +90,15 @@ export function PreviewPanel(props: {
 
   const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
 
-  // Keep the selected port valid against the live set: when ports exist and the
-  // current selection isn't one of them, snap to the LAST entry — so a freshly
-  // added server auto-selects and a removed one falls back. The warm-up effect +
-  // iframe stay keyed off `port()`, so the switch flows through unchanged.
+  // Keep the selected port valid against the live set: a NEWLY appended server
+  // auto-selects, a removed selection falls back to the last entry. The warm-up
+  // effect + iframe stay keyed off `port()`, so the switch flows through
+  // unchanged. `knownPorts` = the set seen by the previous reconcile.
+  let knownPorts: ReadonlySet<number> = new Set<number>();
   createEffect(() => {
-    const next = reconcileSelectedPort(entries(), port());
+    const live = entries();
+    const next = reconcileSelectedPort(live, port(), knownPorts);
+    knownPorts = new Set(live.map((e) => e.port));
     if (next !== port()) setPort(next);
   });
 

@@ -27,6 +27,15 @@ function bakedFs(): MemoryFsSync {
   write(fs, `${ROOT}/node_modules/a/node_modules/ms/index.js`, enc.encode('nested'));
   // binary content round-trips byte-exact through base64
   write(fs, `${ROOT}/node_modules/vite/blob.bin`, new Uint8Array([0, 255, 128, 7]));
+  // install-time shadow shims (ADR-0188): the bake runs the same install(), so
+  // the shimmed native entry + the alias package are tree files like any other
+  // and MUST ride the snapshot (no boot overlay recreates them anymore).
+  write(
+    fs,
+    `${ROOT}/node_modules/rollup/dist/native.js`,
+    enc.encode("require('@rollup/wasm-node/dist/native.js')"),
+  );
+  write(fs, `${ROOT}/node_modules/esbuild/package.json`, enc.encode('{"name":"esbuild"}'));
   return fs;
 }
 
@@ -53,6 +62,11 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(dec.decode(target.readFileBytesSync(`${ROOT}/package-lock.json`))).toBe(
       '{"lockfileVersion":3}',
     );
+    // install-time shim files restored verbatim (ADR-0188)
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/rollup/dist/native.js`))).toBe(
+      "require('@rollup/wasm-node/dist/native.js')",
+    );
+    expect(target.existsSync(`${ROOT}/node_modules/esbuild/package.json`)).toBe(true);
     expect(reparsed.packages).toBe(8);
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
   });

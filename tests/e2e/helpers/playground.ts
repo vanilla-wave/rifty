@@ -266,10 +266,9 @@ export async function expectTerminalContains(
   await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(terminalPattern(text));
 }
 
-export function viteDevReadyPattern(port = 5174): RegExp {
-  return new RegExp(`\\[vite\\] dev server ready on port ${port}`, 'u');
-}
-
+// `viteDevReadyPattern` (the rifty-authored `[vite] dev server ready` marker) is
+// GONE — the runtime no longer prints it (generic dev-server lifecycle); wait on
+// the LIVE pill via expectViteDevServerReady instead.
 export type InitialTerminalState = 'vite-booted' | 'idle-shell';
 
 export async function waitForViteBootOrIdleShell(
@@ -313,9 +312,7 @@ export function capturePageProblems(page: Page): CapturedPageProblems {
 }
 
 function terminalPattern(text: string | RegExp): string | RegExp {
-  if (typeof text !== 'string') return text;
-  const match = /^\[vite\] dev server ready on port (\d+)$/u.exec(text);
-  return match ? viteDevReadyPattern(Number(match[1])) : text;
+  return text;
 }
 
 export async function selectPreset(page: Page, id: string): Promise<void> {
@@ -346,6 +343,14 @@ export async function selectPreset(page: Page, id: string): Promise<void> {
   await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 5_000 });
 }
 
+/**
+ * Wait until the dev server on `port` is UP per the UI — never a rifty-authored
+ * terminal marker (the terminal carries only tool output; backlog:
+ * playground/generic-dev-server-lifecycle). Readiness signals, any of:
+ *  - the LIVE pill derived from the listening-port set (`LIVE :<port>`),
+ *  - the preview switcher listing `:<port>` (a non-primary second server),
+ *  - the tool's OWN output (`VITE vN ready` / `localhost:<port>`).
+ */
 export async function expectViteDevServerReady(
   page: Page,
   port = 5174,
@@ -353,18 +358,23 @@ export async function expectViteDevServerReady(
   slot: 'active' | number = 'active',
 ): Promise<void> {
   const ready = new RegExp(
-    `\\[vite\\] dev server ready on port ${port}|VITE v\\d+(?:\\.\\d+){0,2}\\s+ready|localhost:${port}|\\[status\\] LIVE :${port}`,
+    `VITE v\\d+(?:\\.\\d+){0,2}\\s+ready|localhost:${port}|\\[status\\] UP :${port}`,
     'u',
   );
+  const pill = page.locator('.rf-livepill[data-state="running"]', {
+    hasText: `LIVE :${port}`,
+  });
+  const switcherOption = page.locator('.rf-preview__switcher option', {
+    hasText: `:${port}`,
+  });
   await expect
     .poll(
       async () => {
         const buffer = await terminalBuffer(page, slot);
-        const live = await page
-          .getByText(`LIVE :${port}`, { exact: true })
-          .isVisible({ timeout: 250 })
-          .catch(() => false);
-        return live ? `${buffer}\n[status] LIVE :${port}` : buffer;
+        const live =
+          (await pill.isVisible({ timeout: 250 }).catch(() => false)) ||
+          (await switcherOption.count().catch(() => 0)) > 0;
+        return live ? `${buffer}\n[status] UP :${port}` : buffer;
       },
       { timeout },
     )

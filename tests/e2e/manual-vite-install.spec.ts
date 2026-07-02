@@ -41,12 +41,14 @@ test.describe('manual Vite install path', () => {
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 120_000);
 
     await runTerminalLine(page, 'npm run dev');
-    await expectTerminalContains(page, 'vite: starting dev server', 10_000);
+    // Readiness = the LIVE pill / vite's own banner (expectViteDevServerReady);
+    // no rifty-authored terminal marker exists anymore (generic dev lifecycle).
     await expectViteDevServerReady(page, 5174, 60_000);
 
     const previewFrame = page.frameLocator('iframe').first();
     const previewBody = previewFrame.locator('body');
-    await expect(previewFrame.locator('script[data-rifty-hmr-bridge]')).toHaveCount(1, {
+    // ADR-0189: the generic preview-path injection (no vite wrapper plugin).
+    await expect(previewFrame.locator('script[data-rifty-ws-bridge]')).toHaveCount(1, {
       timeout: 30_000,
     });
 
@@ -61,7 +63,7 @@ test.describe('manual Vite install path', () => {
       globalThis.addEventListener('beforeunload', () => {
         localStorage.setItem(`${key}:beforeunload`, '1');
       });
-      globalThis.addEventListener('rifty:hmr:message', (event: Event) => {
+      globalThis.addEventListener('rifty:ws:message', (event: Event) => {
         const detail = (event as CustomEvent<unknown>).detail;
         const messagesKey = `${key}:messages`;
         const messages = JSON.parse(localStorage.getItem(messagesKey) ?? '[]') as unknown[];
@@ -74,8 +76,8 @@ test.describe('manual Vite install path', () => {
       .poll(
         () =>
           previewFrame.locator('body').evaluate(() => {
-            const global = globalThis as unknown as { __riftyHmrOpen?: unknown };
-            return global.__riftyHmrOpen === true;
+            const global = globalThis as unknown as { __riftyWsBridgeOpen?: unknown };
+            return global.__riftyWsBridgeOpen === true;
           }),
         { timeout: 10_000 },
       )

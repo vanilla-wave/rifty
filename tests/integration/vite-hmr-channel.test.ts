@@ -9,6 +9,7 @@ import { createHmrBridgeToken, hmrBridgeUrl } from '../../apps/playground/src/gl
 import { PREVIEW_LOCAL_HOST } from '../../packages/io/src/index.ts';
 import { createServer as createHttpServer } from '../../packages/net/src/http/server.ts';
 import { BridgedWebSocket } from '../../packages/net/src/ws/bridge.ts';
+import { webSocketBridgeClientScript } from '../../packages/net/src/ws/browser-client-script.ts';
 
 interface ViteModule {
   createServer(config: ViteInlineConfig): Promise<ViteDevServer>;
@@ -22,10 +23,10 @@ interface ViteInlineConfig {
     port: number;
     strictPort: boolean;
     hmr: {
-      protocol: 'ws';
-      host: string;
-      clientPort: number;
-      path: string;
+      protocol?: 'ws';
+      host?: string;
+      clientPort?: number;
+      path?: string;
       server: unknown;
     };
     host: string;
@@ -143,7 +144,128 @@ describe('real Vite HMR over rifty HTTP WebSocket upgrade', () => {
       hmrHttpServer.close();
     }
   });
+
+  it('stock hmr config: the injected preview client reaches native server.ws on the default path (ADR-0189)', async () => {
+    // The browser-flow shape with NO wrapper rewrite: vite keeps its default
+    // hmr path (base '/') and the client is the generic injected
+    // `window.WebSocket` patch — it aims at the HOST PAGE origin (foreign
+    // port) like a stock `@vite/client` and remaps discovery to the guest
+    // port from the /preview/<port>/ prefix. `hmr.server` only pins vite's ws
+    // to the rifty HttpServer (in the browser require('node:http') IS rifty;
+    // this Node test must opt in).
+    const vite = await loadPlaygroundVite();
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'rifty-vite-stock-hmr-'));
+    tmpRoots.push(root);
+    await mkdir(join(root, 'src'), { recursive: true });
+    const entry = join(root, 'src/main.js');
+    await writeFile(
+      join(root, 'index.html'),
+      '<!doctype html><script type="module" src="/src/main.js"></script>',
+      'utf8',
+    );
+    await writeFile(entry, selfAcceptingModule('one'), 'utf8');
+
+    const port = await getEphemeralPort();
+    const hmrHttpServer = createHttpServer();
+    hmrHttpServer.listen({ port });
+    // 'listening' is gated on the async cross-realm bind-claim (ADR-0186) —
+    // the upgrade channel subscribes only after it.
+    await new Promise<void>((resolve) => hmrHttpServer.on('listening', () => resolve()));
+    const seen: HmrPayload[] = [];
+    let server: ViteDevServer | null = null;
+    const restoreWindow = installPreviewWindow(port);
+    let client: PreviewWindowWebSocket | null = null;
+
+    try {
+      server = await vite.createServer({
+        root,
+        base: './',
+        logLevel: 'silent',
+        server: {
+          port,
+          strictPort: true,
+          hmr: { server: hmrHttpServer },
+          host: '127.0.0.1',
+          allowedHosts: true,
+          watch: { ignored: ['**/node_modules/**'] },
+        },
+        appType: 'spa',
+        clearScreen: false,
+        optimizeDeps: { disabled: true },
+      });
+      await server.listen();
+
+      const script = webSocketBridgeClientScript({ previewPortFromPath: true });
+      // eslint-disable-next-line no-new-func
+      new Function(script)();
+      const PreviewWebSocket = (
+        globalThis as unknown as {
+          window: { WebSocket: new (url: string, protocols?: string) => PreviewWindowWebSocket };
+        }
+      ).window.WebSocket;
+      // Stock @vite/client shape: `${location.hostname}:${location.port}${base}`.
+      client = new PreviewWebSocket('ws://localhost:5273/', 'vite-hmr');
+      client.addEventListener('message', (e) => {
+        seen.push(JSON.parse(String((e as MessageEvent).data)) as HmrPayload);
+      });
+      await new Promise<void>((resolve, reject) => {
+        client?.addEventListener('open', () => resolve(), { once: true });
+        client?.addEventListener(
+          'close',
+          () => reject(new Error('stock hmr bridge connection refused')),
+          { once: true },
+        );
+      });
+      await waitForPayload(seen, (payload) => payload.type === 'connected', 'connected');
+
+      await server.transformRequest('/src/main.js');
+      await writeFile(entry, selfAcceptingModule('two'), 'utf8');
+      server.watcher.emit('change', entry);
+
+      const update = await waitForPayload(
+        seen,
+        (payload) => payload.type === 'update',
+        'Vite update payload',
+      );
+      expect(update.updates).toEqual([
+        expect.objectContaining({
+          type: 'js-update',
+          path: '/src/main.js',
+          acceptedPath: '/src/main.js',
+        }),
+      ]);
+    } finally {
+      client?.close();
+      await server?.close();
+      hmrHttpServer.close();
+      restoreWindow();
+    }
+  });
 });
+
+interface PreviewWindowWebSocket extends EventTarget {
+  close(): void;
+}
+
+/** Minimal preview-iframe `window` for the injected bridge script (Node realm). */
+function installPreviewWindow(guestPort: number): () => void {
+  const globalWithWindow = globalThis as unknown as { window: unknown };
+  const previous = globalWithWindow.window;
+  const events = new EventTarget();
+  globalWithWindow.window = {
+    location: {
+      href: `http://localhost:5273/preview/${guestPort}/`,
+      hostname: 'localhost',
+      pathname: `/preview/${guestPort}/`,
+    },
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
+  };
+  return () => {
+    globalWithWindow.window = previous;
+  };
+}
 
 async function loadPlaygroundVite(): Promise<ViteModule> {
   const playgroundRequire = createRequire(

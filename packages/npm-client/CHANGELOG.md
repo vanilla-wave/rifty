@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Install-time shadow internals shims + loud substitution lines (ADR-0188).** `install()` now
+  applies `@riftydev/shadow-registry` `internalsShims` after linking, into each pinned copy's
+  actual install path (nested/hoisted-aware): rollup's `dist/native.js` → real
+  `@rollup/wasm-node` parser (companion-injected into the dep walk at EXACTLY rollup's version;
+  replay re-derives it — no lockfile format change), plus the `esbuild`/`lightningcss` alias
+  packages materialized next to their baked-override targets. Installed trigger version outside
+  the shim's proven range → `NotImplementedError('shadow-registry.<pkg>@<version>')`; a replayed
+  companion at a drifted version → `EBROKENLOCK`. Every baked substitution prints via the new
+  `InstallOptions.onSubstitution` sink (default `console.warn`), on fresh install AND lockfile
+  replay: `npm: esbuild@<range> → @esbuild/wasi-preview1@<v> (substituted from shadow registry,
+  ADR-0051)` and `npm: rollup@<v> internals patched from shadow registry`. User `overrides` do
+  not print (`resolveOverride` now returns `source: 'user' | 'baked'`). Tests in
+  `installer-shadow-shims.test.ts`.
+
 ### Fixed
 
 - **Lockfile fast-path replays shadow/user overrides (eddy on override packages).** The

@@ -239,7 +239,11 @@ export class HttpServer extends EventEmitter {
       } satisfies WebSocketBridgeFrame);
       return;
     }
-    if ((url.protocol !== 'ws:' && url.protocol !== 'wss:') || portForWsUrl(url) !== this.port) {
+    // No URL-port check: frames arrive only on THIS server's port-keyed
+    // discovery channel — the channel IS the port intent. The remapped preview
+    // client (ADR-0189) keeps the stock URL (host page origin, foreign port);
+    // the consumer ('upgrade' listener / npm ws) validates path/protocols.
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
       return;
     }
     const key = isValidWebSocketKey(frame.key) ? frame.key : createWebSocketKey();
@@ -394,11 +398,6 @@ function connRefusedError(address: string, port: number): Error {
 
 function streamWriteAfterEndError(): Error {
   return Object.assign(new Error('write after end'), { code: 'ERR_STREAM_WRITE_AFTER_END' });
-}
-
-function portForWsUrl(url: URL): number {
-  if (url.port !== '') return Number.parseInt(url.port, 10);
-  return url.protocol === 'wss:' ? 443 : 80;
 }
 
 function normaliseProtocols(protocols: readonly string[] | undefined): readonly string[] {

@@ -3,15 +3,20 @@
  * child spawns serve:true (kernel never reaps it), so the bootstrap OWNS the
  * decision the kernel drain hook would make for a run-to-completion child:
  *  - the entry listened (registered a port) → it is a SERVER: serve each port's
- *    cross-realm preview, post the ports to the owner, STAY ALIVE (return).
+ *    cross-realm preview, post the ports to the owner, STAY ALIVE (return) and
+ *    keep watching the registry (a later close()/re-listen reposts the set).
  *  - else → run-to-completion: await the event-loop drain (ADR-0152 — timers/
  *    imports + unhandledrejection→exit1), then process.exit(code).
  *
  * Real CLIs such as Vite may call listen() and then keep their top-level promise
- * pending. So the lifecycle watches registered ports while the entry is still
- * running; a port wins the branch without waiting for top-level return.
- * Pure + dep-injected so both branches unit-test without a Worker.
+ * pending. So the lifecycle watches for a port while the entry is still running;
+ * a port wins the branch without waiting for top-level return. Event-sourced
+ * from the net registry's register/unregister (no polling — backlog:
+ * playground/generic-dev-server-lifecycle). Pure + dep-injected so both
+ * branches unit-test without a Worker.
  */
+import { watchServedPorts } from './port-watch.ts';
+
 interface ProcessExitLike {
   code?: unknown;
   exitCode?: unknown;
@@ -39,90 +44,65 @@ export interface NodeLifecycleDeps {
   readonly runEntry: () => Promise<void>;
   /** Ports the entry registered via listen() (net registry listPorts). */
   readonly listPorts: () => number[];
+  /** Subscribe to net-registry port changes (onRegistryChange); returns unsubscribe. */
+  readonly onPortsChange: (cb: () => void) => () => void;
   /** Await event-loop drain (keepalive awaitDrain). */
   readonly awaitDrain: () => Promise<void>;
   /** Wire `/preview/<port>/` for a listened port; returns a teardown. */
   readonly servePreview: (port: number) => () => void;
-  /** Report the listened ports to the owner (rifty:node-listening). */
+  /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
   readonly postListening: (ports: number[]) => void;
   /** Raw `process.exitCode` at natural exit (honoured per Node — ADR-0157 D4). */
   readonly readExitCode: () => unknown;
   /** Exit the worker with a code (process.exit). */
   readonly exit: (code: number) => void;
-  /** Test seam for the port-poll loop; production uses setTimeout. */
-  readonly wait?: (ms: number) => Promise<void>;
 }
 
 type EntryOutcome =
   | { readonly kind: 'returned' }
   | { readonly kind: 'threw'; readonly err: unknown };
 
-const DEFAULT_LISTEN_POLL_MS = 25;
-const activePreviewTeardowns = new Set<() => void>();
-
-interface UnrefHandle {
-  unref?: () => unknown;
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const handle = setTimeout(resolve, ms) as unknown as UnrefHandle;
-    handle.unref?.();
-  });
-}
-
-function servePorts(deps: NodeLifecycleDeps, ports: readonly number[]): void {
-  for (const port of ports) activePreviewTeardowns.add(deps.servePreview(port));
-  deps.postListening([...ports]);
-}
-
 type DrainOutcome =
   | { readonly kind: 'pending' }
   | { readonly kind: 'resolved' }
-  | {
-      readonly kind: 'rejected';
-      readonly err: unknown;
-    };
+  | { readonly kind: 'rejected'; readonly err: unknown };
 
-async function waitForListenOrDrain(
-  deps: NodeLifecycleDeps,
-  waitForPoll: (ms: number) => Promise<void>,
-): Promise<'served' | 'drained'> {
-  let drainOutcome: DrainOutcome = { kind: 'pending' };
-  const currentDrainOutcome = (): DrainOutcome => drainOutcome;
-  void deps.awaitDrain().then(
-    () => {
-      drainOutcome = { kind: 'resolved' };
-    },
-    (err) => {
-      drainOutcome = { kind: 'rejected', err };
-    },
-  );
-
-  for (;;) {
-    const ports = deps.listPorts();
-    if (ports.length > 0) {
-      servePorts(deps, ports);
-      return 'served';
-    }
-    const outcome = currentDrainOutcome();
-    if (outcome.kind === 'rejected') throw outcome.err;
-    if (outcome.kind === 'resolved') return 'drained';
-    await waitForPoll(DEFAULT_LISTEN_POLL_MS);
-  }
+function servePorts(deps: NodeLifecycleDeps, ports: readonly number[]): Map<number, () => void> {
+  const served = new Map<number, () => void>();
+  for (const port of ports) served.set(port, deps.servePreview(port));
+  deps.postListening([...ports]);
+  return served;
 }
 
 export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<void> {
-  const waitForPoll = deps.wait ?? wait;
+  // Wake-versioned event loop: any of {entry settled, drain settled, port
+  // registered/unregistered} bumps the version and releases the waiters, so the
+  // decision loop re-checks state exactly when something changed — never a timer.
+  let version = 0;
+  const waiters: Array<() => void> = [];
+  const wake = (): void => {
+    version += 1;
+    while (waiters.length > 0) waiters.shift()?.();
+  };
+  const nextWake = (seen: number): Promise<void> => {
+    if (version !== seen) return Promise.resolve();
+    return new Promise<void>((resolve) => waiters.push(resolve));
+  };
+  // Subscribe BEFORE running the entry: a synchronous listen() during import can
+  // never race the subscription (the loop also re-reads listPorts each pass).
+  const unsubscribePorts = deps.onPortsChange(wake);
+
   let lateErrorsShouldSurface = false;
   let entryOutcome: EntryOutcome | null = null;
   const currentEntryOutcome = (): EntryOutcome | null => entryOutcome;
   void deps.runEntry().then(
     () => {
       entryOutcome = { kind: 'returned' };
+      wake();
     },
     (err) => {
       entryOutcome = { kind: 'threw', err };
+      wake();
       if (!lateErrorsShouldSurface) return;
       const code = exitCodeOf(err);
       if (code !== null) deps.exit(code);
@@ -133,13 +113,33 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
     },
   );
 
+  let drainStarted = false;
+  let drainOutcome: DrainOutcome = { kind: 'pending' };
+  const currentDrainOutcome = (): DrainOutcome => drainOutcome;
+  const startDrain = (): void => {
+    if (drainStarted) return;
+    drainStarted = true;
+    void deps.awaitDrain().then(
+      () => {
+        drainOutcome = { kind: 'resolved' };
+        wake();
+      },
+      (err) => {
+        drainOutcome = { kind: 'rejected', err };
+        wake();
+      },
+    );
+  };
+
   for (;;) {
-    // Let a synchronously-returned/rejected entry settle before inspecting ports.
-    // This preserves the listen-then-throw invariant: a failing entry must not
+    const seen = version;
+    // Let a synchronously-settled entry land before inspecting ports. This
+    // preserves the listen-then-throw invariant: a failing entry must not
     // publish a preview slot just because it registered one before throwing.
     await Promise.resolve();
     const outcome = currentEntryOutcome();
     if (outcome?.kind === 'threw') {
+      unsubscribePorts();
       const code = exitCodeOf(outcome.err);
       if (code !== null) {
         deps.exit(code);
@@ -147,25 +147,40 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
       }
       throw outcome.err; // surfaced by the kernel worker-entry → stderr + exit 1
     }
+    const drained = currentDrainOutcome();
+    if (drained.kind === 'rejected') {
+      unsubscribePorts();
+      throw drained.err;
+    }
 
     const ports = deps.listPorts();
     if (ports.length > 0) {
-      servePorts(deps, ports);
+      const served = servePorts(deps, ports);
       lateErrorsShouldSurface = true;
+      // Keep following the registry for the realm's whole life: close() reposts
+      // `[]` (pill leaves running), a re-listen re-serves + reposts.
+      watchServedPorts({
+        listPorts: deps.listPorts,
+        subscribe: deps.onPortsChange,
+        servePreview: deps.servePreview,
+        post: deps.postListening,
+        served,
+      });
+      unsubscribePorts();
       return; // serve:true keeps the realm alive; parent kill stops it
     }
 
-    if (outcome?.kind === 'returned') break;
-    await waitForPoll(DEFAULT_LISTEN_POLL_MS);
+    if (outcome?.kind === 'returned') {
+      startDrain();
+      if (currentDrainOutcome().kind === 'resolved') {
+        unsubscribePorts();
+        // Natural exit honours process.exitCode (Node parity, D4): a clean
+        // return after `process.exitCode = N` exits N, not 0. A tail THROW still
+        // maps to exit 1 above (uncaught wins, Node-faithful).
+        deps.exit(normalizeExitCode(deps.readExitCode()));
+        return;
+      }
+    }
+    await nextWake(seen);
   }
-
-  const drainResult = await waitForListenOrDrain(deps, waitForPoll);
-  if (drainResult === 'served') {
-    lateErrorsShouldSurface = true;
-    return; // serve:true keeps the realm alive; parent kill stops it
-  }
-  // Natural exit honours process.exitCode (Node parity, D4): a clean return after
-  // `process.exitCode = N` exits N, not 0. A tail THROW still maps to exit 1 above
-  // (uncaught wins, Node-faithful).
-  deps.exit(normalizeExitCode(deps.readExitCode()));
 }

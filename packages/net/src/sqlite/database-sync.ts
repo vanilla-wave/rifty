@@ -4,11 +4,11 @@
  * layer-build time (Spike C): construct, `exec` for migration DDL + PRAGMAs,
  * `close`.
  *
- * Engine bring-up is async (WASM) but this surface is fully synchronous — see
- * {@link ./engine.ts}. Requires `initSqliteEngine()` to have RESOLVED before any
- * `DatabaseSync` is constructed; the constructor calls synchronous
- * `getSqliteEngine()`, which throws "engine not initialized" otherwise (no
- * silent stub).
+ * This surface is fully synchronous; the engine must be up first — via awaited
+ * `initSqliteEngine()`, `initSqliteEngineSync(bytes)`, or the lazy
+ * provider-driven bring-up in the builtin factory (see {@link ./engine.ts}).
+ * Otherwise the constructor's `getSqliteEngine()` throws "engine not
+ * initialized" (no silent stub).
  *
  * Scope: constructor, `open`, `exec`, `close`, `prepare`. Other `DatabaseSync`
  * members (`location`, `function`, `aggregate`, `createSession`,
@@ -78,9 +78,9 @@ export class DatabaseSync {
    *   the first cut.
    * @param options - See {@link DatabaseSyncOptions}. Defaults match Node:
    *   `open: true`, `enableForeignKeyConstraints: true`.
-   * @throws {Error} If the sql.js engine has not been brought up — await
-   *   `initSqliteEngine()` before constructing. Synchronous half of the
-   *   async-bring-up bridge (ADR-0065 D1).
+   * @throws {Error} If the sql.js engine has not been brought up (no awaited
+   *   `initSqliteEngine()`, no sync bring-up, no provider seam). Synchronous
+   *   half of the engine-bridge (ADR-0065 D1).
    */
   constructor(filename: string, options?: DatabaseSyncOptions) {
     this.#filename = filename;

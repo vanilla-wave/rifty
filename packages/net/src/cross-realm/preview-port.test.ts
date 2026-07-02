@@ -65,6 +65,261 @@ describe('previewPortChannelUrl', () => {
   });
 });
 
+describe('cross-realm preview — text/html WS bridge injection (ADR-0189)', () => {
+  it('injects the marker-guarded bridge script into text/html responses (content-length honest)', async () => {
+    const html = '<!doctype html><html><head></head><body>app</body></html>';
+    const bytes = new TextEncoder().encode(html);
+    cleanup.add(
+      serveCrossRealmPreview(5111, async () => {
+        return new Response(bytes, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-length': String(bytes.byteLength),
+          },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5111);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain('<script data-rifty-ws-bridge>');
+    expect(body).toContain('__riftyWebSocketBridgeInstalled');
+    expect(body).toContain('<body>app</body>');
+    expect(Number(response.headers.get('content-length'))).toBe(
+      new TextEncoder().encode(body).byteLength,
+    );
+  });
+
+  it('leaves non-HTML responses byte-identical', async () => {
+    const payload = JSON.stringify({ rows: [1, 2, 3] });
+    cleanup.add(
+      serveCrossRealmPreview(5112, async () => {
+        return new Response(payload, {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5112);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/api'));
+    expect(await response.text()).toBe(payload);
+  });
+
+  it('decompresses gzip html, injects, and re-serves identity (content-length honest)', async () => {
+    const html = '<!doctype html><html><head></head><body>zipped</body></html>';
+    const gzipped = await compressBytes(new TextEncoder().encode(html), 'gzip');
+    cleanup.add(
+      serveCrossRealmPreview(5114, async () => {
+        return new Response(gzipped, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html',
+            'content-encoding': 'gzip',
+            'content-length': String(gzipped.byteLength),
+          },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5114);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain('<script data-rifty-ws-bridge>');
+    expect(body).toContain('<body>zipped</body>');
+    expect(response.headers.get('content-encoding')).toBeNull();
+    expect(Number(response.headers.get('content-length'))).toBe(
+      new TextEncoder().encode(body).byteLength,
+    );
+  });
+
+  it('refuses html with an undecodable content-encoding LOUD (no silent uninjected pass)', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5115, async () => {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'text/html', 'content-encoding': 'br' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5115);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('content-encoding');
+  });
+
+  it('decodes a header-declared non-utf8 charset and re-serves utf-8 (content-type re-stamped)', async () => {
+    // 'привет' in windows-1251 — a utf-8 decode would mojibake it.
+    const cyr1251 = new Uint8Array([0xef, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2]);
+    const head = new TextEncoder().encode('<!doctype html><html><head></head><body>');
+    const tail = new TextEncoder().encode('</body></html>');
+    const bytes = new Uint8Array(head.byteLength + cyr1251.byteLength + tail.byteLength);
+    bytes.set(head, 0);
+    bytes.set(cyr1251, head.byteLength);
+    bytes.set(tail, head.byteLength + cyr1251.byteLength);
+    cleanup.add(
+      serveCrossRealmPreview(5117, async () => {
+        return new Response(bytes, {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=windows-1251' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5117);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    const body = await response.text();
+    expect(body).toContain('<script data-rifty-ws-bridge>');
+    expect(body).toContain('привет');
+    // The rewritten body is utf-8 (TextEncoder has no other output) — the
+    // header must say so, or the browser re-decodes utf-8 bytes as 1251.
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+  });
+
+  it('refuses an unknown header charset LOUD (no mojibake rewrite)', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5118, async () => {
+        return new Response('<html></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=x-unknown-9' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5118);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('charset');
+  });
+
+  it('refuses a META-declared non-utf8 charset LOUD when the header carries none', async () => {
+    const html = '<html><head><meta charset="windows-1251"></head><body>x</body></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5119, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5119);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('charset');
+  });
+
+  it('refuses the http-equiv META form of a non-utf8 charset LOUD too', async () => {
+    const html =
+      '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1251"></head><body>x</body></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5121, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5121);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('charset');
+  });
+
+  it('a META utf-8 declaration (either form) injects normally', async () => {
+    const html =
+      '<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>x</body></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5122, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5122);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('<script data-rifty-ws-bridge>');
+  });
+
+  it('warns LOUD when the document CSP would block the injected inline script (still injects)', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      cleanup.add(
+        serveCrossRealmPreview(5120, async () => {
+          return new Response('<html><head></head><body>x</body></html>', {
+            status: 200,
+            headers: {
+              'content-type': 'text/html',
+              'content-security-policy': "default-src 'self'",
+            },
+          });
+        }),
+      );
+      const handler = bridgeCrossRealmPreview(5120);
+      cleanup.add(handler.dispose);
+
+      const response = await handler(new Request('http://preview.local/'));
+      const body = await response.text();
+      expect(body).toContain('<script data-rifty-ws-bridge>');
+      expect(errors.mock.calls.some((call) => String(call[0]).includes('CSP'))).toBe(true);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('leaves content-encoded non-HTML byte-identical', async () => {
+    const compressedish = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02]);
+    cleanup.add(
+      serveCrossRealmPreview(5116, async () => {
+        return new Response(compressedish, {
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream', 'content-encoding': 'gzip' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5116);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(compressedish);
+  });
+
+  it('does not double-inject an already-marked document', async () => {
+    const html = '<html><head><script data-rifty-ws-bridge>/* here */</script></head></html>';
+    cleanup.add(
+      serveCrossRealmPreview(5113, async () => {
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5113);
+    cleanup.add(handler.dispose);
+
+    const response = await handler(new Request('http://preview.local/'));
+    expect(await response.text()).toBe(html);
+  });
+});
+
 describe('cross-realm preview port — happy path', () => {
   it('round-trips a GET → Response across the BroadcastChannel hop', async () => {
     cleanup.add(
@@ -725,3 +980,13 @@ describe('cross-realm preview port — SSE ceiling (ADR-0048)', () => {
     expect(await settled.r.text()).toContain('net.preview.cross-realm-unbounded-body');
   });
 });
+
+async function compressBytes(
+  bytes: Uint8Array,
+  format: 'gzip' | 'deflate',
+): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([bytes as unknown as BlobPart])
+    .stream()
+    .pipeThrough(new CompressionStream(format));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}

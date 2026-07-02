@@ -47,6 +47,7 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
+import { applyInternalsShims, assertShimSupported, companionRequestsFor } from './shadow-shims.ts';
 import {
   type TarballCache,
   VfsTarballCache,
@@ -95,6 +96,16 @@ export interface InstallOptions {
    * resolution cache (`--prefer-offline` analogue). Inert without `resolverUrl`.
    */
   prefer?: 'cached' | 'online';
+  /**
+   * Substitution-provenance sink (ADR-0188). One complete line per
+   * shadow-registry substitution — baked redirects (`npm: esbuild@^0.28.0 →
+   * @esbuild/wasi-preview1@0.28.0 (substituted from shadow registry, ADR-0051)`)
+   * and internals-shim applications (`npm: rollup@4.62.2 internals patched
+   * from shadow registry`) — on fresh install AND lockfile replay. User
+   * `overrides` do not report (the user authored those). Default:
+   * `console.warn` — a substitution is never silent.
+   */
+  onSubstitution?: (line: string) => void;
 }
 
 /** Payload for {@link InstallOptions.onPackage}. */
@@ -236,6 +247,9 @@ export async function install(
     cache: tarballCache,
     getTarball: (url) => opts.registry.getTarball(url),
   };
+  const substitutions = createSubstitutionReporter(
+    opts.onSubstitution ?? ((line) => console.warn(line)),
+  );
 
   let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
 
@@ -264,7 +278,14 @@ export async function install(
     }
   }
 
-  const plan = chooseSource(existingLockfile, dependencies, optionalDependencies, rootName, opts);
+  const plan = chooseSource(
+    existingLockfile,
+    dependencies,
+    optionalDependencies,
+    rootName,
+    opts,
+    substitutions,
+  );
 
   const resolved = await walkAndPin(
     plan.source,
@@ -280,6 +301,9 @@ export async function install(
   // warn output is identical whichever path the install took.
   warnUnsatisfiedPeers(packages);
   await link(opts.vfs, opts.cwd, packages);
+  // ADR-0188: install-time internals shims into the actual installed dirs —
+  // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
+  await applyInternalsShims(opts.vfs, opts.cwd, packages, substitutions.line);
   const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
@@ -602,6 +626,54 @@ function declineEddy(reason: string): false {
 }
 
 /**
+ * Per-install substitution-provenance reporter (ADR-0188). `redirect` dedupes
+ * within one run (the same baked redirect can surface via the top-level
+ * pre-pass AND the walk); wording is the backlog contract — it MUST name the
+ * shadow registry.
+ */
+interface SubstitutionReporter {
+  redirect(source: string, range: string | null, target: string, version: string): void;
+  line(text: string): void;
+}
+
+function createSubstitutionReporter(sink: (line: string) => void): SubstitutionReporter {
+  const seen = new Set<string>();
+  return {
+    redirect(source, range, target, version): void {
+      const key = `${source}@${range ?? '*'}→${target}@${version}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      sink(
+        `npm: ${source}@${range ?? '*'} → ${target}@${version} (substituted from shadow registry, ADR-0051)`,
+      );
+    },
+    line(text): void {
+      sink(text);
+    },
+  };
+}
+
+/**
+ * Replay-path top-level redirects: the walk only sees post-override names
+ * (`applyOverridesToRequest` rewrote the request), so a top-level baked
+ * redirect must be reported here, with the version the lockfile pins.
+ */
+function reportTopLevelBakedRedirects(
+  request: Record<string, string>,
+  parent: string,
+  overrides: OverrideMap | undefined,
+  topLevelPins: Map<string, string>,
+  reporter: SubstitutionReporter,
+): void {
+  for (const [name, range] of Object.entries(request)) {
+    const override = resolveOverride(name, parent, overrides);
+    if (!override || override.source !== 'baked' || override.name === name) continue;
+    const version = topLevelPins.get(override.name);
+    if (version) reporter.redirect(name, range, override.name, version);
+  }
+}
+
+/**
  * Pick the resolution strategy. Lockfile fast path wins iff a valid v3 lockfile
  * exists, covers every top-level request after override application, and no
  * override redirects the locked subgraph to an unpinned name. Else live-resolve.
@@ -612,6 +684,7 @@ function chooseSource(
   optionalDependencies: Record<string, string>,
   rootName: string,
   opts: InstallOptions,
+  substitutions: SubstitutionReporter,
 ): SourcePlan {
   const effectiveDependencies = applyOverridesToRequest(dependencies, rootName, opts.overrides);
   const effectiveOptionalDependencies = applyOverridesToRequest(
@@ -629,14 +702,25 @@ function chooseSource(
       topLevelPins &&
       subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
+      reportTopLevelBakedRedirects(
+        { ...dependencies, ...optionalDependencies },
+        rootName,
+        opts.overrides,
+        topLevelPins,
+        substitutions,
+      );
       return {
-        source: createLockfileSource(existingLockfile, opts),
+        source: createLockfileSource(existingLockfile, opts, substitutions),
         dependencies: effectiveDependencies,
         optionalDependencies: effectiveOptionalDependencies,
       };
     }
   }
-  return { source: createRegistrySource(opts), dependencies, optionalDependencies };
+  return {
+    source: createRegistrySource(opts, substitutions),
+    dependencies,
+    optionalDependencies,
+  };
 }
 
 /**
@@ -730,6 +814,9 @@ async function walkAndPin(
   ): Promise<void> {
     return (async () => {
       const pin = await source.resolve(name, range, { parentName, parentInstallPath });
+      // ADR-0188: a shimmed package outside its shim's proven range must fail
+      // loudly BEFORE anything installs — never a stale shim silently applied.
+      assertShimSupported(pin.name, pin.version);
 
       // Did THIS visit newly claim the flat slot? (Either `choosePlacement`'s
       // first-wins set, or the block below.) Needed so an optional-boundary
@@ -848,6 +935,15 @@ async function walkAndPin(
         } catch (err) {
           warnOptional(desc, err);
         }
+      }
+      // ADR-0188: same-version companion pins for shadow internals shims
+      // (rollup ↔ @rollup/wasm-node lockstep). Injected on BOTH sources —
+      // replay re-derives them from (name, version); a pre-shim lockfile
+      // misses the entry and throws EBROKENLOCK (delete + re-install).
+      const companions = companionRequestsFor(pin.name, pin.version);
+      prefetchPackuments(companions, installPath, pin.name);
+      for (const [depName, depRange] of Object.entries(companions)) {
+        await visit(depName, depRange, installPath, pin.name, optional);
       }
     })();
   }
@@ -971,9 +1067,13 @@ async function pinToPackage(
  * entry: the contract is "lockfile is authoritative or it's an error".
  * Returning `null` would leave a partial set that reads as network slowness.
  */
-function createLockfileSource(lockfile: Lockfile, opts: InstallOptions): ResolutionSource {
+function createLockfileSource(
+  lockfile: Lockfile,
+  opts: InstallOptions,
+  substitutions: SubstitutionReporter,
+): ResolutionSource {
   return {
-    async resolve(name, _range, ctx): Promise<ResolvedPin> {
+    async resolve(name, range, ctx): Promise<ResolvedPin> {
       // Apply the same shadow/user override the live-resolve source does
       // (`createRegistrySource`, ADR-0015 baked table + user `overrides`) BEFORE
       // the lockfile lookup. The writer stores a redirect under its TARGET key
@@ -1027,6 +1127,10 @@ function createLockfileSource(lockfile: Lockfile, opts: InstallOptions): Resolut
           },
         );
       }
+      // ADR-0188: replay prints the same substitution line live-resolve does.
+      if (override && override.source === 'baked' && override.name !== name) {
+        substitutions.redirect(name, range, effectiveName, entry.version);
+      }
       return {
         name: effectiveName,
         version: entry.version,
@@ -1078,7 +1182,10 @@ function assertNativeSupported(name: string, version: string, manifest: VersionM
  * not detected here post-M11; each call picks the best version for its own
  * (name, range) and the walk decides placement.
  */
-function createRegistrySource(opts: InstallOptions): ResolutionSource {
+function createRegistrySource(
+  opts: InstallOptions,
+  substitutions: SubstitutionReporter,
+): ResolutionSource {
   const packumentCache = opts.packumentCache ?? new Map<string, Packument>();
   const PACKUMENT_CONCURRENCY = 8;
   const packumentSem = new Semaphore(PACKUMENT_CONCURRENCY);
@@ -1155,6 +1262,11 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       const manifest = packument.versions[pick];
       if (!manifest) {
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
+      }
+
+      // ADR-0188: baked redirects are never silent — user-visible provenance.
+      if (override && override.source === 'baked' && override.name !== name) {
+        substitutions.redirect(name, range, effectiveName, pick);
       }
 
       // ADR-0051. A shadow override already redirected to a trusted pure-JS

@@ -17,6 +17,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
 import { BridgedWebSocket } from '../ws/bridge.ts';
+import { portChannelNameForPort } from '../ws/channel.ts';
 import type { ServerResponse } from './response.ts';
 import httpDefault, { createServer } from './server.ts';
 
@@ -277,6 +278,55 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     expect(serverBufferedAmount).toBe(0);
     ws.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
+    wss.close();
+    httpServer.close();
+  });
+
+  it('accepts a remapped open frame whose URL keeps the page-origin port (ADR-0189)', async () => {
+    // The preview bridge client keys the discovery channel by the GUEST port
+    // (from the iframe's /preview/<port>/ prefix) but keeps the stock client's
+    // URL — the browser-visible page origin, whose port is NOT the guest port.
+    // Arriving on this server's own port channel IS the port intent; the URL
+    // port must not be re-validated against it.
+    const { WebSocketServer } = requireFromHere('ws') as {
+      WebSocketServer: RealWsServerCtor;
+    };
+    const port = 4111; // NOT 4110 — the double-listen EADDRINUSE test above holds that claim
+    const httpServer = createServer();
+    const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    wss.on('connection', (socket) => {
+      socket.send('remap-ok');
+    });
+    httpServer.listen({ port });
+    // 'listening' is gated on the async cross-realm bind-claim (ADR-0186) —
+    // the upgrade channel subscribes only after it; a microtask is not enough.
+    await new Promise<void>((resolve) => httpServer.on('listening', () => resolve()));
+
+    const channel = new BroadcastChannel(portChannelNameForPort(port));
+    const seen: Array<{ type?: string; data?: unknown }> = [];
+    channel.addEventListener('message', (e) => {
+      seen.push((e as MessageEvent).data as { type?: string; data?: unknown });
+    });
+    channel.postMessage({
+      type: 'open',
+      cid: 'remap-cid-1',
+      url: 'ws://localhost:5273/ws',
+      protocols: [],
+    });
+    await waitFor(() =>
+      seen.some((frame) => frame.type === 'msg' && String(frame.data) === 'remap-ok'),
+    );
+
+    expect(seen.some((frame) => frame.type === 'open-ack')).toBe(true);
+    channel.postMessage({
+      type: 'close',
+      cid: 'remap-cid-1',
+      code: 1000,
+      reason: '',
+      from: 'client',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    channel.close();
     wss.close();
     httpServer.close();
   });

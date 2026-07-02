@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(fileURLToPath(new URL('./build-boot.ts', import.meta.url)), 'utf8');
 
-describe('Vite build/preview shim overlay', () => {
-  it('re-roots build shims onto the active project root', () => {
-    expect(source).toContain('function overlayBuildShims(root: string): void');
-    expect(source).toContain('reRootBuildShimPath(path, root)');
-    expect(source).toContain('overlayBuildShims(root)');
+describe('Vite build/preview boot', () => {
+  it('carries zero shim glue — internals shims are applied at install time (ADR-0188)', () => {
+    expect(source).not.toContain('overlayBuildShims');
+    expect(source).not.toContain('reRootBuildShimPath');
+    expect(source).not.toContain('ShimFiles');
   });
 
   it('uses Vite default absolute base and rejects malformed .assets paths', () => {

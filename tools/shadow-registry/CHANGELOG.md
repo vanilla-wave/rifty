@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Shim data restructured for install-time application (ADR-0188).** New `internalsShims`
+  table keyed by the INSTALLED trigger package with package-relative file paths, a proven
+  `range`, alias `into` (esbuild/lightningcss import names), and `companions` (rollup →
+  `@rollup/wasm-node`, same-version lockstep). Replaces the `/workspace`-path-keyed
+  `browserShimFileSets`/`viteBrowserShimFiles`/`viteBuildShimFiles` exports (removed; the
+  npm-client installer is now the only applier). The rollup dev empty-Program stub is deleted —
+  ONE mode-independent `dist/native.js` always delegates to the real `@rollup/wasm-node` parser.
+
+- **esbuild shim: dual entry + every unbridgeable surface loud (ADR-0188 review).**
+  `require('esbuild')` now works like real Node: the shim ships `lib/main.cjs` beside the ESM
+  `lib/main.js` (one shared body; `exports.require → ./lib/main.cjs`) — the old require condition
+  pointed into a `type:module` `.js`, which the rifty loader loud-fails on sync require. The fake
+  happy paths are gone: `build()` refuses an entry whose transformed output still imports LOCAL
+  files (`esbuild.build.bundle` — the bridge transforms one module; real esbuild would bundle);
+  `context()` constructs only with EMPTY entry points (its empty `rebuild()` matches real
+  esbuild's zero-entry result; entries refuse at construction, `serve()` refuses always);
+  `analyzeMetafile*()` refuses non-empty metafiles instead of returning `''`. The alias
+  metadata no longer lies about its version: package.json + the `version` export claim
+  0.28.0 (the exact `bakedOverrides` trigger pin — was a stale static `0.21.5`), and the
+  shim `range` is the same EXACT pin so a bumped override loud-throws at install until
+  the static claims move with it (guard test pins the coupling).
+
 ### Added
 
 - `viteBuildShimFiles` adds a production-build overlay: Rollup's native entry

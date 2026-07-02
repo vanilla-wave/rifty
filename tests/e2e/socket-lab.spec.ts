@@ -18,7 +18,7 @@ const EXPECTED_MATRIX: Record<string, { expected: string; probe: string }> = {
   'ws-server-local-upgrade': { expected: 'supported', probe: 'auto' },
   'net-http-framed-server': { expected: 'supported', probe: 'auto' },
   'net/ws-client-external-host': { expected: 'supported', probe: 'manual' },
-  'browser-preview-websocket': { expected: 'not-yet', probe: 'auto' },
+  'browser-preview-websocket': { expected: 'supported', probe: 'auto' },
   'net-real-tcp-socket-semantics': { expected: 'ceiling', probe: 'auto' },
   'udp-dgram-surface': { expected: 'ceiling', probe: 'auto' },
   'tls-https-surface': { expected: 'not-yet', probe: 'auto' },
@@ -96,6 +96,13 @@ test.describe('Socket Lab preset — honest socket capability gate', () => {
       timeout: 60_000,
     });
     await expect(frame.locator('.row[data-outcome="fail"]')).toHaveCount(0);
+    // ADR-0189: the browser-side probe must have genuinely round-tripped (a
+    // pending/unrun probe would still show 0 failures).
+    await expect(
+      frame
+        .locator('.row', { hasText: 'Plain preview page native WebSocket' })
+        .locator('.row__status'),
+    ).toHaveText('verified', { timeout: 30_000 });
     await expect(frame.locator('.summary')).toContainText('failing');
     await expect(frame.locator('.summary')).toContainText('0 failing');
   });

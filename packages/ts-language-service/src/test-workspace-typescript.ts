@@ -5,21 +5,33 @@ import type { createMemoryFs } from '@riftydev/vfs/internal';
 
 const nodeRequire = createRequire(import.meta.url);
 
+export interface WorkspaceTypeScriptLayout {
+  /** Package-relative dir receiving typescript.js + lib*.d.ts. Default 'lib' (stock npm layout). */
+  readonly entryDir?: string;
+  /** Replacement package.json text (relocated-`main` / `exports` variants). Default: the real manifest. */
+  readonly packageJsonText?: string;
+}
+
 export function writeRealWorkspaceTypeScript(
   fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
   projectRoot: string,
+  layout: WorkspaceTypeScriptLayout = {},
 ): void {
   const enc = new TextEncoder();
   const packageJson = nodeRequire.resolve('typescript/package.json');
   const packageRoot = path.dirname(packageJson);
   const libDir = path.join(packageRoot, 'lib');
+  const entryDir = layout.entryDir ?? 'lib';
   const target = `${projectRoot}/node_modules/typescript`;
-  fsSync.mkdirSync(`${target}/lib`, { recursive: true });
-  fsSync.writeFileSync(`${target}/package.json`, enc.encode(readFileSync(packageJson, 'utf8')));
+  fsSync.mkdirSync(`${target}/${entryDir}`, { recursive: true });
+  fsSync.writeFileSync(
+    `${target}/package.json`,
+    enc.encode(layout.packageJsonText ?? readFileSync(packageJson, 'utf8')),
+  );
   for (const name of readdirSync(libDir)) {
     if (name !== 'typescript.js' && !/^lib(\.[^.]+)*\.d\.ts$/.test(name)) continue;
     fsSync.writeFileSync(
-      `${target}/lib/${name}`,
+      `${target}/${entryDir}/${name}`,
       enc.encode(readFileSync(path.join(libDir, name), 'utf8')),
     );
   }

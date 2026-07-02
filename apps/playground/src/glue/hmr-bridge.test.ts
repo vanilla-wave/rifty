@@ -1,29 +1,22 @@
 /**
- * Unit tests for the cross-realm HMR bridge (ADR-0017 phase 1).
+ * Unit tests for the cross-realm HMR bridge (ADR-0017 phase 1) — mini-dev's
+ * explicit broadcaster half only. The vite plugin/client-script half died with
+ * ADR-0189 (the preview path injects the generic bridge into every text/html
+ * response; stock vite HMR rides it).
  *
  * These tests prove the wiring contract:
  *   1. `setupHmrBridge` exposes the ordinary WebSocketServer surface that a
  *      cross-realm client can connect to using `hmrBridgeUrl(port)`.
  *   2. `broadcast()` from the page side reaches the client.
- *   3. The Vite plugin `transformIndexHtml` injects the generic browser
- *      WebSocket bridge once (idempotent across reload cycles).
- *
- * The full browser HMR roundtrip is covered by the e2e spec
- * (`tests/e2e/m10-hmr.spec.ts`), which exercises the iframe-loaded HMR
- * client end-to-end. Here we run the bridge in a single Node realm and use
- * `BridgedWebSocket` to prove old opt-in clients still interop with the
- * ordinary server surface.
  */
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { BridgedWebSocket } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 import {
   createHmrBridgeToken,
-  createHmrBridgeVitePlugin,
   hmrBridgeUrl,
   hmrClientScript,
   setupHmrBridge,
-  viteHmrClientScript,
 } from './hmr-bridge.ts';
 
 describe('hmrBridgeUrl', () => {
@@ -103,47 +96,6 @@ describe('setupHmrBridge', () => {
   });
 });
 
-describe('createHmrBridgeVitePlugin', () => {
-  it('injects the Vite HMR transport before @vite/client runs', () => {
-    const plugin = createHmrBridgeVitePlugin({ port: 3200, token: 'plugin-token' });
-    const html = '<!doctype html><html><body><div id="app"></div></body></html>';
-    const transformed = plugin.transformIndexHtml(html);
-    if (typeof transformed === 'string' || Array.isArray(transformed)) {
-      throw new Error('expected a Vite tag transform object');
-    }
-    expect(transformed.html).toBe(html);
-    expect(transformed.tags).toEqual([
-      expect.objectContaining({
-        tag: 'script',
-        injectTo: 'head-prepend',
-        attrs: expect.objectContaining({ 'data-rifty-hmr-bridge': '' }),
-      }),
-    ]);
-    expect(String(transformed.tags?.[0]?.children)).toContain(hmrBridgeUrl(3200, 'plugin-token'));
-  });
-
-  it('is idempotent: running twice does not duplicate the script', () => {
-    const plugin = createHmrBridgeVitePlugin({ port: 3201 });
-    const html = '<html><body></body></html>';
-    const once = plugin.transformIndexHtml(html);
-    const renderedOnce =
-      typeof once === 'string' || Array.isArray(once)
-        ? String(once)
-        : `${once.html}<script data-rifty-hmr-bridge>${once.tags?.[0]?.children}</script>`;
-    const twice = plugin.transformIndexHtml(renderedOnce);
-    expect(twice).toBe(renderedOnce);
-  });
-
-  it('does not ship the reload-only client for real Vite', () => {
-    const plugin = createHmrBridgeVitePlugin({ port: 3202 });
-    const transformed = plugin.transformIndexHtml('<div id="app"></div>');
-    if (typeof transformed === 'string' || Array.isArray(transformed)) {
-      throw new Error('expected a Vite tag transform object');
-    }
-    expect(String(transformed.tags?.[0]?.children)).not.toContain('location.reload()');
-  });
-});
-
 describe('hmrClientScript', () => {
   it('produces valid JS (parses without SyntaxError)', () => {
     const script = hmrClientScript(3300);
@@ -161,18 +113,5 @@ describe('hmrClientScript', () => {
     const script = hmrClientScript(3302);
     expect(script).toContain('location.reload()');
     expect(script).toContain('var eventPrefix = "rifty:hmr"');
-  });
-});
-
-describe('viteHmrClientScript', () => {
-  it('produces valid JS that installs the generic WebSocket bridge before Vite', () => {
-    const script = viteHmrClientScript(3303, 'vite-token');
-    expect(() => new Function(script)).not.toThrow();
-    expect(script).toContain('window.WebSocket');
-    expect(script).toContain('__riftyWebSocketBridgeInstalled');
-    expect(script).toContain(hmrBridgeUrl(3303, 'vite-token'));
-    expect(script).not.toContain('RiftyViteHmrWebSocket');
-    expect(script).not.toContain("protocols === 'vite-hmr'");
-    expect(script).not.toContain('location.reload()');
   });
 });

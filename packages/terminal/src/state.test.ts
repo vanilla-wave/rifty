@@ -93,4 +93,44 @@ describe('terminal state store', () => {
       env: { OK: 'yes' },
     });
   });
+
+  it('round-trips the recorded dev command (sync + async)', async () => {
+    const devCommand = { line: 'npm run start:webpack', cwd: '/workspace/fork' };
+    const fs = fakeFs();
+    saveTerminalState(fs, { cwd: '/workspace', env: {}, devCommand });
+    expect(loadTerminalState(fs, '/workspace').devCommand).toEqual(devCommand);
+
+    const vfs = fakeVfs();
+    await saveTerminalStateAsync(vfs, { cwd: '/workspace', env: {}, devCommand });
+    expect((await loadTerminalStateAsync(vfs, '/workspace')).devCommand).toEqual(devCommand);
+  });
+
+  it('loads no dev command when none was saved', () => {
+    const fs = fakeFs();
+    saveTerminalState(fs, { cwd: '/workspace', env: {} });
+    expect(loadTerminalState(fs, '/workspace').devCommand).toBeUndefined();
+  });
+
+  it('drops a malformed dev command on parse, keeping cwd/env', () => {
+    const malformed: unknown[] = [
+      'vite', // non-object
+      { line: '', cwd: '/workspace' }, // empty line
+      { line: 42, cwd: '/workspace' }, // non-string line
+      { line: 'vite', cwd: 'relative' }, // relative cwd
+      { line: 'vite' }, // missing cwd
+      { cwd: '/workspace' }, // missing line
+      null,
+    ];
+    for (const devCommand of malformed) {
+      const fs = fakeFs();
+      fs.mkdirSync('/workspace/.rifty', { recursive: true });
+      fs.writeFileSync(
+        TERMINAL_STATE_PATH,
+        new TextEncoder().encode(JSON.stringify({ cwd: '/workspace/app', env: {}, devCommand })),
+      );
+      const loaded = loadTerminalState(fs, '/workspace');
+      expect(loaded.devCommand).toBeUndefined();
+      expect(loaded.cwd).toBe('/workspace/app');
+    }
+  });
 });

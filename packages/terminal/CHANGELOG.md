@@ -4,6 +4,9 @@
 
 ### Added
 
+- `TerminalState.devCommand` (`{ line, cwd }`) — optional recorded dev-server
+  command, round-tripped by the sync + async state stores; validated on parse
+  (non-empty line, absolute cwd; malformed → dropped, cwd/env kept).
 - `RiftyTerminalOptions.banner` — optional content-agnostic onboarding banner
   printed ONCE on the first `mount()`, before the first prompt. The host owns
   the copy (and any ANSI styling / `\r\n`); this package ships none. Not

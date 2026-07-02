@@ -1,14 +1,10 @@
-import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { viteBrowserShimFiles, viteBuildShimFiles } from '../glue/esbuild-shim.ts';
-import { viteHmrClientScript } from '../glue/hmr-bridge.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const SHIM_ROOT_PREFIX = '/workspace';
 const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const VITE_CLI_KEEPALIVE_NEEDLE = 'this.runMatchedCommand();';
 const VITE_CLI_KEEPALIVE_PATCH = `var __riftyAction = this.runMatchedCommand();
@@ -45,10 +41,8 @@ const VITE_CLI_PREVIEW_PATCH_MARKER = 'configFile: false,';
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'run';
 
 export interface ViteCliPrepareOptions {
-  readonly hmr?: {
-    readonly enabled: boolean;
-    readonly port: number;
-  };
+  /** Force `server.hmr: false` — Vite 8 keeps HMR off pending Rolldown socket parity (ADR-0161). */
+  readonly hmrOff?: boolean;
   readonly userConfigPath?: string;
 }
 
@@ -58,22 +52,10 @@ declare global {
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
 }
 
-function reRootShimPath(shimPath: string, root: string): string {
-  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
-    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
-    : shimPath;
-}
-
-function overlayShims(root: string, mode: ViteCliMode): void {
-  const fs = syncMirror();
-  const files = mode === 'build' || mode === 'dev' ? viteBuildShimFiles : viteBrowserShimFiles;
-  for (const [path, content] of Object.entries(files)) {
-    const np = normalizePath(reRootShimPath(path, root));
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
-
+// NOT shadow-registry shims (those apply at install time, ADR-0188): these
+// patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
+// keepalive pin (CAC never awaits async actions) and the preview inline-config
+// (executes only under `vite preview`; needle-guarded, loud on drift).
 function installCliActionPatches(root: string, mode: ViteCliMode): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
@@ -120,33 +102,10 @@ function relativeImportSpecifier(fromDir: string, targetPath: string): string {
   return rel.startsWith('.') ? rel : `./${rel}`;
 }
 
-function pluginSource(port: number, token: string): string {
-  const script = viteHmrClientScript(port, token);
-  return `function riftyHmrBridgePlugin() {
-  const marker = 'data-rifty-hmr-bridge';
-  const script = ${JSON.stringify(script)};
-  return {
-    name: 'rifty:hmr-bridge',
-    configureServer(server) {
-      globalThis.__riftyActiveViteServer = server;
-    },
-    transformIndexHtml(html) {
-      if (html.includes(marker)) return html;
-      return {
-        html,
-        tags: [{ tag: 'script', attrs: { [marker]: '' }, children: script, injectTo: 'head-prepend' }],
-      };
-    },
-  };
-}`;
-}
-
 function wrapperSource(opts: {
   readonly userConfigPath: string | null;
   readonly wrapperDir: string;
-  readonly hmrEnabled: boolean;
-  readonly port: number;
-  readonly token: string;
+  readonly hmrOff: boolean;
 }): string {
   const userImport =
     opts.userConfigPath === null
@@ -154,21 +113,22 @@ function wrapperSource(opts: {
       : `import __riftyUserConfig from ${JSON.stringify(
           relativeImportSpecifier(opts.wrapperDir, opts.userConfigPath),
         )};`;
-  const hmrConfig = opts.hmrEnabled
-    ? `{
-        protocol: 'ws',
-        host: ${JSON.stringify(PREVIEW_LOCAL_HOST)},
-        clientPort: ${opts.port},
-        path: ${JSON.stringify(`__hmr/${encodeURIComponent(opts.token)}`)},
-      }`
-    : 'false';
-  const plugins = opts.hmrEnabled ? '[riftyHmrBridgePlugin()]' : '[]';
-  const mergedHmr = opts.hmrEnabled
-    ? `userHmr === false ? false : { ...${hmrConfig}, ...objectOrEmpty(userHmr) }`
-    : 'false';
+  // Stock HMR (ADR-0189): the user's `server.hmr` flows through untouched —
+  // the generic preview WS bridge carries vite's own server.ws. ADR-0161 pins
+  // Vite 8 hmr:false until Rolldown socket parity is re-proven.
+  const forcedHmr = opts.hmrOff ? 'hmr: false,' : '';
   return `${userImport}
 
-${pluginSource(opts.port, opts.token)}
+function riftyViteServerHandlePlugin() {
+  return {
+    name: 'rifty:vite-server-handle',
+    configureServer(server) {
+      // Editor writes reach the CLI child as rifty:vite-file-change frames; the
+      // VFS fires no watcher events, so invalidation needs the live server handle.
+      globalThis.__riftyActiveViteServer = server;
+    },
+  };
+}
 
 function objectOrEmpty(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -183,7 +143,6 @@ function mergeRiftyConfig(userConfig) {
   const user = objectOrEmpty(userConfig);
   const userServer = objectOrEmpty(user.server);
   const userOptimizeDeps = objectOrEmpty(user.optimizeDeps);
-  const userHmr = userServer.hmr;
   return {
     ...user,
     base: user.base ?? './',
@@ -198,9 +157,9 @@ function mergeRiftyConfig(userConfig) {
       strictPort: userServer.strictPort ?? true,
       host: userServer.host ?? true,
       allowedHosts: userServer.allowedHosts ?? true,
-      hmr: ${mergedHmr},
+      ${forcedHmr}
     },
-    plugins: [...pluginArray(user.plugins), ...${plugins}],
+    plugins: [...pluginArray(user.plugins), riftyViteServerHandlePlugin()],
   };
 }
 
@@ -227,9 +186,7 @@ function writeViteCliConfigWrapper(root: string, opts: ViteCliPrepareOptions): v
       wrapperSource({
         userConfigPath,
         wrapperDir: dirname(wrapperPath),
-        hmrEnabled: opts.hmr?.enabled ?? false,
-        port: opts.hmr?.port ?? 5173,
-        token: globalThis.crypto?.randomUUID?.() ?? `hmr-${Date.now().toString(36)}`,
+        hmrOff: opts.hmrOff === true,
       }),
     ),
   );
@@ -242,7 +199,6 @@ export async function prepareViteCli(
 ): Promise<void> {
   if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
   installCliActionPatches(root, mode);
-  overlayShims(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
   if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
 }

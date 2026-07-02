@@ -5,9 +5,9 @@
  * `public/snapshots/`. Run via `pnpm snapshots:bake` after changing a baked
  * template's dependency maps; the asset is committed (deploys stay hermetic).
  *
- * Same installer, same shadow overrides, same native-dep gate as the worker —
- * the baked tree is byte-equivalent to what a worker-side install produces
- * (minus the esbuild/rollup shim overlay, which the worker applies at boot).
+ * Same installer, same shadow overrides + install-time internals shims
+ * (ADR-0188), same native-dep gate as the worker — the baked tree is
+ * byte-equivalent to what a worker-side install produces, shims included.
  */
 // TODO(backlog: playground/baked-snapshot-regeneration)
 import { mkdirSync, writeFileSync } from 'node:fs';

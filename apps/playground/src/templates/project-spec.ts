@@ -85,8 +85,6 @@ interface NodeProjectSpecBase extends ProjectSpecBase {
 /** Template whose worker runs the entry as a long-running Node server program. */
 export interface NodeServerProjectSpec extends NodeProjectSpecBase {
   readonly runtime: 'node-server';
-  /** Bring up the sql.js WASM engine (`node:sqlite`) before importing the entry. */
-  readonly sqlite: boolean;
 }
 
 /** Template whose worker runs the entry once and surfaces output in the terminal. */
@@ -124,7 +122,6 @@ export interface ViteBootstrapConfig extends BootstrapConfigBase {
 
 export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
   readonly runtime: 'node-server';
-  readonly sqlite: boolean;
 }
 
 export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
@@ -296,7 +293,7 @@ export function resolveBootstrapConfig(
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
     if (spec.runtime === 'node-cli') return { ...base, runtime: 'node-cli', seedFiles };
-    return { ...base, runtime: 'node-server', sqlite: spec.sqlite, seedFiles };
+    return { ...base, runtime: 'node-server', seedFiles };
   }
   const seedFiles: Record<string, string> = {
     ...initializedGitFiles(root),

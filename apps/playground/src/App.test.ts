@@ -40,7 +40,10 @@ describe('App terminal startup wiring', () => {
   // stays enforced for both runtimes and both setup kinds.
   it('auto-starts the active preset through the command that owns the real worker lifecycle', () => {
     expect(source).toContain(
-      'void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()))',
+      'void runTerminalSequence(\n' +
+        '        session.id,\n' +
+        '        bootLinesOverride ?? presetBootLines(preset, activeRoot()),\n' +
+        '      );',
     );
     expect(source).not.toContain("['npm install', 'npm run dev']");
     // hardcoded boot literals bypassing the dispatch helper are banned
@@ -93,9 +96,12 @@ describe('App terminal startup wiring', () => {
     expect(restore).toContain('if (!(await trackSwitch(switchTo(idx.activeId)))) return;');
     expect(restore).toContain('await ensureWorkspaceOwnerStarted(true);');
     // The relaunch — over the persisted (OPFS-preloaded) tree, never a re-seed —
-    // serialized through the preset-transition queue like every other launch.
+    // serialized through the preset-transition queue like every other launch. It
+    // replays the RECORDED dev command of the previously running session (a fork
+    // may have swapped the dev tool), falling back to template boot lines.
+    expect(restore).toContain('void queuePresetTransition(() =>');
     expect(restore).toContain(
-      'void queuePresetTransition(() => runVitePreset(presetForId(activeStarterId())));',
+      'restoreBootLines(props.terminalPersistence.initialState.devCommand, preset, activeRoot())',
     );
     // The boot decision delegates to the restore path (still boot-gated once).
     const bootEffect = source.match(
@@ -468,10 +474,10 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('isDevServerLine');
     expect(source).not.toContain('runViteCommand');
     expect(source).not.toContain('DevServerContext');
-    // the page wires the preview SW route on the owner-reported port + token
-    expect(source).toContain(
-      'wirePreviewBridge(frame.port, workspaceOwner().previewOwnerToken, frame.previewScope)',
-    );
+    // Bridge wiring lives SOLELY on the pty:preview set effect — wiring the
+    // derived dev frame too would transiently double-bridge the primary port
+    // (C3 clobber; the generic dev-server lifecycle).
+    expect(source).not.toContain('wirePreviewBridge(frame.port');
   });
 
   it('keys non-dev preview bridges by port and preview scope', () => {
@@ -494,7 +500,10 @@ describe('App terminal startup wiring', () => {
 
   it('loads and persists terminal environment state', () => {
     expect(source).toContain('env: props.terminalPersistence.initialState.env');
-    expect(source).toContain('saveState({ cwd: session.cwd, env: session.env })');
+    // cwd/env persist per command; the recorded dev command rides along so a
+    // later cwd/env save never wipes it (single terminal-state file).
+    expect(source).toContain('savedShellState = { cwd: session.cwd, env: session.env };');
+    expect(source).toContain('saveState({ ...savedShellState, devCommand: savedDevCommand })');
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
@@ -596,10 +605,10 @@ describe('App terminal startup wiring', () => {
       /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.freshConsole\(session\.id, terminalWelcomeBanner\);/,
     );
     expect(runPreset).toMatch(
-      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(\s*restartSessionId,\s*restartGeneration,\s*preset,\s*bootLinesOverride,\s*\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
-      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?const booted = await waitForPresetBoot\(\s*session\.id,\s*generation,\s*templateForPreset\(preset\)\s*\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
+      /void runTerminalSequence\(\s*session\.id,\s*bootLinesOverride \?\? presetBootLines\(preset, activeRoot\(\)\),\s*\);[\s\S]*?const booted = await waitForPresetBoot\(session\.id, generation, templateForPreset\(preset\)\);[\s\S]*?if \(!booted\) return;[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 
@@ -675,9 +684,11 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('wires page-side bridges for non-dev preview ports (node servers and vite preview)', () => {
-    expect(source).toContain(".filter((p) => p.source !== 'dev-server' && p.port !== devPort)");
-    expect(source).not.toContain(".filter((p) => p.source === 'node' && p.port !== devPort)");
+  it('wires page-side bridges for EVERY previewable port through the one set path', () => {
+    // The pty:preview set (deduped by port in the owner registry) is the single
+    // wiring source — no dev-source/devPort exclusions, no second wiring path.
+    expect(source).toContain('const entries = previewPorts();');
+    expect(source).not.toContain(".filter((p) => p.source !== 'dev-server'");
   });
 
   it('keeps worker snapshots from reloading the preview iframe', () => {

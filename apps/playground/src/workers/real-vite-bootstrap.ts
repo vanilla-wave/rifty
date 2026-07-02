@@ -48,7 +48,7 @@ import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
 } from '../glue/install-stamp.ts';
-import { type NodeChildMessage, isNodeChildMessage } from '../glue/node-child-ipc.ts';
+import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
@@ -58,7 +58,6 @@ import { reconcileOwnerIndexAtBoot, recoverIndex } from '../glue/project-index.t
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
-  type PtyDevServer,
   isPageToOwner,
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
@@ -67,6 +66,7 @@ import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
+import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import {
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
@@ -118,23 +118,11 @@ import {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const VITE_DEFAULT_DEV_PORT = 5173;
 const VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH = '.rifty/vite-cli.config.mjs';
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
 const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
 const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
-
-function devServerFrame(
-  sid: string | undefined,
-  frame: Omit<PtyDevServer, 'type' | 'sid'>,
-): PtyDevServer {
-  return {
-    type: 'pty:dev-server',
-    ...(sid === undefined ? {} : { sid }),
-    ...frame,
-  };
-}
 
 function ptySidFromContext(ctx: CommandContext): string | undefined {
   const sid = ctx.env[PTY_SESSION_ENV];
@@ -143,6 +131,8 @@ function ptySidFromContext(ctx: CommandContext): string | undefined {
 
 registerNetBuiltins();
 registerSqliteBuiltin();
+// node:sqlite self-initializes at first require.
+installSqliteWasmSyncProvider();
 
 function log(line: string): void {
   // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
@@ -288,12 +278,6 @@ function viteCliMode(args: readonly string[]): ViteCliMode {
   return 'dev';
 }
 
-function parsePositivePort(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : null;
-}
-
 function createPreviewScope(): string {
   return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
 }
@@ -302,28 +286,16 @@ function previewScopeFromEnv(env: Record<string, string | undefined>): string | 
   return env.RIFTY_PREVIEW_SCOPE || undefined;
 }
 
-function withPreviewScope(
-  ctx: CommandContext,
-  previewScope = createPreviewScope(),
-): CommandContext {
+function withPreviewScope(ctx: CommandContext, previewScope?: string): CommandContext {
   return {
     ...ctx,
     env: {
       ...ctx.env,
-      RIFTY_PREVIEW_SCOPE: previewScope,
+      // An already-minted scope (e.g. the vite CLI env prep) is preserved so the
+      // child's serveCrossRealmPreview and the page bridge key on the same value.
+      RIFTY_PREVIEW_SCOPE: previewScope ?? ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope(),
     },
   };
-}
-
-function viteCliPort(args: readonly string[], fallback: number): number {
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === undefined) continue;
-    if (arg === '--port' || arg === '-p') return parsePositivePort(args[i + 1]) ?? fallback;
-    if (arg.startsWith('--port='))
-      return parsePositivePort(arg.slice('--port='.length)) ?? fallback;
-  }
-  return fallback;
 }
 
 function viteConfigArg(args: readonly string[]): string | null {
@@ -374,8 +346,8 @@ function withViteCliEnv(
   args: readonly string[],
   ctx: CommandContext,
   opts?: {
-    readonly hmrEnabled: boolean;
-    readonly port: number;
+    /** ADR-0161: the active template pins Vite 8 server.hmr:false. */
+    readonly hmrOff: boolean;
   },
 ): CommandContext {
   if (binNameOf(binPath) !== 'vite') return ctx;
@@ -394,14 +366,10 @@ function withViteCliEnv(
       ...(previewMode
         ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
         : {}),
-      ...(mode === 'dev' && opts
-        ? {
-            RIFTY_VITE_CLI_HMR: opts.hmrEnabled ? '1' : '0',
-            RIFTY_VITE_CLI_PORT: String(viteCliPort(args, opts.port)),
-            ...userConfigEnv,
-          }
-        : {}),
-      ...(mode === 'preview' ? userConfigEnv : {}),
+      // Stock HMR needs no env (ADR-0189 — the generic preview bridge carries
+      // vite's own server.ws); only the ADR-0161 hmr-off pin is threaded.
+      ...(mode === 'dev' && opts?.hmrOff ? { RIFTY_VITE_CLI_HMR_OFF: '1' } : {}),
+      ...(previewMode ? userConfigEnv : {}),
     },
   };
 }
@@ -511,23 +479,15 @@ async function bootShellOwner(opts: {
   // running/stopped frames the page pill already consumes; this ADDS the mirror, it
   // does not replace the status path).
   //
-  // A hoisted function declaration (not a const arrow) so it can reference the
-  // `const previews` below without a use-before-init: `send` is visible at the
-  // `createPreviewRegistry({ send })` call site (hoisting), and `previews` is
-  // initialized before `send` ever runs — both stay `const`-clean (no `let`).
   function send(frame: OwnerToPageFrame): void {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
     if (frame.type === 'pty:exit') publishOwnerState();
-    if (frame.type === 'pty:dev-server') {
-      if (frame.status === 'running' && frame.port !== undefined)
-        previews.setDevServer(frame.port, frame.previewScope);
-      else if (frame.status === 'stopped') previews.clearDevServer();
-    }
   }
 
-  // Multi-port preview registry (ADR-0155/0174): one set of previewable ports —
-  // the co-resident dev server's slot (mirrored in `send` above), real
-  // `vite preview`, plus each running `node <file>` / server-capable `.bin`.
+  // Multi-port preview registry (ADR-0155/0174) + the SINGLE `pty:dev-server`
+  // authority: the LIVE pill derives from the listening-port set — any guest
+  // server (vite, webpack-dev-server, bare node:http) flips it; no bin-name
+  // keying.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
 
   // The persistent owner is spawned once with the default template; a preset
@@ -581,10 +541,10 @@ async function bootShellOwner(opts: {
   // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
   const devServer = createDevServerController({
-    send,
+    lifecycle: previews,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: async (signal, devLog) => {
+    boot: async (signal, devLog, devSid) => {
       const cleanForSwitch = shouldCleanForDevBootWithInstallState({
         lastTemplateId: lastDevTemplateId,
         lastRoot: lastDevRoot,
@@ -653,6 +613,13 @@ async function bootShellOwner(opts: {
           previewScope: createPreviewScope(),
         },
         onSnapshotDirty: publishOwnerState,
+        // Post-ready port changes (the entry called server.close() / re-listened):
+        // update the dev slot so the pill tracks the child's REAL port set.
+        onPortsChanged: (ports, previewScope) => {
+          const next = ports[0];
+          if (next === undefined) previews.clearDevServer();
+          else previews.setDevServer(next, previewScope, devSid);
+        },
         // Owner realm → real OWNER OPFS drain. The child's install writes land in
         // THIS realm's write-through queue over fs.* RPC; the child's own flush is
         // a no-op (remote SyncRpcFsSync has none). Drain here on dev-ready so the
@@ -663,14 +630,23 @@ async function bootShellOwner(opts: {
     },
   });
 
-  let activeViteDevChild: BinWorkerHandle | null = null;
+  // Live foreground bin children — editor writes are forwarded to EVERY one so
+  // HMR invalidation is not keyed on a bin name; a child without an active vite
+  // server ignores the frame (node-entry-bootstrap's isViteFileChangeMessage
+  // handler no-ops). HMR itself is stock (ADR-0189 generic preview WS bridge);
+  // the vite-NAMED remainder is the wrapper's forced options in
+  // withViteCliArgs/withViteCliEnv below — owned by backlog:
+  // net/preview-websocket-bridge (acceptance: per-option retirement).
+  const liveBinChildren = new Set<BinWorkerHandle>();
   // Editor writes land via the vfs-write bridge; forward them to the running dev
   // server's HMR (the virtual FS fires no real watcher events) + republish.
   const onVfsWrite = (paths: readonly string[]): void => {
     publishOwnerState();
     for (const path of paths) {
       devServer.notifyFileChanged(path);
-      activeViteDevChild?.send?.({ type: 'rifty:vite-file-change', path });
+      for (const child of liveBinChildren) {
+        child.send?.({ type: 'rifty:vite-file-change', path });
+      }
     }
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
@@ -678,77 +654,38 @@ async function bootShellOwner(opts: {
 
   const vfs = new SyncMirrorVfs();
   const registry = createProxiedRegistryClient();
-  let vitePreviewActive = false;
   let binRunSeq = 0;
   const binPreviewSids = new WeakMap<object, string>();
-  const onViteListening = (
-    req: { readonly args: readonly string[] },
-    message: NodeChildMessage,
-    ctx: CommandContext,
-  ) => {
-    const firstPort = message.ports[0];
-    if (firstPort === undefined) return;
-    const mode = viteCliMode(req.args);
-    const previewScope = message.previewScope ?? previewScopeFromEnv(ctx.env);
-    if (mode === 'preview') {
-      vitePreviewActive = true;
-      previews.setPreview(firstPort, previewScope);
-      ctx.stdout.write(`[vite] preview ready on port ${firstPort}\n`);
-      return;
-    }
-    if (mode === 'dev') {
-      ctx.stdout.write(`[vite] dev server ready on port ${firstPort}\n`);
-      send(
-        devServerFrame(ptySidFromContext(ctx), {
-          status: 'running',
-          port: firstPort,
-          url: `/preview/${firstPort}/`,
-          ...(previewScope === undefined ? {} : { previewScope }),
-        }),
-      );
-    }
-  };
+  const binChildHandles = new WeakMap<object, BinWorkerHandle>();
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
-  // the real `.bin` shim. For `vite` we only mirror lifecycle/preview state; the
-  // installed CLI owns command parsing, config loading, dev/build/preview behavior.
+  // the real `.bin` shim. Lifecycle is UNIFORM — the child posts its listening
+  // port set (`rifty:node-listening`, sourced from the net registry's
+  // register/unregister events); the preview registry derives the LIVE pill from
+  // it. No bin-name dispatch: webpack-dev-server or a bare server CLI gets the
+  // same preview + pill wiring vite does.
   const childBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl, {
-    onStart: (req, ctx) => {
-      const name = binNameOf(req.shimPath);
-      if (name !== 'vite') binPreviewSids.set(req, `bin-${++binRunSeq}`);
-      if (name === 'vite' && viteCliMode(req.args) === 'dev') {
-        const port = parsePositivePort(req.env.RIFTY_VITE_CLI_PORT) ?? devCfg.port;
-        ctx.stdout.write(`[real-vite/worker] starting dev server on port ${port}...\n`);
-        send(devServerFrame(ptySidFromContext(ctx), { status: 'starting' }));
-      }
+    onStart: (req) => {
+      binPreviewSids.set(req, `bin-${++binRunSeq}`);
     },
     onSpawn: (req, handle) => {
-      if (binNameOf(req.shimPath) === 'vite' && viteCliMode(req.args) === 'dev') {
-        activeViteDevChild = handle;
-      }
+      binChildHandles.set(req, handle);
+      liveBinChildren.add(handle);
     },
     onMessage: (req, message, ctx) => {
       if (!isNodeChildMessage(message)) return;
-      if (binNameOf(req.shimPath) === 'vite') {
-        onViteListening(req, message, ctx);
-        return;
-      }
       const sid = binPreviewSids.get(req);
-      if (sid !== undefined)
-        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env));
+      if (sid === undefined) return;
+      previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
+        ptySid: ptySidFromContext(ctx),
+        cwd: ctx.cwd,
+        labelBase: binNameOf(req.shimPath),
+      });
     },
-    onExit: (req, ctx) => {
+    onExit: (req) => {
+      const handle = binChildHandles.get(req);
+      if (handle) liveBinChildren.delete(handle);
       const sid = binPreviewSids.get(req);
       if (sid !== undefined) previews.removeBySid(sid);
-      if (binNameOf(req.shimPath) !== 'vite') return;
-      const mode = viteCliMode(req.args);
-      if (mode === 'dev') {
-        activeViteDevChild = null;
-        send(devServerFrame(ptySidFromContext(ctx), { status: 'stopped' }));
-      }
-      if (mode === 'preview' && vitePreviewActive) {
-        vitePreviewActive = false;
-        previews.clearPreview();
-      }
     },
   });
   const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
@@ -757,18 +694,9 @@ async function bootShellOwner(opts: {
       binPath,
       args,
       ctx,
-      devCfg.runtime === 'vite'
-        ? {
-            hmrEnabled: devCfg.hmrEnabled,
-            port: VITE_DEFAULT_DEV_PORT,
-          }
-        : undefined,
+      devCfg.runtime === 'vite' && !devCfg.hmrEnabled ? { hmrOff: true } : undefined,
     );
-    return childBinExecutor(
-      binPath,
-      viteArgs,
-      binNameOf(binPath) === 'vite' ? viteCtx : withPreviewScope(viteCtx),
-    );
+    return childBinExecutor(binPath, viteArgs, withPreviewScope(viteCtx));
   };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
@@ -792,7 +720,12 @@ async function bootShellOwner(opts: {
   const runDevServer = async (ctx: CommandContext): Promise<number> => {
     const signal = ctx.signal ?? new AbortController().signal;
     try {
-      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk), ptySidFromContext(ctx));
+      await devServer.run(
+        signal,
+        (chunk) => ctx.stdout.write(chunk),
+        ptySidFromContext(ctx),
+        ctx.cwd,
+      );
       return 130; // resolves only when `signal` aborts (Ctrl-C)
     } catch (err) {
       if (signal.aborted) return 130;
@@ -929,7 +862,11 @@ async function bootShellOwner(opts: {
       const previewScope = createPreviewScope();
       return ownerNodeExecutor(entryPath, [...scriptArgs], withPreviewScope(ctx, previewScope), {
         sid,
-        onListening: (id, ports, scope) => previews.addNode(id, ports, scope ?? previewScope),
+        onListening: (id, ports, scope) =>
+          previews.addNode(id, ports, scope ?? previewScope, {
+            ptySid: ptySidFromContext(ctx),
+            cwd: ctx.cwd,
+          }),
         onExit: (id) => previews.removeBySid(id),
       });
     };
@@ -987,7 +924,7 @@ async function bootShellOwner(opts: {
   const server = createPtyServer({
     send,
     makeShell,
-    onDevServerReq: () => devServer.publish(),
+    onDevServerReq: () => previews.publishDev(),
     // ADR-0155: answer a page subscribe by re-emitting the full preview-port set.
     onPreviewReq: () => previews.publish(),
     // Re-resolve the dev-server config for the current preset (ADR-0148) so a

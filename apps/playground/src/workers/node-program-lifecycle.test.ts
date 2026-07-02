@@ -5,10 +5,32 @@ import {
   runNodeProgramLifecycle,
 } from './node-program-lifecycle.ts';
 
-function deps(over: Partial<NodeLifecycleDeps> = {}): NodeLifecycleDeps {
+/** Fake net registry: a mutable port set + change events (onRegistryChange shape). */
+function fakeRegistry(initial: number[] = []) {
+  const ports = new Set<number>(initial);
+  const listeners = new Set<() => void>();
   return {
+    listPorts: () => [...ports].sort((a, b) => a - b),
+    onPortsChange: (cb: () => void) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    listen(port: number) {
+      ports.add(port);
+      for (const cb of [...listeners]) cb();
+    },
+    close(port: number) {
+      ports.delete(port);
+      for (const cb of [...listeners]) cb();
+    },
+  };
+}
+
+function deps(over: Partial<NodeLifecycleDeps> = {}, reg = fakeRegistry()) {
+  const d: NodeLifecycleDeps = {
     runEntry: vi.fn(async () => {}),
-    listPorts: vi.fn(() => [] as number[]),
+    listPorts: reg.listPorts,
+    onPortsChange: reg.onPortsChange,
     awaitDrain: vi.fn(async () => {}),
     servePreview: vi.fn(() => () => {}),
     postListening: vi.fn(),
@@ -16,11 +38,16 @@ function deps(over: Partial<NodeLifecycleDeps> = {}): NodeLifecycleDeps {
     exit: vi.fn(),
     ...over,
   };
+  return { d, reg };
+}
+
+async function settle(times = 8): Promise<void> {
+  for (let i = 0; i < times; i++) await Promise.resolve();
 }
 
 describe('runNodeProgramLifecycle', () => {
   it('script (no listen): drains then exits 0', async () => {
-    const d = deps();
+    const { d } = deps();
     await runNodeProgramLifecycle(d);
     expect(d.runEntry).toHaveBeenCalledOnce();
     expect(d.awaitDrain).toHaveBeenCalledOnce();
@@ -30,7 +57,7 @@ describe('runNodeProgramLifecycle', () => {
   });
 
   it('server (listened): serves each port, posts ports, does NOT exit/drain', async () => {
-    const d = deps({ listPorts: vi.fn(() => [3000, 8080]) });
+    const { d } = deps({}, fakeRegistry([3000, 8080]));
     await runNodeProgramLifecycle(d);
     expect(d.servePreview).toHaveBeenCalledTimes(2);
     expect(d.servePreview).toHaveBeenCalledWith(3000);
@@ -41,10 +68,10 @@ describe('runNodeProgramLifecycle', () => {
   });
 
   it('server whose entry stays pending after listen still posts ports', async () => {
-    const d = deps({
-      runEntry: vi.fn(() => new Promise<void>(() => {})),
-      listPorts: vi.fn(() => [5174]),
-    });
+    const { d } = deps(
+      { runEntry: vi.fn(() => new Promise<void>(() => {})) },
+      fakeRegistry([5174]),
+    );
     await runNodeProgramLifecycle(d);
     expect(d.servePreview).toHaveBeenCalledWith(5174);
     expect(d.postListening).toHaveBeenCalledWith([5174]);
@@ -52,73 +79,59 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.exit).not.toHaveBeenCalled();
   });
 
-  it('pending entry without a port keeps polling instead of exiting', async () => {
-    let waits = 0;
-    const d = deps({
-      runEntry: vi.fn(() => new Promise<void>(() => {})),
-      listPorts: vi.fn(() => []),
-      wait: vi.fn(async () => {
-        waits++;
-        if (waits === 2) throw new Error('stop polling');
-      }),
+  it('pending entry without a port waits on events instead of exiting', async () => {
+    const reg = fakeRegistry();
+    const { d } = deps({ runEntry: vi.fn(() => new Promise<void>(() => {})) }, reg);
+    let settled = false;
+    const run = runNodeProgramLifecycle(d).then(() => {
+      settled = true;
     });
-    await expect(runNodeProgramLifecycle(d)).rejects.toThrow('stop polling');
-    expect(d.awaitDrain).not.toHaveBeenCalled();
+    await settle();
+    expect(settled).toBe(false); // parked, not exited
     expect(d.exit).not.toHaveBeenCalled();
+    reg.listen(4000); // a LATE listen event wakes the loop → server branch
+    await run;
+    expect(settled).toBe(true);
+    expect(d.servePreview).toHaveBeenCalledWith(4000);
+    expect(d.postListening).toHaveBeenCalledWith([4000]);
   });
 
   it('returned entry with a pending drain can still become a server on a later listen', async () => {
-    let polls = 0;
-    const d = deps({
-      runEntry: vi.fn(async () => {}),
-      listPorts: vi.fn(() => (polls > 0 ? [5174] : [])),
-      awaitDrain: vi.fn(() => new Promise<void>(() => {})),
-      wait: vi.fn(async () => {
-        polls += 1;
-      }),
-    });
-    await runNodeProgramLifecycle(d);
+    const reg = fakeRegistry();
+    const { d } = deps({ awaitDrain: vi.fn(() => new Promise<void>(() => {})) }, reg);
+    const run = runNodeProgramLifecycle(d);
+    await settle();
     expect(d.awaitDrain).toHaveBeenCalledOnce();
+    reg.listen(5174);
+    await run;
     expect(d.servePreview).toHaveBeenCalledWith(5174);
     expect(d.postListening).toHaveBeenCalledWith([5174]);
     expect(d.exit).not.toHaveBeenCalled();
   });
 
-  it('late-listen polling unrefs its own timer so it does not hold the drain open', async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    const unref = vi.fn();
-    const timers: Array<() => void> = [];
-    const timerStub = ((callback: unknown) => {
-      timers.push(() => {
-        if (typeof callback === 'function') callback();
-      });
-      return { unref };
-    }) as unknown as typeof setTimeout;
-    vi.stubGlobal('setTimeout', timerStub);
-    try {
-      let polls = 0;
-      const d = deps({
-        runEntry: vi.fn(async () => {}),
-        listPorts: vi.fn(() => (polls > 0 ? [5174] : [])),
-        awaitDrain: vi.fn(() => new Promise<void>(() => {})),
-      });
-      const run = runNodeProgramLifecycle(d);
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(unref).toHaveBeenCalledOnce();
-      polls = 1;
-      timers.shift()?.();
-      await run;
-      expect(d.servePreview).toHaveBeenCalledWith(5174);
-      expect(d.exit).not.toHaveBeenCalled();
-    } finally {
-      vi.stubGlobal('setTimeout', originalSetTimeout);
-    }
+  it('after served: close() reposts [] and tears the preview; re-listen re-serves', async () => {
+    const reg = fakeRegistry([3000]);
+    const teardown = vi.fn();
+    const { d } = deps(
+      {
+        runEntry: vi.fn(() => new Promise<void>(() => {})),
+        servePreview: vi.fn(() => teardown),
+      },
+      reg,
+    );
+    await runNodeProgramLifecycle(d);
+    expect(d.postListening).toHaveBeenLastCalledWith([3000]);
+    reg.close(3000);
+    expect(teardown).toHaveBeenCalledOnce();
+    expect(d.postListening).toHaveBeenLastCalledWith([]);
+    reg.listen(3001);
+    expect(d.servePreview).toHaveBeenCalledWith(3001);
+    expect(d.postListening).toHaveBeenLastCalledWith([3001]);
   });
 
   it('entry process.exit code propagates (drain + preview skipped)', async () => {
     const err = Object.assign(new Error('x'), { code: 'RIFTY_PROCESS_EXIT', exitCode: 3 });
-    const d = deps({
+    const { d } = deps({
       runEntry: vi.fn(async () => {
         throw err;
       }),
@@ -130,7 +143,7 @@ describe('runNodeProgramLifecycle', () => {
   });
 
   it('a non-exit throw propagates (surfaced by kernel worker-entry)', async () => {
-    const d = deps({
+    const { d } = deps({
       runEntry: vi.fn(async () => {
         throw new Error('boom');
       }),
@@ -143,12 +156,14 @@ describe('runNodeProgramLifecycle', () => {
   // preview slot — the throw short-circuits before listPorts/servePreview, so the
   // owner never adds (and never has to clean up) a slot for a realm that died.
   it('a listen()-then-throw never serves a preview or posts ports', async () => {
-    const d = deps({
-      listPorts: vi.fn(() => [3000]), // it DID listen…
-      runEntry: vi.fn(async () => {
-        throw new Error('late'); // …then threw
-      }),
-    });
+    const { d } = deps(
+      {
+        runEntry: vi.fn(async () => {
+          throw new Error('late'); // …after it DID listen (port pre-registered)
+        }),
+      },
+      fakeRegistry([3000]),
+    );
     await expect(runNodeProgramLifecycle(d)).rejects.toThrow('late');
     expect(d.servePreview).not.toHaveBeenCalled();
     expect(d.postListening).not.toHaveBeenCalled();
@@ -157,14 +172,14 @@ describe('runNodeProgramLifecycle', () => {
 
   // D4 (ADR-0157 review): natural exit honours process.exitCode (Node parity).
   it('natural exit exits with process.exitCode, not a hardcoded 0', async () => {
-    const d = deps({ readExitCode: vi.fn(() => 7) });
+    const { d } = deps({ readExitCode: vi.fn(() => 7) });
     await runNodeProgramLifecycle(d);
     expect(d.awaitDrain).toHaveBeenCalledOnce();
     expect(d.exit).toHaveBeenCalledWith(7);
   });
 
   it('a listened server ignores process.exitCode (stays alive, no exit)', async () => {
-    const d = deps({ listPorts: vi.fn(() => [3000]), readExitCode: vi.fn(() => 7) });
+    const { d } = deps({ readExitCode: vi.fn(() => 7) }, fakeRegistry([3000]));
     await runNodeProgramLifecycle(d);
     expect(d.exit).not.toHaveBeenCalled();
   });

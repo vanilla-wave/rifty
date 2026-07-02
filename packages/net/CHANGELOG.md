@@ -4,6 +4,36 @@
 
 ### Added
 
+- **Generic preview WebSocket bridge (ADR-0189, backlog net/preview-websocket-bridge, partial).**
+  `serveCrossRealmPreview` now injects the `window.WebSocket` bridge script into every
+  `text/html` response (marker `data-rifty-ws-bridge`, head-prepend, buffered v1 —
+  html replies always take the buffered `reply` frame; `content-length` re-stamped).
+  `webSocketBridgeClientScript` gains `previewPortFromPath`: `ws:`/`wss:` URLs whose
+  hostname is loopback (`localhost`, `127.0.0.1`) or the page's own hostname are
+  bridged with the discovery channel keyed by the GUEST port from the iframe's
+  `/preview/<port>/` prefix — regardless of the URL's own port (stock dev clients aim
+  at `location.host`); the original URL still travels in the `open` frame; non-matching
+  hosts keep native WebSocket. `HttpServer` upgrade accept drops the URL-port equality
+  check (the port-keyed discovery channel IS the port intent), so a stock vite
+  `server.ws` / npm `ws` accepts the remapped open frame on its default path.
+  The request hop strips `accept-encoding`, so a content-encoded html body means an
+  unconditional compressor: gzip/deflate html is decompressed and re-served identity
+  (injection still lands, `content-encoding` dropped); an undecodable coding (br/zstd/
+  multi) is refused LOUD (`NotImplementedError` → 502 error frame), never a silently
+  uninjected pass. The rewrite decodes with the HEADER-declared charset and re-stamps
+  `content-type` to utf-8 (TextEncoder's only output); an unknown charset — or a
+  META-declared non-utf8 one with no header charset — refuses LOUD; a document CSP
+  that would block the injected inline script logs a LOUD console.error (injection
+  still ships). The OPEN frame carries the GUEST-visible URL: a page-origin WS URL
+  resolved under the iframe's `/preview/<port>/` base (document-relative
+  `new WebSocket('ws')`) gets the prefix stripped exactly as the SW strips it for
+  HTTP — previously the guest upgrade saw `/preview/<port>/ws` and stock `path`
+  validation refused it; `.url` still reports the browser-resolved URL (native parity).
+  The bridge's loopback predicate now matches the http server's `isLoopbackHost`
+  family — all of 127.0.0.0/8, `0.0.0.0`, `::1`/`[::1]`, IPv4-mapped loopback —
+  not just `localhost`/`127.0.0.1`.
+
+- **Synchronous `node:sqlite` engine bring-up + lazy provider seam** (backlog/net/sqlite-lazy-engine). New `initSqliteEngineSync(wasmBytes)` brings the sql.js engine up FULLY synchronously from caller-supplied wasm bytes (emscripten `instantiateWasm` hook + sync `WebAssembly.Module`/`Instance`; spike-proven: sql.js attaches `Database` to the config object before `initSqlJs` returns). New `setSqliteEngineSyncProvider(() => bytes)` seam: host realms install it at boot (no wasm cost), and the `node:sqlite` builtin factory self-initializes on first `require('node:sqlite')` — no preset flag, no ahead-of-time await. Memo interplay pinned: ready engine reused by either path; sync call during a PENDING async init throws loud (sql.js glue memoises one module per realm); no provider + not ready keeps the loud constructor error, now naming the seam. Byte sourcing stays with the caller (no hardcoded asset URL, D-004); sync-compile legality in worker realms is a browser fact for e2e.
 - **Cross-realm `EADDRINUSE` at `listen()`** (ADR-0186, closes backlog/net/cross-realm-listen-eaddrinuse). Two supervised-child `node` realms (ADR-0150) can no longer silently double-bind the same loopback port. At `listen(port)` (explicit port only) each realm broadcasts a bind-`claim` on the per-port preview `BroadcastChannel`; an existing owner replies `claim-deny` and a concurrent claimant tie-breaks deterministically by a lexicographic id (lower wins), so exactly one realm keeps the port and the loser emits the Node-shaped async `'error'` `EADDRINUSE` (errno -98, syscall `listen`) — never a spurious `'listening'`. The port still registers synchronously, so the intra-realm fast-path (ADR-0157) and immediate same-realm dispatch are unchanged; the claim only gates `'listening'` and unregisters on a loss. Released on `close()`/realm-exit (the channel dies with the realm). Additive `claim`/`claim-deny` frames on the existing channel (no `PREVIEW_PORT_FRAME_VERSION` bump, ADR-0031). Shared `claimPort`/`releasePort` helper drives BOTH `http.Server.listen` and `net.Server.listen`. Trade-off: a bounded claim-window latency on every explicit `listen` (production perf is a non-goal) — the window is tunable via the new exported `setDefaultClaimWindowMs`/`getDefaultClaimWindowMs` (a single-realm harness runs it at 0); `releasePort` is exported as the `close()` counterpart (mirrors the public `unregisterPort`). Out of scope: ephemeral `listen(0)` cross-realm uniqueness and collision with a non-`listen` owner (the Vite preview). Unit + integration tested over a real `BroadcastChannel` (win / deny / tie-break / release + the listen-level EADDRINUSE), RED-checked; the real two-realm hop is the `cross-realm-listen-eaddrinuse` browser e2e.
 - **`IncomingMessage` body chunks are `Buffer`s (Node parity).** `http`/`https` response (and server-side request) `'data'` chunks are now `Buffer`s rather than raw `Uint8Array`s, so the canonical Node client idiom `let b = ''; res.on('data', (c) => (b += c))` decodes utf8 — a bare `Uint8Array` stringifies to CSV byte values, silently corrupting a body read without an explicit decode. Surfaced by the cross-realm e2e (a gateway reading the proxied body). `Buffer` IS a `Uint8Array`, so existing `decode(chunk)` / byte-length consumers are unaffected.
 - **Cross-realm `http.request`/`get` loopback via the preview broker** (ADR-0180, closes backlog/net/cross-realm-http-loopback). A loopback request whose port has no handler in THIS realm now probes sibling Worker realms over the per-port preview `BroadcastChannel` before refusing: a realm that owns the port emits an additive `accept` frame (ownership signal) and serves the reply; no `accept` within the bounded probe window → Node-shaped `ECONNREFUSED` (the realm-local registry is the whole namespace). Reuses the ADR-0043/0048 transport — the server side already registers `serveCrossRealmPreview` per listened port, so service-to-service calls between two supervised-child `node` servers (ADR-0150) now connect. Streamed replies stay LIVE: a `live` requester consumes `reply-stream-*` chunk-by-chunk into its `IncomingMessage`, so a cross-realm SSE/NDJSON feed reaches the caller before the server ends (the page preview consumer still buffers + refuses SSE, unchanged). The local registry is consulted FIRST, so a same-realm server never broadcasts. New `dispatchCrossRealmLoopback` export + additive `accept`/`live` frames (versioned, ADR-0031). Unit + integration tested over a real `BroadcastChannel` (refuse / round-trip / POST / SSE-live / local-first), RED-checked. Cross-realm `https:` stays refused (no in-browser TLS server); no cross-realm backpressure/cancel yet (M12, ADR-0017).

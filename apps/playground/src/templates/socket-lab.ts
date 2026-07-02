@@ -78,10 +78,10 @@ const CAPABILITIES = [
   {
     id: 'browser-preview-websocket',
     band: 'WebSocket',
-    expected: 'not-yet',
+    expected: 'supported',
     probe: 'auto',
     label: 'Plain preview page native WebSocket',
-    evidence: 'A node-server page is not auto-injected with the generic bridge; native browser WS cannot reach the worker port.',
+    evidence: 'Every preview page gets the generic WebSocket bridge injected; new WebSocket(location.host) reaches the worker port and server close(code, reason) lands as a faithful CloseEvent.',
   },
   {
     id: 'net-real-tcp-socket-semantics',
@@ -167,7 +167,15 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (socket) => {
   socket.on('message', (data) => {
-    socket.send('echo:' + bufferToText(data));
+    const text = bufferToText(data);
+    // 'close:<code>:<reason>' -> server-initiated close; browser probes assert
+    // the CloseEvent lands faithful through the bridge (close parity).
+    const close = /^close:(\\d{4}):(.*)$/.exec(text);
+    if (close) {
+      socket.close(Number(close[1]), close[2]);
+      return;
+    }
+    socket.send('echo:' + text);
   });
 });
 
@@ -655,10 +663,18 @@ async function boot() {
 async function probeBrowserPreviewWs() {
   const row = state.get('browser-preview-websocket');
   if (!row) return;
+  // Stock browser shape: aim at location.host (the host page origin) — the
+  // injected generic bridge remaps to the guest port from /preview/<port>/.
+  // Pass = echo round-trip AND a server-initiated close(code, reason) landing
+  // as a faithful CloseEvent (bridge close parity).
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = proto + '//' + location.host + '/ws';
+  const payload = 'preview-probe';
+  const closeCode = 4321;
+  const closeReason = 'lab-close';
   const outcome = await new Promise((resolve) => {
     let settled = false;
+    let echoed = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
@@ -668,23 +684,44 @@ async function probeBrowserPreviewWs() {
       const ws = new WebSocket(url);
       const timer = setTimeout(() => {
         ws.close();
-        finish({ outcome: 'expected-error', evidence: 'native browser WS did not reach ' + location.host });
-      }, 700);
-      ws.onopen = () => {
+        finish({
+          outcome: 'fail',
+          evidence: (echoed ? 'no close event' : 'no echo') + ' from ' + url + ' within 5s',
+        });
+      }, 5000);
+      ws.onopen = () => ws.send(payload);
+      ws.onmessage = (event) => {
+        const message = String(event.data);
+        if (message !== 'echo:' + payload) {
+          clearTimeout(timer);
+          ws.close();
+          finish({ outcome: 'fail', evidence: 'unexpected echo: ' + message });
+          return;
+        }
+        echoed = true;
+        ws.send('close:' + closeCode + ':' + closeReason);
+      };
+      ws.onclose = (event) => {
+        if (!echoed) return;
         clearTimeout(timer);
-        ws.close();
-        finish({ outcome: 'fail', evidence: 'browser WS reached worker; update this row to supported' });
+        finish(
+          event.code === closeCode && event.reason === closeReason && event.wasClean
+            ? {
+                outcome: 'pass',
+                evidence: 'echo + faithful close via ' + url + ' -> code=' + event.code + ' reason=' + event.reason,
+              }
+            : {
+                outcome: 'fail',
+                evidence: 'close parity broken: code=' + event.code + ' reason=' + event.reason + ' wasClean=' + event.wasClean,
+              },
+        );
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        finish({ outcome: 'expected-error', evidence: 'native browser WS rejected before the bridge' });
-      };
-      ws.onclose = () => {
-        clearTimeout(timer);
-        finish({ outcome: 'expected-error', evidence: 'native browser WS closed without bridge reachability' });
+        finish({ outcome: 'fail', evidence: 'browser WS errored (' + url + ')' });
       };
     } catch (err) {
-      finish({ outcome: 'expected-error', evidence: String(err && err.message ? err.message : err) });
+      finish({ outcome: 'fail', evidence: String(err && err.message ? err.message : err) });
     }
   });
   row.result = { id: row.id, ...outcome };
@@ -921,7 +958,6 @@ export const SOCKET_LAB_TEMPLATE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: SOCKET_LAB_SERVER_SOURCE },
   defaultPort: 3220,
   estimatedBootSeconds: 12,
-  sqlite: false,
   extraFiles: {
     '/public/index.html': INDEX_HTML,
     '/public/client.js': CLIENT_JS,

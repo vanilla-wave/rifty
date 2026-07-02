@@ -80,6 +80,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0180 | Cross-realm http.request loopback via the preview broker |
 | 0181 | Client node:https request and get over browser fetch |
 | 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
+| 0189 | Preview loopback WebSocket bridge |
 
 ### service-worker
 
@@ -110,6 +111,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0175 | Bounded-concurrency packument prefetch in npm install |
 | 0176 | Cache headers for npm registry proxy |
 | 0182 | Eddy opt-in fast-install resolver |
+| 0188 | Install-time shadow internals shims with companion pins and substitution provenance |
 
 ### playground
 

@@ -36,7 +36,6 @@ describe('resolveProjectSpec', () => {
     expect(spec.runtime).toBe('node-server');
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('express');
-    expect(spec.sqlite).toBe(true);
     expect(spec.entry.relativePath).toBe('/src/main.js');
     // server entry talks to the builtin DB and a real npm express
     expect(spec.entry.content).toContain("from 'node:sqlite'");
@@ -64,7 +63,6 @@ describe('resolveProjectSpec', () => {
     expect(spec.runtime).toBe('node-server');
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toEqual({ ws: '^8.18.3' });
-    expect(spec.sqlite).toBe(false);
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'node:http'");
     expect(spec.entry.content).toContain("from 'node:module'");
@@ -83,7 +81,6 @@ describe('resolveProjectSpec', () => {
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('hono');
     expect(spec.install).toHaveProperty('@hono/node-server');
-    expect(spec.sqlite).toBe(false);
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'hono'");
     expect(spec.entry.content).toContain("from '@hono/node-server'");
@@ -101,7 +98,6 @@ describe('resolveProjectSpec', () => {
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('koa');
     expect(spec.install).toHaveProperty('@koa/router');
-    expect(spec.sqlite).toBe(false);
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'koa'");
     expect(spec.entry.content).toContain("from '@koa/router'");
@@ -133,7 +129,6 @@ describe('resolveProjectSpec', () => {
     expect(spec.runtime).toBe('node-server');
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('marked');
-    expect(spec.sqlite).toBe(false);
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'marked'");
     expect(spec.entry.content).toContain("from 'node:http'");

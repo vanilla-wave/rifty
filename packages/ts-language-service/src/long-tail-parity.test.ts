@@ -1086,7 +1086,7 @@ describe('parity: remaining achievable ts.LanguageService surface', () => {
     );
 
     await expect(createTsLanguageService({ fsSync, projectRoot: RIFTY_ROOT })).rejects.toThrow(
-      'workspace TypeScript compiler unreadable',
+      'has no resolvable compiler entry',
     );
   });
 });

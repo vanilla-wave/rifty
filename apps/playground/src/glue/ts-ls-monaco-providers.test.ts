@@ -194,6 +194,29 @@ describe('applyWorkspaceTextEdit', () => {
     }
   });
 
+  it('treats an unresolvable workspace TypeScript package as unavailable', async () => {
+    const providers = registerTsLanguageServiceProviders(
+      rejectingClient(
+        new Error(
+          'workspace TypeScript at /proj/node_modules/typescript has no resolvable compiler entry (package.json exports/main): Cannot find module',
+        ),
+      ),
+      bridgeFor(TEST_PATH),
+    );
+
+    try {
+      await expect(
+        providers.providers.hover.provideHover(
+          semanticModel(),
+          { lineNumber: 1, column: 1 } as monaco.Position,
+          neverCancelled,
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      providers.dispose();
+    }
+  });
+
   it('cancels compound code actions when a later client request is disposed', async () => {
     const model = semanticModel();
     __monacoTestState.markers = [

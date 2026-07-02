@@ -2,6 +2,67 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
+  net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
+  rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config
+  flows through and vite's stock client rides the generic preview-path WS bridge
+  (`@riftydev/net` injects it into every text/html preview response — webpack/socket.io
+  get the same transport for free). Deleted: `RIFTY_VITE_CLI_HMR`/`RIFTY_VITE_CLI_PORT`
+  env plumbing, `viteHmrClientScript`/`createHmrBridgeVitePlugin` (+ structural plugin
+  types), the dev-server-boot bespoke hmr wiring. The wrapper keeps a minimal
+  `configureServer` plugin (sets `__riftyActiveViteServer` for editor-write HMR
+  invalidation — the VFS has no watcher events) and its OTHER forced options
+  (allowedHosts/host/strictPort/base/optimizeDeps — remaining wrapper retirement is
+  tracked in the backlog item). New env `RIFTY_VITE_CLI_HMR_OFF=1` threads only the
+  ADR-0161 Vite 8 hmr-off pin. A user `--config` path now also threads to the dev
+  wrapper (was preview-only). Socket-lab `browser-preview-websocket` flips to
+  `supported` with a real round-trip probe — the probe also asserts close parity:
+  the lab `/ws` server honours a `close:<code>:<reason>` trigger and the browser
+  CloseEvent must land faithful (code/reason/wasClean) through the bridge (backlog
+  parity case 2 on the preview path; `preview-websocket-bridge.spec.ts` pins the
+  same over an explicit `ws://localhost` URL). Instrumentation keys renamed
+  (`data-rifty-ws-bridge`, `__riftyWsBridgeOpen`, `rifty:ws:*`).
+
+- **`node:sqlite` works in any project — preset flag deleted.** Worker realms
+  install a sync sql.js wasm provider at boot (bytes via sync XHR of the bundled
+  asset); the builtin self-initializes at the first `require('node:sqlite')`
+  (sync bring-up, `@riftydev/net`). The `sqlite: true` template flag and the
+  eager 30s engine boot in the node-server dev path are gone — `node server.mjs`
+  using `node:sqlite` now works in a scratch project too.
+
+- **Zero boot-time shim glue (ADR-0188).** `overlayShims`/`reRootShimPath` (dev-server-boot,
+  vite-cli-prep) + `overlayBuildShims` (build-boot) + `glue/esbuild-shim.ts` deleted — the
+  npm-client installer writes the shadow-registry internals shims at install time, so
+  hand-installed `npm i vite` works identically to the presets and the vite8 tree no longer
+  gets dead esbuild/rollup overlay files. The vite template drops its hand-pinned
+  `@rollup/wasm-node` (installer injects it as rollup's same-version companion); snapshots
+  rebaked with the shims + companion baked in. The playground `npm` command streams the new
+  substitution provenance lines (`… substituted from shadow registry …`) into its output.
+
+- **Generic dev-server lifecycle — no vite keying.** The LIVE pill + preview
+  derive from the guest's LISTENING-PORT SET (net-registry register/unregister
+  events, relayed child→owner→page): any server — vite, webpack-dev-server, a
+  bare `node:http` — lights LIVE + preview; `server.close()` drops it without a
+  process exit. The `binNameOf === 'vite'` lifecycle dispatch, the synthesized
+  `[vite] dev server ready` / `[vite] preview ready` terminal markers, and the
+  preview-source auto-select special case are gone (terminal carries only
+  tool-authored output; a newly appended port auto-selects generically; e2e
+  readiness asserts LIVE-pill `data-state`). Editor HMR file-change frames fan
+  out to every live bin child instead of one vite-named handle.
+- **Reload-restore replays the recorded dev command.** The page records the
+  shell line that produced the RUNNING dev server (+ exec-time cwd) in the
+  persisted terminal state and relaunches THAT on reload — `cd`-prefixed when
+  it ran outside the active root — instead of the preset template's boot line,
+  so a fork that swapped vite for another server survives a page reload.
+  Cleared on a real running→stopped without error (Ctrl-C / `server.close()`);
+  an errored stop (owner crash/exit) keeps it, so reload still relaunches.
+- **TS-unavailable provider matcher follows the new resolver error.** Monaco
+  providers now classify the broken-workspace-TypeScript reject by the ts-LS
+  "has no resolvable compiler entry" message (compiler entry is resolved with
+  Node semantics, no longer a `lib/typescript.js` probe).
+
 ### Added
 
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
@@ -14,6 +75,25 @@
 
 ### Fixed
 
+- **Preset switch/restart no longer spins when a SECOND server is live.** The
+  derived dev-server status is GLOBAL (any listening server keeps it `running` —
+  generic lifecycle), but the switch stops ONE session: with a vite dev server
+  plus a bare `node server.mjs` in another terminal, the stop-wait polled for a
+  global `stopped` that never came and the switch hung on the veil forever. The
+  wait now settles when the stopped session stops OWNING the primary (everything
+  stopped, or the pill moved to another session's server). e2e: dual-server
+  switch case in `generic-dev-server-lifecycle.spec.ts`. Two siblings of the
+  same bug: the page no longer locally wipes the OWNER-derived preview-port set
+  after a dev stop (a local `[]` tore the second live server's preview bridge;
+  the owner's devStopped emit delivers the truthful remainder), and
+  `devBootFailed` no longer forces a global `stopped` frame while another
+  server's port still serves — the status stays snapshot-derived, the boot
+  error still rides the frame (unit RED-checked).
+- **Multi-port entries: ports opened BEFORE the port watch began are now served.**
+  The dev-boot watch subscribes after ready with only the boot port seeded and
+  reconciled only on the NEXT registry change — a second port opened during boot
+  stayed unbridged until an unrelated event. `watchServedPorts` now runs one
+  initial reconcile at start (unit RED-checked).
 - **A true first run opens the chooser instantly.** The index-driven chooser
   (below) traded the flash for a first-visit delay: a brand-new user waited for
   the first owner index publish (~1.5-3s dev, more hosted) staring at a dead

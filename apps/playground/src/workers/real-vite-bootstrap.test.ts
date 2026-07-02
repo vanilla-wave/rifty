@@ -24,11 +24,11 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('flushSyncMirror,\n    publishOwnerState,');
   });
 
-  it('passes browser HMR config to real vite .bin dev children', () => {
-    expect(source).toContain('const VITE_DEFAULT_DEV_PORT = 5173');
-    expect(source).toContain('RIFTY_VITE_CLI_HMR');
-    expect(source).toContain('RIFTY_VITE_CLI_PORT');
+  it('pins hmr-off (ADR-0161) on vite .bin dev children; the endpoint-rewrite env is gone (ADR-0189)', () => {
     expect(source).toContain('withViteCliArgs');
+    expect(source).toContain('RIFTY_VITE_CLI_HMR_OFF');
+    expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
+    expect(source).not.toContain('VITE_DEFAULT_DEV_PORT');
   });
 
   it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
@@ -36,13 +36,14 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
     expect(source).toContain("if (mode !== 'dev') return [...args]");
     expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
-    expect(source).toContain("...(mode === 'preview' ? userConfigEnv : {})");
+    expect(source).toContain('...(previewMode ? userConfigEnv : {})');
   });
 
-  it('forwards editor writes into the active real vite CLI child', () => {
-    expect(source).toContain('let activeViteDevChild');
+  it('forwards editor writes into every live bin child (no bin-name keying)', () => {
+    expect(source).toContain('const liveBinChildren = new Set<BinWorkerHandle>()');
     expect(source).toContain("type: 'rifty:vite-file-change'");
-    expect(source).toContain('activeViteDevChild?.send');
+    expect(source).toContain('for (const child of liveBinChildren)');
+    expect(source).not.toContain('activeViteDevChild');
   });
 
   it('accepts VFS write frames over the kernel worker IPC channel', () => {
@@ -70,12 +71,23 @@ describe('vite command — real installed bin routing', () => {
     expect(source).not.toContain("shell.registerCommand('vite'");
     expect(source).not.toContain('classifyViteCommand');
     expect(source).toContain('createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl');
-    expect(source).toContain("binNameOf(req.shimPath) === 'vite'");
   });
 
-  it('mirrors server-capable non-vite bins into the preview registry', () => {
+  it('bin lifecycle is uniform — no bin-name dispatch outside the HMR CLI prep', () => {
+    // Generic dev-server lifecycle:
+    // the ONLY allowed vite-name checks are inside withViteCliArgs/withViteCliEnv
+    // (the HMR config wrapper, owned by backlog: net/preview-websocket-bridge).
+    expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
+    expect(source).not.toContain('[vite] dev server ready');
+    expect(source).not.toContain('[vite] preview ready');
+    const allowed = [...source.matchAll(/binNameOf\(binPath\) !== 'vite'/g)].length;
+    expect(allowed).toBe(2); // withViteCliArgs + withViteCliEnv, nothing else
+  });
+
+  it('mirrors every server-capable bin into the preview registry (vite included)', () => {
     expect(source).toContain('const binPreviewSids = new WeakMap<object, string>()');
     expect(source).toContain('previews.addNode(sid, message.ports, message.previewScope');
+    expect(source).toContain('labelBase: binNameOf(req.shimPath)');
     expect(source).toContain('previews.removeBySid(sid)');
   });
 

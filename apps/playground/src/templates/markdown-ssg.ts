@@ -121,7 +121,6 @@ export const MARKDOWN_SSG_TEMPLATE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: MARKDOWN_SSG_SOURCE },
   defaultPort: 3333,
   estimatedBootSeconds: 12,
-  sqlite: false,
   extraFiles: {
     '/content/intro.md': INTRO_MD,
     '/content/runtime.md': API_MD,

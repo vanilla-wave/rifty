@@ -1,30 +1,15 @@
 /**
- * Cross-realm HMR bridge — ADR-0017 phase 1 acceptance.
- *
- * Hosts the ordinary `@riftydev/net` WebSocketServer and ships an inlined
- * browser WebSocket bridge. Replaces native HMR WebSocket hops that can't
- * cross page/iframe/worker realms (no real TCP, no SW interception for WS
- * upgrade).
- *
- * Both HMR consumers install the browser-side bridge before their dev clients
- * run. Mini-dev hosts a small reload broadcaster here. Real Vite hosts its own
- * native `server.ws` on `http.Server.on('upgrade')`; rifty supplies the
- * cross-realm browser `WebSocket` route.
- *
- * Why a bridge at all: the iframe's native `WebSocket` can't reach an in-process
- * `WebSocketServer` (no real TCP, no SW interception for the WS upgrade);
- * the net bridge crosses the page↔iframe (and worker↔iframe) realm boundary
- * instead. At M11 A-026 Vite moves fully into a Worker realm — the iframe keeps
- * the same WS URL, just gets messages from a different sender, so that
- * migration is a realm swap, not a routing rewrite.
+ * Cross-realm HMR bridge — ADR-0017 phase 1; mini-dev's explicit broadcaster
+ * half only. The vite plugin/client-script half died with ADR-0189: the
+ * cross-realm preview path injects the generic `window.WebSocket` bridge into
+ * every text/html response, and stock vite HMR (native `server.ws` on
+ * `http.Server.on('upgrade')`) rides it — no per-tool glue.
  *
  * Server side: {@link setupHmrBridge} owns a token-scoped WS URL for simple
- * broadcasters. Client side (iframe): an inlined generic `window.WebSocket`
- * bridge from `@riftydev/net` routes browser constructors to rifty-hosted
- * `http.Server`/`WebSocketServer` surfaces.
+ * broadcasters (mini-dev). Client side (iframe): {@link hmrClientScript}
+ * inlines the generic bridge + a reload-on-update listener.
  *
  * Adapter discipline: no Solid signals here (D-002); caller-driven lifecycle.
- * Doesn't depend on Vite types — the Vite plugin/channel are structural.
  */
 
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
@@ -71,7 +56,8 @@ export function hmrClientScript(port: number, token?: string): string {
     try {
       if (typeof payload === 'string') payload = JSON.parse(payload);
     } catch (_) {}
-    // Mini-dev default: reload on update. Real Vite uses viteHmrClientScript.
+    // Mini-dev default: reload on update. Real Vite rides the generic
+    // preview-path injection (ADR-0189), not this script.
     if (payload && payload.type === 'update') {
       location.reload();
     }
@@ -80,25 +66,6 @@ export function hmrClientScript(port: number, token?: string): string {
     onPayload(e.data);
   });
 })();`;
-}
-
-/**
- * Inline transport shim for Vite's real `@vite/client`.
- *
- * Vite still owns HMR payload semantics; this installs the generic
- * `window.WebSocket` bridge before `@vite/client` creates its socket.
- */
-export function viteHmrClientScript(port: number, token?: string): string {
-  const url = hmrBridgeUrl(port, token);
-  return `${webSocketBridgeClientScript({
-    bridgeHosts: [PREVIEW_LOCAL_HOST],
-    instrumentation: {
-      eventPrefix: 'rifty:hmr',
-      openFlag: '__riftyHmrOpen',
-      lastMessageFlag: '__riftyHmrLastMessage',
-    },
-  })}
-try { window.__riftyHmrBridgeUrl = ${JSON.stringify(url)}; } catch (_) {}`;
 }
 
 /**
@@ -145,58 +112,6 @@ export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
     },
     close(): void {
       server.close();
-    },
-  };
-}
-
-/**
- * Minimal shape we need from a Vite plugin. Declared structurally rather than
- * importing Vite's types — `realVite.ts` keeps Vite's full type surface out of
- * the playground typecheck pass. The runtime cares only about `name` + the hooks
- * we implement.
- */
-export interface HmrBridgeVitePlugin {
-  readonly name: string;
-  transformIndexHtml(html: string): HmrBridgeHtmlTransformResult;
-}
-
-export interface HmrBridgeHtmlTag {
-  readonly tag: 'script';
-  readonly attrs: Readonly<Record<string, string>>;
-  readonly children: string;
-  readonly injectTo: 'head-prepend';
-}
-
-export interface HmrBridgeHtmlTransform {
-  readonly html: string;
-  readonly tags: readonly HmrBridgeHtmlTag[];
-}
-
-export type HmrBridgeHtmlTransformResult = string | HmrBridgeHtmlTransform;
-
-/**
- * Vite plugin that injects {@link viteHmrClientScript} as `head-prepend`.
- * Vite's own dev HTML hook runs before user plugins; this late head-prepend
- * lands before `/@vite/client`, so the WebSocket shim is installed first.
- */
-export function createHmrBridgeVitePlugin(opts: SetupHmrBridgeOptions): HmrBridgeVitePlugin {
-  const script = viteHmrClientScript(opts.port, opts.token);
-  const marker = 'data-rifty-hmr-bridge';
-  return {
-    name: 'rifty:hmr-bridge',
-    transformIndexHtml(html: string): HmrBridgeHtmlTransformResult {
-      if (html.includes(marker)) return html;
-      return {
-        html,
-        tags: [
-          {
-            tag: 'script',
-            attrs: { [marker]: '' },
-            children: script,
-            injectTo: 'head-prepend',
-          },
-        ],
-      };
     },
   };
 }

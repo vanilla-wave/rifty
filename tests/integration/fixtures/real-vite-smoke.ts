@@ -1,11 +1,11 @@
 /**
  * Real Vite smoke — standalone (run via `tsx`), NOT a vitest test.
  *
- * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` install/shim
- * steps in-process: install real vite@8 from the live registry, overlay the
- * esbuild/lightningcss/rollup shims, then (only in a SAB/kernel-backed Worker
- * realm) build the loader, `import('vite')`, `createServer`, `listen`, and
- * `transformRequest`.
+ * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` install steps
+ * in-process: install real vite@8 from the live registry (the installer applies
+ * the shadow-registry internals shims itself, ADR-0188), then (only in a
+ * SAB/kernel-backed Worker realm) build the loader, `import('vite')`,
+ * `createServer`, `listen`, and `transformRequest`.
  *
  * It replaces `globalThis.process` with rifty's shim (matching the worker
  * realm), which is incompatible with vitest's child-process IPC — hence a
@@ -31,9 +31,7 @@ import {
 } from '../../../packages/runtime-js/src/builtins/process.ts';
 import { installTimerGlobals } from '../../../packages/runtime-js/src/builtins/timers.ts';
 import { createModuleLoader } from '../../../packages/runtime-js/src/module-loader/index.ts';
-import { dirname, normalizePath } from '../../../packages/vfs/src/index.ts';
 import { createMemoryFs, setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
-import { viteBrowserShimFiles } from '../../../tools/shadow-registry/src/index.ts';
 
 // biome-ignore lint/suspicious/noExplicitAny: smoke harness.
 type Any = any;
@@ -117,18 +115,11 @@ async function main(): Promise<void> {
     fetch: globalThis.fetch,
   });
   const result = await install('app', '0.0.0', { vite: viteSpec }, { vfs, cwd: ROOT, registry });
-  log(`installed ${result.packages.length} packages`);
-
-  for (const [path, content] of Object.entries(viteBrowserShimFiles)) {
-    const np = normalizePath(path);
-    fsSync.mkdirSync(dirname(np), { recursive: true });
-    fsSync.writeFileSync(np, enc.encode(content as string));
-  }
-  log('esbuild + lightningcss + rollup shims overlaid');
+  log(`installed ${result.packages.length} packages (shadow shims applied at install time)`);
 
   if (!hasKernelBackedWorkerCapabilities()) {
     log(
-      `RIFTY_VITE_SMOKE_REQUIRES_KERNEL_WORKERS — vite@${viteSpec} installed and shims overlaid; import/createServer requires a SAB + kernel-backed Worker realm for Rolldown WASI pthreads`,
+      `RIFTY_VITE_SMOKE_REQUIRES_KERNEL_WORKERS — vite@${viteSpec} installed (install-time shims); import/createServer requires a SAB + kernel-backed Worker realm for Rolldown WASI pthreads`,
     );
     realExit(0);
     return;

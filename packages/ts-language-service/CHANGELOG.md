@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **Workspace compiler located via Node resolution semantics.** The compiler
+  entry now resolves through rifty's module resolver (package.json
+  `exports`/`main`, node_modules walk-up, Node-parity-tested vs
+  `require.resolve('typescript')`) instead of a hardcoded `lib/typescript.js`
+  probe; std-lib `.d.ts` load next to the resolved entry (tsc's own rule).
+  Absent package still fails "TypeScript is not installed"; an unresolvable
+  package fails loudly naming its dir; the compiler-API duck-check is unchanged.
+
 - **Workspace TypeScript is now required for TS-LS init** (ADR-0177). The service
   no longer falls back to rifty's vendored compiler when
   `node_modules/typescript` is absent; missing and broken workspace TypeScript

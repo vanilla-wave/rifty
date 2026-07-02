@@ -322,7 +322,6 @@ export const KOA_API_TEMPLATE: NodeServerProjectSpec = {
   entry: { relativePath: '/src/main.js', content: KOA_API_SERVER_SOURCE },
   defaultPort: 3332,
   estimatedBootSeconds: 15,
-  sqlite: false,
   extraFiles: {
     '/public/index.html': INDEX_HTML,
     '/public/client.js': CLIENT_JS,

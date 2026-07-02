@@ -28,11 +28,22 @@ export interface DevErrorMessage {
 export interface DevSnapshotMessage {
   readonly type: 'rifty:dev-snapshot';
 }
+/**
+ * Child→owner: the FULL current listening-port set, posted on every net-registry
+ * change AFTER `rifty:dev-ready` (the entry called `server.close()` /
+ * re-listened). `ports: []` = nothing listening → the pill leaves 'running'.
+ */
+export interface DevPortsMessage {
+  readonly type: 'rifty:dev-ports';
+  readonly ports: number[];
+  readonly previewScope?: string;
+}
 export type DevServerChildMessage =
   | DevReadyMessage
   | PreviewReadyMessage
   | DevErrorMessage
-  | DevSnapshotMessage;
+  | DevSnapshotMessage
+  | DevPortsMessage;
 
 /** Owner→child: an editor write — forward to the running server's HMR. */
 export interface DevFileChangedMessage {
@@ -59,6 +70,12 @@ export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage 
   if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
   if (c.type === 'rifty:preview-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
   if (c.type === 'rifty:dev-error') return typeof c.message === 'string';
+  if (c.type === 'rifty:dev-ports') {
+    const ports = (m as { ports?: unknown }).ports;
+    return (
+      Array.isArray(ports) && ports.every((p) => Number.isInteger(p)) && optionalPreviewScope(c)
+    );
+  }
   return c.type === 'rifty:dev-snapshot';
 }
 
