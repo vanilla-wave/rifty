@@ -1,38 +1,47 @@
 /**
- * React + Vite issue-tracker preset e2e (backlog: playground/react-vite-preset).
+ * React + Vite issue-tracker preset e2e (backlog: playground/react-vite-preset;
+ * dev-boot chain per ADR-0192).
  *
  * Proves the ordinary-React-SPA chain end-to-end in a real cross-origin-isolated
  * browser: the instant preset restores its baked node_modules snapshot, the real
  * `vite` CLI child loads the template's OWN vite.config.ts (with
- * @vitejs/plugin-react), the preview iframe renders the dashboard from the mock
- * dataset, client-side navigation works inside the iframe, and a component edit
- * through Monaco's real input path HMR-updates the preview without a full
- * reload (Fast Refresh via plugin-react — asserted by a survive-sentinel).
+ * @vitejs/plugin-react) through the real esbuild-wasm bridge, the Vite 7 dep
+ * optimizer pre-bundles CJS react/react-dom (parity: `.vite/deps/_metadata.json`
+ * with `needsInterop: true`, react-refresh preamble in served components — same
+ * as a local Node run of the identical template), the preview iframe renders
+ * the dashboard from the mock dataset, client-side navigation works inside the
+ * iframe, and a component edit through Monaco's real input path HMR-updates
+ * the preview without a full reload (Fast Refresh via plugin-react — asserted
+ * by a survive-sentinel).
  */
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import {
   capturePageProblems,
+  expectTerminalContains,
   expectViteDevServerReady,
+  openShellTerminal,
   pickStarter,
+  runTerminalLine,
 } from './helpers/playground.ts';
 
 const PORT = 5174;
+
+async function fetchPreviewText(page: Page, port: number, path: string): Promise<string> {
+  return page.evaluate(
+    async ({ targetPort, targetPath }) => {
+      const r = await fetch(`/preview/${targetPort}${targetPath}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`GET ${targetPath} -> ${r.status}`);
+      return r.text();
+    },
+    { targetPort: port, targetPath: path },
+  );
+}
 
 test.describe('React + Vite issue tracker preset', () => {
   test('boots LIVE, renders the dashboard, navigates to /issues, HMR-updates a component', async ({
     page,
     browserName,
   }) => {
-    // TODO(backlog: playground/react-preset-dev-boot-gaps) — executable
-    // acceptance, blocked on two loud runtime gaps (verified 2026-07-02):
-    //   A. config-wrapper bundling: the esbuild build-shim does not traverse the
-    //      wrapper's relative `../vite.config.ts` import → ModuleLoadError from
-    //      node_modules/.vite-temp/ and the vite CLI child exits.
-    //   B. dep pre-bundling: @vitejs/plugin-react injects optimizeDeps.include →
-    //      Vite 7 optimizer calls esbuild.context → NotImplementedError; CJS-only
-    //      react/react-dom cannot be served to the browser without it.
-    // Remove this gate when the backlog item lands; the body below is the spec.
-    test.fixme(true, 'blocked: playground/react-preset-dev-boot-gaps (dev server cannot boot)');
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(240_000);
     const problems = capturePageProblems(page);
@@ -57,6 +66,16 @@ test.describe('React + Vite issue tracker preset', () => {
       timeout: 60_000,
     });
     await expect(frame.locator('.recent-list li').first()).toBeVisible();
+
+    // Parity vs local Node vite 7 (ADR-0192): the transformed entry imports the
+    // optimizer's ESM interop chunks — CJS react is served pre-bundled from
+    // node_modules/.vite/deps, never raw.
+    const mainSource = await fetchPreviewText(page, PORT, '/src/main.tsx');
+    expect(mainSource).toMatch(/\.vite\/deps\/react/);
+    // Parity: a served component module carries the plugin-react Fast-Refresh
+    // preamble (user vite.config.ts + @vitejs/plugin-react really loaded).
+    const appSource = await fetchPreviewText(page, PORT, '/src/App.tsx');
+    expect(appSource).toContain('@react-refresh');
 
     // Client-side navigation inside the preview iframe (React Router).
     await frame.getByRole('link', { name: 'Issues' }).click();
@@ -112,6 +131,14 @@ test.describe('React + Vite issue tracker preset', () => {
           ),
       )
       .toBe('alive');
+
+    // Parity: the dep optimizer COMPLETED on the guest tree — metadata file on
+    // disk with the react entry marked for CJS interop, as on local Node.
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'ls node_modules/.vite/deps');
+    await expectTerminalContains(page, '_metadata.json', 20_000);
+    await runTerminalLine(page, 'grep needsInterop node_modules/.vite/deps/_metadata.json');
+    await expectTerminalContains(page, '"needsInterop": true', 20_000);
 
     problems.assertNoViteImportErrors();
   });

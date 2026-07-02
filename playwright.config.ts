@@ -21,6 +21,7 @@ const HEAVY_SPECS = [
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
   '**/react-vite-preset.spec.ts',
+  '**/react-vite-build.spec.ts',
 ];
 
 export default defineConfig({

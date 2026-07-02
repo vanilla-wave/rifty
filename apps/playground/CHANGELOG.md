@@ -8,14 +8,23 @@
   snapshot + chooser card + deep-link): ordinary React + TS + Vite 7 + React
   Router 7 + `@vitejs/plugin-react` app, portable by unit-tested contract
   (standard `dev`/`build`/`preview` scripts, zero rifty references; templates
-  gained an optional non-lifecycle `scripts` field for that). KNOWN GAP — the
-  dev server does not boot in-browser yet, loudly: (A) the esbuild build-shim
-  does not traverse the config-wrapper's relative `vite.config.ts` import
-  (ModuleLoadError from `.vite-temp`), and (B) plugin-react's injected
-  `optimizeDeps.include` drives Vite 7's optimizer into `esbuild.context`
-  (`NotImplementedError`) — CJS-only react/react-dom need that pre-bundle.
-  E2E acceptance committed but fixme-gated on backlog:
-  playground/react-preset-dev-boot-gaps.
+  gained an optional non-lifecycle `scripts` field for that). Boots LIVE
+  end-to-end (e2e un-fixme'd + build parity spec) on the real esbuild bridge
+  below.
+
+- **Real esbuild JS API in-browser via `esbuild-wasm@0.27.7` (ADR-0192).** New
+  host bridge (`workers/esbuild-host.ts`, `globalThis.__riftyEsbuild`): one
+  lazily-initialized inline esbuild-wasm service per worker realm with a
+  wasm_exec fs facade over the VFS (fd-routed around the lib's stdio protocol)
+  and JS-side `outputFiles` writes (browser esbuild never writes) — vite's
+  config bundling (`vite.config.ts` with relative imports) and the Vite 7 dep
+  optimizer (CJS react pre-bundle, `needsInterop` metadata) now run for real.
+  The per-call WASI transform bridge (`esbuild-wasi-transform.ts`,
+  `__riftyEsbuildTransform`) is removed from the vite path (the vendored
+  `@esbuild/wasi-preview1` conformance surface stays, ADR-0047). The vite CLI
+  wrapper no longer force-suppresses dep discovery — suppression is now
+  template-gated (`server.optimizeDepsDisabled` → vite8/Rolldown + zero-dep
+  templates); react-vite runs the real optimizer.
 
 - **`?preset=<id>&autorun=1` deep-link.** A cold tab boots straight into a preset
   (shareable launch URLs + the `pnpm bench` perf harness). The id is validated

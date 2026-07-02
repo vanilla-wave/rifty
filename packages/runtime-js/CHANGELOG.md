@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **ESM `default` import of a CJS module survives registry cache hits.** The
+  loader wrapped CJS exports into an ESM namespace only on first load; every
+  later importer (second `import`, or `import` after a `require()`) received
+  the RAW exports object, so its `default` binding was `undefined`. One
+  memoized namespace per module id now serves all importers (Node parity:
+  shared namespace identity), dropped on `invalidate`. Found by vite 7's
+  `tinyglobby` (`fdir` require()s `picomatch` first → `import picomatch`
+  got undefined) blocking the react-vite dev boot; regression-tested in
+  `interop-cjs-cache.test.ts`.
+
 ### Added
 
 - **`NODE_PROCESS_IDENTITY` is now a public export** (package root + `@riftydev/runtime-js/builtins/process-identity` for a side-effect-free page import). The frozen Node-identity record (`version`, `platform`, `arch`, …) that seeds every rifty `process` is exposed so the host can report the SAME `process.version` the spawned child does (e.g. the playground's `node -v` and the terminal welcome banner), instead of a drifting hardcode.

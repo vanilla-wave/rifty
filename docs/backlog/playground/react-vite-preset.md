@@ -6,7 +6,7 @@ created: 2026-07-02
 why: the main vibecoding scenario is React client apps + dev server; current presets have no real React — a minimal toy would fake the bench signal
 user_story: As a playground user, I want to open an ordinary modern React SPA and see it live in the preview, but today only vanilla Vite / Node server presets exist
 epic: ai-mode-mvp
-blocked_by: [playground/react-preset-dev-boot-gaps]
+blocked_by: []
 sources: [docs/backlog/epics/ai-mode-mvp.md]
 code: [apps/playground/src/presets.ts, apps/playground/src/templates/registry.ts, apps/playground/src/templates/vite.ts, apps/playground/tools/bake-dep-snapshots.ts]
 ---

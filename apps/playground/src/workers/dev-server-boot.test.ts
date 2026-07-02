@@ -73,9 +73,10 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain('reRootShimPath(path, root)');
   });
 
-  it('installs the real esbuild WASI transform bridge before Vite imports esbuild', () => {
-    expect(source).toContain('installEsbuildTransformBridge(root)');
-    expect(source.indexOf('installEsbuildTransformBridge(root)')).toBeLessThan(
+  it('installs the host esbuild-wasm bridge before Vite imports esbuild (ADR-0192)', () => {
+    expect(source).toContain("import { installEsbuildBridge } from './esbuild-host.ts'");
+    expect(source).toContain('installEsbuildBridge()');
+    expect(source.indexOf('installEsbuildBridge()')).toBeLessThan(
       source.indexOf('loader.import(\n      cfg.runtimeSpecifier'),
     );
   });

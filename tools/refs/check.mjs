@@ -86,6 +86,7 @@ const TOMBSTONES = new Set([
   'docs/public/compat/browsers.md',
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
+  'docs/backlog/playground/react-preset-dev-boot-gaps.md', // done → ADR-0192
 ]);
 
 const errors = [];

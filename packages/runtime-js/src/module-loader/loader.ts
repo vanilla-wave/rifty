@@ -143,6 +143,21 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     return out;
   };
 
+  // ONE ESM namespace per non-ESM module id (Node parity): every importer —
+  // first load, registry cache hit, require()-then-import — must see the SAME
+  // wrapped namespace with its `default` binding. Wrapping per call leaked the
+  // RAW CJS exports on cache hits (`default` === undefined for the second
+  // importer; broke vite7's tinyglobby→picomatch after fdir require()d it).
+  // Dropped in lockstep with the registry in `invalidate`.
+  const esmNamespaces = new Map<string, Record<string, unknown>>();
+  function esmNamespaceFor(id: string, exportsObj: Record<string, unknown>) {
+    const hit = esmNamespaces.get(id);
+    if (hit) return hit;
+    const ns = wrapCjsAsEsmNamespace(exportsObj);
+    esmNamespaces.set(id, ns);
+    return ns;
+  }
+
   const deps = {
     registry,
     resolver,
@@ -176,12 +191,17 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
-        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(id));
+        return esmNamespaceFor(id, loadBuiltinOrThrow(id));
       }
       const cached = registry.get(id);
-      if (cached && cached.state === 'loaded') return cached.exports;
+      if (cached && cached.state === 'loaded') {
+        return cached.kind === 'esm' ? cached.exports : esmNamespaceFor(id, cached.exports);
+      }
       if (cached && cached.state === 'loading') {
-        return cached.exports;
+        // In-cycle CJS exports are partial: wrap WITHOUT memoizing (the wrap
+        // snapshots named keys, so the post-load importer must re-wrap the
+        // complete exports via the memoized path above).
+        return cached.kind === 'esm' ? cached.exports : wrapCjsAsEsmNamespace(cached.exports);
       }
       // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
       // module (perf #14). The id-only path stays for direct id callers
@@ -196,23 +216,24 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       // (the preload carries the resolved `{kind:'builtin'}` record). Mirror the
       // id-path's `node:` short-circuit — builtins have no source to execute.
       if (resolved.kind === 'builtin') {
-        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(resolved.id));
+        return esmNamespaceFor(resolved.id, loadBuiltinOrThrow(resolved.id));
       }
       const cached = registry.get(resolved.id);
-      if (cached && cached.state === 'loaded') return cached.exports;
+      if (cached && cached.state === 'loaded') {
+        return cached.kind === 'esm'
+          ? cached.exports
+          : esmNamespaceFor(resolved.id, cached.exports);
+      }
       if (cached && cached.state === 'loading') {
-        return cached.exports;
+        // In-cycle CJS exports are partial: wrap WITHOUT memoizing (see loadAsync).
+        return cached.kind === 'esm' ? cached.exports : wrapCjsAsEsmNamespace(cached.exports);
       }
       if (resolved.kind === 'esm') {
         return executeEsm(resolved, { ...deps });
       }
-      if (resolved.kind === 'json') {
-        const cjsExports = executeCjs(resolved, { ...deps });
-        return wrapCjsAsEsmNamespace(cjsExports);
-      }
-      // CJS imported from ESM — wrap exports as an ESM-shaped namespace.
+      // CJS/JSON imported from ESM — the shared per-id ESM-shaped namespace.
       const cjsExports = executeCjs(resolved, { ...deps });
-      return wrapCjsAsEsmNamespace(cjsExports);
+      return esmNamespaceFor(resolved.id, cjsExports);
     },
   };
 
@@ -283,16 +304,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     invalidate(id) {
       registry.invalidate(id);
-      // Keep the strip cache + ESM AST cache coherent with the executed-module
-      // cache, dropping them in lockstep.
+      // Keep the strip cache + ESM AST cache + memoized CJS namespaces coherent
+      // with the executed-module cache, dropping them in lockstep.
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();
         sourceMaps.clear();
+        esmNamespaces.clear();
       } else {
         transformCache.delete(id);
         esmAstCache.delete(id);
         sourceMaps.delete(id);
+        esmNamespaces.delete(id);
       }
       // Resolver caches (package.json parses #5 + resolution memo #15) are
       // input-keyed and cannot be pruned by module id, so ANY invalidate —

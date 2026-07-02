@@ -44,9 +44,13 @@ export const bakedOverrides: OverrideMap = {
   lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
-const SHIM_ESBUILD_VERSION = '0.21.5';
+// Must match the exact `esbuild-wasm` devDependency pin in apps/playground
+// (ADR-0192 single-host-instance: one esbuild per guest, no version skew).
+const SHIM_ESBUILD_VERSION = '0.27.7';
 
-const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — transform delegated to the dev-server WASI bridge
+const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — the real esbuild JS API, delegated to the host-realm
+// esbuild-wasm instance (ADR-0192). Guest and host share the worker realm, so
+// options, results, and JS plugin callbacks cross the bridge untouched.
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
     super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
@@ -55,72 +59,85 @@ const NotImplementedError = class extends Error {
   }
 };
 
-export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
-
-export async function initialize(_opts) {
-  return undefined;
-}
-
-export async function transform(input, options = {}) {
-  const bridge = globalThis.__riftyEsbuildTransform;
-  if (typeof bridge !== 'function') {
-    throw new NotImplementedError('esbuild.transform', 'rifty dev-server did not install the WASI transform bridge');
+function hostEsbuild() {
+  const host = globalThis.__riftyEsbuild;
+  if (!host) {
+    throw new Error(
+      'rifty: esbuild host bridge missing — installEsbuildBridge() must run before esbuild is imported (prepareViteCli/bootDevServer/bootBuild wiring)',
+    );
   }
-  return bridge(input, options);
+  return host;
 }
 
-export function transformSync(_input, _options = {}) {
-  throw new NotImplementedError('esbuild.transformSync', 'the real WASI transform is async');
+export const version = hostEsbuild().version;
+
+let initializeCalled = false;
+export async function initialize(options = {}) {
+  // Node esbuild parity: browser-only options are rejected and a second
+  // call throws; the actual service start is owned by the host bridge.
+  if (options.wasmURL || options.wasmModule || options.worker !== undefined) {
+    throw new Error('The "wasmURL", "wasmModule" and "worker" options only work in esbuild-wasm');
+  }
+  if (initializeCalled) {
+    throw new Error('Cannot call "initialize" more than once');
+  }
+  initializeCalled = true;
+  await hostEsbuild().initialize();
 }
 
-export async function build(_opts) {
-  throw new NotImplementedError('esbuild.build', 'use the WASI runner');
+export function transform(input, options) {
+  return hostEsbuild().transform(input, options);
 }
 
-export function buildSync(_opts) {
-  throw new NotImplementedError('esbuild.buildSync', 'use the WASI runner');
+export function build(options) {
+  return hostEsbuild().build(options);
 }
 
-export async function context(_opts) {
-  // Minimal context that does nothing but lets Vite's dep-pre-bundling code
-  // run to completion without throwing on construction.
-  return {
-    rebuild: async () => ({ errors: [], warnings: [], outputFiles: [], metafile: { inputs: {}, outputs: {} } }),
-    watch: async () => undefined,
-    serve: async () => undefined,
-    cancel: async () => undefined,
-    dispose: async () => undefined,
-  };
+export function context(options) {
+  return hostEsbuild().context(options);
 }
 
-export async function analyzeMetafile(_metafile, _opts) {
-  return '';
+export function formatMessages(messages, options) {
+  return hostEsbuild().formatMessages(messages, options);
 }
 
-export function analyzeMetafileSync(_metafile, _opts) {
-  return '';
+export function analyzeMetafile(metafile, options) {
+  return hostEsbuild().analyzeMetafile(metafile, options);
 }
 
-export async function formatMessages(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
+export function stop() {
+  return hostEsbuild().stop();
 }
 
-export function formatMessagesSync(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
+export function transformSync(_input, _options) {
+  throw new NotImplementedError('esbuild.transformSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+export function buildSync(_options) {
+  throw new NotImplementedError('esbuild.buildSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+export function formatMessagesSync(_messages, _options) {
+  throw new NotImplementedError('esbuild.formatMessagesSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+export function analyzeMetafileSync(_metafile, _options) {
+  throw new NotImplementedError('esbuild.analyzeMetafileSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
 }
 
 export const default_ = {
   version,
+  initialize,
   transform,
   transformSync,
   build,
   buildSync,
   context,
-  analyzeMetafile,
-  analyzeMetafileSync,
   formatMessages,
   formatMessagesSync,
-  initialize,
+  analyzeMetafile,
+  analyzeMetafileSync,
+  stop,
 };
 
 export { default_ as default };
@@ -154,164 +171,6 @@ const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
 export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
-};
-
-const SHIM_ESBUILD_BUILD_SOURCE = `// rifty: esbuild shim — BUILD path, real async WASI transform bridge
-const NotImplementedError = class extends Error {
-  constructor(feature, hint) {
-    super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
-    this.name = 'NotImplementedError';
-    this.feature = feature;
-  }
-};
-
-export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
-
-export async function initialize(_opts) {
-  return undefined;
-}
-
-function decodeInput(input) {
-  return typeof input === 'string' ? input : new TextDecoder().decode(input);
-}
-
-function transformBridge() {
-  const bridge = globalThis.__riftyEsbuildTransform;
-  if (typeof bridge !== 'function') {
-    throw new NotImplementedError('esbuild.transform', 'rifty build WASI bridge not installed');
-  }
-  return bridge;
-}
-
-export async function transform(input, options = {}) {
-  const result = await transformBridge()(decodeInput(input), options);
-  return {
-    code: result.code,
-    map: result.map,
-    warnings: result.warnings || [],
-    legalComments: '',
-    mangleCache: undefined,
-  };
-}
-
-export function transformSync(_input, _options = {}) {
-  throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
-}
-
-function loaderForPath(path) {
-  if (/\\.tsx$/i.test(path)) return 'tsx';
-  if (/\\.ts$/i.test(path)) return 'ts';
-  if (/\\.jsx$/i.test(path)) return 'jsx';
-  return 'js';
-}
-
-function firstEntryPoint(opts) {
-  if (!Array.isArray(opts.entryPoints) || opts.entryPoints.length !== 1 || typeof opts.entryPoints[0] !== 'string') {
-    throw new NotImplementedError('esbuild.build.entryPoints', 'rifty config bundling supports one string entry point');
-  }
-  return opts.entryPoints[0];
-}
-
-async function loadEntryThroughPlugins(opts, entry) {
-  const onLoad = [];
-  const api = {
-    onResolve() {
-      // The minimal config bridge does not traverse imports. Vite's own
-      // externalize plugin may register resolvers; they are relevant only if a
-      // config imports extra modules, which remains a loud gap below.
-    },
-    onLoad(options, callback) {
-      onLoad.push({ filter: options && options.filter, callback });
-    },
-  };
-  for (const plugin of opts.plugins || []) {
-    if (plugin && typeof plugin.setup === 'function') plugin.setup(api);
-  }
-  for (const hook of onLoad) {
-    if (hook.filter && !hook.filter.test(entry)) continue;
-    const loaded = await hook.callback({ path: entry, namespace: 'file', pluginData: undefined });
-    if (loaded) {
-      return {
-        contents: typeof loaded.contents === 'string' ? loaded.contents : decodeInput(loaded.contents || ''),
-        loader: loaded.loader || loaderForPath(entry),
-      };
-    }
-  }
-  throw new NotImplementedError('esbuild.build.onLoad', 'rifty config bundling needs an onLoad result for the entry');
-}
-
-export async function build(opts = {}) {
-  if (opts.write !== false) {
-    throw new NotImplementedError('esbuild.build.write', 'rifty config bundling supports write:false only');
-  }
-  const entry = firstEntryPoint(opts);
-  const loaded = await loadEntryThroughPlugins(opts, entry);
-  const result = await transformBridge()(loaded.contents, {
-    loader: loaded.loader,
-    format: opts.format || 'esm',
-    target: Array.isArray(opts.target) ? opts.target.join(',') : opts.target,
-    sourcemap: opts.sourcemap,
-  });
-  const text = result.code;
-  return {
-    errors: [],
-    warnings: result.warnings || [],
-    outputFiles: [
-      {
-        path: opts.outfile || '<stdout>',
-        contents: new TextEncoder().encode(text),
-        text,
-      },
-    ],
-    metafile: opts.metafile ? { inputs: { [entry]: {} }, outputs: {} } : undefined,
-    mangleCache: undefined,
-  };
-}
-
-export function buildSync(_opts) {
-  throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
-}
-
-export async function context(_opts) {
-  throw new NotImplementedError('esbuild.context', 'vite production build does not use dep pre-bundling here');
-}
-
-export async function analyzeMetafile(_metafile, _opts) {
-  return '';
-}
-
-export function analyzeMetafileSync(_metafile, _opts) {
-  return '';
-}
-
-export async function formatMessages(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
-}
-
-export function formatMessagesSync(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
-}
-
-export const default_ = {
-  version,
-  transform,
-  transformSync,
-  build,
-  buildSync,
-  context,
-  analyzeMetafile,
-  analyzeMetafileSync,
-  formatMessages,
-  formatMessagesSync,
-  initialize,
-};
-
-export { default_ as default };
-`;
-
-export const esbuildBuildShimFiles: Record<string, string> = {
-  '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
-  '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_BUILD_SOURCE,
 };
 
 const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
@@ -462,8 +321,10 @@ export function collectBrowserShimFiles(names: readonly BrowserShimName[]): Reco
 }
 
 export const viteBrowserShimFiles = collectBrowserShimFiles(['esbuild', 'lightningcss', 'rollup']);
+// Build differs from dev only in the rollup overlay (real WASM parser); the
+// esbuild shim is ONE honest delegation for both (ADR-0192).
 export const viteBuildShimFiles: Record<string, string> = {
-  ...esbuildBuildShimFiles,
+  ...esbuildShimFiles,
   ...lightningcssShimFiles,
   ...rollupBuildShimFiles,
 };

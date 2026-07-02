@@ -54,9 +54,10 @@ Vite 7.x declares `esbuild: ^0.27.0` (7.3.6 also allows `^0.28.0`);
 - **One esbuild per guest**: the vite transform path moves off the per-call WASI
   CLI bridge onto the same esbuild-wasm instance — no version skew between
   `transform` (was 0.28.0 binary behind a "0.21.5" facade) and `build`/`context`.
-- **Vendor the wasm**: `esbuild-wasm@0.27.7`'s `esbuild.wasm` fetched by a pinned
-  fetch script (SHA-512, same pattern as `fetch-esbuild-wasi.mjs`), checked in,
-  served as a playground asset with an env-configurable URL (D-004), loaded
+- **Ship the wasm from the host bundle**: `esbuild-wasm` is an exact-pinned
+  playground devDependency (lockfile-hermetic — unlike the guest-served WASI
+  binary, no repo vendoring needed); its `esbuild.wasm` is emitted as a bundled
+  asset (`?url` import), so no runtime external URL exists (D-004), loaded
   lazily on first esbuild API use (never on preset boot path).
 - **ADR-0047 scope**: vendoring `@esbuild/wasi-preview1` and its role as the
   WASI-infra forcing consumer (CLI conformance, shell `esbuild` binary) stay.

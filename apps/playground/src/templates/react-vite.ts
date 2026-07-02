@@ -991,7 +991,10 @@ export const REACT_VITE_TEMPLATE = {
   server: {
     appType: 'spa',
     strictPort: true,
-    optimizeDepsDisabled: true,
+    // Real dep pre-bundling REQUIRED: react/react-dom are CJS-only and
+    // @vitejs/plugin-react injects optimizeDeps.include — the optimizer runs
+    // on the host esbuild-wasm bridge (ADR-0192).
+    optimizeDepsDisabled: false,
     host: true,
     allowedHosts: true,
   },
