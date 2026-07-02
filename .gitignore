@@ -31,3 +31,10 @@ docs/superpowers/
 
 # Local Netlify folder
 .netlify
+
+# agent-bench run artifacts (traces contain model output; committed artifacts are
+# human-authored summaries only — ADR-0191). Mirrors tools/agent-bench/reports/.gitignore
+# at root level so biome (vcs.useIgnoreFile reads only the root file) skips them too.
+tools/agent-bench/reports/*
+!tools/agent-bench/reports/README.md
+!tools/agent-bench/reports/.gitignore

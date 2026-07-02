@@ -1,0 +1,15 @@
+{
+  "name": "@riftydev/agent-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "External two-lane validation harness for the playground AI mode (ADR-0191). Never product API.",
+  "main": "./src/cli.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.3",
+    "@playwright/test": "^1.49.0"
+  }
+}

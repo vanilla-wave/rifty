@@ -25,6 +25,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:parity": "tsx tools/node-parity-runner/src/cli.ts",
+    "agent-bench": "tsx tools/agent-bench/src/cli.ts",
     "test:conformance": "vitest run --project conformance",
     "test:integration": "vitest run --project integration",
     "test:e2e": "pnpm test:e2e:heavy && pnpm test:e2e:light",

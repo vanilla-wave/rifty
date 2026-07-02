@@ -1,0 +1,1 @@
+Add a stats endpoint to the message API. GET /api/stats should return JSON shaped like {"total": <number of messages>, "byAuthor": {"<author>": <message count>}}. It has to stay correct as new messages are POSTed, not return a hardcoded snapshot.
