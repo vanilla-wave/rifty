@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **Preset boot extracted to a headless orchestration core (ADR-0197, epic
+  playground-testable-core, slice 3).** The preset-transition veil + one
+  serialization queue, the TS-request gate over an in-flight transition, the
+  dev-server preset boot (fresh session vs restart-in-place, ADR-0148) and the
+  gallery-pick flow (paint → owner start → stop-before-write → scratch establish
+  → memory-mode seed → boot; eager vs from-dequeue TS gate) now live in
+  `src/orchestration/preset-boot.ts` behind injected ports (the slice-1
+  dev-server core rides in as a port — dependency spine); App binds the real
+  ones. Behavior-preserving; contracts pinned by RED-checked behavioral
+  node-vitest tests (19) instead of ~56 `expect(source)` greps (App.test.ts
+  source-asserts 387 → 331).
+
 - **Boot/restore + project switch extracted to headless orchestration cores
   (ADR-0197, epic playground-testable-core, slice 2).** The workspace-owner
   start gate (`ensureStarted`), the sequential project switch (teardown →

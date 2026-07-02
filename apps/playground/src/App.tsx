@@ -95,6 +95,7 @@ import {
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
+import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
 import {
@@ -352,7 +353,7 @@ export function App(props: AppProps) {
   }
 
   function workspaceArchiveBlocked(): boolean {
-    return presetTransitioning() || devServer.status() !== 'stopped';
+    return presetBoot.transitioning() || devServer.status() !== 'stopped';
   }
 
   async function downloadWorkspaceArchive(): Promise<void> {
@@ -839,28 +840,9 @@ export function App(props: AppProps) {
   // Dev-server lifecycle is OWNER-driven (ADR-0148) and lives in the extracted
   // orchestration core (`orchestration/dev-server-lifecycle.ts`, ADR-0197); the
   // `devServer` binding below (after the manager) wires its ports to the real
-  // owner/terminal/machine.
-  const [presetTransitioning, setPresetTransitioning] = createSignal(false);
-  let presetTransitionChain: Promise<void> = Promise.resolve();
+  // owner/terminal/machine. Preset transitions live in the preset-boot core
+  // (`orchestration/preset-boot.ts`, slice 3) bound further below.
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
-  interface TsPresetTransitionGate {
-    resolve(): void;
-  }
-  let tsPresetTransitionReady: Promise<void> = Promise.resolve();
-  function beginTsPresetTransition(): TsPresetTransitionGate {
-    let resolve!: () => void;
-    tsPresetTransitionReady = new Promise<void>((done) => {
-      resolve = done;
-    });
-    return { resolve };
-  }
-  function queuePresetTransition(run: () => Promise<void>): Promise<void> {
-    const queued = presetTransitionChain.then(run, run);
-    presetTransitionChain = queued.catch((err: unknown) => {
-      console.error('[preset-transition] failed', err);
-    });
-    return presetTransitionChain;
-  }
 
   // The terminal shell + cwd/env + npm + bin all live in the persistent
   // workspace owner now (ADR-0146 owner-resident shell); the manager is a thin pty-channel client.
@@ -962,8 +944,8 @@ export function App(props: AppProps) {
       await setActiveIndex(workspaceOwner().snapshotPort, id);
     },
     transition: {
-      begin: () => setPresetTransitioning(true),
-      end: () => setPresetTransitioning(false),
+      begin: () => presetBoot.beginTransition(),
+      end: () => presetBoot.endTransition(),
     },
     devServer: {
       lifecycleRunning: () => devServer.lifecycleRunning(),
@@ -981,8 +963,8 @@ export function App(props: AppProps) {
       // boot. The boot replays the RECORDED dev command of the previously running
       // session (a fork may have swapped the dev tool) — template boot lines when none.
       const preset = presetForId(activeStarterId());
-      void queuePresetTransition(() =>
-        runVitePreset(
+      void presetBoot.queueTransition(() =>
+        presetBoot.runPreset(
           preset,
           undefined,
           restoreBootLines(props.terminalPersistence.initialState.devCommand, preset, activeRoot()),
@@ -1009,6 +991,54 @@ export function App(props: AppProps) {
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
     restore: (idx) => void workspace.restoreOnReload(idx),
     pickDeepLinkStarter: (id) => void onPickStarter(id),
+  });
+
+  // Headless preset-boot core (ADR-0197 slice 3) bound to the REAL ports: the
+  // dev-server core (dependency spine), the owner dev-config, the page terminal
+  // echo loop, the picked-starter paint/seed glue and the TS re-init hook.
+  const presetBoot = createPresetBoot<TerminalSessionSnapshot>({
+    devServer: {
+      lifecycleRunning: () => devServer.lifecycleRunning(),
+      sessionId: () => devServer.sessionId(),
+      pickSession: () => devServer.pickSession(),
+      reserveSession: (session) => devServer.reserveSession(session),
+      claimSession: (id) => devServer.claimSession(id),
+      beginBoot: (id) => devServer.beginBoot(id),
+      nextGeneration: () => devServer.nextGeneration(),
+      currentGeneration: () => devServer.currentGeneration(),
+      stopSession: (id) => devServer.stopSession(id),
+      stopBeforeStarterWrite: () => devServer.stopBeforeStarterWrite(),
+      startSession: (id, generation, preset, override) =>
+        devServer.startSession(id, generation, preset, override),
+      waitForPresetBoot: (id, generation, spec) =>
+        devServer.waitForPresetBoot(id, generation, spec),
+    },
+    presetForId: (id) => presetForId(id),
+    templateForPreset,
+    bootLines: (preset) => presetBootLines(preset, activeRoot()),
+    // `slug` keys the install stamp/RIFTY_RFV_SLUG to the ACTIVE ROOT
+    // (store.activeId — 'scratch' on a gallery pick), matching the owner spawn;
+    // `templateId`/`setup` follow the picked preset (ADR-0148).
+    applyDevConfig: (preset) =>
+      workspaceOwner().setDevConfig({
+        templateId: templateForPreset(preset).id,
+        slug: store.activeId(),
+        setup: preset.setup,
+      }),
+    freshConsole: (id) => manager.freshConsole(id, terminalWelcomeBanner),
+    runBootSequence: (id, lines) => runTerminalSequence(id, lines),
+    reinitializeTs: () => reinitializeTsForPickedPreset(),
+    dirtyScratchPick: () => store.activeId() === 'scratch' && store.scratch()?.dirty === true,
+    setOwnerReady: (ready) => workspace.setOwnerReady(ready),
+    paintStarterUi: (preset) => paintPickedStarterUi(preset),
+    markEditorContextReady: () => indexBoot.setEditorProjectContextReady(true),
+    noteStarterBaselinePending: () => {
+      if (!workspace.started()) starterGeneratedBaselinePendingForNextOwner = true;
+    },
+    ensureOwnerStarted: () => workspace.ensureStarted(false),
+    establishScratch: (id, opts) => durableNewScratch(id, opts),
+    ephemeralStorage: saveAffordance(storageMode).ephemeral,
+    seedWorkspace: (preset) => seedViteWorkspace(preset),
   });
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
@@ -1306,7 +1336,7 @@ export function App(props: AppProps) {
     let ready: Promise<boolean> = Promise.resolve(false);
     const waitForTsRequestGate = async (): Promise<void> => {
       await owner.ready;
-      await tsPresetTransitionReady;
+      await presetBoot.tsTransitionReady();
     };
     const waitForTsReady = async (): Promise<void> => {
       await waitForTsRequestGate();
@@ -1959,81 +1989,6 @@ export function App(props: AppProps) {
     await loadPresetUi(preset);
   }
 
-  async function runVitePreset(
-    preset: Preset,
-    tsGate?: TsPresetTransitionGate,
-    bootLinesOverride?: readonly string[],
-  ): Promise<void> {
-    try {
-      setPresetTransitioning(true);
-      // The caller already painted the starter UI and, for OPFS, established the
-      // owner tree via durableNewScratch(). Re-loading/re-seeding here can erase
-      // edits made during the boot window.
-      const restartNeeded = devServer.lifecycleRunning();
-      const restartSessionId = restartNeeded
-        ? (devServer.sessionId() ?? devServer.pickSession().id)
-        : undefined;
-      const restartGeneration = restartNeeded ? devServer.nextGeneration() : undefined;
-      if (restartNeeded) await devServer.stopSession(restartSessionId ?? null);
-      if (restartGeneration !== undefined && restartGeneration !== devServer.currentGeneration()) {
-        return;
-      }
-      let session: TerminalSessionSnapshot | undefined;
-      if (!restartNeeded) {
-        session = devServer.pickSession();
-        devServer.claimSession(session.id);
-      }
-      // Tell the owner which template/runtime the next co-resident dev server boots
-      // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
-      // must update the runtime before the dev line runs. `slug` keys the install
-      // stamp/RIFTY_RFV_SLUG to the ACTIVE ROOT (store.activeId — 'scratch' on a
-      // gallery pick), matching the owner spawn; `templateId`/`setup` follow the
-      // picked preset (the new active starter for this scratch).
-      //
-      // The ack is config-assignment only — the deps restore no longer gates it
-      // (the owner's per-run `beforeRun` gate awaits the restore inside the run,
-      // streaming progress), so the `$ <boot line>` echo below paints immediately.
-      await workspaceOwner().setDevConfig({
-        templateId: templateForPreset(preset).id,
-        slug: store.activeId(),
-        setup: preset.setup,
-      });
-      if (restartNeeded) {
-        if (restartSessionId && restartGeneration !== undefined) {
-          const booted = await devServer.startSession(
-            restartSessionId,
-            restartGeneration,
-            preset,
-            bootLinesOverride,
-          );
-          if (!booted) return;
-        }
-        reinitializeTsForPickedPreset();
-        return;
-      }
-      if (!session) return;
-      session = await devServer.reserveSession(session);
-      devServer.claimSession(session.id);
-      manager.freshConsole(session.id, terminalWelcomeBanner); // fresh console + greeting
-      const generation = devServer.nextGeneration();
-      devServer.beginBoot(session.id);
-      void runTerminalSequence(
-        session.id,
-        bootLinesOverride ?? presetBootLines(preset, activeRoot()),
-      );
-      const booted = await devServer.waitForPresetBoot(
-        session.id,
-        generation,
-        templateForPreset(preset),
-      );
-      if (!booted) return;
-      reinitializeTsForPickedPreset();
-    } finally {
-      setPresetTransitioning(false);
-      tsGate?.resolve();
-    }
-  }
-
   onMount(() => {
     // Boot policy (ADR-0165 project-first + preset deep-link) — decided in the
     // index-boot core; the degraded fallback-beat timer is cancelled on unmount.
@@ -2141,32 +2096,14 @@ export function App(props: AppProps) {
     if (!(await workspace.waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
     indexBoot.markBootDecisionMade();
-    const runPick = async (): Promise<void> => {
-      const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
-      const tsGate = wasDirty ? undefined : beginTsPresetTransition();
-      if (!wasDirty) workspace.setOwnerReady(false);
-      store.pickStarter(id);
-      if (!wasDirty) {
-        await paintPickedStarterUi(presetForId(id));
-        indexBoot.setEditorProjectContextReady(true);
-        if (!workspace.started()) starterGeneratedBaselinePendingForNextOwner = true;
-        await workspace.ensureStarted(false);
-        await devServer.stopBeforeStarterWrite();
-        await durableNewScratch(id, { preserveDirtySameStarter: true });
-        // Memory mode has no durable index → durableNewScratch is a no-op, so this is
-        // the ONLY owner-tree seed. AWAIT it before runVitePreset boots vite, else the
-        // dev server can start over an un-seeded /scratch (runVitePreset no longer
-        // seeds/waits — that guarantee moved here).
-        if (saveAffordance(storageMode).ephemeral) await seedViteWorkspace(presetForId(id));
-        workspace.setOwnerReady(true);
-        await runVitePreset(presetForId(id), tsGate);
-      }
-    };
-    if (presetTransitioning()) {
-      await queuePresetTransition(runPick);
-      return;
-    }
-    void queuePresetTransition(runPick);
+    // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
+    // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
+    // commit — a dirty scratch opens the switch dialog and the boot aborts there.
+    await presetBoot.pickStarter(id, {
+      commit: (starter) => store.pickStarter(starter),
+      guardDirtyScratch: true,
+      preserveDirtySameStarter: true,
+    });
   }
 
   // Switch active root from the launcher/chip. The store gates a dirty scratch
@@ -2452,29 +2389,13 @@ export function App(props: AppProps) {
     pendingId?: string;
   }): Promise<void> {
     if (target.pendingStarter) {
-      const pendingStarter = target.pendingStarter;
-      const tsGate = beginTsPresetTransition();
-      const runPendingStarter = async (): Promise<void> => {
-        workspace.setOwnerReady(false);
-        store.confirmPickStarter(pendingStarter);
-        await paintPickedStarterUi(presetForId(pendingStarter));
-        indexBoot.setEditorProjectContextReady(true);
-        if (!workspace.started()) starterGeneratedBaselinePendingForNextOwner = true;
-        await workspace.ensureStarted(false);
-        await devServer.stopBeforeStarterWrite();
-        await durableNewScratch(pendingStarter);
-        // Memory mode: AWAIT the seed before vite boots (see onPickStarter) — the
-        // only owner-tree seed in the ephemeral path.
-        if (saveAffordance(storageMode).ephemeral)
-          await seedViteWorkspace(presetForId(pendingStarter));
-        workspace.setOwnerReady(true);
-        await runVitePreset(presetForId(pendingStarter), tsGate);
-      };
-      if (presetTransitioning()) {
-        await queuePresetTransition(runPendingStarter);
-        return;
-      }
-      void queuePresetTransition(runPendingStarter);
+      // Unguarded commit + an EAGER TS gate: the gate must block TS requests for
+      // the whole queued wait, not only from dequeue (the dialog already decided).
+      await presetBoot.pickStarter(target.pendingStarter, {
+        commit: (starter) => store.confirmPickStarter(starter),
+        guardDirtyScratch: false,
+        eagerTsGate: true,
+      });
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void workspace.trackSwitch(workspace.switchTo(target.pendingId));
@@ -2771,7 +2692,7 @@ export function App(props: AppProps) {
   });
 
   const livePillLabel = (): string =>
-    presetTransitioning()
+    presetBoot.transitioning()
       ? 'SWITCHING'
       : devServer.status() === 'running'
         ? `LIVE :${machine.realVitePort()}`
@@ -2783,7 +2704,7 @@ export function App(props: AppProps) {
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
-        ? presetTransitioning()
+        ? presetBoot.transitioning()
           ? `${activeTemplate().displayName} · switching`
           : devServer.status() === 'running'
             ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
@@ -2839,7 +2760,7 @@ export function App(props: AppProps) {
 
         <span
           class="rf-livepill"
-          data-state={presetTransitioning() ? 'switching' : devServer.status()}
+          data-state={presetBoot.transitioning() ? 'switching' : devServer.status()}
           title={modeLabel()}
         >
           <span class="rf-livepill__dot" aria-hidden="true" />
