@@ -15,10 +15,14 @@
  * violate CLAUDE.md "no internal imports across packages").
  */
 import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
-import { RegistryClient } from '@riftydev/npm-client';
+import {
+  RegistryClient,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
+} from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type InstallFn,
   createNpmShellCommand,
@@ -1191,5 +1195,211 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(exitCode).toBe(0);
     expect(seenResolverUrl).toBeUndefined();
     expect(rec.stdout.join('')).not.toContain('via eddy');
+  });
+});
+
+describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
+  async function projVfs(deps: Record<string, string> = { debug: '^4.4.1' }): Promise<MemoryVfs> {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', version: '0.0.0', dependencies: deps }, null, 2)}\n`,
+    );
+    return vfs;
+  }
+
+  function keyFor(deps: Record<string, string>): string {
+    const body = eddyRequestFromPackageJson(JSON.stringify({ dependencies: deps }));
+    if (!body) throw new Error('test setup: bad package.json');
+    return canonicalEddyRequestKey(body);
+  }
+
+  /** Let a fire-and-forget write-back settle. */
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('a learned pin rides into install() as resolverClosureHash when no env pin exists', async () => {
+    const vfs = await projVfs();
+    const getKeys: string[] = [];
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async (key) => {
+            getKeys.push(key);
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seenPin).toBe('sha256-learned');
+    expect(getKeys).toEqual([keyFor({ debug: '^4.4.1' })]);
+  });
+
+  it('the env pin wins — the learned store is not even consulted', async () => {
+    const vfs = await projVfs();
+    let gets = 0;
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-env',
+        learnedPins: {
+          get: async () => {
+            gets++;
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
+    expect(seenPin).toBe('sha256-env');
+    expect(gets).toBe(0);
+  });
+
+  it('an eddy install writes the pin back under the MERGED package.json request key', async () => {
+    const vfs = await projVfs({ debug: '^4.4.1' });
+    const sets: Array<{ key: string; hash: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async (key, hash) => {
+            sets.push({ key, hash });
+          },
+        },
+        install: async () => ({
+          ...singletonResult('kleur', '4.1.5'),
+          source: 'eddy',
+          closureHash: 'sha256-new',
+        }),
+      }),
+    );
+
+    // A named install MERGES into package.json first — the learned key must be
+    // the post-merge request (debug + kleur), not the pre-install file.
+    const { exitCode } = await runShell(shell, 'npm install kleur@4.1.5');
+    await flush();
+
+    expect(exitCode).toBe(0);
+    expect(sets).toEqual([
+      { key: keyFor({ debug: '^4.4.1', kleur: '4.1.5' }), hash: 'sha256-new' },
+    ]);
+  });
+
+  it('a standard-source install never writes a pin', async () => {
+    const vfs = await projVfs();
+    let sets = 0;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async () => {
+            sets++;
+          },
+        },
+        install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+    await flush();
+
+    expect(sets).toBe(0);
+  });
+
+  it('a failing pin write-back is swallowed (warn) — the install still succeeds', async () => {
+    const vfs = await projVfs();
+    const shell = new Shell({ cwd: '/proj' });
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map((a) => String(a)).join(' '));
+    });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async () => {
+            throw new Error('opfs exploded');
+          },
+        },
+        install: async () => ({
+          ...singletonResult('debug', '4.4.1'),
+          source: 'eddy',
+          closureHash: 'sha256-new',
+        }),
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+    await flush();
+    warnSpy.mockRestore();
+
+    expect(exitCode).toBe(0);
+    expect(warnings.some((w) => /learned pin/.test(w))).toBe(true);
+  });
+
+  it('is inert without resolverUrl — the learned store is never consulted', async () => {
+    const vfs = await projVfs();
+    let gets = 0;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        learnedPins: {
+          get: async () => {
+            gets++;
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
+    expect(gets).toBe(0);
   });
 });

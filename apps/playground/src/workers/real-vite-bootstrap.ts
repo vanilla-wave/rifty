@@ -42,6 +42,11 @@ import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
+import {
+  learnedPinForPackageJsonSync,
+  readLearnedPin,
+  writeLearnedPin,
+} from '../glue/eddy-learned-pins.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
 import { startInstallPrefetch } from '../glue/install-prefetch.ts';
@@ -476,8 +481,10 @@ async function bootShellOwner(opts: {
       resolverUrl,
       // Pins key on the TEMPLATE id (the template owns the dep-set); the slug
       // is the root id ('scratch'|projectId, ADR-0165) and says nothing about
-      // the closure.
-      closureHash: getEddyPin(devSpec.id),
+      // the closure. No env pin → a learned pin (ADR-0194) turns the prefetch
+      // into a cacheable GET; read SYNC — this whole gate is sync by design.
+      closureHash:
+        getEddyPin(devSpec.id) ?? learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson),
       bundleBaseUrl: getEddyBundleBaseUrl(),
     });
   }
@@ -869,6 +876,11 @@ async function bootShellOwner(opts: {
       resolverClosureHash: () => getEddyPin(devSpec.id),
       resolverBundleBaseUrl: getEddyBundleBaseUrl(),
       resolverPrefetch: () => installPrefetch,
+      // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
+      learnedPins: {
+        get: (key) => readLearnedPin(vfs, key),
+        set: (key, hash) => writeLearnedPin(vfs, key, hash),
+      },
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =

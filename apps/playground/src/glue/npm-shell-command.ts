@@ -29,6 +29,8 @@ import {
   type InstallOptions,
   type InstallResult,
   type RegistryClient,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
   install as realInstall,
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
@@ -77,6 +79,14 @@ export interface NpmShellCommandDeps {
    *  install() consumes the handle at most once and only on a canonical
    *  request match. Inert without `resolverUrl`. */
   readonly resolverPrefetch?: () => EddyPrefetchHandle | undefined;
+  /** Learned pins (ADR-0194): `canonicalEddyRequestKey → closureHash`. Read
+   *  (post-merge key) when no env pin covers the install; written
+   *  fire-and-forget after a successful eddy install so the NEXT identical dep
+   *  set is a cacheable GET. Inert without `resolverUrl`. */
+  readonly learnedPins?: {
+    get(requestKey: string): Promise<string | undefined>;
+    set(requestKey: string, closureHash: string): Promise<void>;
+  };
 }
 
 interface ProjectPackageJson {
@@ -449,8 +459,18 @@ async function runInstall(
   const start = performance.now();
 
   const installFn = deps.install ?? realInstall;
-  const resolverClosureHash = deps.resolverClosureHash?.();
+  const envPin = deps.resolverClosureHash?.();
   const resolverPrefetch = deps.resolverPrefetch?.();
+  // Learned pins (ADR-0194): key on the request install() will actually send —
+  // computed AFTER the merged package.json write above, so a named install
+  // (`npm i kleur`) keys the post-merge set, not the stale file. Env pin wins;
+  // the learned store is consulted only to fill its absence.
+  const requestKey = deps.resolverUrl ? await installRequestKey(deps.vfs, packageJsonPath) : null;
+  const learnedPin =
+    !envPin && requestKey && deps.learnedPins
+      ? await deps.learnedPins.get(requestKey).catch(() => undefined)
+      : undefined;
+  const resolverClosureHash = envPin ?? learnedPin;
   try {
     const result = await installFn({
       vfs: deps.vfs,
@@ -474,6 +494,17 @@ async function runInstall(
     const elapsedMs = Math.round(performance.now() - start);
 
     await stampInstalledTree(deps, ctx.cwd, result.packages.length);
+    // Fire-and-forget write-back: the pin is an optimization, never worth
+    // blocking or failing the install line over.
+    if (result.source === 'eddy' && result.closureHash && requestKey && deps.learnedPins) {
+      const { learnedPins } = deps;
+      const closureHash = result.closureHash;
+      void Promise.resolve()
+        .then(() => learnedPins.set(requestKey, closureHash))
+        .catch((err) => {
+          console.warn(`npm: learned pin write failed: ${(err as Error).message}`);
+        });
+    }
     const via = result.source === 'eddy' ? ' via eddy (fast)' : '';
     ctx.stdout.write(
       `npm: installed ${result.packages.length} package(s) in ${formatInstallDuration(elapsedMs)}${via}\n`,
@@ -498,6 +529,24 @@ function hasRootLifecycleScript(scripts: Record<string, string>): boolean {
     scripts.postinstall !== undefined ||
     scripts.prepare !== undefined
   );
+}
+
+/**
+ * The canonical eddy request key for the package.json ON DISK (post-merge).
+ * `null` when the file is missing or a shape the installer would reject — then
+ * no pin can be looked up or learned (the install itself surfaces any loud
+ * error).
+ */
+async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<string | null> {
+  if (!(await vfs.exists(packageJsonPath))) return null;
+  let text: string;
+  try {
+    text = await vfs.readFileText(packageJsonPath);
+  } catch {
+    return null;
+  }
+  const body = eddyRequestFromPackageJson(text);
+  return body ? canonicalEddyRequestKey(body) : null;
 }
 
 /**
