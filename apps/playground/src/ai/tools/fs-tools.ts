@@ -16,6 +16,12 @@ import { type DefinedAiTool, cappedResult, defineAiTool } from './tool-def.ts';
 const enc = new TextEncoder();
 const fatalDec = new TextDecoder('utf-8', { fatal: true });
 
+/** Directory-scope param: absent OR empty/whitespace means the workspace root.
+ *  (Agents routinely call list/grep with `path: ""` expecting the root.) */
+function dirScope(path: string | undefined): string {
+  return path && path.trim() !== '' ? path : '.';
+}
+
 /** Listing/grep/glob guards so a huge tree cannot melt one tool call. */
 export const LIST_MAX_ENTRIES = 2_000;
 export const GREP_MAX_MATCHES = 500;
@@ -212,15 +218,15 @@ export function buildFsTools(ctx: AiAppContext): DefinedAiTool[] {
     name: 'list_files',
     label: 'List files',
     snippet: 'list the workspace tree (dirs end with /)',
-    description: `Recursively list files and directories under a path (default: workspace root). node_modules content is not included. Stops after ${LIST_MAX_ENTRIES} entries.`,
+    description: `Recursively list files and directories under a path (default: workspace root; omit or pass "" for the root). node_modules content is not included. Stops after ${LIST_MAX_ENTRIES} entries.`,
     parameters: Type.Object({
       path: Type.Optional(
-        Type.String({ description: 'Directory to list (default workspace root)' }),
+        Type.String({ description: 'Directory to list (default workspace root; "" = root)' }),
       ),
     }),
     execute: (params) => {
       const root = ctx.root();
-      const base = resolveWorkspacePath(root, params.path ?? '.');
+      const base = resolveWorkspacePath(root, dirScope(params.path));
       const out: string[] = [];
       const budget = { left: LIST_MAX_ENTRIES };
       walkTree(ctx, base, out, budget);
@@ -239,7 +245,7 @@ export function buildFsTools(ctx: AiAppContext): DefinedAiTool[] {
     parameters: Type.Object({
       pattern: Type.String({ description: 'JavaScript regex (no flags syntax, source only)' }),
       path: Type.Optional(
-        Type.String({ description: 'Directory or file to search (default root)' }),
+        Type.String({ description: 'Directory or file to search (default root; "" = root)' }),
       ),
       ignoreCase: Type.Optional(Type.Boolean({ description: 'Case-insensitive match' })),
     }),
@@ -251,7 +257,7 @@ export function buildFsTools(ctx: AiAppContext): DefinedAiTool[] {
       } catch (err) {
         throw new Error(`grep: invalid pattern ${params.pattern} — ${(err as Error).message}`);
       }
-      const base = resolveWorkspacePath(root, params.path ?? '.');
+      const base = resolveWorkspacePath(root, dirScope(params.path));
       const files: string[] = [];
       if (ctx.snapshot.statSync(base).isFile) files.push(base);
       else walkFiles(ctx, base, files, { left: LIST_MAX_ENTRIES });

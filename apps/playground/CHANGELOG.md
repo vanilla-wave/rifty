@@ -35,6 +35,14 @@
   reload), edit_file loud mismatch, diagnostics≡Problems panel, all four
   preview tools, bench hooks (heavy lane).
 
+### Fixed
+
+- **AI mode `list_files` / `grep` accept an empty-string `path` as the workspace
+  root.** The optional `path` defaulted to root only when omitted (`?? '.'`);
+  an explicit `path: ""` — which agents routinely send — fell through to the
+  path guard and threw `path is empty`. Empty/whitespace now means root for
+  these directory-scope tools (read/write/edit still require a real path).
+
 - **`react-vite` preset — React 19 issue-tracker SPA** (template + instant baked
   snapshot + chooser card + deep-link): ordinary React + TS + Vite 7 + React
   Router 7 + `@vitejs/plugin-react` app, portable by unit-tested contract

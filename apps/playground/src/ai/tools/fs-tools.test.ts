@@ -179,6 +179,15 @@ describe('list_files / grep / glob', () => {
     expect(out).toContain('README.md');
   });
 
+  it('list_files / grep treat an empty-string path as the workspace root', async () => {
+    const h = makeHarness();
+    // Agents routinely call these with `path: ""`; it must mean root, not throw.
+    const listed = await run(h, 'list_files', { path: '' });
+    expect(listed).toContain('src/main.js');
+    expect(await run(h, 'grep', { pattern: 'bye', path: '' })).toContain('src/main.js:2');
+    expect(await run(h, 'grep', { pattern: 'bye', path: '   ' })).toContain('src/main.js:2');
+  });
+
   it('grep outputs path:line: text and errors on a bad regex', async () => {
     const h = makeHarness();
     expect(await run(h, 'grep', { pattern: 'bye' })).toBe("src/main.js:2: console.log('bye');");
