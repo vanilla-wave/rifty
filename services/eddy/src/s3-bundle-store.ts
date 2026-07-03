@@ -57,28 +57,41 @@ export class S3BundleStore implements BundleStore {
       manifest = unpackEddyBundle(bytes).manifest;
     } catch (err) {
       // A truncated/foreign object must read as a miss, not a served corrupt
-      // bundle — the client's POST fallback re-seeds the key.
+      // bundle — the compute-path put() (§put) then re-seeds the key.
       console.error(
         `eddy: bundle store object for ${closureHash} is not a valid bundle: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+    // Content-addressed invariant: the object at `bundle/<hash>` MUST be the
+    // bundle whose closure IS that hash. A mismatch (a valid bundle mis-keyed by
+    // a bad upload) reads as a miss, never served under the wrong key — put()
+    // re-seeds the correct bytes.
+    if (manifest.asOf.closureHash !== closureHash) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} carries a different closure hash ${manifest.asOf.closureHash} — treating as a miss`,
       );
       return null;
     }
     return { bytes, manifest };
   }
 
-  async has(closureHash: string): Promise<boolean> {
-    const res = await this.fetchImpl(this.urlFor(closureHash), { method: 'HEAD' });
-    if (res.status === 404) return false;
-    if (!res.ok) {
-      throw new Error(`eddy: bundle store HEAD ${closureHash} failed: HTTP ${res.status}`);
-    }
-    // Drain defensively; a HEAD body is empty by spec.
-    await res.arrayBuffer().catch(() => undefined);
-    return true;
-  }
-
   async put(closureHash: string, bundle: CachedBundle): Promise<void> {
     const url = this.urlFor(closureHash);
+    // Self-heal + skip-identical (ADR-0194 §5): HEAD first. S3 returns the
+    // single-part PUT's ETag = MD5-hex of the body, so a byte-identical object is
+    // already durable → skip the upload. A missing OR non-matching object
+    // (truncated/foreign/mis-keyed, all of which get() reads as a miss) → PUT,
+    // overwriting the poisoned key so GET-by-hash heals. A non-MD5 ETag (bucket
+    // default-encryption, multipart) never matches → we re-upload, a safe degrade.
+    const bodyMd5Hex = createHash('md5').update(bundle.bytes).digest('hex');
+    const head = await this.fetchImpl(url, { method: 'HEAD' }).catch(() => null);
+    if (head) {
+      await head.arrayBuffer().catch(() => undefined); // drain (empty by spec)
+      if (head.ok && (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex) {
+        return; // identical object already durable — no re-upload
+      }
+    }
     const payloadSha256Hex = createHash('sha256').update(bundle.bytes).digest('hex');
     const amzDate = toAmzDate(this.opts.now ? this.opts.now() : new Date());
     const headers: Record<string, string> = {

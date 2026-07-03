@@ -26,12 +26,10 @@ const bundle = (hash: string, size: number) => ({
 });
 
 describe('MemoryBundleStore', () => {
-  it('round-trips get/has/put', async () => {
+  it('round-trips get/put', async () => {
     const store = new MemoryBundleStore({ maxBytes: 1024 });
     expect(await store.get('sha256-a')).toBeNull();
-    expect(await store.has('sha256-a')).toBe(false);
     await store.put('sha256-a', bundle('sha256-a', 8));
-    expect(await store.has('sha256-a')).toBe(true);
     expect((await store.get('sha256-a'))?.manifest.asOf.closureHash).toBe('sha256-a');
   });
 
@@ -41,17 +39,17 @@ describe('MemoryBundleStore', () => {
     await store.put('sha256-b', bundle('sha256-b', 8));
     await store.get('sha256-a'); // promote a
     await store.put('sha256-c', bundle('sha256-c', 8)); // evicts b
-    expect(await store.has('sha256-b')).toBe(false);
-    expect(await store.has('sha256-a')).toBe(true);
-    expect(await store.has('sha256-c')).toBe(true);
+    expect(await store.get('sha256-b')).toBeNull();
+    expect(await store.get('sha256-a')).not.toBeNull();
+    expect(await store.get('sha256-c')).not.toBeNull();
   });
 
   it('a bundle larger than the cap is not stored (and evicts nothing)', async () => {
     const store = new MemoryBundleStore({ maxBytes: 10 });
     await store.put('sha256-a', bundle('sha256-a', 8));
     await store.put('sha256-big', bundle('sha256-big', 64));
-    expect(await store.has('sha256-big')).toBe(false);
-    expect(await store.has('sha256-a')).toBe(true);
+    expect(await store.get('sha256-big')).toBeNull();
+    expect(await store.get('sha256-a')).not.toBeNull();
   });
 });
 
@@ -61,10 +59,6 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
       get: (h) => {
         log.push(`get ${h}`);
         return inner.get(h);
-      },
-      has: (h) => {
-        log.push(`has ${h}`);
-        return inner.has(h);
       },
       put: (h, b) => {
         log.push(`put ${h}`);
@@ -92,12 +86,32 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     expect([...(hit as { bytes: Uint8Array }).bytes]).toEqual([...result.bytes]);
   });
 
+  it('a compute whose closure reads as a store miss (corrupt/foreign object) re-puts to heal it', async () => {
+    const { fetch } = makeLocalFetcher();
+    let puts = 0;
+    // The key holds a poisoned object: get() reads it as a miss. A HEAD-exists
+    // gate would have said "present" and skipped the put, never healing it — so
+    // compute must put unconditionally (the store dedups a genuine no-op upload).
+    const store: BundleStore = {
+      get: async () => null,
+      put: async () => {
+        puts++;
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store,
+    });
+    const result = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(result.kind).toBe('bundle');
+    expect(puts).toBe(1); // re-seeded, not skipped
+  });
+
   it('resolve settles only AFTER the store put settles (durable-before-link is awaited, not fire-and-forget)', async () => {
     const { fetch } = makeLocalFetcher();
     const events: string[] = [];
     const store: BundleStore = {
       get: async () => null,
-      has: async () => false,
       put: async () => {
         await new Promise((r) => setTimeout(r, 20));
         events.push('put-settled');
@@ -113,7 +127,7 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     expect(events).toEqual(['put-settled', 'resolved']);
   });
 
-  it('a recompute whose closure is already stored skips the put (warm store-hit)', async () => {
+  it('a cold recompute re-affirms durability with an idempotent put (the store dedups the upload, not the cache)', async () => {
     const { fetch } = makeLocalFetcher();
     const log: string[] = [];
     const store = recordingStore(new MemoryBundleStore({ maxBytes: 1024 * 1024 }), log);
@@ -125,11 +139,15 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
       clock: () => nowMs,
     });
     await cache.resolve({ dependencies: { debug: '^4.4.1' } });
-    const putsAfterFirst = log.filter((l) => l.startsWith('put ')).length;
-    expect(putsAfterFirst).toBe(1);
+    expect(log.filter((l) => l.startsWith('put ')).length).toBe(1);
     nowMs += 61_000; // expire the mutable link → recompute, same closure
-    await cache.resolve({ dependencies: { debug: '^4.4.1' } });
-    expect(log.filter((l) => l.startsWith('put ')).length).toBe(putsAfterFirst);
+    const again = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(again.kind).toBe('bundle');
+    // No has()-gate: the cache re-puts on every cold recompute; the STORE
+    // (S3 via its ETag check, `s3-bundle-store.test.ts`) skips the redundant
+    // upload. Self-heal depends on this — a cache-side gated skip would never
+    // overwrite a poisoned key.
+    expect(log.filter((l) => l.startsWith('put ')).length).toBe(2);
   });
 
   it('a failed store put still serves the computed bundle and does NOT link it (recompute next time)', async () => {
@@ -137,7 +155,6 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     let puts = 0;
     const store: BundleStore = {
       get: async () => null,
-      has: async () => false,
       put: async () => {
         puts++;
         throw new Error('bucket down');

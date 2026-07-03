@@ -171,12 +171,13 @@ export class EddyCache {
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
     // Durable-BEFORE-link (ADR-0194 §5): the awaited put guarantees a linked
-    // hash is servable (GET-by-hash via CDN/bucket) before any client learns
-    // it. A recompute of an already-stored closure skips the upload.
+    // hash is servable (GET-by-hash via CDN/bucket) before any client learns it.
+    // put is idempotent + self-healing — it re-seeds a missing OR corrupt/foreign
+    // object (a stale HEAD-exists check would wrongly skip the heal) and skips the
+    // upload only when the SAME bytes are already durable. So a recompute of an
+    // already-stored closure is a no-op upload, but a poisoned key gets fixed.
     try {
-      if (!(await this.store.has(closureHash))) {
-        await this.store.put(closureHash, { bytes: result.bytes, manifest: result.manifest });
-      }
+      await this.store.put(closureHash, { bytes: result.bytes, manifest: result.manifest });
     } catch (err) {
       // Degrade, never 500: serve the computed bundle, skip the link so the
       // next request recomputes (and retries the put).

@@ -68,9 +68,12 @@
   `canonicalEddyRequestKey → closureHash` at `/.rifty/eddy-learned-pins.json` (TTL = the
   server's mutable tier, cap 64, corrupt = absent), so ANY repeat dep set — ad-hoc
   `npm install` included, not just env-pinned templates — becomes a cacheable
-  `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an origin POST. Env pins
-  (`VITE_RIFTY_EDDY_PINS`) keep priority; the owner-boot prefetch reads the learned pin
-  through the sync mirror (the prefetch gate stays sync by design). New seam:
+  `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an origin POST. A learned
+  pin — keyed on the EXACT post-merge dep set — WINS over the coarser template env pin
+  (`VITE_RIFTY_EDDY_PINS`), which stays the FALLBACK for the first install of a set: so a
+  repeat of a *modified* set (`npm install <pkg>`, then a reload) rides its learned GET
+  instead of re-POSTing behind a now-stale env pin. The owner-boot prefetch reads the learned
+  pin through the sync mirror (the prefetch gate stays sync by design). New seam:
   `NpmShellCommandDeps.learnedPins`.
 
 - **Leaner install-stamp durability (ADR-0187).** The write-through FIFO lands the stamp

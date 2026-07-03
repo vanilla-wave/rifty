@@ -86,10 +86,11 @@ export interface NpmShellCommandDeps {
    *  install() consumes the handle at most once and only on a canonical
    *  request match. Inert without `resolverUrl`. */
   readonly resolverPrefetch?: () => EddyPrefetchHandle | undefined;
-  /** Learned pins (ADR-0194): `canonicalEddyRequestKey → closureHash`. Read
-   *  (post-merge key) when no env pin covers the install; written
-   *  fire-and-forget after a successful eddy install so the NEXT identical dep
-   *  set is a cacheable GET. Inert without `resolverUrl`. */
+  /** Learned pins (ADR-0194): `canonicalEddyRequestKey → closureHash`. Read on
+   *  the post-merge key and PREFERRED over the coarse template env pin (a learned
+   *  pin matches the EXACT dep set, the env pin only the pristine preset); written
+   *  fire-and-forget after a successful eddy install so the NEXT identical dep set
+   *  is a cacheable GET. Inert without `resolverUrl`. */
   readonly learnedPins?: {
     get(requestKey: string): Promise<string | undefined>;
     set(requestKey: string, closureHash: string): Promise<void>;
@@ -468,16 +469,21 @@ async function runInstall(
   const installFn = deps.install ?? realInstall;
   const envPin = deps.resolverClosureHash?.();
   const resolverPrefetch = deps.resolverPrefetch?.();
-  // Learned pins (ADR-0194): key on the request install() will actually send —
-  // computed AFTER the merged package.json write above, so a named install
-  // (`npm i kleur`) keys the post-merge set, not the stale file. Env pin wins;
-  // the learned store is consulted only to fill its absence.
+  // Pin selection (ADR-0194). requestKey is the EXACT post-merge dep set —
+  // computed AFTER the package.json write above, so `npm i kleur` keys {…+kleur},
+  // not the stale file. A learned pin, keyed on that exact request, is the CORRECT
+  // closure for this set, so it WINS over the coarse template env pin
+  // (`VITE_RIFTY_EDDY_PINS`) — the env pin only matches the pristine preset; after
+  // `npm install <pkg>` it no longer describes the request (it would just cost a
+  // coverage-cancelled GET before POST). Env pin stays the fallback that seeds the
+  // FIRST install of a set (no learned pin yet). This keeps the ADR-0194 promise:
+  // a repeat of the same dep set — modified or not — rides a cacheable learned GET.
   const requestKey = deps.resolverUrl ? await installRequestKey(deps.vfs, packageJsonPath) : null;
   const learnedPin =
-    !envPin && requestKey && deps.learnedPins
+    requestKey && deps.learnedPins
       ? await deps.learnedPins.get(requestKey).catch(() => undefined)
       : undefined;
-  const resolverClosureHash = envPin ?? learnedPin;
+  const resolverClosureHash = learnedPin ?? envPin;
   try {
     const result = await installFn({
       vfs: deps.vfs,

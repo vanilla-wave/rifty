@@ -25,6 +25,23 @@
 - **GET route hardened.** `GET /bundle/<hash>` with a failing store answers
   `500` JSON instead of dying on an unhandled rejection.
 
+### Fixed (eddy v1.2 review follow-ups, ADR-0194)
+
+- **`BundleStore` self-heals a poisoned key.** The `has()`-gate that skipped the
+  durable-before-link put whenever an object *existed* could never overwrite a
+  corrupt/foreign/truncated object (a HEAD-exists check can't tell it from a valid
+  one), so a poisoned `bundle/<hash>` stayed a permanent GET-by-hash `404`. Dropped
+  `BundleStore.has`; `put` is now the idempotent self-healing primitive — the cache
+  puts unconditionally, and `S3BundleStore.put` HEADs first and skips the upload
+  ONLY when the object's ETag (single-part MD5) matches the bytes, otherwise
+  (re-)uploads. A cold recompute is still a no-op upload; a poisoned key gets fixed.
+- **Content-addressed invariant on read.** `S3BundleStore.get(hash)` now verifies
+  `manifest.asOf.closureHash === hash` and reads a mis-keyed (valid-but-wrong-hash)
+  object as a miss, so a bad upload can never serve a bundle under the wrong key.
+- **Deploy compose cosmetics.** `docker-compose(.coi).yml` Caddyfile heredoc indents
+  with spaces (was space-before-tab → `git diff --check` noise); the CDN-origin
+  comment cites ADR-0195 (the renumbered wire-v1.1 ADR), not the stale ADR-0186.
+
 ### Added
 
 - **`GET /bundle/<closureHash>` (ADR-0195).** Content-addressed immutable-tier lookup serving

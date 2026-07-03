@@ -6,14 +6,16 @@
  *   - `S3BundleStore` (`s3-bundle-store.ts`) — Object Storage behind the CDN;
  *     the origin stays stateless-restartable.
  * The contract `EddyCache` relies on (ADR-0194 §5): `put` completes before the
- * dep-set link is written (durable-before-link); `has` lets a recompute of an
- * already-stored closure skip the upload.
+ * dep-set link is written (durable-before-link) AND is idempotent + self-healing
+ * — it re-seeds a missing OR corrupt/foreign object (`get` reads either as a
+ * miss) and skips the upload only when the SAME bytes are already durable. There
+ * is deliberately no cheap `has`: a HEAD-exists check can't tell a valid object
+ * from a poisoned one, so gating the heal on it would silently skip re-seeding.
  */
 import type { CachedBundle } from './cache.ts';
 
 export interface BundleStore {
   get(closureHash: string): Promise<CachedBundle | null>;
-  has(closureHash: string): Promise<boolean>;
   put(closureHash: string, bundle: CachedBundle): Promise<void>;
 }
 
@@ -40,10 +42,6 @@ export class MemoryBundleStore implements BundleStore {
     this.map.delete(closureHash);
     this.map.set(closureHash, bundle);
     return bundle;
-  }
-
-  async has(closureHash: string): Promise<boolean> {
-    return this.map.has(closureHash);
   }
 
   async put(closureHash: string, bundle: CachedBundle): Promise<void> {

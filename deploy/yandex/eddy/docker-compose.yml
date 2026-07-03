@@ -55,14 +55,14 @@ services:
       - |
         cat >/etc/caddy/Caddyfile <<'CADDY'
         {
-        	admin off
+          admin off
         }
 
         eddy.rifty.dev {
-        	# eddy (server.ts) sets the CORS + Cross-Origin-Resource-Policy headers
-        	# the cross-origin browser client needs; Caddy only terminates TLS and
-        	# reverse-proxies, so those headers pass through unchanged.
-        	reverse_proxy eddy:8788
+          # eddy (server.ts) sets the CORS + Cross-Origin-Resource-Policy headers
+          # the cross-origin browser client needs; Caddy only terminates TLS and
+          # reverse-proxies, so those headers pass through unchanged.
+          reverse_proxy eddy:8788
         }
         CADDY
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

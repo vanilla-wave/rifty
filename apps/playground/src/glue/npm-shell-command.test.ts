@@ -1257,9 +1257,9 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
     expect(getKeys).toEqual([keyFor({ debug: '^4.4.1' })]);
   });
 
-  it('the env pin wins — the learned store is not even consulted', async () => {
+  it('a learned pin WINS over the env pin — the exact post-merge request beats the coarse template pin', async () => {
     const vfs = await projVfs();
-    let gets = 0;
+    const getKeys: string[] = [];
     let seenPin: string | undefined;
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
@@ -1270,8 +1270,8 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
         resolverUrl: 'http://eddy.test',
         resolverClosureHash: () => 'sha256-env',
         learnedPins: {
-          get: async () => {
-            gets++;
+          get: async (key) => {
+            getKeys.push(key);
             return 'sha256-learned';
           },
           set: async () => {},
@@ -1285,8 +1285,37 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
 
     await runShell(shell, 'npm install');
 
+    // A learned pin matches the EXACT dep set, so it beats the template env pin —
+    // otherwise a modified set (`npm i <pkg>`) never rides its learned GET.
+    expect(seenPin).toBe('sha256-learned');
+    expect(getKeys).toEqual([keyFor({ debug: '^4.4.1' })]);
+  });
+
+  it('the env pin is the FALLBACK when no learned pin covers the set yet', async () => {
+    const vfs = await projVfs();
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-env',
+        learnedPins: {
+          get: async () => undefined, // first install of this set — nothing learned
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
     expect(seenPin).toBe('sha256-env');
-    expect(gets).toBe(0);
   });
 
   it('an eddy install writes the pin back under the MERGED package.json request key', async () => {

@@ -101,6 +101,9 @@ interface FakeS3 {
 function startFakeS3(): Promise<FakeS3> {
   const requests: FakeS3['requests'] = [];
   const objects = new Map<string, Buffer>();
+  // S3 ETag of a single-part PUT is the quoted hex MD5 of the body — returned on
+  // PUT and echoed on GET/HEAD. `put`'s skip-identical/self-heal path keys on it.
+  const etagOf = (body: Buffer): string => `"${createHash('md5').update(body).digest('hex')}"`;
   const server = createServer((req, res) => {
     const path = req.url ?? '';
     requests.push({ method: req.method ?? '', path, headers: req.headers });
@@ -108,8 +111,9 @@ function startFakeS3(): Promise<FakeS3> {
       const chunks: Buffer[] = [];
       req.on('data', (c: Buffer) => chunks.push(c));
       req.on('end', () => {
-        objects.set(path, Buffer.concat(chunks));
-        res.writeHead(200);
+        const body = Buffer.concat(chunks);
+        objects.set(path, body);
+        res.writeHead(200, { etag: etagOf(body) });
         res.end();
       });
       return;
@@ -120,7 +124,11 @@ function startFakeS3(): Promise<FakeS3> {
       res.end(req.method === 'HEAD' ? undefined : '<Error><Code>NoSuchKey</Code></Error>');
       return;
     }
-    res.writeHead(200, { 'content-type': 'application/x-tar', 'content-length': body.length });
+    res.writeHead(200, {
+      'content-type': 'application/x-tar',
+      'content-length': body.length,
+      etag: etagOf(body),
+    });
     res.end(req.method === 'HEAD' ? undefined : body);
   });
   return new Promise((resolve) => {
@@ -151,18 +159,57 @@ function makeStore(url: string): S3BundleStore {
 }
 
 describe('S3BundleStore', () => {
-  it('put→has→get round-trips through a real HTTP server; manifest recovered from the bundle bytes', async () => {
+  it('put→get round-trips through a real HTTP server; manifest recovered from the bundle bytes', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    expect(await store.has(HASH)).toBe(false);
     expect(await store.get(HASH)).toBeNull();
 
     await store.put(HASH, { bytes: bundleBytes, manifest });
-    expect(await store.has(HASH)).toBe(true);
     const hit = await store.get(HASH);
     expect(hit).not.toBeNull();
     expect([...(hit?.bytes ?? [])]).toEqual([...bundleBytes]);
     expect(hit?.manifest.asOf.closureHash).toBe(HASH);
+  });
+
+  it('a second put of the SAME bytes skips the upload (ETag match) — no redundant re-upload on cold recompute', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+    expect(fake.requests.filter((r) => r.method === 'PUT').length).toBe(1);
+  });
+
+  it('self-heals a corrupt/truncated object: get reads it as a miss, put overwrites the poisoned key', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    // A prior failed upload left garbage at the key.
+    fake.objects.set(key, Buffer.from('truncated-garbage-not-a-tar'));
+    expect(await store.get(HASH)).toBeNull(); // corrupt → miss
+
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+    // ETag of the garbage ≠ MD5 of the valid bytes → the put re-seeds the key.
+    expect(fake.requests.filter((r) => r.method === 'PUT').length).toBe(1);
+    const hit = await store.get(HASH);
+    expect([...(hit?.bytes ?? [])]).toEqual([...bundleBytes]);
+  });
+
+  it('rejects a valid bundle stored under the WRONG key (content-addressed invariant)', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    // A valid bundle whose closure is a DIFFERENT hash, mis-keyed at HASH.
+    const otherManifest: EddyBundleManifestV1 = {
+      ...manifest,
+      asOf: { ...manifest.asOf, closureHash: 'sha256-different' },
+    };
+    const otherBytes = packEddyBundle({
+      manifest: otherManifest,
+      lockfileText: '{"lockfileVersion":3}',
+      tarballs: [],
+    });
+    fake.objects.set(key, Buffer.from(otherBytes));
+    expect(await store.get(HASH)).toBeNull(); // right shape, wrong hash → miss
   });
 
   it('addresses the object as /<bucket>/bundle/<percent-encoded hash> — the client bundleUrlFor shape', async () => {
@@ -186,7 +233,8 @@ describe('S3BundleStore', () => {
     const expectedSha = createHash('sha256').update(bundleBytes).digest('hex');
     expect(put?.headers['x-amz-content-sha256']).toBe(expectedSha);
 
-    await store.has(HASH);
+    // put emits an unsigned HEAD (skip-identical probe) before the signed PUT;
+    // get is an unsigned GET. Only the PUT carries an Authorization header.
     await store.get(HASH);
     for (const r of fake.requests.filter((x) => x.method !== 'PUT')) {
       expect(r.headers.authorization).toBeUndefined();

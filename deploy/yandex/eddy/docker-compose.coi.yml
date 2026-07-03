@@ -34,18 +34,18 @@ services:
       - |
         cat >/etc/caddy/Caddyfile <<'CADDY'
         {
-        	admin off
+          admin off
         }
 
         eddy.rifty.dev {
-        	reverse_proxy eddy:8788
+          reverse_proxy eddy:8788
         }
 
-        # CDN origin host (ADR-0186): the eddy-cdn.rifty.dev edge fetches over
+        # CDN origin host (ADR-0195): the eddy-cdn.rifty.dev edge fetches over
         # https with this Host — the edge refuses POST, so the resolver DNS
         # stays on the VM and only GET-by-hash rides the CDN.
         eddy-origin.rifty.dev {
-        	reverse_proxy eddy:8788
+          reverse_proxy eddy:8788
         }
         CADDY
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

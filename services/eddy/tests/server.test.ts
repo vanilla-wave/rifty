@@ -184,7 +184,6 @@ describe('eddy HTTP server', () => {
         get: async () => {
           throw new Error('bucket down');
         },
-        has: async () => false,
         put: async () => {},
       },
     });
