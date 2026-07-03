@@ -15,11 +15,11 @@ import {
   RegistryClient,
   type TarballCache,
   VfsTarballCache,
+  closureHashOf,
   install,
   packEddyBundle,
 } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { closureHashOf } from './closure-hash.ts';
 import { readNpmClientVersion } from './npm-client-version.ts';
 import { layeredTarballCache, packumentOverlay } from './shared-caches.ts';
 
@@ -126,7 +126,7 @@ export async function resolveBundle(
     asOf: {
       resolvedAt: deps.now ? deps.now() : new Date().toISOString(),
       registry: deps.registryBaseUrl,
-      closureHash: closureHashOf(result.lockfile),
+      closureHash: await closureHashOf(result.lockfile),
     },
     tarballs: entries,
   };

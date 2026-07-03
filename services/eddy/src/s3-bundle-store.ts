@@ -95,6 +95,11 @@ export class S3BundleStore implements BundleStore {
     const payloadSha256Hex = createHash('sha256').update(bundle.bytes).digest('hex');
     const amzDate = toAmzDate(this.opts.now ? this.opts.now() : new Date());
     const headers: Record<string, string> = {
+      // Immutable content-addressed object: S3 stores this as system metadata and
+      // echoes it on GET, so the bucket-backed CDN path serves bundles with the
+      // same forever-cacheable header the origin GET route sets (ADR-0194 §4).
+      // Signed with the rest — it is part of the canonical request when sent.
+      'cache-control': 'public, max-age=31536000, immutable',
       host: url.host,
       'content-type': 'application/x-tar',
       'x-amz-content-sha256': payloadSha256Hex,

@@ -1068,6 +1068,50 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(stamp.packages).toBe(2);
   });
 
+  it('drains the write-through even when the stamp write FAILS — durable-on-exit must not hinge on the stamp', async () => {
+    // A stamp failure only costs the next boot's skip optimization; the TREE must
+    // still be flushed or an immediate reload loses the user's install. So flush
+    // runs regardless of the stamp's outcome.
+    const base = new MemoryVfs();
+    await base.mkdir('/proj/node_modules', { recursive: true });
+    const vfs = new Proxy(base, {
+      get(target, prop, receiver) {
+        if (prop === 'writeFile') {
+          return async (path: string, data: unknown) => {
+            if (String(path).endsWith('.rifty-install-stamp.json')) {
+              throw new Error('stamp write boom');
+            }
+            return (target.writeFile as (p: string, d: unknown) => Promise<void>)(path, data);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    }) as unknown as MemoryVfs;
+    let flushed = false;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushed = true;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    warnSpy.mockRestore();
+
+    expect(exitCode).toBe(0); // install still succeeds
+    expect(flushed).toBe(true); // …and the tree was flushed despite the stamp failure
+    expect(await base.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
   it('keys the install stamp on the owner project slug so a reload reuses the tree', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });

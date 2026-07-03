@@ -567,9 +567,12 @@ async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<str
  * ONCE. The single post-stamp drain (vs the historical flush→stamp→flush pair)
  * rides the FIFO ordering pin (ADR-0187): the stamp is enqueued after every
  * tree write, so one drain lands stamp AND tree together — npm parity, a
- * reload right after the command cannot lose the install. Best-effort — a
- * stamp/drain failure costs the worker's skip optimization, never the
- * install's success.
+ * reload right after the command cannot lose the install. Best-effort.
+ *
+ * The stamp and the drain are INDEPENDENTLY guarded: a stamp write failure only
+ * costs the next boot's skip optimization, but the TREE must still be flushed or
+ * an immediate reload loses the user's install — so the drain runs regardless of
+ * the stamp's outcome (durable-on-exit does not hinge on the stamp).
  */
 async function stampInstalledTree(
   deps: NpmShellCommandDeps,
@@ -578,9 +581,13 @@ async function stampInstalledTree(
 ): Promise<void> {
   try {
     await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
-    await deps.flush?.();
   } catch (err) {
     console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
+  }
+  try {
+    await deps.flush?.();
+  } catch (err) {
+    console.warn(`npm: install flush failed: ${(err as Error).message}`);
   }
 }
 

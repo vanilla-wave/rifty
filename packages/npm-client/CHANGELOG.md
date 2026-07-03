@@ -26,6 +26,18 @@
 - **`InstallOptions.packumentCache` widened to `PackumentCacheLike`** (minimal
   `{get, set}`; `Map` satisfies it structurally) so callers — eddy's process-wide TTL
   cache — can inject policy-aware caches without a Map subclass.
+- **`closureHashOf(lockfile)`.** The stable content hash of a resolved closure (ADR-0182 §6,
+  the immutable-tier key) is now exported here as ONE shared async (WebCrypto) implementation —
+  eddy awaits it to stamp the manifest; the client re-derives it to verify a bundle's identity.
+
+### Fixed (eddy v1.2 review follow-ups, ADR-0194)
+
+- **Content-addressed bundle verification (client).** `consumeEddyResponse` now refuses a
+  bundle whose `manifest.asOf.closureHash` (a) ≠ the hash a pinned GET/prefetch asked for
+  (a CDN/cache mixup served the wrong object) or (b) ≠ `closureHashOf` of the bundle's OWN
+  lockfile (the manifest lies about its identity). Both gate BEFORE any tarball seed or
+  lockfile write, so a mis-addressed bundle is declined (→ POST/standard fallback), never
+  adopted or learned as a pin. Regressions in `client-roundtrip.test.ts`.
 
 ### Added (eddy wire protocol v1.1, ADR-0195)
 
@@ -33,6 +45,10 @@
   cacheable `GET <resolverUrl>/bundle/<hash>` (browser-HTTP-cache/CDN friendly, preflight-free);
   any miss/failure falls through to the POST resolve, a POST failure to the standard install.
   Same non-disableable gates on every path — a stale pin degrades, never mis-installs.
+- **`InstallOptions.resolverBundleBaseUrl` — split-host CDN base.** The pinned GET may ride a
+  SEPARATE hostname from the POST resolve (`bundleUrlFor(bundleBaseUrl ?? resolverUrl, hash)`) —
+  real edges (Yandex CDN) refuse POST, so a stale pin on the CDN falls back to the ORIGIN's POST.
+  Defaults to `resolverUrl` (single-host). Threaded into `startEddyPrefetch` too.
 - **`startEddyPrefetch` + `InstallOptions.resolverPrefetch`.** Start the bundle fetch before
   `install()` runs (e.g. at owner boot) so the round-trip overlaps boot work. The handle is
   keyed on the canonical request (`canonicalEddyRequestKey`; `eddyRequestFromPackageJson`

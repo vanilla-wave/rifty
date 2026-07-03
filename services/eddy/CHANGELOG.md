@@ -38,6 +38,13 @@
 - **Content-addressed invariant on read.** `S3BundleStore.get(hash)` now verifies
   `manifest.asOf.closureHash === hash` and reads a mis-keyed (valid-but-wrong-hash)
   object as a miss, so a bad upload can never serve a bundle under the wrong key.
+- **Immutable `Cache-Control` on the S3 PUT.** The signed PUT now sends
+  `cache-control: public, max-age=31536000, immutable`, so a bucket-backed CDN
+  origin serves bundles with the same forever-cacheable header as the origin GET
+  route (was absent — the CDN path would miss the promised header).
+- **`closureHashOf` moved to `@riftydev/npm-client`.** The closure-hash function
+  is now ONE shared implementation (async WebCrypto) the resolver awaits, so the
+  client can re-derive it to verify a bundle's self-claimed hash without drift.
 - **Deploy compose cosmetics.** `docker-compose(.coi).yml` Caddyfile heredoc indents
   with spaces (was space-before-tab → `git diff --check` noise); the CDN-origin
   comment cites ADR-0195 (the renumbered wire-v1.1 ADR), not the stale ADR-0186.
@@ -73,12 +80,6 @@
   value (`" "`, `"\t"`) is also refused — `Number(" ")` is `0`, not `NaN`, so it
   would otherwise slip past the finite/≥0 gate and silently set TTL 0 (dead
   cache). `0` (always recompute) and unset (default TTL) are unchanged.
-- **Honest caching docs.** `hosting-eddy.md` + the server comment no longer
-  claim a live CDN tier: the `Cache-Control: immutable` header is inert on the
-  POST resolve response (shared caches don't store POST), so today only the
-  in-process LRU is the shared cache. A real CDN tier needs a
-  `GET /bundle/<closure-hash>` route — tracked in
-  `docs/backlog/distribution/eddy-cdn-tier-get-by-hash.md`.
 
 ### Added
 

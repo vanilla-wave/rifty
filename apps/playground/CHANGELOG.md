@@ -83,7 +83,9 @@
   `npm install` keeps ONE post-stamp drain instead of the old flush→stamp→flush pair —
   npm parity, an immediate reload cannot lose the install (e2e-pinned by
   `owner-snapshot-restore-exec`). Reload-critical drains (dev-ready, eval boundary)
-  unchanged.
+  unchanged. The post-install stamp write and the tree drain are now INDEPENDENTLY
+  guarded, so a stamp-write failure (only costs the next boot's skip optimization)
+  no longer skips the drain — durable-on-exit does not hinge on the stamp.
 - **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0195).** For the active
   from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
   overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes

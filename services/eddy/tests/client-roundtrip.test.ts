@@ -653,4 +653,68 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     };
     expect(ms.version).toBe('2.0.0');
   });
+
+  it('resolverClosureHash: a pinned GET whose bundle self-reports a DIFFERENT hash is refused (content-addressed), falls back to POST', async () => {
+    // The GET serves a VALID, request-covering bundle — but its real closure hash
+    // is NOT the pin the client asked for (a CDN/cache mixup, or a poisoned edge).
+    // Coverage+integrity alone would adopt it AND learn a wrong pin; the
+    // content-address check refuses the GET and the POST fallback wins.
+    const bytes = await buildBundleFor(DEPS);
+    let gets = 0;
+    let posts = 0;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'POST') posts++;
+      else gets++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: 'sha256-not-the-served-hash',
+      });
+      expect(result.source).toBe('eddy'); // adopted via the POST fallback
+      expect(gets).toBe(1); // the pinned GET was tried…
+      expect(posts).toBe(1); // …refused on the hash mismatch → POST (cf. the ZERO-POST pinned-hit case)
+      // The learned hash is the REAL served hash, never the bogus pin.
+      expect(result.closureHash).not.toBe('sha256-not-the-served-hash');
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('refuses a bundle whose manifest closureHash does not match its own lockfile (content-addressed self-consistency)', async () => {
+    // A divergent/buggy resolver stamps a manifest hash the lockfile does not
+    // produce. Integrity+coverage pass, but the bundle lies about its identity —
+    // adopting it would learn a pin that dereferences to nothing. Refuse it.
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    contents.manifest.asOf.closureHash = 'sha256-liar'; // ≠ closureHashOf(its lockfile)
+    const poisoned = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(poisoned));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard'); // refused → fell back
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
 });

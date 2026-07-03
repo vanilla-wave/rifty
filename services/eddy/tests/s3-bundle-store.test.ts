@@ -194,6 +194,16 @@ describe('S3BundleStore', () => {
     expect([...(hit?.bytes ?? [])]).toEqual([...bundleBytes]);
   });
 
+  it('PUTs the immutable Cache-Control header so the bucket-backed CDN serves bundles forever', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+    const put = fake.requests.find((r) => r.method === 'PUT');
+    expect(put?.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    // It is signed (part of the canonical request), so S3 accepts + stores it.
+    expect(String(put?.headers.authorization)).toMatch(/SignedHeaders=[^,]*cache-control/);
+  });
+
   it('rejects a valid bundle stored under the WRONG key (content-addressed invariant)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);

@@ -30,6 +30,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { closureHashOf } from './closure-hash.ts';
 import { streamTarEntries } from './eddy-bundle-stream.ts';
 import {
   EDDY_BUNDLE_FORMAT,
@@ -618,13 +619,31 @@ async function tryEddyFastPath(
   };
 
   const prefetched = opts.resolverPrefetch?.take(requestKey) ?? null;
-  const attempts: Array<{ label: string; run: () => Promise<Response> }> = [];
-  if (prefetched) attempts.push({ label: 'prefetch', run: () => prefetched });
+  // `expectedHash` names the hash a CONTENT-ADDRESSED fetch must return: a pinned
+  // GET (or a pinned prefetch) is `GET /bundle/<hash>`, so the bundle's manifest
+  // MUST self-report that hash — else the CDN/cache served the wrong object and we
+  // decline (defence-in-depth over the origin's own key check). A POST has no
+  // pre-known hash (the server computes it), so it carries none.
+  const attempts: Array<{ label: string; expectedHash?: string; run: () => Promise<Response> }> =
+    [];
+  if (prefetched) {
+    attempts.push({
+      label: 'prefetch',
+      ...(opts.resolverPrefetch?.closureHash
+        ? { expectedHash: opts.resolverPrefetch.closureHash }
+        : {}),
+      run: () => prefetched,
+    });
+  }
   const pin = opts.resolverClosureHash;
   // Skip a duplicate GET when the consumed prefetch already WAS this pin's GET.
   if (pin && !(prefetched && opts.resolverPrefetch?.closureHash === pin)) {
     const bundleBase = opts.resolverBundleBaseUrl ?? url;
-    attempts.push({ label: 'get', run: () => fetch(bundleUrlFor(bundleBase, pin)) });
+    attempts.push({
+      label: 'get',
+      expectedHash: pin,
+      run: () => fetch(bundleUrlFor(bundleBase, pin)),
+    });
   }
   attempts.push({
     label: 'post',
@@ -647,6 +666,7 @@ async function tryEddyFastPath(
         effectiveRequest,
         opts,
         tarballCache,
+        attempt.expectedHash,
       );
       if (typeof outcome !== 'string') return outcome.closureHash;
       reasons.push(`${attempt.label}: ${outcome}`);
@@ -677,12 +697,19 @@ async function* bufferedTarEntries(
  * verified bytes (the cache re-verifies on every `get`). The lockfile is
  * written ONLY after every manifest-named tarball landed, so any failure
  * leaves the pre-existing lockfile untouched.
+ *
+ * Content-addressed integrity (ADR-0194): the manifest's self-reported
+ * `closureHash` must (a) equal `expectedClosureHash` when the fetch was a pinned
+ * GET/prefetch — else the CDN served the wrong object — and (b) re-derive from
+ * the bundle's own lockfile — else the bundle lies about its identity. Both gate
+ * BEFORE any tarball seed or lockfile write.
  */
 async function consumeEddyResponse(
   response: Response,
   effectiveRequest: Record<string, string>,
   opts: InstallOptions,
   tarballCache: TarballCache,
+  expectedClosureHash?: string,
 ): Promise<{ adopted: true; closureHash: string } | string> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
@@ -712,6 +739,12 @@ async function consumeEddyResponse(
       if (parsed.format !== EDDY_BUNDLE_FORMAT) {
         return `unsupported EddyBundle format: ${JSON.stringify(parsed.format)}`;
       }
+      // Content-addressed GET/prefetch: the served object must BE the hash we
+      // asked for (a wrong one = CDN/cache mixup). Checked at member 1, before
+      // any seed/write.
+      if (expectedClosureHash !== undefined && parsed.asOf.closureHash !== expectedClosureHash) {
+        return `bundle closure hash ${parsed.asOf.closureHash} ≠ requested ${expectedClosureHash}`;
+      }
       for (const t of parsed.tarballs) byFile.set(t.file, t);
       manifest = parsed;
       continue;
@@ -726,6 +759,13 @@ async function consumeEddyResponse(
       // breaking BOTH the never-throw and lockfile-untouched promises.
       if ((parsed.lockfileVersion as number) !== 3) {
         return `bundle lockfile is not v3 (got ${JSON.stringify(parsed.lockfileVersion)})`;
+      }
+      // Self-consistency: a content-addressed bundle must hash to the hash it
+      // names. Re-derive from the bundle's OWN lockfile (member 2, before any
+      // seed/write) so a manifest that lies about its closure is refused, never
+      // adopted or learned as a pin.
+      if (manifest !== null && manifest.asOf.closureHash !== (await closureHashOf(parsed))) {
+        return `bundle manifest closure hash ${manifest.asOf.closureHash} does not match its lockfile`;
       }
       // Coverage gap / override divergence → fallback (no partial install).
       const pins = lockfileCovers(parsed, effectiveRequest);

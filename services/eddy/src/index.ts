@@ -26,5 +26,4 @@ export {
   type MemoryTarballCacheOptions,
   type TtlPackumentCacheOptions,
 } from './shared-caches.ts';
-export { closureHashOf } from './closure-hash.ts';
 export { readNpmClientVersion } from './npm-client-version.ts';
