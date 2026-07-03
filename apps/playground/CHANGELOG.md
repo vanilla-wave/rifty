@@ -35,6 +35,16 @@
   reload), edit_file loud mismatch, diagnostics≡Problems panel, all four
   preview tools, bench hooks (heavy lane).
 
+### Changed
+
+- **AI mode chat shows live activity so a run never looks frozen.** A heartbeat
+  row (animated dots + phase: waiting / thinking / responding / running `<tool>`)
+  renders while a run is in flight — covering the model's event-less server-side
+  pauses (reasoning / network) where no chat events arrive at all. Reasoning
+  (`thinking_delta`) now streams as a dimmed italic block above the answer, and
+  tool cards stream partial output live (`tool_execution_update`) instead of
+  sitting on `(running)` until the call ends.
+
 ### Fixed
 
 - **AI mode `list_files` / `grep` accept an empty-string `path` as the workspace

@@ -3224,6 +3224,58 @@ body.rf-resizing iframe {
   content: "▍";
   color: var(--rf-accent);
 }
+/* Reasoning stream: dimmed + italic, set apart from the answer. */
+.rf-ai__msg[data-role="thinking"] .rf-ai__role {
+  color: var(--rf-text-faint);
+}
+.rf-ai__msg[data-role="thinking"] .rf-ai__text {
+  color: var(--rf-text-faint);
+  font-style: italic;
+  border-left: 2px solid var(--rf-line-inner);
+  padding-left: 8px;
+}
+/* Live activity heartbeat — the "what's happening now" line while a run is in
+   flight (covers the model's event-less server-side pauses). */
+.rf-ai__activity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--rf-text-muted);
+  font: 400 11.5px / 16px var(--rf-font-sans);
+}
+.rf-ai__activitydots {
+  display: inline-flex;
+  gap: 3px;
+}
+.rf-ai__activitydots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--rf-accent);
+  animation: rf-ai-pulse 1.1s ease-in-out infinite;
+}
+.rf-ai__activitydots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.rf-ai__activitydots i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes rf-ai-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rf-ai__activitydots i {
+    animation: none;
+    opacity: 0.7;
+  }
+}
 .rf-ai__tool {
   border: 1px solid var(--rf-line-inner);
   border-radius: var(--rf-r-xs);

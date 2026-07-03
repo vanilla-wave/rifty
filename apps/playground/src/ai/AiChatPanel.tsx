@@ -14,8 +14,10 @@ import { PROMPT_PROFILE_ID } from './prompt-profile.ts';
 import { type AiRunStatus, type AiSession, createAiSession } from './session.ts';
 import { type AiSettings, type StorageLike, loadAiSettings, saveAiSettings } from './settings.ts';
 
+type ChatRole = 'user' | 'assistant' | 'thinking';
+
 type ChatItem =
-  | { kind: 'text'; id: number; role: 'user' | 'assistant'; text: string; streaming: boolean }
+  | { kind: 'text'; id: number; role: ChatRole; text: string; streaming: boolean }
   | {
       kind: 'tool';
       id: number;
@@ -52,6 +54,17 @@ function formatArgs(args: unknown): string {
   }
 }
 
+/** Live activity phase while a run is in flight (drives the heartbeat row). */
+export type AiPhase = 'waiting' | 'thinking' | 'responding' | { readonly tool: string };
+
+/** Human label for the activity heartbeat — the "what's happening now" line. */
+export function activityLabel(phase: AiPhase): string {
+  if (typeof phase === 'object') return `Running ${phase.tool}`;
+  if (phase === 'thinking') return 'Thinking';
+  if (phase === 'responding') return 'Responding';
+  return 'Waiting for the model';
+}
+
 function safeLocalStorage(): StorageLike | undefined {
   try {
     return globalThis.localStorage;
@@ -73,6 +86,7 @@ export function AiChatPanel(props: {
   const [items, setItems] = createSignal<ChatItem[]>([]);
   const [status, setStatus] = createSignal<AiRunStatus>('idle');
   const [statusDetail, setStatusDetail] = createSignal<string | null>(null);
+  const [phase, setPhase] = createSignal<AiPhase>('waiting');
   const [input, setInput] = createSignal('');
   // Signal, not a plain let: JSX (Export disabled state, Stop wiring) must
   // react when a session appears/disappears.
@@ -109,6 +123,32 @@ export function AiChatPanel(props: {
     });
   }
 
+  // Append a streaming delta to the last open bubble of `role`, or open a new
+  // one. Bubbles are created lazily (on first delta), so a reasoning stream
+  // shows above the answer and a tool-only turn leaves no empty bubble.
+  function appendStream(role: ChatRole, delta: string): void {
+    const open = items().some(
+      (item) => item.kind === 'text' && item.role === role && item.streaming,
+    );
+    if (open) {
+      patchLast(
+        (item) => item.kind === 'text' && item.role === role && item.streaming,
+        (item) => (item.kind === 'text' ? { ...item, text: item.text + delta } : item),
+      );
+    } else {
+      pushItem({ kind: 'text', role, text: delta, streaming: true });
+    }
+    listEl?.scrollTo({ top: listEl.scrollHeight });
+  }
+
+  function finalizeStream(role: ChatRole, finalText?: string): void {
+    patchLast(
+      (item) => item.kind === 'text' && item.role === role && item.streaming,
+      (item) =>
+        item.kind === 'text' ? { ...item, streaming: false, text: finalText ?? item.text } : item,
+    );
+  }
+
   function onAgentEvent(event: AgentEvent): void {
     switch (event.type) {
       case 'message_start': {
@@ -121,36 +161,37 @@ export function AiChatPanel(props: {
             streaming: false,
           });
         } else if (role === 'assistant') {
-          pushItem({ kind: 'text', role: 'assistant', text: '', streaming: true });
+          // Don't open an assistant bubble yet — wait for the first text/thinking
+          // delta so ordering and empty-turn suppression stay correct.
+          setPhase('waiting');
         }
         break;
       }
       case 'message_update': {
         const streamEvent = event.assistantMessageEvent;
         if (streamEvent.type === 'text_delta') {
-          patchLast(
-            (item) => item.kind === 'text' && item.role === 'assistant' && item.streaming,
-            (item) =>
-              item.kind === 'text' ? { ...item, text: item.text + streamEvent.delta } : item,
-          );
-          listEl?.scrollTo({ top: listEl.scrollHeight });
+          // First answer text ends the reasoning stream, if any.
+          finalizeStream('thinking');
+          appendStream('assistant', streamEvent.delta);
+          setPhase('responding');
+        } else if (streamEvent.type === 'thinking_delta') {
+          appendStream('thinking', streamEvent.delta);
+          setPhase('thinking');
         }
         break;
       }
       case 'message_end': {
         const role = (event.message as { role?: unknown }).role;
         if (role === 'assistant') {
-          const text = extractText(event.message);
-          patchLast(
-            (item) => item.kind === 'text' && item.role === 'assistant' && item.streaming,
-            (item) => (item.kind === 'text' ? { ...item, text, streaming: false } : item),
-          );
+          finalizeStream('thinking');
+          finalizeStream('assistant', extractText(event.message));
           // Drop an empty assistant bubble (tool-call-only turns have no text).
           setItems((prev) =>
             prev.filter(
               (item) => !(item.kind === 'text' && item.role === 'assistant' && item.text === ''),
             ),
           );
+          setPhase('waiting');
         }
         break;
       }
@@ -162,7 +203,19 @@ export function AiChatPanel(props: {
           args: event.args,
           done: false,
         });
+        setPhase({ tool: event.toolName });
         break;
+      case 'tool_execution_update': {
+        // Stream partial tool output (e.g. shell stdout) into the open card.
+        const partial = extractText(event.partialResult);
+        if (partial !== '') {
+          patchLast(
+            (item) => item.kind === 'tool' && item.toolCallId === event.toolCallId,
+            (item) => (item.kind === 'tool' ? { ...item, result: partial } : item),
+          );
+        }
+        break;
+      }
       case 'tool_execution_end':
         patchLast(
           (item) => item.kind === 'tool' && item.toolCallId === event.toolCallId,
@@ -176,6 +229,7 @@ export function AiChatPanel(props: {
                 }
               : item,
         );
+        setPhase('waiting');
         break;
       default:
         break;
@@ -205,6 +259,7 @@ export function AiChatPanel(props: {
       }
       setStatus(event.status);
       setStatusDetail(event.detail);
+      if (event.status === 'running') setPhase('waiting');
       if (event.status === 'budget-exceeded' && event.detail) {
         pushItem({ kind: 'notice', tone: 'budget', text: event.detail });
       } else if (event.status === 'error' && event.detail) {
@@ -394,9 +449,11 @@ export function AiChatPanel(props: {
         <For each={items()}>
           {(item) => {
             if (item.kind === 'text') {
+              const roleLabel =
+                item.role === 'user' ? 'you' : item.role === 'thinking' ? 'thinking' : 'agent';
               return (
                 <div class="rf-ai__msg" data-role={item.role} data-testid="ai-msg">
-                  <span class="rf-ai__role">{item.role === 'user' ? 'you' : 'agent'}</span>
+                  <span class="rf-ai__role">{roleLabel}</span>
                   <div class="rf-ai__text" data-streaming={item.streaming}>
                     {item.text}
                   </div>
@@ -432,6 +489,23 @@ export function AiChatPanel(props: {
             );
           }}
         </For>
+        {/* Live heartbeat: keeps the session from looking frozen during the
+            model's server-side pauses (reasoning / network) where no chat
+            events arrive at all. */}
+        <Show when={status() === 'running'}>
+          <div
+            class="rf-ai__activity"
+            data-testid="ai-activity"
+            data-phase={typeof phase() === 'object' ? 'tool' : phase()}
+          >
+            <span class="rf-ai__activitydots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span>{activityLabel(phase())}</span>
+          </div>
+        </Show>
       </div>
 
       <footer class="rf-ai__input">
