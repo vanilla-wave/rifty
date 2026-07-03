@@ -5,7 +5,7 @@ title: Eddy — opt-in fast npm install (~6x cold)
 created: 2026-06-28
 value: A developer running a cold `npm install` on a real project in a browser tab gets it in well under a second — the same real Node dependency tree, just resolved + bundled by an open, self-hostable server instead of a dozen serial round-trips.
 user_story: As a developer (or an SDK embedder building their own sandbox) I want a cold, no-lockfile `npm install` to finish in ~0.6s instead of ~4s, but today it pays two latency-bound waterfalls (packument metadata + many small tarballs) that no client-side knob can remove.
-items: [perf/eddy-http3-cold-validation, distribution/eddy-package-and-deploy]
+items: [perf/eddy-http3-cold-validation, perf/eddy-upstream-registry-ab, distribution/eddy-package-and-deploy]
 ---
 
 ## Outcome
@@ -27,6 +27,7 @@ Delivered (closed; the ~6x mechanism, parity-proven + `pnpm pr:check` green):
 
 Open:
 - `perf/eddy-http3-cold-validation` — the open risk: the HTTP/3 leg of the real-browser cold-install number. Harness + deployed eddy now exist; warm-h2 is measured at **1.70x** (standard 4284ms → eddy 2517ms, `perf/benchmarks.json`) — the ~6x was a Node/sandbox model. Only h3 transport control (Playwright can't pin it) is still open. (draft)
+- `perf/eddy-upstream-registry-ab` — the last deferred server-side cold-origin lever (ADR-0194 §Levers-2): eddy resolves through the browser-CORS CDN registry-proxy the SERVER doesn't need — direct npmjs may skip cold-edge double hops, but RU-region routing from the VM might be slower/throttled, so it must be A/B-measured on the VM before flipping `REGISTRY_BASE_URL`. Deploy-gated. (draft)
 - `distribution/eddy-package-and-deploy` — `@riftydev/eddy` is publish-ready (tsup build + bin) with a Docker/compose recipe + self-host docs; the actual npm publish + rifty.dev deploy are confirm-first/outward. (ready)
 
 Supersedes (folded from the `cold-npm-install-speedup` epic): the former `npm-client/server-side-closure-resolver` and `npm-client/bundled-popular-subgraph-metadata` draft items — their measured-and-verified design is now this epic + ADR-0182. Out of scope: the extracted-tree artifact variant (4.3x byte penalty, dominated); signed/attested manifests (mirror-grade only for v1); a pluggable client `ClosureSource` (URL seam only for v1); independent npm source-of-truth re-verification (would re-introduce the waterfall).
