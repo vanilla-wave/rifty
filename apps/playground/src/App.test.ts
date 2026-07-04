@@ -9,6 +9,20 @@ import type { BootResult } from './boot.ts';
 import { createAppProjectStore } from './glue/app-project-store.ts';
 import { saveAffordance, storageModeFromBoot } from './glue/degraded-storage.ts';
 
+// RESIDUAL source-grep pins (epic playground-testable-core). App.tsx cannot
+// render in the node vitest env (transitively imports browser-only xterm), so
+// its wiring is pinned as SOURCE — minimally. Behavior lives in the extracted
+// cores (orchestration/*.test.ts: dev-server/workspace lifecycles, preset +
+// project-index boot, save-flow, reset-refresh, workspace-files, scm, terminal
+// persistence), glue/*.test.ts, and tests/e2e. Every surviving expect(source)
+// is either
+//   (a) a NEGATIVE pin on an architectural invariant (single authoritative
+//       owner, no page-side dev-server interception, no WORKSPACE constant, no
+//       program-write model, no snapshot-driven preview reload), or
+//   (b) THE binding pin for one App wiring surface — the core instantiation or
+//       the JSX/port line whose silent rewiring neither tsc nor a behavioral
+//       test would catch (swapped accessor, dropped onCleanup, stale handler).
+// Do not re-grow: tools/checks/source-grep-ratchet.mjs ratchets the count.
 const source = readFileSync(fileURLToPath(new URL('./App.tsx', import.meta.url)), 'utf8');
 const streamsCompatSrc = readFileSync(
   fileURLToPath(new URL('../../../docs/public/compat/streams.md', import.meta.url)),
@@ -29,215 +43,130 @@ const streamInteropAdrSrc = readFileSync(
 );
 
 describe('App terminal startup wiring', () => {
-  // Revised pins (ADR-0135, prev. node-server template ADR): boot lines are
-  // preset-dispatched via presetBootLines() (from-scratch presets prepend the
-  // visible `npm install`); the ORIGINAL intent — boot goes through the visible
-  // command that owns the worker lifecycle, never cosmetic terminal theater —
-  // stays enforced for both runtimes and both setup kinds.
-
-  it('cold boot spawns the hidden empty workspace owner (no visible project until a pick)', () => {
-    // Launcher gating + the one-shot boot decision are pinned behaviorally in
-    // orchestration/project-index-boot.test.ts; here only the App-side spawn glue.
-    expect(source).toContain('function createHiddenEmptyWorkspaceOwner(): WorkspaceOwnerHandle');
-    expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
-    expect(source).toContain('hiddenEmptyBoot: true');
+  it('cold boot spawns the hidden empty workspace owner and never auto-boots a preset', () => {
+    // Launcher gating + the one-shot boot decision are behavioral in
+    // orchestration/project-index-boot.test.ts; here the spawn binding only.
     expect(source).toContain('const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();');
-    expect(source).toMatch(/createSignal<WorkspaceOwnerHandle>\(initialOwnerHandle\)/);
-    expect(source).not.toContain('startProjectIndexOwner');
-    expect(source).toContain('const machine = useMode({});');
+    expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
+    // (a) project-first cold boot: chooser, no auto-boot of the default preset.
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
-    expect(source).not.toContain('seedViteWorkspace(DEFAULT_PRESET);');
   });
 
-  it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
-    // Single-store-owner regression guard (exactly one authoritative store; page
-    // holds no authoritative fs): the page must not construct or write a local
-    // syncMirror; seeding + archive + editor writes all go to the owner.
+  it('holds no page-side authoritative VFS store — the owner is the single store', () => {
+    // (a) one authoritative owner; the page must not construct a local mirror.
+    // `@riftydev/vfs/internal` is a declared export, so check:arch ALLOWS it —
+    // this pin is the only guard.
     expect(source).not.toContain('const vfs = syncMirror()');
-    expect(source).not.toContain('writeText(vfs');
     expect(source).not.toContain("from '@riftydev/vfs/internal'");
-    expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(preset),');
   });
 
-  it('follows the active preset template instead of hardcoding the default', () => {
-    expect(source).not.toContain('const template = defaultProjectSpec()');
-    expect(source).toContain('const activeTemplate = ');
-    expect(source).toContain('resolveProjectSpec(');
-    expect(source).toContain('.templateId');
-    // ADR-0148 (co-resident dev server in the owner): the ONE workspace owner
-    // spawns with the ACTIVE template (it hosts both the shell and the
-    // co-resident dev server) — no per-run spawn.
+  it('spawns the ONE owner with the ACTIVE template — no page-side dev server', () => {
+    // ADR-0148: the owner hosts shell + co-resident dev server; swapping the
+    // spawn back to a hardcoded template is tsc-silent.
     expect(source).toContain('template: activeTemplate()');
     expect(source).not.toContain('startRealVite');
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
-    expect(source).toContain('function openPreviewTab(port = machine.realVitePort()): void');
+    // No behavioral heir (popup windows unreachable in node + e2e); the
+    // wrapper mechanics are the contract: opener-owned window, escaped src.
     expect(source).toContain("globalThis.window?.open('', '_blank')");
-    expect(source).toContain('previewWindow.document.write');
     expect(source).toContain('<iframe src="${escapeHtmlAttr(url)}"');
-    expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
   it('threads the starter seed + editor writes through the workspace-files core', () => {
-    // Seed semantics (package.json install-owned, ifAbsent reload re-seed) and
-    // the owner-routed editor write are pinned behaviorally in
+    // Seed semantics + owner-routed writes are behavioral in
     // orchestration/workspace-files.test.ts; here the App-side bindings.
     expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(preset),');
     expect(source).toContain('onFileWritten={(path, content) => files.writeFile(path, content)}');
-    // initial editor tabs follow preset data under the active root, threaded into EditorHost too
-    expect(source).toContain('root={activeRoot}');
-    expect(source).toContain('initialEditorFiles={publishedInitialEditorFiles}');
+    // initial tabs follow the STORE-derived starter under the ACTIVE root
     expect(source).toContain(
-      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
+      'initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot())',
     );
   });
 
-  it('paints a picked starter before boot without repainting or reseeding over early edits', () => {
-    // Pick ORDERING (paint → owner → stop-before-write → scratch → seed → boot)
-    // is pinned behaviorally in orchestration/preset-boot.test.ts; here the
-    // App-side paint glue the ports bind to.
+  it('paints a picked starter before boot (ordering glue; behavior in the preset-boot core)', () => {
     const loadPresetUi = source.match(
       /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(loadPresetUi).toBeDefined();
-    expect(source).toContain('function resetEditorToActiveInitialFiles(): void');
-    expect(source).toContain(
-      'const [publishedInitialEditorFiles, setPublishedInitialEditorFiles] = createSignal',
-    );
-    expect(loadPresetUi).toContain('await machine.loadPreset(preset);');
+    expect(loadPresetUi).toContain('setActivePreset(preset.id);');
     expect(loadPresetUi).toContain('paintPickedStarterSnapshot(preset);');
     expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
-    expect(source).toContain('function paintPickedStarterSnapshot(preset: Preset): void');
-    expect(source).toContain('snapshotFs.update({');
-    expect(source).toContain('setPublishedInitialEditorFiles(paths);');
-    expect(source).toContain('editorApi?.openInitialFiles(paths)');
-    expect(source).not.toContain("createSignal('main.js')");
-    expect(source).not.toContain("createSignal('javascript')");
+    // (a) program-write model stays deleted
     expect(source).not.toContain('discardPendingProgramWrite');
   });
 
-  it('uses preset openFiles as the complete ordered initial editor tab set', () => {
-    expect(source).toContain(
-      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
-    );
-    expect(source).toContain(
-      'initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot())',
-    );
-    expect(source).not.toContain('push(templateForPreset(preset).entry.relativePath)');
-    expect(source).not.toContain(
-      'editorApi?.openFile(workspacePresetPath(path), { activate: false })',
-    );
-  });
-
   it('renders the preset-transition veil from the preset-boot core', () => {
-    // Veil truth (true during boot, false + TS-gate resolve in finally; the
-    // switch-path begin/end) is pinned behaviorally in orchestration/
-    // {preset-boot,workspace-lifecycle}.test.ts; here the JSX surfaces.
-    expect(source).toMatch(
-      /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?setActivePreset\(preset\.id\);/,
-    );
+    // Veil truth is behavioral in orchestration/{preset-boot,workspace-lifecycle}
+    // .test.ts; the pill binding (which accessor feeds the UI) is tsc-silent.
     expect(source).toContain("presetBoot.transitioning() ? 'switching' : devServer.status()");
-    expect(source).toMatch(/presetBoot\.transitioning\(\)\s*\?\s*'SWITCHING'/);
-    expect(source).toMatch(
-      /presetBoot\.transitioning\(\)\s*\?\s*`\$\{activeTemplate\(\)\.displayName\} · switching`/,
-    );
   });
 
   it('palette stop targets only the lifecycle-owned dev session (stale terminals untouched)', () => {
-    // The stale-terminal + switch-path session capture semantics are pinned
-    // behaviorally in orchestration/{dev-server,workspace}-lifecycle.test.ts.
     expect(source).toContain('const stoppableDevServerSessionId = devServer.stoppableSessionId();');
   });
 
-  it('tags the worker with the project slug and clears the console on a project switch', () => {
-    // slug → worker install-stamp reuse key keyed to the ACTIVE ROOT/id (ADR-0165
-    // §4: store.activeId — 'scratch' on boot, a projectId after switch); freshConsole
-    // → wipe + re-greet the switched-in project's terminal (banner survives the boot clear).
+  it('tags the worker with the store-derived slug and re-greets the switched-in console', () => {
+    // slug = install-stamp reuse key keyed to store.activeId() (ADR-0165 §4);
+    // freshConsole binds the REAL terminal manager + welcome banner.
     expect(source).toContain('slug: store.activeId(),');
-    expect(source).toContain('markStopped: () => devServer.markStopped(),');
-    expect(source).toContain('rebindTerminal: (owner) => manager.rebindOwner(owner),');
-    // the fresh console + greeting is a preset-boot port (behavioral); the App
-    // binds the real terminal manager + banner:
     expect(source).toContain(
       'freshConsole: (id) => manager.freshConsole(id, terminalWelcomeBanner),',
     );
   });
 
-  // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
-  // owner — EVERY line (npm, vite, `npm run dev`) goes to the owner pty channel;
-  // the page no longer intercepts a dev line or hosts a per-run preview worker.
   it('routes every line — including the dev server — to the owner pty channel', () => {
     expect(source).toContain('return manager.runLine(id, line, dims)');
+    // (a) ADR-0148: no page-side dev-server interception layer.
     expect(source).not.toContain('dispatchDevServerLine');
-    expect(source).not.toContain('isDevServerLine');
-    expect(source).not.toContain('runViteCommand');
-    expect(source).not.toContain('DevServerContext');
-    // Bridge wiring lives SOLELY on the pty:preview set effect — wiring the
-    // derived dev frame too would transiently double-bridge the primary port
-    // (C3 clobber; the generic dev-server lifecycle).
+    // (a) bridge wiring lives SOLELY on the pty:preview effect (C3 clobber).
     expect(source).not.toContain('wirePreviewBridge(frame.port');
   });
 
-  it('runs npm + dev scripts in the owner (no page-side dev interception)', () => {
-    expect(source).not.toContain('runTerminalScript');
-    expect(source).not.toContain('npmRunDevBody');
-    // dev-server status is owner-reported (frame-driven, pinned behaviorally in
-    // the lifecycle core); the page only binds the owner signal to the core:
+  it('attaches the dev-server lifecycle core to the owner signal and disposes it', () => {
+    // Frame semantics are behavioral in orchestration/dev-server-lifecycle
+    // .test.ts; the attach effect + onCleanup are tsc-silent if dropped.
     expect(source).toContain('devServer.attachOwner(workspaceOwner());');
     expect(source).toContain('onCleanup(() => devServer.dispose());');
   });
 
-  it('loads and persists terminal environment state through the persistence core', () => {
-    // Snapshot coalescing (cwd/env + dev command in ONE file, partial updates
-    // never wipe the other half) is pinned behaviorally in orchestration/
-    // terminal-state-persistence.test.ts; here the App bindings.
-    expect(source).toContain('env: props.terminalPersistence.initialState.env,');
+  it('persists terminal environment state through the persistence core', () => {
+    // Snapshot coalescing is behavioral in orchestration/terminal-state-
+    // persistence.test.ts; here the core instantiation + the live-session port.
     expect(source).toContain('const terminalState = createTerminalStatePersistence({');
     expect(source).toContain('sessionState: (id) => manager.snapshot(id),');
-    expect(source).toContain('terminalState.persistTerminalState(id);');
   });
 
   it('delegates TS diagnostic synchronization to the versioned helper', () => {
     expect(source).toContain('createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>');
     expect(source).toContain('api.onDocument(diagnosticSync.handleDocument)');
     expect(source).toContain('beforeRequest: waitForTsRequestGate');
-    expect(source).toContain('diagnosticSync.dispose()');
   });
 
-  it('waits for the workspace owner before sending TS language-service requests', () => {
-    expect(source).toContain('const owner = workspaceOwner();');
-    expect(source).toContain('const waitForTsRequestGate = async (): Promise<void> => {');
+  it('gates TS requests on the owner AND the preset transition', () => {
+    // The gate composition is App glue with no behavioral heir.
     expect(source).toContain('await owner.ready;');
     expect(source).toContain('await presetBoot.tsTransitionReady();');
-    expect(source).toContain('await waitForTsRequestGate();');
-    expect(source).toContain('if (disposed) return false;');
     expect(source).toContain('reinitializeTs: () => reinitializeTsForPickedPreset(),');
   });
 
   it('reinitializes rifty TS when starter files change under the same active root', () => {
-    expect(source).toContain('const [tsProjectRevision, setTsProjectRevision] = createSignal(0)');
+    // tsProjectRevision() is the effect's tracking read — dropping it kills the
+    // resubscribe without any tsc or behavioral signal.
     expect(source).toContain('tsProjectRevision();');
-    expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
-    // frame gating/edge detection is the lifecycle core's contract (behavioral);
-    // the App binds its callbacks to the real signals:
-    expect(source).toContain('onOwnerAlive: () => workspace.setOwnerReady(true),');
     expect(source).toContain(
       'onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),',
     );
-    expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
+    // reinit replays the open documents into the fresh LS
     expect(source).toContain(
       'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
     );
-    expect(source).toContain('await diagnosticSync.refreshOpenDiagnostics();');
   });
 
-  it('routes workspace archive export and import through the workspace-files core', () => {
-    // Owner-tree export/import + the dev-server gate are pinned behaviorally in
-    // orchestration/workspace-files.test.ts; here the App-side bindings.
-    expect(source).toContain("id: 'act:export-workspace'");
-    expect(source).toContain("id: 'act:import-workspace'");
-    expect(source).toContain('function workspaceArchiveBlocked(): boolean');
+  it('gates workspace archive on transition/dev-server and binds the port', () => {
+    // Export/import flows are behavioral in orchestration/workspace-files
+    // .test.ts; the gate DEFINITION + its port binding live here.
     expect(source).toContain(
       "return presetBoot.transitioning() || devServer.status() !== 'stopped';",
     );
@@ -245,24 +174,16 @@ describe('App terminal startup wiring', () => {
   });
 
   it('mounts the preview for a node-only port (dev stopped) + un-gates previewUrl (ADR-0157 C1)', () => {
-    // C1: hasPreview ORs the node-server port set, so `node server.js` shows a
-    // preview even with the dev server stopped.
+    // Referenced by tests/e2e/node-command.spec.ts as the unit pin for the
+    // un-gating (the e2e asserts the live route).
     expect(source).toContain(
       "devServer.status() !== 'stopped' || devServer.previewPorts().length > 0;",
     );
-    // C1: previewUrl is membership-gated (any registered preview port), not gated on
-    // devServerRunning() — so a node-only "open in new tab" no longer silently no-ops.
     expect(source).toContain('devServer.previewPorts().some((p) => p.port === port)');
-    expect(source).toContain(
-      'const previewUrl = (port = machine.realVitePort()): string | undefined =>',
-    );
   });
 
-  it('keeps worker snapshots from reloading the preview iframe', () => {
-    // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
-    expect(source).not.toContain('previewRevision');
-    expect(source).not.toContain('setPreviewRevision');
-    expect(source).toContain('<PreviewPanel');
+  it('keeps worker snapshots from reloading the preview iframe (ADR-0126)', () => {
+    // (a) preview reloads are HMR-client-driven; the snapshot refreshKey stays deleted.
     expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
   });
@@ -271,32 +192,26 @@ describe('App terminal startup wiring', () => {
 describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
   it('wires the status-bar Export button to the real archive download', () => {
     expect(source).toContain('onExport={() => void files.downloadArchive()}');
-    expect(source).toContain('exportDisabled={workspaceArchiveBlocked()}');
   });
 
-  it('the Share toast no longer implies the user edits travel with the link', () => {
-    // share() copies only location.href (no encoded workspace) — the toast must
-    // not claim it shares the project. Real share-by-link is the M13 item.
+  it('the Share toast does not imply the user edits travel with the link', () => {
+    // share() copies only location.href — the copy must not claim more.
     expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
-    expect(source).not.toContain('Link copied — ${globalThis.location?.host');
   });
 });
 
 describe('session data-loss guards — beforeunload + Cmd+W/Cmd+S (frictionless-first-poke)', () => {
-  it('Cmd/Ctrl+S kills the save-page dialog, flushes debounced writes + acks', () => {
-    expect(source).toContain("(e.key === 's' || e.code === 'KeyS')");
+  // No behavioral or e2e heir: keyboard + unload glue is client-only.
+  it('Cmd/Ctrl+S kills the save-page dialog and flushes debounced writes', () => {
     expect(source).toContain('void editorApi?.flushPendingWrites();');
-    expect(source).toContain("flashToast('Saved', 'success');");
   });
 
   it('Cmd/Ctrl+W closes the active editor tab, not the browser tab', () => {
-    expect(source).toContain("(e.key === 'w' || e.code === 'KeyW')");
     expect(source).toContain('if (editorApi?.closeActiveTab()) {');
   });
 
   it('beforeunload prompts ONLY in memory mode with dirty edits (OPFS never prompts)', () => {
     expect(source).toContain("if (storageMode === 'memory' && store.dirty()) {");
-    expect(source).toContain("e.returnValue = '';");
     expect(source).toContain("globalThis.window?.addEventListener('beforeunload', onBeforeUnload)");
   });
 
@@ -328,122 +243,65 @@ describe('http compat docs', () => {
 });
 
 describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', () => {
-  it('deletes the hardcoded WORKSPACE constant', () => {
-    expect(source).not.toContain("const WORKSPACE = '/workspace'");
+  it('never re-declares a WORKSPACE constant (usages without it are tsc errors)', () => {
+    expect(source).not.toContain('const WORKSPACE = ');
   });
 
-  it('derives the active root from the active id via rootForId', () => {
-    expect(source).toContain('rootForId(');
-    // a single derived accessor the surfaces read, not a re-typed literal
+  it('derives the active root from the active id via one accessor', () => {
     expect(source).toContain('const activeRoot = (): string => rootForId(');
   });
 
-  it('threads activeRoot() through the owner spawn, seed, writes, explorer, and boot lines', () => {
+  it('threads activeRoot() + the store-derived starter through spawn and explorer', () => {
     expect(source).toContain('root: activeRoot()'); // startWorkspaceOwner spawn
-    // ADR-0165 §4: the restart path's boot lines follow the store-derived starter —
-    // behavioral in the lifecycle core; the App injects the store-derived port:
+    // restart-path boot lines follow the STORE-derived starter (lifecycle port)
     expect(source).toContain('activeStarterPreset: () => presetForId(activeStarterId()),');
-    expect(source).toContain('presetBootLines(preset, activeRoot())');
     expect(source).toContain('root={activeRoot()}'); // FileExplorer prop
-    // node_modules prop + preset-path seeding read the dynamic root
-    expect(source).toContain('root: activeRoot()');
-    expect(source).toContain(
-      'initialEditorFilesForPreset(presetForId(activeStarterId()), activeRoot())',
-    );
-    expect(source).toContain(
-      "import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';",
-    );
-    // no lingering WORKSPACE references on any surface
-    expect(source).not.toContain('WORKSPACE)');
-    expect(source).not.toContain('${WORKSPACE}');
-    expect(source).not.toContain('new SnapshotFs(WORKSPACE)');
   });
 
-  it('binds FileExplorer mutations to OwnerRpcFs, keeping SnapshotFs as the read view', () => {
-    expect(source).toContain("import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';");
+  it('binds FileExplorer mutations to OwnerRpcFs (owner-routed, SnapshotFs read view)', () => {
+    // Mutation ordering (close tabs → owner RPC) is e2e-covered
+    // (scm-file-manager rename/delete specs); the ctor binding is the pin.
     expect(source).toContain(
       'const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner())',
     );
-    expect(source).toContain('const explorerMutations: FileExplorerMutations = {');
-    expect(source).toContain('await flushPendingEditorWrites();');
-    expect(source).toContain(
-      'editorApi?.closePathTree(from);\n      await ownerRpcFs.renamePath(from, to);',
-    );
-    expect(source).toContain('await ownerRpcFs.renamePath(from, to);');
-    expect(source).toContain('editorApi?.closePathTree(from);');
-    expect(source).toContain(
-      'editorApi?.closePathTree(path);\n      await ownerRpcFs.deletePath(path);',
-    );
-    expect(source).toContain('await ownerRpcFs.deletePath(path);');
-    expect(source).toContain('editorApi?.closePathTree(path);');
-    expect(source).toContain('vfs={snapshotFs}');
-    expect(source).toContain('mutations={explorerMutations}');
-    expect(source).toContain('onNotify={(message, tone) => flashToast(message, tone)}');
   });
 
-  it('binds the reset-refresh core to the real snapshot/index/dev-server ports', () => {
-    // Reset/rename confirms (flush → durable re-seed → mirror flip → active-root
-    // frame-gated refresh) are pinned behaviorally in orchestration/
-    // reset-refresh.test.ts; here the App bindings.
+  it('binds the reset-refresh core to the real snapshot + dialog ports', () => {
+    // Reset/rename semantics are behavioral in orchestration/reset-refresh
+    // .test.ts; reset confirm is e2e-covered (project-management).
     expect(source).toContain('const resetRefresh = createResetRefresh({');
     expect(source).toContain('subscribeSnapshot: (cb) => snapshotFs.subscribe(cb),');
-    expect(source).toContain(
-      'resetScratchIndex: (starter) => resetScratchIndex(workspaceOwner().snapshotPort, starter),',
-    );
-    expect(source).toContain(
-      'awaitActiveSnapshotFrame: () => resetRefresh.waitForActiveSnapshotFrame(),',
-    );
     expect(source).toContain('onConfirmRename={() => resetRefresh.confirmRename(renameName())}');
-    expect(source).toContain('onConfirmReset={resetRefresh.confirmReset}');
   });
 
-  it('binds the SCM core to the owner feed and threads it into the panels', () => {
-    // Feed subscription, path mapping, stale-root guard, diffs and actions are
-    // pinned behaviorally in orchestration/scm.test.ts; here the JSX bindings.
+  it('binds the SCM core to the owner feed and disposes it', () => {
+    // Feed/diff/action semantics are behavioral in orchestration/scm.test.ts;
+    // panel actions (stage/commit/diff/download) are e2e-covered
+    // (scm-file-manager). Attach/dispose/subscribe are the tsc-silent bindings.
     expect(source).toContain('scm.attachOwner(workspaceOwner());');
     expect(source).toContain('onCleanup(() => scm.dispose());');
     expect(source).toContain(
       'subscribeStatus: (owner, cb) => subscribeGitStatus(owner.snapshotPort, cb),',
     );
-    expect(source).toContain('gitStatus={scm.gitStatus()}');
-    expect(source).toContain('gitStatus={scm.gitStatus}');
-    expect(source).toContain('readGitOriginalText={scm.readGitOriginalText}');
   });
 
-  it('wires the GIT panel to the SCM core', () => {
-    expect(source).toContain("import { ScmPanel } from './components/ScmPanel.tsx';");
-    expect(source).toContain('<ScmPanel');
-    expect(source).toContain("layout.view() === 'scm'");
-    expect(source).toContain('branch={scm.activeScm().branch}');
+  it('feeds the GIT panel from the core and keeps explorer compares wired', () => {
     expect(source).toContain('status={scm.gitStatus()}');
-    expect(source).toContain('history={scm.activeScm().history}');
-    expect(source).toContain('onOpenChange={(row) => void scm.openScmResourceDiff(row)}');
-    expect(source).toContain('onStage={scm.stageRow}');
-    expect(source).toContain('onUnstage={scm.unstageRow}');
-    expect(source).toContain('onDiscard={scm.discardRow}');
-    expect(source).toContain('onCommit={scm.commit}');
-    expect(source).toContain('gitBranch={scm.activeScm().branch}');
+    // explorer compares have NO e2e/behavioral heir — both bindings pinned
     expect(source).toContain(
       'onCompareFiles={(left, right) => void scm.openWorkingFileCompare(left, right)}',
     );
     expect(source).toContain('onCompareWithHead={(path) => void scm.openWorkingHeadCompare(path)}');
-    expect(source).toContain('onDownloadFile={(path) => void files.downloadFile(path)}');
   });
 
-  it('flushes pending editor writes before opening GIT status', () => {
-    expect(source).toContain("async function selectSidebarView(view: 'explorer' | 'scm')");
-    expect(source).toContain('async function flushPendingEditorWrites(): Promise<void>');
-    expect(source).not.toContain('inFlightProgramWrite');
-    expect(source).toContain('await editorApi?.flushPendingWrites();');
-    expect(source).toContain("if (view === 'scm' && willShow) {");
-    expect(source).toContain('await flushPendingEditorWrites();');
+  it('requests fresh GIT status when the panel opens (flush is e2e-covered)', () => {
     expect(source).toContain('scm.requestActiveGitStatus();');
-    expect(source).toContain("onClick={() => void selectSidebarView('scm')}");
+    // (a) program-write model stays deleted
+    expect(source).not.toContain('inFlightProgramWrite');
   });
 
   it('does not use an App-level clean hook for ordinary editor file writes', () => {
-    expect(source).not.toContain('markPathClean(path)');
-    expect(source).not.toContain('editorApi?.markPathClean');
+    expect(source).not.toContain('markPathClean');
   });
 });
 
@@ -506,33 +364,27 @@ describe('App project wiring', () => {
   });
 });
 
-describe('App binds the slice-2 orchestration cores (ADR-0197)', () => {
-  // Switch/restore/index-boot BEHAVIOR is pinned in orchestration/
-  // {workspace-lifecycle,project-index-boot}.test.ts; here only the one-line
-  // bindings to the real ports and JSX gates.
+describe('App binds the orchestration cores (ADR-0197)', () => {
+  // Behavior is in orchestration/*.test.ts; here only the core instantiations
+  // + the port/JSX bindings whose loss is tsc-silent.
   it('binds the workspace lifecycle + index-boot cores to the real ports', () => {
     expect(source).toContain('const workspace = createWorkspaceLifecycle<WorkspaceOwnerHandle>({');
     expect(source).toContain(
       'indexBoot.attachOwner(bridgeProjectIndex(workspaceOwner().snapshotPort));',
     );
-    expect(source).toContain('onCleanup(() => indexBoot.dispose());');
     expect(source).toContain('<Show when={indexBoot.editorProjectContextReady()}>');
     expect(source).toContain('onDiskDelete: (id) => indexBoot.recordOnDiskDelete(id),');
     expect(source).toContain('onCleanup(indexBoot.startBootPolicy(deepLinkStarterId));');
   });
 
-  it('binds the save-flow core to the real store/lifecycle/index ports', () => {
-    // Save/switch decisions (durable-post-first save, plain-Save auto-switch,
-    // Save/Discard-then-continue resume, launcher/pick gates) are pinned
-    // behaviorally in orchestration/save-flow.test.ts; here the App bindings.
+  it('binds the save-flow core to the real store/index ports', () => {
+    // Save/switch decisions are behavioral in orchestration/save-flow.test.ts;
+    // the switch-then dialog paths are e2e-covered (project-management).
     expect(source).toContain('const saveFlow = createSaveFlow({');
-    expect(source).toContain('ownerRoot: () => workspaceOwner().root,');
     expect(source).toContain(
       'saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),',
     );
     expect(source).toContain('onConfirmSave={() => void saveFlow.confirmSave(saveName())}');
-    expect(source).toContain('onSwitchSaveThen={saveFlow.switchSaveThen}');
-    expect(source).toContain('onSwitchDiscardThen={saveFlow.switchDiscardThen}');
   });
 
   it('binds the preset-boot core to the dev-server core and real ports', () => {
@@ -542,13 +394,11 @@ describe('App binds the slice-2 orchestration cores (ADR-0197)', () => {
   });
 
   it('does not label a missing active project as the scratch in the header', () => {
-    expect(source).not.toContain("if (id === 'scratch') return 'Untitled scratch';");
-    expect(source).not.toContain("?.name ?? 'Untitled scratch'");
+    expect(source).not.toContain("'Untitled scratch'");
   });
 
   it('derives the active scratch display name from the starter label', () => {
     expect(source).toContain('scratchDisplayName(activeGlyph().label)');
-    expect(source).toContain('scratchDisplayName(dialogStarterLabel())');
   });
 });
 
@@ -557,10 +407,9 @@ describe('App binds the slice-2 orchestration cores (ADR-0197)', () => {
 // xterm (`self is not defined` in the node vitest env — same reason the file
 // reads App.tsx as SOURCE and tests pure helpers via app-project-store.ts), so it
 // cannot be SSR-rendered here. The wiring contract is pinned identically: the
-// degraded banner mounts iff memory mode (the DegradedBanner emits
-// `data-banner="degraded"`), the StatusBar receives `storageMode`, the storage
-// mode + save copy come from the REAL BootResult via the pure derivations, and a
-// memory save reports EPHEMERAL never a durable Saved (fidelity).
+// degraded banner mounts iff memory mode, the StatusBar receives `storageMode`,
+// the storage mode + save copy come from the REAL BootResult via the pure
+// derivations, and a memory save reports EPHEMERAL never a durable Saved.
 describe('App degraded path wiring (ADR-0165)', () => {
   const memoryBoot: BootResult = {
     vfsBoot: { backend: 'memory' },
@@ -576,21 +425,15 @@ describe('App degraded path wiring (ADR-0165)', () => {
     expect(storageModeFromBoot(opfsBoot)).toBe('opfs');
   });
 
-  it('wires storage mode + isOpfs through storageModeFromBoot (one source, not an inline ternary)', () => {
+  it('wires the storage mode through storageModeFromBoot (one source, not an inline ternary)', () => {
     expect(source).toContain('storageModeFromBoot(props.boot)');
-    expect(source).toContain('const isOpfs = storageMode === ');
-    // the inline backend ternary for isOpfs is gone (single derived source)
-    expect(source).not.toContain("const isOpfs = props.boot.vfsBoot.backend === 'opfs'");
   });
 
-  it('mounts the DegradedBanner gated on degradedBannerVisible (memory + undismissed + launcher closed)', () => {
-    expect(source).toContain('import { DegradedBanner }');
+  it('mounts the DegradedBanner gated on degradedBannerVisible with the real ports', () => {
+    // Gate logic is behavioral in glue/degraded-storage.test.ts; the App binds
+    // the real storage mode + launcher signal.
     expect(source).toContain('degradedBannerVisible({');
-    expect(source).toContain('storage: storageMode,');
     expect(source).toContain('launcherOpen: store.launcherOpen(),');
-    expect(source).toContain('<DegradedBanner');
-    expect(source).toContain('onReEnable={() => globalThis.location?.reload()}');
-    expect(source).toContain('onDismiss={() => setBannerDismissed(true)}');
   });
 
   it('passes storageMode to the StatusBar (memory badge surface hook)', () => {
@@ -603,6 +446,5 @@ describe('App degraded path wiring (ADR-0165)', () => {
     expect(saveAffordance(storageModeFromBoot(memoryBoot)).label).not.toBe('Saved');
     // the App save flow derives its toast from saveAffordance (memory save copy ≠ durable)
     expect(source).toContain('saveAffordance(storageMode)');
-    expect(source).toContain('EPHEMERAL (session only)');
   });
 });

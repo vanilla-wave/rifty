@@ -25,7 +25,11 @@ import { fileURLToPath } from 'node:url';
  *  greps to behavioral tests. At epic close every entry is gone or carries a
  *  `why` (the recorded why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
-  { file: 'apps/playground/src/App.test.ts', count: 209 },
+  {
+    file: 'apps/playground/src/App.test.ts',
+    count: 87,
+    why: 'App.tsx unrenderable in node (xterm import); residual = negative architectural invariants + one binding pin per wiring surface; behavior heirs in orchestration/*.test.ts + glue tests + e2e',
+  },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',
     count: 1,
