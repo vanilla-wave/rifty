@@ -207,12 +207,12 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
   it('stamps WITHOUT draining the write-through on the snapshot path (ADR-0187)', async () => {
     const { vfs, fsSync, logFn } = project();
 
-    // Tripwire: `flush` is no longer part of EnsureProjectDepsOptions —
-    // durability ordering is the write-through FIFO (ADR-0187, pinned in
+    // Tripwire: `flush` powers only the DEFERRED stamp-durability check
+    // (ADR-0187 Corrected) and is NEVER awaited on the boot critical path —
+    // durability ordering is the write-through FIFO (pinned in
     // opfs-sync.test.ts). If a future change re-awaits a drain around the
     // stamp, this never-resolving flush hangs the arrival and the test
     // times out RED.
-    const hangingFlush = { flush: () => new Promise<void>(() => {}) };
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
@@ -223,11 +223,97 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => ({ packages: 0 }),
       log: logFn,
-      ...(hangingFlush as Partial<Parameters<typeof ensureProjectDependencies>[0]>),
+      flush: () => new Promise(() => {}),
     });
 
     expect(result.source).toBe('snapshot');
     expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
+  });
+
+  it('REVOKES the stamp when the deferred drain reports tree persist failures — a later boot must not trust a torn tree (ADR-0187 Corrected)', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+    let resolveFlush!: (report: {
+      failures: Array<{ path: string; op: 'write'; message: string }>;
+      total: number;
+    }) => void;
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: () =>
+        new Promise((r) => {
+          resolveFlush = r;
+        }),
+    });
+    expect(result.source).toBe('snapshot');
+    // The stamp landed non-blocking, BEFORE the drain settled…
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull();
+
+    // …then the drain reports a TREE file that never persisted.
+    resolveFlush({
+      failures: [
+        {
+          path: `${ROOT}/node_modules/vite/package.json`,
+          op: 'write',
+          message: 'QuotaExceededError',
+        },
+      ],
+      total: 1,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
+    expect(log.join('')).toContain('install stamp revoked');
+  });
+
+  it('a deferred-drain failure on the STAMP FILE ITSELF does not revoke — no stamp on disk already re-runs arrival', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: async () => ({
+        failures: [
+          {
+            path: `${ROOT}/node_modules/.rifty-install-stamp.json`,
+            op: 'write' as const,
+            message: 'QuotaExceededError',
+          },
+        ],
+        total: 1,
+      }),
+    });
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
+    expect(log.join('')).not.toContain('revoked');
+  });
+
+  it('a CLEAN deferred drain keeps the stamp', async () => {
+    const { vfs, fsSync, logFn } = project();
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: async () => ({ failures: [], total: 0 }),
+    });
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull();
   });
 
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {

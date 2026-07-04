@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 14)
+
+- **POST body validation is loud.** Malformed dependency fields (a string, an
+  array, nested/alias objects) used to be silently FILTERED — the remainder
+  resolved as a happy-path bundle for an empty/partial closure. Every present
+  `dependencies`/`devDependencies`/`optionalDependencies`/`overrides` must now
+  be an object of string ranges and `prefer` one of `'online' | 'cached'`;
+  anything else is a `400` naming the offending field (matching the client's
+  own loud package.json reader).
+
 ### Fixed (PR #107 round 13)
 
 - **POST success responses are `no-store`.** The response depends on the

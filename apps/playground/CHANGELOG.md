@@ -11,8 +11,10 @@
   re-installs instead of trusting a stamped-but-torn tree. A leftover failure
   on the stamp file itself doesn't gate (the rewrite heals it). Wall-cost ≈
   the previous single post-stamp drain (FIFO: the second drain waits only for
-  the stamp's own write). Residual for the non-blocking boot/restore stamp:
-  backlog `playground/boot-restore-stamp-unchecked-persist`.
+  the stamp's own write). The boot/restore stamp stays non-blocking with a
+  DEFERRED durability check: a fire-and-forget post-boot drain revokes the
+  stamp when the ledger shows tree persist failures, so a later boot re-runs
+  dependency arrival instead of trusting a torn tree.
 
 - **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
   net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
@@ -89,9 +91,9 @@
 
 - **Leaner install-stamp durability (ADR-0187, as later Corrected).** The write-through
   FIFO lands the stamp after every tree write: the snapshot-restore stamp is now fully
-  non-blocking (`EnsureProjectDepsOptions.flush` removed — restore is idempotent, the dev
-  line starts ~0.5s earlier; residual: backlog
-  `playground/boot-restore-stamp-unchecked-persist`), and the visible `npm install`
+  non-blocking (the dev line starts ~0.5s earlier; `EnsureProjectDepsOptions.flush`
+  returned later as the never-awaited seam for the deferred durability check — see the
+  gating entry above), and the visible `npm install`
   drains around the stamp — drain→check→stamp→drain per the ADR-0187 Correction (order
   alone can't survive a swallowed per-op persist failure; see the gating entry above) —
   npm parity, an immediate reload cannot lose the install (e2e-pinned by

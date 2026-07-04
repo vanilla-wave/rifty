@@ -256,6 +256,34 @@ describe('eddy HTTP server', () => {
     expect(res.status).toBe(400);
   });
 
+  it('POST with MALFORMED dependency fields → 400, never a silently-filtered happy path (round 14)', async () => {
+    // The old parser dropped junk entries and resolved the REMAINDER — a
+    // malformed request got a successful bundle for an empty/partial closure.
+    const bad: Array<{ body: unknown; want: RegExp }> = [
+      { body: [1, 2], want: /JSON object/ },
+      { body: 'debug@^4', want: /JSON object/ },
+      { body: { dependencies: 'debug@^4' }, want: /dependencies must be an object/ },
+      { body: { dependencies: ['debug'] }, want: /dependencies must be an object/ },
+      {
+        body: { dependencies: { debug: { version: '^4.4.1' } } },
+        want: /dependencies\["debug"\] must be a string/,
+      },
+      { body: { devDependencies: { a: 1 } }, want: /devDependencies\["a"\] must be a string/ },
+      { body: { overrides: null, dependencies: {} }, want: /overrides must be an object/ },
+      { body: { dependencies: { debug: '^4.4.1' }, prefer: 'fresh' }, want: /prefer must be/ },
+    ];
+    for (const { body, want } of bad) {
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      const parsed = (await res.json()) as { error?: string };
+      expect(parsed.error).toMatch(want);
+    }
+  });
+
   it('listen on an already-bound port REJECTS (EADDRINUSE) — the bin exits nonzero, not an uncaught error event', async () => {
     const addr = server.address() as AddressInfo;
     const second = createEddyServer({

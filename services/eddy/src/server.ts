@@ -183,10 +183,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     sendJson(res, 400, { error: 'malformed JSON body' });
     return;
   }
+  const request = parseRequest(parsed);
+  if ('error' in request) {
+    // Loud 4xx, never a filtered request: silently dropping malformed dep
+    // fields used to resolve a happy-path bundle for an EMPTY/partial closure
+    // — the wrong answer for the caller's actual intent.
+    sendJson(res, 400, { error: request.error });
+    return;
+  }
 
   let result: Awaited<ReturnType<EddyCache['resolve']>>;
   try {
-    result = await cache.resolve(toRequest(parsed));
+    result = await cache.resolve(request.req);
   } catch (err) {
     sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
     return;
@@ -223,28 +231,49 @@ function bundleHeaders(
   };
 }
 
-function pickRecord(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'string') out[k] = v;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
+const REQUEST_DEP_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'overrides',
+] as const;
 
-function toRequest(parsed: unknown): EddyResolveRequest {
-  const obj = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, unknown>;
+/**
+ * Validate the POST body LOUDLY (fidelity: bad input declines, never a happy
+ * path for the wrong closure). The old parser silently FILTERED junk — a
+ * malformed `dependencies` (string, array, nested objects à la npm aliases)
+ * collapsed into an empty/partial request that resolved successfully. Every
+ * present field must be an object of string ranges — the same shape the
+ * client's own package.json reader enforces with `NotImplementedError`s.
+ */
+function parseRequest(parsed: unknown): { req: EddyResolveRequest } | { error: string } {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { error: 'body must be a JSON object of dependency maps' };
+  }
+  const obj = parsed as Record<string, unknown>;
   const req: EddyResolveRequest = {};
-  const deps = pickRecord(obj.dependencies);
-  const dev = pickRecord(obj.devDependencies);
-  const opt = pickRecord(obj.optionalDependencies);
-  const overrides = pickRecord(obj.overrides);
-  if (deps) req.dependencies = deps;
-  if (dev) req.devDependencies = dev;
-  if (opt) req.optionalDependencies = opt;
-  if (overrides) req.overrides = overrides;
-  if (obj.prefer === 'online' || obj.prefer === 'cached') req.prefer = obj.prefer;
-  return req;
+  for (const field of REQUEST_DEP_FIELDS) {
+    const value = obj[field];
+    if (value === undefined) continue;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return { error: `${field} must be an object of string ranges` };
+    }
+    const out: Record<string, string> = {};
+    for (const [name, range] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof range !== 'string') {
+        return { error: `${field}[${JSON.stringify(name)}] must be a string range` };
+      }
+      out[name] = range;
+    }
+    if (Object.keys(out).length > 0) req[field] = out;
+  }
+  if (obj.prefer !== undefined) {
+    if (obj.prefer !== 'online' && obj.prefer !== 'cached') {
+      return { error: "prefer must be 'online' or 'cached'" };
+    }
+    req.prefer = obj.prefer;
+  }
+  return { req };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

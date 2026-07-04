@@ -15,7 +15,8 @@
  * so the stamp — written after the tree — lands durably after it by
  * construction. Order alone can't survive a swallowed per-op persist failure,
  * so the visible `npm install` additionally GATES the stamp on a clean drain
- * (`stampInstalledTree`); the boot/restore stamp stays non-blocking.
+ * (`stampInstalledTree`); the boot/restore stamp stays non-blocking with a
+ * DEFERRED check that revokes it on a dirty ledger (`project-deps.ts`).
  */
 // TODO(backlog: playground/install-stamp-invalidation)
 import { type Vfs, joinPath } from '@riftydev/vfs';

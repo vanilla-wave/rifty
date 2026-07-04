@@ -23,7 +23,7 @@
  * the worker bootstrap so the priority logic is unit-testable outside a
  * worker realm.
  */
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type DepSnapshotV1,
   fetchDepSnapshot as realFetchDepSnapshot,
@@ -31,6 +31,7 @@ import {
 } from './dep-snapshot.ts';
 import {
   depsEqual,
+  installStampPath,
   installStampSatisfied,
   readEffectiveDeps,
   writeInstallStamp,
@@ -69,6 +70,14 @@ export interface EnsureProjectDepsOptions {
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
   readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV1 | null>;
+  /**
+   * Drains the realm's OPFS write-through and reports persist failures
+   * (ADR-0187 Corrected). NEVER awaited on the boot critical path — the stamp
+   * stays non-blocking; it powers the DEFERRED durability check that revokes
+   * a stamp whose tree failed to persist (see {@link stampTree}). Optional:
+   * absent on the memory backend and in restore-only harnesses.
+   */
+  readonly flush?: () => Promise<PersistFailureReport | undefined>;
 }
 
 export async function ensureProjectDependencies(
@@ -157,10 +166,47 @@ async function tryRestoreSnapshot(
 
 /** Non-blocking stamp (ADR-0187): the stamp's write-through is enqueued after
  * every tree write, so FIFO ordering lands it after the tree — no drain on
- * the boot path. UNCHECKED by design (a drain here would re-add ~0.5s to
- * boot): a swallowed per-op persist failure can still stamp a torn tree —
- * ADR-0187 Corrected gates only the visible `npm install`.
- * TODO(backlog: playground/boot-restore-stamp-unchecked-persist) */
+ * the boot path. Durability is checked DEFERRED (ADR-0187 Corrected): a
+ * background drain reads the persist-failure ledger after everything settled
+ * and REVOKES the stamp when the tree failed to persist — a persisted stamp
+ * must never make a later boot skip restore over a known-torn tree. The boot
+ * itself never waits (~0.5s saved stays saved); this session's in-memory tree
+ * is unaffected either way. */
 async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
   await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
+  scheduleStampDurabilityCheck(opts);
+}
+
+/**
+ * Fire-and-forget: drain → inspect the ledger → revoke the stamp on a dirty
+ * report. A failure on the stamp file ITSELF doesn't revoke (no stamp on disk
+ * already means the next boot re-runs arrival — consistent); any OTHER
+ * failure means OPFS may hold a torn tree under a durable stamp — exactly the
+ * state `installStampSatisfied` would wrongly trust. The revoke's own rm
+ * rides the same FIFO (best-effort: under quota pressure a delete frees
+ * space; a NotFound persist already reads as success).
+ */
+function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
+  const flush = opts.flush;
+  if (!flush) return;
+  const stampPath = installStampPath(opts.root);
+  void (async () => {
+    const report = await flush();
+    if (!report || report.total === 0) return;
+    const foreign = report.failures.filter((f) => f.path !== stampPath);
+    const total = report.total - (report.failures.length - foreign.length);
+    if (total === 0) return;
+    const first = foreign[0];
+    const sample = first ? ` (first: ${first.op} ${first.path}: ${first.message})` : '';
+    await opts.vfs.rm(stampPath, { force: true });
+    opts.log(
+      `[real-vite/worker] WARNING: ${total} file(s) failed to persist${sample} — install stamp revoked; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
+    );
+  })().catch((err) => {
+    // The check itself failing (rm error, throwing flush impl) must not
+    // surface as an unhandled rejection — but it must not stay silent either.
+    opts.log(
+      `[real-vite/worker] WARNING: stamp durability check failed: ${(err as Error).message}\n`,
+    );
+  });
 }
