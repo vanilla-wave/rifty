@@ -44,7 +44,7 @@ Lives in `@riftydev/io` because:
 
 - `service-worker/package.json` gains `"@riftydev/io": "workspace:*"` (was zero deps); forward import direction preserved (`io` is its lowest layer).
 - `preview-bridge.ts` drops its inline `PREVIEW_PREFIX_RE`; `matchPreviewUrl` now calls `parsePreviewPath` and remains a thin shape-adapter (`{port, path}` vs `{port, rest}`) for back-compat with `index.ts` consumers.
-- `route-preview.ts` calls `synthesizePreviewUrl(match.path)` instead of inlining the literal.
+- `route-preview.ts` calls `synthesizePreviewUrl(match.path, match.port)` instead of inlining the literal.
 - `net/src/registry.ts` doc comment now points at `@riftydev/io/preview-protocol` as canonical.
 - SW's `protocol.ts` (`SW_PROTOCOL_VERSION`, wire-frame versioning) stays — a different concern (frame format vs addressing).
 - Future scheme changes (`/preview/<port>/`→`/p/<port>/`, HTTP Host synthesis
@@ -64,7 +64,7 @@ Lives in `@riftydev/io` because:
 - [x] `packages/io/src/preview-protocol.ts` exports `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`.
 - [x] `packages/io/src/index.ts` re-exports the full surface.
 - [x] `packages/service-worker/src/preview-bridge.ts` imports the regex from `@riftydev/io`; no inline copy.
-- [x] `packages/service-worker/src/route-preview.ts` calls `synthesizePreviewUrl`; no inline `http://preview.local${...}`.
+- [x] `packages/service-worker/src/route-preview.ts` calls `synthesizePreviewUrl`; no inline upstream host literal.
 - [x] `packages/service-worker/package.json` lists `@riftydev/io` in `dependencies`.
 - [x] `packages/net/src/registry.ts` doc comment cross-references the shared protocol module.
 - [x] Unit suite `packages/io/src/preview-protocol.test.ts` pins the regex and host behaviour.

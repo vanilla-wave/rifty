@@ -21,6 +21,12 @@ Two constants in `packages/service-worker/src/protocol.ts`:
 - **`SW_FRAME_VERSION` = `'1'`** — pins wire-frame data shapes (`SwPingFrame`, `SwPongFrame`, `SwPreviewReadyFrame`, `SwPreviewGoodbyeFrame`, `SerializedRequest`, `SerializedResponse`, any future frame). Bump on: changes to a frame's field set, field type, or per-field semantics. Additive optional fields with a documented default do NOT bump (per ADR-0031's SemVer-major rule).
 - **`SW_ROUTING_VERSION` = `'1'`** — pins the addressing scheme from `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`) AND the owner-fallback rules in `packages/service-worker/src/owner-resolver.ts` (`FirstWindowOwnerResolver`). Bump on: changes to the URL regex shape, the `synthesizePreviewUrl` return shape / synthesized Host, the resolver fallback order, or the one-shot-warn dedup key shape.
 
+Correction 2026-07-04 (ADR-0189 D3): `SW_ROUTING_VERSION` 6 records the
+`synthesizePreviewUrl(path, port?)` host change from `preview.local` to
+`localhost:<port>` for the SW preview path. `PREVIEW_LOCAL_HOST` remains a
+legacy explicit-HMR constant, but the routing contract now includes upstream
+`localhost:<port>` Host synthesis.
+
 Both constants are stamped into every handshake frame and the request envelope; receivers validate both at decode time. A mismatch triggers the existing `PROTOCOL_VERSION_MISMATCH` path with a structured error carrying both `(expected, got)` pairs, so the host can branch on which contract drifted.
 
 The legacy `SW_PROTOCOL_VERSION` is removed cleanly. Only in-repo references were inside `@riftydev/service-worker` itself, plus two non-code prose mentions in `kernel/sync-rpc.ts` and `kernel/CHANGELOG.md` (rewritten to cite ADR-0031/ADR-0040 without the deleted symbol). No external consumer imports it.

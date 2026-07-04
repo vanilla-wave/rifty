@@ -1,7 +1,8 @@
 /**
  * Preview-protocol addressing primitives — single source of truth for the
- * `/preview/<port>/...` URL convention and the synthetic `preview.local` host,
- * shared between `@riftydev/service-worker` and `@riftydev/net`.
+ * `/preview/<port>/...` URL convention, plus the legacy explicit-HMR
+ * `preview.local` host constant, shared between `@riftydev/service-worker`
+ * and `@riftydev/net`.
  *
  * Per ADR-0036 the regex and host literal live here so a routing-scheme change
  * is a one-edit change rather than a multi-package hunt for inlined copies. Both

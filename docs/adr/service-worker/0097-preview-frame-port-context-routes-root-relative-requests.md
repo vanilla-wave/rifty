@@ -64,9 +64,10 @@ root-relative context. Page-owned subresources such as
 `<img src="/preview/5174/logo.png">` may route as explicit preview requests,
 but they never record the page `clientId` as a preview-frame context.
 
-`routePreview` still receives the synthetic upstream URL
-`http://preview.local${pathname}${search}`. The change is only how a root-origin
-iframe request becomes associated with a preview port.
+Correction 2026-07-04 (ADR-0189 D3 / SW_ROUTING_VERSION 6): `routePreview`
+now receives the upstream URL as `http://localhost:<port>${pathname}${search}`.
+The original decision's route-context rule is unchanged; only the forwarded Host
+shape evolved so guest servers see real-local-dev Host parity.
 
 This uses the routing contract pinned by ADR-0040. ADR-0123 bumped
 `SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing; this ADR bumps it
