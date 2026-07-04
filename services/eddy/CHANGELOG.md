@@ -27,6 +27,17 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **Store read gates match CLIENT adoption exactly: non-v3 lockfiles and
+  duplicate manifest members read as a miss.** The closure hash canonicalizes
+  `packages` only, so a v1/v2-mutated lockfile still re-derived to the key and
+  served as a hit every client bounces (decline loop until the mutable TTL);
+  duplicate `file` entries are the client-declined partial shape. Both now
+  self-heal via the next compute's put. RED-checked.
+- **S3 put proof works on providers with non-MD5 ETags.** The round-8 proof
+  required the public HEAD's ETag to equal the body MD5 — bucket encryption /
+  multipart / provider-specific ETags would fail a perfectly served object
+  forever (recompute loop). An unmatched ETag now degrades to an unsigned GET
+  + sha256 byte compare; only a genuinely unreadable/foreign object throws.
 - **`S3BundleStore.put` proves PUBLIC readability before settling.** The signed
   PUT succeeding says nothing about the unsigned read path (the CDN + clients
   read unsigned): against a private/mis-ACL'd bucket the put settled, the cache

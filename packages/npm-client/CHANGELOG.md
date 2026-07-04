@@ -35,6 +35,14 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **Duplicate manifest `file` entries are declined.** Two required
+  name@version entries sharing one member file collapsed in the by-file map:
+  the single member verified against the surviving entry, the seeded-count
+  check compared collapsed sizes and the completeness gate saw both
+  name@version in the manifest ARRAY — the bundle adopted as `eddy` with one
+  package's tarball never seeded (silently replayed from the ordinary
+  registry). Malformed → declined at member 1; the S3 store misses the same
+  shape. RED-checked roundtrip + store regressions.
 - **`closureHashOf` is DEEPLY canonical.** Only the top-level package keys were
   sorted; entry objects were stringified raw, so the same resolved closure with
   a different `dependencies`/`bin`/`peerDependencies` insertion order hashed

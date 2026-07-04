@@ -1231,6 +1231,40 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(seen).toEqual({ resolverClosureHash: 'sha256-pin', resolverPrefetch: prefetchHandle });
   });
 
+  it('does not even INVOKE the pin/prefetch getters when resolverUrl is unset (documented inert)', async () => {
+    // Regression (round 9): the getters ran unconditionally — a throwing pin
+    // store or prefetch handle broke eddy-DISABLED installs.
+    const vfs = await projVfs();
+    let seen: Pick<InstallOptions, 'resolverClosureHash' | 'resolverPrefetch'> | null = null;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverClosureHash: () => {
+          throw new Error('must not run without resolverUrl');
+        },
+        resolverPrefetch: () => {
+          throw new Error('must not run without resolverUrl');
+        },
+        install: async (arg1) => {
+          const opts = arg1 as InstallOptions;
+          seen = {
+            resolverClosureHash: opts.resolverClosureHash,
+            resolverPrefetch: opts.resolverPrefetch,
+          };
+          return { ...singletonResult('debug', '4.4.1'), source: 'standard' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual({ resolverClosureHash: undefined, resolverPrefetch: undefined });
+  });
+
   it('is inert when resolverUrl is unset — no resolverUrl forwarded, no provenance tag', async () => {
     const vfs = await projVfs();
     let seenResolverUrl: string | undefined = 'UNSET';

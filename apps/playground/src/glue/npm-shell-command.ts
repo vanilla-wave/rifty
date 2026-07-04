@@ -467,8 +467,11 @@ async function runInstall(
   const start = performance.now();
 
   const installFn = deps.install ?? realInstall;
-  const envPin = deps.resolverClosureHash?.();
-  const resolverPrefetch = deps.resolverPrefetch?.();
+  // Documented inert without `resolverUrl` — so the getters must not even RUN
+  // (a throwing/warning pin store or prefetch handle must not touch an
+  // eddy-disabled install).
+  const envPin = deps.resolverUrl ? deps.resolverClosureHash?.() : undefined;
+  const resolverPrefetch = deps.resolverUrl ? deps.resolverPrefetch?.() : undefined;
   // Pin selection (ADR-0194). requestKey is the EXACT post-merge dep set —
   // computed AFTER the package.json write above, so `npm i kleur` keys {…+kleur},
   // not the stale file. A learned pin, keyed on that exact request, is the CORRECT

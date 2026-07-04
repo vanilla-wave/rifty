@@ -862,6 +862,42 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('refuses a bundle whose manifest names DUPLICATE member files (two packages sharing one member)', async () => {
+    // Regression (round 9): duplicate `file` values collapse in the client's
+    // by-file map — debug's and ms's entries both point at ms's member, the
+    // single member verifies against ms's integrity, the seeded-count check
+    // compares collapsed sizes (1 === 1) and the completeness gate sees both
+    // name@version in the manifest ARRAY — so the bundle ADOPTED as eddy with
+    // debug's tarball never seeded (replayed from the ordinary registry).
+    const built = await resolveBundle(
+      { dependencies: { debug: '^4.4.1' } },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    const debugEntry = contents.manifest.tarballs.find((t) => t.name === 'debug');
+    const msEntry = contents.manifest.tarballs.find((t) => t.name === 'ms');
+    if (!debugEntry || !msEntry) throw new Error('setup: expected debug + ms tarballs');
+    debugEntry.file = msEntry.file; // two required packages, one member file
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== 'debug');
+    const malformed = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(malformed));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { debug: '^4.4.1' });
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard'); // declined, never a partial eddy adoption
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('refuses a bundle whose lockfile entry lacks replay fields (resolved/integrity)', async () => {
     // Same class as the partial bundle: a lockfile the replay cannot satisfy
     // FROM THE BUNDLE must decline. The manifest hash is recomputed so the

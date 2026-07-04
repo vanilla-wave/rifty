@@ -281,6 +281,33 @@ describe('S3BundleStore', () => {
     expect(await store.get(HASH)).toBeNull(); // incomplete → miss
   });
 
+  it('rejects an object with a NON-v3 lockfile (hash ignores lockfileVersion; clients bounce non-v3)', async () => {
+    // closureHashOf canonicalizes `packages` only, so mutating
+    // lockfileVersion 3→1 keeps the key intact — every prior gate passes, yet
+    // every browser client refuses non-v3 bundles: a permanent decline loop.
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    const lf = JSON.parse(contents.lockfileText) as { lockfileVersion: number };
+    lf.lockfileVersion = 1;
+    contents.lockfileText = JSON.stringify(lf);
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // non-v3 → miss (self-heals on next put)
+  });
+
+  it('rejects an object whose manifest names DUPLICATE member files (client declines the same shape)', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    const [a, b] = contents.manifest.tarballs;
+    if (!a || !b) throw new Error('setup: expected ≥2 tarballs');
+    b.file = a.file; // two required packages, one member file
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // duplicate manifest member → miss
+  });
+
   it('rejects a bundle with tampered tarball bytes (integrity mismatch), matching manifest+lockfile', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
@@ -334,6 +361,53 @@ describe('S3BundleStore', () => {
     await store.get(HASH);
     for (const r of fake.requests.filter((x) => x.method !== 'PUT')) {
       expect(r.headers.authorization).toBeUndefined();
+    }
+  });
+
+  it('a provider with NON-MD5 ETags (encryption/multipart) still settles put via the GET+hash proof — no recompute loop', async () => {
+    // Regression (round 9): the post-PUT proof REQUIRED ETag === body MD5;
+    // an S3-compatible provider with bucket encryption or provider-specific
+    // ETags served the object fine yet failed the proof forever.
+    const objects = new Map<string, Buffer>();
+    let gets = 0;
+    const server = createServer((req, res) => {
+      if (req.method === 'PUT') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          objects.set(req.url ?? '', Buffer.concat(chunks));
+          res.writeHead(200, { etag: '"opaque-provider-etag-1"' });
+          res.end();
+        });
+        return;
+      }
+      const body = objects.get(req.url ?? '');
+      if (!body) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      if (req.method === 'GET') gets++;
+      res.writeHead(200, {
+        'content-type': 'application/x-tar',
+        'content-length': body.length,
+        etag: '"opaque-provider-etag-1"', // never the body MD5
+      });
+      res.end(req.method === 'HEAD' ? undefined : body);
+    });
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+      );
+    });
+    try {
+      const store = makeStore(url);
+      await store.put(HASH, { bytes: bundleBytes, manifest }); // must NOT throw
+      expect(gets).toBe(1); // proof degraded to the read-back GET + hash compare
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((e) => (e ? reject(e) : resolve())),
+      );
     }
   });
 

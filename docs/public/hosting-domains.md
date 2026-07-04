@@ -33,6 +33,15 @@ eddy-cdn.rifty.dev.  CNAME  409f80b3d8827091.topology.gslb.yccdn.ru.
 _acme-challenge.eddy-cdn.rifty.dev.  CNAME  fpq8rrab6e3n0jo4jlts.cm.yandexcloud.net.
 ```
 
+The `*.topology.gslb.yccdn.ru` target is SHARED across this folder's CDN
+resources — the provider routes at the edge by the request's Host header
+(`registry.rifty.dev` → the registry resource, `eddy-cdn.rifty.dev` → the eddy
+resource), so both CNAMEs intentionally point at the same value. Verified live
+2026-07-04: `curl -D- https://eddy-cdn.rifty.dev/bundle/<junk>` answers with
+the EDDY origin's headers (`x-eddy-*` expose list, 404 `no-store`) plus the
+edge's `cache-status`. When adding a CDN resource, take the target from
+`yc cdn resource get <id>` — do not assume it is per-resource.
+
 The playground production build uses
 `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, so npm
 metadata and tarballs go through Yandex Cloud CDN in front of the streaming

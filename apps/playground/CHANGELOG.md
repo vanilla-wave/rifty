@@ -112,6 +112,11 @@
 
 ### Fixed
 
+- **Eddy pin/prefetch getters are truly inert without `resolverUrl`.** The
+  `npm` command invoked `resolverClosureHash()` / `resolverPrefetch()`
+  unconditionally, so a throwing/warning pin store could break an
+  eddy-DISABLED install; the getters now only run when the resolver is
+  configured (regression-tested with throwing getters).
 - **Preset switch/restart no longer spins when a SECOND server is live.** The
   derived dev-server status is GLOBAL (any listening server keeps it `running` —
   generic lifecycle), but the switch stops ONE session: with a vite dev server

@@ -91,6 +91,18 @@ export class S3BundleStore implements BundleStore {
       return null;
     }
     const { manifest, lockfileText, tarballs } = contents;
+    // Same malformed shape CLIENT adoption declines: duplicate `file` values
+    // let two required name@version entries share one member (partial bundle).
+    const files = new Set<string>();
+    for (const t of manifest.tarballs) {
+      if (files.has(t.file)) {
+        console.error(
+          `eddy: bundle store object at ${closureHash} names duplicate member ${t.file} — treating as a miss`,
+        );
+        return null;
+      }
+      files.add(t.file);
+    }
     if (manifest.asOf.closureHash !== closureHash) {
       console.error(
         `eddy: bundle store object at ${closureHash} carries a different closure hash ${manifest.asOf.closureHash} — treating as a miss`,
@@ -105,6 +117,15 @@ export class S3BundleStore implements BundleStore {
     } catch (err) {
       console.error(
         `eddy: bundle store object for ${closureHash} has an unparseable lockfile: ${errMsg(err)}`,
+      );
+      return null;
+    }
+    // The closure hash canonicalizes `packages` ONLY, so a v1/v2-mutated
+    // lockfile still re-derives to the key — yet every CLIENT rejects non-v3
+    // bundles. Serving it would be a permanent hit stricter clients bounce.
+    if ((lockfile.lockfileVersion as number) !== 3) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} has a non-v3 lockfile (${JSON.stringify(lockfile.lockfileVersion)}) — treating as a miss`,
       );
       return null;
     }
@@ -210,20 +231,43 @@ export class S3BundleStore implements BundleStore {
     // A settled put PROMISES GET-by-hash servability (bundle-store.ts contract)
     // — but the signed PUT succeeding says nothing about the UNSIGNED public
     // read path (a private/mis-ACL'd bucket 403s it, and the CDN + clients
-    // read unsigned). Prove it: the same public HEAD the skip-identical probe
-    // uses must now see the object. Throwing here routes into the cache's
-    // degrade path (no mutable link is published for an unservable hash).
+    // read unsigned). Prove it. Cheap path: a public HEAD whose ETag is the
+    // single-part MD5 (Yandex/AWS default). An ETag that is NOT the body MD5
+    // (bucket encryption, multipart, provider-specific) proves nothing either
+    // way, so fall back to an unsigned GET + byte-hash compare — otherwise a
+    // perfectly served object would fail the proof forever (recompute loop).
+    // Throwing routes into the cache's degrade path (no mutable link is
+    // published for an unservable hash).
     const proof = await this.fetchImpl(url, { method: 'HEAD' }).catch((err) => {
       throw new Error(
         `eddy: bundle store PUT ${closureHash} succeeded but the public-read HEAD failed: ${errMsg(err)}`,
       );
     });
     await proof.arrayBuffer().catch(() => undefined);
-    const proofEtag = (proof.headers.get('etag') ?? '').replace(/"/g, '');
-    if (!proof.ok || proofEtag !== bodyMd5Hex) {
+    if (!proof.ok) {
       throw new Error(
         `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
-          `(HEAD ${proof.status}${proof.ok ? ', ETag mismatch' : ''}) — is the bucket public-read?`,
+          `(HEAD ${proof.status}) — is the bucket public-read?`,
+      );
+    }
+    const proofEtag = (proof.headers.get('etag') ?? '').replace(/"/g, '');
+    if (proofEtag === bodyMd5Hex) return; // MD5 ETag proves the exact bytes
+    const readBack = await this.fetchImpl(url).catch((err) => {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} succeeded but the public-read GET failed: ${errMsg(err)}`,
+      );
+    });
+    if (!readBack.ok) {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
+          `(GET ${readBack.status}) — is the bucket public-read?`,
+      );
+    }
+    const served = new Uint8Array(await readBack.arrayBuffer());
+    const servedSha = createHash('sha256').update(served).digest('hex');
+    if (servedSha !== payloadSha256Hex) {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} read back DIFFERENT bytes — the public path serves a foreign object`,
       );
     }
   }

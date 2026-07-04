@@ -767,7 +767,17 @@ async function consumeEddyResponse(
       if (expectedClosureHash !== undefined && parsed.asOf.closureHash !== expectedClosureHash) {
         return `bundle closure hash ${parsed.asOf.closureHash} ≠ requested ${expectedClosureHash}`;
       }
-      for (const t of parsed.tarballs) byFile.set(t.file, t);
+      for (const t of parsed.tarballs) {
+        // Duplicate `file` values collapse in this map: two required
+        // name@version entries sharing one member would pass BOTH the
+        // seeded-count check (1 === 1) and the completeness gate (both
+        // name@version present in the manifest ARRAY) while only one package
+        // ever gets seeded — a partial adoption. Malformed → decline.
+        if (byFile.has(t.file)) {
+          return `bundle manifest names duplicate member ${t.file}`;
+        }
+        byFile.set(t.file, t);
+      }
       manifest = parsed;
       continue;
     }

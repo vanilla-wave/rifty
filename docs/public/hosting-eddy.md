@@ -103,6 +103,22 @@ host). Keep 404/negative caching OFF at the edge — a miss must stay
 origin's own `GET /bundle/<hash>` keeps working either way (it reads the same
 store), so the re-point can happen any time after the env lands.
 
+**Browser-header prerequisite (do this BEFORE the re-point):** the eddy
+ORIGIN sets `Access-Control-Allow-Origin: *` and
+`Cross-Origin-Resource-Policy: cross-origin` on every response — today they
+pass through the CDN unchanged (verified live 2026-07-04 with an
+`Origin: https://play.rifty.dev` GET through `eddy-cdn`). The BUCKET sets
+neither (the store PUTs only `Cache-Control` + `Content-Type`), so a
+bucket-origin edge would serve bundles the browser refuses cross-origin.
+Configure the CDN resource's static response headers (ACAO `*`, CORP
+`cross-origin`) — or an equivalent bucket CORS rule — first, then smoke:
+
+```sh
+curl -fsSI -H 'Origin: https://play.rifty.dev' \
+  "https://eddy-cdn.rifty.dev/bundle/<known-hash>" \
+  | grep -Ei 'access-control-allow-origin|cross-origin-resource-policy'
+```
+
 ## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
 
 A playground deploy can pin a preset's resolved closure so its install rides
