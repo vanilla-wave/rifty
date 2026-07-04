@@ -1,5 +1,6 @@
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it } from 'vitest';
+import { NodeModulesCache } from '../glue/node-modules-cache.ts';
 import { FileExplorer } from './FileExplorer.tsx';
 
 const enc = new TextEncoder();
@@ -95,6 +96,37 @@ describe('FileExplorer owner-routed file manager affordances', () => {
     expect(html).not.toContain('aria-label="Download src"');
     expect(html).toContain('data-mode="owner"');
     expect(html).not.toContain('read-only');
+  });
+
+  it('keeps node_modules rows out of owner mutation affordances', () => {
+    const html = renderToString(() =>
+      FileExplorer({
+        vfs,
+        mutations,
+        root: '/workspace',
+        visible: true,
+        nodeModules: {
+          cache: new NodeModulesCache({
+            readdir: () => Promise.resolve([]),
+            readFile: () => Promise.resolve({ size: 0, content: null }),
+            dispose: () => {},
+          }),
+          present: true,
+          root: '/workspace',
+        },
+        onOpenFile: () => {},
+      }),
+    );
+
+    // The injected node_modules row renders dimmed and non-draggable…
+    expect(html).toContain('rf-row__name">node_modules<');
+    expect(html).toContain('data-dim="true"');
+    expect(html).toContain('draggable="false"');
+    // …with none of the owner mutation affordances its mutable siblings get.
+    expect(html).toContain('aria-label="Rename src"');
+    expect(html).not.toContain('aria-label="Rename node_modules"');
+    expect(html).not.toContain('aria-label="Delete node_modules"');
+    expect(html).not.toContain('aria-label="New file in node_modules"');
   });
 
   it('renders rifty-git file badges and ancestor folder tint', () => {

@@ -4,118 +4,39 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(fileURLToPath(new URL('./FileExplorer.tsx', import.meta.url)), 'utf8');
 
-describe('FileExplorer owner-routed CRUD source guards', () => {
-  it('exposes keyboard rename/delete affordances on mutable rows', () => {
-    expect(source).toContain("e.key === 'F2'");
-    expect(source).toContain("e.key === 'Delete'");
-    expect(source).toContain('beginRename(row)');
-    expect(source).toContain('void deleteRow(row)');
-  });
-
-  it('stops inline edit and action-button key events from bubbling into row handlers', () => {
-    expect(source).toContain('e.stopPropagation();');
-    expect(source).toContain('function stopButtonKeyPropagation(e: KeyboardEvent): void');
-    expect(source).toContain('onKeyDown={stopButtonKeyPropagation}');
-  });
-
-  it('keeps node_modules rows out of owner mutation affordances', () => {
-    expect(source).toContain('function canMutateRow(row: Row): row is MutableRow');
-    expect(source).toContain('!isUnderNodeModules(row.path)');
-    expect(source).toContain('canMutateRow(row)');
-  });
-
+/**
+ * Residual pins only. The decisions live in file-explorer-core.ts (behavioral
+ * node tests) and the render surface in FileExplorer.test.tsx (SSR). What is
+ * left is client-only: solid SSR emits no event handlers and runs no effects,
+ * so JSX wiring and createEffect bodies are behaviorally unobservable in node.
+ */
+describe('FileExplorer residual source pins (client-only wiring)', () => {
   it('tracks active root changes instead of capturing the boot root forever', () => {
-    expect(source).toContain('const [rootValue, setRootValue] = createSignal(props.root)');
-    expect(source).toContain('rootNow = nextRoot');
+    // residual source pin: root mirroring lives in a createEffect — a no-op under
+    // the solid server runtime; pins the old capture-forever regression.
     expect(source).not.toContain('const root = props.root;');
+    // residual source pin: the unowned poll must read the plain mirror the effect
+    // updates, not a captured value.
+    expect(source).toContain('rootNow = nextRoot');
   });
 
-  it('offers single-file download without a folder fake', () => {
-    expect(source).toContain('onDownloadFile?(path: string): void;');
-    expect(source).toContain('function canDownloadRow(row: Row)');
-    expect(source).toContain("row.kind === 'file' && props.onDownloadFile !== undefined");
-    expect(source).toContain("e.key.toLowerCase() === 's'");
-    expect(source).toContain('downloadRow(row)');
+  it('stops inline-edit and action-button key events from bubbling into row handlers', () => {
+    // residual source pin: event bubbling is DOM dispatch — unobservable without a browser.
+    expect(source).toContain('onKeyDown={stopButtonKeyPropagation}');
+    // residual source pin: the rename/create input swallows keys before row shortcuts fire.
+    expect(source).toMatch(/onKeyDown=\{\(e\) => \{\s*e\.stopPropagation\(\);/);
+  });
+
+  it('binds rows and menu items to the extracted decision core', () => {
+    // residual source pin: keyboard intents (file-explorer-core rowKeyIntent) reach rows.
+    expect(source).toContain('onKeyDown={(e) => handleRowKey(e, row)}');
+    // residual source pin: right-click opens the capability-gated menu.
     expect(source).toContain('onContextMenu={(e) => openContextMenu(e, row)}');
-    expect(source).toContain('role="menuitem"');
-    expect(source).toContain('file-arrow-down');
-  });
-
-  it('routes clipboard copy/cut/paste/duplicate through owner copy and rename mutations', () => {
-    expect(source).toContain('planClipboardPaste(vfs, state, targetDir)');
-    expect(source).toContain('await mutations.copyTree(action.from, action.to)');
-    expect(source).toMatch(
-      /await mutations\.renameMany\(\s*plan\.actions\.map\(\(action\) => \(\{ from: action\.from, to: action\.to \}\)\),\s*\);/,
-    );
-    expect(source).toContain("setClipboard({ paths: selectedMutablePathsFor(row), mode: 'copy' })");
-    expect(source).toContain("setClipboard({ paths: selectedMutablePathsFor(row), mode: 'cut' })");
-    expect(source).toContain("if (key === 'c')");
-    expect(source).toContain("if (key === 'x')");
-    expect(source).toContain("if (key === 'v')");
-    expect(source).toContain('Duplicate');
-    expect(source).toContain('data-cut={cutSource(row.path)}');
-    expect(source).toContain('setClipboard(null);');
-  });
-
-  it('offers rename and delete as first-class context-menu items (VS Code parity)', () => {
-    expect(source).toContain('Rename');
-    expect(source).toContain('Delete');
-    expect(source).toMatch(/beginRename\(\{\s*path: menu\(\)\.path,/);
-    expect(source).toMatch(/deleteRow\(\{\s*path: menu\(\)\.path,/);
-  });
-
-  it('offers folder creation from the folder context menu, not only hover buttons', () => {
-    expect(source).toContain('readonly depth: number;');
-    expect(source).toContain('depth: row.depth,');
-    expect(source).toContain("beginCreate('create-file', menu().path, menu().depth + 1)");
-    expect(source).toContain("beginCreate('create-dir', menu().path, menu().depth + 1)");
-    expect(source).toContain('New File');
-    expect(source).toContain('New Folder');
-  });
-
-  it('remembers active file state before async rename lifecycle closes the old model', () => {
-    expect(source).toContain(
-      "const wasActive = state.rowKind === 'file' && props.activePath === state.path;",
-    );
-    expect(source).toContain('await mutations.renamePath(state.path, path);');
-    expect(source).toContain('if (wasActive) props.onOpenFile(path);');
-  });
-
-  it('omits clipboard mutation menu items entirely for download-only rows', () => {
-    expect(source).toContain('<Show when={menu().mutable}>');
-    expect(source).not.toContain('disabled={!menu().mutable || busy()}');
-    expect(source).not.toContain('disabled={!menu().mutable || clipboard() === null || busy()}');
-  });
-
-  it('routes drag-move and OS file upload through coalesced owner frames', () => {
-    expect(source).toContain("setData('application/x-rifty-paths'");
-    expect(source).toContain('planDragMove(vfs, paths, targetDir)');
-    expect(source).toContain('await mutations.renameMany(');
-    expect(source).toContain('planUploadFiles(vfs, files, targetDir)');
-    expect(source).toContain('new Uint8Array(await file.arrayBuffer())');
-    expect(source).toContain(
-      "if (root() !== startRoot) throw new Error('workspace root changed during upload');",
-    );
-    expect(source).toMatch(
-      /for \(const batch of batchUploadWrites\([\s\S]*?\) \{[\s\S]*?if \(root\(\) !== startRoot\) throw new Error\('workspace root changed during upload'\);[\s\S]*?await mutations\.writeFiles\(batch\);[\s\S]*?\}/,
-    );
-    expect(source).toContain('Folder drops are unsupported; drop files instead');
-    expect(source).toContain('workspace root changed during upload');
-    expect(source).toContain('cannot move non-mutable path');
-    expect(source).toContain('Cannot drop on ${row.name}');
+    // residual source pin: drags carry the rifty MIME payload from the row.
     expect(source).toContain('onDragStart={(e) => startRowDrag(e, row)}');
-    expect(source).toContain('onDrop={(e) => void dropOnTarget(e, root())}');
-    expect(source).toContain('void dropOnTarget(e, dropTargetForRow(row), row);');
-  });
-
-  it('offers Copy Path and blob-vs-blob compare without raw diff text', () => {
-    expect(source).toContain("import { copyToClipboard } from '../glue/clipboard.ts';");
-    expect(source).toContain('Copy Path');
-    expect(source).toContain('Copy Relative Path');
-    expect(source).toContain('Compare Selected');
-    expect(source).toContain('Compare with HEAD');
-    expect(source).toContain('props.onCompareFiles?.(selected[0]!, selected[1]!)');
-    expect(source).toContain('props.onCompareWithHead?.(path)');
-    expect(source).not.toContain('git.diff(');
+    // residual source pin: row drops resolve their target through the core mapping.
+    expect(source).toContain('void dropOnTarget(e, dropTargetForRow(row, root()), row);');
+    // residual source pin: menu clicks dispatch the composed item ids.
+    expect(source).toContain('onClick={() => runMenuItem(item.id, menu())}');
   });
 });

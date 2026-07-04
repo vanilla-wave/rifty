@@ -41,7 +41,11 @@ export const ALLOWLIST = [
     count: 2,
     why: 'keyed <Show> iframe remount + Reload retry-signal are client-only wiring (server renders once); warm-up/URL/open-tab heirs in preview-panel-core.test.ts',
   },
-  { file: 'apps/playground/src/components/FileExplorer.source.test.ts', count: 70 },
+  {
+    file: 'apps/playground/src/components/FileExplorer.source.test.ts',
+    count: 9,
+    why: 'client-only JSX handler wiring + root-tracking createEffect (SSR emits no handlers, runs no effects); decision heirs in file-explorer-core.test.ts, render surface in FileExplorer.test.tsx',
+  },
   {
     file: 'apps/playground/src/components/TerminalPanel.test.ts',
     count: 1,
