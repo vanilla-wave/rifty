@@ -10,10 +10,6 @@ import { createAppProjectStore } from './glue/app-project-store.ts';
 import { saveAffordance, storageModeFromBoot } from './glue/degraded-storage.ts';
 
 const source = readFileSync(fileURLToPath(new URL('./App.tsx', import.meta.url)), 'utf8');
-const bootstrapSrc = readFileSync(
-  fileURLToPath(new URL('./workers/real-vite-bootstrap.ts', import.meta.url)),
-  'utf8',
-);
 const streamsCompatSrc = readFileSync(
   fileURLToPath(new URL('../../../docs/public/compat/streams.md', import.meta.url)),
   'utf8',
@@ -328,35 +324,6 @@ describe('http compat docs', () => {
     expect(httpCompatSrc).toContain('| Request headers / `rawHeaders` | ⚠️ |');
     expect(httpCompatSrc).toContain('derived from Fetch-normalized headers');
     expect(httpCompatSrc).toContain('raw casing/order/duplicates are not claimed');
-  });
-});
-
-describe('owner dev-boot clean wiring (ADR-0165 §5)', () => {
-  it('owner dev-boot clean is gated on shouldCleanForDevBoot (root OR template change)', () => {
-    const src = readFileSync(
-      fileURLToPath(new URL('./workers/real-vite-bootstrap.ts', import.meta.url)),
-      'utf8',
-    );
-    expect(src).toContain('shouldCleanForDevBoot');
-    expect(src).toContain('lastDevRoot');
-    // the legacy template-only guard must be gone
-    expect(src).not.toContain('lastDevTemplateId !== devSpec.id');
-  });
-});
-
-describe('owner serves the project index (ADR-0165 realm split)', () => {
-  it('serves the project index over the owner snapshot channel alongside the archive bridge', () => {
-    expect(bootstrapSrc).toContain('serveProjectIndex(');
-    expect(bootstrapSrc).toContain('serveWorkspaceFileReads(port, cfg.root)');
-    // keyed on the dedicated owner port + THIS realm's syncMirror (the owner owns
-    // the index). Wrapping-agnostic: the 5-arg call (with the reset-refresh hook)
-    // formats across lines.
-    const indexServe = bootstrapSrc.slice(bootstrapSrc.indexOf('serveProjectIndex('));
-    expect(indexServe).toMatch(/serveProjectIndex\(\s*port,/);
-    expect(indexServe).toMatch(/syncMirror\(\),/);
-    // ADR-0165 §6: the reset-refresh hook (publishSnapshot) is passed so an
-    // in-place re-seed republishes the live file snapshot.
-    expect(indexServe).toContain('publishSnapshot');
   });
 });
 

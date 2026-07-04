@@ -219,3 +219,28 @@ describe('OPFS persistence wiring (owner OPFS persistence)', () => {
     expect(source).toContain('await initBackend()');
   });
 });
+
+describe('owner dev-boot clean wiring (ADR-0165 §5)', () => {
+  it('owner dev-boot clean is gated on shouldCleanForDevBoot (root OR template change)', () => {
+    expect(source).toContain('shouldCleanForDevBoot');
+    expect(source).toContain('lastDevRoot');
+    // the legacy template-only guard must be gone
+    expect(source).not.toContain('lastDevTemplateId !== devSpec.id');
+  });
+});
+
+describe('owner serves the project index (ADR-0165 realm split)', () => {
+  it('serves the project index over the owner snapshot channel alongside the archive bridge', () => {
+    expect(source).toContain('serveProjectIndex(');
+    expect(source).toContain('serveWorkspaceFileReads(port, cfg.root)');
+    // keyed on the dedicated owner port + THIS realm's syncMirror (the owner owns
+    // the index). Wrapping-agnostic: the 5-arg call (with the reset-refresh hook)
+    // formats across lines.
+    const indexServe = source.slice(source.indexOf('serveProjectIndex('));
+    expect(indexServe).toMatch(/serveProjectIndex\(\s*port,/);
+    expect(indexServe).toMatch(/syncMirror\(\),/);
+    // ADR-0165 §6: the reset-refresh hook (publishSnapshot) is passed so an
+    // in-place re-seed republishes the live file snapshot.
+    expect(indexServe).toContain('publishSnapshot');
+  });
+});

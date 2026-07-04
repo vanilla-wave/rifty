@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
  *  greps to behavioral tests. At epic close every entry is gone or carries a
  *  `why` (the recorded why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
-  { file: 'apps/playground/src/App.test.ts', count: 217 },
+  { file: 'apps/playground/src/App.test.ts', count: 209 },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',
     count: 1,
@@ -56,7 +56,7 @@ export const ALLOWLIST = [
   { file: 'apps/playground/src/workers/build-boot.test.ts', count: 9 },
   { file: 'apps/playground/src/workers/vite-cli-prep.test.ts', count: 26 },
   { file: 'apps/playground/src/workers/dev-server-boot.test.ts', count: 44 },
-  { file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts', count: 93 },
+  { file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts', count: 101 },
   { file: 'apps/playground/src/workers/bundle-local-buffer.test.ts', count: 5 },
 ];
 
