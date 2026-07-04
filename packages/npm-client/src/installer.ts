@@ -31,7 +31,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import { closureHashOf } from './closure-hash.ts';
-import { streamTarEntries } from './eddy-bundle-stream.ts';
+import { DEFAULT_BUNDLE_STALL_MS, streamTarEntries } from './eddy-bundle-stream.ts';
 import {
   EDDY_BUNDLE_FORMAT,
   type EddyBundleManifestV1,
@@ -113,7 +113,9 @@ export interface InstallOptions {
   resolverUrl?: string;
   /**
    * Forwarded to the resolver: `'online'` forces a fresh server-side recompute
-   * (npm `--prefer-online` analogue); `'cached'` (default) uses eddy's bounded
+   * (npm `--prefer-online` analogue) — it also BYPASSES the pinned
+   * GET/prefetch attempts client-side (those serve a content-addressed cached
+   * closure, the opposite of online); `'cached'` (default) uses eddy's bounded
    * resolution cache (`--prefer-offline` analogue). Inert without `resolverUrl`.
    */
   prefer?: 'cached' | 'online';
@@ -132,7 +134,8 @@ export interface InstallOptions {
    * (browser-HTTP-cache/CDN friendly, preflight-free); ANY failure — miss,
    * network, verification — falls through to the POST resolve. The returned
    * bundle passes the same non-disableable gates as a POSTed one, so a stale
-   * pin degrades to POST, never to a wrong install. Inert without
+   * pin degrades to POST, never to a wrong install. Ignored under
+   * `prefer: 'online'` (a pin serves a cached closure). Inert without
    * `resolverUrl`.
    */
   resolverClosureHash?: string;
@@ -151,10 +154,12 @@ export interface InstallOptions {
    */
   resolverPrefetch?: EddyPrefetchHandle;
   /**
-   * No-progress bound (ms) on the direct GET/POST bundle streams (default
-   * {@link DEFAULT_BUNDLE_STALL_MS}): a resolver that stalls mid-body makes the
-   * attempt FAIL (→ next attempt / standard install) instead of parking the
-   * install forever. The prefetch path carries its own bound
+   * No-progress bound (ms) on the eddy attempts (default
+   * {@link DEFAULT_BUNDLE_STALL_MS}), covering BOTH phases: the header wait
+   * (a fetch whose connection/headers hang) and the direct GET/POST bundle
+   * streams (a resolver that stalls mid-body). Either makes the attempt FAIL
+   * (→ next attempt / standard install) instead of parking the install
+   * forever. The prefetch path carries its own bound
    * (`StartEddyPrefetchOptions.stallTimeoutMs`). Inert without `resolverUrl`.
    */
   resolverStallTimeoutMs?: number;
@@ -314,27 +319,29 @@ export async function install(
 
   // ADR-0182 opt-in fast path: when a resolver is configured AND no covering
   // lockfile already gives the zero-network fast path, fetch + verify eddy's
-  // bundle, then seed the cache + write the lockfile so the existing fast path
-  // below runs with zero packument network. Pre-seeding the (already
-  // integrity-verified) tarballs and writing the lockfile happen ONLY after
-  // every check passes, so any failure leaves the pre-existing lockfile
-  // untouched and the standard verifying install runs (warn, never throw).
+  // bundle, seed the cache, and STAGE its lockfile in memory so the existing
+  // fast path below runs with zero packument network. Nothing is committed to
+  // disk here: the on-disk lockfile is written ONLY at the end of a successful
+  // install (after link + shims, same as the standard path) — a failure at any
+  // later point leaves the user's pre-existing lockfile untouched instead of
+  // clobbering it with the resolver's root metadata.
   let source: 'eddy' | 'standard' = 'standard';
   let eddyClosureHash: string | null = null;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
   ) {
-    eddyClosureHash = await tryEddyFastPath(
+    const staged = await tryEddyFastPath(
       opts,
       rootName,
       dependencies,
       optionalDependencies,
       tarballCache,
     );
-    if (eddyClosureHash !== null) {
+    if (staged !== null) {
       source = 'eddy';
-      existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+      eddyClosureHash = staged.closureHash;
+      existingLockfile = staged.lockfile;
     }
   }
 
@@ -592,16 +599,20 @@ function hasLockfileFastPath(
  * ADR-0182 opt-in fast path. Obtain an `EddyBundleV1` from the resolver, verify
  * it (bytes vs the bundle integrity — NON-disableable, mirror-grade trust),
  * check the bundle lockfile covers the request, seed the tarball cache, write
- * the lockfile. Returns the adopted bundle's closureHash on success (the
- * existing lockfile fast path then runs with zero packument network; the hash
- * feeds learned pins, ADR-0194); on ANY failure it warns and returns `null`,
- * leaving the pre-existing lockfile untouched so the standard verifying
- * install runs. Never throws.
+ * the lockfile. Returns the adopted bundle's closureHash + its STAGED lockfile
+ * on success (the existing lockfile fast path then runs with zero packument
+ * network from the in-memory lockfile; the hash feeds learned pins, ADR-0194 —
+ * the caller commits the lockfile to disk only after link/shims succeed); on
+ * ANY failure it warns and returns `null`, leaving the pre-existing lockfile
+ * untouched so the standard verifying install runs. Never throws.
  *
  * The bundle can arrive via THREE attempts, first survivor wins, each failure
  * falls through to the next: a prefetched response (`resolverPrefetch`,
  * consumed only on a canonical-request match), the pinned cacheable
  * `GET /bundle/<closureHash>` (`resolverClosureHash`), and the POST resolve.
+ * `prefer: 'online'` runs the POST ONLY — pinned GET/prefetch serve a
+ * content-addressed CACHED closure, exactly what online promises to bypass
+ * (the POST carries `prefer` so the server skips its mutable tier too).
  */
 async function tryEddyFastPath(
   opts: InstallOptions,
@@ -609,10 +620,11 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<string | null> {
+): Promise<{ closureHash: string; lockfile: Lockfile } | null> {
   const url = opts.resolverUrl;
   if (!url) return null;
 
+  const online = opts.prefer === 'online';
   const body: EddyRequestBody = { dependencies, optionalDependencies };
   if (opts.overrides) body.overrides = opts.overrides;
   const requestKey = canonicalEddyRequestKey(body, opts.prefer ?? 'cached');
@@ -627,14 +639,21 @@ async function tryEddyFastPath(
     ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
   };
 
-  const prefetched = opts.resolverPrefetch?.take(requestKey) ?? null;
+  // prefer:'online' (the `--prefer-online` analogue) promises a FRESH
+  // server-side recompute — a pinned prefetch/GET would serve a cached
+  // closure, so neither enters the pipeline (only the POST, which carries
+  // `prefer` to the server).
+  const prefetched = online ? null : (opts.resolverPrefetch?.take(requestKey) ?? null);
   // `expectedHash` names the hash a CONTENT-ADDRESSED fetch must return: a pinned
   // GET (or a pinned prefetch) is `GET /bundle/<hash>`, so the bundle's manifest
   // MUST self-report that hash — else the CDN/cache served the wrong object and we
   // decline (defence-in-depth over the origin's own key check). A POST has no
   // pre-known hash (the server computes it), so it carries none.
-  const attempts: Array<{ label: string; expectedHash?: string; run: () => Promise<Response> }> =
-    [];
+  const attempts: Array<{
+    label: string;
+    expectedHash?: string;
+    run: (signal: AbortSignal) => Promise<Response>;
+  }> = [];
   if (prefetched) {
     attempts.push({
       label: 'prefetch',
@@ -644,50 +663,87 @@ async function tryEddyFastPath(
       run: () => prefetched,
     });
   }
-  const pin = opts.resolverClosureHash;
-  // The pinned GET is ALWAYS in the pipeline (prefetch → GET → POST): a
-  // SUCCESSFUL same-pin prefetch short-circuits before reaching it (first
-  // survivor wins), so this only runs when the prefetch failed/stalled/was
-  // declined — where retrying the direct GET is exactly the contract (and a
-  // consumed-prefetch decline over a CDN mixup can still succeed here).
+  const pin = online ? undefined : opts.resolverClosureHash;
+  // The pinned GET is ALWAYS in the (cached-preference) pipeline
+  // (prefetch → GET → POST): a SUCCESSFUL same-pin prefetch short-circuits
+  // before reaching it (first survivor wins), so this only runs when the
+  // prefetch failed/stalled/was declined — where retrying the direct GET is
+  // exactly the contract (and a consumed-prefetch decline over a CDN mixup can
+  // still succeed here).
   if (pin) {
     const bundleBase = opts.resolverBundleBaseUrl ?? url;
     attempts.push({
       label: 'get',
       expectedHash: pin,
-      run: () => fetch(bundleUrlFor(bundleBase, pin)),
+      run: (signal) => fetch(bundleUrlFor(bundleBase, pin), { signal }),
     });
   }
   attempts.push({
     label: 'post',
-    run: () => {
+    run: (signal) => {
       const requestBody: Record<string, unknown> = { ...body };
       if (opts.prefer) requestBody.prefer = opts.prefer;
       // No content-type header: a string body defaults to `text/plain` — a
       // CORS-simple request, so a cross-origin browser skips the OPTIONS
       // preflight (one RTT off the cold path). The server parses the body
       // unconditionally.
-      return fetch(url, { method: 'POST', body: JSON.stringify(requestBody) });
+      return fetch(url, { method: 'POST', body: JSON.stringify(requestBody), signal });
     },
   });
 
+  const headersStallMs = opts.resolverStallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
   const reasons: string[] = [];
   for (const attempt of attempts) {
     try {
       const outcome = await consumeEddyResponse(
-        await attempt.run(),
+        await fetchHeadersBounded(attempt.run, headersStallMs, attempt.label),
         effectiveRequest,
         opts,
         tarballCache,
         attempt.expectedHash,
       );
-      if (typeof outcome !== 'string') return outcome.closureHash;
+      if (typeof outcome !== 'string') {
+        return { closureHash: outcome.closureHash, lockfile: outcome.lockfile };
+      }
       reasons.push(`${attempt.label}: ${outcome}`);
     } catch (err) {
       reasons.push(`${attempt.label}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return declineEddy(reasons.join('; '));
+}
+
+/**
+ * Bound the HEADER phase of one attempt: `resolverStallTimeoutMs` (and the
+ * default stall bound) only start once a body exists — a fetch whose
+ * connection/headers hang parked `npm install` before any body bound could
+ * run. The race rejects even when the fetch ignores the abort signal (a
+ * prefetched attempt's fetch is already in flight and unsignalled), so the
+ * attempt pipeline always falls through to the next attempt / standard
+ * install.
+ */
+async function fetchHeadersBounded(
+  run: (signal: AbortSignal) => Promise<Response>,
+  stallMs: number,
+  label: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const attempt = run(controller.signal);
+  attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
+  try {
+    return await Promise.race([
+      attempt,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`eddy ${label}: no response headers for ${stallMs}ms`));
+        }, stallMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const eddyDecoder = new TextDecoder('utf-8');
@@ -708,8 +764,9 @@ async function* bufferedTarEntries(
  * integrity the BUNDLE carries (ADR-0182 §5, non-disableable) and seeded into
  * the content-addressed cache as it arrives: a mid-bundle failure leaves only
  * verified bytes (the cache re-verifies on every `get`). The lockfile is
- * written ONLY after every manifest-named tarball landed, so any failure
- * leaves the pre-existing lockfile untouched.
+ * returned STAGED (in memory), never written here: the caller commits the
+ * final lockfile only after link/shims succeed, so a failure at ANY point —
+ * including after adoption — leaves the pre-existing lockfile untouched.
  *
  * Content-addressed integrity (ADR-0194): the manifest's self-reported
  * `closureHash` must (a) equal `expectedClosureHash` when the fetch was a pinned
@@ -723,7 +780,7 @@ async function consumeEddyResponse(
   opts: InstallOptions,
   tarballCache: TarballCache,
   expectedClosureHash?: string,
-): Promise<{ adopted: true; closureHash: string } | string> {
+): Promise<{ adopted: true; closureHash: string; lockfile: Lockfile } | string> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
@@ -830,8 +887,7 @@ async function consumeEddyResponse(
   if (seededFiles.size !== byFile.size) {
     return 'bundle is missing tarball member(s) named by its manifest';
   }
-  await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return { adopted: true, closureHash: manifest.asOf.closureHash };
+  return { adopted: true, closureHash: manifest.asOf.closureHash, lockfile };
 }
 
 function declineEddy(reason: string): null {

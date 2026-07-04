@@ -296,6 +296,29 @@ describe('S3BundleStore', () => {
     expect(await store.get(HASH)).toBeNull(); // non-v3 → miss (self-heals on next put)
   });
 
+  it('rejects an object with an UNEXPECTED extra member (client declines the same shape) — round 13', async () => {
+    // Manifest, lockfile, completeness and every NAMED tarball all pass — the
+    // smuggled member is invisible to those gates, yet the streaming client
+    // declines exactly this (`unexpected bundle member`): a permanent store
+    // hit strict clients bounce.
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    contents.tarballs.push({
+      // NOT added to manifest.tarballs — an unclaimed extra member.
+      entry: {
+        file: 'tarballs/smuggled.tgz',
+        name: 'smuggled',
+        version: '0.0.0',
+        integrity: 'sha512-x',
+      },
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // unexpected member → miss
+  });
+
   it('rejects an object whose manifest names DUPLICATE member files (client declines the same shape)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);

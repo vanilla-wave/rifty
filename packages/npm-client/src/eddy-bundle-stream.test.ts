@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { streamTarEntries } from './eddy-bundle-stream.ts';
-import { EDDY_BUNDLE_FORMAT, type EddyBundleContents, packEddyBundle } from './eddy-bundle.ts';
+import { EDDY_BUNDLE_FORMAT, type EddyBundleSource, packEddyBundle } from './eddy-bundle.ts';
 import { parseTarEntries } from './unpacker.ts';
 
 const enc = new TextEncoder();
 
 /** A realistic bundle: manifest + lockfile + two tarballs, one with a >100-byte
  * member path (forces a GNU `L` long-name entry). */
-function buildBundle(): { bytes: Uint8Array; contents: EddyBundleContents } {
+function buildBundle(): { bytes: Uint8Array; contents: EddyBundleSource } {
   const longName = `tarballs/${'a'.repeat(120)}-1.0.0.tgz`;
-  const contents: EddyBundleContents = {
+  const contents: EddyBundleSource = {
     manifest: {
       format: EDDY_BUNDLE_FORMAT,
       npmClientVersion: '0.0.0-test',

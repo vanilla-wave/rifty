@@ -964,4 +964,155 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       await closeServer(raw.server);
     }
   });
+
+  it("prefer:'online' bypasses the pinned GET — only the fresh POST recompute runs (round 13)", async () => {
+    // `prefer:'online'` promises a FRESH server-side recompute; a pinned
+    // content-addressed GET serves a CACHED closure — pre-fix it was consulted
+    // first and a hit skipped the recompute entirely.
+    const bytes = await buildBundleFor(DEPS);
+    const hash = unpackEddyBundle(bytes).manifest.asOf.closureHash;
+    let gets = 0;
+    let posts = 0;
+    let postPrefer: unknown;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'GET') {
+        gets++;
+        res.writeHead(200, { 'content-type': 'application/x-tar' });
+        res.end(Buffer.from(bytes));
+        return;
+      }
+      posts++;
+      let body = '';
+      req.on('data', (c: Buffer) => {
+        body += c.toString('utf8');
+      });
+      req.on('end', () => {
+        postPrefer = (JSON.parse(body) as { prefer?: string }).prefer;
+        res.writeHead(200, { 'content-type': 'application/x-tar' });
+        res.end(Buffer.from(bytes));
+      });
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: hash, // a SATISFYING pin — would hit if consulted
+        prefer: 'online',
+      });
+      expect(result.source).toBe('eddy');
+      expect(gets).toBe(0); // the pin was bypassed…
+      expect(posts).toBe(1); // …in favour of ONE fresh recompute
+      expect(postPrefer).toBe('online'); // which bypasses the server's mutable tier too
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it("prefer:'online' never consumes a prefetch — a boot-time response is not a fresh recompute (round 13)", async () => {
+    const bytes = await buildBundleFor(DEPS);
+    const hash = unpackEddyBundle(bytes).manifest.asOf.closureHash;
+    let gets = 0;
+    let posts = 0;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'GET') gets++;
+      else posts++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const handle = startEddyPrefetch({
+        resolverUrl: raw.url,
+        request: { dependencies: DEPS, optionalDependencies: {} },
+        prefer: 'online',
+        closureHash: hash, // ignored under online: the prefetch POSTs, never GETs
+      });
+      const take = vi.fn(handle.take.bind(handle));
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverPrefetch: {
+          ...(handle.closureHash ? { closureHash: handle.closureHash } : {}),
+          take,
+        },
+        prefer: 'online',
+      });
+      expect(result.source).toBe('eddy');
+      expect(take).not.toHaveBeenCalled(); // online install ignores ANY prefetch
+      expect(gets).toBe(0); // and no pinned GET fired anywhere
+      expect(posts).toBe(2); // the (untaken) prefetch POST + the install's own fresh POST
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('a resolver that never sends response HEADERS does not hang install — the header bound fails the attempt, standard runs (round 13)', async () => {
+    // `resolverStallTimeoutMs` used to start only once a BODY existed; a fetch
+    // whose connection/headers hang parked `npm install` forever.
+    const raw = await startRaw(() => {
+      // hold the socket open, never write a response
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverStallTimeoutMs: 50,
+      });
+      expect(result.source ?? 'standard').toBe('standard');
+      expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('a link failure AFTER bundle adoption leaves the PREVIOUS lockfile untouched (staged, never pre-committed — round 13)', async () => {
+    // Pre-fix, adoption committed the bundle lockfile to disk BEFORE link +
+    // shims ran; a failure there left the resolver's lockfile in the project
+    // instead of the user's previous one.
+    const vfs = new MemoryVfs();
+    await writePackageJson(vfs, DEPS);
+    const previous = `${JSON.stringify(
+      { name: 'app', version: '1.0.0', lockfileVersion: 3, packages: { '': { dependencies: {} } } },
+      null,
+      2,
+    )}\n`;
+    await vfs.writeFile('/app/package-lock.json', previous);
+    // node_modules writes fail (quota-class) only AFTER adoption succeeded —
+    // the tarball cache lives under /.rifty and stays writable.
+    const failing = new Proxy(vfs, {
+      get(target, prop, receiver) {
+        if (prop === 'writeFile' || prop === 'mkdir') {
+          return async (path: string, ...rest: unknown[]) => {
+            if (String(path).includes('/node_modules/')) {
+              throw new Error('node_modules write boom');
+            }
+            return (
+              target[prop as 'writeFile'] as unknown as (...a: unknown[]) => Promise<void>
+            ).call(target, path, ...rest);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    }) as unknown as MemoryVfs;
+    const { registry } = makeRegistry();
+    await expect(
+      install({ vfs: failing, cwd: '/app', registry, resolverUrl: eddyUrl }),
+    ).rejects.toThrow(/node_modules write boom/);
+    expect(await vfs.readFileText('/app/package-lock.json')).toBe(previous);
+  });
 });

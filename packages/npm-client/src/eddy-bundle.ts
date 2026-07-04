@@ -56,6 +56,10 @@ export interface EddyBundleContents {
   manifest: EddyBundleManifestV1;
   lockfileText: string;
   tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }>;
+  /** EVERY member name in the container, in order — including ones the
+   * manifest does not claim. Lets a validator reject unexpected members the
+   * way the streaming client does (the maps above only surface claimed ones). */
+  memberNames: string[];
 }
 
 /** Bundle member names — fixed order `manifest → lockfile → tarballs/*` (the
@@ -123,7 +127,12 @@ function emitFile(chunks: Uint8Array[], name: string, data: Uint8Array): void {
 }
 
 /** Serialize bundle contents to `EddyBundleV1` tar bytes. */
-export function packEddyBundle(contents: EddyBundleContents): Uint8Array {
+/** Pack input: the layout (`manifest → lockfile → tarballs/*`) is DERIVED, so
+ * `memberNames` — an unpack observation — is not part of it. An unpacked
+ * `EddyBundleContents` still satisfies it (repack-after-mutate tests). */
+export type EddyBundleSource = Omit<EddyBundleContents, 'memberNames'>;
+
+export function packEddyBundle(contents: EddyBundleSource): Uint8Array {
   const chunks: Uint8Array[] = [];
   emitFile(chunks, MANIFEST_FILE, encoder.encode(JSON.stringify(contents.manifest)));
   emitFile(chunks, LOCKFILE_FILE, encoder.encode(contents.lockfileText));
@@ -146,7 +155,11 @@ export function packEddyBundle(contents: EddyBundleContents): Uint8Array {
  * a manifest tarball entry with no matching tar member). */
 export function unpackEddyBundle(bytes: Uint8Array): EddyBundleContents {
   const byName = new Map<string, Uint8Array>();
-  for (const e of parseTarEntries(bytes)) byName.set(e.name, e.data);
+  const memberNames: string[] = [];
+  for (const e of parseTarEntries(bytes)) {
+    byName.set(e.name, e.data);
+    memberNames.push(e.name);
+  }
 
   const manifestBytes = byName.get(MANIFEST_FILE);
   if (!manifestBytes) {
@@ -177,5 +190,5 @@ export function unpackEddyBundle(bytes: Uint8Array): EddyBundleContents {
     return { entry, bytes: data };
   });
 
-  return { manifest, lockfileText: decoder.decode(lockBytes), tarballs };
+  return { manifest, lockfileText: decoder.decode(lockBytes), tarballs, memberNames };
 }

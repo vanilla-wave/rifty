@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 13)
+
+- **`prefer: 'online'` now really forces a fresh recompute.** The pinned
+  GET-by-hash and the prefetch are BYPASSED under online preference (both
+  serve a content-addressed cached closure); only the POST — carrying
+  `prefer` so the server skips its mutable tier too — runs.
+  `startEddyPrefetch` likewise ignores a pinned `closureHash` under online
+  and POSTs.
+- **Eddy attempts are bounded through the HEADER phase.**
+  `resolverStallTimeoutMs` (default 10s) now also covers the fetch itself —
+  a resolver whose connection/headers hang fails the attempt (abort + race)
+  and falls through to the next attempt / standard install, instead of
+  parking `npm install` forever. Same bound added to the prefetch fetch.
+- **The eddy bundle lockfile is STAGED, not pre-committed.** Adoption used to
+  write `package-lock.json` before link/shims ran — a later failure left the
+  resolver's lockfile in the project. The staged lockfile now drives the
+  install in memory and the final lockfile is written only at the success
+  point (as the standard path always did); any post-adoption failure leaves
+  the previous lockfile untouched.
+- **`EddyBundleContents.memberNames` + exported `MANIFEST_FILE`/
+  `LOCKFILE_FILE`** so eddy's durable store can reject bundle objects with
+  unexpected extra members exactly like client adoption does (one container
+  contract, no cross-package string drift).
+
 ### Added
 
 - **Install-time shadow internals shims + loud substitution lines (ADR-0188).** `install()` now

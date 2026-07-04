@@ -19,7 +19,9 @@
 import { createHash } from 'node:crypto';
 import {
   type EddyBundleContents,
+  LOCKFILE_FILE,
   type Lockfile,
+  MANIFEST_FILE,
   bundleCompletenessGap,
   closureHashOf,
   computeIntegrity,
@@ -145,7 +147,7 @@ export class S3BundleStore implements BundleStore {
       );
       return null;
     }
-    const { manifest, lockfileText, tarballs } = contents;
+    const { manifest, lockfileText, tarballs, memberNames } = contents;
     // Same malformed shape CLIENT adoption declines: duplicate `file` values
     // let two required name@version entries share one member (partial bundle).
     const files = new Set<string>();
@@ -157,6 +159,18 @@ export class S3BundleStore implements BundleStore {
         return null;
       }
       files.add(t.file);
+    }
+    // UNEXPECTED members are a client decline too (`unexpected bundle member`)
+    // — an object smuggling extra entries past the manifest would be a
+    // permanent store hit strict clients bounce. `unpackEddyBundle` surfaces
+    // only manifest-named tarballs, so check the raw member list.
+    for (const name of memberNames) {
+      if (name !== MANIFEST_FILE && name !== LOCKFILE_FILE && !files.has(name)) {
+        console.error(
+          `eddy: bundle store object at ${closureHash} carries an unexpected member ${name} — treating as a miss`,
+        );
+        return null;
+      }
     }
     if (manifest.asOf.closureHash !== closureHash) {
       console.error(

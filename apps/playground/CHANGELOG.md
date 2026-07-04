@@ -87,16 +87,17 @@
   pin through the sync mirror (the prefetch gate stays sync by design). New seam:
   `NpmShellCommandDeps.learnedPins`.
 
-- **Leaner install-stamp durability (ADR-0187).** The write-through FIFO lands the stamp
-  after every tree write, so "durable stamp implies durable tree" needs no pre-stamp drain:
-  the snapshot-restore stamp is now fully non-blocking (`EnsureProjectDepsOptions.flush`
-  removed — restore is idempotent, the dev line starts ~0.5s earlier), and the visible
-  `npm install` keeps ONE post-stamp drain instead of the old flush→stamp→flush pair —
+- **Leaner install-stamp durability (ADR-0187, as later Corrected).** The write-through
+  FIFO lands the stamp after every tree write: the snapshot-restore stamp is now fully
+  non-blocking (`EnsureProjectDepsOptions.flush` removed — restore is idempotent, the dev
+  line starts ~0.5s earlier; residual: backlog
+  `playground/boot-restore-stamp-unchecked-persist`), and the visible `npm install`
+  drains around the stamp — drain→check→stamp→drain per the ADR-0187 Correction (order
+  alone can't survive a swallowed per-op persist failure; see the gating entry above) —
   npm parity, an immediate reload cannot lose the install (e2e-pinned by
   `owner-snapshot-restore-exec`). Reload-critical drains (dev-ready, eval boundary)
-  unchanged. The post-install stamp write and the tree drain are now INDEPENDENTLY
-  guarded, so a stamp-write failure (only costs the next boot's skip optimization)
-  no longer skips the drain — durable-on-exit does not hinge on the stamp.
+  unchanged. A stamp-write failure only costs the next boot's skip optimization — the
+  tree drain never hinges on the stamp.
 - **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0195).** For the active
   from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
   overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes

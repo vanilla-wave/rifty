@@ -87,7 +87,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     res.end();
     return;
   }
-  if (req.method === 'GET') {
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    // HEAD rides the same branch (RFC 9110: identical to GET minus the body —
+    // node suppresses body writes for HEAD): the route is CDN-fronted, and
+    // edge health checks / `curl -I` smoke tests probe it with HEAD.
     const match = /^\/bundle\/([^/]+)$/.exec(req.url ?? '');
     if (!match) {
       sendJson(res, 405, {
@@ -144,8 +147,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
       sendJson(res, 404, { error: 'unknown bundle hash' }, { 'cache-control': 'no-store' });
       return;
     }
-    res.writeHead(200, bundleHeaders(hit.manifest));
-    res.end(Buffer.from(hit.bytes));
+    res.writeHead(200, {
+      ...bundleHeaders(hit.manifest, CACHE_CONTROL_IMMUTABLE),
+      // Explicit for HEAD (node suppresses the body, so nothing else sets it).
+      'content-length': String(hit.bytes.byteLength),
+    });
+    res.end(req.method === 'HEAD' ? undefined : Buffer.from(hit.bytes));
     return;
   }
   if (req.method !== 'POST') {
@@ -189,18 +196,26 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     sendJson(res, 422, { kind: 'unsupported', feature: result.feature, message: result.message });
     return;
   }
-  res.writeHead(200, bundleHeaders(result.manifest));
+  // no-store: a POST response depends on the BODY — a cache that keys on the
+  // URL (some CDNs can be configured to cache POST) would serve one dep-set's
+  // bundle for another. Only the content-addressed GET is immutable.
+  res.writeHead(200, bundleHeaders(result.manifest, 'no-store'));
   res.end(Buffer.from(result.bytes));
 }
 
-/** 200-bundle headers, shared by the POST resolve and the GET-by-hash route.
- * `immutable` is inert on the POST (shared caches don't store POST) but load-
- * bearing on the GET: a CDN/browser cache holds the content-addressed bytes
- * forever. */
-function bundleHeaders(manifest: EddyBundleManifestV1): Record<string, string> {
+const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
+
+/** 200-bundle headers, shared by the POST resolve and the GET-by-hash route —
+ * only the cache policy differs: `immutable` is load-bearing on the GET (a
+ * CDN/browser cache holds the content-addressed bytes forever) and WRONG on
+ * the body-dependent POST (`no-store`). */
+function bundleHeaders(
+  manifest: EddyBundleManifestV1,
+  cacheControl: string,
+): Record<string, string> {
   return {
     'content-type': 'application/x-tar',
-    'cache-control': 'public, max-age=31536000, immutable',
+    'cache-control': cacheControl,
     'x-eddy-resolved-at': manifest.asOf.resolvedAt,
     'x-eddy-closure-hash': manifest.asOf.closureHash,
     'x-eddy-npm-client-version': manifest.npmClientVersion,
@@ -280,7 +295,7 @@ function sendJson(
 function corsHeaders(): Record<string, string> {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, HEAD, POST, OPTIONS',
     // Kept although the current client sends a CORS-simple POST (no
     // content-type header, no preflight): an already-deployed older client
     // still preflights with `content-type`.

@@ -9,10 +9,15 @@ export {
 export { extractTarGz, parseTarEntries } from './unpacker.ts';
 export {
   EDDY_BUNDLE_FORMAT,
+  // Fixed member names, exported so eddy's durable store validates the SAME
+  // container layout the client streams (no cross-package string drift).
+  LOCKFILE_FILE,
+  MANIFEST_FILE,
   packEddyBundle,
   unpackEddyBundle,
   type EddyBundleContents,
   type EddyBundleManifestV1,
+  type EddyBundleSource,
   type EddyBundleTarballEntry,
 } from './eddy-bundle.ts';
 export {

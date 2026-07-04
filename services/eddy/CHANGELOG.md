@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 13)
+
+- **POST success responses are `no-store`.** The response depends on the
+  BODY — a URL-keyed cache (some CDNs can be configured to cache POST) would
+  serve one dep-set's bundle for another. Only the content-addressed
+  `GET /bundle/<hash>` keeps the one-year `immutable` policy.
+- **`HEAD /bundle/<hash>` is supported** (RFC 9110: GET minus the body) —
+  edge health checks and `curl -I` smoke tests probe the CDN-fronted route;
+  it used to 405.
+- **Store validation rejects UNEXPECTED extra bundle members** — the same
+  shape client adoption declines (`unexpected bundle member`); a smuggled
+  member could otherwise stay a permanent store hit strict clients bounce.
+
 ### Fixed (PR #107 round 12)
 
 - **`GET /bundle/<hash>` validates the hash shape.** The decoded segment

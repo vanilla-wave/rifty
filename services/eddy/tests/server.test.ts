@@ -37,7 +37,10 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('x-eddy-resolved-at')).toBeTruthy();
     expect(res.headers.get('x-eddy-closure-hash')).toBeTruthy();
     expect(res.headers.get('x-eddy-npm-client-version')).toBeTruthy();
-    expect(res.headers.get('cache-control')).toMatch(/immutable/);
+    // no-store: the response depends on the BODY — a URL-keyed cache (some
+    // CDNs can cache POST) would serve one dep-set's bundle for another. Only
+    // the content-addressed GET-by-hash is immutable.
+    expect(res.headers.get('cache-control')).toBe('no-store');
 
     const bytes = new Uint8Array(await res.arrayBuffer());
     const { manifest, lockfileText } = unpackEddyBundle(bytes);
@@ -86,6 +89,29 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
     const got = new Uint8Array(await res.arrayBuffer());
     expect([...got]).toEqual([...posted]);
+  });
+
+  it('HEAD /bundle/<hash> → 200 with the GET headers and NO body (edge health checks, curl -I smoke) — round 13', async () => {
+    const post = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: { debug: '^4.4.1' } }),
+    });
+    const hash = post.headers.get('x-eddy-closure-hash') as string;
+    const bytes = new Uint8Array(await post.arrayBuffer());
+
+    const head = await fetch(`${baseUrl}/bundle/${encodeURIComponent(hash)}`, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(head.headers.get('x-eddy-closure-hash')).toBe(hash);
+    expect(Number(head.headers.get('content-length'))).toBe(bytes.byteLength);
+    expect((await head.arrayBuffer()).byteLength).toBe(0); // no body on HEAD
+
+    const miss = await fetch(`${baseUrl}/bundle/${encodeURIComponent('sha256-nope')}`, {
+      method: 'HEAD',
+    });
+    expect(miss.status).toBe(404);
+    expect(miss.headers.get('cache-control')).toBe('no-store');
   });
 
   it('GET /bundle/<unknown> → 404 JSON with no-store (a CDN must never pin a miss)', async () => {

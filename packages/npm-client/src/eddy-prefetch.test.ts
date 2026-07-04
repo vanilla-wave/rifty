@@ -34,7 +34,8 @@ describe('startEddyPrefetch', () => {
       fetchImpl: impl,
     });
     expect(calls[0]?.input).toBe('http://eddy.test/bundle/sha256-ab%2Fcd%3D');
-    expect(calls[0]?.init).toBeUndefined();
+    expect(calls[0]?.init?.method).toBeUndefined(); // a plain GET…
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal); // …under the header bound
     expect(handle.closureHash).toBe('sha256-ab/cd=');
   });
 
@@ -178,5 +179,34 @@ describe('startEddyPrefetch', () => {
       fetchImpl: impl,
     });
     await expect(handle.take(KEY)).rejects.toThrow('network down');
+  });
+
+  it("prefer:'online' IGNORES the pinned hash — the prefetch POSTs (fresh recompute), never GET-by-hash (round 13)", () => {
+    const { impl, calls } = fetchSpy(async () => new Response('x'));
+    const handle = startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      prefer: 'online',
+      closureHash: 'sha256-abc', // a pin would serve a CACHED closure — online must not
+      fetchImpl: impl,
+    });
+    expect(calls[0]?.input).toBe('http://eddy.test'); // POST origin, not /bundle/<hash>
+    expect(calls[0]?.init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({ prefer: 'online' });
+    // No content-address expectation is exposed for a POSTed response.
+    expect(handle.closureHash).toBeUndefined();
+  });
+
+  it('a fetch whose HEADERS never arrive rejects on the stall bound — take() never parks the installer (round 13)', async () => {
+    // The drain bounds only start once a body exists; the header phase needs
+    // its own bound or a hung connection waits forever.
+    const impl = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+    const handle = startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl: impl,
+      stallTimeoutMs: 25,
+    });
+    await expect(handle.take(KEY)).rejects.toThrow(/no response headers for 25ms/);
   });
 });

@@ -16,11 +16,11 @@ An earlier revision of this ADR dropped the drain from BOTH sites. The `owner-sn
 ## Decision
 
 - **Boot/restore stamp (`stampTree`, `project-deps.ts`): non-blocking.** No drain; the stamp rides the FIFO. A reload inside the drain window re-runs dependency arrival — idempotent (snapshot re-restore), no user data at stake. `EnsureProjectDepsOptions.flush` removed; the dev line starts ~0.5s earlier.
-- **Command stamp (`stampInstalledTree`, `npm-shell-command.ts`): ONE post-stamp drain** (vs the historical flush→stamp→flush pair — FIFO makes the pre-stamp flush redundant). `npm install` returns only when tree + stamp are durable: npm parity, reload-safe.
+- **Command stamp (`stampInstalledTree`, `npm-shell-command.ts`): ONE post-stamp drain** (vs the historical flush→stamp→flush pair — FIFO makes the pre-stamp flush redundant). `npm install` returns only when tree + stamp are durable: npm parity, reload-safe. *(Corrected 2026-07-04: the command site is drain→check→stamp→drain — the tree drain is CHECKED against the persist-failure ledger before the stamp; see the note above. Wall-cost ≈ the single drain.)*
 - The FIFO itself is a recorded contract: `enqueuePending` order is load-bearing (comment at the site + a RED-on-parallelize pin in `opfs-sync.test.ts` — inverted-latency writes must complete in call order). Reload-critical drains are untouched: the dev-ready drain (`devServerChild.boot({flush})`), the eval-boundary flush, project-index and starter-baseline flushes.
 
 ## Consequences
 
 - Instant-preset restore returns ~0.5s earlier; `npm install` saves the pre-stamp half of the old double drain and stays durable-on-exit (`owner-snapshot-restore-exec` pins install-survives-reload).
-- A reload during a boot-restore's drain window finds no stamp → arrival re-runs (correct, visible, idempotent); never a stamped-but-torn tree (FIFO: stamp lands last).
+- A reload during a boot-restore's drain window finds no stamp → arrival re-runs (correct, visible, idempotent). *(Corrected 2026-07-04: FIFO order rules out a stamp landing BEFORE the tree, but a swallowed per-op persist failure can still stamp a torn tree on the unchecked boot path — recorded residual: backlog `playground/boot-restore-stamp-unchecked-persist`.)*
 - Parallelizing the write-through queue now requires an explicit stamp barrier — the vfs FIFO pin fails loudly if attempted naively.
