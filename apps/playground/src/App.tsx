@@ -65,7 +65,7 @@ import {
   saveProjectIndexPhases,
   setActiveIndex,
 } from './glue/project-index-port.ts';
-import { type ActiveId, type ProjectIndex, rootForId } from './glue/project-index.ts';
+import { type ActiveId, rootForId } from './glue/project-index.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
@@ -94,6 +94,7 @@ import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.t
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
+import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
 import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
@@ -1615,51 +1616,30 @@ export function App(props: AppProps) {
   // Save/Rename dialog input text, held page-side (the dialog is controlled).
   const [saveName, setSaveName] = createSignal('');
   const [renameName, setRenameName] = createSignal('');
-  // A switch the user chose to "Save scratch, then continue" — the pending target
-  // is stashed across the Save dialog (which replaces the switch dialog) so the
-  // switch resumes AFTER the save commits (ADR-0165 §9). null = a plain Save CTA.
-  const [pendingAfterSave, setPendingAfterSave] = createSignal<{
-    pendingStarter?: string;
-    pendingId?: string;
-  } | null>(null);
-  let pendingSaveApplied: Promise<boolean> | null = null;
-  let pendingSaveDurability: Promise<boolean> | null = null;
-  let pendingSaveAutoSwitchId: ActiveId | null = null;
-
-  function trackSave(
-    id: string,
-    save: {
-      readonly applied: Promise<ProjectIndex | null>;
-      readonly durable: Promise<ProjectIndex | null>;
-    },
-  ): { applied: Promise<boolean>; durable: Promise<boolean> } {
-    const appliedWait = (async (): Promise<boolean> => {
-      const index = await save.applied;
-      return index?.projects.some((p) => p.id === id) === true;
-    })();
-    const applied = appliedWait.finally(() => {
-      if (pendingSaveApplied === applied) pendingSaveApplied = null;
-    });
-    pendingSaveApplied = applied;
-
-    const durableWait = (async (): Promise<boolean> => {
-      const index = await save.durable;
-      return index?.projects.some((p) => p.id === id) === true;
-    })();
-    const durable = durableWait.finally(() => {
-      if (pendingSaveDurability === durable) pendingSaveDurability = null;
-    });
-    pendingSaveDurability = durable;
-    return { applied, durable };
-  }
-
-  async function waitForPendingSaveApplied(): Promise<boolean> {
-    return (await pendingSaveApplied?.catch(() => false)) ?? true;
-  }
-
-  async function waitForPendingSaveDurable(): Promise<boolean> {
-    return (await pendingSaveDurability?.catch(() => false)) ?? true;
-  }
+  // Save/switch decisions (ADR-0165 §7/§9: save phase tracking, plain-Save
+  // auto-switch, Save/Discard-then-continue resume, launcher-switch gates) live
+  // in the save-flow core; the App binds the real store/lifecycle/index ports.
+  const saveFlow = createSaveFlow({
+    store,
+    workspace,
+    pickStarterUnguarded: (starter) =>
+      presetBoot.pickStarter(starter, {
+        commit: (s) => store.confirmPickStarter(s),
+        guardDirtyScratch: false,
+        eagerTsGate: true,
+      }),
+    ownerRoot: () => workspaceOwner().root,
+    rootForId,
+    activeStarterId,
+    ephemeral: () => saveAffordance(storageMode).ephemeral,
+    // Read the port at fire time (the live channel); memory mode never posts.
+    saveIndexPhases: (id, name, starter) =>
+      saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),
+    openSaveDialog,
+    showSaveError: (message) => store.setToast({ kind: 'error', text: message }),
+    showEphemeralSaveNotice: (name) =>
+      store.setToast({ kind: 'info', text: `${name} · EPHEMERAL (session only)` }),
+  });
 
   async function flushPendingEditorWrites(): Promise<void> {
     await editorApi?.flushPendingWrites();
@@ -1695,9 +1675,7 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
-    pendingSaveAutoSwitchId = null;
-    if (!(await workspace.waitForPendingSwitch())) return;
-    if (!(await waitForPendingSaveApplied())) return;
+    if (!(await saveFlow.beginStarterPick())) return;
     indexBoot.markBootDecisionMade();
     // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
     // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
@@ -1709,20 +1687,10 @@ export function App(props: AppProps) {
     });
   }
 
-  // Switch active root from the launcher/chip. The store gates a dirty scratch
-  // (switch dialog); an applied switch drives the real owner respawn (switchTo).
-  async function onLauncherSwitch(id: ActiveId): Promise<void> {
-    pendingSaveAutoSwitchId = null;
-    if (!(await workspace.waitForPendingSwitch())) return;
-    if (!(await waitForPendingSaveDurable())) return;
-    const ownerNeedsSwitch = workspaceOwner().root !== rootForId(id);
-    store.requestSwitch(id);
-    const prompted = store.dialog()?.kind === 'switch';
-    if (!prompted && ownerNeedsSwitch) {
-      void workspace.trackSwitch(workspace.switchTo(id));
-    } else if (!prompted) {
-      void workspace.ensureStarted(true);
-    }
+  // Switch active root from the launcher/chip — the save-flow core gates it over
+  // in-flight saves/switches; an applied switch drives the real owner respawn.
+  function onLauncherSwitch(id: ActiveId): void {
+    void saveFlow.launcherSwitch(id);
   }
 
   // Open the launcher on the REMEMBERED tab (localStorage), but force STARTERS when
@@ -1795,89 +1763,6 @@ export function App(props: AppProps) {
   function openSaveDialog(): void {
     setSaveName('');
     store.openDialog({ kind: 'save', defaultName: '' });
-  }
-
-  async function switchToSavedProjectAfterSave(
-    id: ActiveId,
-    saved: Promise<boolean>,
-  ): Promise<void> {
-    try {
-      if (saveAffordance(storageMode).ephemeral) return;
-      if (!(await saved)) return;
-      if (pendingAfterSave()) return;
-      if (pendingSaveAutoSwitchId !== id) return;
-      if (workspace.switchPending()) return;
-      if (store.activeId() !== id) return;
-      if (workspaceOwner().root === rootForId(id)) return;
-      void workspace.trackSwitch(workspace.switchTo(id));
-    } finally {
-      if (pendingSaveAutoSwitchId === id) pendingSaveAutoSwitchId = null;
-    }
-  }
-
-  // Confirm Save: the store flips the mirror pointer; a fresh page id is allocated
-  // (the owner reconciles the on-disk move via saveScratchAsProject + its index).
-  // ADR-0165 §8 fidelity: a memory-mode save is EPHEMERAL — its toast must NEVER
-  // read like a durable `Saved as <name>`. saveAffordance(storageMode) is the one
-  // source shared with the status-bar badge, so the two surfaces cannot drift.
-  async function onConfirmSave(): Promise<void> {
-    const name = saveName().trim();
-    if (!name) return;
-    // Collision-free project id (crypto.randomUUID, Math.random fallback) — a
-    // collision would make saveScratchAsProject throw `already exists` owner-side
-    // while the page optimistically flipped activeId onto another project's tree.
-    const id = `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
-    const ephemeral = saveAffordance(storageMode).ephemeral;
-    const durableSave = ephemeral
-      ? {
-          applied: Promise.resolve<ProjectIndex | null>(null),
-          durable: Promise.resolve<ProjectIndex | null>(null),
-        }
-      : (() => {
-          const phases = saveProjectIndexPhases(
-            workspaceOwner().snapshotPort,
-            id,
-            name,
-            activeStarterId(),
-          );
-          return {
-            applied: phases.applied.catch((err: unknown) => {
-              console.error('[project-index] save apply failed', err);
-              const message = err instanceof Error ? err.message : String(err);
-              store.setToast({ kind: 'error', text: `Save failed: ${message}` });
-              return null;
-            }),
-            durable: phases.durable.catch((err: unknown) => {
-              console.warn('[project-index] save durability still pending', err);
-              return null;
-            }),
-          };
-        })();
-    // ADR-0165 §7 durable Save: post the on-disk move FIRST (owner copies /scratch
-    // → /projects/<id>, flips+persists the index, deletes /scratch), reading the
-    // active STARTER while the store is still scratch-active (confirmSave below
-    // flips activeId to the project). The owner re-publishes only after flush;
-    // waiting here prevents a late save publish from reverting a following
-    // starter-pick/switch. Read the port at fire time (the live channel). Skipped
-    // in memory mode (EPHEMERAL — no durable tree).
-    const saveWait = ephemeral
-      ? { applied: Promise.resolve(true), durable: Promise.resolve(true) }
-      : trackSave(id, durableSave);
-    store.confirmSave(name, id);
-    if (ephemeral) {
-      store.setToast({ kind: 'info', text: `${name} · EPHEMERAL (session only)` });
-    }
-    // Save-then-continue resume (ADR-0165 §9): the switch dialog stashed a target.
-    // Wait for the save to be DURABLE before switchTo hard-kills the owner (else
-    // the committed tree races the teardown and the respawn boots empty), then apply.
-    const pending = pendingAfterSave();
-    if (pending) {
-      setPendingAfterSave(null);
-      if (await saveWait.durable) await applyPendingTarget(pending);
-    } else if (!ephemeral) {
-      pendingSaveAutoSwitchId = id;
-      void switchToSavedProjectAfterSave(id, saveWait.durable);
-    }
   }
 
   // Confirm Rename: post the durable on-disk rename to the owner (it rewrites the
@@ -1981,48 +1866,6 @@ export function App(props: AppProps) {
     if (d.pendingId) return store.projects().find((p) => p.id === d.pendingId)?.name ?? '';
     return '';
   });
-
-  // Apply a confirmed switch target — UNGUARDED (the user already chose Save or
-  // Discard, ADR-0165 §9). Uses the store's `confirm*` transitions, NOT the
-  // dirty-guarded `requestSwitch`/`pickStarter`: re-invoking the guarded ones from
-  // a still-dirty scratch would re-open the switch dialog and never flip activeId,
-  // so the owner would respawn at the new root with the OLD template/starter.
-  async function applyPendingTarget(target: {
-    pendingStarter?: string;
-    pendingId?: string;
-  }): Promise<void> {
-    if (target.pendingStarter) {
-      // Unguarded commit + an EAGER TS gate: the gate must block TS requests for
-      // the whole queued wait, not only from dequeue (the dialog already decided).
-      await presetBoot.pickStarter(target.pendingStarter, {
-        commit: (starter) => store.confirmPickStarter(starter),
-        guardDirtyScratch: false,
-        eagerTsGate: true,
-      });
-    } else if (target.pendingId) {
-      store.confirmSwitchTo(target.pendingId);
-      void workspace.trackSwitch(workspace.switchTo(target.pendingId));
-    }
-  }
-
-  // Discard-then-continue: drop the switch dialog and apply the pending target
-  // immediately (the unnamed draft is kept on disk; only the save-as-project is
-  // skipped — ADR-0165 §9).
-  function onSwitchDiscardThen(): void {
-    const d = store.dialog();
-    store.setDialog(null);
-    if (d?.kind === 'switch') void applyPendingTarget(d);
-  }
-
-  // Save-then-continue: stash the pending target, then open the Save dialog (which
-  // replaces the switch dialog). The switch RESUMES in onConfirmSave AFTER the save
-  // commits — so "Save scratch, then continue" actually continues (ADR-0165 §9).
-  function onSwitchSaveThen(): void {
-    const d = store.dialog();
-    if (d?.kind === 'switch')
-      setPendingAfterSave({ pendingStarter: d.pendingStarter, pendingId: d.pendingId });
-    openSaveDialog();
-  }
 
   // A port is previewable iff it is a registered preview port (ADR-0155 multi-port:
   // the dev-server port is itself a registry entry when running, and each node
@@ -2270,7 +2113,7 @@ export function App(props: AppProps) {
       if (e.key === 'Escape' && !paletteOpen()) {
         if (store.dialog()) {
           e.preventDefault();
-          setPendingAfterSave(null);
+          saveFlow.cancelPendingAfterSave();
           store.setDialog(null);
         } else if (store.launcherOpen()) {
           e.preventDefault();
@@ -2651,16 +2494,16 @@ export function App(props: AppProps) {
         onSaveName={(v) => setSaveName(v)}
         onRenameName={(v) => setRenameName(v)}
         onCancel={() => {
-          setPendingAfterSave(null); // a cancelled Save-then-continue drops its pending switch
+          saveFlow.cancelPendingAfterSave(); // a cancelled Save-then-continue drops its pending switch
           store.setDialog(null);
         }}
-        onConfirmSave={onConfirmSave}
+        onConfirmSave={() => void saveFlow.confirmSave(saveName())}
         onConfirmRename={onConfirmRename}
         onConfirmReset={onConfirmReset}
         onConfirmDelete={() => store.confirmDelete()}
         onConfirmResetSandbox={() => void onResetBrowserSandbox()}
-        onSwitchSaveThen={onSwitchSaveThen}
-        onSwitchDiscardThen={onSwitchDiscardThen}
+        onSwitchSaveThen={saveFlow.switchSaveThen}
+        onSwitchDiscardThen={saveFlow.switchDiscardThen}
       />
 
       <Show when={toast()} keyed>

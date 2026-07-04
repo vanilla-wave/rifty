@@ -168,17 +168,6 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('marks a same-root launcher open ready without respawning the hidden owner', () => {
-    const switchStart = source.indexOf('async function onLauncherSwitch(id: ActiveId)');
-    const switchEnd = source.indexOf('// Open the launcher on the REMEMBERED tab', switchStart);
-    const switchBody = source.slice(switchStart, switchEnd);
-    expect(switchStart).toBeGreaterThan(-1);
-    expect(switchEnd).toBeGreaterThan(switchStart);
-    expect(switchBody).toContain('if (!prompted && ownerNeedsSwitch)');
-    expect(switchBody).toContain('} else if (!prompted) {');
-    expect(switchBody).toContain('void workspace.ensureStarted(true);');
-  });
-
   // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
   // owner — EVERY line (npm, vite, `npm run dev`) goes to the owner pty channel;
   // the page no longer intercepts a dev line or hosts a per-run preview worker.
@@ -487,22 +476,6 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain("onClick={() => void selectSidebarView('scm')}");
   });
 
-  it('respawns the owner at the saved project root after a plain Save-as-project', () => {
-    expect(source).toContain('let pendingSaveAutoSwitchId: ActiveId | null = null;');
-    expect(source).toContain('function switchToSavedProjectAfterSave(');
-    expect(source).toContain('if (saveAffordance(storageMode).ephemeral) return;');
-    expect(source).toContain('if (pendingSaveAutoSwitchId !== id) return;');
-    expect(source).toContain('if (workspace.switchPending()) return;');
-    expect(source).toContain('if (store.activeId() !== id) return;');
-    expect(source).toContain('void workspace.trackSwitch(workspace.switchTo(id));');
-    expect(source).toContain('pendingSaveAutoSwitchId = id;');
-    expect(source).toContain('} else if (!ephemeral) {');
-    expect(source).toContain('void switchToSavedProjectAfterSave(id, saveWait.durable);');
-    expect(source).toContain('pendingSaveAutoSwitchId = null;');
-    // The switch sequencing itself (teardown → respawn → rewire → snapshot →
-    // editor reset) is pinned behaviorally in orchestration/workspace-lifecycle.test.ts.
-  });
-
   it('does not use an App-level clean hook for ordinary editor file writes', () => {
     expect(source).not.toContain('markPathClean(path)');
     expect(source).not.toContain('editorApi?.markPathClean');
@@ -581,6 +554,20 @@ describe('App binds the slice-2 orchestration cores (ADR-0197)', () => {
     expect(source).toContain('<Show when={indexBoot.editorProjectContextReady()}>');
     expect(source).toContain('onDiskDelete: (id) => indexBoot.recordOnDiskDelete(id),');
     expect(source).toContain('onCleanup(indexBoot.startBootPolicy(deepLinkStarterId));');
+  });
+
+  it('binds the save-flow core to the real store/lifecycle/index ports', () => {
+    // Save/switch decisions (durable-post-first save, plain-Save auto-switch,
+    // Save/Discard-then-continue resume, launcher/pick gates) are pinned
+    // behaviorally in orchestration/save-flow.test.ts; here the App bindings.
+    expect(source).toContain('const saveFlow = createSaveFlow({');
+    expect(source).toContain('ownerRoot: () => workspaceOwner().root,');
+    expect(source).toContain(
+      'saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),',
+    );
+    expect(source).toContain('onConfirmSave={() => void saveFlow.confirmSave(saveName())}');
+    expect(source).toContain('onSwitchSaveThen={saveFlow.switchSaveThen}');
+    expect(source).toContain('onSwitchDiscardThen={saveFlow.switchDiscardThen}');
   });
 
   it('binds the preset-boot core to the dev-server core and real ports', () => {
