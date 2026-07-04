@@ -4,6 +4,24 @@
 
 ### Changed
 
+- **Epic playground-testable-core CLOSED: source-grep asserts 888 → 140, every
+  residual with a recorded why (`tools/checks/source-grep-ratchet.mjs`).**
+  Remaining App.tsx flows extracted to headless cores with mutation-RED-checked
+  behavioral tests (ADR-0197): `src/orchestration/save-flow.ts` (durable-post-first
+  Save, plain-Save auto-switch, Save/Discard-then-continue resume, launcher/pick
+  gates), `reset-refresh.ts` (on-disk re-seed + frame-gated live refresh, rename),
+  `terminal-state-persistence.ts` (single-snapshot cwd/env+devCommand). Component
+  cores: `components/editor-host-core.ts` (whole ADR-0075 editor session state
+  machine, 44 its), `file-explorer-core.ts` (keyboard/menu/clipboard/drag/upload
+  decisions), `preview-panel-core.ts` (warm-up hooks, route, open-tab).
+  realVite + ts-ls-monaco-providers greps replaced by behavioral heirs
+  (ts-ls-monaco-providers-source.test.ts deleted). Worker lanes: vite-cli-prep +
+  build-boot fully behavioral in node (patched CLI/wrapper configs EXECUTED);
+  real-vite-bootstrap/dev-server-boot contracts behavioral via tests/browser-unit
+  (ADR-0196: owner shell routing, publish/persistence, boot modes) + in-file node
+  boot tests. App.test.ts residual = negative architectural invariants + one
+  binding pin per wiring surface.
+
 - **Owner file/archive + SCM flows extracted to headless orchestration cores
   (ADR-0197, epic playground-testable-core, slice 4a).** The guarded owner byte
   read (owner-change-mid-read fails loud) in

@@ -16,6 +16,7 @@ sources: [DD-3, EPIC C, ADR-0003 (D-002)]
 - C3: repoint playground `adapters/use*` to consume workbench → playground becomes a thin binding (M, idea).
 - Pull when a second (non-Solid) consumer is real (the reason for C), or when the playground refactor to a thin shell is worth doing on its own.
 - 2026-07-02: epic `playground-testable-core` now owns the App() untangling (headless orchestration core + behavioral tests) — this item shrinks to the package lift + public controller API; still ADR-gated on start.
+- 2026-07-04: epic CLOSED — App() untangled (`apps/playground/src/orchestration/*` + component cores, behavioral tests); the untangling blocker is gone, item = package lift + public API only.
 
 ## Reversibility
 IRREVERSIBLE: new package + public controller API (cross-package surface) → needs its own ADR (promote DD-3 to ADR when the track starts). Gate: a foreseen non-Solid consumer; parked until then. The no-upward-imports check (C1) protects the D-002 / no-reverse-imports hard rule.
