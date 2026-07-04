@@ -91,6 +91,10 @@
   overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes
   it only on a canonical dep-set match. `VITE_RIFTY_EDDY_PINS` (JSON `preset-slug →
   closureHash`, env-config, default absent) turns the fetch into a cacheable GET-by-hash.
+  The prefetch's pin follows the same learned-WINS priority as the install path (ADR-0194):
+  a learned exact-match pin beats the coarse template env pin, so `install` (which consumes
+  the prefetch before its own pin) never rides a stale env prefetch over the exact learned
+  one; the dedup key is a structured `JSON.stringify` (was a NUL-delimited literal).
   Page boot preconnects the registry + resolver origins (env-config only, D-004).
 
 ### Added

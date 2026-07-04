@@ -119,7 +119,9 @@ Beyond env pins, the playground LEARNS pins automatically (ADR-0194): after a
 successful eddy install it persists `request-key → closure-hash`
 (`/.rifty/eddy-learned-pins.json`, TTL = the server's mutable tier), so ANY
 repeat dep set — ad-hoc `npm install` included — rides the cacheable GET on the
-next fresh profile. No operator work; env pins take priority.
+next fresh profile. No operator work; a LEARNED exact-match pin wins over a
+template env pin (which only matches the pristine preset — env pins are the
+fallback that seeds the first install of a set).
 
 ## Cold-spike knobs
 
@@ -188,13 +190,15 @@ first.
    ```
 
 3. Reserve a static IP, reuse the proxy's `rifty-registry-proxy` security group
-   (ingress `80/tcp` + `443/tcp`), and add the DNS record **first**:
-   `eddy.rifty.dev. A <reserved-ip>` in the `rifty` zone
-   (`docs/public/hosting-domains.md`).
+   (ingress `80/tcp` + `443/tcp`), and add the DNS records **first** (both A → the
+   reserved IP, in the `rifty` zone — `docs/public/hosting-domains.md`):
+   `eddy.rifty.dev` AND `eddy-origin.rifty.dev` (the COI Caddy serves both — the
+   `-origin` host is the CDN origin, needed once you add the CDN tier below).
 
 4. A COI compose = `deploy/yandex/eddy/docker-compose.yml` with eddy's `build:`
-   replaced by `image: cr.yandex/$REG/eddy:0.1.0` (Caddy unchanged). Create the
-   VM with that service account (mirrors the proxy specs):
+   replaced by `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed tag; the
+   committed `docker-compose.coi.yml` tracks the live one — Caddy unchanged).
+   Create the VM with that service account (mirrors the proxy specs):
 
    ```bash
    yc compute instance create-with-container rifty-eddy \
@@ -233,8 +237,12 @@ edge, hence the split-host shape):
   ~10 min (the default `*.yccdn.cloud.yandex.net` cert answers until then).
 - VM Caddy serves BOTH `eddy.rifty.dev` and `eddy-origin.rifty.dev`
   (`deploy/yandex/eddy/docker-compose.coi.yml`).
-- Playground env: `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev` +
-  `VITE_RIFTY_EDDY_PINS` (template-id → hash). Measured 2026-07-02
+- Playground env (operator-set, OPT-IN — `netlify.toml` ships only
+  `VITE_RIFTY_RESOLVER_URL` today): to route pinned GETs through the CDN, add
+  `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev`; to pin presets, add
+  `VITE_RIFTY_EDDY_PINS` (JSON `template-id → closureHash`, each filled from a
+  real `x-eddy-closure-hash` for that template — never a placeholder). Measured
+  2026-07-02
   (median-of-5, same session): pin@origin == POST on a warm origin
   (~2.77s install→vite-ready vs standard 4.53s); pin@CDN traded ~+0.8s from a
   EU vantage (geo transit to the RU POP) for cold-restart immunity — the edge

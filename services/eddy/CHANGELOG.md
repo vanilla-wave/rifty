@@ -35,13 +35,22 @@
   puts unconditionally, and `S3BundleStore.put` HEADs first and skips the upload
   ONLY when the object's ETag (single-part MD5) matches the bytes, otherwise
   (re-)uploads. A cold recompute is still a no-op upload; a poisoned key gets fixed.
-- **Content-addressed invariant on read.** `S3BundleStore.get(hash)` now verifies
-  `manifest.asOf.closureHash === hash` and reads a mis-keyed (valid-but-wrong-hash)
-  object as a miss, so a bad upload can never serve a bundle under the wrong key.
-- **Immutable `Cache-Control` on the S3 PUT.** The signed PUT now sends
-  `cache-control: public, max-age=31536000, immutable`, so a bucket-backed CDN
+- **Full content-address verification on read.** `S3BundleStore.get(hash)` no
+  longer trusts the manifest's self-reported hash: a HIT must (1) self-report the
+  key, (2) RE-DERIVE the key from its own lockfile (`closureHashOf`), and (3) carry
+  tarball bytes matching the integrity the manifest names. A forged/poisoned object
+  (matching key, tampered lockfile or tarball) now reads as a MISS → `put()`
+  re-seeds it, instead of lingering as a permanent store hit the client only
+  rejects later.
+- **Mutable-link generation guard (freshness race).** Each compute carries a
+  monotonic gen; the mutable `dep-set → closure-hash` link is published only by the
+  latest-STARTED compute. An older cached-policy compute finishing AFTER a fresh
+  `prefer:'online'` refresh can no longer clobber the link with its stale closure.
+- **Immutable `Cache-Control` on the S3 PUT + metadata self-heal.** The signed PUT
+  sends `cache-control: public, max-age=31536000, immutable`, so a bucket-backed CDN
   origin serves bundles with the same forever-cacheable header as the origin GET
-  route (was absent — the CDN path would miss the promised header).
+  route (was absent). `put`'s skip-identical fast path now also checks the header:
+  a same-byte object missing it (an older upload) is re-PUT to repair the metadata.
 - **`closureHashOf` moved to `@riftydev/npm-client`.** The closure-hash function
   is now ONE shared implementation (async WebCrypto) the resolver awaits, so the
   client can re-derive it to verify a bundle's self-claimed hash without drift.

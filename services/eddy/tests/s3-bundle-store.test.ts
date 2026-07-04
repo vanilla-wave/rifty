@@ -9,9 +9,14 @@
 import { createHash } from 'node:crypto';
 import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { packEddyBundle } from '@riftydev/npm-client';
+import { packEddyBundle, unpackEddyBundle } from '@riftydev/npm-client';
 import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  LOCAL_REGISTRY_BASE_URL,
+  makeLocalFetcher,
+} from '../../../tests/integration/fixtures/local-registry.ts';
+import { resolveBundle } from '../src/index.ts';
 import { S3BundleStore } from '../src/s3-bundle-store.ts';
 import { signV4 } from '../src/sigv4.ts';
 
@@ -71,19 +76,42 @@ describe('signV4 — AWS published example vectors', () => {
   });
 });
 
-// A closure hash exercising every base64 special: `/`, `+`, `=`.
-const HASH = 'sha256-ab/cd+ef=';
-
-const manifest: EddyBundleManifestV1 = {
+// A synthetic hash exercising every base64 special (`/`,`+`,`=`) for the
+// URL-encoding shape test. A strict get() reads it as a miss (not content-
+// addressed), but that test only asserts the REQUEST path, never the return.
+const URL_SPECIALS_HASH = 'sha256-ab/cd+ef=';
+const syntheticManifest: EddyBundleManifestV1 = {
   format: 'EddyBundleV1',
   npmClientVersion: '0.0.0',
-  asOf: { resolvedAt: '2026-07-02T00:00:00Z', registry: 'packument:', closureHash: HASH },
+  asOf: {
+    resolvedAt: '2026-07-02T00:00:00Z',
+    registry: 'packument:',
+    closureHash: URL_SPECIALS_HASH,
+  },
   tarballs: [],
 };
-const bundleBytes = packEddyBundle({
-  manifest,
+const syntheticBundle = packEddyBundle({
+  manifest: syntheticManifest,
   lockfileText: '{"lockfileVersion":3}',
   tarballs: [],
+});
+
+// The ONLY shape a strict get() accepts as a HIT: a REAL bundle whose manifest
+// hash === closureHashOf(lockfile) and whose tarball integrities match. Built
+// once from the vendored fixture registry (it has tarballs → mutable for the
+// tamper tests).
+let HASH: string;
+let manifest: EddyBundleManifestV1;
+let bundleBytes: Uint8Array;
+beforeAll(async () => {
+  const built = await resolveBundle(
+    { dependencies: { debug: '^4.4.1' } },
+    { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+  );
+  if (built.kind !== 'bundle') throw new Error('setup: expected a bundle');
+  bundleBytes = built.bytes;
+  manifest = unpackEddyBundle(bundleBytes).manifest;
+  HASH = manifest.asOf.closureHash;
 });
 
 interface FakeS3 {
@@ -96,11 +124,14 @@ interface FakeS3 {
     headers: Record<string, string | string[] | undefined>;
   }>;
   objects: Map<string, Buffer>;
+  /** Per-object `Cache-Control` system metadata (as S3 stores + echoes it). */
+  cacheControls: Map<string, string>;
 }
 
 function startFakeS3(): Promise<FakeS3> {
   const requests: FakeS3['requests'] = [];
   const objects = new Map<string, Buffer>();
+  const cacheControls = new Map<string, string>();
   // S3 ETag of a single-part PUT is the quoted hex MD5 of the body — returned on
   // PUT and echoed on GET/HEAD. `put`'s skip-identical/self-heal path keys on it.
   const etagOf = (body: Buffer): string => `"${createHash('md5').update(body).digest('hex')}"`;
@@ -113,6 +144,8 @@ function startFakeS3(): Promise<FakeS3> {
       req.on('end', () => {
         const body = Buffer.concat(chunks);
         objects.set(path, body);
+        const cc = req.headers['cache-control'];
+        if (typeof cc === 'string') cacheControls.set(path, cc);
         res.writeHead(200, { etag: etagOf(body) });
         res.end();
       });
@@ -124,17 +157,19 @@ function startFakeS3(): Promise<FakeS3> {
       res.end(req.method === 'HEAD' ? undefined : '<Error><Code>NoSuchKey</Code></Error>');
       return;
     }
+    const cc = cacheControls.get(path);
     res.writeHead(200, {
       'content-type': 'application/x-tar',
       'content-length': body.length,
       etag: etagOf(body),
+      ...(cc ? { 'cache-control': cc } : {}),
     });
     res.end(req.method === 'HEAD' ? undefined : body);
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as AddressInfo).port;
-      resolve({ url: `http://127.0.0.1:${port}`, server, requests, objects });
+      resolve({ url: `http://127.0.0.1:${port}`, server, requests, objects, cacheControls });
     });
   });
 }
@@ -204,31 +239,63 @@ describe('S3BundleStore', () => {
     expect(String(put?.headers.authorization)).toMatch(/SignedHeaders=[^,]*cache-control/);
   });
 
-  it('rejects a valid bundle stored under the WRONG key (content-addressed invariant)', async () => {
+  it('rejects a valid bundle stored under the WRONG key (manifest self-report ≠ key)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
     const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
-    // A valid bundle whose closure is a DIFFERENT hash, mis-keyed at HASH.
-    const otherManifest: EddyBundleManifestV1 = {
-      ...manifest,
-      asOf: { ...manifest.asOf, closureHash: 'sha256-different' },
-    };
-    const otherBytes = packEddyBundle({
-      manifest: otherManifest,
-      lockfileText: '{"lockfileVersion":3}',
-      tarballs: [],
-    });
-    fake.objects.set(key, Buffer.from(otherBytes));
+    // A valid bundle whose manifest reports a DIFFERENT hash, mis-keyed at HASH.
+    fake.objects.set(key, Buffer.from(syntheticBundle));
     expect(await store.get(HASH)).toBeNull(); // right shape, wrong hash → miss
+  });
+
+  it('rejects a bundle whose lockfile RE-DERIVES to a different hash (tampered lockfile, matching manifest hash)', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    // Keep the manifest's self-reported hash === key, but mutate the lockfile so
+    // closureHashOf(lockfile) no longer equals it.
+    const contents = unpackEddyBundle(bundleBytes);
+    const lf = JSON.parse(contents.lockfileText) as { packages: Record<string, unknown> };
+    lf.packages['node_modules/__injected'] = { version: '9.9.9' };
+    contents.lockfileText = JSON.stringify(lf);
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // manifest matches key, lockfile doesn't → miss
+  });
+
+  it('rejects a bundle with tampered tarball bytes (integrity mismatch), matching manifest+lockfile', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    expect(contents.tarballs.length).toBeGreaterThan(0);
+    const victim = contents.tarballs[0];
+    if (!victim) return;
+    const tampered = new Uint8Array(victim.bytes);
+    tampered[0] = (tampered[0] ?? 0) ^ 0xff; // integrity no longer matches the manifest entry
+    victim.bytes = tampered;
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // hash/lockfile fine, tarball bytes bad → miss
+  });
+
+  it('re-PUTs a same-byte object that lacks the immutable Cache-Control (repairs metadata)', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    // An older upload: correct bytes but NO cache-control metadata.
+    fake.objects.set(key, Buffer.from(bundleBytes));
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+    // ETag matches, but the missing header forces a repair PUT.
+    expect(fake.requests.filter((r) => r.method === 'PUT').length).toBe(1);
+    expect(fake.cacheControls.get(key)).toBe('public, max-age=31536000, immutable');
   });
 
   it('addresses the object as /<bucket>/bundle/<percent-encoded hash> — the client bundleUrlFor shape', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    await store.put(HASH, { bytes: bundleBytes, manifest });
-    const expectedPath = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    await store.put(URL_SPECIALS_HASH, { bytes: syntheticBundle, manifest: syntheticManifest });
+    const expectedPath = `/eddy-bundles/bundle/${encodeURIComponent(URL_SPECIALS_HASH)}`;
     expect(fake.requests.map((r) => `${r.method} ${r.path}`)).toContain(`PUT ${expectedPath}`);
-    await store.get(HASH);
+    await store.get(URL_SPECIALS_HASH);
     expect(fake.requests.at(-1)).toMatchObject({ method: 'GET', path: expectedPath });
   });
 

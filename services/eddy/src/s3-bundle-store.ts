@@ -13,10 +13,21 @@
  * bytes on `get` (it IS the first tar member) — no sidecar metadata to drift.
  */
 import { createHash } from 'node:crypto';
-import { type EddyBundleManifestV1, unpackEddyBundle } from '@riftydev/npm-client';
+import {
+  type EddyBundleContents,
+  type Lockfile,
+  closureHashOf,
+  computeIntegrity,
+  parseIntegrityAlgorithm,
+  unpackEddyBundle,
+} from '@riftydev/npm-client';
 import type { BundleStore } from './bundle-store.ts';
 import type { CachedBundle } from './cache.ts';
 import { signV4 } from './sigv4.ts';
+
+const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
+
+const errMsg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 export interface S3BundleStoreOptions {
   /** Storage endpoint, e.g. `https://storage.yandexcloud.net`. */
@@ -52,26 +63,67 @@ export class S3BundleStore implements BundleStore {
       throw new Error(`eddy: bundle store GET ${closureHash} failed: HTTP ${res.status}`);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
-    let manifest: EddyBundleManifestV1;
+    return this.verifyContentAddress(closureHash, bytes);
+  }
+
+  /**
+   * A store HIT is a bundle that FULLY content-addresses to its key. The
+   * manifest's self-reported hash is NOT trusted: the object must (1) unpack,
+   * (2) self-report the key, (3) RE-DERIVE the key from its own lockfile
+   * (`closureHashOf`), and (4) carry tarball bytes matching the integrity its
+   * manifest names. Any failure reads as a MISS so the compute-path `put()`
+   * re-seeds the key — a forged/poisoned object (matching key, tampered
+   * lockfile/tarball) can't linger as a permanent GET-by-hash hit the client
+   * only rejects later. The extra hashing is marginal next to the object fetch.
+   */
+  private async verifyContentAddress(
+    closureHash: string,
+    bytes: Uint8Array,
+  ): Promise<CachedBundle | null> {
+    let contents: EddyBundleContents;
     try {
-      manifest = unpackEddyBundle(bytes).manifest;
+      contents = unpackEddyBundle(bytes);
     } catch (err) {
-      // A truncated/foreign object must read as a miss, not a served corrupt
-      // bundle — the compute-path put() (§put) then re-seeds the key.
       console.error(
-        `eddy: bundle store object for ${closureHash} is not a valid bundle: ${err instanceof Error ? err.message : String(err)}`,
+        `eddy: bundle store object for ${closureHash} is not a valid bundle: ${errMsg(err)}`,
       );
       return null;
     }
-    // Content-addressed invariant: the object at `bundle/<hash>` MUST be the
-    // bundle whose closure IS that hash. A mismatch (a valid bundle mis-keyed by
-    // a bad upload) reads as a miss, never served under the wrong key — put()
-    // re-seeds the correct bytes.
+    const { manifest, lockfileText, tarballs } = contents;
     if (manifest.asOf.closureHash !== closureHash) {
       console.error(
         `eddy: bundle store object at ${closureHash} carries a different closure hash ${manifest.asOf.closureHash} — treating as a miss`,
       );
       return null;
+    }
+    let derived: string;
+    try {
+      derived = await closureHashOf(JSON.parse(lockfileText) as Lockfile);
+    } catch (err) {
+      console.error(
+        `eddy: bundle store object for ${closureHash} has an unparseable lockfile: ${errMsg(err)}`,
+      );
+      return null;
+    }
+    if (derived !== closureHash) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} re-derives to ${derived} from its lockfile — treating as a miss`,
+      );
+      return null;
+    }
+    for (const t of manifest.tarballs) {
+      const found = tarballs.find((x) => x.entry.file === t.file);
+      const algorithm = found ? parseIntegrityAlgorithm(t.integrity) : null;
+      if (
+        !found ||
+        !algorithm ||
+        (await computeIntegrity(found.bytes, algorithm)) !== t.integrity
+      ) {
+        console.error(
+          `eddy: bundle store object at ${closureHash} has a bad/absent tarball ${t.file} — treating as a miss`,
+        );
+        return null;
+      }
     }
     return { bytes, manifest };
   }
@@ -84,12 +136,17 @@ export class S3BundleStore implements BundleStore {
     // (truncated/foreign/mis-keyed, all of which get() reads as a miss) → PUT,
     // overwriting the poisoned key so GET-by-hash heals. A non-MD5 ETag (bucket
     // default-encryption, multipart) never matches → we re-upload, a safe degrade.
+    // Skip ONLY when the metadata is ALSO already immutable — an existing
+    // same-byte object missing the `Cache-Control` header (an older upload) still
+    // gets re-PUT to repair the metadata the CDN path depends on.
     const bodyMd5Hex = createHash('md5').update(bundle.bytes).digest('hex');
     const head = await this.fetchImpl(url, { method: 'HEAD' }).catch(() => null);
     if (head) {
       await head.arrayBuffer().catch(() => undefined); // drain (empty by spec)
-      if (head.ok && (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex) {
-        return; // identical object already durable — no re-upload
+      const etagMatch = (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex;
+      const immutable = head.headers.get('cache-control') === CACHE_CONTROL_IMMUTABLE;
+      if (head.ok && etagMatch && immutable) {
+        return; // identical object already durable WITH the immutable header — no re-upload
       }
     }
     const payloadSha256Hex = createHash('sha256').update(bundle.bytes).digest('hex');
@@ -99,7 +156,7 @@ export class S3BundleStore implements BundleStore {
       // echoes it on GET, so the bucket-backed CDN path serves bundles with the
       // same forever-cacheable header the origin GET route sets (ADR-0194 §4).
       // Signed with the rest — it is part of the canonical request when sent.
-      'cache-control': 'public, max-age=31536000, immutable',
+      'cache-control': CACHE_CONTROL_IMMUTABLE,
       host: url.host,
       'content-type': 'application/x-tar',
       'x-amz-content-sha256': payloadSha256Hex,

@@ -66,6 +66,10 @@ class Lru<V> {
     this.map.set(key, v);
     return v;
   }
+  /** Read WITHOUT promoting — the publish guard compares generations. */
+  peek(key: string): V | undefined {
+    return this.map.get(key);
+  }
   set(key: string, value: V): void {
     if (this.map.has(key)) this.map.delete(key);
     this.map.set(key, value);
@@ -104,11 +108,14 @@ export class EddyCache {
   private readonly ttlMs: number;
   private readonly clock: () => number;
   private readonly resolveFn: typeof resolveBundle;
-  private readonly mutable: Lru<{ closureHash: string; expiresAt: number }>;
+  private readonly mutable: Lru<{ closureHash: string; expiresAt: number; gen: number }>;
   private readonly store: BundleStore;
   private readonly packuments: TtlPackumentCache;
   private readonly tarballs: MemoryTarballCache;
   private readonly inflight = new Map<string, Promise<EddyResolveResult>>();
+  /** Monotonic per-compute stamp: a later-STARTED compute (fresher reads) has a
+   *  higher gen and wins the mutable-link publish (see {@link compute}). */
+  private computeSeq = 0;
 
   constructor(opts: EddyCacheOptions) {
     this.ttlMs = (opts.ttlSeconds ?? DEFAULT_TTL_SECONDS) * 1000;
@@ -167,6 +174,10 @@ export class EddyCache {
   }
 
   private async compute(req: EddyResolveRequest, key: string): Promise<EddyResolveResult> {
+    // Stamp BEFORE the first await so the gen reflects START order (= the order
+    // flights registered): a concurrent prefer:'online' compute starts after a
+    // cached one and thus outranks it.
+    const gen = ++this.computeSeq;
     const result = await this.resolveFn(req, this.resolver);
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
@@ -188,9 +199,16 @@ export class EddyCache {
     }
     // Re-seed the mutable link even on a prefer:'online' recompute, so a later
     // cached request reuses the just-computed closure (npm --prefer-online too
-    // writes the lockfile it fetched).
+    // writes the lockfile it fetched). Generation guard: an OLDER compute (read
+    // staler packuments) must not clobber a link a NEWER compute already
+    // published — else a slow cached-policy compute finishing AFTER a fresh
+    // prefer:'online' refresh would republish the stale closure. Only the
+    // latest-started compute for the key wins.
     if (this.ttlMs > 0) {
-      this.mutable.set(key, { closureHash, expiresAt: this.clock() + this.ttlMs });
+      const cur = this.mutable.peek(key);
+      if (!cur || gen > cur.gen) {
+        this.mutable.set(key, { closureHash, expiresAt: this.clock() + this.ttlMs, gen });
+      }
     }
     return result;
   }

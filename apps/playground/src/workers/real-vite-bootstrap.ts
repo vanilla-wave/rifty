@@ -465,7 +465,7 @@ async function bootShellOwner(opts: {
     // download and fire a second POST (measured 2026-07-02: duplicate POSTs
     // 40ms apart, and the two concurrent 7MB streams intermittently stalled
     // ~10s). Keep the handle when nothing changed.
-    const config = `${devSpec.id} ${devCfg.root} ${devSlug} ${devCfg.packageJson}`;
+    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
     if (installPrefetch && installPrefetchConfig === config) return;
     installPrefetch = undefined;
     installPrefetchConfig = config;
@@ -479,12 +479,14 @@ async function bootShellOwner(opts: {
     installPrefetch = startInstallPrefetch({
       packageJsonText: devCfg.packageJson,
       resolverUrl,
-      // Pins key on the TEMPLATE id (the template owns the dep-set); the slug
-      // is the root id ('scratch'|projectId, ADR-0165) and says nothing about
-      // the closure. No env pin → a learned pin (ADR-0194) turns the prefetch
-      // into a cacheable GET; read SYNC — this whole gate is sync by design.
+      // Pin priority mirrors the install path (ADR-0194): a LEARNED pin (exact
+      // post-merge dep set) wins over the coarse template env pin (keyed on the
+      // template id — the slug is the root id 'scratch'|projectId, ADR-0165, and
+      // says nothing about the closure). Env pin is the fallback for the first
+      // boot. Read SYNC — this whole gate is sync by design; else install would
+      // consume a stale env prefetch before the exact learned pin.
       closureHash:
-        getEddyPin(devSpec.id) ?? learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson),
+        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
       bundleBaseUrl: getEddyBundleBaseUrl(),
     });
   }
