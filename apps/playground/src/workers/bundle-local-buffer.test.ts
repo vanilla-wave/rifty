@@ -67,6 +67,13 @@ describe('kind:url child bootstraps reinstall the bundle-local global Buffer', (
   // Each child entry is `import()`ed into the kernel worker realm AFTER the pre-entry
   // hook set a foreign-bundle Buffer global; it MUST reinstall its own copy or a
   // package reading the global Buffer (etag) crashes in a production build.
+  //
+  // residual source pin: every listed file is a worker-only `kind:'url'` entry
+  // (top-level await / kernel process shim / worker boot at import) — node
+  // cannot import one to observe the call, and the dual-copy hazard only
+  // exists in PRODUCTION worker bundles (dev shares one ESM instance), so
+  // even a browser-unit run can't fail without a prod build (tests/e2e-prod
+  // covers the symptom end-to-end; this pins the per-entry wiring).
   for (const file of [
     'dev-server-child-bootstrap.ts',
     'node-entry-bootstrap.ts',
@@ -83,6 +90,9 @@ describe('kind:url child bootstraps reinstall the bundle-local global Buffer', (
 
 describe('ts-lsp worker bootstrap keeps the package endpoint in production bundles', () => {
   it('imports and calls the package worker boot explicitly', () => {
+    // residual source pin: emitted-bundle shape (explicit binding + call so the
+    // ?worker chunk keeps the endpoint) on a worker-only entry that boots the
+    // LS at import — unobservable from node; browser-unit/prod lane material.
     const src = read('ts-lsp-worker-entry.ts');
     expect(src).toMatch(
       /import\s+\{\s*bootTsLanguageServiceWorker\s*\}\s+from\s+['"]@riftydev\/ts-language-service\/worker\/entry['"]/,

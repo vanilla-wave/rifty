@@ -52,6 +52,27 @@ declare global {
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
 }
 
+// Env → CLI-prep decoding: the owner sets RIFTY_VITE_CLI_* on the child;
+// node-entry-bootstrap threads proc.env through these (moved here for node
+// testability — the bootstrap is a worker-only entry).
+export function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
+  return value === 'dev' || value === 'build' || value === 'preview' || value === 'run'
+    ? value
+    : null;
+}
+
+export function viteCliPrepareOptionsFromEnv(
+  env: Record<string, string | undefined>,
+): ViteCliPrepareOptions {
+  const userConfigPath = env.RIFTY_VITE_CLI_USER_CONFIG;
+  return {
+    // ADR-0161: Vite 8 templates pin server.hmr:false; stock HMR otherwise
+    // (the generic preview bridge carries vite's own server.ws, ADR-0189).
+    ...(env.RIFTY_VITE_CLI_HMR_OFF === '1' ? { hmrOff: true } : {}),
+    ...(userConfigPath ? { userConfigPath } : {}),
+  };
+}
+
 // NOT shadow-registry shims (those apply at install time, ADR-0188): these
 // patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
 // keepalive pin (CAC never awaits async actions) and the preview inline-config

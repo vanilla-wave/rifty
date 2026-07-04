@@ -55,13 +55,24 @@ export const ALLOWLIST = [
     count: 1,
     why: 'RiftyTerminal is constructed in onMount (client-only, solid server runtime) — ctor-option wiring unobservable in node; values pinned via terminal-appearance module',
   },
-  { file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts', count: 9 },
-  { file: 'apps/playground/src/workers/kernel-worker-entry.test.ts', count: 5 },
-  { file: 'apps/playground/src/workers/build-boot.test.ts', count: 9 },
-  { file: 'apps/playground/src/workers/vite-cli-prep.test.ts', count: 26 },
+  {
+    file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
+    count: 6,
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, file-change bridge wiring; env-decoder heirs in vite-cli-prep.test.ts',
+  },
+  {
+    file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
+    count: 5,
+    why: 'contract = emitted-bundle shape (explicit bindings keep Vite from tree-shaking the setup chunk) — unobservable at node runtime; import executes installWorkerEntry worker wiring',
+  },
+
   { file: 'apps/playground/src/workers/dev-server-boot.test.ts', count: 44 },
   { file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts', count: 101 },
-  { file: 'apps/playground/src/workers/bundle-local-buffer.test.ts', count: 5 },
+  {
+    file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
+    count: 5,
+    why: 'dual-copy Buffer hazard exists only in PROD ?worker&url bundles (dev/browser-unit share one ESM instance); wiring pins on child bootstraps; behavior covered in tests/e2e-prod',
+  },
 ];
 
 const SCAN_ROOT = 'apps/playground/src';

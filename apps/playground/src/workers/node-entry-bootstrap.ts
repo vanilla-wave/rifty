@@ -44,7 +44,11 @@ import {
   type ViteDevServerWithModuleGraph,
   invalidateViteModule,
 } from './real-vite-invalidation.ts';
-import { type ViteCliMode, type ViteCliPrepareOptions, prepareViteCli } from './vite-cli-prep.ts';
+import {
+  prepareViteCli,
+  viteCliModeFromEnv,
+  viteCliPrepareOptionsFromEnv,
+} from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -103,24 +107,6 @@ function installViteFileChangeBridge(): void {
     const server = globalThis.__riftyActiveViteServer;
     if (server) invalidateViteModule(server, message.path);
   });
-}
-
-function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
-  return value === 'dev' || value === 'build' || value === 'preview' || value === 'run'
-    ? value
-    : null;
-}
-
-function viteCliPrepareOptionsFromEnv(
-  env: Record<string, string | undefined>,
-): ViteCliPrepareOptions {
-  const userConfigPath = env.RIFTY_VITE_CLI_USER_CONFIG;
-  return {
-    // ADR-0161: Vite 8 templates pin server.hmr:false; stock HMR otherwise
-    // (the generic preview bridge carries vite's own server.ws, ADR-0189).
-    ...(env.RIFTY_VITE_CLI_HMR_OFF === '1' ? { hmrOff: true } : {}),
-    ...(userConfigPath ? { userConfigPath } : {}),
-  };
 }
 
 const viteCliMode = viteCliModeFromEnv(proc.env.RIFTY_VITE_CLI_MODE);
