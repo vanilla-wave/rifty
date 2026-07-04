@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "overall_verdict": { "type": "string", "enum": ["pass", "concern", "blocker"] },
+    "merge_call": { "type": "string", "description": "One-line merge recommendation." },
+    "axes": {
+      "type": "array",
+      "description": "One entry per rifty-review rubric axis, in rubric order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "axis": { "type": "string", "description": "Rubric axis name." },
+          "verdict": { "type": "string", "enum": ["pass", "concern", "blocker"] },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "severity": { "type": "string", "enum": ["blocker", "concern", "nit"] },
+                "location": { "type": "string", "description": "file:line, cited from the diff." },
+                "summary": { "type": "string", "description": "Concise defect statement." }
+              },
+              "required": ["severity", "location", "summary"]
+            }
+          }
+        },
+        "required": ["axis", "verdict", "findings"]
+      }
+    }
+  },
+  "required": ["overall_verdict", "merge_call", "axes"]
+}
