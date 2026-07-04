@@ -32,7 +32,11 @@ export const ALLOWLIST = [
     why: 'keyed <For> reconciliation is client-only (SSR renders once); the grep pins the per-session keyed slots',
   },
   { file: 'apps/playground/src/components/EditorHost.test.ts', count: 88 },
-  { file: 'apps/playground/src/components/PreviewPanel.test.ts', count: 28 },
+  {
+    file: 'apps/playground/src/components/PreviewPanel.test.ts',
+    count: 2,
+    why: 'keyed <Show> iframe remount + Reload retry-signal are client-only wiring (server renders once); warm-up/URL/open-tab heirs in preview-panel-core.test.ts',
+  },
   { file: 'apps/playground/src/components/FileExplorer.source.test.ts', count: 70 },
   {
     file: 'apps/playground/src/components/TerminalPanel.test.ts',
