@@ -15,4 +15,4 @@ Same code in real Node and rifty, diff stdout. External reference — agent can'
 - Smoke — basic post-build scenarios
 - Compat matrix — auto-generated, `docs/public/compat/`
 
-Anti-pattern (ratcheted): source-grep tests (`expect(source).toContain`) — `pnpm check:source-grep` refuses new ones; allowlist burn-down = epic `playground-testable-core`.
+Anti-pattern (ratcheted): source-grep tests (`expect(source).toContain`) — `pnpm check:source-grep` refuses new ones; residual pins live in the ALLOWLIST (`tools/checks/source-grep-ratchet.mjs`), each with a recorded why-behavioral-is-impossible.

@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Epic playground-testable-core CLOSED: source-grep asserts 888 → 140, every
+- **Epic playground-testable-core CLOSED: source-grep asserts 888 → 141, every
   residual with a recorded why (`tools/checks/source-grep-ratchet.mjs`).**
   Remaining App.tsx flows extracted to headless cores with mutation-RED-checked
   behavioral tests (ADR-0197): `src/orchestration/save-flow.ts` (durable-post-first
@@ -20,7 +20,12 @@
   real-vite-bootstrap/dev-server-boot contracts behavioral via tests/browser-unit
   (ADR-0196: owner shell routing, publish/persistence, boot modes) + in-file node
   boot tests. App.test.ts residual = negative architectural invariants + one
-  binding pin per wiring surface.
+  binding pin per wiring surface. Review fixes: editor git-status handler keys
+  on gitStatus+activeId only, gutter recompute `untrack`-ed (the memo→plain-fn
+  `activeTabKind` swap had widened the effect to raw `tabs()` — per-keystroke
+  HEAD-text refetch + cache wipe; pinned, RED-checked); archive import surfaces
+  a failed file READ as the `Import failed:` toast again (was an unhandled
+  rejection post-extraction; behavioral test).
 
 - **Owner file/archive + SCM flows extracted to headless orchestration cores
   (ADR-0197, epic playground-testable-core, slice 4a).** The guarded owner byte

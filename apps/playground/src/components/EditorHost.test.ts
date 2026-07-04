@@ -29,6 +29,12 @@ describe('EditorHost component wiring (residual greps — see header)', () => {
     expect(source).toContain('monaco.editor.createDiffEditor');
   });
 
+  it('git-status handler keys on gitStatus+activeId only — gutter recompute untracked (per-keystroke HEAD-refetch storm guard; effects never run in node)', () => {
+    expect(coreSource).toMatch(
+      /function handleGitStatusChanged\(\): void \{\s*props\.gitStatus\?\.\(\);\s*activeId\(\);\s*gitOriginalTextCache\.clear\(\);\s*untrack\(\(\) => updateDirtyGutterForActive\(\)\);\s*\}/,
+    );
+  });
+
   it('has no special program model or program-only props', () => {
     const programProps =
       /PROGRAM_TAB_ID|programModel|programValue|programPath|programTitle|onProgramChange|suppressProgramEcho/;

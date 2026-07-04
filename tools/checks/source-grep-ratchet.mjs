@@ -37,8 +37,8 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/components/EditorHost.test.ts',
-    count: 10,
-    why: 'EditorHost.tsx unrenderable in node (monaco-env ?worker import); pins = widget mounts + effect→core-handler wiring; behavioral heirs in editor-host-core.test.ts',
+    count: 11,
+    why: 'EditorHost.tsx unrenderable in node (monaco-env ?worker import); pins = widget mounts + effect→core-handler wiring + git-handler tracked scope (effects never run in node); behavioral heirs in editor-host-core.test.ts',
   },
   {
     file: 'apps/playground/src/components/PreviewPanel.test.ts',
@@ -186,7 +186,7 @@ export function compareToAllowlist(measured, allowlist) {
     const entry = allowed.get(file);
     if (!entry) {
       violations.push(
-        `${file}: ${count} source-grep assertion(s) in a file NOT on the allowlist — write a behavioral test instead (epic playground-testable-core)`,
+        `${file}: ${count} source-grep assertion(s) in a file NOT on the allowlist — write a behavioral test instead (a genuinely unobservable contract needs an ALLOWLIST entry with a recorded why)`,
       );
     } else if (count > entry.count) {
       violations.push(

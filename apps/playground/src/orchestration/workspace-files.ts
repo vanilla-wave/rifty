@@ -155,7 +155,15 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
       return;
     }
     const picked = deps.pickArchiveFile((text) => {
-      void (async (): Promise<void> => importArchiveText(await text()))();
+      // `text()` (the File read) can reject after the pick — same loud toast as
+      // any import failure, never an unhandled rejection.
+      void (async (): Promise<void> => {
+        try {
+          await importArchiveText(await text());
+        } catch (err) {
+          deps.showError(`Import failed: ${(err as Error).message}`);
+        }
+      })();
     });
     if (!picked) deps.showError('Workspace archive import is unavailable here');
   }

@@ -29,6 +29,7 @@ jobs:
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
+      - run: pnpm check:source-grep # blocking: no new source-grep tests (allowlist exact-match)
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
       - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
 

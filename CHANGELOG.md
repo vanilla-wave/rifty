@@ -11,8 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new
   `expect(source).toContain`-style tests in apps/playground and forces the
-  15-file/888-assert allowlist burn-down to be recorded (exact-count match, both
-  directions). Wired into `pr:check`.
+  allowlist burn-down (opened at 15 files/888 asserts, closed at 11/141) to be
+  recorded (exact-count match, both directions). Wired into `pr:check` and the
+  CI lint-and-typecheck job.
 - **Browser-unit test lane (ADR-0196, epic playground-testable-core).**
   `pnpm test:browser-unit` — thin Playwright harness (`unit-harness.html`, no App
   boot) on the playground vite dev server: worker-side modules behaviorally tested

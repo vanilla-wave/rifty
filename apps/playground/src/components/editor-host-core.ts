@@ -8,7 +8,8 @@
  *
  * Solid server runtime note: signals work in node vitest but memos freeze, so
  * `activeTabKind` is a plain derived function (same values; callers' effects
- * track its signal reads directly).
+ * track its signal reads directly — so effect-body handlers must `untrack`
+ * derived reads they don't key on, see handleGitStatusChanged).
  */
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
@@ -979,11 +980,16 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     clearGitDiffTabs();
   }
 
-  /** Body of the component's git-status createEffect. */
+  /** Body of the component's git-status createEffect. Keys on gitStatus +
+   *  activeId ONLY (the pre-extraction dep set: activeTabKind was a cutoff
+   *  memo there): `untrack` keeps the raw `tabs()` reads inside
+   *  updateDirtyGutterForActive from re-running the effect — cache wipe +
+   *  HEAD-text refetch — on every keystroke's setDirty tabs write. */
   function handleGitStatusChanged(): void {
     props.gitStatus?.();
+    activeId();
     gitOriginalTextCache.clear();
-    updateDirtyGutterForActive();
+    untrack(() => updateDirtyGutterForActive());
   }
 
   /** Body of the component's activeId createEffect: point the mounted Monaco

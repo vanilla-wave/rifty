@@ -237,4 +237,15 @@ describe('workspace archive export/import (owner tree, dev-server gate)', () => 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.owner.imported).toEqual(['{"files":{}}']);
   });
+
+  it('a picked file that fails to READ surfaces Import failed — never a silent unhandled rejection', async () => {
+    const h = new Harness();
+    h.files().chooseArchive();
+    h.pickedCb?.(async () => {
+      throw new Error('file unreadable');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.owner.imported).toEqual([]);
+    expect(h.errors).toEqual(['Import failed: file unreadable']);
+  });
 });
