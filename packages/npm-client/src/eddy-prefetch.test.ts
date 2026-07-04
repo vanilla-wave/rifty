@@ -108,6 +108,61 @@ describe('startEddyPrefetch', () => {
     expect(handle.take(canonicalEddyRequestKey(REQUEST, 'online'))).not.toBeNull();
   });
 
+  it('a NEVER-ENDING body rejects after the no-progress bound instead of hanging take() forever', async () => {
+    // Regression: the eager drain used a bare arrayBuffer() — a resolver that
+    // held the connection open parked the installer's take() forever (terminal
+    // "hang" with no error, no fallback). The bounded drain must reject so the
+    // attempt pipeline falls through to its own GET/POST.
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3])); // some progress…
+        // …then silence: never enqueue again, never close.
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const impl = (async () => new Response(stream)) as unknown as typeof fetch;
+    const handle = startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl: impl,
+      stallTimeoutMs: 25,
+    });
+    await expect(handle.take(KEY)).rejects.toThrow(/no body progress/);
+    expect(cancelled).toBe(true); // the dead stream was released, not leaked
+  });
+
+  it('an OVER-CAP body rejects (the POST fallback streams; the buffer must not grow unbounded)', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(64));
+      },
+    });
+    const impl = (async () => new Response(stream)) as unknown as typeof fetch;
+    const handle = startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl: impl,
+      maxBufferBytes: 100,
+    });
+    await expect(handle.take(KEY)).rejects.toThrow(/exceeded 100 bytes/);
+  });
+
+  it('an UNTAKEN never-ending prefetch rejects quietly — no unhandled rejection', async () => {
+    const stream = new ReadableStream<Uint8Array>({ start() {} });
+    const impl = (async () => new Response(stream)) as unknown as typeof fetch;
+    startEddyPrefetch({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl: impl,
+      stallTimeoutMs: 10,
+    });
+    // vitest fails the run on unhandled rejections — settling is the assert.
+    await new Promise((r) => setTimeout(r, 40));
+  });
+
   it('an untaken failed prefetch is not an unhandled rejection; a taken one still rejects', async () => {
     const { impl } = fetchSpy(async () => {
       throw new Error('network down');

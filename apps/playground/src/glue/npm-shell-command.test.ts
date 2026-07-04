@@ -12,7 +12,13 @@
  * The real `install` flow is exercised by `@riftydev/npm-client`'s own suite;
  * we inject a stub via the `install` DI seam so this file does not depend on
  * tarball fixtures from another package's private `_test-fixtures/` (would
- * violate CLAUDE.md "no internal imports across packages").
+ * violate CLAUDE.md "no internal imports across packages"). The seam is the
+ * command's REAL contract (`deps.install ?? realInstall` — the compiler pins
+ * `InstallFn` to the real signature), not a convenience mock; what a stub
+ * can't vouch for — real result shape, learned-pin write-back with the
+ * eddy-computed hash, stamp over a real tree — is covered without any stub by
+ * `tests/integration/npm-shell-eddy-glue.test.ts` (real npm-client + real eddy
+ * server over the fixture registry).
  */
 import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
 import {

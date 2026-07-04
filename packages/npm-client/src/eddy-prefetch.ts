@@ -33,6 +33,72 @@ export interface StartEddyPrefetchOptions {
   bundleBaseUrl?: string;
   /** Injectable fetch (tests); defaults to the global. */
   fetchImpl?: typeof fetch;
+  /** Eager-drain no-progress bound (ms): a body chunk must arrive within this
+   * window or the prefetch REJECTS (the installer then falls through to its
+   * own GET/POST). Default {@link DEFAULT_PREFETCH_STALL_MS}. */
+  stallTimeoutMs?: number;
+  /** Eager-drain byte cap: an over-cap body rejects the prefetch (the POST
+   * fallback streams, so a legit huge bundle still installs — it just skips
+   * the buffered prefetch). Default {@link DEFAULT_PREFETCH_MAX_BYTES}. */
+  maxBufferBytes?: number;
+}
+
+/** Real bundles are single-digit MB; the cap only guards a runaway body. */
+export const DEFAULT_PREFETCH_MAX_BYTES = 128 * 1024 * 1024;
+/** Matches the measured h2-stall class (~10s) the eager drain exists to fix;
+ * a healthy stream delivers chunks sub-second, so no-progress ≥ this is dead. */
+export const DEFAULT_PREFETCH_STALL_MS = 10_000;
+
+/**
+ * Buffer the whole body with a no-progress timeout + byte cap. A never-ending
+ * or runaway stream must REJECT (→ installer fallback), never park the
+ * consumer forever: an unbounded `arrayBuffer()` here once hung `npm install`
+ * with no error when the resolver held the connection open.
+ */
+async function drainBounded(
+  response: Response,
+  stallMs: number,
+  maxBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const body = response.body;
+  if (!body) return new Uint8Array(await response.arrayBuffer());
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const read = reader.read();
+      // A raced-out read settles later (cancel() resolves it {done:true});
+      // never let a late rejection surface as unhandled.
+      read.catch(() => {});
+      const next = await Promise.race([
+        read,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`eddy prefetch: no body progress for ${stallMs}ms`)),
+            stallMs,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
+      if (next.done) break;
+      total += next.value.length;
+      if (total > maxBytes) {
+        throw new Error(`eddy prefetch: body exceeded ${maxBytes} bytes`);
+      }
+      chunks.push(next.value);
+    }
+  } catch (err) {
+    void reader.cancel().catch(() => {});
+    throw err;
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }
 
 export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchHandle {
@@ -49,12 +115,17 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
   // probe) — buffering downloads the bundle DURING boot and makes the later
   // consume instant. `take` hands out a synthetic Response over the buffered
   // bytes with the original status/headers, so the installer's gates (JSON
-  // decline, !ok, streaming unpack) see the same shape.
+  // decline, !ok, streaming unpack) see the same shape. The drain is BOUNDED
+  // (no-progress timeout + byte cap): a never-ending body rejects instead of
+  // parking the taker forever — the installer's attempt pipeline then falls
+  // through to its own GET/POST.
+  const stallMs = opts.stallTimeoutMs ?? DEFAULT_PREFETCH_STALL_MS;
+  const maxBytes = opts.maxBufferBytes ?? DEFAULT_PREFETCH_MAX_BYTES;
   const buffered = response.then(async (r) => ({
     status: r.status,
     statusText: r.statusText,
     headers: r.headers,
-    bytes: new Uint8Array(await r.arrayBuffer()),
+    bytes: await drainBounded(r, stallMs, maxBytes),
   }));
   // An untaken failed prefetch must never surface as an unhandled rejection;
   // the ORIGINAL rejection still reaches whoever takes the handle.

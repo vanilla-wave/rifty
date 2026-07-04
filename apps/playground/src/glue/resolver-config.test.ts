@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getEddyPin } from './resolver-config.ts';
 
 describe('getEddyPin (VITE_RIFTY_EDDY_PINS, ADR-0195 §5)', () => {
-  it('returns the pin for a mapped preset slug, undefined otherwise', () => {
+  it('returns the pin for a mapped template id, undefined otherwise', () => {
     const raw = JSON.stringify({ 'real-vite': 'sha256-abc', 'hono-api': 'sha256-def' });
     expect(getEddyPin('real-vite', raw)).toBe('sha256-abc');
     expect(getEddyPin('koa-api', raw)).toBeUndefined();

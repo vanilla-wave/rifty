@@ -27,6 +27,15 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **`MemoryBundleStore.put` is durable-or-THROW — an over-cap bundle no longer
+  publishes an unservable hash.** The silent over-cap `return` let `EddyCache`
+  believe the put succeeded: it wrote the mutable link, but `GET /bundle/<hash>`
+  404'd forever — every "linked" resolve of that dep set degraded to a full
+  recompute with a misleading link. `put` now throws; the existing degrade path
+  (log, skip link, serve the computed bundle) handles it, so the hash is never
+  published unservable. Pinned by a store-level rejects test + an
+  `EddyCache`-level unservable-hash test (`bundle-store.test.ts`), both
+  RED-checked against the silent drop.
 - **`BundleStore` self-heals a poisoned key.** The `has()`-gate that skipped the
   durable-before-link put whenever an object *existed* could never overwrite a
   corrupt/foreign/truncated object (a HEAD-exists check can't tell it from a valid

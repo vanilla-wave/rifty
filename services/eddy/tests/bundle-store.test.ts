@@ -5,13 +5,14 @@
  * link, store-hit skips put, failed put degrades (no link, no 500).
  */
 import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
 import { type BundleStore, MemoryBundleStore } from '../src/bundle-store.ts';
 import { EddyCache } from '../src/cache.ts';
+import { resolveBundle } from '../src/resolver.ts';
 
 const manifestFor = (hash: string): EddyBundleManifestV1 => ({
   format: 'EddyBundleV1',
@@ -44,10 +45,14 @@ describe('MemoryBundleStore', () => {
     expect(await store.get('sha256-c')).not.toBeNull();
   });
 
-  it('a bundle larger than the cap is not stored (and evicts nothing)', async () => {
+  it('an over-cap bundle REJECTS the put (durable-or-throw) and evicts nothing', async () => {
+    // A silent return here published unservable hashes: cache.ts linked the
+    // hash after an apparently-successful put, then GET-by-hash 404'd forever.
     const store = new MemoryBundleStore({ maxBytes: 10 });
     await store.put('sha256-a', bundle('sha256-a', 8));
-    await store.put('sha256-big', bundle('sha256-big', 64));
+    await expect(store.put('sha256-big', bundle('sha256-big', 64))).rejects.toThrow(
+      /exceeds the memory store cap/,
+    );
     expect(await store.get('sha256-big')).toBeNull();
     expect(await store.get('sha256-a')).not.toBeNull();
   });
@@ -148,6 +153,40 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     // upload. Self-heal depends on this — a cache-side gated skip would never
     // overwrite a poisoned key.
     expect(log.filter((l) => l.startsWith('put ')).length).toBe(2);
+  });
+
+  it('an OVER-CAP bundle never becomes a servable GET-by-hash or a mutable link (degrades, no 500)', async () => {
+    // End-to-end through a REAL MemoryBundleStore with a tiny cap: the resolve
+    // still serves the computed bundle, but the hash must NOT be published —
+    // getBundle misses (no unservable "linked" hash) and the next resolve
+    // recomputes (no mutable link was written).
+    const { fetch } = makeLocalFetcher();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const store = new MemoryBundleStore({ maxBytes: 16 }); // every real bundle is over-cap
+      let computes = 0;
+      const cache = new EddyCache({
+        resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+        store,
+        resolveFn: (req, deps) => {
+          computes++;
+          return resolveBundle(req, deps);
+        },
+      });
+      const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+      expect(first.kind).toBe('bundle');
+      if (first.kind !== 'bundle') return;
+      expect(await cache.getBundle(first.manifest.asOf.closureHash)).toBeNull();
+      const second = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+      expect(second.kind).toBe('bundle');
+      expect(computes).toBe(2); // no link survived → full recompute, not a cache hit
+      // LOUD, never silent (Fidelity): the drop is visible in the server log.
+      expect(errSpy.mock.calls.some((c) => /exceeds the memory store cap/.test(c.join(' ')))).toBe(
+        true,
+      );
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 
   it('a failed store put still serves the computed bundle and does NOT link it (recompute next time)', async () => {

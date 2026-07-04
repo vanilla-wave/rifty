@@ -546,6 +546,52 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('resolverPrefetch: a NEVER-ENDING prefetch body does not hang install — bounded drain rejects, fallback runs', async () => {
+    // Regression (round 5): the prefetch eager-drain was an unbounded
+    // arrayBuffer(); a resolver holding the connection open parked install()
+    // forever on the consumed prefetch — no error, no fallback, a hung
+    // terminal. Server behavior: EVERY request gets the manifest+lockfile of a
+    // NON-covering bundle, then the connection stays open. The bounded drain
+    // must reject the prefetch; install's own POST attempt then streams,
+    // declines on coverage, and the standard install completes.
+    const bytes = await buildBundleFor({ debug: '^4.4.1' });
+    const entries = parseTarEntries(bytes);
+    const manifestSize = entries[0]?.data.length ?? 0;
+    const lockfileSize = entries[1]?.data.length ?? 0;
+    const boundary =
+      512 + Math.ceil(manifestSize / 512) * 512 + 512 + Math.ceil(lockfileSize / 512) * 512;
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.write(Buffer.from(bytes.slice(0, boundary)));
+      // never end()
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { debug: '^4.4.1', kleur: '4.1.5' }); // not covered
+      const { registry } = makeRegistry();
+      const request = {
+        dependencies: { debug: '^4.4.1', kleur: '4.1.5' },
+        optionalDependencies: {},
+      };
+      const prefetch = startEddyPrefetch({
+        resolverUrl: raw.url,
+        request,
+        stallTimeoutMs: 100, // test-fast; default 10s
+      });
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverPrefetch: prefetch,
+      });
+      expect(result.source).toBe('standard');
+      expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  }, 15_000);
+
   it('streams the bundle: a coverage decline aborts BEFORE the tarball bytes transfer', async () => {
     // The server sends ONLY the manifest + lockfile members, then holds the
     // connection open forever. A buffering client would hang awaiting the full

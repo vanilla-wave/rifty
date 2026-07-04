@@ -11,6 +11,10 @@
  * miss) and skips the upload only when the SAME bytes are already durable. There
  * is deliberately no cheap `has`: a HEAD-exists check can't tell a valid object
  * from a poisoned one, so gating the heal on it would silently skip re-seeding.
+ * `put` is durable-or-THROW — a settled put means GET-by-hash serves the bundle.
+ * A put that cannot store (over-cap, bucket down) must reject so `EddyCache`
+ * skips the link (the hash is never published unservable); a silent drop here
+ * once linked hashes that 404'd on GET.
  */
 import type { CachedBundle } from './cache.ts';
 
@@ -45,7 +49,13 @@ export class MemoryBundleStore implements BundleStore {
   }
 
   async put(closureHash: string, bundle: CachedBundle): Promise<void> {
-    if (bundle.bytes.length > this.maxBytes) return; // would evict everything for nothing
+    if (bundle.bytes.length > this.maxBytes) {
+      // Storing would evict everything AND still not fit; a silent return here
+      // would break durable-or-throw (the caller would link an unservable hash).
+      throw new Error(
+        `bundle ${closureHash} (${bundle.bytes.length} bytes) exceeds the memory store cap (${this.maxBytes})`,
+      );
+    }
     const existing = this.map.get(closureHash);
     if (existing) {
       this.map.delete(closureHash);

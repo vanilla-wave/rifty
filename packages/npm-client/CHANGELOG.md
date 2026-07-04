@@ -32,6 +32,19 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **Bounded prefetch drain — a never-ending bundle body can no longer hang
+  `npm install`.** `startEddyPrefetch`'s deliberate eager drain (h2-stall fix)
+  was an unbounded `arrayBuffer()`: a resolver that held the connection open
+  parked the installer's consumed prefetch forever — no error, no fallback, a
+  hung terminal. The drain now has a no-progress timeout
+  (`stallTimeoutMs`, default 10s — the measured h2-stall class) and a byte cap
+  (`maxBufferBytes`, default 128MB; the POST fallback streams, so a legit huge
+  bundle still installs) — a violated bound rejects, the attempt pipeline falls
+  through to its own GET/POST, and the dead stream is cancelled. Unit tests +
+  a `client-roundtrip.test.ts` never-ending-prefetch regression, RED-checked
+  against the unbounded drain. Residual (sweep-found, recorded):
+  `docs/backlog/npm-client/eddy-direct-path-no-progress-bound.md` — the DIRECT
+  GET/POST streaming reads still lack the bound.
 - **Content-addressed bundle verification (client).** `consumeEddyResponse` now refuses a
   bundle whose `manifest.asOf.closureHash` (a) ≠ the hash a pinned GET/prefetch asked for
   (a CDN/cache mixup served the wrong object) or (b) ≠ `closureHashOf` of the bundle's OWN
