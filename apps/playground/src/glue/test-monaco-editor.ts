@@ -112,9 +112,13 @@ export interface TestMarker {
   readonly endColumn: number;
 }
 
+export type TestCommandHandler = (accessor: unknown, ...args: unknown[]) => void;
+
 export const __monacoTestState = {
   models: new Map<string, TestModel>(),
   markers: [] as TestMarker[],
+  /** `monaco.editor.registerCommand` registrations, keyed by command id. */
+  commands: new Map<string, TestCommandHandler>(),
 };
 
 export const editor = {
@@ -129,7 +133,15 @@ export const editor = {
         (filter.owner === undefined || marker.owner === filter.owner),
     );
   },
-  registerCommand(): { dispose(): void } {
+  registerCommand(id?: string, handler?: TestCommandHandler): { dispose(): void } {
+    if (typeof id === 'string' && typeof handler === 'function') {
+      __monacoTestState.commands.set(id, handler);
+      return {
+        dispose() {
+          __monacoTestState.commands.delete(id);
+        },
+      };
+    }
     return { dispose() {} };
   },
 };
@@ -145,6 +157,42 @@ function disposable(): { dispose(): void } {
 }
 
 export const languages = {
+  // Enum values mirror the real monaco-editor `editor.api.d.ts` verbatim so
+  // behavioral tests compare against the same runtime values Monaco ships.
+  CompletionItemKind: {
+    Method: 0,
+    Function: 1,
+    Constructor: 2,
+    Field: 3,
+    Variable: 4,
+    Class: 5,
+    Struct: 6,
+    Interface: 7,
+    Module: 8,
+    Property: 9,
+    Event: 10,
+    Operator: 11,
+    Unit: 12,
+    Value: 13,
+    Constant: 14,
+    Enum: 15,
+    EnumMember: 16,
+    Keyword: 17,
+    Text: 18,
+    Color: 19,
+    File: 20,
+    Reference: 21,
+    Customcolor: 22,
+    Folder: 23,
+    TypeParameter: 24,
+    User: 25,
+    Issue: 26,
+    Snippet: 27,
+  },
+  CompletionItemTag: { Deprecated: 1 },
+  CompletionItemInsertTextRule: { None: 0, KeepWhitespace: 1, InsertAsSnippet: 4 },
+  CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1, TriggerForIncompleteCompletions: 2 },
+  SignatureHelpTriggerKind: { Invoke: 1, TriggerCharacter: 2, ContentChange: 3 },
   registerHoverProvider: disposable,
   registerDefinitionProvider: disposable,
   registerTypeDefinitionProvider: disposable,
