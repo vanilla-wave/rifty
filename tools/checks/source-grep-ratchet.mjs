@@ -66,8 +66,16 @@ export const ALLOWLIST = [
     why: 'contract = emitted-bundle shape (explicit bindings keep Vite from tree-shaking the setup chunk) — unobservable at node runtime; import executes installWorkerEntry worker wiring',
   },
 
-  { file: 'apps/playground/src/workers/dev-server-boot.test.ts', count: 44 },
-  { file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts', count: 101 },
+  {
+    file: 'apps/playground/src/workers/dev-server-boot.test.ts',
+    count: 1,
+    why: 'ADR-0161 hmr flag is vite8-opt-in only (no default-lane seam); boot behavior heirs = in-file node tests + tests/browser-unit + e2e m7/generic-dev-server-lifecycle',
+  },
+  {
+    file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
+    count: 13,
+    why: 'worker-only owner entry; residual = ADR-0161 hmr-off env (vite8 opt-in), prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); heirs in tests/browser-unit + e2e',
+  },
   {
     file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
     count: 5,
