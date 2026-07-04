@@ -238,6 +238,8 @@ superseded.
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
+| 0036 `synthesizePreviewUrl(path)` host clause | 0189 / note 2026-07-04 | SW preview HTTP routing now synthesizes `localhost[:port]`; `PREVIEW_LOCAL_HOST=preview.local` remains for explicit legacy HMR bridge paths |
+| 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |

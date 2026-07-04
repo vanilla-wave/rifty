@@ -276,10 +276,8 @@ describe('resolveBootstrapConfig (node-cli runtime)', () => {
 });
 
 describe('terminal dev command derivation', () => {
-  it('boots vite templates through the real vite CLI pinned to the template port', () => {
-    expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe(
-      'vite --host 0.0.0.0 --strictPort --port 5174',
-    );
+  it('boots vite templates through the real vite CLI with only the preferred template port', () => {
+    expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe('vite --port 5174');
   });
 
   it("boots node-server templates through 'npm run dev' pinned to the project root", () => {

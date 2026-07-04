@@ -65,8 +65,8 @@ export const SW_FRAME_VERSION = '1';
  *     iframe's `FetchEvent.clientId` (or a same-origin `/preview/<port>/`
  *     request referrer after reload) route to the same port.
  *
- * Bump on: changes to the URL regex shape, the synthetic host literal, the
- * `synthesizePreviewUrl` return shape, the resolver fallback order, the Worker
+ * Bump on: changes to the URL regex shape, the `synthesizePreviewUrl` return
+ * shape / synthesized Host, the resolver fallback order, the Worker
  * or window port claim scope, the window anti-hijack rejection, the
  * preview-frame port context, or the mismatch / first-window-warn dedup key
  * shape.

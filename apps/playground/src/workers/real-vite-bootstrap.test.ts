@@ -34,6 +34,8 @@ describe('real Vite bootstrap preview routing', () => {
   it('runs real vite preview with stock args — the SW-stamped localhost Host needs no --host (ADR-0189 D3)', () => {
     expect(source).not.toContain('PREVIEW_LOCAL_HOST');
     expect(source).not.toContain("'--host',");
+    expect(source).not.toContain("'--strictPort',");
+    expect(source).not.toContain('0.0.0.0');
     expect(source).toContain("if (mode !== 'dev') return [...args]");
     expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
     expect(source).toContain('...(previewMode ? userConfigEnv : {})');
