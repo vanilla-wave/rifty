@@ -31,7 +31,11 @@ export const ALLOWLIST = [
     count: 1,
     why: 'keyed <For> reconciliation is client-only (SSR renders once); the grep pins the per-session keyed slots',
   },
-  { file: 'apps/playground/src/components/EditorHost.test.ts', count: 88 },
+  {
+    file: 'apps/playground/src/components/EditorHost.test.ts',
+    count: 10,
+    why: 'EditorHost.tsx unrenderable in node (monaco-env ?worker import); pins = widget mounts + effect→core-handler wiring; behavioral heirs in editor-host-core.test.ts',
+  },
   {
     file: 'apps/playground/src/components/PreviewPanel.test.ts',
     count: 2,

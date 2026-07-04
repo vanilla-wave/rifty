@@ -121,9 +121,85 @@ export const __monacoTestState = {
   commands: new Map<string, TestCommandHandler>(),
 };
 
+let nextAutoModelUri = 0;
+
+/**
+ * Live text model for behavioral tests (editor-host-core): value + content
+ * events + dispose — the exact surface the editor session core drives. Like
+ * real Monaco, touching a disposed model throws (catches use-after-close).
+ */
+export class TextModel {
+  readonly uri: Uri;
+  private value: string;
+  private readonly languageId: string;
+  private disposed = false;
+  private readonly contentListeners = new Set<() => void>();
+
+  constructor(value: string, languageId = 'plaintext', uri?: Uri) {
+    this.value = value;
+    this.languageId = languageId;
+    nextAutoModelUri += 1;
+    this.uri = uri ?? Uri.parse(`inmemory://model/${nextAutoModelUri}`);
+  }
+
+  private assertNotDisposed(): void {
+    if (this.disposed) throw new Error('TestTextModel is disposed');
+  }
+
+  getValue(): string {
+    this.assertNotDisposed();
+    return this.value;
+  }
+
+  setValue(text: string): void {
+    this.assertNotDisposed();
+    this.value = text;
+    for (const listener of [...this.contentListeners]) listener();
+  }
+
+  getLanguageId(): string {
+    return this.languageId;
+  }
+
+  getLineCount(): number {
+    this.assertNotDisposed();
+    return this.value.split('\n').length;
+  }
+
+  onDidChangeContent(listener: () => void): { dispose(): void } {
+    this.contentListeners.add(listener);
+    return { dispose: () => void this.contentListeners.delete(listener) };
+  }
+
+  isDisposed(): boolean {
+    return this.disposed;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.contentListeners.clear();
+  }
+}
+
 export const editor = {
   getModel(uri: TestUri): TestModel | undefined {
     return __monacoTestState.models.get(uri.toString());
+  },
+  createModel(value: string, language?: string, uri?: Uri): TextModel {
+    return new TextModel(value, language ?? 'plaintext', uri);
+  },
+  /** Real replace semantics: resets the (resource, owner) marker channel. */
+  setModelMarkers(
+    model: { readonly uri: TestUri },
+    owner: string,
+    markers: readonly Omit<TestMarker, 'resource' | 'owner'>[],
+  ): void {
+    __monacoTestState.markers = [
+      ...__monacoTestState.markers.filter(
+        (marker) => marker.owner !== owner || marker.resource?.toString() !== model.uri.toString(),
+      ),
+      ...markers.map((marker) => ({ ...marker, resource: model.uri as TestUri, owner })),
+    ];
   },
   getModelMarkers(filter: { readonly resource?: TestUri; readonly owner?: string }): TestMarker[] {
     return __monacoTestState.markers.filter(
@@ -146,11 +222,20 @@ export const editor = {
   },
 };
 
-export const Range = {
-  areIntersectingOrTouching(): boolean {
+/** Constructible (editor-host-core `new monaco.Range(...)` for gutter decorations)
+ *  while keeping the static the ts-LS providers call. */
+export class Range {
+  static areIntersectingOrTouching(): boolean {
     return true;
-  },
-};
+  }
+
+  constructor(
+    readonly startLineNumber: number,
+    readonly startColumn: number,
+    readonly endLineNumber: number,
+    readonly endColumn: number,
+  ) {}
+}
 
 function disposable(): { dispose(): void } {
   return { dispose() {} };
