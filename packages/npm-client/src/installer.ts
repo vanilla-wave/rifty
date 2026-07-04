@@ -645,8 +645,12 @@ async function tryEddyFastPath(
     });
   }
   const pin = opts.resolverClosureHash;
-  // Skip a duplicate GET when the consumed prefetch already WAS this pin's GET.
-  if (pin && !(prefetched && opts.resolverPrefetch?.closureHash === pin)) {
+  // The pinned GET is ALWAYS in the pipeline (prefetch → GET → POST): a
+  // SUCCESSFUL same-pin prefetch short-circuits before reaching it (first
+  // survivor wins), so this only runs when the prefetch failed/stalled/was
+  // declined — where retrying the direct GET is exactly the contract (and a
+  // consumed-prefetch decline over a CDN mixup can still succeed here).
+  if (pin) {
     const bundleBase = opts.resolverBundleBaseUrl ?? url;
     attempts.push({
       label: 'get',

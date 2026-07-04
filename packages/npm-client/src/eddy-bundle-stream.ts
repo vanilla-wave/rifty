@@ -94,6 +94,20 @@ export async function* streamTarEntries(
     return out;
   }
 
+  /** Read the (tiny) tail past the end-of-archive marker to true EOF. A
+   * successful bundle GET must be consumed COMPLETELY: cancelling with bytes
+   * left on the wire makes the browser discard the response from its HTTP
+   * cache — which would defeat the whole immutable `GET /bundle/<hash>` tier
+   * (the pinned/learned GET is fast BECAUSE the cache holds it). Still
+   * bounded: the stall timeout + byte cap above keep applying. */
+  async function drainToEof(): Promise<void> {
+    while (!sourceDone) {
+      // 512 always exceeds the leftover of a sane terminator, so each call
+      // makes progress; the bounds throw on a pathological endless tail.
+      await ensure(available + 512);
+    }
+  }
+
   try {
     let pendingLongName: string | null = null;
     for (;;) {
@@ -104,7 +118,13 @@ export async function* streamTarEntries(
         throw new Error('truncated eddy bundle tar stream');
       }
       const header = take(512);
-      if (header.every((b) => b === 0)) return; // end-of-archive zero block
+      if (header.every((b) => b === 0)) {
+        // End-of-archive zero block: consume the remainder (second zero block
+        // + any trailing padding) so the response ends at TRUE EOF and the
+        // browser commits it to the HTTP cache.
+        await drainToEof();
+        return;
+      }
       const { name, typeflag, size } = parseTarHeader(header);
       const padded = Math.ceil(size / 512) * 512;
       if (!(await ensure(padded))) throw new Error('truncated eddy bundle tar stream');
@@ -119,8 +139,10 @@ export async function* streamTarEntries(
       if (typeflag === '0' || typeflag === '') yield { name: fullName, data };
     }
   } finally {
-    // Runs on completion AND on early consumer abort — cancel is a no-op on an
-    // exhausted stream, and stops the underlying download otherwise.
+    // Runs on completion AND on early consumer abort. After a clean drain the
+    // stream is exhausted and cancel is a spec no-op (the cache keeps the
+    // response); on an early abort (gate decline / bound violation) it stops
+    // the underlying download.
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }

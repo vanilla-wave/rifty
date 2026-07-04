@@ -62,11 +62,13 @@
   origin serves bundles with the same forever-cacheable header as the origin GET
   route (was absent). `put`'s skip-identical fast path now also checks the header:
   a same-byte object missing it (an older upload) is re-PUT to repair the metadata.
-- **`closureHashOf` moved to `@riftydev/npm-client`.** The closure-hash function
-  is now ONE shared implementation (async WebCrypto) the resolver awaits, so the
-  client can re-derive it to verify a bundle's self-claimed hash without drift.
-  `@riftydev/eddy` keeps a compatibility re-export — existing
-  `import { closureHashOf } from '@riftydev/eddy'` consumers are unaffected.
+- **`closureHashOf` canonicalization moved to `@riftydev/npm-client`; the
+  `@riftydev/eddy` API is UNCHANGED.** The shared async (WebCrypto)
+  implementation is what the resolver awaits and the client re-derives to
+  verify a bundle's self-claimed hash. `@riftydev/eddy` keeps its pre-existing
+  SYNC `closureHashOf(lockfile): string` (node:crypto over the SAME exported
+  `canonicalClosureJson` — a drift-tripwire test asserts sync === await async),
+  so existing consumers see no signature change.
 - **Deploy compose cosmetics.** `docker-compose(.coi).yml` Caddyfile heredoc indents
   with spaces (was space-before-tab → `git diff --check` noise); the CDN-origin
   comment cites ADR-0195 (the renumbered wire-v1.1 ADR), not the stale ADR-0186.

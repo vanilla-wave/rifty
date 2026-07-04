@@ -26,12 +26,32 @@
 - **`InstallOptions.packumentCache` widened to `PackumentCacheLike`** (minimal
   `{get, set}`; `Map` satisfies it structurally) so callers — eddy's process-wide TTL
   cache — can inject policy-aware caches without a Map subclass.
-- **`closureHashOf(lockfile)`.** The stable content hash of a resolved closure (ADR-0182 §6,
-  the immutable-tier key) is now exported here as ONE shared async (WebCrypto) implementation —
-  eddy awaits it to stamp the manifest; the client re-derives it to verify a bundle's identity.
+- **`closureHashOf(lockfile)` + `canonicalClosureJson(lockfile)`.** The stable content hash
+  of a resolved closure (ADR-0182 §6, the immutable-tier key) is now exported here as ONE
+  shared async (WebCrypto) implementation — eddy awaits it to stamp the manifest; the client
+  re-derives it to verify a bundle's identity. The canonical serialization is exported
+  separately so `@riftydev/eddy`'s pre-existing SYNC `closureHashOf` (string API, node:crypto)
+  hashes the same bytes and cannot drift.
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **A completed bundle GET reads to TRUE EOF — the browser HTTP cache keeps
+  it.** The streaming reader used to stop at the first end-of-archive zero
+  block and cancel the body with the terminator tail still on the wire; a
+  cancelled body makes the browser DISCARD the response from its HTTP cache,
+  silently defeating the immutable `GET /bundle/<hash>` tier (the pinned /
+  learned GET is fast BECAUSE the cache holds it). The reader now drains the
+  (tiny, still stall/cap-bounded) remainder to true EOF on the success path;
+  early aborts (gate declines, bound violations) still cancel. RED-checked
+  full-consume-never-cancels regression.
+- **A FAILED pinned prefetch falls through to the direct pinned GET, not
+  straight to POST.** The attempt pipeline is `prefetch → GET → POST`; a
+  dedup condition skipped the GET whenever the prefetch was the same pin's
+  fetch — correct for a SUCCESSFUL prefetch (which short-circuits anyway) but
+  wrong for a stalled/failed one, which jumped to the origin POST and lost the
+  cacheable GET tier exactly when the retry was cheapest. The GET attempt is
+  now unconditional (first survivor still wins). RED-checked
+  stalled-pin-prefetch → GET-adopts → zero-POSTs regression.
 - **Bounded prefetch drain — a never-ending bundle body can no longer hang
   `npm install`.** `startEddyPrefetch`'s deliberate eager drain (h2-stall fix)
   was an unbounded `arrayBuffer()`: a resolver that held the connection open
@@ -89,12 +109,13 @@
   keyed on the canonical request (`canonicalEddyRequestKey`; `eddyRequestFromPackageJson`
   mirrors the installer's manifest merge) and consumed at most once — a prefetch for drifted
   deps is ignored, never trusted.
-- **Streaming bundle unpack (`streamTarEntries`).** The fast path consumes the bundle as a
-  stream: format/v3/coverage gates run on the manifest + lockfile members (a decline cancels
-  the download before tarball bytes transfer); tarballs are integrity-verified and seeded into
-  the content-addressed cache as each arrives (partial seed leaves only verified bytes); the
-  lockfile is still written only after every manifest-named tarball landed. Buffered fallback
-  when `Response.body` is unavailable.
+- **Streaming bundle unpack (`streamTarEntries`, internal).** The fast path consumes the
+  bundle as a stream: format/v3/coverage gates run on the manifest + lockfile members (a
+  decline cancels the download before tarball bytes transfer); tarballs are integrity-verified
+  and seeded into the content-addressed cache as each arrives (partial seed leaves only
+  verified bytes); the lockfile is still written only after every manifest-named tarball
+  landed. Buffered fallback when `Response.body` is unavailable. The reader is an internal
+  detail of `install()` — deliberately NOT part of the public API.
 
 ### Performance
 

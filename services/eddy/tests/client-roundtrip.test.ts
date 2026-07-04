@@ -593,6 +593,57 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   }, 15_000);
 
+  it('a FAILED pinned prefetch still tries the direct pinned GET before POST (prefetch → GET → POST)', async () => {
+    // Regression (round 7): a same-pin prefetch that stalled made the pipeline
+    // SKIP the direct GET and jump to POST — the cacheable GET tier was lost
+    // exactly when the retry was cheapest. A successful prefetch short-circuits
+    // before the GET; a failed one must fall through TO it.
+    const bytes = await buildBundleFor(DEPS);
+    const hash = unpackEddyBundle(bytes).manifest.asOf.closureHash;
+    let gets = 0;
+    let posts = 0;
+    const raw = await startRaw((req, res) => {
+      if (req.method === 'POST') {
+        posts++;
+        res.writeHead(500);
+        res.end();
+        return;
+      }
+      gets++;
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      // The prefetch is a pinned GET for the SAME hash, but its transport dies
+      // (never-ending body → bounded drain rejects).
+      const hangingFetch = (async () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {} }))) as unknown as typeof fetch;
+      const prefetch = startEddyPrefetch({
+        resolverUrl: raw.url,
+        request: { dependencies: DEPS, optionalDependencies: {} },
+        closureHash: hash,
+        fetchImpl: hangingFetch,
+        stallTimeoutMs: 25,
+      });
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverClosureHash: hash,
+        resolverPrefetch: prefetch,
+      });
+      expect(result.source).toBe('eddy'); // adopted via the DIRECT pinned GET
+      expect(gets).toBe(1);
+      expect(posts).toBe(0); // POST never needed — the GET tier did its job
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('a COVERING bundle that stalls mid-tarball does not hang install — the stream bound fails the attempt, standard runs', async () => {
     // Regression (round 6): the coverage gates cannot save this case — the
     // lockfile COVERS the request, so the client keeps reading tarball bytes;

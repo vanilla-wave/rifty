@@ -13,9 +13,21 @@
  */
 import type { Lockfile } from './linker.ts';
 
-export async function closureHashOf(lockfile: Lockfile): Promise<string> {
+/**
+ * The canonical (order-independent) serialization the closure hash is computed
+ * over — ONE definition, so `@riftydev/eddy`'s SYNC `closureHashOf` (Node-only,
+ * kept for its pre-existing string-returning API) can never drift from the
+ * async hash below.
+ */
+export function canonicalClosureJson(lockfile: Lockfile): string {
   const keys = Object.keys(lockfile.packages).sort();
-  const canonical = JSON.stringify(keys.map((k) => [k, lockfile.packages[k]]));
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return JSON.stringify(keys.map((k) => [k, lockfile.packages[k]]));
+}
+
+export async function closureHashOf(lockfile: Lockfile): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonicalClosureJson(lockfile)),
+  );
   return `sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`;
 }

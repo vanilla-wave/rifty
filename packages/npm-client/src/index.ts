@@ -15,7 +15,6 @@ export {
   type EddyBundleManifestV1,
   type EddyBundleTarballEntry,
 } from './eddy-bundle.ts';
-export { streamTarEntries } from './eddy-bundle-stream.ts';
 export {
   startEddyPrefetch,
   type EddyPrefetchHandle,
@@ -28,7 +27,7 @@ export {
   type EddyRequestBody,
 } from './eddy-request.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
-export { closureHashOf } from './closure-hash.ts';
+export { closureHashOf, canonicalClosureJson } from './closure-hash.ts';
 export { resolveOverride, type OverrideMap, type ResolvedOverrideTarget } from './overrides.ts';
 export {
   install,

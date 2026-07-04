@@ -65,8 +65,9 @@
 ### Performance
 
 - **Learned eddy pins (ADR-0194).** After a successful eddy install the owner persists
-  `canonicalEddyRequestKey → closureHash` at `/.rifty/eddy-learned-pins.json` (TTL = the
-  server's mutable tier, cap 64, corrupt = absent), so ANY repeat dep set — ad-hoc
+  `canonicalEddyRequestKey → closureHash` at `/.rifty/eddy-learned-pins.json` (TTL 1800s =
+  the server's mutable-tier DEFAULT — a custom `EDDY_TTL_SECONDS` is not tracked; an
+  outlived pin degrades to a verified 404 → POST; cap 64, corrupt = absent), so ANY repeat dep set — ad-hoc
   `npm install` included, not just env-pinned templates — becomes a cacheable
   `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an origin POST. A learned
   pin — keyed on the EXACT post-merge dep set — WINS over the coarser template env pin

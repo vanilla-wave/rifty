@@ -128,9 +128,11 @@ simply keep POSTing.
 
 Beyond env pins, the playground LEARNS pins automatically (ADR-0194): after a
 successful eddy install it persists `request-key → closure-hash`
-(`/.rifty/eddy-learned-pins.json`, TTL = the server's mutable tier), so ANY
-repeat dep set — ad-hoc `npm install` included — rides the cacheable GET on the
-next fresh profile. No operator work; a LEARNED exact-match pin wins over a
+(`/.rifty/eddy-learned-pins.json`, TTL 1800s = the server's mutable-tier
+DEFAULT — the client does NOT track a deploy's custom `EDDY_TTL_SECONDS`; a
+pin outliving the server link only costs a verified 404 → POST re-seed, never
+a wrong install), so ANY repeat dep set — ad-hoc `npm install` included —
+rides the cacheable GET on the next fresh profile. No operator work; a LEARNED exact-match pin wins over a
 template env pin (which only matches the pristine preset — env pins are the
 fallback that seeds the first install of a set).
 

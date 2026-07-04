@@ -6,11 +6,12 @@
  * origin POST.
  *
  * Storage: `/.rifty/eddy-learned-pins.json` on the owner VFS (dot-dir
- * precedent: `VfsTarballCache`). TTL = the server's mutable-tier default —
- * a pin must not outlive the server-side link it mirrors; expiry degrades to
- * POST which re-learns. Corrupt/wrong-shape file reads as absent, never an
- * error. A stale pin is harmless either way: the installer's verification
- * gates (coverage, integrity) already degrade it to POST.
+ * precedent: `VfsTarballCache`). TTL = the server's mutable-tier DEFAULT
+ * (1800s) — the client does NOT track a deploy's custom `EDDY_TTL_SECONDS`;
+ * a pin outliving the server link degrades to a verified 404 → POST which
+ * re-learns. Corrupt/wrong-shape file reads as absent, never an error. A
+ * stale pin is harmless either way: the installer's verification gates
+ * (coverage, integrity) already degrade it to POST.
  *
  * Sync reader exists for `primeInstallPrefetch`, which is sync BY DESIGN (an
  * async gate starves behind the owner boot loop — measured double-POST,
@@ -20,7 +21,8 @@ import { canonicalEddyRequestKey, eddyRequestFromPackageJson } from '@riftydev/n
 import type { Vfs } from '@riftydev/vfs';
 
 export const LEARNED_PINS_PATH = '/.rifty/eddy-learned-pins.json';
-/** = eddy's mutable-tier default (`EDDY_TTL_SECONDS`). */
+/** = eddy's mutable-tier DEFAULT (`EDDY_TTL_SECONDS` unset); deliberately not
+ * synced to a custom deploy value — expiry only re-POSTs. */
 export const LEARNED_PIN_TTL_MS = 1800 * 1000;
 export const LEARNED_PINS_CAP = 64;
 

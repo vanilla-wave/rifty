@@ -15,7 +15,8 @@ import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './e
 
 export interface EddyPrefetchHandle {
   /** The pinned closure hash this prefetch was a GET for (absent → it POSTed).
-   * Lets the installer skip a duplicate GET attempt for the same hash. */
+   * The installer verifies the consumed response against it (content-addressed
+   * fetches must return the hash they asked for). */
   readonly closureHash?: string;
   /** One-shot: the in-flight response iff `requestKey` equals this prefetch's
    * canonical key; `null` on mismatch and after the first take. */

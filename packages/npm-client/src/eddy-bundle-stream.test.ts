@@ -126,6 +126,37 @@ describe('streamTarEntries — incremental EddyBundleV1 outer-tar reader', () =>
     expect(rest.length).toBe(3);
   });
 
+  it('a fully-consumed bundle reads to TRUE EOF and never cancels the source (HTTP cache keeps the GET)', async () => {
+    // Regression (round 7): the reader used to `return` at the FIRST zero
+    // block and the finally-cancel fired with the terminator tail still on the
+    // wire — a cancelled body makes the browser DISCARD the response from its
+    // HTTP cache, defeating the immutable `GET /bundle/<hash>` tier.
+    const { bytes } = buildBundle();
+    let cancelled = false;
+    let delivered = 0;
+    let off = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (off >= bytes.length) {
+          controller.close();
+          return;
+        }
+        const chunk = bytes.slice(off, Math.min(off + 512, bytes.length));
+        off += chunk.length;
+        delivered += chunk.length;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const got: string[] = [];
+    for await (const e of streamTarEntries(stream)) got.push(e.name);
+    expect(got.length).toBe(4); // all members still parsed
+    expect(delivered).toBe(bytes.length); // …and the body was read to TRUE EOF
+    expect(cancelled).toBe(false); // the source was never cancelled
+  });
+
   it('a NEVER-ENDING stream throws after the no-progress bound instead of parking the consumer', async () => {
     // Regression (round 6): the direct GET/POST paths stream through this
     // reader; a resolver that sent a covering manifest+lockfile then hung
