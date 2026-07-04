@@ -94,6 +94,7 @@ import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.t
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
+import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
 import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
@@ -543,7 +544,7 @@ export function App(props: AppProps) {
         requestVfsSnapshot(next.snapshotPort);
         const timer = setTimeout(finish, 2000);
       }),
-    awaitActiveSnapshotFrame: () => waitForActiveSnapshotFrame(),
+    awaitActiveSnapshotFrame: () => resetRefresh.waitForActiveSnapshotFrame(),
     flushEditorWrites: () => flushPendingEditorWrites(),
     // Memory mode has no durable index → the switch skips the activeId persist.
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
@@ -1640,6 +1641,23 @@ export function App(props: AppProps) {
     showEphemeralSaveNotice: (name) =>
       store.setToast({ kind: 'info', text: `${name} · EPHEMERAL (session only)` }),
   });
+  // Reset/rename confirms (ADR-0165 §6: real on-disk re-seed + live refresh of
+  // the active root) live in the reset-refresh core; the App binds the real ports.
+  const resetRefresh = createResetRefresh({
+    store,
+    devServer,
+    ownerUnavailable: () => workspaceOwner().snapshotPort === UNAVAILABLE_OWNER_PORT,
+    subscribeSnapshot: (cb) => snapshotFs.subscribe(cb),
+    requestSnapshot: () => requestVfsSnapshot(workspaceOwner().snapshotPort),
+    resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
+    flushEditorWrites: () => flushPendingEditorWrites(),
+    ephemeral: () => saveAffordance(storageMode).ephemeral,
+    activeStarterId,
+    // Owner index posts read the port at fire time (the live channel).
+    resetScratchIndex: (starter) => resetScratchIndex(workspaceOwner().snapshotPort, starter),
+    resetProjectIndex: (id) => resetProjectIndex(workspaceOwner().snapshotPort, id),
+    renameProjectIndex: (id, name) => renameProjectIndex(workspaceOwner().snapshotPort, id, name),
+  });
 
   async function flushPendingEditorWrites(): Promise<void> {
     await editorApi?.flushPendingWrites();
@@ -1763,79 +1781,6 @@ export function App(props: AppProps) {
   function openSaveDialog(): void {
     setSaveName('');
     store.openDialog({ kind: 'save', defaultName: '' });
-  }
-
-  // Confirm Rename: post the durable on-disk rename to the owner (it rewrites the
-  // index `name` + re-publishes) reading the dialog's target id BEFORE the store
-  // flips it, then flip the page mirror (immediate UX; the owner reconciles). Read
-  // the port at fire time (memory mode has no durable index — page-mirror only).
-  function onConfirmRename(): void {
-    const d = store.dialog();
-    const id = d && d.kind === 'rename' ? d.id : null;
-    const name = renameName().trim();
-    if (id && name && !saveAffordance(storageMode).ephemeral) {
-      void renameProjectIndex(workspaceOwner().snapshotPort, id, name).catch((err: unknown) =>
-        console.error('[project-index] rename failed', err),
-      );
-    }
-    store.confirmRename(renameName());
-  }
-
-  // Re-seed visible editor tabs + restart the dev server after the OWNER
-  // re-seeded the ACTIVE root (ADR-0165 §6). The owner already republished the
-  // file snapshot (reset-refresh hook), so the explorer is fresh; here the page
-  // reopens the preset's initial files and reboots the dev server so the preview
-  // reflects the restored tree (node_modules was wiped → the boot re-installs).
-  async function waitForActiveSnapshotFrame(): Promise<void> {
-    const owner = workspaceOwner();
-    if (owner.snapshotPort === UNAVAILABLE_OWNER_PORT) return;
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      let unsubscribe: () => void = () => {};
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        unsubscribe();
-        clearTimeout(timer);
-        resolve();
-      };
-      const timer = setTimeout(finish, 2000);
-      unsubscribe = snapshotFs.subscribe(finish);
-      requestVfsSnapshot(owner.snapshotPort);
-    });
-  }
-
-  async function refreshActiveAfterReset(): Promise<void> {
-    await waitForActiveSnapshotFrame();
-    resetEditorToActiveInitialFiles();
-    const activeDevServerSessionId = devServer.sessionId();
-    if (devServer.lifecycleRunning() && activeDevServerSessionId) {
-      void devServer.restart(activeDevServerSessionId);
-    }
-  }
-
-  // Confirm Reset (ADR-0165 §6): a REAL on-disk re-seed for both the active scratch
-  // (index-reset) and a named project (index-reset-project) — the owner wipes +
-  // re-derives the tree from the starter bundle and re-publishes. When the reset
-  // target is the ACTIVE root, also refresh the live editor + dev server so the
-  // "restores the clean starter files" promise is true on screen, not just on disk.
-  // Read the port at fire time; memory mode skips the durable post (page-mirror only).
-  function onConfirmReset(): void {
-    const d = store.dialog();
-    const id = d && d.kind === 'reset' ? d.id : null;
-    const activeReset = id === store.activeId();
-    void (async (): Promise<void> => {
-      await flushPendingEditorWrites();
-      if (id && !saveAffordance(storageMode).ephemeral) {
-        if (id === 'scratch') {
-          await resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId());
-        } else {
-          await resetProjectIndex(workspaceOwner().snapshotPort, id);
-        }
-      }
-      store.confirmReset();
-      if (activeReset) await refreshActiveAfterReset();
-    })().catch((err: unknown) => console.error('[project-index] reset failed', err));
   }
 
   // Dialog-derived strings (ADR-0165 §9 ProjectDialogs contract).
@@ -2498,8 +2443,8 @@ export function App(props: AppProps) {
           store.setDialog(null);
         }}
         onConfirmSave={() => void saveFlow.confirmSave(saveName())}
-        onConfirmRename={onConfirmRename}
-        onConfirmReset={onConfirmReset}
+        onConfirmRename={() => resetRefresh.confirmRename(renameName())}
+        onConfirmReset={resetRefresh.confirmReset}
         onConfirmDelete={() => store.confirmDelete()}
         onConfirmResetSandbox={() => void onResetBrowserSandbox()}
         onSwitchSaveThen={saveFlow.switchSaveThen}

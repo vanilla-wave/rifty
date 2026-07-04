@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
  *  greps to behavioral tests. At epic close every entry is gone or carries a
  *  `why` (the recorded why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
-  { file: 'apps/playground/src/App.test.ts', count: 218 },
+  { file: 'apps/playground/src/App.test.ts', count: 217 },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',
     count: 1,

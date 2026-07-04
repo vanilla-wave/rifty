@@ -413,23 +413,20 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
     expect(source).toContain('onNotify={(message, tone) => flashToast(message, tone)}');
   });
 
-  it('waits for owner reset and a fresh snapshot before reopening active initial tabs', () => {
-    const resetStart = source.indexOf('function onConfirmReset(): void');
-    const resetEnd = source.indexOf('  // Dialog-derived strings', resetStart);
-    const resetBlock = source.slice(resetStart, resetEnd);
-    expect(resetStart).toBeGreaterThan(-1);
-    expect(resetEnd).toBeGreaterThan(resetStart);
-    expect(source).toContain('async function waitForActiveSnapshotFrame(): Promise<void>');
-    expect(source).toMatch(
-      /async function refreshActiveAfterReset\(\): Promise<void> \{[\s\S]*?await waitForActiveSnapshotFrame\(\);[\s\S]*?resetEditorToActiveInitialFiles\(\);/,
+  it('binds the reset-refresh core to the real snapshot/index/dev-server ports', () => {
+    // Reset/rename confirms (flush → durable re-seed → mirror flip → active-root
+    // frame-gated refresh) are pinned behaviorally in orchestration/
+    // reset-refresh.test.ts; here the App bindings.
+    expect(source).toContain('const resetRefresh = createResetRefresh({');
+    expect(source).toContain('subscribeSnapshot: (cb) => snapshotFs.subscribe(cb),');
+    expect(source).toContain(
+      'resetScratchIndex: (starter) => resetScratchIndex(workspaceOwner().snapshotPort, starter),',
     );
-    expect(resetBlock).toMatch(
-      /await flushPendingEditorWrites\(\);[\s\S]*?await resetScratchIndex\(workspaceOwner\(\)\.snapshotPort, activeStarterId\(\)\);/,
+    expect(source).toContain(
+      'awaitActiveSnapshotFrame: () => resetRefresh.waitForActiveSnapshotFrame(),',
     );
-    expect(resetBlock).toContain('await resetProjectIndex(workspaceOwner().snapshotPort, id);');
-    expect(resetBlock).toMatch(
-      /store\.confirmReset\(\);[\s\S]*?if \(activeReset\) await refreshActiveAfterReset\(\);/,
-    );
+    expect(source).toContain('onConfirmRename={() => resetRefresh.confirmRename(renameName())}');
+    expect(source).toContain('onConfirmReset={resetRefresh.confirmReset}');
   });
 
   it('binds the SCM core to the owner feed and threads it into the panels', () => {
