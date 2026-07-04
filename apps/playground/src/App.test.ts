@@ -192,13 +192,14 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('onCleanup(() => devServer.dispose());');
   });
 
-  it('loads and persists terminal environment state', () => {
-    expect(source).toContain('env: props.terminalPersistence.initialState.env');
-    // cwd/env persist per command; the recorded dev command rides along so a
-    // later cwd/env save never wipes it (single terminal-state file).
-    expect(source).toContain('savedShellState = { cwd: session.cwd, env: session.env };');
-    expect(source).toContain('saveState({ ...savedShellState, devCommand: savedDevCommand })');
-    expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
+  it('loads and persists terminal environment state through the persistence core', () => {
+    // Snapshot coalescing (cwd/env + dev command in ONE file, partial updates
+    // never wipe the other half) is pinned behaviorally in orchestration/
+    // terminal-state-persistence.test.ts; here the App bindings.
+    expect(source).toContain('env: props.terminalPersistence.initialState.env,');
+    expect(source).toContain('const terminalState = createTerminalStatePersistence({');
+    expect(source).toContain('sessionState: (id) => manager.snapshot(id),');
+    expect(source).toContain('terminalState.persistTerminalState(id);');
   });
 
   it('delegates TS diagnostic synchronization to the versioned helper', () => {

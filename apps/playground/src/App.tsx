@@ -97,6 +97,7 @@ import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
 import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
+import { createTerminalStatePersistence } from './orchestration/terminal-state-persistence.ts';
 import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
 import {
@@ -482,7 +483,7 @@ export function App(props: AppProps) {
     },
     runBootSequence: (id, lines) => runTerminalSequence(id, lines),
     executedLine: (sid) => lastExecutedLine.get(sid),
-    persistDevCommand: (command) => persistDevCommand(command),
+    persistDevCommand: (command) => terminalState.persistDevCommand(command),
     setRealVitePort: (port) => machine.setRealVitePort(port),
     onOwnerAlive: () => workspace.setOwnerReady(true),
     onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),
@@ -753,31 +754,14 @@ export function App(props: AppProps) {
     void props.terminalPersistence.saveHistory(next);
   }
 
-  // Recorded dev command (reload-restore): the shell line that produced the
-  // RUNNING dev server + its exec-time cwd. Persisted alongside cwd/env so a
-  // reload relaunches the REAL command (a fork may have swapped vite for another
-  // server), not the preset template's boot line.
-  let savedDevCommand: TerminalDevCommand | undefined =
-    props.terminalPersistence.initialState.devCommand;
-  let savedShellState: { cwd: string; env: Record<string, string> } = {
-    cwd: props.terminalPersistence.initialState.cwd,
-    env: props.terminalPersistence.initialState.env,
-  };
-
-  function persistTerminalSnapshot(): void {
-    void props.terminalPersistence.saveState({ ...savedShellState, devCommand: savedDevCommand });
-  }
-
-  function persistTerminalState(id: string): void {
-    const session = manager.snapshot(id);
-    savedShellState = { cwd: session.cwd, env: session.env };
-    persistTerminalSnapshot();
-  }
-
-  function persistDevCommand(next: TerminalDevCommand | undefined): void {
-    savedDevCommand = next;
-    persistTerminalSnapshot();
-  }
+  // cwd/env + recorded dev command persist as ONE snapshot (reload-restore);
+  // the coalescing contract is pinned behaviorally in orchestration/
+  // terminal-state-persistence.test.ts.
+  const terminalState = createTerminalStatePersistence({
+    initialState: props.terminalPersistence.initialState,
+    saveState: (state) => props.terminalPersistence.saveState(state),
+    sessionState: (id) => manager.snapshot(id),
+  });
 
   function refreshTerminalState(): void {
     // The dev server runs IN the owner now (ADR-0148 co-resident dev server), as
@@ -889,7 +873,7 @@ export function App(props: AppProps) {
           durationMs: finishedMs - startedMs,
           exitCode,
         });
-        persistTerminalState(id);
+        terminalState.persistTerminalState(id);
       }
     }
   }
