@@ -97,16 +97,20 @@ export interface PersistFailure {
 }
 
 /** {@link OpfsFsSync.flush} result (ADR-0187 Corrected): the still-unhealed
- * persist failures. `total` ≥ `failures.length` — the ledger is capped, the
- * count is not. `total === 0` ⇔ everything drained IS durable. */
+ * persist failures. `failures` is a SAMPLE (first {@link
+ * PERSIST_REPORT_SAMPLE} by ledger order); `total` is the full count —
+ * `total === 0` ⇔ everything drained IS durable. Every counted path stays
+ * individually healable (the ledger itself is never truncated). */
 export interface PersistFailureReport {
   readonly failures: ReadonlyArray<PersistFailure>;
   readonly total: number;
 }
 
-/** Ledger cap: under quota exhaustion EVERY write fails; keep a sample, count
- * the rest ({@link PersistFailureReport.total}). */
-const PERSIST_FAILURE_CAP = 100;
+/** Report-sample size: consumers read `failures[0]` + `total`; shipping the
+ * whole ledger on every flush is waste, truncating the LEDGER (not just the
+ * report) would make over-cap failures unhealable — `total` could then never
+ * return to 0 after a big quota event. */
+const PERSIST_REPORT_SAMPLE = 20;
 
 /**
  * Walks an OPFS directory tree and yields `{ path, kind, size, children? }`
@@ -527,17 +531,15 @@ export class OpfsFsSync implements FsSync {
    * Persist-failure ledger: paths whose LAST persist attempt failed, i.e.
    * where OPFS is known to lag the in-memory mirror. A later successful
    * persist of the same path heals its entry (re-install after a freed
-   * quota). Capped — under quota exhaustion every write fails; the overflow
-   * count keeps the report honest without unbounded growth.
+   * quota). Deliberately UNCAPPED: keyed by path, so growth is bounded by the
+   * distinct paths written this session — the same order as the mirror's own
+   * `index`/`content` maps (which hold the actual bytes). A truncated ledger
+   * would make over-cap failures unhealable (`total` never returns to 0 after
+   * a big quota event); only the REPORT is sampled.
    */
   private readonly persistFailures = new Map<string, PersistFailure>();
-  private persistFailureOverflow = 0;
 
   private recordPersistFailure(path: string, op: PersistFailure['op'], err: unknown): void {
-    if (!this.persistFailures.has(path) && this.persistFailures.size >= PERSIST_FAILURE_CAP) {
-      this.persistFailureOverflow++;
-      return;
-    }
     const message = err instanceof Error ? err.message : String(err);
     this.persistFailures.set(path, { path, op, message });
   }
@@ -574,10 +576,12 @@ export class OpfsFsSync implements FsSync {
    */
   async flush(): Promise<PersistFailureReport> {
     await Promise.allSettled([...this.pending]);
-    return {
-      failures: [...this.persistFailures.values()],
-      total: this.persistFailures.size + this.persistFailureOverflow,
-    };
+    const failures: PersistFailure[] = [];
+    for (const failure of this.persistFailures.values()) {
+      if (failures.length >= PERSIST_REPORT_SAMPLE) break;
+      failures.push(failure);
+    }
+    return { failures, total: this.persistFailures.size };
   }
 
   /**

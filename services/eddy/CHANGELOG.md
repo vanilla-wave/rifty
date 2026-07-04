@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 11)
+
+- **A fresher compute whose store put fails now KILLS the stale mutable
+  link.** "Failed put skips the link" was not enough when an older link
+  already existed for the dep-set: it outlived the fresh compute, so a later
+  cached request served the STALE closure from the store instead of
+  recomputing. The kill rides the same generation guard as the publish — an
+  older failed compute never tears down a link a newer refresh published.
+
 ### Fixed (PR #107 round 10)
 
 - **S3 store network ops are bounded.** Every `S3BundleStore` fetch (GET, HEAD

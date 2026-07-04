@@ -9,8 +9,11 @@
   mkdir / rm / rename persist per path (a later successful persist of the same
   path heals its entry; an `rm` hitting `NotFoundError` counts as success —
   disk already agrees). `flush()` still never rejects but now returns a
-  `PersistFailureReport` (`failures` sample + uncapped `total`), so a caller
-  that promises durability (the playground install stamp) can gate on
+  `PersistFailureReport` — `failures` is a sampled view, `total` the full
+  count; the ledger itself is uncapped (keyed by path, so bounded by the
+  distinct paths written — the same order as the mirror's own index), keeping
+  every failure healable so `total` returns to 0 after a quota event. A caller
+  that promises durability (the playground install stamp) gates on
   `total === 0` instead of trusting FIFO order across silently-failed ops.
 
 - **Write-through FIFO ordering pinned as a contract (ADR-0187).** `OpfsFsSync`'s

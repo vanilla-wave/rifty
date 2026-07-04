@@ -13,8 +13,7 @@ import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createNpmShellCommand } from '../../apps/playground/src/glue/npm-shell-command.ts';
-import { resolveBundle } from '../../services/eddy/src/index.ts';
-import { type EddyServer, createEddyServer } from '../../services/eddy/src/server.ts';
+import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 
 const DEPS = { debug: '^4.4.1' };

@@ -1103,6 +1103,38 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect(report.failures[0]).toMatchObject({ path: '/node_modules', op: 'mkdir' });
   });
 
+  it('MORE failures than the report sample stay individually healable — total returns to 0 after a big quota event', async () => {
+    // Regression (round 11): a capped ledger counted over-cap failures in an
+    // opaque overflow with no path identity — they could never heal, so after
+    // a large quota event `total` stayed > 0 forever and the visible
+    // `npm install` permanently skipped install stamps. The ledger is now
+    // uncapped (bounded by distinct paths); only the REPORT is sampled.
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    // 120 > the old 100-entry ledger cap — the paths that used to land in the
+    // opaque overflow are exactly the ones that could never heal.
+    const paths = Array.from({ length: 120 }, (_, i) => `/f${i}.txt`);
+    for (const path of paths) fs.writeFileSync(path, new Uint8Array([1]));
+    const dirty = await fs.flush();
+    expect(dirty.total).toBe(120); // full count…
+    expect(dirty.failures.length).toBe(20); // …sampled report
+
+    // Quota freed: re-persist EVERY path — including the ones beyond the
+    // sample — and the report must come back fully clean.
+    fail = false;
+    for (const path of paths) fs.writeFileSync(path, new Uint8Array([2]));
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect(healed.failures).toEqual([]);
+  });
+
   it('an rm whose OPFS entry is ALREADY GONE reads as success (disk agrees), not a failure', async () => {
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),

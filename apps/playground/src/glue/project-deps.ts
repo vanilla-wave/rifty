@@ -156,8 +156,11 @@ async function tryRestoreSnapshot(
 }
 
 /** Non-blocking stamp (ADR-0187): the stamp's write-through is enqueued after
- * every tree write, so FIFO ordering alone guarantees a durable stamp implies
- * a durable tree — no drain on the boot path. */
+ * every tree write, so FIFO ordering lands it after the tree — no drain on
+ * the boot path. UNCHECKED by design (a drain here would re-add ~0.5s to
+ * boot): a swallowed per-op persist failure can still stamp a torn tree —
+ * ADR-0187 Corrected gates only the visible `npm install`.
+ * TODO(backlog: playground/boot-restore-stamp-unchecked-persist) */
 async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
   await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
 }

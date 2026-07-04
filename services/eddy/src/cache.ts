@@ -212,6 +212,14 @@ export class EddyCache {
       console.error(
         `eddy: bundle store put failed for ${closureHash}: ${err instanceof Error ? err.message : String(err)}`,
       );
+      // Stale-link kill: "skip the link" is not enough when an OLDER link for
+      // this key already exists — it would outlive this FRESHER compute and a
+      // later cached request would serve the stale closure instead of
+      // recomputing. Delete it, under the same generation guard as the publish
+      // below: a NEWER compute's published link is never torn down by an older
+      // failed one.
+      const cur = this.mutable.peek(key);
+      if (cur && gen > cur.gen) this.mutable.delete(key);
       return result;
     }
     // Re-seed the mutable link even on a prefer:'online' recompute, so a later

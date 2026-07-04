@@ -3,7 +3,7 @@ import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
-import { MemoryBundleStore } from '../src/bundle-store.ts';
+import { type BundleStore, MemoryBundleStore } from '../src/bundle-store.ts';
 import { EddyCache } from '../src/cache.ts';
 import type { EddyResolveResult } from '../src/resolver.ts';
 import { resolveBundle } from '../src/resolver.ts';
@@ -107,6 +107,89 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     // A later cached resolve must reuse the FRESH online closure, not the stale one.
     const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+  });
+
+  it('a FRESHER compute whose store put FAILS kills the stale mutable link — the next cached request recomputes', async () => {
+    // Regression (round 11): "failed put skips the link" is not enough when an
+    // OLDER link already exists for the key — it outlived the fresher failed
+    // compute, so a later cached request served the STALE closure from the
+    // store instead of recomputing (contradicting the ADR-0194 degrade story).
+    const { fetch } = makeLocalFetcher();
+    let failPuts = false;
+    let computes = 0;
+    const store = new MemoryBundleStore({ maxBytes: 1024 });
+    const flaky: BundleStore = {
+      get: (hash) => store.get(hash),
+      put: async (hash, bundle) => {
+        if (failPuts) throw new Error('bucket down');
+        await store.put(hash, bundle);
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: flaky,
+      resolveFn: async () => {
+        computes++;
+        return bundleFor(computes === 1 ? 'sha256-OLD' : 'sha256-NEW');
+      },
+    });
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } }); // link → OLD (put ok)
+    expect(first.kind === 'bundle' && first.manifest.asOf.closureHash).toBe('sha256-OLD');
+    failPuts = true;
+    const refresh = await cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' });
+    expect(refresh.kind === 'bundle' && refresh.manifest.asOf.closureHash).toBe('sha256-NEW'); // degrade serves the computed bundle
+    failPuts = false;
+    // Pre-fix this served sha256-OLD straight from the store (stale link hit).
+    const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+    expect(computes).toBe(3); // recompute + put retry, never the stale closure
+  });
+
+  it('an OLDER compute whose put fails does NOT kill the link a NEWER refresh published (generation guard on the kill)', async () => {
+    const { fetch } = makeLocalFetcher();
+    let releaseCached = (): void => {};
+    let releaseOnline = (): void => {};
+    const cachedGate = new Promise<void>((r) => {
+      releaseCached = r;
+    });
+    const onlineGate = new Promise<void>((r) => {
+      releaseOnline = r;
+    });
+    let computes = 0;
+    const store = new MemoryBundleStore({ maxBytes: 1024 });
+    const flaky: BundleStore = {
+      get: (hash) => store.get(hash),
+      put: async (hash, bundle) => {
+        // Only the OLDER compute's closure fails to store.
+        if (hash === 'sha256-OLD') throw new Error('bucket down');
+        await store.put(hash, bundle);
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: flaky,
+      resolveFn: async (req) => {
+        computes++;
+        if (req.prefer === 'online') {
+          await onlineGate;
+          return bundleFor('sha256-NEW');
+        }
+        await cachedGate;
+        return bundleFor('sha256-OLD');
+      },
+    });
+
+    const cachedP = cache.resolve({ dependencies: { debug: '^4.4.1' } }); // gen1, will put-fail
+    const onlineP = cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' }); // gen2
+    releaseOnline();
+    const online = await onlineP;
+    expect(online.kind === 'bundle' && online.manifest.asOf.closureHash).toBe('sha256-NEW');
+    releaseCached(); // older compute settles LAST; its failed put must not tear down the gen2 link
+    await cachedP;
+
+    const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+    expect(computes).toBe(2); // served via the surviving link + store hit, no recompute
   });
 
   it('getBundle returns the immutable-tier bundle by closure hash, null for unknown', async () => {
