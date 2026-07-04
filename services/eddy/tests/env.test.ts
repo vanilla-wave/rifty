@@ -85,4 +85,44 @@ describe('parseS3Config (EDDY_S3_* — all-or-none)', () => {
     const { EDDY_S3_SECRET_ACCESS_KEY: _omitted, ...partial } = full;
     expect(() => parseS3Config(partial)).toThrow(/EDDY_S3_SECRET_ACCESS_KEY/);
   });
+
+  it('a whitespace-only value is MISSING, not present — the group stays all-or-none honest', () => {
+    // `'   '` passed the old truthiness check, so a blank endpoint booted the
+    // S3 store with junk — against this file's loud-startup contract.
+    expect(() => parseS3Config({ ...full, EDDY_S3_BUCKET: '   ' })).toThrow(/EDDY_S3_BUCKET/);
+    // ALL blank/unset → memory store, not an error.
+    expect(parseS3Config({ EDDY_S3_ENDPOINT: ' ', EDDY_S3_BUCKET: '\t' })).toBeUndefined();
+  });
+
+  it('trims surrounding whitespace off accepted values', () => {
+    expect(parseS3Config({ ...full, EDDY_S3_BUCKET: '  eddy-bundles  ' })?.bucket).toBe(
+      'eddy-bundles',
+    );
+  });
+
+  it('refuses a non-URL endpoint, naming the var (never a secret value)', () => {
+    for (const bad of ['not a url', 'storage.yandexcloud.net', 'ftp://x']) {
+      expect(() => parseS3Config({ ...full, EDDY_S3_ENDPOINT: bad })).toThrow(
+        /EDDY_S3_ENDPOINT must be an http\(s\) URL/,
+      );
+    }
+  });
+
+  it('refuses inner whitespace in bucket/region', () => {
+    expect(() => parseS3Config({ ...full, EDDY_S3_BUCKET: 'my bucket' })).toThrow(/EDDY_S3_BUCKET/);
+    expect(() => parseS3Config({ ...full, EDDY_S3_REGION: 'ru central1' })).toThrow(
+      /EDDY_S3_REGION/,
+    );
+  });
+
+  it('never includes the secret pair values in error messages', () => {
+    try {
+      parseS3Config({ ...full, EDDY_S3_ENDPOINT: 'junk' });
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const msg = (err as Error).message;
+      expect(msg).not.toContain('secret');
+      expect(msg).not.toContain('key');
+    }
+  });
 });

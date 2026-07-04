@@ -13,15 +13,29 @@
  */
 import type { Lockfile } from './linker.ts';
 
+/** Recursively key-sort plain objects so JSON insertion order can't leak into
+ * the hash — `dependencies`/`bin`/`peerDependencies` maps describe the SAME
+ * closure whatever order a packument (or a future serializer) emitted them. */
+function deepCanonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(deepCanonical);
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(record).sort()) out[k] = deepCanonical(record[k]);
+    return out;
+  }
+  return value;
+}
+
 /**
- * The canonical (order-independent) serialization the closure hash is computed
- * over — ONE definition, so `@riftydev/eddy`'s SYNC `closureHashOf` (Node-only,
- * kept for its pre-existing string-returning API) can never drift from the
- * async hash below.
+ * The canonical (order-independent, DEEPLY key-sorted) serialization the
+ * closure hash is computed over — ONE definition, so `@riftydev/eddy`'s SYNC
+ * `closureHashOf` (Node-only, kept for its pre-existing string-returning API)
+ * can never drift from the async hash below.
  */
 export function canonicalClosureJson(lockfile: Lockfile): string {
   const keys = Object.keys(lockfile.packages).sort();
-  return JSON.stringify(keys.map((k) => [k, lockfile.packages[k]]));
+  return JSON.stringify(keys.map((k) => [k, deepCanonical(lockfile.packages[k])]));
 }
 
 export async function closureHashOf(lockfile: Lockfile): Promise<string> {

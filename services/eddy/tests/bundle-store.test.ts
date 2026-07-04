@@ -189,6 +189,44 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     }
   });
 
+  it('a THROWING store read on a fresh mutable link degrades to recompute — the POST never 500s while the registry is up', async () => {
+    // First resolve computes + links; then the store starts THROWING on reads
+    // (bucket down). The linked resolve must treat that as a miss and
+    // recompute (it has the dep-set), not propagate a 500 through server.ts.
+    const { fetch } = makeLocalFetcher();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let reads = 0;
+      let computes = 0;
+      const store: BundleStore = {
+        get: async () => {
+          reads++;
+          throw new Error('bucket down');
+        },
+        put: async () => {},
+      };
+      const cache = new EddyCache({
+        resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+        store,
+        resolveFn: (req, deps) => {
+          computes++;
+          return resolveBundle(req, deps);
+        },
+      });
+      const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+      expect(first.kind).toBe('bundle');
+      const second = await cache.resolve({ dependencies: { debug: '^4.4.1' } }); // fresh link → throwing read
+      expect(second.kind).toBe('bundle'); // degraded to recompute, never a throw
+      expect(reads).toBeGreaterThan(0);
+      expect(computes).toBe(2);
+      expect(errSpy.mock.calls.some((c) => /bucket down.*recomputing/s.test(c.join(' ')))).toBe(
+        true,
+      );
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
   it('a failed store put still serves the computed bundle and does NOT link it (recompute next time)', async () => {
     const { fetch } = makeLocalFetcher();
     let puts = 0;

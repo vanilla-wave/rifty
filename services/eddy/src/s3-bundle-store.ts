@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import {
   type EddyBundleContents,
   type Lockfile,
+  bundleCompletenessGap,
   closureHashOf,
   computeIntegrity,
   parseIntegrityAlgorithm,
@@ -96,9 +97,11 @@ export class S3BundleStore implements BundleStore {
       );
       return null;
     }
+    let lockfile: Lockfile;
     let derived: string;
     try {
-      derived = await closureHashOf(JSON.parse(lockfileText) as Lockfile);
+      lockfile = JSON.parse(lockfileText) as Lockfile;
+      derived = await closureHashOf(lockfile);
     } catch (err) {
       console.error(
         `eddy: bundle store object for ${closureHash} has an unparseable lockfile: ${errMsg(err)}`,
@@ -108,6 +111,21 @@ export class S3BundleStore implements BundleStore {
     if (derived !== closureHash) {
       console.error(
         `eddy: bundle store object at ${closureHash} re-derives to ${derived} from its lockfile — treating as a miss`,
+      );
+      return null;
+    }
+    // At least as strict as CLIENT adoption (`consumeEddyResponse`): a
+    // poisoned object can keep its lockfile (same closure hash) while OMITTING
+    // a reachable tarball from both manifest and members — the tarball loop
+    // below only checks what the manifest NAMES. Reuse the client's own gate
+    // (roots = the lockfile root entry's deps = the original request) so a hit
+    // the client would reject reads as a MISS here and self-heals on the next
+    // compute's put.
+    const rootDeps = lockfile.packages?.['']?.dependencies ?? {};
+    const gap = bundleCompletenessGap(lockfile, rootDeps, manifest.tarballs);
+    if (gap) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} is incomplete (${gap}) — treating as a miss`,
       );
       return null;
     }
@@ -189,6 +207,25 @@ export class S3BundleStore implements BundleStore {
       );
     }
     await res.arrayBuffer().catch(() => undefined);
+    // A settled put PROMISES GET-by-hash servability (bundle-store.ts contract)
+    // — but the signed PUT succeeding says nothing about the UNSIGNED public
+    // read path (a private/mis-ACL'd bucket 403s it, and the CDN + clients
+    // read unsigned). Prove it: the same public HEAD the skip-identical probe
+    // uses must now see the object. Throwing here routes into the cache's
+    // degrade path (no mutable link is published for an unservable hash).
+    const proof = await this.fetchImpl(url, { method: 'HEAD' }).catch((err) => {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} succeeded but the public-read HEAD failed: ${errMsg(err)}`,
+      );
+    });
+    await proof.arrayBuffer().catch(() => undefined);
+    const proofEtag = (proof.headers.get('etag') ?? '').replace(/"/g, '');
+    if (!proof.ok || proofEtag !== bodyMd5Hex) {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
+          `(HEAD ${proof.status}${proof.ok ? ', ETag mismatch' : ''}) — is the bucket public-read?`,
+      );
+    }
   }
 }
 

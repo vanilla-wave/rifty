@@ -59,22 +59,50 @@ export type S3EnvConfig = Pick<
 /**
  * Parse the `EDDY_S3_*` group (ADR-0194 §4). None set → `undefined` (memory
  * store). ALL set → the store config. A partial group throws, naming the
- * missing vars — a half-configured store must never boot.
+ * missing vars — a half-configured store must never boot. Values are TRIMMED
+ * and junk is refused loudly (this file's contract): a whitespace-only var
+ * counts as missing, an endpoint that is not an http(s) URL throws. Error
+ * messages name the VAR, never a secret value.
  */
 export function parseS3Config(env: Record<string, string | undefined>): S3EnvConfig | undefined {
   const entries = Object.entries(S3_ENV_KEYS) as Array<
     [keyof S3EnvConfig, (typeof S3_ENV_KEYS)[keyof typeof S3_ENV_KEYS]]
   >;
-  const missing = entries.filter(([, envKey]) => !env[envKey]).map(([, envKey]) => envKey);
-  if (missing.length === entries.length) return undefined;
+  const values = new Map<keyof S3EnvConfig, string>();
+  for (const [field, envKey] of entries) {
+    const trimmed = env[envKey]?.trim();
+    if (trimmed) values.set(field, trimmed);
+  }
+  if (values.size === 0) return undefined;
+  const missing = entries.filter(([field]) => !values.has(field)).map(([, envKey]) => envKey);
   if (missing.length > 0) {
     throw new Error(
-      `EDDY_S3_* is partially configured — missing ${missing.join(', ')} (set all of ${entries
+      `EDDY_S3_* is partially configured — missing/blank ${missing.join(', ')} (set all of ${entries
         .map(([, k]) => k)
         .join(', ')} or none)`,
     );
   }
+  const endpoint = values.get('endpoint') as string;
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')) {
+    throw new Error(
+      `${S3_ENV_KEYS.endpoint} must be an http(s) URL (e.g. https://storage.yandexcloud.net); got ${JSON.stringify(endpoint)}`,
+    );
+  }
+  for (const field of ['bucket', 'region'] as const) {
+    const value = values.get(field) as string;
+    if (/\s/.test(value)) {
+      throw new Error(
+        `${S3_ENV_KEYS[field]} must not contain whitespace; got ${JSON.stringify(value)}`,
+      );
+    }
+  }
   const out = {} as Record<keyof S3EnvConfig, string>;
-  for (const [field, envKey] of entries) out[field] = env[envKey] as string;
+  for (const [field] of entries) out[field] = values.get(field) as string;
   return out;
 }

@@ -35,6 +35,15 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **`closureHashOf` is DEEPLY canonical.** Only the top-level package keys were
+  sorted; entry objects were stringified raw, so the same resolved closure with
+  a different `dependencies`/`bin`/`peerDependencies` insertion order hashed
+  differently — duplicate immutable objects and cache misses for one closure.
+  `canonicalClosureJson` now recursively key-sorts nested records (values
+  untouched). Applies before any durable content-addressed store exists in prod,
+  so no stored hashes are invalidated. `bundleCompletenessGap` is also exported
+  from the public index so eddy's durable store validates objects exactly as
+  strictly as the client adopts them. RED-checked nested-order tests.
 - **A completed bundle GET reads to TRUE EOF — the browser HTTP cache keeps
   it.** The streaming reader used to stop at the first end-of-archive zero
   block and cancel the body with the terminator tail still on the wire; a

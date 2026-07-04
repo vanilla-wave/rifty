@@ -262,6 +262,25 @@ describe('S3BundleStore', () => {
     expect(await store.get(HASH)).toBeNull(); // manifest matches key, lockfile doesn't → miss
   });
 
+  it('rejects a PARTIAL object: lockfile intact (hash matches) but a reachable tarball omitted from manifest+members', async () => {
+    // Regression (round 8): the tarball loop only checks what the manifest
+    // NAMES — an object with an unchanged lockfile (same closure hash) that
+    // drops a reachable tarball from BOTH manifest and members passed every
+    // prior gate, yet the browser client rejects exactly this via its
+    // completeness gate. The store must read it as a miss (→ self-heal), not
+    // serve a hit stricter clients bounce forever.
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    const before = contents.tarballs.length;
+    contents.manifest.tarballs = contents.manifest.tarballs.filter((t) => t.name !== 'ms');
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== 'ms');
+    expect(contents.tarballs.length).toBeLessThan(before); // the omission is real
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // incomplete → miss
+  });
+
   it('rejects a bundle with tampered tarball bytes (integrity mismatch), matching manifest+lockfile', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
@@ -315,6 +334,45 @@ describe('S3BundleStore', () => {
     await store.get(HASH);
     for (const r of fake.requests.filter((x) => x.method !== 'PUT')) {
       expect(r.headers.authorization).toBeUndefined();
+    }
+  });
+
+  it('a PUT that succeeds against a NON-public bucket rejects (public HEAD 403) — the hash is never linked unservable', async () => {
+    // Signed writes work but unsigned reads 403 (bucket not public-read): the
+    // durable-before-link contract says a settled put == GET-by-hash serves,
+    // and the CDN + clients read UNSIGNED — so put must prove the public read.
+    const objects = new Map<string, Buffer>();
+    const server = createServer((req, res) => {
+      if (req.method === 'PUT') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          const body = Buffer.concat(chunks);
+          objects.set(req.url ?? '', body);
+          res.writeHead(200, { etag: `"${createHash('md5').update(body).digest('hex')}"` });
+          res.end();
+        });
+        return;
+      }
+      // Unsigned GET/HEAD: AccessDenied — the object exists but is private.
+      res.writeHead(403, { 'content-type': 'application/xml' });
+      res.end(req.method === 'HEAD' ? undefined : '<Error><Code>AccessDenied</Code></Error>');
+    });
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+      );
+    });
+    try {
+      const store = makeStore(url);
+      await expect(store.put(HASH, { bytes: bundleBytes, manifest })).rejects.toThrow(
+        /not publicly readable.*public-read/s,
+      );
+      expect(objects.size).toBe(1); // the signed PUT itself DID succeed
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((e) => (e ? reject(e) : resolve())),
+      );
     }
   });
 

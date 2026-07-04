@@ -21,6 +21,42 @@ describe('closureHashOf', () => {
     expect(await closureHashOf(a)).toBe(await closureHashOf(b));
   });
 
+  it('is identical regardless of NESTED record key order (dependencies/bin/peerDependencies)', async () => {
+    // Regression (round 8): only the top-level package keys were sorted; the
+    // entry objects were stringified raw, so the same resolved closure with a
+    // different `dependencies` insertion order hashed differently — duplicate
+    // immutable objects + cache misses for one closure.
+    const a = lf({
+      'node_modules/x': {
+        version: '1.0.0',
+        integrity: 'sha512-x',
+        dependencies: { p: '1.0.0', q: '2.0.0' },
+        bin: { one: 'a.js', two: 'b.js' },
+        peerDependencies: { r: '^3' },
+      },
+    });
+    const b = lf({
+      'node_modules/x': {
+        peerDependencies: { r: '^3' },
+        bin: { two: 'b.js', one: 'a.js' },
+        dependencies: { q: '2.0.0', p: '1.0.0' },
+        integrity: 'sha512-x',
+        version: '1.0.0',
+      },
+    });
+    expect(await closureHashOf(a)).toBe(await closureHashOf(b));
+  });
+
+  it('differs when a NESTED value (not just order) changes', async () => {
+    const a = lf({
+      'node_modules/x': { version: '1.0.0', dependencies: { p: '1.0.0' } },
+    });
+    const b = lf({
+      'node_modules/x': { version: '1.0.0', dependencies: { p: '1.0.1' } },
+    });
+    expect(await closureHashOf(a)).not.toBe(await closureHashOf(b));
+  });
+
   it('differs when any pinned integrity differs', async () => {
     const a = lf({ 'node_modules/x': { version: '1.0.0', integrity: 'sha512-x' } });
     const b = lf({ 'node_modules/x': { version: '1.0.0', integrity: 'sha512-DIFFERENT' } });

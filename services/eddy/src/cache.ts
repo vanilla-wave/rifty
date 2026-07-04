@@ -152,7 +152,16 @@ export class EddyCache {
     if (!online) {
       const link = this.mutable.get(key);
       if (link && link.expiresAt > this.clock()) {
-        const hit = await this.store.get(link.closureHash);
+        // A throwing store read (bucket down / transient 5xx) is a MISS here,
+        // never a 500: the POST path HAS the dep-set, so it can recompute and
+        // ride the existing failed-put degrade. Only the direct GET-by-hash
+        // route (getBundle — no dep-set to recompute from) surfaces the error.
+        const hit = await this.store.get(link.closureHash).catch((err) => {
+          console.error(
+            `eddy: bundle store read failed for linked ${link.closureHash}: ${err instanceof Error ? err.message : String(err)} — recomputing`,
+          );
+          return null;
+        });
         if (hit) return { kind: 'bundle', bytes: hit.bytes, manifest: hit.manifest };
       }
       // Thundering herd: identical cold requests join one compute. An 'online'

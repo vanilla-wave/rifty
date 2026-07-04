@@ -28,6 +28,10 @@ export {
 } from './eddy-request.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
 export { closureHashOf, canonicalClosureJson } from './closure-hash.ts';
+// The bundle-adoption completeness gate, shared so eddy's durable store
+// validates objects EXACTLY as strictly as the client adopts them (a store
+// hit a client would reject must read as a miss and self-heal).
+export { bundleCompletenessGap } from './installer-lockfile-reader.ts';
 export { resolveOverride, type OverrideMap, type ResolvedOverrideTarget } from './overrides.ts';
 export {
   install,

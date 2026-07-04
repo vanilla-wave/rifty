@@ -27,6 +27,33 @@
 
 ### Fixed (eddy v1.2 review follow-ups, ADR-0194)
 
+- **`S3BundleStore.put` proves PUBLIC readability before settling.** The signed
+  PUT succeeding says nothing about the unsigned read path (the CDN + clients
+  read unsigned): against a private/mis-ACL'd bucket the put settled, the cache
+  linked the hash, and every GET-by-hash 403'd. After the PUT an unsigned HEAD
+  must now return ok with the body's ETag — else `put` throws ("is the bucket
+  public-read?") and the cache's degrade path skips the link. Regression: a
+  fake S3 that accepts writes but 403s public reads.
+- **A throwing store read on a fresh mutable link degrades to recompute — the
+  POST never 500s while the registry is up.** `resolve()` called `store.get()`
+  bare on a link hit; an S3 outage propagated as a 500 even though the POST has
+  the dep-set and could recompute. The read failure now logs and reads as a
+  miss (→ compute → the existing failed-put degrade). The direct
+  `GET /bundle/<hash>` route (no dep-set to recompute from) still surfaces the
+  error.
+- **Store read validation is now at least as strict as CLIENT adoption.**
+  `verifyContentAddress` only verified tarballs the manifest NAMED — a poisoned
+  object keeping its lockfile (same closure hash) while omitting a reachable
+  tarball from BOTH manifest and members read as a store HIT that every browser
+  client bounces via its completeness gate (permanent decline loop until the
+  mutable TTL expired). The store now runs the SAME `bundleCompletenessGap`
+  (roots = the lockfile root entry's deps — the original request), so such an
+  object reads as a miss and self-heals on the next compute's put.
+- **`parseS3Config` refuses junk, not just absence.** Whitespace-only values
+  passed the all-or-none presence check and booted the S3 store with blanks;
+  values are now trimmed (blank = missing), the endpoint must be an http(s)
+  URL, bucket/region must not contain whitespace — all named-var errors, never
+  echoing the secret pair.
 - **`MemoryBundleStore.put` is durable-or-THROW — an over-cap bundle no longer
   publishes an unservable hash.** The silent over-cap `return` let `EddyCache`
   believe the put succeeded: it wrote the mutable link, but `GET /bundle/<hash>`
