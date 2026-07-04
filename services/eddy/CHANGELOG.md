@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 12)
+
+- **`GET /bundle/<hash>` validates the hash shape.** The decoded segment
+  becomes an S3 object-key path segment — junk like `..` (sent
+  percent-encoded) URL-normalizes into non-bundle bucket paths. Anything that
+  is not `sha256-<base64>` is now a `400` with `no-store` (as is malformed
+  percent-encoding, previously a 500); the store is never consulted.
+- **Error-body snippet cap no longer buffers a whole oversized chunk.** The
+  PUT-failure snippet reader slices each chunk to the remaining 4 KiB cap
+  instead of pushing it whole.
+
 ### Fixed (PR #107 round 11)
 
 - **A fresher compute whose store put fails now KILLS the stale mutable

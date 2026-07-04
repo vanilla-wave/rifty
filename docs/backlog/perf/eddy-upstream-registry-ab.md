@@ -3,7 +3,7 @@ area: perf
 status: draft
 title: eddy upstream registry A/B — direct npmjs vs CDN-proxy, measured on the VM
 created: 2026-07-03
-why: eddy's cold-origin resolve is RTT-chain-bound (walk is graph-depth-bound; concurrency + bytes already exhausted in v1.2), and the ONE untried server-side lever is the upstream it resolves against — today the deployed VM points `REGISTRY_BASE_URL` at the CDN registry-proxy (built for BROWSER CORS, which the server does not need), paying cold-edge double hops direct npmjs might avoid; this is the last deferred lever from ADR-0194 §Levers-2, currently living only in prose
+why: eddy's cold-origin resolve is RTT-chain-bound (walk is graph-depth-bound; concurrency + bytes already exhausted in v1.2), and the ONE untried server-side lever is the upstream it resolves against — today the deployed VM points `REGISTRY_BASE_URL` at the CDN registry-proxy (built for BROWSER CORS, which the server does not need), paying cold-edge double hops direct npmjs might avoid; this is the lever ADR-0194 §Deferred records
 user_story: As a playground user typing a first-ever `npm install <deps>` I want eddy's cold resolve to take the shortest upstream path, but today it resolves through the browser-CORS CDN proxy (extra edge hops) instead of possibly-faster direct npmjs — untested from the VM, and RU-region routing to npmjs might actually be slower/throttled, so it must be MEASURED before flipping.
 epic: fast-install-resolver
 blocked_by: [distribution/eddy-package-and-deploy]
@@ -13,7 +13,7 @@ code: [services/eddy/src/bin.ts, deploy/yandex/eddy/docker-compose.coi.yml]
 
 ## Context
 
-eddy v1.2 (ADR-0194) closed the client-side + server-cache levers on the cold-origin floor: shared packument (TTL) + immutable tarball caches, single-flight per dep-set, stateless Object-Storage bundle store. What v1.2 explicitly did NOT try (ADR-0194 §Levers item 2, deferred) is the **upstream** eddy resolves against.
+eddy v1.2 (ADR-0194) closed the client-side + server-cache levers on the cold-origin floor: shared packument (TTL) + immutable tarball caches, single-flight per dep-set, stateless Object-Storage bundle store. What v1.2 explicitly did NOT try (ADR-0194 §Deferred) is the **upstream** eddy resolves against.
 
 The deployed VM sets `REGISTRY_BASE_URL=https://registry.rifty.dev/npm-registry` — the Caddy CDN registry-proxy (ADR-0163). That proxy exists to give the BROWSER a CORS-clean, same-origin registry; the eddy SERVER needs no CORS, so it may be paying cold-edge double hops (VM → CDN edge → npmjs) that a direct `REGISTRY_BASE_URL=https://registry.npmjs.org` would skip. The walk is graph-depth-bound (measured: packument concurrency 8→32 ≈ −10%; corgi bytes-only ≈ no wall-time), so RTT-per-hop is exactly what dominates the cold floor — making the upstream hop count the last lever with headroom.
 

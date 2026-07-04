@@ -1,3 +1,4 @@
+import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { unpackEddyBundle } from '@riftydev/npm-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -95,6 +96,62 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     const body = (await res.json()) as { error?: string };
     expect(body.error).toMatch(/unknown bundle/);
+  });
+
+  it('GET /bundle/<junk> that is not a sha256-<base64> hash → 400 no-store, never reaches the store', async () => {
+    for (const junk of ['foo', 'sha256-%20', 'md5-abcd']) {
+      const res = await fetch(`${baseUrl}/bundle/${junk}`);
+      expect(res.status).toBe(400);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toMatch(/malformed closure hash/);
+    }
+  });
+
+  it('a RAW dot-segment bundle path (proxy/raw client) → 400 no-store, never an object-key traversal', async () => {
+    // The hash becomes an S3 object-key path segment: `.`/`..` URL-normalize
+    // into non-bundle bucket paths at the store. fetch normalizes them away
+    // client-side (incl. `%2E%2E` — WHATWG dot-segment rules), so exercise
+    // the route the way a raw client/proxy would: node:http sends the path
+    // VERBATIM.
+    const addr = server.address() as AddressInfo;
+    const rawGet = (path: string) =>
+      new Promise<{ status: number; cacheControl: string | undefined; body: string }>(
+        (resolve, reject) => {
+          const req = httpRequest(
+            { hostname: '127.0.0.1', port: addr.port, path, method: 'GET' },
+            (res) => {
+              let data = '';
+              res.on('data', (c: Buffer) => {
+                data += c.toString('utf8');
+              });
+              res.on('end', () =>
+                resolve({
+                  status: res.statusCode ?? 0,
+                  cacheControl: res.headers['cache-control'],
+                  body: data,
+                }),
+              );
+            },
+          );
+          req.on('error', reject);
+          req.end();
+        },
+      );
+    for (const path of ['/bundle/..', '/bundle/.', '/bundle/%2E%2E']) {
+      const res = await rawGet(path);
+      expect(res.status).toBe(400);
+      expect(res.cacheControl).toBe('no-store');
+      expect(res.body).toMatch(/malformed closure hash/);
+    }
+  });
+
+  it('GET /bundle/<bad-percent-encoding> → 400 no-store, not a 500', async () => {
+    const res = await fetch(`${baseUrl}/bundle/%zz`);
+    expect(res.status).toBe(400);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toMatch(/percent-encoding/);
   });
 
   it('OPTIONS advertises GET alongside POST', async () => {

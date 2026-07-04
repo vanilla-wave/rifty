@@ -97,9 +97,34 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     }
     // The closure hash is `sha256-<base64>` — base64 carries `/`+`=`, so the
     // path segment arrives percent-encoded.
+    let closureHash: string;
+    try {
+      closureHash = decodeURIComponent(match[1] as string);
+    } catch {
+      sendJson(
+        res,
+        400,
+        { error: 'malformed percent-encoding in bundle path' },
+        { 'cache-control': 'no-store' },
+      );
+      return;
+    }
+    // Shape gate BEFORE the store: the hash becomes an OBJECT KEY (an S3 path
+    // segment) — junk like `.`/`..` would URL-normalize into non-bundle bucket
+    // paths. Anything that is not `sha256-<base64>` is a 400, no-store (junk
+    // must never pin at the CDN either).
+    if (!/^sha256-[A-Za-z0-9+/]+={0,2}$/.test(closureHash)) {
+      sendJson(
+        res,
+        400,
+        { error: 'malformed closure hash — expected sha256-<base64>' },
+        { 'cache-control': 'no-store' },
+      );
+      return;
+    }
     let hit: Awaited<ReturnType<EddyCache['getBundle']>>;
     try {
-      hit = await cache.getBundle(decodeURIComponent(match[1] as string));
+      hit = await cache.getBundle(closureHash);
     } catch (err) {
       // An S3-backed store can fail at runtime (bucket outage) — answer 500,
       // never leave an unhandled rejection to kill the process (ADR-0194).

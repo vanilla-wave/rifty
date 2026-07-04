@@ -154,6 +154,9 @@ export class RegistryClient {
     }
   }
 
+  // Standard-path body reads are UNBOUNDED (no stall/byte cap — unlike the
+  // eddy bundle stream); a stalled registry parks the install.
+  // TODO(backlog: npm-client/registry-fetch-no-progress-bound)
   async getPackument(name: string): Promise<Packument> {
     const url = `${this.baseUrl}/${encodeURIComponent(name).replace('%40', '@')}`;
     const response = await this.fetchWithRetry(url);
@@ -161,6 +164,7 @@ export class RegistryClient {
     return (await response.json()) as Packument;
   }
 
+  // TODO(backlog: npm-client/registry-fetch-no-progress-bound) — same class.
   async getTarball(tarballUrl: string): Promise<Uint8Array> {
     const response = await this.fetchWithRetry(tarballUrl);
     if (!response.ok) throw new Error(`Failed to fetch tarball: ${response.status}`);

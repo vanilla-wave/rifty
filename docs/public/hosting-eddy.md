@@ -209,6 +209,7 @@ first.
    the TAG on every deploy — the COI VM does not re-pull an existing tag:
 
    ```bash
+   yc container registry create --name rifty              # one-time (fresh cloud/folder)
    yc container registry configure-docker                 # once
    REG=$(yc container registry get --name rifty --format json | jq -r .id)
    docker buildx build --platform linux/amd64 \

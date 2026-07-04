@@ -24,6 +24,8 @@ Client (`packages/npm-client`):
 6. **`InstallResult.closureHash?: string`** — set iff `source === 'eddy'`, the adopted bundle's `manifest.asOf.closureHash`. (`consumeEddyResponse` returns `{adopted: true, closureHash} | decline-string`; `tryEddyFastPath` returns `string | null`.) Public-API addition; optional, so existing result literals stay valid.
 7. **`InstallOptions.packumentCache` widened** from `Map<string, Packument>` to a minimal `{get, set}` interface (`PackumentCacheLike`) so eddy can inject its TTL cache; `Map` satisfies it structurally — no caller changes.
 
+Also public-API additions, both serving the one-algorithm/no-drift rule (`@riftydev/eddy` imports only the package root): **`bundleCompletenessGap`** — the client-adoption completeness gate, reused by the server store's content-address verification so a store hit is at least as strict as client adoption (§5); **`canonicalClosureJson`** — the canonical closure serialization behind `closureHashOf`, so eddy's sync hash twin derives byte-identical hashes (a drift tripwire pins sync ≡ async).
+
 Playground (`apps/playground`):
 
 8. **Learned pins** — `/.rifty/eddy-learned-pins.json` (dot-dir precedent: `VfsTarballCache`), `requestKey → {closureHash, savedAt}`, TTL **1800s** (= the server's mutable-tier DEFAULT; the client does NOT track a deploy's custom `EDDY_TTL_SECONDS` — a pin outliving the server link degrades to a verified 404 → POST re-seed, never a wrong install), cap 64 (evict oldest), corrupt/missing = absent (never an error). Async (Vfs) + sync (`FsSync`) readers — sync because `primeInstallPrefetch` is sync by design (async gate = measured double-POST). `requestKey = canonicalEddyRequestKey(eddyRequestFromPackageJson(text))` computed AFTER the merged package.json write; learned entries exist only under the `prefer:'cached'` key. Learned pin (exact post-merge `requestKey`) has priority over the coarse template env pin (`VITE_RIFTY_EDDY_PINS`); env pin is the FALLBACK that seeds the first install of a set. The reverse priority would defeat the promise below for *modified* sets: an env pin only matches the pristine preset, so after `npm install <pkg>` the exact-match learned pin must win or its cacheable GET never fires. Write-back after an eddy install is fire-and-forget. New seam: `NpmShellCommandDeps.learnedPins?: {get; set}`.
@@ -31,6 +33,8 @@ Playground (`apps/playground`):
 Revisits ADR-0195's rejected alternative "client-persisted dep-set→hash map": the install stamp suppresses repeat installs on the SAME tree, but a fresh profile/new project with a known dep set has no stamp — measured 2026-07-02, that path is a full origin POST (~0.65s of 0.88s is TLS+RTT+origin transfer) vs ~0 for a browser-HTTP-cache GET.
 
 Rejected: VM disk / RAM-only LRU as the bundle store (deploy invalidates, RSS-bounded, sticky GET traffic — evolution recorded in the closed backlog item); new S3 SDK dep (one signed PUT doesn't justify a dependency tree); walk-concurrency bump (measured −10% at 8→32, depth-bound); separate resolve-only wire mode (subsumed by shared tarball cache, see 2).
+
+Deferred (not rejected): the upstream-registry lever — the deployed VM resolves through the browser-CORS CDN registry-proxy the SERVER doesn't need; direct npmjs may skip cold-edge double hops but RU-region routing may be slower, so it needs an on-VM A/B before flipping `REGISTRY_BASE_URL` (`docs/backlog/perf/eddy-upstream-registry-ab.md`).
 
 ## Consequences
 

@@ -405,8 +405,10 @@ async function readErrorSnippet(res: Response): Promise<string> {
     while (size < ERROR_SNIPPET_BYTES) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value);
-      size += value.byteLength;
+      // Slice to the REMAINING cap — one big first chunk must not buffer whole.
+      const chunk = value.subarray(0, ERROR_SNIPPET_BYTES - size);
+      chunks.push(chunk);
+      size += chunk.byteLength;
     }
   } catch {
     // partial snippet is fine
