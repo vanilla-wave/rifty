@@ -1,10 +1,10 @@
 ---
 area: perf
 status: draft
-title: Validate eddy ~6x on a real browser over HTTP/3
+title: Validate the eddy launch speed number on a real browser over HTTP/3 (warm h2 = 1.70x; h3 unmeasured)
 created: 2026-06-28
-why: the ~6x headline assumes the bundled single stream beats the per-origin single-h2 tarball phase; HTTP/3 (advertised via alt-svc, untested) could lift the single-connection ceiling and narrow eddy's edge — the number must be measured on the real transport before it is quoted
-user_story: As the maker quoting an eddy speed number at launch I want it measured on a real Chromium tab over the actual transport (h2/h3), but today the ~6x is from a Node/sandbox model and the h3 path is unmeasured.
+why: warm h2 is measured at 1.70x (the launch number); the historical ~6x is a Node/sandbox model that assumed the bundled single stream beats the per-origin single-h2 tarball phase. HTTP/3 (advertised via alt-svc, untested) could lift the single-connection ceiling and shift the measured number — it must be confirmed on the real transport before any h3 figure is quoted.
+user_story: As the maker quoting an eddy speed number at launch I want it measured on a real Chromium tab over the actual transport (h2/h3); warm h2 is 1.70x today and the h3 path is unmeasured (the "~6x" is a Node/sandbox model, never the launch quote).
 epic: fast-install-resolver
 blocked_by: []
 sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/backlog/perf/reference/speed-benchmarks.md]

@@ -9,9 +9,25 @@ import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
+import { MemoryBundleStore } from '../src/bundle-store.ts';
 import { EddyCache } from '../src/cache.ts';
+import type { EddyResolveResult } from '../src/resolver.ts';
 import { resolveBundle } from '../src/resolver.ts';
 import { MemoryTarballCache, TtlPackumentCache } from '../src/shared-caches.ts';
+
+const packument = (name: string) =>
+  ({ name, 'dist-tags': {}, versions: {} }) as unknown as Parameters<TtlPackumentCache['set']>[1];
+
+const okBundle = (closureHash: string): EddyResolveResult => ({
+  kind: 'bundle',
+  bytes: new Uint8Array([1]),
+  manifest: {
+    format: 'EddyBundleV1',
+    npmClientVersion: '0.0.0',
+    asOf: { resolvedAt: 't', registry: 'r', closureHash },
+    tarballs: [],
+  },
+});
 
 function makeCache(overrides: Partial<ConstructorParameters<typeof EddyCache>[0]> = {}) {
   const { fetch, calls } = makeLocalFetcher();
@@ -95,6 +111,48 @@ describe('shared caches across resolves (ADR-0194 §1–2)', () => {
     // packuments the online pass wrote through.
     await cache.resolve({ dependencies: { debug: '^4.4.1', kleur: '4.1.5' } });
     expect(calls.packument - packumentsAfterOnline).toBe(1); // only kleur
+  });
+
+  it('a late STALE cached flight cannot repollute the shared packument cache after a newer online refresh (metadata race)', async () => {
+    // Publish/dist-tag race: a cached resolve (started FIRST, fetched stale
+    // metadata) writes through LAST, after a newer prefer:'online' refresh wrote
+    // fresh metadata. The shared cache must NOT roll back.
+    const { fetch } = makeLocalFetcher();
+    let releaseCached = (): void => {};
+    let releaseOnline = (): void => {};
+    const cachedGate = new Promise<void>((r) => {
+      releaseCached = r;
+    });
+    const onlineGate = new Promise<void>((r) => {
+      releaseOnline = r;
+    });
+    const fresh = packument('debug-fresh');
+    const stale = packument('debug-stale');
+    let readShared: (name: string) => { name: string } | undefined = () => undefined;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: new MemoryBundleStore({ maxBytes: 1024 }),
+      resolveFn: async (req, deps) => {
+        readShared = (name) => deps.packumentCache?.get(name); // adapter.get → shared cache
+        if (req.prefer === 'online') {
+          await onlineGate;
+          deps.packumentCache?.set('debug', fresh); // newer generation
+          return okBundle('sha256-NEW');
+        }
+        await cachedGate;
+        deps.packumentCache?.set('debug', stale); // older generation → must be dropped
+        return okBundle('sha256-OLD');
+      },
+    });
+
+    const cachedP = cache.resolve({ dependencies: { debug: '^4.4.1' } }); // gen1
+    const onlineP = cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' }); // gen2
+    releaseOnline();
+    await onlineP; // writes FRESH (gen2)
+    releaseCached();
+    await cachedP; // writes STALE (gen1) → dropped by the generation guard
+
+    expect(readShared('debug')?.name).toBe('debug-fresh');
   });
 
   it('a zero-capacity shared tarball cache never breaks a resolve (per-request layer holds the bytes)', async () => {
@@ -192,9 +250,6 @@ describe('single-flight per depSetKey (ADR-0194 §3)', () => {
 });
 
 describe('TtlPackumentCache', () => {
-  const packument = (name: string) =>
-    ({ name, 'dist-tags': {}, versions: {} }) as unknown as Parameters<TtlPackumentCache['set']>[1];
-
   it('serves within TTL, expires after, 0 = disabled', () => {
     let nowMs = 0;
     const cache = new TtlPackumentCache({ ttlSeconds: 300, clock: () => nowMs });
@@ -207,6 +262,15 @@ describe('TtlPackumentCache', () => {
     const off = new TtlPackumentCache({ ttlSeconds: 0, clock: () => 0 });
     off.set('debug', packument('debug'));
     expect(off.get('debug')).toBeUndefined();
+  });
+
+  it('setWithGen: an older generation cannot roll back a newer live entry', () => {
+    const cache = new TtlPackumentCache({ ttlSeconds: 300, clock: () => 0 });
+    cache.setWithGen('debug', packument('new'), 2);
+    cache.setWithGen('debug', packument('old'), 1); // older gen → dropped
+    expect(cache.get('debug')?.name).toBe('new');
+    cache.setWithGen('debug', packument('newer'), 3); // newer gen → writes
+    expect(cache.get('debug')?.name).toBe('newer');
   });
 
   it('caps entries LRU (get promotes)', () => {

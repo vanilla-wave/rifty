@@ -31,7 +31,10 @@ export interface TtlPackumentCacheOptions {
 }
 
 export class TtlPackumentCache implements PackumentCacheLike {
-  private readonly map = new Map<string, { packument: Packument; expiresAt: number }>();
+  private readonly map = new Map<
+    string,
+    { packument: Packument; expiresAt: number; gen: number }
+  >();
   private readonly ttlMs: number;
   private readonly clock: () => number;
   private readonly maxEntries: number;
@@ -55,10 +58,29 @@ export class TtlPackumentCache implements PackumentCacheLike {
     return entry.packument;
   }
 
+  /** Ungenerationed write — unconditional (tests / non-generation callers). */
   set(name: string, packument: Packument): void {
+    this.write(name, packument, 0);
+  }
+
+  /**
+   * Generation-aware write (ADR-0194): metadata is MUTABLE, so a concurrent
+   * `prefer:'online'` refresh (a NEWER generation) must not be rolled back by an
+   * OLDER cached-policy flight that fetched stale metadata and writes it through
+   * later. A write from generation `gen` is dropped when a live entry was already
+   * written by a strictly-newer generation. (The immutable tarball cache needs no
+   * such guard — same key ⇒ same bytes.)
+   */
+  setWithGen(name: string, packument: Packument, gen: number): void {
+    const existing = this.map.get(name);
+    if (existing && existing.expiresAt > this.clock() && existing.gen > gen) return;
+    this.write(name, packument, gen);
+  }
+
+  private write(name: string, packument: Packument, gen: number): void {
     if (this.ttlMs <= 0) return;
     this.map.delete(name);
-    this.map.set(name, { packument, expiresAt: this.clock() + this.ttlMs });
+    this.map.set(name, { packument, expiresAt: this.clock() + this.ttlMs, gen });
     while (this.map.size > this.maxEntries) {
       const oldest = this.map.keys().next().value;
       if (oldest === undefined) break;

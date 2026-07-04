@@ -4,8 +4,11 @@
 rifty's OWN resolution server-side and returns one `EddyBundleV1` (lockfile +
 compressed tarballs); the client pre-seeds its tarball cache + writes the
 lockfile, then the existing lockfile fast path installs with zero packument
-network (~6x cold). It is **additive and opt-in** — standard install is
-untouched and is the always-on fallback.
+network — structurally ~100 cold round-trips collapse to 1 POST. Measured on a
+real browser over warm h2: **1.70x** (standard 4284ms → eddy 2517ms). (The older
+"~6x" is a Node/sandbox model, not a browser number — don't quote it at launch.)
+It is **additive and opt-in** — standard install is untouched and is the
+always-on fallback.
 
 Run your own eddy to keep the speedup a property of the **open, self-hostable**
 stack. Trust boundary: mirror-grade — see the eddy section of

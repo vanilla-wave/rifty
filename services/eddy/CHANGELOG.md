@@ -42,10 +42,12 @@
   (matching key, tampered lockfile or tarball) now reads as a MISS → `put()`
   re-seeds it, instead of lingering as a permanent store hit the client only
   rejects later.
-- **Mutable-link generation guard (freshness race).** Each compute carries a
-  monotonic gen; the mutable `dep-set → closure-hash` link is published only by the
-  latest-STARTED compute. An older cached-policy compute finishing AFTER a fresh
-  `prefer:'online'` refresh can no longer clobber the link with its stale closure.
+- **Generation guard across BOTH mutable tiers (freshness race).** Each compute
+  carries a monotonic gen. The mutable `dep-set → closure-hash` link AND every
+  shared packument write-through (`TtlPackumentCache.setWithGen`) are stamped with
+  it, so an older cached-policy compute finishing AFTER a fresh `prefer:'online'`
+  refresh can no longer roll back either the link OR the shared metadata cache with
+  its stale reads. The immutable tarball cache needs no guard (same key ⇒ same bytes).
 - **Immutable `Cache-Control` on the S3 PUT + metadata self-heal.** The signed PUT
   sends `cache-control: public, max-age=31536000, immutable`, so a bucket-backed CDN
   origin serves bundles with the same forever-cacheable header as the origin GET

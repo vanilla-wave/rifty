@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
  * ORIGINAL as-of stamp (when it was first resolved) — staleness is visible,
  * never silently refreshed.
  */
-import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
+import type { EddyBundleManifestV1, PackumentCacheLike } from '@riftydev/npm-client';
 import { type BundleStore, MemoryBundleStore } from './bundle-store.ts';
 import {
   type EddyResolveRequest,
@@ -178,7 +178,15 @@ export class EddyCache {
     // flights registered): a concurrent prefer:'online' compute starts after a
     // cached one and thus outranks it.
     const gen = ++this.computeSeq;
-    const result = await this.resolveFn(req, this.resolver);
+    // Stamp this flight's packument write-throughs with `gen` so an OLDER cached
+    // flight can't roll back the shared metadata cache after a newer online
+    // refresh (ADR-0194). Reads stay direct; the per-request overlay (resolver.ts)
+    // still layers self-consistency on top.
+    const packumentCache: PackumentCacheLike = {
+      get: (name) => this.packuments.get(name),
+      set: (name, packument) => this.packuments.setWithGen(name, packument, gen),
+    };
+    const result = await this.resolveFn(req, { ...this.resolver, packumentCache });
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
     // Durable-BEFORE-link (ADR-0194 §5): the awaited put guarantees a linked
