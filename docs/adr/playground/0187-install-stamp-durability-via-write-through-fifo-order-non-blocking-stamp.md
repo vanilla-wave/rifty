@@ -3,7 +3,9 @@
 Status: Accepted
 Date: 2026-07
 
-> TL;DR: the FIFO write-through queue lands the stamp after every tree write, so "durable stamp implies durable tree" needs NO pre-stamp drain. The boot/restore stamp becomes fully non-blocking (restore is idempotent); the visible `npm install` command keeps ONE post-stamp drain — npm parity says the tree is on disk when the command returns (e2e-pinned: install survives an immediate reload).
+> Corrected (2026-07-04, PR #107 round 10): FIFO order alone does NOT deliver "durable stamp implies durable tree" — per-op persist failures (quota/perm) were swallowed, so a failed tree write + a succeeded stamp write stamps a torn tree the next boot trusts. Fix: `OpfsFsSync` keeps a per-path persist-failure ledger (healed by a later successful persist of the same path); `flush()` still never rejects but now RETURNS the ledger report. The visible `npm install` gates the stamp on a clean tree drain (drain→check→stamp→drain; wall-cost ≈ the single drain — the post-stamp drain only waits for the stamp's own write) and warns loudly + skips the stamp on a dirty one (self-heal: no stamp → next boot re-installs). The boot/restore stamp stays non-blocking and UNGATED — residual: `docs/backlog/playground/boot-restore-stamp-unchecked-persist.md`.
+
+> TL;DR: the FIFO write-through queue lands the stamp after every tree write, so "durable stamp implies durable tree" needs NO pre-stamp drain (see Corrected above: order must be paired with the persist-failure gate). The boot/restore stamp becomes fully non-blocking (restore is idempotent); the visible `npm install` command drains around the stamp — npm parity says the tree is on disk when the command returns (e2e-pinned: install survives an immediate reload).
 
 ## Context
 

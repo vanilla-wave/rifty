@@ -60,8 +60,16 @@ export function createEddyServer(opts: EddyServerOptions): EddyServer {
   });
   return {
     raw: server,
+    // Rejects on a listen failure (EADDRINUSE, EACCES) so the CLI can exit
+    // nonzero with the real error instead of an uncaught 'error' event.
     listen: (port, host = '127.0.0.1') =>
-      new Promise<void>((resolve) => server.listen(port, host, () => resolve())),
+      new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, host, () => {
+          server.removeListener('error', reject);
+          resolve();
+        });
+      }),
     address: () => server.address(),
     close: () =>
       new Promise<void>((resolve, reject) =>
@@ -95,7 +103,14 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     } catch (err) {
       // An S3-backed store can fail at runtime (bucket outage) — answer 500,
       // never leave an unhandled rejection to kill the process (ADR-0194).
-      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      // no-store: this route is CDN-fronted; an intermediary must never pin a
+      // transient bucket failure over an immutable hash.
+      sendJson(
+        res,
+        500,
+        { error: err instanceof Error ? err.message : String(err) },
+        { 'cache-control': 'no-store' },
+      );
       return;
     }
     if (!hit) {

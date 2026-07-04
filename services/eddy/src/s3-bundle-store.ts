@@ -11,6 +11,10 @@
  * percent-decodes the request path, so a CDN origin re-point VM → bucket
  * changes nothing on the wire. The manifest is recovered from the bundle
  * bytes on `get` (it IS the first tar member) — no sidecar metadata to drift.
+ *
+ * Every network op is BOUNDED (per-op deadline, body byte cap): `EddyCache`
+ * awaits store calls before replying, so a stalled bucket must fail loudly
+ * into the existing degrade paths, never park the server.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -28,6 +32,17 @@ import { signV4 } from './sigv4.ts';
 
 const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
 
+/** Per-network-op deadline (headers + full body). `EddyCache` AWAITS store
+ * calls before replying, so an unbounded bucket op parks the whole POST/GET —
+ * every op must SETTLE (same class the client fixed for bundle streams). */
+const DEFAULT_OP_TIMEOUT_MS = 30_000;
+/** Mirrors the client's `DEFAULT_BUNDLE_MAX_BYTES` (eddy-bundle-stream.ts,
+ * deliberately unexported): real bundles are single-digit MB; the cap only
+ * guards a runaway body. */
+const DEFAULT_MAX_BUNDLE_BYTES = 128 * 1024 * 1024;
+/** Error-body snippet cap — enough for any S3 XML error, never a full object. */
+const ERROR_SNIPPET_BYTES = 4096;
+
 const errMsg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 export interface S3BundleStoreOptions {
@@ -41,6 +56,10 @@ export interface S3BundleStoreOptions {
   fetchImpl?: typeof fetch;
   /** Injectable clock for the signature date (tests pin it). */
   now?: () => Date;
+  /** Per-network-op deadline in ms (default {@link DEFAULT_OP_TIMEOUT_MS}). */
+  opTimeoutMs?: number;
+  /** Body byte cap for reads (default {@link DEFAULT_MAX_BUNDLE_BYTES}). */
+  maxBundleBytes?: number;
 }
 
 export class S3BundleStore implements BundleStore {
@@ -57,13 +76,49 @@ export class S3BundleStore implements BundleStore {
     return new URL(`${base}/${this.opts.bucket}/bundle/${encodeURIComponent(closureHash)}`);
   }
 
-  async get(closureHash: string): Promise<CachedBundle | null> {
-    const res = await this.fetchImpl(this.urlFor(closureHash));
-    if (res.status === 404) return null;
-    if (!res.ok) {
-      throw new Error(`eddy: bundle store GET ${closureHash} failed: HTTP ${res.status}`);
+  /**
+   * Run one network op under a hard deadline. The abort cancels a
+   * signal-honoring fetch; the race REJECTS regardless, so a fetch that
+   * ignores the signal — or a body that stalls/streams forever — still cannot
+   * park the caller. The deadline spans headers AND body (a stalled body after
+   * a fast 200 is the same hang).
+   */
+  private async boundedOp<T>(what: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const timeoutMs = this.opts.opTimeoutMs ?? DEFAULT_OP_TIMEOUT_MS;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = run(controller.signal);
+    attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
+    try {
+      return await Promise.race([
+        attempt,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`eddy: bundle store ${what} timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
+  }
+
+  async get(closureHash: string): Promise<CachedBundle | null> {
+    const maxBytes = this.opts.maxBundleBytes ?? DEFAULT_MAX_BUNDLE_BYTES;
+    const bytes = await this.boundedOp(`GET ${closureHash}`, async (signal) => {
+      const res = await this.fetchImpl(this.urlFor(closureHash), { signal });
+      if (res.status === 404) {
+        discardBody(res);
+        return null;
+      }
+      if (!res.ok) {
+        discardBody(res);
+        throw new Error(`eddy: bundle store GET ${closureHash} failed: HTTP ${res.status}`);
+      }
+      return readBodyBounded(res, maxBytes, `GET ${closureHash}`);
+    });
+    if (!bytes) return null;
     return this.verifyContentAddress(closureHash, bytes);
   }
 
@@ -179,14 +234,18 @@ export class S3BundleStore implements BundleStore {
     // same-byte object missing the `Cache-Control` header (an older upload) still
     // gets re-PUT to repair the metadata the CDN path depends on.
     const bodyMd5Hex = createHash('md5').update(bundle.bytes).digest('hex');
-    const head = await this.fetchImpl(url, { method: 'HEAD' }).catch(() => null);
-    if (head) {
-      await head.arrayBuffer().catch(() => undefined); // drain (empty by spec)
-      const etagMatch = (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex;
-      const immutable = head.headers.get('cache-control') === CACHE_CONTROL_IMMUTABLE;
-      if (head.ok && etagMatch && immutable) {
-        return; // identical object already durable WITH the immutable header — no re-upload
-      }
+    // The probe is an OPTIMIZATION: any failure (network, timeout) → PUT anyway.
+    const probe = await this.boundedOp(`HEAD ${closureHash} (probe)`, async (signal) => {
+      const head = await this.fetchImpl(url, { method: 'HEAD', signal });
+      discardBody(head); // empty by spec
+      return {
+        ok: head.ok,
+        etagMatch: (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex,
+        immutable: head.headers.get('cache-control') === CACHE_CONTROL_IMMUTABLE,
+      };
+    }).catch(() => null);
+    if (probe?.ok && probe.etagMatch && probe.immutable) {
+      return; // identical object already durable WITH the immutable header — no re-upload
     }
     const payloadSha256Hex = createHash('sha256').update(bundle.bytes).digest('hex');
     const amzDate = toAmzDate(this.opts.now ? this.opts.now() : new Date());
@@ -216,54 +275,81 @@ export class S3BundleStore implements BundleStore {
     // `host` rides the connection itself; sending it again as an option is
     // ignored by fetch — it is signed above because S3 requires it signed.
     const { host: _host, ...sendHeaders } = headers;
-    const res = await this.fetchImpl(url, {
-      method: 'PUT',
-      headers: { ...sendHeaders, authorization },
-      body: bundle.bytes as unknown as BodyInit,
+    await this.boundedOp(`PUT ${closureHash}`, async (signal) => {
+      const res = await this.fetchImpl(url, {
+        method: 'PUT',
+        headers: { ...sendHeaders, authorization },
+        body: bundle.bytes as unknown as BodyInit,
+        signal,
+      });
+      if (!res.ok) {
+        const snippet = await readErrorSnippet(res);
+        throw new Error(
+          `eddy: bundle store PUT ${closureHash} failed: HTTP ${res.status} ${snippet.slice(0, 200)}`,
+        );
+      }
+      discardBody(res);
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `eddy: bundle store PUT ${closureHash} failed: HTTP ${res.status} ${body.slice(0, 200)}`,
-      );
-    }
-    await res.arrayBuffer().catch(() => undefined);
     // A settled put PROMISES GET-by-hash servability (bundle-store.ts contract)
     // — but the signed PUT succeeding says nothing about the UNSIGNED public
     // read path (a private/mis-ACL'd bucket 403s it, and the CDN + clients
-    // read unsigned). Prove it. Cheap path: a public HEAD whose ETag is the
-    // single-part MD5 (Yandex/AWS default). An ETag that is NOT the body MD5
-    // (bucket encryption, multipart, provider-specific) proves nothing either
-    // way, so fall back to an unsigned GET + byte-hash compare — otherwise a
-    // perfectly served object would fail the proof forever (recompute loop).
-    // Throwing routes into the cache's degrade path (no mutable link is
-    // published for an unservable hash).
-    const proof = await this.fetchImpl(url, { method: 'HEAD' }).catch((err) => {
+    // read unsigned). Prove it — the BYTES and the METADATA: a provider/proxy
+    // that accepts the PUT but strips/ignores `Cache-Control` would publish a
+    // link the CDN/browser tier can't hold, silently defeating ADR-0194 §4.
+    // Cheap byte path: a public HEAD whose ETag is the single-part MD5
+    // (Yandex/AWS default). An ETag that is NOT the body MD5 (bucket
+    // encryption, multipart, provider-specific) proves nothing either way, so
+    // fall back to an unsigned GET + byte-hash compare — otherwise a perfectly
+    // served object would fail the proof forever (recompute loop). Throwing
+    // routes into the cache's degrade path (no mutable link is published for
+    // an unservable hash).
+    const proof = await this.boundedOp(`HEAD ${closureHash} (put proof)`, async (signal) => {
+      const res = await this.fetchImpl(url, { method: 'HEAD', signal });
+      discardBody(res);
+      return {
+        ok: res.ok,
+        status: res.status,
+        etag: (res.headers.get('etag') ?? '').replace(/"/g, ''),
+        cacheControl: res.headers.get('cache-control'),
+      };
+    }).catch((err) => {
       throw new Error(
         `eddy: bundle store PUT ${closureHash} succeeded but the public-read HEAD failed: ${errMsg(err)}`,
       );
     });
-    await proof.arrayBuffer().catch(() => undefined);
     if (!proof.ok) {
       throw new Error(
         `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
           `(HEAD ${proof.status}) — is the bucket public-read?`,
       );
     }
-    const proofEtag = (proof.headers.get('etag') ?? '').replace(/"/g, '');
-    if (proofEtag === bodyMd5Hex) return; // MD5 ETag proves the exact bytes
-    const readBack = await this.fetchImpl(url).catch((err) => {
+    if (proof.cacheControl !== CACHE_CONTROL_IMMUTABLE) {
+      throw new Error(
+        `eddy: bundle store PUT ${closureHash} succeeded but the public read serves Cache-Control ` +
+          `${JSON.stringify(proof.cacheControl)} — not the immutable metadata the CDN tier depends on`,
+      );
+    }
+    if (proof.etag === bodyMd5Hex) return; // MD5 ETag proves the exact bytes
+    const served = await this.boundedOp(`GET ${closureHash} (put proof)`, async (signal) => {
+      const res = await this.fetchImpl(url, { signal });
+      if (!res.ok) {
+        discardBody(res);
+        throw new Error(
+          `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
+            `(GET ${res.status}) — is the bucket public-read?`,
+        );
+      }
+      return readBodyBounded(
+        res,
+        this.opts.maxBundleBytes ?? DEFAULT_MAX_BUNDLE_BYTES,
+        `GET ${closureHash} (put proof)`,
+      );
+    }).catch((err) => {
+      if (err instanceof Error && /not publicly readable/.test(err.message)) throw err;
       throw new Error(
         `eddy: bundle store PUT ${closureHash} succeeded but the public-read GET failed: ${errMsg(err)}`,
       );
     });
-    if (!readBack.ok) {
-      throw new Error(
-        `eddy: bundle store PUT ${closureHash} succeeded but the object is not publicly readable ` +
-          `(GET ${readBack.status}) — is the bucket public-read?`,
-      );
-    }
-    const served = new Uint8Array(await readBack.arrayBuffer());
     const servedSha = createHash('sha256').update(served).digest('hex');
     if (servedSha !== payloadSha256Hex) {
       throw new Error(
@@ -271,6 +357,68 @@ export class S3BundleStore implements BundleStore {
       );
     }
   }
+}
+
+/** Fire-and-forget body discard: releases the connection without buffering. */
+function discardBody(res: Response): void {
+  void res.body?.cancel().catch(() => {});
+}
+
+/**
+ * Read a body fully, CANCELLING + throwing past `cap` — an over-cap object is
+ * junk (no client would accept it), not data worth buffering.
+ */
+async function readBodyBounded(res: Response, cap: number, what: string): Promise<Uint8Array> {
+  const body = res.body;
+  if (!body) return new Uint8Array(await res.arrayBuffer());
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > cap) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`eddy: bundle store ${what} body exceeded the ${cap}-byte cap`);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/** Best-effort error-body snippet: at most {@link ERROR_SNIPPET_BYTES}, then
+ * cancel — an error body must never buffer like an object. */
+async function readErrorSnippet(res: Response): Promise<string> {
+  const body = res.body;
+  if (!body) return '';
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size < ERROR_SNIPPET_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+    }
+  } catch {
+    // partial snippet is fine
+  }
+  void reader.cancel().catch(() => {});
+  const joined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(joined);
 }
 
 /** `YYYYMMDD'T'HHMMSS'Z'` (UTC). */

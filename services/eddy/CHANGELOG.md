@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 10)
+
+- **S3 store network ops are bounded.** Every `S3BundleStore` fetch (GET, HEAD
+  probe, PUT, put proof) runs under a per-op deadline (`opTimeoutMs`, default
+  30s) with an `AbortController` + race (a signal-ignoring fetch or a
+  stalled/endless body still settles), and body reads are capped
+  (`maxBundleBytes`, default = the client's 128 MiB bundle cap). A stalled
+  bucket now fails loudly into the existing degrade paths (POST recomputes,
+  GET-by-hash 500s) instead of parking the server.
+- **Put proof requires the immutable metadata.** The post-PUT public-read proof
+  now also checks `Cache-Control: public, max-age=31536000, immutable` on the
+  served object — a provider/proxy that accepts the PUT but strips the header
+  fails `put()`, so no mutable link is published for a hash the CDN/browser
+  tier can't hold.
+- **`GET /bundle/<hash>` store-failure 500 is `no-store`.** The route is
+  CDN-fronted; a transient bucket outage must never be pinned by an
+  intermediary (misses already were `no-store`).
+- **`PORT` refuses junk; listen failures exit nonzero.** `parsePort` joins the
+  loud env parsers (integer 1..65535; `PORT=abc`/whitespace throw at startup),
+  and `EddyServer.listen` rejects on `EADDRINUSE`/`EACCES` so the bin logs and
+  exits 1 instead of an uncaught `'error'` event.
+
 ### Added (eddy v1.2, ADR-0194)
 
 - **Shared resolve caches + single-flight.** Cold resolves now share a process-wide

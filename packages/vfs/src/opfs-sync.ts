@@ -89,6 +89,25 @@ export interface PairedAsyncSurface {
   rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
 }
 
+/** One path whose LAST OPFS persist attempt failed — disk lags the mirror. */
+export interface PersistFailure {
+  readonly path: string;
+  readonly op: 'write' | 'mkdir' | 'rm' | 'rename';
+  readonly message: string;
+}
+
+/** {@link OpfsFsSync.flush} result (ADR-0187 Corrected): the still-unhealed
+ * persist failures. `total` ≥ `failures.length` — the ledger is capped, the
+ * count is not. `total === 0` ⇔ everything drained IS durable. */
+export interface PersistFailureReport {
+  readonly failures: ReadonlyArray<PersistFailure>;
+  readonly total: number;
+}
+
+/** Ledger cap: under quota exhaustion EVERY write fails; keep a sample, count
+ * the rest ({@link PersistFailureReport.total}). */
+const PERSIST_FAILURE_CAP = 100;
+
 /**
  * Walks an OPFS directory tree and yields `{ path, kind, size, children? }`
  * for every entry under `root`. The root itself is reported as
@@ -391,31 +410,43 @@ export class OpfsFsSync implements FsSync {
   /**
    * Fire-and-forget async persist of a directory creation to OPFS. Caller
    * already mutated the in-memory mirror; this brings disk in line.
-   * Errors are swallowed — the next `refreshIndex` will reconcile.
+   * Errors never reject the queue — they land in the persist-failure ledger
+   * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
     this.enqueuePending(async () => {
       try {
         await this.persistDirectoryPath(path, recursive);
-      } catch {
+        this.persistFailures.delete(path);
+      } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
-        // reconciles on next refresh.
+        // reconciles on next refresh — but the divergence is RECORDED so a
+        // durability-gated caller (install stamp) can refuse to trust it.
+        this.recordPersistFailure(path, 'mkdir', err);
       }
     });
   }
 
   /**
    * Async persist of an `rm` to OPFS, tracked in {@link pending} so
-   * {@link flush} drains deletes too (ADR-0072). Errors are swallowed —
-   * the next `refreshIndex` reconciles any mismatch.
+   * {@link flush} drains deletes too (ADR-0072). Errors never reject the
+   * queue — they land in the persist-failure ledger; the next `refreshIndex`
+   * reconciles any mismatch.
    */
   private persistRmAsync(path: string, recursive: boolean): void {
     this.enqueuePending(async () => {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
-      } catch {
-        // See `persistMkdirAsync` — mismatch reconciles on refresh.
+        this.persistFailures.delete(path);
+      } catch (err) {
+        // See `persistMkdirAsync` — mismatch reconciles on refresh; recorded
+        // meanwhile. A missing OPFS entry is already-removed = success.
+        if ((err as { name?: string }).name === 'NotFoundError') {
+          this.persistFailures.delete(path);
+          return;
+        }
+        this.recordPersistFailure(path, 'rm', err);
       }
     });
   }
@@ -481,12 +512,34 @@ export class OpfsFsSync implements FsSync {
     this.enqueuePending(async () => {
       try {
         await surface.writeFile(normalized, data);
-      } catch {
+        this.persistFailures.delete(normalized);
+      } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
         // refreshIndex/preload reconciles. Cache stays correct for sync
-        // callers in this realm.
+        // callers in this realm — but the divergence is RECORDED: a caller
+        // that promises durability (install stamp) must be able to see it.
+        this.recordPersistFailure(normalized, 'write', err);
       }
     });
+  }
+
+  /**
+   * Persist-failure ledger: paths whose LAST persist attempt failed, i.e.
+   * where OPFS is known to lag the in-memory mirror. A later successful
+   * persist of the same path heals its entry (re-install after a freed
+   * quota). Capped — under quota exhaustion every write fails; the overflow
+   * count keeps the report honest without unbounded growth.
+   */
+  private readonly persistFailures = new Map<string, PersistFailure>();
+  private persistFailureOverflow = 0;
+
+  private recordPersistFailure(path: string, op: PersistFailure['op'], err: unknown): void {
+    if (!this.persistFailures.has(path) && this.persistFailures.size >= PERSIST_FAILURE_CAP) {
+      this.persistFailureOverflow++;
+      return;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    this.persistFailures.set(path, { path, op, message });
   }
 
   /** Adds `p` to {@link pending} and self-removes it on settle. */
@@ -499,9 +552,10 @@ export class OpfsFsSync implements FsSync {
   }
 
   private enqueuePending(task: () => Promise<void>): void {
-    // FIFO is load-bearing (ADR-0187): the install stamp's "durable stamp
-    // implies durable tree" is delivered by write-through ORDER, not by a
-    // blocking flush. Parallelizing this queue requires per-path ordering +
+    // FIFO is load-bearing (ADR-0187 Corrected): the install stamp's "durable
+    // stamp implies durable tree" is delivered by write-through ORDER plus the
+    // persist-failure ledger gate (order alone can't survive a swallowed
+    // per-op failure). Parallelizing this queue requires per-path ordering +
     // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
     const p = this.pending.length === 0 ? task() : this.pendingTail.then(task, task);
     this.pendingTail = p.catch(() => {});
@@ -512,10 +566,18 @@ export class OpfsFsSync implements FsSync {
    * Drains all in-flight async OPFS write-through / structural operations
    * (ADR-0072). Callers invoke this before a deterministic boundary —
    * e.g. the runtime worker awaits it before resolving an `eval` result so
-   * persistence completes before any page reload. Never rejects.
+   * persistence completes before any page reload. Never rejects — instead it
+   * RETURNS the persist-failure ledger (ADR-0187 Corrected): paths where OPFS
+   * still lags the mirror because their last persist attempt failed. Callers
+   * that only order writes ignore the result; callers that PROMISE durability
+   * (the install stamp) gate on `report.total === 0`.
    */
-  async flush(): Promise<void> {
+  async flush(): Promise<PersistFailureReport> {
     await Promise.allSettled([...this.pending]);
+    return {
+      failures: [...this.persistFailures.values()],
+      total: this.persistFailures.size + this.persistFailureOverflow,
+    };
   }
 
   /**
@@ -843,9 +905,15 @@ export class OpfsFsSync implements FsSync {
           const parent = await this.resolveParent(srcRoot);
           await parent.removeEntry(basename(srcRoot), { recursive: true });
         }
-      } catch {
+      } catch (err) {
         // Mismatch reconciles on the next refreshIndex (same posture as
-        // enqueueWriteThrough / persistRmAsync).
+        // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION
+        // path — those are the files a reload would find missing; a later
+        // successful write-through of the same path heals the entry.
+        for (const move of fileMoves) {
+          this.recordPersistFailure(move.newPath, 'rename', err);
+        }
+        if (fileMoves.length === 0) this.recordPersistFailure(srcRoot, 'rename', err);
       }
     });
   }

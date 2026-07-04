@@ -392,6 +392,9 @@ describe('S3BundleStore', () => {
         'content-type': 'application/x-tar',
         'content-length': body.length,
         etag: '"opaque-provider-etag-1"', // never the body MD5
+        // The provider stores the PUT metadata faithfully — only its ETags
+        // are opaque (the put proof also requires the immutable header).
+        'cache-control': 'public, max-age=31536000, immutable',
       });
       res.end(req.method === 'HEAD' ? undefined : body);
     });
@@ -448,6 +451,120 @@ describe('S3BundleStore', () => {
         server.close((e) => (e ? reject(e) : resolve())),
       );
     }
+  });
+
+  it('a PUT whose public read STRIPS Cache-Control rejects — a non-immutable link would defeat the CDN tier', async () => {
+    // Regression (round 10): the proof returned on MD5-ETag equality alone; a
+    // provider/proxy that accepts the PUT but drops the `Cache-Control` system
+    // metadata served correct bytes with NO immutable header, so the published
+    // link silently lost the CDN/browser-cache tier ADR-0194 §4 depends on.
+    const objects = new Map<string, Buffer>();
+    const server = createServer((req, res) => {
+      if (req.method === 'PUT') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          const body = Buffer.concat(chunks);
+          objects.set(req.url ?? '', body);
+          // Metadata dropped on the floor — only the bytes are stored.
+          res.writeHead(200, { etag: `"${createHash('md5').update(body).digest('hex')}"` });
+          res.end();
+        });
+        return;
+      }
+      const body = objects.get(req.url ?? '');
+      if (!body) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'application/x-tar',
+        'content-length': body.length,
+        etag: `"${createHash('md5').update(body).digest('hex')}"`, // bytes ARE correct
+        // no cache-control: the immutable metadata was stripped
+      });
+      res.end(req.method === 'HEAD' ? undefined : body);
+    });
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+      );
+    });
+    try {
+      const store = makeStore(url);
+      await expect(store.put(HASH, { bytes: bundleBytes, manifest })).rejects.toThrow(
+        /Cache-Control.*immutable metadata/s,
+      );
+      expect(objects.size).toBe(1); // the PUT itself DID succeed — only the proof failed
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((e) => (e ? reject(e) : resolve())),
+      );
+    }
+  });
+
+  it('a fetch that never settles (dead bucket, signal ignored) → get() rejects on the op deadline, never hangs', async () => {
+    const store = new S3BundleStore({
+      endpoint: 'https://example.invalid',
+      bucket: 'eddy-bundles',
+      region: 'ru-central1',
+      accessKeyId: 'k',
+      secretAccessKey: 's',
+      opTimeoutMs: 25,
+      fetchImpl: () => new Promise<Response>(() => {}), // never settles, ignores the signal
+    });
+    await expect(store.get(HASH)).rejects.toThrow(/timed out after 25ms/);
+  });
+
+  it('a fetch that never settles → put() rejects on the op deadline (probe degrade, then the PUT itself times out)', async () => {
+    const store = new S3BundleStore({
+      endpoint: 'https://example.invalid',
+      bucket: 'eddy-bundles',
+      region: 'ru-central1',
+      accessKeyId: 'k',
+      secretAccessKey: 's',
+      opTimeoutMs: 25,
+      fetchImpl: () => new Promise<Response>(() => {}),
+    });
+    // The stalled probe is a degrade (→ PUT anyway); the stalled PUT is the throw.
+    await expect(store.put(HASH, { bytes: bundleBytes, manifest })).rejects.toThrow(
+      /PUT .* timed out after 25ms/,
+    );
+  });
+
+  it('a 200 whose body then STALLS forever → get() rejects on the op deadline (the deadline spans the body read)', async () => {
+    const stalled = new ReadableStream<Uint8Array>({
+      pull: () => new Promise<never>(() => {}), // headers arrived; the body never does
+    });
+    const store = new S3BundleStore({
+      endpoint: 'https://example.invalid',
+      bucket: 'eddy-bundles',
+      region: 'ru-central1',
+      accessKeyId: 'k',
+      secretAccessKey: 's',
+      opTimeoutMs: 25,
+      fetchImpl: async () => new Response(stalled, { status: 200 }),
+    });
+    await expect(store.get(HASH)).rejects.toThrow(/timed out after 25ms/);
+  });
+
+  it('a body that streams forever → get() rejects on the byte cap, never buffers unbounded', async () => {
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024));
+      },
+    });
+    const store = new S3BundleStore({
+      endpoint: 'https://example.invalid',
+      bucket: 'eddy-bundles',
+      region: 'ru-central1',
+      accessKeyId: 'k',
+      secretAccessKey: 's',
+      maxBundleBytes: 256 * 1024,
+      fetchImpl: async () => new Response(endless, { status: 200 }),
+    });
+    await expect(store.get(HASH)).rejects.toThrow(/exceeded the 262144-byte cap/);
   });
 
   it('throws loudly on a rejected PUT (status + body) — the cache degrades, never silently unlinked', async () => {

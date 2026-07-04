@@ -4,6 +4,16 @@
 
 ### Changed
 
+- **`npm install` gates the install stamp on a CLEAN persist drain (ADR-0187
+  Corrected).** The write-through drain is checked before stamping: a dirty
+  `PersistFailureReport` (OPFS quota/perm failure) skips the stamp with a loud
+  terminal warning — the install keeps working this session, the next boot
+  re-installs instead of trusting a stamped-but-torn tree. A leftover failure
+  on the stamp file itself doesn't gate (the rewrite heals it). Wall-cost ≈
+  the previous single post-stamp drain (FIFO: the second drain waits only for
+  the stamp's own write). Residual for the non-blocking boot/restore stamp:
+  backlog `playground/boot-restore-stamp-unchecked-persist`.
+
 - **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
   net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
   rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config

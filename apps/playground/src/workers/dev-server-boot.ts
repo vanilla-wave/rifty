@@ -15,7 +15,7 @@ import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } f
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { type PersistFailureReport, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type {
   BootstrapConfig,
   NodeServerBootstrapConfig,
@@ -58,10 +58,17 @@ interface ViteDevServer {
   moduleGraph?: ViteModuleGraph;
 }
 
-/** Drain this realm's OPFS write-through (no-op on the memory backend). */
-export async function flushSyncMirror(): Promise<void> {
-  const mirror = syncMirror() as { flush?: () => Promise<void> };
-  if (typeof mirror.flush === 'function') await mirror.flush();
+/**
+ * Drain this realm's OPFS write-through (no-op on the memory backend).
+ * Returns the drain's persist-failure report (ADR-0187 Corrected) so a
+ * durability-gated caller (the npm install stamp) can see swallowed
+ * quota/perm failures; `undefined` on the memory backend (no durability tier
+ * to break). Ordering-only callers ignore the result.
+ */
+export async function flushSyncMirror(): Promise<PersistFailureReport | undefined> {
+  const mirror = syncMirror() as { flush?: () => Promise<PersistFailureReport | undefined> };
+  if (typeof mirror.flush === 'function') return await mirror.flush();
+  return undefined;
 }
 
 // No shim glue here (ADR-0188): the esbuild/rollup/lightningcss internals shims

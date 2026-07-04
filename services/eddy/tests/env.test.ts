@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseByteCount, parseS3Config, parseTtlSeconds } from '../src/env.ts';
+import { parseByteCount, parsePort, parseS3Config, parseTtlSeconds } from '../src/env.ts';
 
 describe('parseTtlSeconds (EDDY_TTL_SECONDS env-config)', () => {
   it('returns undefined when unset → falls back to the default TTL', () => {
@@ -54,6 +54,27 @@ describe('parseByteCount (cache byte-cap env-config)', () => {
       expect(() => parseByteCount(bad, 'EDDY_BUNDLE_MEMORY_MAX_BYTES')).toThrow(
         /EDDY_BUNDLE_MEMORY_MAX_BYTES/,
       );
+    }
+  });
+});
+
+describe('parsePort (PORT env-config)', () => {
+  it('returns undefined when unset → the bin applies its default', () => {
+    expect(parsePort(undefined)).toBeUndefined();
+    expect(parsePort('')).toBeUndefined();
+  });
+
+  it('parses a valid port', () => {
+    expect(parsePort('8788')).toBe(8788);
+    expect(parsePort('1')).toBe(1);
+    expect(parsePort('65535')).toBe(65535);
+  });
+
+  it('throws loudly on junk instead of drifting into an invalid listen', () => {
+    // `Number('abc')` = NaN and `Number(' ')` = 0 both used to reach
+    // `server.listen(...)` unrefused — against the loud-startup contract.
+    for (const bad of ['abc', ' ', '\t', '-1', '0', '65536', '1.5', '8788px']) {
+      expect(() => parsePort(bad)).toThrow(/PORT must be an integer in 1\.\.65535/);
     }
   });
 });

@@ -95,6 +95,13 @@ VM env (compose): `EDDY_S3_ENDPOINT=https://storage.yandexcloud.net`,
 key pair. Only PUT is signed (hand-rolled SigV4, no SDK dep); GET/HEAD ride
 the public-read bucket exactly like the CDN does.
 
+Store contract the origin ENFORCES per put: after the signed PUT it proves the
+UNSIGNED public read serves the exact bytes **with**
+`Cache-Control: public, max-age=31536000, immutable` — a private bucket or a
+store/proxy that strips that metadata fails the put loudly (POST degrades to
+compute-and-serve, no link published). Every store op is bounded (30s per-op
+deadline, 128 MiB body cap): a stalled bucket degrades, never parks the origin.
+
 CDN re-point: change the `eddy-cdn.rifty.dev` resource's origin from
 `eddy-origin.rifty.dev` to the bucket
 (`eddy-bundles.storage.yandexcloud.net`, host header pinned to the bucket

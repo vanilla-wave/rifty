@@ -43,6 +43,22 @@ export function parseByteCount(raw: string | undefined, name: string): number | 
   return value;
 }
 
+/**
+ * Parse the `PORT` env var. Unset → `undefined` (the bin defaults to 8788).
+ * Otherwise it MUST be an integer in 1..65535 — `Number('abc')` = NaN and
+ * `Number(' ')` = 0 would both drift into an invalid listen instead of a
+ * clear startup refusal. Port 0 (bind-any) is junk for a service whose
+ * operators must know the port.
+ */
+export function parsePort(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const value = Number(raw);
+  if (raw.trim() === '' || !Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error(`PORT must be an integer in 1..65535; got ${JSON.stringify(raw)}`);
+  }
+  return value;
+}
+
 const S3_ENV_KEYS = {
   endpoint: 'EDDY_S3_ENDPOINT',
   bucket: 'EDDY_S3_BUCKET',

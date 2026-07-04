@@ -1036,11 +1036,11 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     );
   });
 
-  it('drains the write-through ONCE, after the stamp — durable-on-exit npm parity', async () => {
+  it('drains + CHECKS before the stamp, then drains the stamp — durable-on-exit npm parity (ADR-0187 Corrected)', async () => {
     // A reload right after `npm install` must not lose the tree
-    // (owner-snapshot-restore-exec e2e). ONE drain suffices: the FIFO
-    // write-through (ADR-0187) lands the tree before the stamp, so a durable
-    // stamp implies a durable tree — no pre-stamp flush.
+    // (owner-snapshot-restore-exec e2e). The tree drain is checked FIRST — a
+    // stamp must never claim a tree whose write-through failed — then the
+    // stamp rides its own (tiny) drain.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1058,6 +1058,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
               ? 'flush-after-stamp'
               : 'flush-before-stamp',
           );
+          return undefined;
         },
       }),
     );
@@ -1065,13 +1066,111 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
-    expect(events).toEqual(['flush-after-stamp']);
+    expect(events).toEqual(['flush-before-stamp', 'flush-after-stamp']);
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
     expect(stamp.version).toBe(1);
     expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
     expect(stamp.packages).toBe(2);
+  });
+
+  it('a DIRTY drain (persist failures) skips the stamp and warns loudly — never stamp a torn tree', async () => {
+    // OPFS quota/perm failure: the write-through swallowed it per-op, but the
+    // flush report exposes it (ADR-0187 Corrected). The install stays usable
+    // this session (exit 0), the stamp is SKIPPED (next boot re-installs
+    // instead of trusting a tree OPFS failed to hold), stderr says so.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            {
+              path: '/proj/node_modules/lodash/package.json',
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 137,
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0); // the live tree works — durability, not the install, failed
+    const stderr = rec.stderr.join('');
+    expect(stderr).toContain('137 file(s) failed to persist');
+    expect(stderr).toContain('QuotaExceededError');
+    expect(stderr).toContain('NOT durable');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
+  it('a leftover failure on the stamp file ITSELF does not gate — the stamp rewrite heals that path', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    let call = 0;
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () =>
+          ++call === 1
+            ? {
+                // A previous install's stamp never persisted — not a torn TREE.
+                failures: [
+                  {
+                    path: '/proj/node_modules/.rifty-install-stamp.json',
+                    op: 'write' as const,
+                    message: 'QuotaExceededError',
+                  },
+                ],
+                total: 1,
+              }
+            : { failures: [], total: 0 },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toBe('');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+  });
+
+  it('a THROWING flush skips the stamp and warns — a drain that cannot even report is not durable', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          throw new Error('rpc torn');
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toContain('install flush failed: rpc torn');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
   it('drains the write-through even when the stamp write FAILS — durable-on-exit must not hinge on the stamp', async () => {
@@ -1106,6 +1205,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
         install,
         flush: async () => {
           flushed = true;
+          return undefined;
         },
       }),
     );

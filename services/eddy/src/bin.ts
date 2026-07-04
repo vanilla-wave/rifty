@@ -11,11 +11,11 @@
  * silently disabling the cache they configure.
  */
 import { MemoryBundleStore } from './bundle-store.ts';
-import { parseByteCount, parseS3Config, parseTtlSeconds } from './env.ts';
+import { parseByteCount, parsePort, parseS3Config, parseTtlSeconds } from './env.ts';
 import { S3BundleStore } from './s3-bundle-store.ts';
 import { createEddyServer } from './server.ts';
 
-const port = Number(process.env.PORT ?? '8788');
+const port = parsePort(process.env.PORT) ?? 8788;
 const registryBaseUrl = process.env.REGISTRY_BASE_URL ?? 'https://registry.npmjs.org';
 const ttlSeconds = parseTtlSeconds(process.env.EDDY_TTL_SECONDS);
 const packumentTtlSeconds = parseTtlSeconds(
@@ -44,9 +44,17 @@ const server = createEddyServer({
   tarballCacheMaxBytes,
   store,
 });
-server.listen(port, '0.0.0.0').then(() => {
-  const storeLabel = s3 ? `s3 ${s3.endpoint}/${s3.bucket}` : 'memory';
-  console.log(
-    `@riftydev/eddy listening on :${port} → upstream registry ${registryBaseUrl}, bundle store: ${storeLabel}`,
-  );
-});
+server
+  .listen(port, '0.0.0.0')
+  .then(() => {
+    const storeLabel = s3 ? `s3 ${s3.endpoint}/${s3.bucket}` : 'memory';
+    console.log(
+      `@riftydev/eddy listening on :${port} → upstream registry ${registryBaseUrl}, bundle store: ${storeLabel}`,
+    );
+  })
+  .catch((err: unknown) => {
+    console.error(
+      `@riftydev/eddy failed to listen on :${port}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  });

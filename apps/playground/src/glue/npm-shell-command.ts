@@ -16,12 +16,13 @@
  * into the terminal via `Shell.run`'s `onChunk` callback. Per-package lines
  * stream live through `InstallOptions.onPackage` (ADR-0134).
  *
- * After a successful install the tree is stamped (ADR-0135) and the OPFS
- * write-through is drained ONCE, after the stamp (ADR-0187): the queue is
- * FIFO, so the stamp — enqueued after every tree write — lands after the tree
- * by construction, and the single post-stamp drain makes both durable before
- * the command returns (npm parity: an immediate reload cannot lose the
- * install).
+ * After a successful install the OPFS write-through is drained and CHECKED
+ * (ADR-0187 Corrected): only a clean drain (no persist failures) stamps the
+ * tree (ADR-0135) — FIFO order alone cannot deliver "durable stamp implies
+ * durable tree" when a quota/perm failure is swallowed per-op. On a dirty
+ * drain the stamp is SKIPPED and the terminal warns loudly: the install
+ * works this session, the next boot re-installs instead of trusting a torn
+ * tree (npm parity stays honest — a reload cannot silently lose the install).
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -35,8 +36,8 @@ import {
   install as realInstall,
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
-import type { Vfs } from '@riftydev/vfs';
-import { writeInstallStamp } from './install-stamp.ts';
+import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
+import { installStampPath, writeInstallStamp } from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -61,10 +62,11 @@ export interface NpmShellCommandDeps {
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
   /** Drains the VFS write-through before the command returns (npm parity: when
    *  `npm install` exits the tree IS on disk — an immediate reload must not
-   *  lose it; e2e-pinned by owner-snapshot-restore-exec). ONE drain, after the
-   *  stamp: the FIFO write-through (ADR-0187) lands the tree before the stamp,
-   *  so a single post-stamp drain makes both durable. */
-  readonly flush?: () => Promise<void>;
+   *  lose it; e2e-pinned by owner-snapshot-restore-exec). Returns the drain's
+   *  persist-failure report (ADR-0187 Corrected) — a dirty report gates the
+   *  install stamp (never stamp a tree OPFS failed to hold); `undefined` means
+   *  "no durability tier" (memory backend) and reads as clean. */
+  readonly flush?: () => Promise<PersistFailureReport | undefined>;
   /** The owner's project slug (preset id) the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
@@ -509,7 +511,7 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    await stampInstalledTree(deps, ctx.cwd, result.packages.length);
+    await stampInstalledTree(deps, ctx, ctx.cwd, result.packages.length);
     // Fire-and-forget write-back: the pin is an optimization, never worth
     // blocking or failing the install line over.
     if (result.source === 'eddy' && result.closureHash && requestKey && deps.learnedPins) {
@@ -565,32 +567,71 @@ async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<str
   return body ? canonicalEddyRequestKey(body) : null;
 }
 
+/** One terminal-readable line for a dirty drain: first failure + count. */
+function persistFailureLine(report: PersistFailureReport): string {
+  const first = report.failures[0];
+  const sample = first ? ` (first: ${first.op} ${first.path}: ${first.message})` : '';
+  return `${report.total} file(s) failed to persist to OPFS${sample}`;
+}
+
 /**
- * Stamp the freshly installed tree (ADR-0135), then drain the write-through
- * ONCE. The single post-stamp drain (vs the historical flush→stamp→flush pair)
- * rides the FIFO ordering pin (ADR-0187): the stamp is enqueued after every
- * tree write, so one drain lands stamp AND tree together — npm parity, a
- * reload right after the command cannot lose the install. Best-effort.
+ * Drain the write-through, GATE, stamp, drain the stamp (ADR-0187 Corrected).
+ * FIFO order still lands the stamp after the tree, but order alone cannot
+ * survive a swallowed per-op quota/perm failure — a stamped-but-torn tree
+ * would be TRUSTED by the next boot's `installStampSatisfied`. So the tree
+ * drain is checked FIRST and a dirty report skips the stamp (self-heal: no
+ * stamp → the next boot re-installs) with a loud terminal warning. Wall-cost
+ * ≈ the old single drain: the queue is FIFO, so the post-stamp drain only
+ * waits for the stamp's own (tiny) write.
  *
- * The stamp and the drain are INDEPENDENTLY guarded: a stamp write failure only
- * costs the next boot's skip optimization, but the TREE must still be flushed or
- * an immediate reload loses the user's install — so the drain runs regardless of
- * the stamp's outcome (durable-on-exit does not hinge on the stamp).
+ * The stamp stays best-effort: its own write/drain failure only costs the
+ * next boot's skip optimization — the TREE is already proven durable.
  */
 async function stampInstalledTree(
   deps: NpmShellCommandDeps,
+  ctx: CommandContext,
   cwd: string,
   packages: number,
 ): Promise<void> {
+  const notDurable = (cause: string): void => {
+    ctx.stderr.write(
+      `npm: WARNING: ${cause} — the install works in this session but is NOT durable; skipping the install stamp (the next boot re-installs)\n`,
+    );
+  };
+  let treeReport: PersistFailureReport | undefined;
+  try {
+    treeReport = await deps.flush?.();
+  } catch (err) {
+    notDurable(`install flush failed: ${(err as Error).message}`);
+    return;
+  }
+  if (treeReport && treeReport.total > 0) {
+    // A leftover failure on the stamp file ITSELF (a previous install's stamp
+    // never persisted) is not a torn TREE — that path is about to be
+    // rewritten, which heals it. Everything else gates the stamp.
+    const stampPath = installStampPath(cwd);
+    const failures = treeReport.failures.filter((f) => f.path !== stampPath);
+    const total = treeReport.total - (treeReport.failures.length - failures.length);
+    if (total > 0) {
+      notDurable(persistFailureLine({ failures, total }));
+      return;
+    }
+  }
   try {
     await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
   } catch (err) {
     console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
+    return;
   }
   try {
-    await deps.flush?.();
+    const stampReport = await deps.flush?.();
+    if (stampReport && stampReport.total > 0) {
+      ctx.stderr.write(
+        `npm: WARNING: the install stamp failed to persist (${persistFailureLine(stampReport)}) — the next boot re-installs\n`,
+      );
+    }
   } catch (err) {
-    console.warn(`npm: install flush failed: ${(err as Error).message}`);
+    console.warn(`npm: install stamp flush failed: ${(err as Error).message}`);
   }
 }
 

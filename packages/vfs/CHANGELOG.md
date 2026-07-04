@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Persist-failure ledger — `flush()` reports swallowed OPFS failures
+  (ADR-0187 Corrected).** `OpfsFsSync` records every failed write-through /
+  mkdir / rm / rename persist per path (a later successful persist of the same
+  path heals its entry; an `rm` hitting `NotFoundError` counts as success —
+  disk already agrees). `flush()` still never rejects but now returns a
+  `PersistFailureReport` (`failures` sample + uncapped `total`), so a caller
+  that promises durability (the playground install stamp) can gate on
+  `total === 0` instead of trusting FIFO order across silently-failed ops.
+
 - **Write-through FIFO ordering pinned as a contract (ADR-0187).** `OpfsFsSync`'s
   `enqueuePending` serialization is now load-bearing for the playground's non-blocking install
   stamp ("durable stamp implies durable tree" via queue order, not a blocking flush): a

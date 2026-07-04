@@ -1016,12 +1016,12 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Write-through FIFO ordering (ADR-0187): completion order == call order even
-// when a LATER write could finish faster. Load-bearing: the install stamp is
-// enqueued after the tree's writes, so "durable stamp implies durable tree"
-// holds WITHOUT a blocking flush on the install path. Parallelizing this queue
-// requires per-path ordering + an explicit stamp barrier — this pin is the
-// tripwire.
+// Write-through FIFO ordering (ADR-0187 Corrected): completion order == call
+// order even when a LATER write could finish faster. Load-bearing: the install
+// stamp is enqueued after the tree's writes, so it can never land BEFORE them
+// — order plus the persist-failure ledger (below) delivers "durable stamp
+// implies durable tree". Parallelizing this queue requires per-path ordering +
+// an explicit stamp barrier — this pin is the tripwire.
 // ---------------------------------------------------------------------------
 
 describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp durability)', () => {
@@ -1046,5 +1046,75 @@ describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp dur
     fs.writeFileSync('/c', new Uint8Array([3])); // …fastest last
     await fs.flush();
     expect(completed).toEqual(['/a', '/b', '/c']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Persist-failure ledger (ADR-0187 Corrected): FIFO order alone can't deliver
+// "durable stamp implies durable tree" when a per-op quota/perm failure is
+// swallowed — flush() must REPORT the divergence so a durability-gated caller
+// (the npm install stamp) can refuse to trust it. flush() still never rejects.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('flush() resolves (never rejects) and REPORTS a swallowed write-through failure; a later success HEALS it', async () => {
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/f.txt', new Uint8Array([1]));
+    const report = await fs.flush();
+    expect(report.total).toBe(1);
+    expect(report.failures).toEqual([
+      { path: '/f.txt', op: 'write', message: 'QuotaExceededError' },
+    ]);
+    // The sync view is untouched — the cache still serves this realm.
+    expect([...fs.readFileBytesSync('/f.txt')]).toEqual([1]);
+
+    // Heal-on-success: a re-write of the SAME path that persists (freed
+    // quota, re-install) clears the entry — the divergence is gone.
+    fail = false;
+    fs.writeFileSync('/f.txt', new Uint8Array([2]));
+    expect((await fs.flush()).total).toBe(0);
+  });
+
+  it('records a failed DIRECTORY persist — a missing tree dir is a durability gap too', async () => {
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    // The fake root rejects unknown dirs (its getDirectoryHandle ignores
+    // `create`) — the mkdir persist fails while the mirror mkdir succeeded.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/node_modules', { recursive: true });
+    expect(fs.existsSync('/node_modules')).toBe(true); // mirror has it
+    const report = await fs.flush();
+    expect(report.total).toBe(1);
+    expect(report.failures[0]).toMatchObject({ path: '/node_modules', op: 'mkdir' });
+  });
+
+  it('an rm whose OPFS entry is ALREADY GONE reads as success (disk agrees), not a failure', async () => {
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    (root as { removeEntry: unknown }).removeEntry = () =>
+      Promise.reject(new DomError('NotFoundError'));
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/f.txt', new Uint8Array([1]));
+    fs.rmSync('/f.txt');
+    expect((await fs.flush()).total).toBe(0); // never-persisted entry: rm target absent = durable
   });
 });

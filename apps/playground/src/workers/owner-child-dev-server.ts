@@ -107,8 +107,9 @@ export interface DevServerChildBootOpts {
    * in-owner install flush — leaving the queue empty for subsequent (small)
    * shell writes, which then persist to durable OPFS before a reload terminates
    * the owner worker. Optional: absent on the memory backend (flush no-ops).
+   * Ordering-only: the persist report (ADR-0187 Corrected) is ignored here.
    */
-  readonly flush?: () => Promise<void>;
+  readonly flush?: () => Promise<unknown>;
 }
 
 export interface OwnerChildDevServer {

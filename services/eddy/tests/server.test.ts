@@ -173,6 +173,15 @@ describe('eddy HTTP server', () => {
     expect(res.status).toBe(400);
   });
 
+  it('listen on an already-bound port REJECTS (EADDRINUSE) — the bin exits nonzero, not an uncaught error event', async () => {
+    const addr = server.address() as AddressInfo;
+    const second = createEddyServer({
+      registryBaseUrl: LOCAL_REGISTRY_BASE_URL,
+      fetch: makeLocalFetcher().fetch,
+    });
+    await expect(second.listen(addr.port)).rejects.toThrow(/EADDRINUSE/);
+  });
+
   it('GET /bundle/<hash> with a throwing store → 500 JSON, server stays alive (ADR-0194)', async () => {
     // An S3-backed store can fail at runtime (bucket outage). The GET route
     // must answer 500 — not leave an unhandled rejection that kills the
@@ -193,6 +202,9 @@ describe('eddy HTTP server', () => {
       const res = await fetch(`${url}/bundle/sha256-x`);
       expect(res.status).toBe(500);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
+      // no-store: the route is CDN-fronted — a transient bucket failure must
+      // never be pinned by an intermediary over an immutable hash.
+      expect(res.headers.get('cache-control')).toBe('no-store');
       const again = await fetch(`${url}/bundle/sha256-x`);
       expect(again.status).toBe(500); // still answering — no crash
     } finally {
