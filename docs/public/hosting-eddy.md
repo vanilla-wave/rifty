@@ -72,6 +72,14 @@ bucket. Object key = `bundle/<closure-hash>` with the hash RAW (base64 `/`
 `=` as-is): the client percent-encodes and S3 percent-decodes, so re-pointing
 the CDN origin from the VM to the bucket needs no client/wire change.
 
+**Deploy status (honest):** the committed `docker-compose.coi.yml` (and the
+live rifty.dev VM it tracks) runs the MEMORY store — the S3 tier activates
+only after this operator step. The access-key pair is a secret and is never
+committed: fill the commented `EDDY_S3_*` placeholders in a LOCAL copy of the
+COI compose and hand it to the VM via
+`yc compute instance add-metadata --metadata-from-file docker-compose=<local-copy>`
+(then restart). The committed file keeps placeholders only.
+
 Yandex Object Storage recipe (operator, confirm-first — spend):
 
 ```bash
@@ -197,6 +205,11 @@ first.
    reserved IP, in the `rifty` zone — `docs/public/hosting-domains.md`):
    `eddy.rifty.dev` AND `eddy-origin.rifty.dev` (the COI Caddy serves both — the
    `-origin` host is the CDN origin, needed once you add the CDN tier below).
+   **HTTP/3:** that group is TCP-only, so QUIC cannot negotiate — Caddy
+   advertises h3 but browsers fall back to h2. The compose now publishes
+   `443/udp`; to actually serve h3, also add an ingress `443/udp` rule (or a
+   dedicated group). Until then every h3 claim/measurement is void
+   (`docs/backlog/perf/eddy-http3-cold-validation.md`).
 
 4. A COI compose = `deploy/yandex/eddy/docker-compose.yml` with eddy's `build:`
    replaced by `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed tag; the

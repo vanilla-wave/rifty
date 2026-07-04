@@ -47,6 +47,7 @@ import {
   fetchAndUnpackToCache,
 } from './fetch-and-unpack.ts';
 import {
+  bundleCompletenessGap,
   lockfileCovers,
   lockfileSubgraph,
   pinnedEntryForParent,
@@ -149,6 +150,14 @@ export interface InstallOptions {
    * never trusted. Inert without `resolverUrl`.
    */
   resolverPrefetch?: EddyPrefetchHandle;
+  /**
+   * No-progress bound (ms) on the direct GET/POST bundle streams (default
+   * {@link DEFAULT_BUNDLE_STALL_MS}): a resolver that stalls mid-body makes the
+   * attempt FAIL (→ next attempt / standard install) instead of parking the
+   * install forever. The prefetch path carries its own bound
+   * (`StartEddyPrefetchOptions.stallTimeoutMs`). Inert without `resolverUrl`.
+   */
+  resolverStallTimeoutMs?: number;
 }
 
 /** Payload for {@link InstallOptions.onPackage}. */
@@ -724,8 +733,17 @@ async function consumeEddyResponse(
   }
   if (!response.ok) return `resolver returned HTTP ${response.status}`;
 
+  // Bounded stream (round 6): a stall/runaway on the DIRECT GET/POST paths
+  // must fail the attempt (→ fallback), exactly like the prefetch's bounded
+  // drain — an unbounded read here parked `npm install` forever on a resolver
+  // that sent a covering manifest+lockfile then hung mid-tarball.
   const entries = response.body
-    ? streamTarEntries(response.body)
+    ? streamTarEntries(
+        response.body,
+        opts.resolverStallTimeoutMs === undefined
+          ? {}
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs },
+      )
     : bufferedTarEntries(new Uint8Array(await response.arrayBuffer()));
 
   let manifest: EddyBundleManifestV1 | null = null;
@@ -772,6 +790,13 @@ async function consumeEddyResponse(
       if (!pins || !subgraphFreeOfOverrideDivergence(parsed, pins, opts.overrides)) {
         return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
       }
+      // Completeness (round 6): a covering lockfile whose reachable packages
+      // lack a matching manifest tarball would replay the omissions from the
+      // ORDINARY registry on cache miss while claiming `source: 'eddy'` — a
+      // provenance lie (and a learned pin to a partial bundle). Gate at member
+      // 2, before any tarball seed or lockfile write.
+      const gap = bundleCompletenessGap(parsed, effectiveRequest, manifest?.tarballs ?? []);
+      if (gap) return gap;
       lockfile = parsed;
       continue;
     }

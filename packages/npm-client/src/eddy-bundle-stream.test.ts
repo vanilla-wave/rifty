@@ -126,6 +126,53 @@ describe('streamTarEntries — incremental EddyBundleV1 outer-tar reader', () =>
     expect(rest.length).toBe(3);
   });
 
+  it('a NEVER-ENDING stream throws after the no-progress bound instead of parking the consumer', async () => {
+    // Regression (round 6): the direct GET/POST paths stream through this
+    // reader; a resolver that sent a covering manifest+lockfile then hung
+    // mid-tarball parked `npm install` forever — no error, no fallback.
+    const { bytes } = buildBundle();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // Manifest + lockfile + a partial tarball, then silence (never close).
+        controller.enqueue(bytes.slice(0, 2048 + 100));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const consume = async () => {
+      for await (const _ of streamTarEntries(stream, { stallTimeoutMs: 25 })) {
+        // drain
+      }
+    };
+    await expect(consume()).rejects.toThrow(/no body progress for 25ms/);
+    expect(cancelled).toBe(true); // the dead stream was released, not leaked
+  });
+
+  it('an OVER-CAP body throws (a forged giant tar header must not buffer unbounded)', async () => {
+    // A header claiming a ~8GB member would make `ensure(padded)` buffer the
+    // whole body; the byte cap has to cut it off.
+    const header = new Uint8Array(512);
+    header.set(enc.encode('big.bin'), 0); // name
+    header.set(enc.encode('77777777777'), 124); // size (octal) ≈ 8GB
+    header[156] = '0'.charCodeAt(0); // regular file
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(header);
+      },
+      pull(controller) {
+        controller.enqueue(new Uint8Array(1024).fill(0xab));
+      },
+    });
+    const consume = async () => {
+      for await (const _ of streamTarEntries(stream, { maxBytes: 4096 })) {
+        // drain
+      }
+    };
+    await expect(consume()).rejects.toThrow(/exceeded 4096 bytes/);
+  });
+
   it('early generator return cancels the source stream (stops the download)', async () => {
     const { bytes } = buildBundle();
     let cancelled = false;

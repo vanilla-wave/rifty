@@ -10,6 +10,7 @@
  * (format, v3, integrity, coverage) like any other bundle.
  */
 
+import { DEFAULT_BUNDLE_MAX_BYTES, DEFAULT_BUNDLE_STALL_MS } from './eddy-bundle-stream.ts';
 import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
 
 export interface EddyPrefetchHandle {
@@ -43,11 +44,10 @@ export interface StartEddyPrefetchOptions {
   maxBufferBytes?: number;
 }
 
-/** Real bundles are single-digit MB; the cap only guards a runaway body. */
-export const DEFAULT_PREFETCH_MAX_BYTES = 128 * 1024 * 1024;
-/** Matches the measured h2-stall class (~10s) the eager drain exists to fix;
- * a healthy stream delivers chunks sub-second, so no-progress ≥ this is dead. */
-export const DEFAULT_PREFETCH_STALL_MS = 10_000;
+/** One bound for every acquisition path: the direct GET/POST streams
+ * (`streamTarEntries`) and this eager drain share the same constants. */
+export const DEFAULT_PREFETCH_MAX_BYTES = DEFAULT_BUNDLE_MAX_BYTES;
+export const DEFAULT_PREFETCH_STALL_MS = DEFAULT_BUNDLE_STALL_MS;
 
 /**
  * Buffer the whole body with a no-progress timeout + byte cap. A never-ending

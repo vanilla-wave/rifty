@@ -42,9 +42,31 @@
   bundle still installs) — a violated bound rejects, the attempt pipeline falls
   through to its own GET/POST, and the dead stream is cancelled. Unit tests +
   a `client-roundtrip.test.ts` never-ending-prefetch regression, RED-checked
-  against the unbounded drain. Residual (sweep-found, recorded):
-  `docs/backlog/npm-client/eddy-direct-path-no-progress-bound.md` — the DIRECT
-  GET/POST streaming reads still lack the bound.
+  against the unbounded drain.
+- **Bounded DIRECT bundle streams — the same hang class on the pinned-GET/POST
+  paths.** `streamTarEntries` now carries a no-progress timeout (default 10s,
+  shared constants with the prefetch drain) and a total byte cap (128MB — also
+  the guard against a forged tar header claiming a giant member): a resolver/CDN
+  that sends a covering manifest+lockfile then stalls mid-tarball FAILS the
+  attempt (dead stream cancelled) instead of parking `npm install` forever,
+  and the pipeline proceeds to the next attempt / standard install. New
+  `InstallOptions.resolverStallTimeoutMs` overrides the bound. Unit + a
+  covering-bundle-stalls-mid-tarball roundtrip regression, RED-checked. The
+  remaining sibling gap — STANDARD-path registry fetches have no bound either
+  (pre-existing; real npm has make-fetch-happen timeouts) — is recorded:
+  `docs/backlog/npm-client/registry-fetch-no-progress-bound.md`.
+- **Partial-bundle completeness gate — a covering lockfile with omitted
+  tarballs is declined, never adopted as `source: 'eddy'`.** The client only
+  verified tarballs the MANIFEST named; a divergent/buggy resolver could send a
+  covering lockfile while omitting required tarballs — the adopted lockfile
+  would then replay the omissions from the ORDINARY registry on cache miss
+  while reporting (and learning a pin for) `eddy`: a provenance lie. Now every
+  lockfile package reachable from the request must carry `resolved`+`integrity`
+  AND a manifest tarball matching its name@version+integrity
+  (`bundleCompletenessGap`), gated at member 2 before any seed/write; an honest
+  bundle can never trip it (the server harvests one tarball per resolved
+  package from the same install that produced the lockfile). Two roundtrip
+  regressions (omitted tarball; entry without replay fields), RED-checked.
 - **Content-addressed bundle verification (client).** `consumeEddyResponse` now refuses a
   bundle whose `manifest.asOf.closureHash` (a) ≠ the hash a pinned GET/prefetch asked for
   (a CDN/cache mixup served the wrong object) or (b) ≠ `closureHashOf` of the bundle's OWN

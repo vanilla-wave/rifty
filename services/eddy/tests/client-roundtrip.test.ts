@@ -11,6 +11,7 @@ import {
   RegistryClient,
   VfsTarballCache,
   canonicalEddyRequestKey,
+  closureHashOf,
   install,
   packEddyBundle,
   parseTarEntries,
@@ -592,6 +593,43 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   }, 15_000);
 
+  it('a COVERING bundle that stalls mid-tarball does not hang install — the stream bound fails the attempt, standard runs', async () => {
+    // Regression (round 6): the coverage gates cannot save this case — the
+    // lockfile COVERS the request, so the client keeps reading tarball bytes;
+    // a resolver/CDN that hangs mid-body parked `npm install` forever. The
+    // direct-stream no-progress bound must fail the POST attempt instead.
+    const bytes = await buildBundleFor(DEPS);
+    const entries = parseTarEntries(bytes);
+    const manifestSize = entries[0]?.data.length ?? 0;
+    const lockfileSize = entries[1]?.data.length ?? 0;
+    const boundary =
+      512 + Math.ceil(manifestSize / 512) * 512 + 512 + Math.ceil(lockfileSize / 512) * 512;
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      // Manifest + lockfile + a partial first tarball, then hold the
+      // connection open forever.
+      res.write(Buffer.from(bytes.slice(0, boundary + 700)));
+      // never end()
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS); // fully covered — coverage gate passes
+      const { registry } = makeRegistry();
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverStallTimeoutMs: 100, // test-fast; default 10s
+      });
+      expect(result.source).toBe('standard');
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  }, 15_000);
+
   it('streams the bundle: a coverage decline aborts BEFORE the tarball bytes transfer', async () => {
     // The server sends ONLY the manifest + lockfile members, then holds the
     // connection open forever. A buffering client would hang awaiting the full
@@ -730,6 +768,82 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       expect(posts).toBe(1); // …refused on the hash mismatch → POST (cf. the ZERO-POST pinned-hit case)
       // The learned hash is the REAL served hash, never the bogus pin.
       expect(result.closureHash).not.toBe('sha256-not-the-served-hash');
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('refuses a PARTIAL bundle: a covering lockfile whose reachable package has no manifest tarball is declined, never adopted as eddy', async () => {
+    // Regression (round 6): a buggy resolver sends a covering lockfile but
+    // OMITS a required tarball from the manifest+bundle. Every gate up to now
+    // passes (coverage ✓, hash self-consistency ✓ — the lockfile is untouched,
+    // all MANIFEST-named tarballs land ✓) — but adopting it would make the
+    // lockfile replay silently fetch the omission from the ORDINARY registry
+    // on cache miss while reporting (and learning a pin for) source:'eddy'.
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    const before = contents.tarballs.length;
+    // Drop a REACHABLE transitive dep (ms — debug depends on it) from BOTH the
+    // manifest and the packed members.
+    contents.manifest.tarballs = contents.manifest.tarballs.filter((t) => t.name !== 'ms');
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== 'ms');
+    expect(contents.tarballs.length).toBeLessThan(before); // the omission is real
+    const partial = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(partial));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard'); // declined → honest fallback
+      expect(result.closureHash).toBeUndefined(); // no pin learned for a partial bundle
+      // The standard install still produced the full correct tree.
+      expect(await vfs.exists('/app/node_modules/ms/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('refuses a bundle whose lockfile entry lacks replay fields (resolved/integrity)', async () => {
+    // Same class as the partial bundle: a lockfile the replay cannot satisfy
+    // FROM THE BUNDLE must decline. The manifest hash is recomputed so the
+    // self-consistency gate passes and THIS gate is what trips.
+    const built = await resolveBundle(
+      { dependencies: DEPS },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    const lf = JSON.parse(contents.lockfileText) as {
+      packages: Record<string, { integrity?: string }>;
+    };
+    const victim = lf.packages['node_modules/ms'];
+    expect(victim?.integrity).toBeDefined();
+    if (victim) victim.integrity = undefined; // JSON.stringify drops it below
+    contents.lockfileText = JSON.stringify(lf);
+    contents.manifest.asOf.closureHash = await closureHashOf(
+      lf as Parameters<typeof closureHashOf>[0],
+    );
+    const poisoned = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(poisoned));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard');
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/ms/package.json')).toBe(true);
     } finally {
       await closeServer(raw.server);
     }

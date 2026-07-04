@@ -65,9 +65,20 @@
 - **`closureHashOf` moved to `@riftydev/npm-client`.** The closure-hash function
   is now ONE shared implementation (async WebCrypto) the resolver awaits, so the
   client can re-derive it to verify a bundle's self-claimed hash without drift.
+  `@riftydev/eddy` keeps a compatibility re-export — existing
+  `import { closureHashOf } from '@riftydev/eddy'` consumers are unaffected.
 - **Deploy compose cosmetics.** `docker-compose(.coi).yml` Caddyfile heredoc indents
   with spaces (was space-before-tab → `git diff --check` noise); the CDN-origin
   comment cites ADR-0195 (the renumbered wire-v1.1 ADR), not the stale ADR-0186.
+- **Deploy honesty: S3 env + HTTP/3 ports.** The committed COI compose boots the
+  MEMORY bundle store — the stateless-origin story needed the operator's
+  `EDDY_S3_*` env, which the docs implied was live. The compose now carries
+  commented placeholders + the secret-injection workflow (local copy →
+  `--metadata-from-file`; never committed), and `hosting-eddy.md` states the
+  live deploy is memory-backed until that step. Both composes also publish
+  `443/udp` for HTTP/3, and the docs/backlog now say plainly: the reused
+  security group is TCP-only, so h3 is NOT reachable until an operator adds a
+  `443/udp` ingress rule — no h3 number is quotable before then.
 
 ### Added
 

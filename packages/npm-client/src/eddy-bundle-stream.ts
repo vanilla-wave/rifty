@@ -15,20 +15,57 @@ import { parseTarHeader } from './unpacker.ts';
 
 const dec = new TextDecoder('utf-8');
 
+/** Real bundles are single-digit MB; the cap only guards a runaway body (or a
+ * forged tar header claiming a giant entry that would buffer unbounded). */
+export const DEFAULT_BUNDLE_MAX_BYTES = 128 * 1024 * 1024;
+/** Matches the measured h2-stall class (~10s); a healthy stream delivers
+ * chunks sub-second, so no-progress ≥ this is a dead connection. */
+export const DEFAULT_BUNDLE_STALL_MS = 10_000;
+
+export interface StreamTarEntriesBounds {
+  /** No-progress bound (ms): a body chunk must arrive within this window or
+   * the stream THROWS (→ the eddy attempt pipeline falls through). A server
+   * that stalls mid-tarball must never park `npm install` forever. */
+  stallTimeoutMs?: number;
+  /** Total received-byte cap; exceeding it throws. */
+  maxBytes?: number;
+}
+
 export async function* streamTarEntries(
   stream: ReadableStream<Uint8Array>,
+  bounds: StreamTarEntriesBounds = {},
 ): AsyncGenerator<{ name: string; data: Uint8Array }, void, undefined> {
+  const stallMs = bounds.stallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
+  const maxBytes = bounds.maxBytes ?? DEFAULT_BUNDLE_MAX_BYTES;
   const reader = stream.getReader();
   // Unconsumed chunks in arrival order; `available` = total buffered bytes.
   const pending: Uint8Array[] = [];
   let available = 0;
+  let received = 0;
   let sourceDone = false;
 
   async function ensure(n: number): Promise<boolean> {
     while (available < n && !sourceDone) {
-      const r = await reader.read();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const read = reader.read();
+      // A raced-out read settles later (the finally-block cancel resolves it);
+      // never let a late rejection surface as unhandled.
+      read.catch(() => {});
+      const r = await Promise.race([
+        read,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`eddy bundle: no body progress for ${stallMs}ms`)),
+            stallMs,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
       if (r.done) sourceDone = true;
       else if (r.value.length > 0) {
+        received += r.value.length;
+        if (received > maxBytes) {
+          throw new Error(`eddy bundle: body exceeded ${maxBytes} bytes`);
+        }
         pending.push(r.value);
         available += r.value.length;
       }

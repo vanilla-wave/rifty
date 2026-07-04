@@ -27,3 +27,7 @@ export {
   type TtlPackumentCacheOptions,
 } from './shared-caches.ts';
 export { readNpmClientVersion } from './npm-client-version.ts';
+// Compatibility re-export: `closureHashOf` was exported from here before the
+// implementation moved to `@riftydev/npm-client` (one shared impl, ADR-0194);
+// existing `@riftydev/eddy` consumers must keep working.
+export { closureHashOf } from '@riftydev/npm-client';

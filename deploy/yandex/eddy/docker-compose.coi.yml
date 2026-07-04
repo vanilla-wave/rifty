@@ -15,6 +15,17 @@ services:
       REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
       PORT: "8788"
       EDDY_TTL_SECONDS: "1800"
+      # Bundle store: WITHOUT the EDDY_S3_* group below this boots the
+      # byte-bounded MEMORY store (bundles die with the container) — the
+      # stateless-origin story (ADR-0194 §4) holds only once an operator
+      # provisions the bucket + key (hosting-eddy.md §Object-Storage) and
+      # deploys a LOCAL copy of this file with the group filled in via
+      # `--metadata-from-file`. The secret pair must NEVER be committed here.
+      # EDDY_S3_ENDPOINT: "https://storage.yandexcloud.net"
+      # EDDY_S3_BUCKET: "eddy-bundles"
+      # EDDY_S3_REGION: "ru-central1"
+      # EDDY_S3_ACCESS_KEY_ID: "<from `yc iam access-key create`>"
+      # EDDY_S3_SECRET_ACCESS_KEY: "<from `yc iam access-key create`>"
 
   caddy:
     image: caddy:2.10.2-alpine
@@ -25,6 +36,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # HTTP/3: Caddy advertises h3 via alt-svc; QUIC needs UDP 443 published
+      # here AND a `443/udp` ingress rule on the VM's security group (the
+      # reused rifty-registry-proxy group is TCP-only today — until an operator
+      # adds the rule, browsers race QUIC, fail, and stay on h2).
+      - "443:443/udp"
     volumes:
       - caddy_data:/data
       - caddy_config:/config
