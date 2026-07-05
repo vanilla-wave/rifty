@@ -244,10 +244,15 @@ first.
    dedicated group). Until then every h3 claim/measurement is void
    (`docs/backlog/perf/eddy-http3-cold-validation.md`).
 
-4. A COI compose = `deploy/yandex/eddy/docker-compose.yml` with eddy's `build:`
-   replaced by `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed tag; the
-   committed `docker-compose.coi.yml` is the deploy input and may be ahead of
-   the live VM until the operator redeploys it — Caddy unchanged).
+4. A COI compose starts from `deploy/yandex/eddy/docker-compose.yml`, replaces
+   eddy's `build:` with `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed
+   tag), and carries the deploy-only Caddy origin host
+   `eddy-origin.rifty.dev`. The checked-in
+   `deploy/yandex/eddy/docker-compose.coi.yml` is the memory-store template and
+   may be ahead of the live VM until the operator redeploys it. For a stateless
+   S3-backed origin, copy that file locally, fill the `EDDY_S3_*` group, and use
+   the local copy below; uploading the checked-in placeholder file boots the
+   memory store.
    Create the VM with that service account (mirrors the proxy specs):
 
    ```bash
@@ -264,12 +269,15 @@ first.
    playground prod build (`netlify.toml`) so from-scratch presets resolve via
    eddy.
 
-6. Re-deploying a new image: push a NEW tag, update the `docker-compose`
-   metadata key, restart:
+6. Re-deploying a new image: push a NEW tag, update the COI compose's image
+   tag, upload that compose as the `docker-compose` metadata key, restart. If
+   the VM is S3-backed, reuse/update the same LOCAL secret-bearing compose from
+   §Object-Storage; do not upload the checked-in placeholder template or eddy
+   will boot the memory store.
 
    ```bash
    yc compute instance add-metadata --name rifty-eddy \
-     --metadata-from-file docker-compose=deploy/yandex/eddy/docker-compose.coi.yml
+     --metadata-from-file docker-compose=<coi-compose>
    yc compute instance restart --name rifty-eddy
    ```
 
