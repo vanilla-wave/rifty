@@ -28,6 +28,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, asyncVfs } from '@riftydev/vfs';
+import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { fsError, toNodeFsError } from './fs-errors.ts';
@@ -429,7 +430,10 @@ class FileWriteStream extends EventEmitter {
   private closeEmitted = false;
   private bufferedLength = 0;
   private needDrain = false;
+  private destroyBeforeOpen = false;
+  private emitDestroyError = false;
   private pendingErrorAfterOpen: unknown | null = null;
+  private readonly pendingWriteCallbacks: Array<(err?: unknown) => void> = [];
   private readonly finishCallbacks: Array<(err?: unknown) => void> = [];
 
   constructor(path: string, opts: WriteStreamOptions = {}) {
@@ -440,7 +444,14 @@ class FileWriteStream extends EventEmitter {
     this.emitCloseOpt = opts.emitClose ?? true;
     this.highWaterMark = opts.highWaterMark ?? 64 * 1024;
     this.path = path;
-    setTimeout(() => this.open(), 0);
+    keepaliveRef();
+    setTimeout(() => {
+      try {
+        this.open();
+      } finally {
+        keepaliveUnref();
+      }
+    }, 0);
   }
 
   private closeOnce(): void {
@@ -455,7 +466,7 @@ class FileWriteStream extends EventEmitter {
    * EEXIST, 'r+' requires existence. Failures are Node-shaped 'error' EVENTS.
    */
   private open(): void {
-    if (this.destroyed) return;
+    if (this.destroyed && !this.destroyBeforeOpen) return;
     const np = resolvePath(this.path);
     this.np = np;
     let buffered: PendingWrite[] | null = null;
@@ -481,36 +492,74 @@ class FileWriteStream extends EventEmitter {
       this.bufferedLength = 0;
       this.emit('open', 0);
       this.emit('ready');
-      for (const write of buffered) queueMicrotask(() => write.cb?.());
+      const destroyErr = this.destroyBeforeOpen ? STREAM_DESTROYED() : undefined;
+      this.queueWriteCallbacks(buffered, destroyErr);
       this.emitDrainIfNeeded();
+      if (this.destroyBeforeOpen) {
+        this.queueFinishCallbacks(destroyErr);
+        queueMicrotask(() => this.closeOnce());
+        return;
+      }
       if (this.pendingErrorAfterOpen) {
         const err = this.pendingErrorAfterOpen;
         this.pendingErrorAfterOpen = null;
-        this.emit('error', err);
-        this.closeOnce();
+        queueMicrotask(() => {
+          this.emit('error', err);
+          this.closeOnce();
+        });
         return;
       }
-      if (this.finished) this.finishIfReady();
+      if (this.finished) queueMicrotask(() => this.finishIfReady());
     } catch (err) {
+      if (this.pendingErrorAfterOpen) {
+        const pendingErr = this.pendingErrorAfterOpen;
+        this.pendingErrorAfterOpen = null;
+        queueMicrotask(() => {
+          this.emit('error', pendingErr);
+          this.closeOnce();
+        });
+        return;
+      }
       this.failed = true;
       const nodeErr = toNodeFsError(err, 'open', this.path);
       this.failPending(nodeErr, buffered ?? undefined);
-      this.emit('error', nodeErr);
-      this.closeOnce();
+      queueMicrotask(() => {
+        this.emit('error', nodeErr);
+        this.closeOnce();
+      });
     }
+  }
+
+  private queueWriteCallbacks(writes: readonly PendingWrite[], err?: unknown): void {
+    for (const write of writes) queueMicrotask(() => write.cb?.(err));
+  }
+
+  private queueCallbacks(callbacks: readonly ((err?: unknown) => void)[], err?: unknown): void {
+    for (const cb of callbacks) queueMicrotask(() => cb(err));
+  }
+
+  private runPendingWriteCallbacks(err?: unknown): void {
+    const callbacks = this.pendingWriteCallbacks.splice(0);
+    for (const cb of callbacks) cb(err);
   }
 
   private failPending(err: unknown, pending?: PendingWrite[]): void {
     const buffered = pending ?? this.preOpen ?? [];
     this.preOpen = null;
     this.bufferedLength = 0;
-    for (const write of buffered) queueMicrotask(() => write.cb?.(err));
-    this.flushFinishCallbacks(err);
+    this.queueWriteCallbacks(buffered, err);
+    this.queueCallbacks(this.pendingWriteCallbacks.splice(0), err);
+    this.queueFinishCallbacks(err);
   }
 
-  private flushFinishCallbacks(err?: unknown): void {
+  private queueFinishCallbacks(err?: unknown): void {
     const callbacks = this.finishCallbacks.splice(0);
     for (const cb of callbacks) queueMicrotask(() => cb(err));
+  }
+
+  private runFinishCallbacks(err?: unknown): void {
+    const callbacks = this.finishCallbacks.splice(0);
+    for (const cb of callbacks) cb(err);
   }
 
   write(
@@ -524,8 +573,11 @@ class FileWriteStream extends EventEmitter {
     assertValidChunk(chunk);
     if (this.finished) {
       const err = WRITE_AFTER_END();
-      const deferErrorUntilOpen = !this.opened && !this.finishEmitted && !this.destroyed;
-      if (!this.finishEmitted && !this.failed && !this.destroyed) {
+      const shouldErrorStream = !this.finishEmitted && !this.failed && !this.destroyed;
+      const deferErrorUntilOpen = !this.opened && shouldErrorStream;
+      const buffered = deferErrorUntilOpen ? (this.preOpen ?? []) : [];
+      const pendingWriteCallbacks = shouldErrorStream ? this.pendingWriteCallbacks.splice(0) : [];
+      if (shouldErrorStream) {
         if (this.opened) this.persist();
         // A same-turn write-after-end destroys before 'finish'. If the file is
         // not open yet, open still applies its create/truncate side effect, but
@@ -536,12 +588,18 @@ class FileWriteStream extends EventEmitter {
       }
       queueMicrotask(() => {
         cb?.(err);
-        if (deferErrorUntilOpen) return;
-        if (!this.finishEmitted) {
-          this.emit('error', err);
-          this.closeOnce();
-        }
       });
+      if (shouldErrorStream) {
+        this.queueCallbacks(pendingWriteCallbacks, STREAM_DESTROYED());
+        this.queueWriteCallbacks(buffered, err);
+        this.queueFinishCallbacks(err);
+        if (!deferErrorUntilOpen) {
+          queueMicrotask(() => {
+            this.emit('error', err);
+            this.closeOnce();
+          });
+        }
+      }
       return false;
     }
     if (this.failed || this.destroyed) {
@@ -560,8 +618,8 @@ class FileWriteStream extends EventEmitter {
       this.preOpen.push({ buf, cb });
     } else {
       this.overlay(buf);
+      if (cb) this.pendingWriteCallbacks.push(cb);
       this.scheduleFlush();
-      queueMicrotask(() => cb?.());
     }
     return !overHighWaterMark;
   }
@@ -590,9 +648,12 @@ class FileWriteStream extends EventEmitter {
       this.flushScheduled = false;
       if (this.failed || this.destroyed) return;
       // open() runs before any flush (both are microtasks, open queued first).
-      this.persist();
-      if (!this.failed) {
+      const err = this.persist();
+      if (err) {
+        this.runPendingWriteCallbacks(err);
+      } else if (!this.failed) {
         this.bufferedLength = 0;
+        this.runPendingWriteCallbacks();
         this.emitDrainIfNeeded();
       }
     });
@@ -628,12 +689,12 @@ class FileWriteStream extends EventEmitter {
     this.finishEmitted = true;
     const err = this.persist();
     if (err) {
-      this.flushFinishCallbacks(err);
+      this.runFinishCallbacks(err);
       return;
     }
+    this.runFinishCallbacks();
     this.emit('finish');
     this.closeOnce();
-    this.flushFinishCallbacks();
   }
 
   end(
@@ -667,8 +728,22 @@ class FileWriteStream extends EventEmitter {
   /** Node semantics: destroy discards buffered-but-unflushed data, no 'finish'. */
   destroy(): void {
     if (this.destroyed) return;
+    const err = STREAM_DESTROYED();
+    const preOpen = !this.opened;
+    const buffered = this.preOpen ?? [];
+    const hadPendingWriteCallbacks = this.pendingWriteCallbacks.length > 0;
+    this.preOpen = null;
+    this.queueWriteCallbacks(buffered, err);
+    this.queueCallbacks(this.pendingWriteCallbacks.splice(0), err);
+    this.queueFinishCallbacks(err);
+    this.destroyBeforeOpen = preOpen;
+    this.emitDestroyError = !preOpen && hadPendingWriteCallbacks;
     this.destroyed = true;
-    this.closeOnce();
+    if (preOpen) return;
+    queueMicrotask(() => {
+      if (this.emitDestroyError) this.emit('error', err);
+      this.closeOnce();
+    });
   }
 }
 

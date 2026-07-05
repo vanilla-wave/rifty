@@ -111,19 +111,49 @@ describe('fs streams', () => {
   it('write after same-tick end destroys before finish and preserves the opened end chunk', async () => {
     const ws = createWriteStream('/we-sync.log');
     await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
-    let sawFinish = false;
-    ws.on('finish', () => {
-      sawFinish = true;
-    });
+    const events: string[] = [];
+    ws.on('finish', () => events.push('finish'));
     const closed = new Promise<void>((resolve) => ws.on('close', () => resolve()));
-    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
-    ws.end('a');
-    const ret = ws.write('b', () => {});
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.end('a', (err?: unknown) =>
+      events.push(`endcb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    const ret = ws.write('b', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+    );
     expect(ret).toBe(false);
-    expect(((await eventErr) as { code?: string }).code).toBe('ERR_STREAM_WRITE_AFTER_END');
     await closed;
-    expect(sawFinish).toBe(false);
+    expect(events).toEqual([
+      'writecb:ERR_STREAM_WRITE_AFTER_END',
+      'endcb:ERR_STREAM_WRITE_AFTER_END',
+      'error:ERR_STREAM_WRITE_AFTER_END',
+    ]);
     expect(await fsp.readFile('/we-sync.log', 'utf8')).toBe('a');
+  });
+
+  it('opened write pending callback is destroyed before end callback on same-tick write-after-end', async () => {
+    const ws = createWriteStream('/we-open-pending.log');
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    const events: string[] = [];
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    ws.write('a', (err?: unknown) =>
+      events.push(`write1cb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
+    const ret = ws.write('b', (err?: unknown) =>
+      events.push(`write2cb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    expect(ret).toBe(false);
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual([
+      'write2cb:ERR_STREAM_WRITE_AFTER_END',
+      'write1cb:ERR_STREAM_DESTROYED',
+      'endcb:ERR_STREAM_WRITE_AFTER_END',
+      'error:ERR_STREAM_WRITE_AFTER_END',
+      'close',
+    ]);
+    expect(await fsp.readFile('/we-open-pending.log', 'utf8')).toBe('a');
   });
 
   it('pre-open write after end reports callback before open, then emits error', async () => {
@@ -133,7 +163,7 @@ describe('fs streams', () => {
     ws.on('ready', () => events.push('ready'));
     ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
     ws.on('close', () => events.push('close'));
-    ws.end();
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
     const ret = ws.write('x', (err?: unknown) =>
       events.push(`cb:${(err as { code?: string } | undefined)?.code}`),
     );
@@ -142,12 +172,53 @@ describe('fs streams', () => {
     expect(events).toEqual([
       'ret:false',
       'cb:ERR_STREAM_WRITE_AFTER_END',
+      'endcb:ERR_STREAM_WRITE_AFTER_END',
       'open',
       'ready',
       'error:ERR_STREAM_WRITE_AFTER_END',
       'close',
     ]);
     expect(await fsp.readFile('/we-preopen.log', 'utf8')).toBe('');
+  });
+
+  it('pre-open write-after-end error wins over a later open failure', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/missing-dir/we-preopen.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
+    const ret = ws.write('x', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    events.push(`ret:${ret}`);
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual([
+      'ret:false',
+      'writecb:ERR_STREAM_WRITE_AFTER_END',
+      'endcb:ERR_STREAM_WRITE_AFTER_END',
+      'error:ERR_STREAM_WRITE_AFTER_END',
+      'close',
+    ]);
+  });
+
+  it('pre-open queued write/end callbacks fire before finish/close', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/queued-success.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('finish', () => events.push('finish'));
+    ws.on('close', () => events.push('close'));
+    ws.write('x', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code ?? 'null'}`),
+    );
+    ws.end((err?: unknown) =>
+      events.push(`endcb:${(err as { code?: string } | undefined)?.code ?? 'null'}`),
+    );
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual(['open', 'ready', 'writecb:null', 'endcb:null', 'finish', 'close']);
+    expect(await fsp.readFile('/queued-success.log', 'utf8')).toBe('x');
   });
 
   it('r+ through a file reports ENOTDIR open, not ENOENT', async () => {
@@ -168,6 +239,64 @@ describe('fs streams', () => {
     expect((cbErr as { code?: string }).code).toBe('ERR_STREAM_DESTROYED');
     await new Promise((r) => setTimeout(r, 0));
     expect(eventFired).toBe(false);
+  });
+
+  it('pre-open destroy drains queued write/end callbacks before open/close', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/destroy-preopen.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('close', () => events.push('close'));
+    ws.write('a', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
+    ws.destroy();
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual([
+      'writecb:ERR_STREAM_DESTROYED',
+      'endcb:ERR_STREAM_DESTROYED',
+      'open',
+      'ready',
+      'close',
+    ]);
+    expect(await fsp.readFile('/destroy-preopen.log', 'utf8')).toBe('');
+  });
+
+  it('post-open destroy drains pending write callback and emits destroyed error', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/destroy-postopen.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    ws.write('a', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    ws.destroy();
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual([
+      'open',
+      'ready',
+      'writecb:ERR_STREAM_DESTROYED',
+      'error:ERR_STREAM_DESTROYED',
+      'close',
+    ]);
+  });
+
+  it('post-open destroy drains pending end callback without an error event', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/destroy-end-postopen.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
+    ws.destroy();
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual(['open', 'ready', 'endcb:ERR_STREAM_DESTROYED', 'close']);
   });
 
   it('invalid chunk type throws synchronously (ERR_INVALID_ARG_TYPE)', () => {
@@ -265,13 +394,16 @@ describe('fs streams', () => {
   });
 
   it('pre-open write/end callbacks receive the open error', async () => {
+    const events: string[] = [];
     const ws = createWriteStream('/missing-dir/out.txt');
-    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
-    const writeErr = new Promise<unknown>((resolve) => ws.write('x', resolve));
-    const endErr = new Promise<unknown>((resolve) => ws.end(resolve));
-    expect(((await writeErr) as { code?: string }).code).toBe('ENOENT');
-    expect(((await endErr) as { code?: string }).code).toBe('ENOENT');
-    expect(((await eventErr) as { code?: string }).code).toBe('ENOENT');
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    ws.write('x', (err?: unknown) =>
+      events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    ws.end((err?: unknown) => events.push(`endcb:${(err as { code?: string } | undefined)?.code}`));
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual(['writecb:ENOENT', 'endcb:ENOENT', 'error:ENOENT', 'close']);
   });
 
   it('write stream highWaterMark participates in write() backpressure', async () => {

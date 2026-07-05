@@ -21,7 +21,9 @@
   later `open`/`ready` events like Node; `copyFileSync(COPYFILE_EXCL)` reports a
   missing source before an existing destination; and `cpSync` fast/edge paths
   keep destination traversal errors Node-shaped instead of leaking raw VFS
-  errors or misattributing them to the source.
+  errors or misattributing them to the source. Queued `createWriteStream`
+  `write`/`end` callbacks now fire before `finish` or open-failure `error` /
+  `close`, matching Node's observable callback fences.
 - **Node-shaped fs errors everywhere (review 2026-07-05).** A single
   VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
   `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path
