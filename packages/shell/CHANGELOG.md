@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **`cat` byte pump now has a frozen GNU coreutils fixture guard** for raw
+  binary output, complementing the ADR-0198 pipe/redirect byte-transparency
+  package tests.
 - **Byte-transparent data plane (ADR-0198).** `Writer.write` accepts
   `string | Uint8Array`; stdout capture, pipe hand-off and `>`/`>>` redirects
   carry bytes end-to-end, and `cat` pumps raw bytes on its plain path.

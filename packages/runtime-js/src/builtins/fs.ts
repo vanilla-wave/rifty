@@ -400,17 +400,19 @@ function resizeFile(path: string, len: number): void {
 
 function writeBytesAt(record: FdRecord, bytes: Uint8Array, position: number | null): number {
   if (!record.writable) throw fsError('EBADF', record.path, 'write');
-  const stat = syncMirror().statSync(record.path);
+  const stat = withSyscall('write', record.path, () => syncMirror().statSync(record.path));
   if (stat.isDirectory) throw fsError('EISDIR', record.path, 'write');
 
-  const existing = syncMirror().readFileBytesSync(record.path);
+  const existing = withSyscall('write', record.path, () =>
+    syncMirror().readFileBytesSync(record.path),
+  );
   const start = record.append ? existing.byteLength : (position ?? record.position);
   assertNonNegativeInteger(start, 'position');
 
   const next = new Uint8Array(Math.max(existing.byteLength, start + bytes.byteLength));
   next.set(existing);
   next.set(bytes, start);
-  syncMirror().writeFileSync(record.path, next);
+  withSyscall('write', record.path, () => syncMirror().writeFileSync(record.path, next));
   if (position === null || record.append) record.position = start + bytes.byteLength;
   return bytes.byteLength;
 }
@@ -663,7 +665,7 @@ export function readlinkSync(p: string): string {
   // No symlinks: a path either doesn't exist (ENOENT) or is not a link (EINVAL).
   const np = resolvePath(p);
   const ps = pathToString(p);
-  if (!syncMirror().existsSync(np)) throw fsError('ENOENT', ps, 'readlink');
+  withSyscall('readlink', p, () => syncMirror().statSync(np));
   throw fsError('EINVAL', ps, 'readlink');
 }
 
@@ -671,7 +673,7 @@ function _realpathSyncImpl(p: string): string {
   const np = resolvePath(p);
   // Node absolutizes before the failing lstat, so the error path is the
   // RESOLVED one (unlike the as-passed rule everywhere else).
-  if (!syncMirror().existsSync(np)) throw fsError('ENOENT', np, 'lstat');
+  withSyscall('lstat', np, () => syncMirror().statSync(np));
   return np;
 }
 
@@ -838,9 +840,9 @@ export function readSync(
   checkedSliceBounds(buffer, offset, count);
   if (pos !== null) assertNonNegativeInteger(pos, 'position');
 
-  const stat = syncMirror().statSync(record.path);
+  const stat = withSyscall('read', record.path, () => syncMirror().statSync(record.path));
   if (stat.isDirectory) throw fsError('EISDIR', record.path, 'read');
-  const bytes = syncMirror().readFileBytesSync(record.path);
+  const bytes = withSyscall('read', record.path, () => syncMirror().readFileBytesSync(record.path));
   const start = pos ?? record.position;
   const end = Math.min(bytes.byteLength, start + count);
   const read = Math.max(0, end - start);
@@ -887,13 +889,14 @@ export function writeSync(
 }
 
 export function fstatSync(fd: number): Stats {
-  return new Stats(syncMirror().statSync(getFd(fd).path));
+  const record = getFd(fd);
+  return withSyscall('fstat', record.path, () => new Stats(syncMirror().statSync(record.path)));
 }
 
 export function ftruncateSync(fd: number, len = 0): void {
   const record = getFd(fd);
   if (!record.writable) throw fsError('EBADF', record.path, 'ftruncate');
-  resizeFile(record.path, len);
+  withSyscall('ftruncate', record.path, () => resizeFile(record.path, len));
 }
 
 export function truncateSync(p: PathLike, len = 0): void {
@@ -966,7 +969,9 @@ export function lutimesSync(p: string, atime: number | Date, mtime: number | Dat
 export function futimesSync(fd: number, atime: number | Date, mtime: number | Date): void {
   if (!fdTable.has(fd)) throw fsError('EBADF', undefined, 'futime');
   const record = getFd(fd);
-  syncMirror().utimes(record.path, toMs(atime), toMs(mtime));
+  withSyscall('futime', record.path, () =>
+    syncMirror().utimes(record.path, toMs(atime), toMs(mtime)),
+  );
 }
 
 export function futimes(

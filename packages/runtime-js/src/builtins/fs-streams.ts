@@ -27,7 +27,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { asyncVfs } from '@riftydev/vfs';
+import { VfsError, asyncVfs } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { fsError, toNodeFsError } from './fs-errors.ts';
@@ -92,6 +92,15 @@ function assertStreamRange(name: string, value: number | undefined): void {
 
 function streamError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
+}
+
+function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean } | null {
+  try {
+    return syncMirror().statSync(np);
+  } catch (err) {
+    if (err instanceof VfsError && err.code === 'ENOENT') return null;
+    throw err;
+  }
 }
 
 const WRITE_AFTER_END = (): Error => streamError('ERR_STREAM_WRITE_AFTER_END', 'write after end');
@@ -401,6 +410,7 @@ class FileWriteStream extends EventEmitter {
   private failed = false;
   private destroyed = false;
   private finished = false;
+  private finishEmitted = false;
   private flushScheduled = false;
   private closeEmitted = false;
 
@@ -429,7 +439,7 @@ class FileWriteStream extends EventEmitter {
     const np = resolvePath(this.path);
     this.np = np;
     try {
-      const exists = syncMirror().existsSync(np);
+      const exists = statStrictOrNull(np) !== null;
       if (exists && this.flags.exclusive) {
         throw fsError('EEXIST', pathToString(this.path), 'open');
       }
@@ -466,11 +476,21 @@ class FileWriteStream extends EventEmitter {
     const encoding = typeof encodingOrCb === 'function' ? undefined : encodingOrCb;
     assertValidChunk(chunk);
     if (this.finished) {
-      // Node: callback AND 'error' event (verified 2026-07-05).
       const err = WRITE_AFTER_END();
+      if (!this.finishEmitted && !this.failed && !this.destroyed) {
+        if (this.opened) this.persist();
+        // A same-turn write-after-end destroys before 'finish'. If the file is
+        // not open yet, open still applies its create/truncate side effect, but
+        // buffered writes are discarded (Node parity).
+        this.preOpen = null;
+        this.failed = true;
+      }
       queueMicrotask(() => {
         cb?.(err);
-        this.emit('error', err);
+        if (!this.finishEmitted) {
+          this.emit('error', err);
+          this.closeOnce();
+        }
       });
       return false;
     }
@@ -553,9 +573,10 @@ class FileWriteStream extends EventEmitter {
     }
     if (this.destroyed) return; // Node: end() on a destroyed stream drops the callback (verified)
     if (chunk !== undefined) this.write(chunk, encoding as string | undefined);
+    this.finished = true;
     queueMicrotask(() => {
-      if (this.failed || this.destroyed || this.finished) return;
-      this.finished = true;
+      if (this.failed || this.destroyed || this.finishEmitted) return;
+      this.finishEmitted = true;
       if (this.opened) this.persist();
       if (this.failed) return;
       this.emit('finish');

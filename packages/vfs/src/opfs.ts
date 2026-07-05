@@ -154,13 +154,17 @@ export class OpfsVfs implements Vfs {
     try {
       parent = await this.getDirectory(dirname(np));
     } catch (err) {
-      if (options?.force) return;
+      if (options?.force && err instanceof VfsError && err.code === 'ENOENT') return;
       throw err;
     }
     try {
       await parent.removeEntry(basename(np), { recursive: options?.recursive ?? false });
     } catch (err) {
-      if (options?.force) return;
+      if (options?.force) {
+        const mapped = mapOpfsError(err, np, 'file');
+        if (mapped.code === 'ENOENT') return;
+        throw mapped;
+      }
       throw mapOpfsError(err, np, 'file');
     }
   }

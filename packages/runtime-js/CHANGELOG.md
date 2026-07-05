@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **PR #115 review follow-up:** `createWriteStream` now rejects same-tick
+  write-after-`end()` before bytes can mutate; `r+` stream open through a file
+  reports `ENOTDIR`; `fs.watch` throws Node-shaped `ENOENT` for a missing target;
+  `readlinkSync`/`realpathSync` keep `ENOTDIR` through-file fidelity; fd-backed
+  read/write/stat/truncate/time ops route backend failures through the fs error
+  boundary.
 - **Node-shaped fs errors everywhere (review 2026-07-05).** A single
   VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
   `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path

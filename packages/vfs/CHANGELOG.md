@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- **PR #115 review follow-up:** `OpfsVfs.rm(path, { force:true })` now
+  suppresses only `ENOENT`; through-file (`ENOTDIR`), permission, quota, and
+  browser I/O failures stay loud instead of being reported as success.
 - **`openReadable` validates its window.** `chunkSize: 0` previously looped the
   pull callback forever (reader hang); a negative `start`/`end` fell into
   `subarray`'s from-the-end semantics. Both are loud `RangeError`s now, in

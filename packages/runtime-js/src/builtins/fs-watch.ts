@@ -13,6 +13,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { basename, joinPath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
+import { toNodeFsError } from './fs-errors.ts';
 import { resolvePath } from './fs-path.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
@@ -145,8 +146,8 @@ export function watch(
   try {
     const s = syncMirror().statSync(target);
     isDir = s.isDirectory;
-  } catch {
-    // target doesn't exist — fine, we'll just emit rename when it appears.
+  } catch (err) {
+    throw toNodeFsError(err, 'watch', path);
   }
 
   if (isDir) {

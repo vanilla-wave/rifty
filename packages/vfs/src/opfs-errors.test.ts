@@ -68,6 +68,7 @@ type ErrorKind =
   | 'NotAllowedError'
   | 'QuotaExceededError'
   | 'TypeMismatchError'
+  | 'InvalidModificationError'
   | 'GremlinError';
 
 interface FakeDirOpts {
@@ -77,6 +78,8 @@ interface FakeDirOpts {
   fileError?: ErrorKind;
   /** Behaviour for `getDirectoryHandle`. */
   dirError?: ErrorKind;
+  /** Behaviour for `removeEntry`. */
+  removeError?: ErrorKind;
 }
 
 function makeFakeRoot(opts: FakeDirOpts): FileSystemDirectoryHandle {
@@ -94,6 +97,12 @@ function makeFakeRoot(opts: FakeDirOpts): FileSystemDirectoryHandle {
         return Promise.reject(new FakeDomException(opts.dirError));
       }
       throw new Error('unexpected fake getDirectoryHandle call without dirError set');
+    },
+    removeEntry(_name: string, _o?: { recursive?: boolean }) {
+      if (opts.removeError) {
+        return Promise.reject(new FakeDomException(opts.removeError));
+      }
+      return Promise.resolve();
     },
   };
   return handle as unknown as FileSystemDirectoryHandle;
@@ -156,6 +165,22 @@ describe('OpfsVfs error mapping', () => {
     const err = await vfs.readFile('/x').catch((e: unknown) => e);
     expect((err as VfsError).cause).toBeInstanceOf(Error);
     expect(((err as VfsError).cause as Error).name).toBe('GremlinError');
+  });
+
+  it('rm force suppresses only ENOENT from removeEntry', async () => {
+    await expect(
+      fakeVfs({ removeError: 'NotFoundError' }).rm('/missing', { force: true }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fakeVfs({ removeError: 'NotAllowedError' }).rm('/locked', { force: true }),
+    ).rejects.toMatchObject({ code: 'EACCES' });
+  });
+
+  it('rm force does not suppress ENOTDIR while resolving the parent', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.rm('/plain-file/child', { force: true })).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
   });
 });
 

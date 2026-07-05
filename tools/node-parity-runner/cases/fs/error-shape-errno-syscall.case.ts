@@ -52,6 +52,7 @@ const c: ParityCase = {
     probe('utimes-missing', FULL, () => fs.utimesSync('missing.txt', 1, 1));
     probe('readlink-plain-file', FULL, () => fs.readlinkSync('plain.txt'));
     probe('readlink-missing', FULL, () => fs.readlinkSync('missing.txt'));
+    probe('readlink-notdir', FULL, () => fs.readlinkSync('plain.txt/deep'));
     probe('realpath-missing', ['code', 'errno', 'syscall'], () => fs.realpathSync('missing.txt'));
     probe('rename-missing-src', DUAL, () => fs.renameSync('missing.txt', 'dst.txt'));
     probe('copyFile-missing-src', DUAL, () => fs.copyFileSync('missing.txt', 'dst.txt'));

@@ -95,13 +95,42 @@ describe('fs streams', () => {
     expect(await fsp.readFile('/w.log', 'utf8')).toBe('x');
   });
 
-  it('write after end: callback + error event carry ERR_STREAM_WRITE_AFTER_END', async () => {
+  it('write after finished: callback carries ERR_STREAM_WRITE_AFTER_END without error event', async () => {
     const ws = createWriteStream('/we.log');
     await new Promise<void>((resolve) => ws.end('x', () => resolve()));
-    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
+    let eventFired = false;
+    ws.on('error', () => {
+      eventFired = true;
+    });
     const cbErr = await new Promise<unknown>((resolve) => ws.write('y', resolve));
     expect((cbErr as { code?: string }).code).toBe('ERR_STREAM_WRITE_AFTER_END');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(eventFired).toBe(false);
+  });
+
+  it('write after same-tick end destroys before finish and preserves the opened end chunk', async () => {
+    const ws = createWriteStream('/we-sync.log');
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    let sawFinish = false;
+    ws.on('finish', () => {
+      sawFinish = true;
+    });
+    const closed = new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
+    ws.end('a');
+    const ret = ws.write('b', () => {});
+    expect(ret).toBe(false);
     expect(((await eventErr) as { code?: string }).code).toBe('ERR_STREAM_WRITE_AFTER_END');
+    await closed;
+    expect(sawFinish).toBe(false);
+    expect(await fsp.readFile('/we-sync.log', 'utf8')).toBe('a');
+  });
+
+  it('r+ through a file reports ENOTDIR open, not ENOENT', async () => {
+    writeFileSync('/plain.txt', 'x');
+    const ws = createWriteStream('/plain.txt/deep', { flags: 'r+' });
+    const err = await new Promise<unknown>((resolve) => ws.on('error', resolve));
+    expect(err).toMatchObject({ code: 'ENOTDIR', syscall: 'open', path: '/plain.txt/deep' });
   });
 
   it('write after destroy: callback-only ERR_STREAM_DESTROYED, no error event (Node parity)', async () => {

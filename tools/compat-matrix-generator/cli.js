@@ -73,12 +73,22 @@ const matrices = [
       [
         '`createReadStream` / `createWriteStream`',
         '✅',
-        'Async `Vfs.openReadable` first, chunked reads, pipe and `end` smoke tests',
+        'Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), pipe and `end` parity tests',
+      ],
+      [
+        'Stream unsupported options',
+        '❌',
+        '`fd`, custom `fs`, write-stream `start`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore',
       ],
       [
         '`fs.watch`',
         '⚠️',
         'Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics',
+      ],
+      [
+        '`fs.watch` buffer/exotic filename encodings',
+        '❌',
+        "`encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError`; UTF-8 string filenames are the claimed subset",
       ],
       [
         'Durable `fsync` / inode-like open-unlink semantics',

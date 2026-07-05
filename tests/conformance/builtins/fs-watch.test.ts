@@ -22,6 +22,20 @@ function nextTick(ms = 20): Promise<void> {
 }
 
 describe('fs.watch', () => {
+  it('throws ENOENT synchronously for a missing target', () => {
+    try {
+      fs.watch('/missing-watch-target');
+    } catch (err) {
+      expect(err).toMatchObject({
+        code: 'ENOENT',
+        syscall: 'watch',
+        path: '/missing-watch-target',
+      });
+      return;
+    }
+    throw new Error('expected fs.watch to throw');
+  });
+
   it('fires `change` when a watched file is rewritten', async () => {
     fs.writeFileSync('/a.txt', 'one');
     const events: Array<{ event: string; filename: string | null }> = [];
