@@ -47,4 +47,27 @@ describe('fs streams', () => {
     });
     expect(events).toContain('end');
   });
+
+  it('write stream data is visible WITHOUT end() — long-lived logger contract', async () => {
+    const ws = createWriteStream('/app.log', { flags: 'a' });
+    const opened = new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    ws.write('session started\n');
+    await opened;
+    // No end(): the stream stays open (Winston-style logger). Give the
+    // per-burst flush microtask a macrotask boundary to run.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await fsp.readFile('/app.log', 'utf8')).toBe('session started\n');
+    ws.write('second line\n');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await fsp.readFile('/app.log', 'utf8')).toBe('session started\nsecond line\n');
+  });
+
+  it("'w' with no writes truncates at open, not at end", async () => {
+    writeFileSync('/trunc.txt', 'previous content');
+    const ws = createWriteStream('/trunc.txt');
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    // Stream still open, nothing written — Node already truncated the file.
+    expect(await fsp.readFile('/trunc.txt', 'utf8')).toBe('');
+    ws.destroy();
+  });
 });
