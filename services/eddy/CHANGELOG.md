@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Deployed
+
+- **eddy v1.2 live on rifty.dev** (2026-07-05). Image `cr.yandex/…/eddy:0.2.2`
+  (amd64) redeployed from `main`; COI compose tag bumped `0.2.1`→`0.2.2`. Live
+  POST now emits `x-eddy-store-durable`; deep-canonical closure hash is upstream-
+  registry-URL independent. Memory store (no `EDDY_S3_*`). Unblocks
+  `perf/eddy-upstream-registry-ab`.
+
 ### Fixed (PR #107 round 23)
 
 - **Eddy bundle-store modules stay acyclic.** `CachedBundle` now lives with the
