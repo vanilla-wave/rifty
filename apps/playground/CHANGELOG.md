@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added (PR #113 review round 3)
+
+- **Owner durability barrier: `handle.flushDurable()` (`rifty:vfs-flush` acked
+  IPC).** A vfs-write ack only proves the owner's in-memory mirror; the OPFS
+  write-through drains behind it, so nothing page-side could prove durability
+  without a wall-clock sleep. The owner now answers an acked flush: drain via
+  `flushSyncMirror`, ack ok only on a clean ledger (ADR-0187 Corrected),
+  nack listing unhealed persist failures. The browser-unit persistence spec
+  replaces its 1s sleep-before-kill with this barrier (RED-checked: a broken
+  ack fails the spec).
+
 ### Fixed (PR #113 review round 2)
 
 - **Owner swap rewires same-port preview bridges.** The SW bridge key now

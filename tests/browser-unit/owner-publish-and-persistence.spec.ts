@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   bootOwner,
   closeOwner,
+  flushOwnerDurable,
   gotoHarness,
   ownerLogs,
   readOwnerFile,
@@ -107,8 +108,10 @@ test('hidden-empty owner stays hidden; OPFS tree survives an owner respawn', asy
 
   const marker = `persist-probe ${Date.now().toString(36)}`;
   await writeOwnerFile(page, '/scratch/persist-probe.txt', marker);
-  // Let the OPFS write-through queue drain before killing the worker.
-  await page.waitForTimeout(1_000);
+  // Durability barrier (ADR-0187): the write ack only proves the in-memory
+  // mirror; flushDurable drains the OPFS write-through and rejects on persist
+  // failures — the respawn below reads from disk, deterministically.
+  await flushOwnerDurable(page);
   await closeOwner(page);
 
   // Same workspace id → same OPFS scope: a respawned owner must see the file.

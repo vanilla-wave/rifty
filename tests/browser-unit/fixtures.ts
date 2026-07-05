@@ -135,6 +135,17 @@ export async function writeOwnerFile(page: Page, path: string, content: string):
   );
 }
 
+/** Durability barrier: drain the owner's OPFS write-through (ADR-0187) —
+ *  resolves only when the durable tier is clean, rejects on persist failures.
+ *  The deterministic replacement for a sleep before killing the owner. */
+export async function flushOwnerDurable(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const w = window as unknown as { __buOwner?: { flushDurable(): Promise<void> } };
+    if (!w.__buOwner) throw new Error('flushOwnerDurable: no owner booted on this page');
+    await w.__buOwner.flushDurable();
+  });
+}
+
 /** readFileBytes decoded to text; never throws — missing files report ok:false. */
 export function readOwnerFile(
   page: Page,

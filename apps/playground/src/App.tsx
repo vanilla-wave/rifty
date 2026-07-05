@@ -168,6 +168,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
       throw new Error(OWNER_UNAVAILABLE_MSG);
     },
     writeFrameAcked: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    flushDurable: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     readFileBytes: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),

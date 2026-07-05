@@ -17,7 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/browser-unit` lane (`*.spec.ts` — a grep there bypassed the gate) and
   refuses a positive-count allowlist entry without a recorded `why`; the
   repo-wide sweep of pre-existing package greps is backlog
-  `toolchain-build/source-grep-ratchet-repo-wide`.
+  `toolchain-build/source-grep-ratchet-repo-wide`. Review round 3: the ratchet
+  keys on assertion IDENTITY, not just count — each entry also records a
+  `digest` of the normalized assertion-signature multiset, so swapping one grep
+  for another at the same per-file count (invisible to a count-only ratchet) is
+  refused unless the entry is re-recorded (digest + why) in the same PR.
 - **Browser-unit test lane (ADR-0196, epic playground-testable-core).**
   `pnpm test:browser-unit` — thin Playwright harness (`unit-harness.html`, no App
   boot) on the playground vite dev server: worker-side modules behaviorally tested
