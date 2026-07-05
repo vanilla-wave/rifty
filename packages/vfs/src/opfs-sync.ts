@@ -470,6 +470,7 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', path);
     }
     if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+    if (this.index.get(normalized)?.kind === 'dir') throw new VfsError('EISDIR', path);
     // In-cache write (ADR-0072): ONE defensive slice shared by the content
     // cache and the async write-through (#3, perf audit 2026-06-05: 2N->N
     // copies/write). This single entry-point slice is the SOLE barrier
@@ -487,9 +488,8 @@ export class OpfsFsSync implements FsSync {
     if (!wasKnown) {
       this.attachChild(normalized); // attachChild invalidates the parent cache
     } else {
-      // Already a known child: attachChild is skipped, but the child's kind can
-      // flip (e.g. dir->file) so the parent's dirent cache must still drop
-      // (perf audit 2026-06-05; kind-flip hazard).
+      // Already a known child: attachChild is skipped, but a parent cache may
+      // exist, so drop it conservatively on every overwrite.
       const parentEntry = this.index.get(parent);
       if (parentEntry?.kind === 'dir') parentEntry.sortedDirents = null;
     }

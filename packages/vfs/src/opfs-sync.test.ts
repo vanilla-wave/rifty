@@ -495,7 +495,7 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     expect(fs.readdirSync('/').map((d) => d.name)).toEqual(['a.txt', 'b.txt', 'sub']);
   });
 
-  it('readdirSync dirent cache invalidates on create / unlink / kind change (perf audit 2026-06-05)', async () => {
+  it('readdirSync dirent cache invalidates on create / unlink (perf audit 2026-06-05)', async () => {
     const root = buildFakeRoot({
       files: new Map([['/x.txt', { bytes: new Uint8Array([1]) }]]),
       dirs: new Set(['/', '/d']),
@@ -510,14 +510,6 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     // UNLINK: removing a child must drop it.
     fs.rmSync('/new', { recursive: true });
     expect(fs.readdirSync('/').map((e) => e.name)).toEqual(['d', 'x.txt']);
-    // KIND CHANGE: writeFileSync over the EXISTING dir name `/d` flips its
-    // index entry dir -> file (wasKnown=true path). The cached dirent must
-    // flip isDirectory true -> false, not stay stale.
-    expect(fs.readdirSync('/').find((e) => e.name === 'd')?.isDirectory).toBe(true);
-    fs.writeFileSync('/d', new Uint8Array([9]));
-    const dEntry = fs.readdirSync('/').find((e) => e.name === 'd');
-    expect(dEntry?.isDirectory).toBe(false);
-    expect(dEntry?.isFile).toBe(true);
   });
 
   it('readdirSync on a non-directory throws ENOTDIR', async () => {

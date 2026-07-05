@@ -96,6 +96,11 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
     const throughFile = thrown(() => fs.writeFileSync('/plain.txt/f.txt', enc.encode('x')));
     expect(throughFile.code).toBe('ENOTDIR');
     expect(throughFile.path).toBe('/plain.txt/f.txt');
+    const overDirectory = thrown(() => fs.writeFileSync('/dir', enc.encode('x')));
+    expect(overDirectory.code).toBe('EISDIR');
+    expect(overDirectory.path).toBe('/dir');
+    expect(fs.statSync('/dir').isDirectory).toBe(true);
+    expect(fs.readdirSync('/dir').map((d) => d.name)).toEqual(['keep.txt']);
   });
 
   it('mkdir through a file → ENOTDIR naming the full target', () => {

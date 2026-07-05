@@ -28,6 +28,8 @@
   browser I/O failures stay loud instead of being reported as success.
   `OpfsFsSync.cpSync('/file/child', dst)` now reports `ENOTDIR` with the
   source path instead of collapsing the traversal failure to `ENOENT`.
+  `OpfsFsSync.writeFileSync('/dir', bytes)` now throws `EISDIR` instead of
+  mutating the warm index from directory to file and leaving stale descendants.
 - **`openReadable` validates its window.** `chunkSize: 0` previously looped the
   pull callback forever (reader hang); a negative `start`/`end` fell into
   `subarray`'s from-the-end semantics. Both are loud `RangeError`s now, in
