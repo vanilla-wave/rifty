@@ -20,6 +20,7 @@ Write the concrete developer scenario first: the **real npm package / Node progr
 Interview the user one scenario-branch at a time (each branch = a case the user hits), resolving dependencies in order. One question at a time, with your recommended answer.
 - **User owns the boundary; you own the mechanism.** Ask ONLY user-observable forks: which real software must work, which cases are in vs out. No user-visible difference between the options (wire-format, broker location, internal dispatch) → not a user question: decide + record yourself (REVERSIBLE → CHANGELOG/backlog; IRREVERSIBLE → ADR BEFORE `ready`), never ask. A question citing no scenario branch is the wrong one.
 - Codebase / ADRs / Node already answer it → explore, don't ask.
+- Infra-touching scope (cache/persistence/network/concurrency) → grill failure branches like scenario branches: what does the user observe when the fast path / store / network breaks mid-operation? Each answer = a `## Fault matrix` row (axes: `docs/process/fault-classes.md`).
 - Keep going until in / out of scope and every fork are settled — zero open assumptions for the implementer.
 
 ## Shape
@@ -28,5 +29,6 @@ Interview the user one scenario-branch at a time (each branch = a case the user 
 
 ## `ready` bar — built whole: zero new decisions, zero new in-scope items, ADR already exists
 Item — five contract sections, shapes + anti-approximation rules all in `docs/backlog/README.md` (`backlog:check` enforces them; read there, don't restate): **`## User scenario`** (the spine from §Lead with — required unless the item has an `epic:` parent, which owns it) · **Acceptance** · **Parity cases** · **Out of scope** · **Decisions**. Every fork is one YOU resolved (mechanism) or an ADR link — never parked for the user.
+Infra-touching item: contract also carries **`## Fault matrix`** — applicable axes from `docs/process/fault-classes.md` × operation → honest outcome (fallback / degraded / loud throw), each row a fault-test target. A single «works or falls back» sentence is not a matrix — enumerate the rows.
 Epic: Outcome + end-to-end User scenario + enumerated Items, each child `ready` or `draft` with a clear path. An epic-child item leans on the epic's User scenario — its contract is Acceptance/Parity/Out-of-scope/Decisions only.
 Flip `draft → ready` only when the bar is met.

@@ -13,6 +13,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No "implement later" / silent backlog.** Every gap is explicit (NotImplementedError, backlog item, compat ❌) — never hidden behind a passing path.
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
+- **3+ review rounds on one change = systemic defect, not bad luck.** Stop point-fixing: classify all rounds' findings per `docs/process/fault-classes.md`, kill recurring classes structurally (one chokepoint / one validation boundary — `rifty-fix` skill), record which gap (item contract / TEMPLATE / tooling) let the class through.
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -40,5 +41,6 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 - [ ] no new deferred decisions or tech debt
 - [ ] implementation alligned with project goal
 - [ ] `pnpm pr:check` pass
+- [ ] touches cache/persistence/network/concurrency → `## Fault matrix` rows covered by fault tests; `rifty-review-loop` converged (0 blockers) before handover — mergeability = gates, not agent opinion
 - [ ] `CHANGELOG.md` in affected packages
 - [ ] ADR for IRREVERSIBLE / backlog for provisional
