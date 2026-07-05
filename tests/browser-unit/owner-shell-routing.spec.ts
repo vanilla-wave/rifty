@@ -63,6 +63,16 @@ test('instant preset restore gates the run; template node_modules seeds re-asser
   // Fresh owner: this test mutates /scratch node_modules via the instant restore.
   await bootOwner(page, { workspaceId: 'bu-restore-gate', hiddenEmptyBoot: true });
 
+  // Hold the snapshot response ~600ms (latency shaping only — the REAL bytes
+  // still flow through the REAL restore path). The stamp rework (ADR-0187
+  // Corrected) took the awaited OPFS drains out of the restore, so on a fast
+  // host the whole restore can beat the 250ms slow-progress threshold and the
+  // exec below would no longer provably overlap the in-flight restore.
+  await page.route('**/snapshots/typescript-node-modules.json.gz', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+
   // Switch to the instant typescript preset: prepareActiveDevConfigDeps starts
   // restoring the baked snapshot ASYNCHRONOUSLY (the ack must not wait for it).
   await setDevConfig(page, { templateId: 'typescript', slug: 'scratch', setup: 'instant' });

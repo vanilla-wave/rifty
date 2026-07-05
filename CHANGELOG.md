@@ -26,6 +26,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **browser-unit: the restore-gate spec no longer races the 250ms slow-progress
+  threshold.** The stamp rework (PR #107, ADR-0187 Corrected) removed the awaited
+  OPFS drains from the instant restore path, so a fast host could finish the
+  restore before the threshold and the gate's progress line never printed. The
+  spec now holds the snapshot response 600ms (latency shaping only — real bytes,
+  real restore path) so the gated exec provably overlaps the in-flight restore.
 - **`pnpm bench` refuses a partial or foreign-server measurement.** Two Fidelity
   hardenings on the install metric: (1) a pass now records `measured` ONLY when
   ALL `RUNS` samples reached first Vite response — a partial set (e.g. 1/5 after
