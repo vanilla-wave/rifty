@@ -36,6 +36,34 @@ describe('FSWatcher ref/unref drive the keepalive refcount via the poll timer', 
   });
 });
 
+describe('fs.watch options honesty (review 2026-07-05)', () => {
+  afterEach(() => resetSyncMirror());
+
+  it('persistent:false unrefs the poll timer instead of silently ignoring the field', () => {
+    const original = {
+      setInterval: globalThis.setInterval,
+      clearInterval: globalThis.clearInterval,
+    };
+    try {
+      installTimerGlobals();
+      syncMirror().mkdirSync('/w', { recursive: true });
+      const persistent = watch('/w', { interval: 1000 }, () => {});
+      expect(activeRefs()).toBe(1);
+      persistent.close();
+      const transient = watch('/w', { interval: 1000, persistent: false }, () => {});
+      expect(activeRefs()).toBe(0);
+      transient.close();
+    } finally {
+      globalThis.setInterval = original.setInterval;
+      globalThis.clearInterval = original.clearInterval;
+    }
+  });
+
+  it("encoding:'buffer' is a loud gap, not a silently-utf8 string", () => {
+    expect(() => watch('/w', { encoding: 'buffer' }, () => {})).toThrow(/Not implemented/);
+  });
+});
+
 describe('fs.watch recursive semantics (review 2026-07-05)', () => {
   beforeEach(() => {
     resetSyncMirror();

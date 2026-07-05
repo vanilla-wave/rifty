@@ -10,6 +10,7 @@
  * via options so dev-server use cases can choose tighter loops.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { basename, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -22,6 +23,10 @@ export interface WatchOptions {
    * (`src/components/Button.tsx`). Default false — Node parity.
    */
   recursive?: boolean;
+  /** `false` unrefs the poll timer so an active watcher doesn't hold the realm alive. */
+  persistent?: boolean;
+  /** Only 'utf8' (default) — 'buffer' filenames are a loud gap. */
+  encoding?: string;
   /** abort signal */
   signal?: AbortSignal;
 }
@@ -129,6 +134,12 @@ export function watch(
     typeof optionsOrListener === 'function' ? {} : (optionsOrListener ?? {});
   const cb = typeof optionsOrListener === 'function' ? optionsOrListener : listener;
 
+  if (opts.encoding !== undefined && opts.encoding !== 'utf8' && opts.encoding !== 'utf-8') {
+    // 'buffer' filenames (and exotic encodings) are unmodelled — loud gap,
+    // never a silently-still-utf8 string.
+    throw new NotImplementedError(`fs.watch.encoding:'${opts.encoding}'`);
+  }
+
   const interval = opts.interval ?? 250;
   const target = resolveCwd(path);
   const watcher = new FSWatcher();
@@ -191,6 +202,10 @@ export function watch(
     );
   }
 
+  // Node parity: persistent:false watchers don't keep the realm alive. The
+  // poll timer's keepalive handle makes unref() real, not a stub (see FSWatcher).
+  if (opts.persistent === false) watcher.unref();
+
   return watcher;
 }
 
@@ -198,6 +213,7 @@ export function watch(
 
 export interface WatchFileOptions {
   interval?: number;
+  /** `false` unrefs the poll timer (Node parity) — an ignored field would lie. */
   persistent?: boolean;
 }
 
@@ -259,6 +275,9 @@ export function watchFile(
     listeners: [cb],
     last: initial,
   };
+  if (opts.persistent === false) {
+    (entry.timer as { unref?: () => unknown }).unref?.();
+  }
   pollers.set(target, entry);
 }
 
