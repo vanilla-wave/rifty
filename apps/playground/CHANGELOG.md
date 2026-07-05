@@ -9,6 +9,9 @@
   `installStampSatisfied`. The deferred OPFS drain promotes the stamp only
   after a clean tree+stamp report; tree damage discards it, and stamp-file
   damage leaves it untrusted so the next boot re-runs dependency arrival.
+- **Stale boot-stamp promoters cannot trust a newer restore.** Pending stamps
+  carry a per-realm promotion id, and dependency arrival invalidates older
+  deferred promotion tasks before mutating `node_modules`.
 
 ### Fixed (PR #107 round 20)
 

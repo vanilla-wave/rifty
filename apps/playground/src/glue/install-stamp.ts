@@ -30,6 +30,8 @@ export interface InstallStamp {
   readonly packages: number;
   /** Pending boot/restore stamps are visible for diagnostics but never trusted. */
   readonly durability?: 'pending';
+  /** Per-realm token so stale deferred promoters cannot trust a newer tree. */
+  readonly promotionId?: string;
 }
 
 /** The dependency tree the stamp attests durable: `<root>/node_modules`. The
@@ -139,16 +141,21 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
     deps?: unknown;
     packages?: unknown;
     durability?: unknown;
+    promotionId?: unknown;
   };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
   if (raw.durability !== undefined && raw.durability !== 'pending') return null;
+  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
   return {
     version: 1,
     slug: typeof raw.slug === 'string' ? raw.slug : '',
     deps: readStringMap(raw.deps),
     packages: raw.packages,
     ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
+      ? { promotionId: raw.promotionId }
+      : {}),
   };
 }
 
@@ -167,6 +174,7 @@ export async function writeInstallStamp(
   packages: number,
   slug = '',
   durability?: 'pending',
+  promotionId?: string,
 ): Promise<void> {
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps) return;
@@ -176,6 +184,7 @@ export async function writeInstallStamp(
     deps,
     packages,
     ...(durability === 'pending' ? { durability } : {}),
+    ...(durability === 'pending' && promotionId ? { promotionId } : {}),
   };
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
@@ -309,15 +318,20 @@ function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStam
     deps?: unknown;
     packages?: unknown;
     durability?: unknown;
+    promotionId?: unknown;
   };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
   if (raw.durability !== undefined && raw.durability !== 'pending') return null;
+  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
   return {
     version: 1,
     slug: typeof raw.slug === 'string' ? raw.slug : '',
     deps: readStringMap(raw.deps),
     packages: raw.packages,
     ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
+      ? { promotionId: raw.promotionId }
+      : {}),
   };
 }

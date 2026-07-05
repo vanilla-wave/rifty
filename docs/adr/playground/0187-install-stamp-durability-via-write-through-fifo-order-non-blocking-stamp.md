@@ -1,4 +1,4 @@
-# ADR 0187: Install-stamp durability via write-through FIFO order (single post-stamp drain)
+# ADR 0187: Install-stamp durability via write-through FIFO order plus verified stamps
 
 Status: Accepted
 Date: 2026-07

@@ -503,6 +503,51 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(flushCalls).toBe(2);
   });
 
+  it('does not let an older deferred promoter trust a newer pending restore', async () => {
+    const { vfs, fsSync, logFn } = project();
+    let resolveFirstFlush!: (report: PersistFailureReport) => void;
+
+    await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: () =>
+        new Promise<PersistFailureReport>((resolve) => {
+          resolveFirstFlush = resolve;
+        }),
+    });
+    const firstPending = await readInstallStamp(vfs, ROOT);
+    expect(firstPending?.durability).toBe('pending');
+
+    await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: () => new Promise(() => {}),
+    });
+    const secondPending = await readInstallStamp(vfs, ROOT);
+    expect(secondPending?.durability).toBe('pending');
+    expect(secondPending?.promotionId).not.toBe(firstPending?.promotionId);
+
+    resolveFirstFlush({ failures: [], total: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const afterOldPromoter = await readInstallStamp(vfs, ROOT);
+    expect(afterOldPromoter?.durability).toBe('pending');
+    expect(afterOldPromoter?.promotionId).toBe(secondPending?.promotionId);
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+  });
+
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {
     // The faithful boot settles instant deps in RESTORE-ONLY mode. from-scratch deps
     // come SOLELY from the explicit `npm install` command — so omitting `install`
