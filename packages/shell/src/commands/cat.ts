@@ -114,9 +114,16 @@ export const cat: ShellCommand = async (args, ctx) => {
       } else {
         bytes = fs.readFileBytesSync(resolve(ctx.cwd, f));
       }
-      const { text, nextNo } = render(dec.decode(bytes), opts, lineNo);
-      lineNo = nextNo;
-      ctx.stdout.write(text);
+      if (!opts.numberAll && !opts.numberNonBlank && !opts.showEnds && !opts.showTabs) {
+        // Plain path writes RAW BYTES (ADR-0198): cat is the byte pump of the
+        // pipeline — decoding here corrupted every non-UTF-8 payload.
+        ctx.stdout.write(bytes);
+      } else {
+        // -n/-b/-E/-A are line/text semantics; decoding is the contract.
+        const { text, nextNo } = render(dec.decode(bytes), opts, lineNo);
+        lineNo = nextNo;
+        ctx.stdout.write(text);
+      }
     } catch (e) {
       if (e instanceof VfsError) {
         ctx.stderr.write(`cat: ${f}: ${strerror(e)}\n`);

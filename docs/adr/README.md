@@ -195,6 +195,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0148 | Unified workspace owner co-resident dev-server and single source of truth ADR-0143 P4 |
 | 0150 | Supervised child processes over SAB sync-views (D P6) |
 | 0167 | git capability over VFS via isomorphic-git |
+| 0198 | Byte-transparent shell data plane; string display plane |
 
 ### terminal
 

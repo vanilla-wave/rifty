@@ -5,6 +5,8 @@
 
 import type { CommandContext } from '../src/types.ts';
 
+const dec = new TextDecoder('utf-8');
+
 export function makeCtx(over: Partial<CommandContext> = {}): {
   ctx: CommandContext;
   out: () => string;
@@ -17,12 +19,12 @@ export function makeCtx(over: Partial<CommandContext> = {}): {
     env: {},
     stdout: {
       write(s) {
-        outBuf += s;
+        outBuf += typeof s === 'string' ? s : dec.decode(s);
       },
     },
     stderr: {
       write(s) {
-        errBuf += s;
+        errBuf += typeof s === 'string' ? s : dec.decode(s);
       },
     },
     ...over,
