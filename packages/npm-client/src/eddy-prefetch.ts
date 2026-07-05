@@ -1,0 +1,147 @@
+/**
+ * Out-of-band eddy bundle prefetch: start the (GET-by-hash or POST) bundle
+ * fetch BEFORE `install()` runs — e.g. at playground owner boot — so the
+ * network round-trip overlaps boot work instead of serializing after it.
+ *
+ * Trust model: the handle is keyed on the CANONICAL request it was started
+ * for; `install()` consumes it only when its own canonical request matches
+ * (`take(key)`), so a prefetch made for stale deps is ignored — never trusted.
+ * The response itself still flows through the fast path's full verification
+ * (format, v3, integrity, coverage) like any other bundle.
+ */
+
+import {
+  DEFAULT_BUNDLE_MAX_BYTES,
+  DEFAULT_BUNDLE_STALL_MS,
+  drainBodyBounded,
+} from './eddy-bundle-stream.ts';
+import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
+
+export interface EddyPrefetchHandle {
+  /** The pinned closure hash this prefetch was a GET for (absent → it POSTed).
+   * The installer verifies the consumed response against it (content-addressed
+   * fetches must return the hash they asked for). */
+  readonly closureHash?: string;
+  /** One-shot: the in-flight response iff `requestKey` equals this prefetch's
+   * canonical key; `null` on mismatch and after the first take. */
+  take(requestKey: string): Promise<Response> | null;
+}
+
+export interface StartEddyPrefetchOptions {
+  resolverUrl: string;
+  request: EddyRequestBody;
+  prefer?: 'cached' | 'online';
+  /** Pinned closure hash → cacheable `GET /bundle/<hash>`; absent → the
+   * CORS-simple POST resolve. IGNORED under `prefer: 'online'` (online
+   * promises a fresh recompute — the prefetch POSTs instead). */
+  closureHash?: string;
+  /** Base URL for the pinned GET (defaults to `resolverUrl`) — a CDN host may
+   * serve GET-by-hash while POST stays on the origin (ADR-0195). */
+  bundleBaseUrl?: string;
+  /** Injectable fetch (tests); defaults to the global. */
+  fetchImpl?: typeof fetch;
+  /** Eager-drain no-progress bound (ms): a body chunk must arrive within this
+   * window or the prefetch REJECTS (the installer then falls through to its
+   * own GET/POST). Default {@link DEFAULT_PREFETCH_STALL_MS}. */
+  stallTimeoutMs?: number;
+  /** Eager-drain byte cap: an over-cap body rejects the prefetch (the POST
+   * fallback streams, so a legit huge bundle still installs — it just skips
+   * the buffered prefetch). Default {@link DEFAULT_PREFETCH_MAX_BYTES}. */
+  maxBufferBytes?: number;
+}
+
+/** One bound for every acquisition path: the direct GET/POST streams
+ * (`streamTarEntries`) and this eager drain share the same constants. */
+export const DEFAULT_PREFETCH_MAX_BYTES = DEFAULT_BUNDLE_MAX_BYTES;
+export const DEFAULT_PREFETCH_STALL_MS = DEFAULT_BUNDLE_STALL_MS;
+
+/**
+ * Bound the HEADER phase of the prefetch fetch: the drain bounds only start
+ * once a body exists — a resolver whose connection/headers hang would
+ * otherwise park the eventual taker forever. Rejects (and aborts) on timeout
+ * even if the fetch ignores the signal.
+ */
+async function headersBounded(
+  attempt: Promise<Response>,
+  stallMs: number,
+  controller: AbortController,
+): Promise<Response> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
+  try {
+    return await Promise.race([
+      attempt,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`eddy prefetch: no response headers for ${stallMs}ms`));
+        }, stallMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchHandle {
+  const key = canonicalEddyRequestKey(opts.request, opts.prefer ?? 'cached');
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const body: Record<string, unknown> = { ...opts.request };
+  if (opts.prefer) body.prefer = opts.prefer;
+  // prefer:'online' promises a FRESH server-side recompute — a pinned
+  // GET-by-hash serves a content-addressed CACHED closure, so the pin is
+  // ignored and the prefetch POSTs (carrying `prefer` to the server). NOTE:
+  // the installer additionally never consumes ANY prefetch under
+  // prefer:'online' (a boot-time prefetch is only as fresh as boot).
+  const pin = opts.prefer === 'online' ? undefined : opts.closureHash;
+  const stallMs = opts.stallTimeoutMs ?? DEFAULT_PREFETCH_STALL_MS;
+  const controller = new AbortController();
+  const response = headersBounded(
+    pin
+      ? fetchImpl(bundleUrlFor(opts.bundleBaseUrl ?? opts.resolverUrl, pin), {
+          signal: controller.signal,
+        })
+      : // Same CORS-simple POST the installer sends (no content-type header).
+        fetchImpl(opts.resolverUrl, {
+          method: 'POST',
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }),
+    stallMs,
+    controller,
+  );
+  // Drain the body EAGERLY: a response left unread across the boot window
+  // stalls its h2 stream (measured ~10s on ~1-in-3 installs, 2026-07-02
+  // probe) — buffering downloads the bundle DURING boot and makes the later
+  // consume instant. `take` hands out a synthetic Response over the buffered
+  // bytes with the original status/headers, so the installer's gates (JSON
+  // decline, !ok, streaming unpack) see the same shape. The drain is BOUNDED
+  // (no-progress timeout + byte cap) AND the header phase above is too
+  // (`headersBounded`): a resolver that never answers OR never ends rejects
+  // instead of parking the taker forever — the installer's attempt pipeline
+  // then falls through to its own GET/POST.
+  const maxBytes = opts.maxBufferBytes ?? DEFAULT_PREFETCH_MAX_BYTES;
+  const buffered = response.then(async (r) => ({
+    status: r.status,
+    statusText: r.statusText,
+    headers: r.headers,
+    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes }),
+  }));
+  // An untaken failed prefetch must never surface as an unhandled rejection;
+  // the ORIGINAL rejection still reaches whoever takes the handle.
+  buffered.catch(() => {});
+  let taken = false;
+  return {
+    // Keyed on the ACTUAL fetch shape: under prefer:'online' the pin was
+    // ignored (POST), so no content-address expectation is exposed.
+    ...(pin === undefined ? {} : { closureHash: pin }),
+    take(requestKey: string): Promise<Response> | null {
+      if (taken || requestKey !== key) return null;
+      taken = true;
+      return buffered.then(
+        (r) =>
+          new Response(r.bytes, { status: r.status, statusText: r.statusText, headers: r.headers }),
+      );
+    },
+  };
+}

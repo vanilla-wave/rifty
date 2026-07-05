@@ -16,22 +16,33 @@
  * into the terminal via `Shell.run`'s `onChunk` callback. Per-package lines
  * stream live through `InstallOptions.onPackage` (ADR-0134).
  *
- * After a successful install the tree is stamped (ADR-0135) so the real-vite
- * worker bootstrap can skip its redundant install; `deps.flush` drains the
- * OPFS write-through before/after the stamp so a durable stamp implies a
- * durable tree.
+ * After a successful install the OPFS write-through is drained and CHECKED
+ * (ADR-0187 Corrected): only a clean drain (no persist failures) stamps the
+ * tree (ADR-0135) — FIFO order alone cannot deliver "durable stamp implies
+ * durable tree" when a quota/perm failure is swallowed per-op. On a dirty
+ * drain the stamp is SKIPPED and the terminal warns loudly: the install
+ * works this session, the next boot re-installs instead of trusting a torn
+ * tree (npm parity stays honest — a reload cannot silently lose the install).
  */
 
 import { NotImplementedError } from '@riftydev/io';
 import {
+  type EddyPrefetchHandle,
   type InstallOptions,
   type InstallResult,
   type RegistryClient,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
   install as realInstall,
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
-import type { Vfs } from '@riftydev/vfs';
-import { writeInstallStamp } from './install-stamp.ts';
+import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
+import {
+  installStampPath,
+  isStampedTreeDamage,
+  reportHasFailure,
+  writeInstallStamp,
+} from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -54,9 +65,13 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
-  /** Drains the VFS write-through (page wires the OPFS sync-mirror flush) so
-   *  the install stamp lands durably AFTER the tree (ADR-0135). */
-  readonly flush?: () => Promise<void>;
+  /** Drains the VFS write-through before the command returns (npm parity: when
+   *  `npm install` exits the tree IS on disk — an immediate reload must not
+   *  lose it; e2e-pinned by owner-snapshot-restore-exec). Returns the drain's
+   *  persist-failure report (ADR-0187 Corrected) — a dirty report gates the
+   *  install stamp (never stamp a tree OPFS failed to hold); `undefined` means
+   *  "no durability tier" (memory backend) and reads as clean. */
+  readonly flush?: () => Promise<PersistFailureReport | undefined>;
   /** The owner's project slug (preset id) the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
@@ -68,6 +83,25 @@ export interface NpmShellCommandDeps {
    *  to the standard verifying install); the install line reports
    *  `via eddy (fast)` when the eddy path produced the tree. */
   readonly resolverUrl?: string;
+  /** Pinned closure hash for the ACTIVE preset (ADR-0195, `VITE_RIFTY_EDDY_PINS`).
+   *  A getter — the active preset can change. Inert without `resolverUrl`. */
+  readonly resolverClosureHash?: () => string | undefined;
+  /** CDN base for pinned bundle GETs (`VITE_RIFTY_EDDY_BUNDLE_URL`, ADR-0195);
+   *  the edge won't proxy POST, so GETs may ride a separate hostname. */
+  readonly resolverBundleBaseUrl?: string;
+  /** Owner-boot bundle prefetch for the ACTIVE preset (ADR-0195). A getter;
+   *  install() consumes the handle at most once and only on a canonical
+   *  request match. Inert without `resolverUrl`. */
+  readonly resolverPrefetch?: () => EddyPrefetchHandle | undefined;
+  /** Learned pins (ADR-0194): `canonicalEddyRequestKey → closureHash`. Read on
+   *  the post-merge key and PREFERRED over the coarse template env pin (a learned
+   *  pin matches the EXACT dep set, the env pin only the pristine preset); written
+   *  fire-and-forget after a successful eddy install so the NEXT identical dep set
+   *  is a cacheable GET. Inert without `resolverUrl`. */
+  readonly learnedPins?: {
+    get(requestKey: string): Promise<string | undefined>;
+    set(requestKey: string, closureHash: string): Promise<void>;
+  };
 }
 
 interface ProjectPackageJson {
@@ -440,12 +474,35 @@ async function runInstall(
   const start = performance.now();
 
   const installFn = deps.install ?? realInstall;
+  // Documented inert without `resolverUrl` — so the getters must not even RUN
+  // (a throwing/warning pin store or prefetch handle must not touch an
+  // eddy-disabled install).
+  const envPin = deps.resolverUrl ? deps.resolverClosureHash?.() : undefined;
+  const resolverPrefetch = deps.resolverUrl ? deps.resolverPrefetch?.() : undefined;
+  // Pin selection (ADR-0194). requestKey is the EXACT post-merge dep set —
+  // computed AFTER the package.json write above, so `npm i kleur` keys {…+kleur},
+  // not the stale file. A learned pin, keyed on that exact request, is the CORRECT
+  // closure for this set, so it WINS over the coarse template env pin
+  // (`VITE_RIFTY_EDDY_PINS`) — the env pin only matches the pristine preset; after
+  // `npm install <pkg>` it no longer describes the request (it would just cost a
+  // coverage-cancelled GET before POST). Env pin stays the fallback that seeds the
+  // FIRST install of a set (no learned pin yet). This keeps the ADR-0194 promise:
+  // a repeat of the same dep set — modified or not — rides a cacheable learned GET.
+  const requestKey = deps.resolverUrl ? await installRequestKey(deps.vfs, packageJsonPath) : null;
+  const learnedPin =
+    requestKey && deps.learnedPins
+      ? await deps.learnedPins.get(requestKey).catch(() => undefined)
+      : undefined;
+  const resolverClosureHash = learnedPin ?? envPin;
   try {
     const result = await installFn({
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
+      ...(resolverClosureHash ? { resolverClosureHash } : {}),
+      ...(deps.resolverBundleBaseUrl ? { resolverBundleBaseUrl: deps.resolverBundleBaseUrl } : {}),
+      ...(resolverPrefetch ? { resolverPrefetch } : {}),
       onPackage: (event) => {
         ctx.stdout.write(
           `npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`,
@@ -459,7 +516,18 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    await stampInstalledTree(deps, ctx.cwd, result.packages.length);
+    await stampInstalledTree(deps, ctx, ctx.cwd, result.packages.length);
+    // Fire-and-forget write-back: the pin is an optimization, never worth
+    // blocking or failing the install line over.
+    if (result.source === 'eddy' && result.closureHash && requestKey && deps.learnedPins) {
+      const { learnedPins } = deps;
+      const closureHash = result.closureHash;
+      void Promise.resolve()
+        .then(() => learnedPins.set(requestKey, closureHash))
+        .catch((err) => {
+          console.warn(`npm: learned pin write failed: ${(err as Error).message}`);
+        });
+    }
     const via = result.source === 'eddy' ? ' via eddy (fast)' : '';
     ctx.stdout.write(
       `npm: installed ${result.packages.length} package(s) in ${formatInstallDuration(elapsedMs)}${via}\n`,
@@ -487,21 +555,101 @@ function hasRootLifecycleScript(scripts: Record<string, string>): boolean {
 }
 
 /**
- * Stamp the freshly installed tree (ADR-0135): flush write-through → write
- * stamp → flush stamp. Best-effort — a stamp failure costs the worker's skip
- * optimization, never the install's success.
+ * The canonical eddy request key for the package.json ON DISK (post-merge).
+ * `null` when the file is missing or a shape the installer would reject — then
+ * no pin can be looked up or learned (the install itself surfaces any loud
+ * error).
+ */
+async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<string | null> {
+  if (!(await vfs.exists(packageJsonPath))) return null;
+  let text: string;
+  try {
+    text = await vfs.readFileText(packageJsonPath);
+  } catch {
+    return null;
+  }
+  const body = eddyRequestFromPackageJson(text);
+  return body ? canonicalEddyRequestKey(body) : null;
+}
+
+/** One terminal-readable line for a dirty drain: first failure + count. */
+function persistFailureLine(report: PersistFailureReport): string {
+  const first = report.failures[0];
+  const sample = first ? ` (first: ${first.op} ${first.path}: ${first.message})` : '';
+  return `${report.total} file(s) failed to persist to OPFS${sample}`;
+}
+
+/**
+ * Drain the write-through, GATE, stamp, drain the stamp (ADR-0187 Corrected).
+ * FIFO order still lands the stamp after the tree, but order alone cannot
+ * survive a swallowed per-op quota/perm failure — a stamped-but-torn tree
+ * would be TRUSTED by the next boot's `installStampSatisfied`. So the tree
+ * drain is checked FIRST and a dirty report skips the stamp (self-heal: no
+ * stamp → the next boot re-installs) with a loud terminal warning. Wall-cost
+ * ≈ the old single drain: the queue is FIFO, so the post-stamp drain only
+ * waits for the stamp's own (tiny) write.
+ *
+ * The stamp stays best-effort: its own write/drain failure only costs the
+ * next boot's skip optimization — the TREE is already proven durable.
  */
 async function stampInstalledTree(
   deps: NpmShellCommandDeps,
+  ctx: CommandContext,
   cwd: string,
   packages: number,
 ): Promise<void> {
+  const notDurable = (cause: string): void => {
+    ctx.stderr.write(
+      `npm: WARNING: ${cause} — the install works in this session but is NOT durable; skipping the install stamp (the next boot re-installs)\n`,
+    );
+  };
+  let treeReport: PersistFailureReport | undefined;
   try {
-    await deps.flush?.();
-    await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
-    await deps.flush?.();
+    treeReport = await deps.flush?.();
   } catch (err) {
-    console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
+    notDurable(`install flush failed: ${(err as Error).message}`);
+    return;
+  }
+  if (treeReport && treeReport.total > 0) {
+    // Only failures INSIDE the stamped tree (`<cwd>/node_modules`, minus the
+    // stamp file — which is about to be rewritten, healing it) gate the stamp.
+    // A global/foreign path (`/.rifty/eddy-learned-pins.json`, another project)
+    // failing to persist is not THIS tree torn and must not skip a good stamp
+    // (`isStampedTreeDamage`). Ask the FULL ledger (`reportHasFailure`), not the
+    // 20-entry sample: foreign failures could fill the sample while tree damage
+    // sits beyond it. Report the full OPFS count with a tree example (from the
+    // sample when present) as the trigger.
+    if (reportHasFailure(treeReport, (p) => isStampedTreeDamage(p, cwd))) {
+      const example = treeReport.failures.find((f) => isStampedTreeDamage(f.path, cwd));
+      notDurable(
+        persistFailureLine({ failures: example ? [example] : [], total: treeReport.total }),
+      );
+      return;
+    }
+  }
+  try {
+    await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
+  } catch (err) {
+    // Terminal, not console: the user's reload behavior changes (next boot
+    // re-installs) — that must be visible where the install ran.
+    ctx.stderr.write(
+      `npm: WARNING: install stamp write failed (${(err as Error).message}) — the next boot re-installs\n`,
+    );
+    return;
+  }
+  try {
+    const stampReport = await deps.flush?.();
+    // Scope to the STAMP FILE via the FULL ledger: foreign/global failures can
+    // fill the sample while the stamp's own failure sits beyond it.
+    if (stampReport && reportHasFailure(stampReport, (p) => p === installStampPath(cwd))) {
+      ctx.stderr.write(
+        'npm: WARNING: the install stamp failed to persist — the next boot re-installs\n',
+      );
+    }
+  } catch (err) {
+    ctx.stderr.write(
+      `npm: WARNING: install stamp flush failed (${(err as Error).message}) — the next boot may re-install\n`,
+    );
   }
 }
 

@@ -1,4 +1,4 @@
-import { syncMirror } from '@riftydev/vfs';
+import { type PersistFailureReport, syncMirror } from '@riftydev/vfs';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach } from 'vitest';
 import { describe, expect, it } from 'vitest';
@@ -48,6 +48,19 @@ describe('workspace-scoped VFS', () => {
     expect(dec.decode(twoSync.readFileBytesSync('/scratch/marker.txt'))).toBe('two');
   });
 
+  it('keeps .rifty owner metadata profile-wide across workspace scopes', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    const oneSync = new ScopedFsSync(fsSync, workspaceVfsPrefix('one'));
+    const twoVfs = new ScopedVfs(vfs, workspaceVfsPrefix('two'));
+
+    oneSync.mkdirSync('/.rifty', { recursive: true });
+    oneSync.writeFileSync('/.rifty/eddy-learned-pins.json', enc.encode('pins'));
+
+    expect(fsSync.existsSync('/.rifty/eddy-learned-pins.json')).toBe(true);
+    expect(fsSync.existsSync('/workspaces/one/.rifty/eddy-learned-pins.json')).toBe(false);
+    expect(await twoVfs.readFileText('/.rifty/eddy-learned-pins.json')).toBe('pins');
+  });
+
   it('re-wires the active sync mirror under the workspace prefix', () => {
     const { vfs, fsSync } = createMemoryFs();
     setSyncMirror(fsSync, { async: vfs });
@@ -58,5 +71,40 @@ describe('workspace-scoped VFS', () => {
 
     expect(fsSync.existsSync('/scratch/marker.txt')).toBe(false);
     expect(fsSync.existsSync('/workspaces/active/scratch/marker.txt')).toBe(true);
+  });
+
+  it('remaps inner OPFS persist-failure paths back to public workspace paths', async () => {
+    const { fsSync } = createMemoryFs();
+    const report: PersistFailureReport = {
+      failures: [
+        {
+          path: '/workspaces/active/proj/node_modules/pkg/package.json',
+          op: 'write',
+          message: 'QuotaExceededError',
+        },
+      ],
+      total: 1,
+      anyFailure(predicate) {
+        return this.failures.some((f) => predicate(f.path));
+      },
+    };
+    (fsSync as typeof fsSync & { flush: () => Promise<PersistFailureReport> }).flush = async () =>
+      report;
+
+    const scoped = new ScopedFsSync(fsSync, workspaceVfsPrefix('active'));
+    const flushed = await scoped.flush();
+
+    expect(flushed?.failures).toEqual([
+      {
+        path: '/proj/node_modules/pkg/package.json',
+        op: 'write',
+        message: 'QuotaExceededError',
+      },
+    ]);
+    expect(flushed?.total).toBe(1);
+    expect(flushed?.anyFailure?.((path) => path === '/proj/node_modules/pkg/package.json')).toBe(
+      true,
+    );
+    expect(flushed?.anyFailure?.((path) => path.startsWith('/workspaces/active'))).toBe(false);
   });
 });

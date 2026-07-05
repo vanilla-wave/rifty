@@ -1,10 +1,10 @@
 ---
 area: perf
 status: draft
-title: Validate eddy ~6x on a real browser over HTTP/3
+title: Validate the eddy launch speed number on a real browser over HTTP/3 (warm h2 = 1.70x; h3 unmeasured)
 created: 2026-06-28
-why: the ~6x headline assumes the bundled single stream beats the per-origin single-h2 tarball phase; HTTP/3 (advertised via alt-svc, untested) could lift the single-connection ceiling and narrow eddy's edge — the number must be measured on the real transport before it is quoted
-user_story: As the maker quoting an eddy speed number at launch I want it measured on a real Chromium tab over the actual transport (h2/h3), but today the ~6x is from a Node/sandbox model and the h3 path is unmeasured.
+why: warm h2 is measured at 1.70x (the launch number); the historical ~6x is a Node/sandbox model that assumed the bundled single stream beats the per-origin single-h2 tarball phase. HTTP/3 (advertised via alt-svc, untested) could lift the single-connection ceiling and shift the measured number — it must be confirmed on the real transport before any h3 figure is quoted.
+user_story: As the maker quoting an eddy speed number at launch I want it measured on a real Chromium tab over the actual transport (h2/h3); warm h2 is 1.70x today and the h3 path is unmeasured (the "~6x" is a Node/sandbox model, never the launch quote).
 epic: fast-install-resolver
 blocked_by: []
 sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/backlog/perf/reference/speed-benchmarks.md]
@@ -29,6 +29,10 @@ Blockers 1 (harness) + 2 (deployed eddy) are now RESOLVED: `pnpm bench` measures
 - **eddy was BROKEN, not just slow, before this** — the client's lockfile fast path did not replay shadow/user overrides, so eddy's pre-seeded lockfile threw `EBROKENLOCK` on every override package (`vite` → esbuild). Fixed in `@riftydev/npm-client` (`createLockfileSource` override-aware) with a regression test; without it the eddy pass here times out. See memory / `installer.ts`.
 
 **Still open (blocker 3 only): h3 vs h2 control.** Playwright can't pin the transport; the 1.70x above is whatever Chromium negotiated to `*.rifty.dev` (likely h2). Measuring the h3 delta + the decision rule below remain.
+
+**Folded here (2026-07-01, ex `perf/install-transport-tuning`):** of that item's three levers, the fetch-semaphore raise was DROPPED (measured inert — one coalesced h2 connection per origin) and `<link rel=preconnect>` SHIPPED (ADR-0195: playground boot preconnects the registry + resolver origins, env-config only). h3 — the only remaining transport lever — lives HERE. Re-baseline with `pnpm bench` before attributing any delta to h3: ADR-0195 (preflight-free POST, pinned GET-by-hash, owner-boot prefetch, streaming unpack) and ADR-0187 (non-blocking stamp) each cut the eddy path's non-transport share after the 1.70x measurement.
+
+**Deploy prerequisite (2026-07-04): h3 is NOT reachable on the live deploy.** Caddy would serve it natively, but QUIC needs UDP 443 end-to-end: the compose now publishes `443/udp` (lands with the next redeploy), while the reused `rifty-registry-proxy` security group is still TCP-only — an operator must add an ingress `443/udp` rule (confirm-first, shared infra) before any h3 measurement means anything. Until both land, Chromium falls back to h2 and every h3 number is void (`hosting-eddy.md` §Deploy step 3).
 
 ## Open forks (resolve to reach ready)
 

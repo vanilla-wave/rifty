@@ -15,23 +15,30 @@
  * from the instant default that shares the same template, a from-scratch preset
  * shows its install even when OPFS was already warmed by an instant preset.
  *
- * Paths 2 and 3 finish by stamping the tree (flush → stamp → flush, so a
- * durable stamp implies a durable tree). Any snapshot failure — fetch,
- * deps drift, restore — degrades to install; a broken asset never bricks
- * the boot. Extracted from the worker bootstrap so the priority logic is
- * unit-testable outside a worker realm.
+ * Paths 2 and 3 finish by stamping the tree. On OPFS, boot/restore first writes
+ * a PENDING stamp (visible but untrusted), then a fire-and-forget drain promotes
+ * it to a trusted stamp only after the tree is clean. The dev line never waits;
+ * a reload before promotion just re-runs dependency arrival. Any snapshot
+ * failure — fetch, deps drift, restore — degrades to install; a broken asset
+ * never bricks the boot. Extracted from the worker bootstrap so the priority
+ * logic is unit-testable outside a worker realm.
  */
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type DepSnapshotV1,
   fetchDepSnapshot as realFetchDepSnapshot,
   restoreDepSnapshot,
 } from './dep-snapshot.ts';
 import {
+  type InstallStamp,
   depsEqual,
+  effectiveDepsFromPackageJsonText,
+  installStampPath,
   installStampSatisfied,
+  isStampedTreeDamage,
   readEffectiveDeps,
-  writeInstallStamp,
+  readInstallStamp,
+  reportHasFailure,
 } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
@@ -64,12 +71,23 @@ export interface EnsureProjectDepsOptions {
    * command, never a dev-line side effect.
    */
   readonly install?: () => Promise<{ readonly packages: number }>;
-  /** Drains the VFS write-through (stamp durability ordering). */
-  readonly flush: () => Promise<void>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
   readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV1 | null>;
+  /**
+   * Drains the realm's OPFS write-through and reports persist failures
+   * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
+   * a PENDING stamp after a clean drain or discards it after tree damage.
+   * Optional: absent on the memory backend and in restore-only harnesses.
+   */
+  readonly flush?: () => Promise<PersistFailureReport | undefined>;
 }
+
+let arrivalEpochSeq = 0;
+let pendingPromotionSeq = 0;
+const arrivalEpochByRoot = new Map<string, number>();
+const stampEncoder = new TextEncoder();
+const stampDecoder = new TextDecoder('utf-8');
 
 export async function ensureProjectDependencies(
   opts: EnsureProjectDepsOptions,
@@ -82,8 +100,10 @@ export async function ensureProjectDependencies(
     return { source: 'stamp', packages: stamp.packages };
   }
 
+  const arrivalEpoch = beginDependencyArrival(opts.root);
+
   if (opts.snapshotUrl) {
-    const restored = await tryRestoreSnapshot(opts, opts.snapshotUrl);
+    const restored = await tryRestoreSnapshot(opts, opts.snapshotUrl, arrivalEpoch);
     if (restored) return restored;
   }
 
@@ -107,7 +127,7 @@ export async function ensureProjectDependencies(
   clearProjectTree(opts.fsSync, opts.root);
 
   const result = await opts.install();
-  await stampTree(opts, result.packages);
+  await stampTree(opts, result.packages, arrivalEpoch);
   return { source: 'install', packages: result.packages };
 }
 
@@ -121,6 +141,7 @@ export function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void
 async function tryRestoreSnapshot(
   opts: EnsureProjectDepsOptions,
   url: string,
+  arrivalEpoch: number,
 ): Promise<EnsureProjectDepsResult | null> {
   const fetchSnapshot = opts.fetchSnapshot ?? realFetchDepSnapshot;
   const snapshot = await fetchSnapshot(url);
@@ -148,15 +169,212 @@ async function tryRestoreSnapshot(
     );
     return null;
   }
-  await stampTree(opts, snapshot.packages);
+  await stampTree(opts, snapshot.packages, arrivalEpoch);
   opts.log(
     `[real-vite/worker] baked node_modules restored (${snapshot.packages} packages, no install needed)\n`,
   );
   return { source: 'snapshot', packages: snapshot.packages };
 }
 
-async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
-  await opts.flush();
-  await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
-  await opts.flush();
+function beginDependencyArrival(root: string): number {
+  arrivalEpochSeq += 1;
+  arrivalEpochByRoot.set(root, arrivalEpochSeq);
+  return arrivalEpochSeq;
+}
+
+function arrivalStillCurrent(root: string, epoch: number): boolean {
+  return arrivalEpochByRoot.get(root) === epoch;
+}
+
+function nextPendingPromotionId(epoch: number): string {
+  pendingPromotionSeq += 1;
+  return `${epoch}:${pendingPromotionSeq}`;
+}
+
+function readEffectiveDepsSync(
+  fsSync: WorkspaceArchiveFs,
+  root: string,
+): Record<string, string> | null {
+  const path = joinPath(root, 'package.json');
+  if (!fsSync.existsSync(path)) return null;
+  try {
+    return effectiveDepsFromPackageJsonText(stampDecoder.decode(fsSync.readFileBytesSync(path)));
+  } catch {
+    return null;
+  }
+}
+
+function writeInstallStampSync(
+  opts: EnsureProjectDepsOptions,
+  packages: number,
+  durability?: 'pending',
+  promotionId?: string,
+): boolean {
+  const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
+  if (!deps) return false;
+  writeInstallStampForDepsSync(opts, deps, packages, durability, promotionId);
+  return true;
+}
+
+function writeInstallStampForDepsSync(
+  opts: EnsureProjectDepsOptions,
+  deps: Record<string, string>,
+  packages: number,
+  durability?: 'pending',
+  promotionId?: string,
+): void {
+  const stamp: InstallStamp = {
+    version: 1,
+    slug: opts.slug,
+    deps,
+    packages,
+    ...(durability === 'pending' ? { durability } : {}),
+    ...(durability === 'pending' && promotionId ? { promotionId } : {}),
+  };
+  opts.fsSync.mkdirSync(joinPath(opts.root, 'node_modules'), { recursive: true });
+  opts.fsSync.writeFileSync(
+    installStampPath(opts.root),
+    stampEncoder.encode(`${JSON.stringify(stamp, null, 2)}\n`),
+  );
+}
+
+async function pendingPromotionStillCurrent(
+  opts: EnsureProjectDepsOptions,
+  packages: number,
+  arrivalEpoch: number,
+  promotionId: string,
+  deps: Record<string, string>,
+): Promise<boolean> {
+  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
+  const stamp = await readInstallStamp(opts.vfs, opts.root);
+  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
+  return (
+    stamp?.durability === 'pending' &&
+    stamp.promotionId === promotionId &&
+    stamp.slug === opts.slug &&
+    stamp.packages === packages &&
+    depsEqual(stamp.deps, deps)
+  );
+}
+
+/** Non-blocking stamp (ADR-0187): OPFS-backed boot/restore writes a PENDING
+ * stamp first. Pending stamps are never trusted by `installStampSatisfied`, so
+ * a crash/reload before the deferred drain re-runs arrival instead of trusting
+ * an unproven tree. The deferred drain promotes the stamp after a clean report
+ * or discards it after tree damage. Memory/no-flush harnesses have no durability
+ * tier, so they keep the old immediate trusted stamp. */
+async function stampTree(
+  opts: EnsureProjectDepsOptions,
+  packages: number,
+  arrivalEpoch: number,
+): Promise<void> {
+  if (!opts.flush) {
+    writeInstallStampSync(opts, packages);
+    return;
+  }
+  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
+  const promotionId = nextPendingPromotionId(arrivalEpoch);
+  const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
+  if (!deps) return;
+  writeInstallStampForDepsSync(opts, deps, packages, 'pending', promotionId);
+  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId, deps);
+}
+
+/**
+ * Fire-and-forget: drain → inspect ledger → promote or discard the PENDING
+ * stamp. Only failures INSIDE the stamped tree (`<root>/node_modules`, minus
+ * the stamp file itself) count as tree damage: a foreign/global path failing to
+ * persist (`/.rifty/eddy-learned-pins.json`, another project's tree) is not THIS
+ * tree torn and must not block promotion (`isStampedTreeDamage`). A stamp-file
+ * failure means the pending marker itself was not durable, so promotion is
+ * skipped; a later boot will re-run arrival instead of trusting a stamp.
+ */
+function scheduleStampDurabilityCheck(
+  opts: EnsureProjectDepsOptions,
+  packages: number,
+  arrivalEpoch: number,
+  promotionId: string,
+  deps: Record<string, string>,
+): void {
+  const flush = opts.flush;
+  if (!flush) return;
+  const stampPath = installStampPath(opts.root);
+  void (async () => {
+    const report = await flush();
+    if (!(await pendingPromotionStillCurrent(opts, packages, arrivalEpoch, promotionId, deps))) {
+      return;
+    }
+    // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
+    // failures could fill the sample while `node_modules` damage sits beyond it,
+    // and trusting a stamp over a torn tree is exactly what this check exists
+    // to prevent. The example for the message comes from the sample when present.
+    if (report && reportHasFailure(report, (p) => isStampedTreeDamage(p, opts.root))) {
+      const example = report.failures.find((f) => isStampedTreeDamage(f.path, opts.root));
+      const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        `[real-vite/worker] WARNING: node_modules failed to persist${sample} — pending install stamp discarded; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
+      );
+      const after = await flush();
+      if (after && reportHasFailure(after, (p) => p === stampPath)) {
+        opts.log(
+          '[real-vite/worker] WARNING: pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
+        );
+      }
+      return;
+    }
+    if (report && reportHasFailure(report, (p) => p === stampPath)) {
+      opts.log(
+        '[real-vite/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
+      );
+      return;
+    }
+
+    const currentDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
+    if (!currentDeps || !depsEqual(currentDeps, deps)) {
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — pending install stamp discarded; the next boot re-runs dependency arrival\n',
+      );
+      const after = await flush();
+      if (after && reportHasFailure(after, (p) => p === stampPath)) {
+        opts.log(
+          '[real-vite/worker] WARNING: stale pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
+        );
+      }
+      return;
+    }
+    if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
+    writeInstallStampForDepsSync(opts, deps, packages);
+    const promoted = await flush();
+    if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
+    const promotedDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
+    if (!promotedDeps || !depsEqual(promotedDeps, deps)) {
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: package.json deps changed during install stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+      );
+      await flush();
+      return;
+    }
+    if (promoted && reportHasFailure(promoted, (p) => isStampedTreeDamage(p, opts.root))) {
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: node_modules failed to persist during stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+      );
+      await flush();
+      return;
+    }
+    if (promoted && reportHasFailure(promoted, (p) => p === stampPath)) {
+      opts.log(
+        '[real-vite/worker] WARNING: trusted install stamp promotion did not reach disk — this session can reuse the tree, but a later boot will re-run dependency arrival\n',
+      );
+    }
+  })().catch((err) => {
+    // The check itself failing (rm error, throwing flush impl) must not
+    // surface as an unhandled rejection — but it must not stay silent either.
+    opts.log(
+      `[real-vite/worker] WARNING: stamp durability check failed: ${(err as Error).message}\n`,
+    );
+  });
 }
