@@ -19,6 +19,7 @@ export {
   type EddyBundleManifestV1,
   type EddyBundleSource,
   type EddyBundleTarballEntry,
+  type UnpackedEddyBundleContents,
 } from './eddy-bundle.ts';
 export {
   startEddyPrefetch,

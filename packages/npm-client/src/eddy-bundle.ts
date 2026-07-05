@@ -51,14 +51,18 @@ export interface EddyBundleManifestV1 {
   tarballs: EddyBundleTarballEntry[];
 }
 
-/** Decoded bundle: manifest + lockfile text + each tarball's bytes. */
+/** Bundle contents: manifest + lockfile text + each tarball's bytes. */
 export interface EddyBundleContents {
   manifest: EddyBundleManifestV1;
   lockfileText: string;
   tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }>;
-  /** EVERY member name in the container, in order — including ones the
-   * manifest does not claim. Lets a validator reject unexpected members the
-   * way the streaming client does (the maps above only surface claimed ones). */
+  /** Present on unpacked bundles: EVERY member name in the container, in order
+   * — including ones the manifest does not claim. Optional so existing callers
+   * can still construct `EddyBundleContents` for pack/mutate tests. */
+  memberNames?: string[];
+}
+
+export interface UnpackedEddyBundleContents extends EddyBundleContents {
   memberNames: string[];
 }
 
@@ -128,9 +132,8 @@ function emitFile(chunks: Uint8Array[], name: string, data: Uint8Array): void {
 
 /** Serialize bundle contents to `EddyBundleV1` tar bytes. */
 /** Pack input: the layout (`manifest → lockfile → tarballs/*`) is DERIVED, so
- * `memberNames` — an unpack observation — is not part of it. An unpacked
- * `EddyBundleContents` still satisfies it (repack-after-mutate tests). */
-export type EddyBundleSource = Omit<EddyBundleContents, 'memberNames'>;
+ * `memberNames` — an unpack observation — is ignored when present. */
+export type EddyBundleSource = EddyBundleContents;
 
 export function packEddyBundle(contents: EddyBundleSource): Uint8Array {
   const chunks: Uint8Array[] = [];
@@ -153,7 +156,7 @@ export function packEddyBundle(contents: EddyBundleSource): Uint8Array {
 /** Parse `EddyBundleV1` tar bytes back into contents. Throws if the bytes are
  * not a valid bundle (missing/format-mismatched manifest, missing lockfile, or
  * a manifest tarball entry with no matching tar member). */
-export function unpackEddyBundle(bytes: Uint8Array): EddyBundleContents {
+export function unpackEddyBundle(bytes: Uint8Array): UnpackedEddyBundleContents {
   const byName = new Map<string, Uint8Array>();
   const memberNames: string[] = [];
   for (const e of parseTarEntries(bytes)) {

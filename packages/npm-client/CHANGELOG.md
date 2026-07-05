@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 21)
+
+- **`EddyBundleContents` stays source-compatible.** `memberNames` is now optional
+  on the public contents shape; `unpackEddyBundle()` returns the narrower
+  `UnpackedEddyBundleContents` when validators need the observed member order.
+
 ### Fixed (PR #107 round 20)
 
 - **Eddy adoption proves every seeded tarball survives cache replay.** A bounded

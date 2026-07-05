@@ -18,10 +18,10 @@
  */
 import { createHash } from 'node:crypto';
 import {
-  type EddyBundleContents,
   LOCKFILE_FILE,
   type Lockfile,
   MANIFEST_FILE,
+  type UnpackedEddyBundleContents,
   bundleCompletenessGap,
   closureHashOf,
   computeIntegrity,
@@ -138,7 +138,7 @@ export class S3BundleStore implements BundleStore {
     closureHash: string,
     bytes: Uint8Array,
   ): Promise<CachedBundle | null> {
-    let contents: EddyBundleContents;
+    let contents: UnpackedEddyBundleContents;
     try {
       contents = unpackEddyBundle(bytes);
     } catch (err) {
