@@ -11,8 +11,9 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { basename, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { basename, joinPath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
+import { resolvePath } from './fs-path.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface WatchOptions {
@@ -68,13 +69,6 @@ export class FSWatcher extends EventEmitter {
     (this.timer as { unref?: () => unknown } | null)?.unref?.();
     return this;
   }
-}
-
-function resolveCwd(p: string): string {
-  if (isAbsolute(p)) return normalizePath(p);
-  const proc = (globalThis as { process?: { cwd?: () => string } }).process;
-  const cwd = proc?.cwd?.() ?? '/';
-  return normalizePath(joinPath(cwd, p));
 }
 
 interface FileSnapshot {
@@ -141,7 +135,7 @@ export function watch(
   }
 
   const interval = opts.interval ?? 250;
-  const target = resolveCwd(path);
+  const target = resolvePath(path);
   const watcher = new FSWatcher();
 
   if (cb) watcher.on('change', cb as (...args: unknown[]) => void);
@@ -255,7 +249,7 @@ export function watchFile(
   const opts: WatchFileOptions = typeof optionsOrListener === 'function' ? {} : optionsOrListener;
   const cb = typeof optionsOrListener === 'function' ? optionsOrListener : listener;
   if (!cb) return;
-  const target = resolveCwd(path);
+  const target = resolvePath(path);
   const interval = opts.interval ?? 5007;
   const existing = pollers.get(target);
   if (existing) {
@@ -282,7 +276,7 @@ export function watchFile(
 }
 
 export function unwatchFile(path: string, listener?: WatchFileListener): void {
-  const target = resolveCwd(path);
+  const target = resolvePath(path);
   const entry = pollers.get(target);
   if (!entry) return;
   if (listener) {

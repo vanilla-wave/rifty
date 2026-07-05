@@ -69,6 +69,31 @@ const c: ParityCase = {
       const rs2 = fs.createReadStream('nope.txt');
       const e2 = await errored(rs2);
       console.log('read-missing:', e2.code, e2.errno, e2.syscall, JSON.stringify(e2.path));
+
+      // (4) callback overloads (review 2026-07-05 fix round): end(cb) fires the
+      // callback and writes NO stray bytes (a function in the chunk slot used
+      // to overlay as array-like -> NUL byte); write(chunk, cb) takes cb, not
+      // an encoding.
+      const ws3 = fs.createWriteStream('cb.txt');
+      ws3.write('hello');
+      await new Promise((res) => ws3.end(res));
+      console.log('end-cb:', JSON.stringify(fs.readFileSync('cb.txt', 'utf8')));
+      const ws4 = fs.createWriteStream('cb2.txt');
+      const werr = await new Promise((res) => ws4.write('x', res));
+      await new Promise((res) => ws4.end(res));
+      console.log('write-cb:', werr === undefined || werr === null,
+        JSON.stringify(fs.readFileSync('cb2.txt', 'utf8')));
+
+      // (5) encoding never splits a multibyte char across chunk boundaries
+      fs.writeFileSync('euro.txt', 'a\u20acb');
+      const chunks = [];
+      await new Promise((res, rej) => {
+        const rs3 = fs.createReadStream('euro.txt', { encoding: 'utf8', highWaterMark: 1 });
+        rs3.on('data', (c) => chunks.push(c));
+        rs3.on('end', res);
+        rs3.on('error', rej);
+      });
+      console.log('multibyte:', JSON.stringify(chunks.join('|')));
     })();
   `,
 };

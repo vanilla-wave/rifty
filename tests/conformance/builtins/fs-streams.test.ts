@@ -70,4 +70,151 @@ describe('fs streams', () => {
     expect(await fsp.readFile('/trunc.txt', 'utf8')).toBe('');
     ws.destroy();
   });
+
+  it('end(cb) fires the callback and writes NO stray bytes (was: NUL byte + swallowed cb)', async () => {
+    const ws = createWriteStream('/e.log');
+    ws.write('hello');
+    await new Promise<void>((resolve) => {
+      // Arity-1 callback — the old chunk-slot overlay minted `fn[0]→0` (NUL).
+      ws.end((_err?: unknown) => resolve());
+    });
+    expect(Array.from(await fsp.readFile('/e.log'))).toEqual([104, 101, 108, 108, 111]);
+  });
+
+  it('end(chunk, cb) writes the chunk then fires the callback', async () => {
+    const ws = createWriteStream('/e2.log');
+    await new Promise<void>((resolve) => ws.end('tail', () => resolve()));
+    expect(await fsp.readFile('/e2.log', 'utf8')).toBe('tail');
+  });
+
+  it('write(chunk, cb) treats a function second arg as the callback, not an encoding', async () => {
+    const ws = createWriteStream('/w.log');
+    const err = await new Promise<unknown>((resolve) => ws.write('x', resolve));
+    expect(err).toBeUndefined();
+    await new Promise<void>((resolve) => ws.end(() => resolve()));
+    expect(await fsp.readFile('/w.log', 'utf8')).toBe('x');
+  });
+
+  it('write after end: callback + error event carry ERR_STREAM_WRITE_AFTER_END', async () => {
+    const ws = createWriteStream('/we.log');
+    await new Promise<void>((resolve) => ws.end('x', () => resolve()));
+    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
+    const cbErr = await new Promise<unknown>((resolve) => ws.write('y', resolve));
+    expect((cbErr as { code?: string }).code).toBe('ERR_STREAM_WRITE_AFTER_END');
+    expect(((await eventErr) as { code?: string }).code).toBe('ERR_STREAM_WRITE_AFTER_END');
+  });
+
+  it('write after destroy: callback-only ERR_STREAM_DESTROYED, no error event (Node parity)', async () => {
+    const ws = createWriteStream('/wd.log');
+    ws.destroy();
+    let eventFired = false;
+    ws.on('error', () => {
+      eventFired = true;
+    });
+    const cbErr = await new Promise<unknown>((resolve) => ws.write('y', resolve));
+    expect((cbErr as { code?: string }).code).toBe('ERR_STREAM_DESTROYED');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(eventFired).toBe(false);
+  });
+
+  it('invalid chunk type throws synchronously (ERR_INVALID_ARG_TYPE)', () => {
+    const ws = createWriteStream('/inv.log');
+    expect(() => ws.write(123 as never)).toThrow(TypeError);
+    ws.destroy();
+  });
+
+  it('write stream binds its target at open — a later cwd change must not retarget the file', async () => {
+    const { setProcessCwd } = await import('../../../packages/runtime-js/src/builtins/process.ts');
+    const { mkdirSync } = await import('../../../packages/runtime-js/src/builtins/fs.ts');
+    mkdirSync('/a', { recursive: true });
+    mkdirSync('/b', { recursive: true });
+    setProcessCwd('/a');
+    try {
+      const ws = createWriteStream('rel.log');
+      await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+      setProcessCwd('/b');
+      await new Promise<void>((resolve) => ws.end('bound', () => resolve()));
+      expect(await fsp.readFile('/a/rel.log', 'utf8')).toBe('bound');
+      await expect(fsp.readFile('/b/rel.log', 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      setProcessCwd('/');
+    }
+  });
+
+  it('emitClose:false suppresses close on success and error alike (read stream)', async () => {
+    await fsp.writeFile('/c.txt', 'x');
+    const okEvents: string[] = [];
+    await new Promise<void>((resolve) => {
+      const rs = createReadStream('/c.txt', { emitClose: false });
+      rs.on('close', () => okEvents.push('close'));
+      rs.on('end', () => resolve());
+      rs.on('data', () => {});
+    });
+    const errEvents: string[] = [];
+    await new Promise<void>((resolve) => {
+      const rs = createReadStream('/missing-c.txt', { emitClose: false });
+      rs.on('close', () => errEvents.push('close'));
+      rs.on('error', () => resolve());
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(okEvents).toEqual([]);
+    expect(errEvents).toEqual([]);
+  });
+
+  it("read stream error emits 'close' after 'error' by default (Node parity)", async () => {
+    const events: string[] = [];
+    await new Promise<void>((resolve) => {
+      const rs = createReadStream('/missing-d.txt');
+      rs.on('error', () => events.push('error'));
+      rs.on('close', () => {
+        events.push('close');
+        resolve();
+      });
+    });
+    expect(events).toEqual(['error', 'close']);
+  });
+
+  it('highWaterMark: 0 is accepted and yields an empty stream + immediate end (Node parity)', async () => {
+    await fsp.writeFile('/h.txt', 'content');
+    const events: string[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream('/h.txt', { highWaterMark: 0 });
+      rs.on('data', () => events.push('data'));
+      rs.on('end', () => {
+        events.push('end');
+        resolve();
+      });
+      rs.on('error', reject);
+    });
+    expect(events).toEqual(['end']);
+  });
+
+  it('utf8 encoding never splits a multibyte char across chunk boundaries', async () => {
+    await fsp.writeFile('/euro.txt', 'a€b');
+    let out = '';
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream('/euro.txt', { encoding: 'utf8', highWaterMark: 1 });
+      rs.on('data', (c: unknown) => {
+        out += c as string;
+      });
+      rs.on('end', () => resolve());
+      rs.on('error', reject);
+    });
+    expect(out).toBe('a€b');
+  });
+
+  it('base64 encoding aligns chunks to 3-byte groups', async () => {
+    const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
+    await fsp.writeFile('/b64.bin', payload);
+    let out = '';
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream('/b64.bin', { encoding: 'base64', highWaterMark: 2 });
+      rs.on('data', (c: unknown) => {
+        out += c as string;
+      });
+      rs.on('end', () => resolve());
+      rs.on('error', reject);
+    });
+    expect(out).toBe(Buffer.from(payload).toString('base64'));
+  });
 });

@@ -5,7 +5,8 @@
  * adds a full Readable/Writable hierarchy. The read path uses `Vfs.openReadable`
  * first (ADR-0020 phase 2 true streaming); the sync mirror is only the fallback
  * when no async VFS is installed. Event order matches Node:
- * `open` → `ready` → `data*` → `end` → `close` / `finish` → `close`.
+ * `open` → `ready` → `data*` → `end` → `close` / `finish` → `close`, with
+ * `emitClose:false` suppressing `close` on success, error and destroy alike.
  *
  * Paths resolve against process.cwd() via the shared fs-path kit and errors
  * surface Node-shaped (fs-errors kit) — both were review 2026-07-05 findings
@@ -13,6 +14,11 @@
  * Write streams honor `flags` ('w'/'a'/exclusive 'x' family/'r+') with Node's
  * truncate-at-open semantics and write THROUGH to the mirror per macrotask
  * burst, so a long-lived logger's output is visible before `end()`.
+ * `write`/`end` accept Node's callback overloads (`write(chunk, cb)`,
+ * `end(cb)`, `end(chunk, cb)`); post-end/post-destroy writes error the
+ * callback with Node's ERR_STREAM_* codes (all verified vs real Node
+ * 2026-07-05 — a function in the chunk slot used to be overlaid as an
+ * array-like, minting a NUL byte into the file).
  *
  * Loud gaps (NotImplementedError, never silent accept-and-ignore): `fd`, `fs`,
  * write-stream `start`, `autoClose:false`. `mode` is accepted: the VFS has no
@@ -68,13 +74,96 @@ function assertSupportedStreamOptions(
   }
 }
 
-/** Node throws ERR_OUT_OF_RANGE SYNCHRONOUSLY at createReadStream for a bad window. */
-function assertStreamRange(name: string, value: number | undefined, min = 0): void {
-  if (value !== undefined && (!Number.isInteger(value) || value < min)) {
+/**
+ * Node validates the window SYNCHRONOUSLY at createReadStream with
+ * ERR_OUT_OF_RANGE for negatives/non-integers. `highWaterMark: 0` is VALID in
+ * Node (yields an empty stream + immediate 'end'; verified 2026-07-05) — it is
+ * handled explicitly in `start()`, never forwarded to the VFS (whose
+ * `chunkSize: 0` is a RangeError).
+ */
+function assertStreamRange(name: string, value: number | undefined): void {
+  if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
     throw Object.assign(
       new RangeError(`The value of "${name}" is out of range. Received ${value}`),
       { code: 'ERR_OUT_OF_RANGE' },
     );
+  }
+}
+
+function streamError(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+const WRITE_AFTER_END = (): Error => streamError('ERR_STREAM_WRITE_AFTER_END', 'write after end');
+const STREAM_DESTROYED = (): Error =>
+  streamError('ERR_STREAM_DESTROYED', 'Cannot call write after a stream was destroyed');
+
+function assertValidChunk(chunk: unknown): asserts chunk is string | Uint8Array {
+  if (typeof chunk !== 'string' && !(chunk instanceof Uint8Array)) {
+    // Node throws SYNCHRONOUSLY — an invalid chunk is a programming error, and
+    // the old array-like overlay of a function chunk minted a NUL byte into
+    // the file (review 2026-07-05).
+    throw Object.assign(
+      new TypeError(
+        'The "chunk" argument must be of type string or an instance of Buffer or Uint8Array',
+      ),
+      { code: 'ERR_INVALID_ARG_TYPE' },
+    );
+  }
+}
+
+/**
+ * Incremental bytes→string converter for the read-stream `encoding` option.
+ * A chunk boundary must not split an encoding unit (Node routes through
+ * StringDecoder): utf8 decodes via a streaming TextDecoder; utf16le/base64
+ * carry the remainder to the next chunk; single-byte encodings pass through.
+ */
+class ChunkDecoder {
+  private readonly enc: string;
+  private readonly utf8: TextDecoder | null;
+  private readonly unit: number;
+  private carry: Uint8Array = new Uint8Array();
+
+  constructor(enc: string) {
+    this.enc = enc;
+    const low = enc.toLowerCase();
+    // Unknown encodings throw here (loud, synchronous — Node validates at
+    // createReadStream too): probe the codec with an empty buffer.
+    (Buffer.from(new Uint8Array()) as Uint8Array & { toString(e?: string): string }).toString(enc);
+    this.utf8 = low === 'utf8' || low === 'utf-8' ? new TextDecoder('utf-8') : null;
+    this.unit =
+      low === 'utf16le' || low === 'utf-16le' || low === 'ucs2' || low === 'ucs-2'
+        ? 2
+        : low === 'base64' || low === 'base64url'
+          ? 3
+          : 1;
+  }
+
+  decode(bytes: Uint8Array): string {
+    if (this.utf8) return this.utf8.decode(bytes, { stream: true });
+    let buf = bytes;
+    if (this.carry.length > 0) {
+      const merged = new Uint8Array(this.carry.length + bytes.length);
+      merged.set(this.carry, 0);
+      merged.set(bytes, this.carry.length);
+      buf = merged;
+      this.carry = new Uint8Array();
+    }
+    const rem = this.unit === 1 ? 0 : buf.length % this.unit;
+    if (rem > 0) {
+      this.carry = buf.slice(buf.length - rem);
+      buf = buf.subarray(0, buf.length - rem);
+    }
+    if (buf.length === 0) return '';
+    return (Buffer.from(buf) as Uint8Array & { toString(e?: string): string }).toString(this.enc);
+  }
+
+  flush(): string {
+    if (this.utf8) return this.utf8.decode();
+    if (this.carry.length === 0) return '';
+    const tail = this.carry;
+    this.carry = new Uint8Array();
+    return (Buffer.from(tail) as Uint8Array & { toString(e?: string): string }).toString(this.enc);
   }
 }
 
@@ -113,7 +202,10 @@ function parseWriteFlags(flags: string, surface: string): ParsedStreamFlags {
 class FileReadStream extends EventEmitter {
   readonly path: string;
   private readonly opts: ReadStreamOptions;
+  private readonly emitCloseOpt: boolean;
+  private readonly strDecoder: ChunkDecoder | null;
   private destroyed = false;
+  private closeEmitted = false;
 
   constructor(path: string, opts: ReadStreamOptions = {}) {
     super();
@@ -124,13 +216,15 @@ class FileReadStream extends EventEmitter {
     }
     assertStreamRange('start', opts.start);
     assertStreamRange('end', opts.end);
-    assertStreamRange('highWaterMark', opts.highWaterMark, 1);
+    assertStreamRange('highWaterMark', opts.highWaterMark);
     if (opts.start !== undefined && opts.end !== undefined && opts.end < opts.start) {
       throw Object.assign(
         new RangeError(`The value of "start" is out of range. Received ${opts.start}`),
         { code: 'ERR_OUT_OF_RANGE' },
       );
     }
+    this.emitCloseOpt = opts.emitClose ?? true;
+    this.strDecoder = opts.encoding ? new ChunkDecoder(opts.encoding) : null;
     this.path = path;
     this.opts = opts;
     if (opts.signal) {
@@ -143,6 +237,13 @@ class FileReadStream extends EventEmitter {
     queueMicrotask(() => this.start());
   }
 
+  /** Emit 'close' at most once, honoring `emitClose:false` (Node parity). */
+  private closeOnce(): void {
+    if (this.closeEmitted) return;
+    this.closeEmitted = true;
+    if (this.emitCloseOpt) this.emit('close');
+  }
+
   private abort(): void {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -151,28 +252,49 @@ class FileReadStream extends EventEmitter {
       code: 'ABORT_ERR',
     });
     this.emit('error', err);
-    this.emit('close');
+    this.closeOnce();
   }
 
+  /** Node default: an errored stream still emits 'close' after 'error'. */
   private emitError(err: unknown): void {
     this.emit('error', toNodeFsError(err, 'open', this.path));
+    this.closeOnce();
+  }
+
+  private emitData(bytes: Uint8Array): void {
+    if (this.strDecoder) {
+      // Never emit the empty string a mid-unit boundary produces.
+      const text = this.strDecoder.decode(bytes);
+      if (text !== '') this.emit('data', text);
+    } else {
+      this.emit('data', Buffer.from(bytes));
+    }
+  }
+
+  /** Flush a decoder-held tail, then 'end' → 'close'. */
+  private finishEnd(): void {
+    const tail = this.strDecoder?.flush();
+    if (tail) this.emit('data', tail);
+    this.emit('end');
+    this.closeOnce();
   }
 
   private start(): void {
     if (this.destroyed) return;
     const hwm = this.opts.highWaterMark ?? 64 * 1024;
+    // Node accepts highWaterMark 0: the stream opens, reads nothing and ends
+    // immediately (verified vs real Node 2026-07-05). The VFS chunkSize
+    // contract treats 0 as a RangeError, so short-circuit here.
+    if (hwm === 0) {
+      this.emit('open', 0);
+      this.emit('ready');
+      this.finishEnd();
+      return;
+    }
     // Node's `createReadStream` byte range is INCLUSIVE of `end`; the half-open
     // `Vfs.openReadable` / sync-slice surfaces are exclusive — convert here so the
     // last byte is delivered (parity: {start,end} reads end-start+1 bytes).
     const exclusiveEnd = this.opts.end !== undefined ? this.opts.end + 1 : undefined;
-    const emitChunkBytes = (bytes: Uint8Array): void => {
-      const chunk = this.opts.encoding
-        ? (Buffer.from(bytes) as Uint8Array & { toString(e?: string): string }).toString(
-            this.opts.encoding,
-          )
-        : Buffer.from(bytes);
-      this.emit('data', chunk);
-    };
 
     // Whole-file emit from a byte buffer, chunked across microtasks so the event
     // loop is not starved. Applies the `start`/`end` window.
@@ -184,13 +306,12 @@ class FileReadStream extends EventEmitter {
       const emitChunk = (): void => {
         if (this.destroyed) return;
         if (i >= end) {
-          this.emit('end');
-          this.emit('close');
+          this.finishEnd();
           return;
         }
         const slice = data.subarray(i, Math.min(i + hwm, end));
         i += slice.length;
-        emitChunkBytes(slice);
+        this.emitData(slice);
         queueMicrotask(emitChunk);
       };
       this.emit('open', 0);
@@ -223,10 +344,9 @@ class FileReadStream extends EventEmitter {
               }
               const { value, done } = await reader.read();
               if (done) break;
-              if (value && value.byteLength > 0) emitChunkBytes(value);
+              if (value && value.byteLength > 0) this.emitData(value);
             }
-            this.emit('end');
-            this.emit('close');
+            this.finishEnd();
           } catch (err) {
             this.emitError(err);
           }
@@ -255,7 +375,10 @@ class FileReadStream extends EventEmitter {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
     this.destroyed = true;
+    // Async like Node's destroy teardown; closeOnce dedupes vs a prior end.
+    queueMicrotask(() => this.closeOnce());
   }
 }
 
@@ -263,6 +386,8 @@ class FileWriteStream extends EventEmitter {
   readonly path: string;
   private readonly emitCloseOpt: boolean;
   private readonly flags: ParsedStreamFlags;
+  /** Resolved-at-open path — Node binds the fd at open; a later chdir must not retarget the file. */
+  private np: string | null = null;
   /** Full file image; writes overlay at {@link pos} (r+ overwrites, a appends). */
   private bytes: Uint8Array = new Uint8Array();
   private pos = 0;
@@ -277,6 +402,7 @@ class FileWriteStream extends EventEmitter {
   private destroyed = false;
   private finished = false;
   private flushScheduled = false;
+  private closeEmitted = false;
 
   constructor(path: string, opts: WriteStreamOptions = {}) {
     super();
@@ -287,6 +413,12 @@ class FileWriteStream extends EventEmitter {
     queueMicrotask(() => this.open());
   }
 
+  private closeOnce(): void {
+    if (this.closeEmitted) return;
+    this.closeEmitted = true;
+    if (this.emitCloseOpt) this.emit('close');
+  }
+
   /**
    * Node's open side-effects happen at OPEN, not at end(): 'w' truncates the
    * file immediately, 'a' creates a missing file, exclusive flags raise
@@ -295,6 +427,7 @@ class FileWriteStream extends EventEmitter {
   private open(): void {
     if (this.destroyed) return;
     const np = resolvePath(this.path);
+    this.np = np;
     try {
       const exists = syncMirror().existsSync(np);
       if (exists && this.flags.exclusive) {
@@ -319,13 +452,32 @@ class FileWriteStream extends EventEmitter {
     } catch (err) {
       this.failed = true;
       this.emit('error', toNodeFsError(err, 'open', this.path));
-      if (this.emitCloseOpt) this.emit('close');
+      this.closeOnce();
     }
   }
 
-  write(chunk: Uint8Array | string, encoding?: string, cb?: (err?: unknown) => void): boolean {
-    if (this.failed || this.destroyed || this.finished) {
-      queueMicrotask(() => cb?.(fsError('EBADF', this.path, 'write')));
+  write(
+    chunk: unknown,
+    encodingOrCb?: string | ((err?: unknown) => void),
+    maybeCb?: (err?: unknown) => void,
+  ): boolean {
+    // Node overload: write(chunk, cb).
+    const cb = typeof encodingOrCb === 'function' ? encodingOrCb : maybeCb;
+    const encoding = typeof encodingOrCb === 'function' ? undefined : encodingOrCb;
+    assertValidChunk(chunk);
+    if (this.finished) {
+      // Node: callback AND 'error' event (verified 2026-07-05).
+      const err = WRITE_AFTER_END();
+      queueMicrotask(() => {
+        cb?.(err);
+        this.emit('error', err);
+      });
+      return false;
+    }
+    if (this.failed || this.destroyed) {
+      // Node: callback only — no 'error' event (verified 2026-07-05).
+      const err = STREAM_DESTROYED();
+      queueMicrotask(() => cb?.(err));
       return false;
     }
     const buf =
@@ -370,23 +522,44 @@ class FileWriteStream extends EventEmitter {
   }
 
   private persist(): void {
+    // np bound at open (Node binds the fd there): persist never re-resolves,
+    // so a chdir mid-stream cannot retarget the file (review 2026-07-05).
+    const np = this.np;
+    if (np === null) return;
     try {
-      syncMirror().writeFileSync(resolvePath(this.path), this.bytes);
+      syncMirror().writeFileSync(np, this.bytes);
     } catch (err) {
       this.failed = true;
       this.emit('error', toNodeFsError(err, 'write', this.path));
     }
   }
 
-  end(chunk?: Uint8Array | string, cb?: () => void): void {
-    if (chunk !== undefined) this.write(chunk);
+  end(chunkOrCb?: unknown, encodingOrCb?: string | (() => void), maybeCb?: () => void): void {
+    // Node overloads: end(cb), end(chunk, cb), end(chunk, encoding, cb).
+    const chunk = typeof chunkOrCb === 'function' ? undefined : chunkOrCb;
+    const cb =
+      typeof chunkOrCb === 'function'
+        ? (chunkOrCb as () => void)
+        : typeof encodingOrCb === 'function'
+          ? encodingOrCb
+          : maybeCb;
+    const encoding = typeof encodingOrCb === 'function' ? undefined : encodingOrCb;
+    if (this.finished) {
+      // Node: a second end() still fires its callback, with no error (verified
+      // 2026-07-05); the write path already emitted 'error' for any chunk.
+      if (chunk !== undefined) this.write(chunk, encoding as string | undefined);
+      queueMicrotask(() => cb?.());
+      return;
+    }
+    if (this.destroyed) return; // Node: end() on a destroyed stream drops the callback (verified)
+    if (chunk !== undefined) this.write(chunk, encoding as string | undefined);
     queueMicrotask(() => {
       if (this.failed || this.destroyed || this.finished) return;
       this.finished = true;
       if (this.opened) this.persist();
       if (this.failed) return;
       this.emit('finish');
-      if (this.emitCloseOpt) this.emit('close');
+      this.closeOnce();
       cb?.();
     });
   }
@@ -395,7 +568,7 @@ class FileWriteStream extends EventEmitter {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    if (this.emitCloseOpt) this.emit('close');
+    this.closeOnce();
   }
 }
 

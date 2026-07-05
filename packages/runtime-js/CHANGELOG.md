@@ -29,6 +29,35 @@
   unrefs the poll timer; `encoding:'buffer'` is a loud gap.
 - **`fs.watchFile` Stats report the real `isFile()`/`isDirectory()`** (was
   hardcoded file=exists, directory=false).
+- **Review fix round 2026-07-05 (PR #115 review + handoff):**
+  - `createWriteStream` `write`/`end` accept Node's callback overloads
+    (`write(chunk, cb)`, `end(cb)`, `end(chunk, cb)`). Previously a function in
+    the chunk slot was overlaid as an array-like — `end(cb)` wrote a NUL byte
+    into the file and silently dropped the callback; `write(chunk, cb)` threw
+    "Unsupported encoding". Post-end writes error the callback AND emit 'error'
+    (`ERR_STREAM_WRITE_AFTER_END`); post-destroy writes error the callback only
+    (`ERR_STREAM_DESTROYED`); invalid chunk types throw synchronously
+    (`ERR_INVALID_ARG_TYPE`) — all verified against real Node. Parity probes
+    added to `fs/streams-flags-relative-cwd`.
+  - Write streams bind their resolved target at open (Node binds the fd): a
+    `process.chdir` mid-stream no longer retargets a relative-path stream.
+  - `createReadStream` honors `emitClose:false` (was a silently-ignored option)
+    and emits `'close'` after `'error'`/`destroy()` by default (Node order);
+    `highWaterMark: 0` is accepted like Node (empty stream + immediate 'end')
+    instead of a Node-divergent throw.
+  - Read-stream `encoding` decodes incrementally (utf8 streaming decoder;
+    utf16le/base64 remainder carry) — a multibyte char split across chunk
+    boundaries no longer minted U+FFFD.
+  - Open-preflight paths (`openSync`, flagged `readFileSync`/`writeFileSync`,
+    `fs.promises.access`) report `ENOTDIR` when traversing through a file
+    instead of collapsing to `ENOENT` (strict probe; the non-throwing
+    `statSyncOrNull` keeps its ADR-0083 resolver contract). Parity probes in
+    `fs/error-shape-errno-syscall`.
+  - `FS_ERRNO` covers the full `VfsErrorCode` set (added `EPERM`/`EIO`/
+    `EDQUOT`) so no VFS error crosses the boundary without `errno`; compile-time
+    exhaustiveness guard in `fs-errors.test.ts`.
+  - `fs.watch`/`fs.watchFile` resolve relative paths via the shared fs-path kit
+    (was a private `globalThis.process.cwd()` re-implementation).
 
 ### Added
 
