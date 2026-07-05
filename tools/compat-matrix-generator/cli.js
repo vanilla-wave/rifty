@@ -78,7 +78,7 @@ const matrices = [
       [
         'Stream unsupported options',
         '❌',
-        '`fd`, custom `fs`, write-stream `start`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore',
+        '`fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore',
       ],
       [
         '`fs.watch`',

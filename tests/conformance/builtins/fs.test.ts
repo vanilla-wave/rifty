@@ -39,6 +39,15 @@ function codeOf(fn: () => void): string | undefined {
   return undefined;
 }
 
+function errorOf(fn: () => void): NodeJS.ErrnoException & { dest?: string } {
+  try {
+    fn();
+  } catch (err) {
+    return err as NodeJS.ErrnoException & { dest?: string };
+  }
+  throw new Error('expected throw');
+}
+
 describe('node:fs sync API', () => {
   it('writeFileSync + readFileSync (utf8)', () => {
     writeFileSync('/hello.txt', 'world');
@@ -95,6 +104,48 @@ describe('node:fs sync API', () => {
 
   it('throws ENOENT for missing files', () => {
     expect(() => readFileSync('/missing.txt')).toThrow(/ENOENT/);
+  });
+
+  it('appendFileSync honors non-append open flags', () => {
+    expect(codeOf(() => fs.appendFileSync('/missing-rplus.txt', 'X', { flag: 'r+' }))).toBe(
+      'ENOENT',
+    );
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'r+' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('Xbc');
+
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'a' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('abcX');
+
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'w' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('X');
+  });
+
+  it('copyFileSync COPYFILE_EXCL reports a missing source before existing destination', () => {
+    writeFileSync('/dst.txt', 'd');
+    const err = errorOf(() => copyFileSync('/missing.txt', '/dst.txt', constants.COPYFILE_EXCL));
+    expect(err).toMatchObject({
+      code: 'ENOENT',
+      syscall: 'copyfile',
+      path: '/missing.txt',
+      dest: '/dst.txt',
+    });
+  });
+
+  it('cpSync reports destination traversal failures as Node-shaped lstat errors', () => {
+    mkdirSync('/dir', { recursive: true });
+    writeFileSync('/dir/keep.txt', 'k');
+    writeFileSync('/plain.txt', 'x');
+
+    const fast = errorOf(() => fs.cpSync('/dir', '/plain.txt/out', { recursive: true }));
+    expect(fast).toMatchObject({ code: 'ENOTDIR', syscall: 'lstat', path: '/plain.txt/out' });
+
+    const edge = errorOf(() =>
+      fs.cpSync('/dir', '/plain.txt/out', { recursive: true, force: false }),
+    );
+    expect(edge).toMatchObject({ code: 'ENOTDIR', syscall: 'lstat', path: '/plain.txt/out' });
   });
 });
 

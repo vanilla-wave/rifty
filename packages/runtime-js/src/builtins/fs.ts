@@ -499,12 +499,27 @@ export function appendFileSync(
   if (flag !== undefined && flag !== 'a' && flag !== 'a+') {
     const parsed = parseOpenFlags(flag);
     if (!parsed.writable) throw fsError('EBADF', ps, 'write');
-    if (parsed.create && parsed.exclusive && syncMirror().existsSync(np)) {
-      throw fsError('EEXIST', ps, 'open');
-    }
+    const stat = withSyscall('open', p, () => statStrictOrNull(np));
+    if (stat?.isDirectory) throw fsError('EISDIR', ps, 'open');
+    if (stat && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
+    if (!stat && !parsed.create) throw fsError('ENOENT', ps, 'open');
+    const next = encodeData(data, enc);
     if (parsed.truncate) {
       // 'w'-family flag on appendFile truncates first (Node honors the flag).
-      withSyscall('open', p, () => syncMirror().writeFileSync(np, encodeData(data, enc)));
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
+      return;
+    }
+    if (!parsed.append) {
+      // Non-append write flags (e.g. `r+`) write from offset 0, preserving any
+      // tail beyond the written data. Node uses the supplied open flag; it does
+      // not silently create a miss or append to the end.
+      const existing = stat
+        ? withSyscall('open', p, () => syncMirror().readFileBytesSync(np))
+        : new Uint8Array();
+      const merged = new Uint8Array(Math.max(existing.length, next.length));
+      merged.set(existing, 0);
+      merged.set(next, 0);
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, merged));
       return;
     }
   }
@@ -694,16 +709,16 @@ export function copyFileSync(src: string, dst: string, mode = 0): void {
   if ((mode & constants.COPYFILE_FICLONE_FORCE) !== 0) {
     throw new NotImplementedError('fs.copyFileSync.COPYFILE_FICLONE_FORCE');
   }
+  const srcAbs = resolvePath(src);
+  const dstAbs = resolvePath(dst);
+  // Source is opened before COPYFILE_EXCL checks the destination: a missing
+  // source reports ENOENT/copyfile even when dst already exists.
+  withSyscall('copyfile', src, () => syncMirror().statSync(srcAbs), dst);
   if ((mode & constants.COPYFILE_EXCL) !== 0 && existsSync(dst)) {
     throw fsError('EEXIST', src, 'copyfile', dst);
   }
   // ADR-0090: native VFS copy (single regular file; dst mtime=now). FICLONE degrades here.
-  withSyscall(
-    'copyfile',
-    src,
-    () => syncMirror().copyFileSync(resolvePath(src), resolvePath(dst)),
-    dst,
-  );
+  withSyscall('copyfile', src, () => syncMirror().copyFileSync(srcAbs, dstAbs), dst);
 }
 
 export function cpSync(src: string, dst: string, opts?: CpOptions): void {
@@ -724,9 +739,12 @@ export function cpSync(src: string, dst: string, opts?: CpOptions): void {
     // TODO(backlog: runtime-js/fs-cp-type-mismatch-error-codes) — VFS cpSync surfaces
     // EISDIR/EEXIST for file→dir / dir→file overwrites; Node uses ERR_FS_CP_NON_DIR_TO_DIR
     // / ERR_FS_CP_DIR_TO_NON_DIR.
-    // Node's cp lstats the source first: a missing src reports 'lstat' with no dest.
-    withSyscall({ default: 'copyfile', ENOENT: 'lstat' }, src, () =>
-      syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive }),
+    const srcAbs = resolvePath(src);
+    const dstAbs = resolvePath(dst);
+    // Node's cp lstats the source first: a missing src reports `lstat` on src.
+    withSyscall('lstat', src, () => syncMirror().statSync(srcAbs));
+    withSyscall({ default: 'copyfile', ENOTDIR: 'lstat' }, dst, () =>
+      syncMirror().cpSync(srcAbs, dstAbs, { recursive: opts?.recursive }),
     );
     return;
   }
@@ -745,8 +763,10 @@ function cpEntry(
   const st = withSyscall('lstat', srcDisplay, () => syncMirror().statSync(srcAbs));
   if (st.isDirectory) {
     if (!opts.recursive) throw fsError('EISDIR', srcAbs, 'cp');
-    syncMirror().mkdirSync(dstAbs, { recursive: true });
-    for (const child of syncMirror().readdirSync(srcAbs)) {
+    withSyscall('lstat', dstDisplay, () => syncMirror().mkdirSync(dstAbs, { recursive: true }));
+    for (const child of withSyscall('scandir', srcDisplay, () =>
+      syncMirror().readdirSync(srcAbs),
+    )) {
       cpEntry(
         `${srcAbs}/${child.name}`,
         `${dstAbs}/${child.name}`,
@@ -769,10 +789,12 @@ function cpEntry(
     }
     return; // force:false → skip an existing file
   }
-  syncMirror().copyFileSync(srcAbs, dstAbs);
+  withSyscall({ default: 'copyfile', ENOTDIR: 'lstat' }, dstDisplay, () =>
+    syncMirror().copyFileSync(srcAbs, dstAbs),
+  );
   if (opts.preserveTimestamps) {
-    const m = syncMirror().statSync(srcAbs).mtime ?? 0;
-    syncMirror().utimes(dstAbs, m, m);
+    const m = withSyscall('stat', srcDisplay, () => syncMirror().statSync(srcAbs)).mtime ?? 0;
+    withSyscall('utime', dstDisplay, () => syncMirror().utimes(dstAbs, m, m));
   }
 }
 

@@ -105,6 +105,21 @@ const c: ParityCase = {
       console.log('write-after-end-same-tick:', writeAfterEndRet, e3.code,
         JSON.stringify(fs.readFileSync('after-end.txt', 'utf8')));
 
+      const preOpenEvents = [];
+      const ws5b = fs.createWriteStream('after-end-preopen.txt');
+      ws5b.on('open', () => preOpenEvents.push('open'));
+      ws5b.on('ready', () => preOpenEvents.push('ready'));
+      ws5b.on('error', (e) => preOpenEvents.push('error:' + e.code));
+      ws5b.on('close', () => preOpenEvents.push('close'));
+      const preOpenClosed = new Promise((res) => ws5b.on('close', res));
+      ws5b.end();
+      const writeAfterEndPreOpenRet = ws5b.write('b', (e) =>
+        preOpenEvents.push('cb:' + e.code));
+      preOpenEvents.push('ret:' + writeAfterEndPreOpenRet);
+      await preOpenClosed;
+      console.log('write-after-end-preopen:', preOpenEvents.join('|'),
+        JSON.stringify(fs.readFileSync('after-end-preopen.txt', 'utf8')));
+
       // (5) encoding never splits a multibyte char across chunk boundaries
       fs.writeFileSync('euro.txt', 'a\u20acb');
       const chunks = [];

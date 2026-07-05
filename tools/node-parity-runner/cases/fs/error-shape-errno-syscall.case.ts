@@ -56,6 +56,8 @@ const c: ParityCase = {
     probe('realpath-missing', ['code', 'errno', 'syscall'], () => fs.realpathSync('missing.txt'));
     probe('rename-missing-src', DUAL, () => fs.renameSync('missing.txt', 'dst.txt'));
     probe('copyFile-missing-src', DUAL, () => fs.copyFileSync('missing.txt', 'dst.txt'));
+    probe('copyFile-excl-missing-src-dst-exists', DUAL, () =>
+      fs.copyFileSync('missing.txt', 'plain.txt', fs.constants.COPYFILE_EXCL));
     probe('open-missing', FULL, () => fs.openSync('missing.txt', 'r'));
     probe('open-notdir', FULL, () => fs.openSync('plain.txt/deep', 'r'));
     probe('open-create-notdir', FULL, () => fs.openSync('plain.txt/deep', 'w'));
@@ -63,7 +65,13 @@ const c: ParityCase = {
     probe('writeFile-rplus-notdir', FULL, () =>
       fs.writeFileSync('plain.txt/deep', 'x', { flag: 'r+' }));
     probe('appendFile-notdir', FULL, () => fs.appendFileSync('plain.txt/deep.log', 'x'));
+    probe('appendFile-rplus-missing', FULL, () =>
+      fs.appendFileSync('missing-rplus.log', 'x', { flag: 'r+' }));
     probe('cp-missing-src', DUAL, () => fs.cpSync('missing-dir', 'dst-dir', { recursive: true }));
+    probe('cp-fast-dst-notdir', FULL, () =>
+      fs.cpSync('dir', 'plain.txt/out', { recursive: true }));
+    probe('cp-edge-dst-notdir', FULL, () =>
+      fs.cpSync('dir', 'plain.txt/out', { recursive: true, force: false }));
     probe('opendir-missing', FULL, () => fs.opendirSync('missing-dir'));
 
     const fsp = require('node:fs/promises');

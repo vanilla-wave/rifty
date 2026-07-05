@@ -126,6 +126,30 @@ describe('fs streams', () => {
     expect(await fsp.readFile('/we-sync.log', 'utf8')).toBe('a');
   });
 
+  it('pre-open write after end reports callback before open, then emits error', async () => {
+    const events: string[] = [];
+    const ws = createWriteStream('/we-preopen.log');
+    ws.on('open', () => events.push('open'));
+    ws.on('ready', () => events.push('ready'));
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    ws.on('close', () => events.push('close'));
+    ws.end();
+    const ret = ws.write('x', (err?: unknown) =>
+      events.push(`cb:${(err as { code?: string } | undefined)?.code}`),
+    );
+    events.push(`ret:${ret}`);
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual([
+      'ret:false',
+      'cb:ERR_STREAM_WRITE_AFTER_END',
+      'open',
+      'ready',
+      'error:ERR_STREAM_WRITE_AFTER_END',
+      'close',
+    ]);
+    expect(await fsp.readFile('/we-preopen.log', 'utf8')).toBe('');
+  });
+
   it('r+ through a file reports ENOTDIR open, not ENOENT', async () => {
     writeFileSync('/plain.txt', 'x');
     const ws = createWriteStream('/plain.txt/deep', { flags: 'r+' });
@@ -150,6 +174,13 @@ describe('fs streams', () => {
     const ws = createWriteStream('/inv.log');
     expect(() => ws.write(123 as never)).toThrow(TypeError);
     ws.destroy();
+  });
+
+  it('createWriteStream signal is a loud unsupported option, never silently ignored', () => {
+    const ac = new AbortController();
+    expect(() => createWriteStream('/signal.log', { signal: ac.signal })).toThrow(
+      /Not implemented/,
+    );
   });
 
   it('write stream binds its target at open — a later cwd change must not retarget the file', async () => {

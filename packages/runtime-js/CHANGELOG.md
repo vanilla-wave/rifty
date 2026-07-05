@@ -14,7 +14,14 @@
   { throwIfNoEntry:false })` suppresses path-through-file `ENOTDIR` probes like
   Node; read streams with `highWaterMark: 0` still open/stat the target before
   ending; and pre-open write/end callbacks now receive open failures instead of
-  false success.
+  false success. Additional local review pass: `appendFileSync(...,
+  { flag:'r+' })` now requires an existing target and writes from offset 0
+  instead of silently creating/appending; write streams no longer silently accept
+  unsupported `signal`; pre-open write-after-`end()` callbacks now beat the
+  later `open`/`ready` events like Node; `copyFileSync(COPYFILE_EXCL)` reports a
+  missing source before an existing destination; and `cpSync` fast/edge paths
+  keep destination traversal errors Node-shaped instead of leaking raw VFS
+  errors or misattributing them to the source.
 - **Node-shaped fs errors everywhere (review 2026-07-05).** A single
   VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
   `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path

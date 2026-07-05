@@ -21,9 +21,9 @@
  * array-like, minting a NUL byte into the file).
  *
  * Loud gaps (NotImplementedError, never silent accept-and-ignore): `fd`, `fs`,
- * write-stream `start`, `autoClose:false`. `mode` is accepted: the VFS has no
- * permission bits, so there is genuinely nothing to apply (same precedent as
- * `lstat === stat`, ADR-0050).
+ * write-stream `start`, write-stream `signal`, `autoClose:false`. `mode` is
+ * accepted: the VFS has no permission bits, so there is genuinely nothing to
+ * apply (same precedent as `lstat === stat`, ADR-0050).
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -58,6 +58,7 @@ interface WriteStreamOptions {
   start?: number;
   highWaterMark?: number;
   fs?: unknown;
+  signal?: AbortSignal;
 }
 
 /** Reject Node option fields this implementation cannot honor — loudly. */
@@ -428,17 +429,18 @@ class FileWriteStream extends EventEmitter {
   private closeEmitted = false;
   private bufferedLength = 0;
   private needDrain = false;
+  private pendingErrorAfterOpen: unknown | null = null;
   private readonly finishCallbacks: Array<(err?: unknown) => void> = [];
 
   constructor(path: string, opts: WriteStreamOptions = {}) {
     super();
-    assertSupportedStreamOptions(opts, 'fs.createWriteStream', ['start']);
+    assertSupportedStreamOptions(opts, 'fs.createWriteStream', ['start', 'signal']);
     assertStreamRange('highWaterMark', opts.highWaterMark);
     this.flags = parseWriteFlags(opts.flags ?? 'w', 'fs.createWriteStream');
     this.emitCloseOpt = opts.emitClose ?? true;
     this.highWaterMark = opts.highWaterMark ?? 64 * 1024;
     this.path = path;
-    queueMicrotask(() => this.open());
+    setTimeout(() => this.open(), 0);
   }
 
   private closeOnce(): void {
@@ -481,6 +483,13 @@ class FileWriteStream extends EventEmitter {
       this.emit('ready');
       for (const write of buffered) queueMicrotask(() => write.cb?.());
       this.emitDrainIfNeeded();
+      if (this.pendingErrorAfterOpen) {
+        const err = this.pendingErrorAfterOpen;
+        this.pendingErrorAfterOpen = null;
+        this.emit('error', err);
+        this.closeOnce();
+        return;
+      }
       if (this.finished) this.finishIfReady();
     } catch (err) {
       this.failed = true;
@@ -515,6 +524,7 @@ class FileWriteStream extends EventEmitter {
     assertValidChunk(chunk);
     if (this.finished) {
       const err = WRITE_AFTER_END();
+      const deferErrorUntilOpen = !this.opened && !this.finishEmitted && !this.destroyed;
       if (!this.finishEmitted && !this.failed && !this.destroyed) {
         if (this.opened) this.persist();
         // A same-turn write-after-end destroys before 'finish'. If the file is
@@ -522,9 +532,11 @@ class FileWriteStream extends EventEmitter {
         // buffered writes are discarded (Node parity).
         this.preOpen = null;
         this.failed = true;
+        if (deferErrorUntilOpen) this.pendingErrorAfterOpen = err;
       }
       queueMicrotask(() => {
         cb?.(err);
+        if (deferErrorUntilOpen) return;
         if (!this.finishEmitted) {
           this.emit('error', err);
           this.closeOnce();
