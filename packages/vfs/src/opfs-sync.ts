@@ -48,7 +48,7 @@ import {
   basenameNormalized,
   dirname,
   dirnameNormalized,
-  normalizePath,
+  normalizeAbsolute,
   segments,
 } from './path.ts';
 import type { VfsDirent } from './types.ts';
@@ -297,11 +297,11 @@ export class OpfsFsSync implements FsSync {
    * async surface — the intended bootstrap path.
    */
   private async ensureHandle(path: string, create: boolean): Promise<FileSystemSyncAccessHandle> {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const existing = this.handles.get(normalized);
     if (existing) return existing;
     const parent = await this.resolveParent(normalized);
-    // `normalized` = normalizePath(path) (#10) — basenameNormalized skips the
+    // `normalized` = normalizeAbsolute(path) (#10) — basenameNormalized skips the
     // redundant normalize pass.
     const file = await parent.getFileHandle(basenameNormalized(normalized), { create });
     const handle = await file.createSyncAccessHandle();
@@ -421,7 +421,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   existsSync(path: string): boolean {
-    return this.index.has(normalizePath(path));
+    return this.index.has(normalizeAbsolute(path));
   }
 
   /**
@@ -444,7 +444,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
     if (!entry) {
       this.assertNoFileAncestor(normalized, path);
@@ -459,7 +459,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     // `normalized` (#10) — skip dirname's redundant normalize.
     const parent = dirnameNormalized(normalized);
     const parentEntry = this.index.get(parent);
@@ -549,7 +549,7 @@ export class OpfsFsSync implements FsSync {
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {
-      const normalized = normalizePath(path);
+      const normalized = normalizeAbsolute(path);
       const dir = dirnameNormalized(normalized);
       if (dir !== '/' && !this.index.has(dir)) {
         this.mkdirSync(dir, { recursive: true });
@@ -559,7 +559,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
     if (!entry) {
       this.assertNoFileAncestor(normalized, path);
@@ -585,13 +585,13 @@ export class OpfsFsSync implements FsSync {
     // the same statSync path (live-handle size + utimes-side-table mtime).
     // One normalize; statSync re-normalizes the already-normalized arg cheaply
     // via the #10 fast-path.
-    const norm = normalizePath(path);
+    const norm = normalizeAbsolute(path);
     if (!this.index.has(norm)) return null;
     return this.statSync(norm);
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     if (!this.index.has(normalized)) {
       this.assertNoFileAncestor(normalized, path);
       throw new VfsError('ENOENT', path);
@@ -606,7 +606,7 @@ export class OpfsFsSync implements FsSync {
    * `MemoryBackend.readdir`).
    */
   readdirSync(path: string): readonly VfsDirent[] {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
     if (!entry) {
       this.assertNoFileAncestor(normalized, path);
@@ -645,7 +645,7 @@ export class OpfsFsSync implements FsSync {
    */
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const parts = segments(normalized);
     if (parts.length === 0) {
       // mkdir('/'): root always exists.
@@ -687,7 +687,7 @@ export class OpfsFsSync implements FsSync {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
     const force = options.force ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     if (normalized === '/') {
       if (recursive) {
         // Clear root's children, keep the root entry. Persist per-child:
@@ -726,8 +726,8 @@ export class OpfsFsSync implements FsSync {
   }
 
   copyFileSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
     if (!srcEntry) {
       this.assertNoFileAncestor(s, src);
@@ -753,8 +753,8 @@ export class OpfsFsSync implements FsSync {
 
   cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
     if (!srcEntry) throw new VfsError('ENOENT', src);
     if (srcEntry.kind === 'file') {
@@ -774,8 +774,8 @@ export class OpfsFsSync implements FsSync {
   }
 
   renameSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     if (s === d) return;
     if (s === '/') throw new VfsError('EINVAL', src);
     const srcEntry = this.index.get(s);

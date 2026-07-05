@@ -8,7 +8,12 @@
   `Vfs`/`FsSync` entry point) throws on a relative path instead of silently
   anchoring it at `/` — the silent coercion masked missing cwd resolution in
   callers (the fs-streams wrong-file bug). cwd anchoring lives strictly above
-  the VFS.
+  the VFS. Fix round 2026-07-05: the OPFS surfaces now enforce it too —
+  `OpfsVfs` walked raw relative paths via `segments`/`dirname` (implicit
+  rooting) and `OpfsFsSync` normalized without asserting; a relative missing
+  path could even spin `assertNoFileAncestor` forever (`dirname('foo')` → `'.'`
+  → `'.'`…). Guard: `fs-sync-strict-paths.test.ts` relative-rejection suite
+  over both backends + the async `OpfsVfs` surface.
 - **Backend errors name the TARGET path and distinguish ENOTDIR.** Traversal
   through a file is `ENOTDIR` (never a silent miss→`ENOENT`), `rm force`
   suppresses only `ENOENT`, and `writeFile`/`mkdir`/`rename`/`copyFile` errors

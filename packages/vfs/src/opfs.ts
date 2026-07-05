@@ -13,7 +13,7 @@
 
 import { VfsError, assertReadWindow } from './errors.ts';
 import { type OpfsErrorContext, mapOpfsError } from './opfs-errors.ts';
-import { basename, dirname, segments } from './path.ts';
+import { basename, dirname, normalizeAbsolute, segments } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
 
 declare const navigator: { storage?: { getDirectory(): Promise<FileSystemDirectoryHandle> } };
@@ -78,12 +78,15 @@ export class OpfsVfs implements Vfs {
   async readFile(path: string): Promise<Uint8Array>;
   async readFile(path: string, encoding: ReadFileEncoding): Promise<string>;
   async readFile(path: string, encoding?: ReadFileEncoding): Promise<Uint8Array | string> {
-    const handle = await this.getFileHandle(path);
+    // ADR-0197: every public entry asserts an absolute path BEFORE any handle
+    // walk — `segments`/`dirname` on a raw relative input silently rooted it.
+    const np = normalizeAbsolute(path);
+    const handle = await this.getFileHandle(np);
     let file: File;
     try {
       file = await handle.getFile();
     } catch (err) {
-      throw mapOpfsError(err, path, 'file');
+      throw mapOpfsError(err, np, 'file');
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
     return encoding === undefined ? bytes : decodeBytes(bytes, encoding);
@@ -95,19 +98,21 @@ export class OpfsVfs implements Vfs {
   }
 
   async writeFile(path: string, data: Uint8Array | string): Promise<void> {
-    const handle = await this.getFileHandle(path, true);
+    const np = normalizeAbsolute(path);
+    const handle = await this.getFileHandle(np, true);
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
     try {
       const writable = await handle.createWritable();
       await writable.write(bytes as unknown as FileSystemWriteChunkType);
       await writable.close();
     } catch (err) {
-      throw mapOpfsError(err, path, 'file');
+      throw mapOpfsError(err, np, 'file');
     }
   }
 
   async readdir(path: string): Promise<readonly VfsDirent[]> {
-    const dir = await this.getDirectory(path);
+    const np = normalizeAbsolute(path);
+    const dir = await this.getDirectory(np);
     const out: VfsDirent[] = [];
     try {
       // FileSystemDirectoryHandle is async-iterable (not in the TS lib types).
@@ -121,17 +126,18 @@ export class OpfsVfs implements Vfs {
         });
       }
     } catch (err) {
-      throw mapOpfsError(err, path, 'dir');
+      throw mapOpfsError(err, np, 'dir');
     }
     out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     return out;
   }
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+    const np = normalizeAbsolute(path);
     const recursive = options?.recursive ?? false;
     await this.init();
     let dir = this.root as FileSystemDirectoryHandle;
-    const parts = segments(path);
+    const parts = segments(np);
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i] as string;
       try {
@@ -143,27 +149,29 @@ export class OpfsVfs implements Vfs {
   }
 
   async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+    const np = normalizeAbsolute(path);
     let parent: FileSystemDirectoryHandle;
     try {
-      parent = await this.getDirectory(dirname(path));
+      parent = await this.getDirectory(dirname(np));
     } catch (err) {
       if (options?.force) return;
       throw err;
     }
     try {
-      await parent.removeEntry(basename(path), { recursive: options?.recursive ?? false });
+      await parent.removeEntry(basename(np), { recursive: options?.recursive ?? false });
     } catch (err) {
       if (options?.force) return;
-      throw mapOpfsError(err, path, 'file');
+      throw mapOpfsError(err, np, 'file');
     }
   }
 
   async stat(path: string): Promise<VfsStat> {
+    const np = normalizeAbsolute(path);
     // Probe the parent handle for the entry kind rather than catching opaque
     // `getFileHandle` errors, so `NotAllowedError`/`QuotaExceededError`
     // propagate instead of being masked as "must be a directory then".
-    const parent = await this.getDirectory(dirname(path));
-    const name = basename(path);
+    const parent = await this.getDirectory(dirname(np));
+    const name = basename(np);
     if (name === '') {
       // root dir; OPFS does not track mtime.
       return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
@@ -180,7 +188,7 @@ export class OpfsVfs implements Vfs {
         const file = await fileHandle.getFile();
         return { isFile: true, isDirectory: false, size: file.size, mtime: file.lastModified };
       } catch (err) {
-        throw mapOpfsError(err, path, 'file');
+        throw mapOpfsError(err, np, 'file');
       }
     }
     // TypeMismatchError means "exists, but other kind" → it's a dir.
@@ -198,7 +206,7 @@ export class OpfsVfs implements Vfs {
       await parent.getDirectoryHandle(name, { create: false });
       return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
     } catch (err) {
-      throw mapOpfsError(err, path, 'dir');
+      throw mapOpfsError(err, np, 'dir');
     }
   }
 
@@ -215,20 +223,22 @@ export class OpfsVfs implements Vfs {
   }
 
   async utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void> {
-    if (!(await this.exists(path))) throw new VfsError('ENOENT', path);
-    this.times.set(path, { atime: atimeMs, mtime: mtimeMs });
+    const np = normalizeAbsolute(path);
+    if (!(await this.exists(np))) throw new VfsError('ENOENT', np);
+    this.times.set(np, { atime: atimeMs, mtime: mtimeMs });
   }
 
   async openReadable(
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    const handle = await this.getFileHandle(path);
+    const np = normalizeAbsolute(path);
+    const handle = await this.getFileHandle(np);
     let file: File;
     try {
       file = await handle.getFile();
     } catch (err) {
-      throw mapOpfsError(err, path, 'file');
+      throw mapOpfsError(err, np, 'file');
     }
     return chunkedFileStream(file, opts);
   }

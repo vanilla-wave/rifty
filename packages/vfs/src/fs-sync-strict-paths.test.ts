@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
+import { OpfsVfs } from './opfs.ts';
 import { MemoryFsSync } from './sync-mirror.ts';
 
 const enc = new TextEncoder();
@@ -126,5 +127,51 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
   it('existsSync through a file stays a plain false (Node existsSync never throws)', () => {
     const fs = seed();
     expect(fs.existsSync('/plain.txt/x')).toBe(false);
+  });
+
+  it('statSyncOrNull stays a non-throwing probe: null through a file (ADR-0083, resolver contract)', () => {
+    const fs = seed();
+    expect(fs.statSyncOrNull('/plain.txt/x')).toBeNull();
+    expect(fs.statSyncOrNull('/missing')).toBeNull();
+  });
+
+  it('rejects relative paths on every entry point (ADR-0197)', () => {
+    const fs = seed();
+    for (const fn of [
+      () => fs.readFileBytesSync('plain.txt'),
+      () => fs.writeFileSync('rel/f.txt', enc.encode('x')),
+      () => fs.existsSync('plain.txt'),
+      () => fs.statSync('./plain.txt'),
+      () => fs.statSyncOrNull('plain.txt'),
+      () => fs.readdirSync('dir'),
+      () => fs.mkdirSync('rel', {}),
+      () => fs.rmSync('plain.txt', {}),
+      () => fs.utimes('plain.txt', 1, 1),
+      () => fs.copyFileSync('plain.txt', '/dst.txt'),
+      () => fs.copyFileSync('/plain.txt', 'dst.txt'),
+      () => fs.renameSync('plain.txt', '/dst.txt'),
+      () => fs.renameSync('/plain.txt', 'dst.txt'),
+      () => fs.cpSync('dir', '/dir2', { recursive: true }),
+    ]) {
+      expect(fn).toThrow(/absolute/);
+    }
+  });
+});
+
+describe('OpfsVfs async surface rejects relative paths before touching OPFS (ADR-0197)', () => {
+  // No OPFS in Node: the relative-path throw must fire BEFORE init()/handle
+  // access, so these reject with the contract error, not EPERM.
+  it.each([
+    ['readFile', (v: OpfsVfs) => v.readFile('rel.txt')],
+    ['writeFile', (v: OpfsVfs) => v.writeFile('rel.txt', 'x')],
+    ['readdir', (v: OpfsVfs) => v.readdir('dir')],
+    ['mkdir', (v: OpfsVfs) => v.mkdir('rel')],
+    ['rm', (v: OpfsVfs) => v.rm('rel.txt')],
+    ['stat', (v: OpfsVfs) => v.stat('rel.txt')],
+    ['exists', (v: OpfsVfs) => v.exists('rel.txt')],
+    ['utimes', (v: OpfsVfs) => v.utimes('rel.txt', 1, 1)],
+    ['openReadable', (v: OpfsVfs) => v.openReadable('rel.txt')],
+  ] as const)('%s', async (_name, call) => {
+    await expect(call(new OpfsVfs())).rejects.toThrow(/absolute/);
   });
 });
