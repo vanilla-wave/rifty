@@ -32,6 +32,12 @@ code: []
 
 <Exact Node behaviors to pin — each a failing-test-first target. Enumerate them; never "plus parity cases".>
 
+## Fault matrix
+
+<!-- Required when the item touches cache/persistence/network/concurrency; delete otherwise.
+     One row per applicable axis (docs/process/fault-classes.md) × operation → honest outcome
+     (fallback / degraded-but-correct / loud throw). Each row = a fault-test target. -->
+
 ## Out of scope
 
 <Exact inputs/APIs that throw NotImplementedError + compat ❌. Name them; never "…" / "etc.".>
