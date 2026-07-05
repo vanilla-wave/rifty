@@ -13,7 +13,11 @@
 # Alternatively, once @riftydev/eddy is published to npm (distribution item),
 # a thin image is just: FROM node:24-alpine; RUN npm i -g @riftydev/eddy; CMD ["eddy"].
 
-FROM node:24-alpine AS build
+# Build on the BUILDER's native platform: the artifact is a self-contained JS
+# bundle (platform-independent), so cross-arch image builds (Apple-Silicon
+# laptop → amd64 VM) skip QEMU emulation of pnpm/tsup entirely; only the run
+# stage below is the target platform.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 RUN corepack enable
 WORKDIR /repo
 COPY . .

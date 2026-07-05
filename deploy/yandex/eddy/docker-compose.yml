@@ -36,6 +36,10 @@ services:
       # Mutable-tier TTL (seconds); 0 = always recompute. Immutable artifacts are
       # served Cache-Control: immutable for the CDN to hold.
       EDDY_TTL_SECONDS: "1800"
+      # Without the EDDY_S3_* group the bundle store is MEMORY (dies with the
+      # container); the stateless origin (ADR-0194 §4) needs the operator-
+      # provisioned bucket env — see docker-compose.coi.yml + hosting-eddy.md
+      # §Object-Storage. Never commit the secret pair.
 
   caddy:
     image: caddy:2.10.2-alpine
@@ -46,6 +50,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # HTTP/3 (QUIC) — Caddy serves it natively but only if UDP 443 is
+      # reachable end-to-end (here + any firewall/security group in front).
+      - "443:443/udp"
     volumes:
       - caddy_data:/data
       - caddy_config:/config
@@ -55,14 +62,14 @@ services:
       - |
         cat >/etc/caddy/Caddyfile <<'CADDY'
         {
-        	admin off
+          admin off
         }
 
         eddy.rifty.dev {
-        	# eddy (server.ts) sets the CORS + Cross-Origin-Resource-Policy headers
-        	# the cross-origin browser client needs; Caddy only terminates TLS and
-        	# reverse-proxies, so those headers pass through unchanged.
-        	reverse_proxy eddy:8788
+          # eddy (server.ts) sets the CORS + Cross-Origin-Resource-Policy headers
+          # the cross-origin browser client needs; Caddy only terminates TLS and
+          # reverse-proxies, so those headers pass through unchanged.
+          reverse_proxy eddy:8788
         }
         CADDY
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

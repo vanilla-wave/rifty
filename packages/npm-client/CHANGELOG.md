@@ -2,6 +2,62 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 22)
+
+- **`InstallResult.closureHash` no longer leaks unproven POST hashes.** Eddy
+  installs still report `source: 'eddy'`, but learned-pin hashes are returned
+  only for content-addressed GET/prefetch responses or POST responses whose
+  `x-eddy-store-durable` header proves the immutable store is servable.
+
+### Fixed (PR #107 round 21)
+
+- **`EddyBundleContents` stays source-compatible.** `memberNames` is now optional
+  on the public contents shape; `unpackEddyBundle()` returns the narrower
+  `UnpackedEddyBundleContents` when validators need the observed member order.
+
+### Fixed (PR #107 round 20)
+
+- **Eddy adoption proves every seeded tarball survives cache replay.** A bounded
+  cache that retained only the last bundle member could pass the old probe while
+  earlier packages were fetched from the registry under `source: 'eddy'`. The
+  client now reads back every seeded tarball before adopting the bundle.
+
+### Fixed (PR #107 round 17)
+
+- **Eddy JSON declines read under the tarball stream's bounds.** A resolver that
+  sent `content-type: application/json` then held the body open parked
+  `npm install` forever — `response.json()` has no timeout. The decline body now
+  drains through the shared `drainBodyBounded` (no-progress timeout + byte cap),
+  so a stalled decline fails the attempt → standard install, never a hang.
+- **Eddy adoption proves the tarball cache is retentive.** A no-op/non-retentive
+  `tarballCache` seeded nothing yet reported `source: 'eddy'` while replaying
+  every package from the REGISTRY (a provenance lie, and a hard failure offline).
+  Adoption now reads a seeded entry back; a miss declines to the standard path.
+
+### Fixed (PR #107 round 13)
+
+- **`prefer: 'online'` now really forces a fresh recompute.** The pinned
+  GET-by-hash and the prefetch are BYPASSED under online preference (both
+  serve a content-addressed cached closure); only the POST — carrying
+  `prefer` so the server skips its mutable tier too — runs.
+  `startEddyPrefetch` likewise ignores a pinned `closureHash` under online
+  and POSTs.
+- **Eddy attempts are bounded through the HEADER phase.**
+  `resolverStallTimeoutMs` (default 10s) now also covers the fetch itself —
+  a resolver whose connection/headers hang fails the attempt (abort + race)
+  and falls through to the next attempt / standard install, instead of
+  parking `npm install` forever. Same bound added to the prefetch fetch.
+- **The eddy bundle lockfile is STAGED, not pre-committed.** Adoption used to
+  write `package-lock.json` before link/shims ran — a later failure left the
+  resolver's lockfile in the project. The staged lockfile now drives the
+  install in memory and the final lockfile is written only at the success
+  point (as the standard path always did); any post-adoption failure leaves
+  the previous lockfile untouched.
+- **`EddyBundleContents.memberNames` + exported `MANIFEST_FILE`/
+  `LOCKFILE_FILE`** so eddy's durable store can reject bundle objects with
+  unexpected extra members exactly like client adoption does (one container
+  contract, no cross-package string drift).
+
 ### Added
 
 - **Install-time shadow internals shims + loud substitution lines (ADR-0188).** `install()` now
@@ -17,6 +73,128 @@
   ADR-0051)` and `npm: rollup@<v> internals patched from shadow registry`. User `overrides` do
   not print (`resolveOverride` now returns `source: 'user' | 'baked'`). Tests in
   `installer-shadow-shims.test.ts`.
+### Added (eddy v1.2, ADR-0194)
+
+- **`InstallResult.closureHash`.** Set iff `source === 'eddy'` — the adopted bundle's
+  `manifest.asOf.closureHash`, threaded out of `consumeEddyResponse` → `tryEddyFastPath`
+  so callers can persist learned pins (`requestKey → closureHash`) and turn the next
+  identical dep set into a cacheable `GET /bundle/<hash>`.
+- **`InstallOptions.packumentCache` widened to `PackumentCacheLike`** (minimal
+  `{get, set}`; `Map` satisfies it structurally) so callers — eddy's process-wide TTL
+  cache — can inject policy-aware caches without a Map subclass.
+- **`closureHashOf(lockfile)` + `canonicalClosureJson(lockfile)`.** The stable content hash
+  of a resolved closure (ADR-0182 §6, the immutable-tier key) is now exported here as ONE
+  shared async (WebCrypto) implementation — eddy awaits it to stamp the manifest; the client
+  re-derives it to verify a bundle's identity. The canonical serialization is exported
+  separately so `@riftydev/eddy`'s pre-existing SYNC `closureHashOf` (string API, node:crypto)
+  hashes the same bytes and cannot drift.
+
+### Fixed (eddy v1.2 review follow-ups, ADR-0194)
+
+- **Duplicate manifest `file` entries are declined.** Two required
+  name@version entries sharing one member file collapsed in the by-file map:
+  the single member verified against the surviving entry, the seeded-count
+  check compared collapsed sizes and the completeness gate saw both
+  name@version in the manifest ARRAY — the bundle adopted as `eddy` with one
+  package's tarball never seeded (silently replayed from the ordinary
+  registry). Malformed → declined at member 1; the S3 store misses the same
+  shape. RED-checked roundtrip + store regressions.
+- **`closureHashOf` is DEEPLY canonical.** Only the top-level package keys were
+  sorted; entry objects were stringified raw, so the same resolved closure with
+  a different `dependencies`/`bin`/`peerDependencies` insertion order hashed
+  differently — duplicate immutable objects and cache misses for one closure.
+  `canonicalClosureJson` now recursively key-sorts nested records (values
+  untouched). Applies before any durable content-addressed store exists in prod,
+  so no stored hashes are invalidated. `bundleCompletenessGap` is also exported
+  from the public index so eddy's durable store validates objects exactly as
+  strictly as the client adopts them. RED-checked nested-order tests.
+- **A completed bundle GET reads to TRUE EOF — the browser HTTP cache keeps
+  it.** The streaming reader used to stop at the first end-of-archive zero
+  block and cancel the body with the terminator tail still on the wire; a
+  cancelled body makes the browser DISCARD the response from its HTTP cache,
+  silently defeating the immutable `GET /bundle/<hash>` tier (the pinned /
+  learned GET is fast BECAUSE the cache holds it). The reader now drains the
+  (tiny, still stall/cap-bounded) remainder to true EOF on the success path;
+  early aborts (gate declines, bound violations) still cancel. RED-checked
+  full-consume-never-cancels regression.
+- **A FAILED pinned prefetch falls through to the direct pinned GET, not
+  straight to POST.** The attempt pipeline is `prefetch → GET → POST`; a
+  dedup condition skipped the GET whenever the prefetch was the same pin's
+  fetch — correct for a SUCCESSFUL prefetch (which short-circuits anyway) but
+  wrong for a stalled/failed one, which jumped to the origin POST and lost the
+  cacheable GET tier exactly when the retry was cheapest. The GET attempt is
+  now unconditional (first survivor still wins). RED-checked
+  stalled-pin-prefetch → GET-adopts → zero-POSTs regression.
+- **Bounded prefetch drain — a never-ending bundle body can no longer hang
+  `npm install`.** `startEddyPrefetch`'s deliberate eager drain (h2-stall fix)
+  was an unbounded `arrayBuffer()`: a resolver that held the connection open
+  parked the installer's consumed prefetch forever — no error, no fallback, a
+  hung terminal. The drain now has a no-progress timeout
+  (`stallTimeoutMs`, default 10s — the measured h2-stall class) and a byte cap
+  (`maxBufferBytes`, default 128MB; the POST fallback streams, so a legit huge
+  bundle still installs) — a violated bound rejects, the attempt pipeline falls
+  through to its own GET/POST, and the dead stream is cancelled. Unit tests +
+  a `client-roundtrip.test.ts` never-ending-prefetch regression, RED-checked
+  against the unbounded drain.
+- **Bounded DIRECT bundle streams — the same hang class on the pinned-GET/POST
+  paths.** `streamTarEntries` now carries a no-progress timeout (default 10s,
+  shared constants with the prefetch drain) and a total byte cap (128MB — also
+  the guard against a forged tar header claiming a giant member): a resolver/CDN
+  that sends a covering manifest+lockfile then stalls mid-tarball FAILS the
+  attempt (dead stream cancelled) instead of parking `npm install` forever,
+  and the pipeline proceeds to the next attempt / standard install. New
+  `InstallOptions.resolverStallTimeoutMs` overrides the bound. Unit + a
+  covering-bundle-stalls-mid-tarball roundtrip regression, RED-checked. The
+  remaining sibling gap — STANDARD-path registry fetches have no bound either
+  (pre-existing; real npm has make-fetch-happen timeouts) — is recorded:
+  `docs/backlog/npm-client/registry-fetch-no-progress-bound.md`.
+- **Partial-bundle completeness gate — a covering lockfile with omitted
+  tarballs is declined, never adopted as `source: 'eddy'`.** The client only
+  verified tarballs the MANIFEST named; a divergent/buggy resolver could send a
+  covering lockfile while omitting required tarballs — the adopted lockfile
+  would then replay the omissions from the ORDINARY registry on cache miss
+  while reporting (and learning a pin for) `eddy`: a provenance lie. Now every
+  lockfile package reachable from the request must carry `resolved`+`integrity`
+  AND a manifest tarball matching its name@version+integrity
+  (`bundleCompletenessGap`), gated at member 2 before any seed/write; an honest
+  bundle can never trip it (the server harvests one tarball per resolved
+  package from the same install that produced the lockfile). Two roundtrip
+  regressions (omitted tarball; entry without replay fields), RED-checked.
+- **Content-addressed bundle verification (client).** `consumeEddyResponse` now refuses a
+  bundle whose `manifest.asOf.closureHash` (a) ≠ the hash a pinned GET/prefetch asked for
+  (a CDN/cache mixup served the wrong object) or (b) ≠ `closureHashOf` of the bundle's OWN
+  lockfile (the manifest lies about its identity). Both gate BEFORE any tarball seed or
+  lockfile write, so a mis-addressed bundle is declined (→ POST/standard fallback), never
+  adopted or learned as a pin. Regressions in `client-roundtrip.test.ts`.
+
+### Added (eddy wire protocol v1.1, ADR-0195)
+
+- **`InstallOptions.resolverClosureHash` — pinned GET-by-hash.** The fast path first tries the
+  cacheable `GET <resolverUrl>/bundle/<hash>` (browser-HTTP-cache/CDN friendly, preflight-free);
+  any miss/failure falls through to the POST resolve, a POST failure to the standard install.
+  Same non-disableable gates on every path — a stale pin degrades, never mis-installs.
+- **`InstallOptions.resolverBundleBaseUrl` — split-host CDN base.** The pinned GET may ride a
+  SEPARATE hostname from the POST resolve (`bundleUrlFor(bundleBaseUrl ?? resolverUrl, hash)`) —
+  real edges (Yandex CDN) refuse POST, so a stale pin on the CDN falls back to the ORIGIN's POST.
+  Defaults to `resolverUrl` (single-host). Threaded into `startEddyPrefetch` too.
+- **`startEddyPrefetch` + `InstallOptions.resolverPrefetch`.** Start the bundle fetch before
+  `install()` runs (e.g. at owner boot) so the round-trip overlaps boot work. The handle is
+  keyed on the canonical request (`canonicalEddyRequestKey`; `eddyRequestFromPackageJson`
+  mirrors the installer's manifest merge) and consumed at most once — a prefetch for drifted
+  deps is ignored, never trusted.
+- **Streaming bundle unpack (`streamTarEntries`, internal).** The fast path consumes the
+  bundle as a stream: format/v3/coverage gates run on the manifest + lockfile members (a
+  decline cancels the download before tarball bytes transfer); tarballs are integrity-verified
+  and seeded into the content-addressed cache as each arrives (partial seed leaves only
+  verified bytes); the lockfile is still written only after every manifest-named tarball
+  landed. Buffered fallback when `Response.body` is unavailable. The reader is an internal
+  detail of `install()` — deliberately NOT part of the public API.
+
+### Performance
+
+- **Eddy POST is CORS-simple.** No `content-type` header (string body → `text/plain`), so a
+  cross-origin browser client skips the OPTIONS preflight — one RTT off the cold install path
+  (ADR-0195 §2). The server always parsed the body unconditionally.
 
 ### Fixed
 
