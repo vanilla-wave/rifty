@@ -69,6 +69,20 @@ const c: ParityCase = {
       const e1b = await errored(rplusNotDir);
       console.log('rplus-notdir:', e1b.code, e1b.errno, e1b.syscall, JSON.stringify(e1b.path));
 
+      fs.mkdirSync('dir-target');
+      for (const flags of ['a', 'w', 'r+']) {
+        const wsDir = fs.createWriteStream('dir-target', { flags });
+        wsDir.end();
+        const err = await errored(wsDir);
+        console.log('stream-dir-' + flags + ':', err.code, err.syscall);
+      }
+      for (const flags of ['ax', 'wx']) {
+        const wsDir = fs.createWriteStream('dir-target', { flags });
+        wsDir.end();
+        const err = await errored(wsDir);
+        console.log('stream-dir-' + flags + ':', err.code, err.syscall);
+      }
+
       // truncate-at-open: 'w' with no writes empties the file once finished
       const wtrunc = fs.createWriteStream('exists.txt');
       wtrunc.end();

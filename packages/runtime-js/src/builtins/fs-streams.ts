@@ -473,9 +473,13 @@ class FileWriteStream extends EventEmitter {
     this.np = np;
     let buffered: PendingWrite[] | null = null;
     try {
-      const exists = statStrictOrNull(np) !== null;
+      const stat = statStrictOrNull(np);
+      const exists = stat !== null;
       if (exists && this.flags.exclusive) {
         throw fsError('EEXIST', pathToString(this.path), 'open');
+      }
+      if (stat?.isDirectory) {
+        throw fsError('EISDIR', pathToString(this.path), 'open');
       }
       if (!exists && this.flags.mustExist) {
         throw fsError('ENOENT', pathToString(this.path), 'open');

@@ -11,6 +11,7 @@ import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sy
 import {
   appendFileSync,
   promises as fsp,
+  mkdirSync,
   writeFileSync,
 } from '../../../packages/runtime-js/src/builtins/fs.ts';
 
@@ -74,6 +75,21 @@ describe('fs streams', () => {
     appendFileSync('/shared.log', 'two\n');
     await new Promise<void>((resolve) => ws.end('three\n', () => resolve()));
     expect(await fsp.readFile('/shared.log', 'utf8')).toBe('base\none\ntwo\nthree\n');
+  });
+
+  it('append stream to an existing directory fails on open even with no chunks', async () => {
+    mkdirSync('/dir', { recursive: true });
+    const events: string[] = [];
+    const ws = createWriteStream('/dir', { flags: 'a' });
+    ws.on('error', (err: unknown) => {
+      const e = err as { code?: string; syscall?: string };
+      events.push(`error:${e.code}:${e.syscall}`);
+    });
+    ws.on('finish', () => events.push('finish'));
+    ws.on('close', () => events.push('close'));
+    ws.end();
+    await new Promise<void>((resolve) => ws.on('close', () => resolve()));
+    expect(events).toEqual(['error:EISDIR:open', 'close']);
   });
 
   it("'w' with no writes truncates at open, not at end", async () => {
