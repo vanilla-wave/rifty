@@ -10,8 +10,10 @@
   Previously every chunk round-tripped through a JS string, so
   `cat img.png > copy.png` (and any binary through a pipe) permanently minted
   U+FFFD into the payload. Display plane (`RunResult.stdout`, `onChunk`) stays
-  string-typed; byte chunks decode through streaming decoders. Guard:
-  `tests/binary-transparency.test.ts`.
+  string-typed; byte chunks decode through streaming decoders, and the decoders
+  FLUSH at segment end (fix round 2026-07-05) — a trailing incomplete UTF-8
+  sequence lands in `onChunk`/`RunResult.stderr` as U+FFFD instead of silently
+  vanishing. Guard: `tests/binary-transparency.test.ts`.
 
 - **A pre-aborted `run()` never starts segment 0 and resolves 130.** The
   documented contract ("resolves immediately when already aborted") was

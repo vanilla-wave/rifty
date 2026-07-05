@@ -681,6 +681,16 @@ export class Shell {
       }
     };
     const result = (exitCode: number): SegmentResult => {
+      // Flush the streaming display decoders: a trailing incomplete UTF-8
+      // sequence held by a tap must land (as U+FFFD) in onChunk / stderr
+      // instead of silently vanishing (review 2026-07-05).
+      const stdoutTail = stdoutTap.decode();
+      if (stdoutTail && streamStdout) options.onChunk?.(stdoutTail, 'stdout');
+      const stderrTail = stderrTap.decode();
+      if (stderrTail) {
+        options.onChunk?.(stderrTail, 'stderr');
+        stderr += stderrTail;
+      }
       const stdoutBytes = concatBytes(stdoutChunks);
       return { exitCode, stdout: decoder.decode(stdoutBytes), stderr, stdoutBytes };
     };

@@ -57,4 +57,36 @@ describe('shell binary transparency (ADR-0198)', () => {
       Array.from(allBytes()),
     );
   });
+
+  it('onChunk flushes a trailing incomplete multibyte sequence instead of dropping it', async () => {
+    // 'hi' + the first 2 bytes of '€' (E2 82) — the streaming display decoder
+    // holds them waiting for a continuation that never comes.
+    syncMirror().writeFileSync('/partial.bin', new Uint8Array([0x68, 0x69, 0xe2, 0x82]));
+    const sh = new Shell();
+    let out = '';
+    const res = await sh.run('cat /partial.bin', {
+      onChunk: (c, s) => {
+        if (s === 'stdout') out += c;
+      },
+    });
+    expect(res.exitCode).toBe(0);
+    expect(out).toBe('hi�');
+  });
+
+  it('RunResult.stderr keeps a trailing incomplete multibyte from a byte-writing command', async () => {
+    const sh = new Shell();
+    sh.registerCommand('errbytes', async (_args, ctx) => {
+      ctx.stderr.write(new Uint8Array([0x68, 0x69, 0xe2, 0x82]));
+      return 1;
+    });
+    let err = '';
+    const res = await sh.run('errbytes', {
+      onChunk: (c, s) => {
+        if (s === 'stderr') err += c;
+      },
+    });
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toBe('hi�');
+    expect(err).toBe('hi�');
+  });
 });
