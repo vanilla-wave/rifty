@@ -410,21 +410,35 @@ export class S3BundleStore implements BundleStore {
  * — a parseable-but-malformed object (missing `asOf`, junk `tarballs`) must
  * fail HERE as a miss, not throw mid-verification into a GET 500. */
 function manifestShapeOk(manifest: unknown): manifest is {
-  asOf: { closureHash: string };
+  npmClientVersion: string;
+  asOf: { resolvedAt: string; registry: string; closureHash: string };
   tarballs: Array<{ file: string; name: string; version: string; integrity: string }>;
 } {
   const m = manifest as {
-    asOf?: { closureHash?: unknown };
+    npmClientVersion?: unknown;
+    asOf?: { resolvedAt?: unknown; registry?: unknown; closureHash?: unknown };
     tarballs?: unknown;
   } | null;
   if (!m || typeof m !== 'object') return false;
-  if (!m.asOf || typeof m.asOf !== 'object' || typeof m.asOf.closureHash !== 'string') {
+  if (typeof m.npmClientVersion !== 'string') return false;
+  if (
+    !m.asOf ||
+    typeof m.asOf !== 'object' ||
+    typeof m.asOf.resolvedAt !== 'string' ||
+    typeof m.asOf.registry !== 'string' ||
+    typeof m.asOf.closureHash !== 'string'
+  ) {
     return false;
   }
   if (!Array.isArray(m.tarballs)) return false;
   return m.tarballs.every(
-    (t: { file?: unknown; integrity?: unknown }) =>
-      !!t && typeof t === 'object' && typeof t.file === 'string' && typeof t.integrity === 'string',
+    (t: { file?: unknown; name?: unknown; version?: unknown; integrity?: unknown }) =>
+      !!t &&
+      typeof t === 'object' &&
+      typeof t.file === 'string' &&
+      typeof t.name === 'string' &&
+      typeof t.version === 'string' &&
+      typeof t.integrity === 'string',
   );
 }
 

@@ -29,12 +29,11 @@ docker run -p 8788:8788 \
   riftydev-eddy
 ```
 
-Or with compose (`deploy/yandex/eddy/docker-compose.yml`), mirroring the
-ADR-0163 registry-proxy deploy: hand the compose file to a Yandex
-Container-Optimized-Image VM exactly as `docs/public/hosting-yandex.md` does for
-the proxy. Note: `docker-compose.yml` uses `build:` (local self-host); a COI VM
-PULLS images, so it takes `docker-compose.coi.yml` (`image:`) instead — the
-"Deploy to rifty.dev" section below covers the build+push+swap.
+Or with local compose (`deploy/yandex/eddy/docker-compose.yml`):
+`docker compose up --build`. That file uses `build:` and is NOT a COI input.
+A Yandex Container-Optimized-Image VM PULLS images, so the rifty.dev path uses
+the image-based `docker-compose.coi.yml`; the "Deploy to rifty.dev" section
+below covers the build+push+metadata swap.
 
 Once `@riftydev/eddy` is published to npm, a thin image is just
 `FROM node:24-alpine` + `npm i -g @riftydev/eddy` + `CMD ["eddy"]`.
@@ -188,7 +187,7 @@ standard verifying install on any failure.
 POST a dep-set and confirm a tar stream comes back:
 
 ```sh
-curl -fsS -X POST http://localhost:8788 \
+curl -fsS -D- -X POST http://localhost:8788 \
   -H 'content-type: application/json' \
   -d '{"dependencies":{"debug":"^4.4.1"}}' \
   -o /tmp/bundle.tar && tar tf /tmp/bundle.tar

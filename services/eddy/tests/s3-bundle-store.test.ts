@@ -372,6 +372,20 @@ describe('S3BundleStore', () => {
     await expect(store.get(HASH)).resolves.toBeNull(); // miss + self-heal, not a rejection
   });
 
+  it('rejects a parseable manifest missing direct-GET header fields', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    (contents.manifest as { npmClientVersion?: unknown }).npmClientVersion = undefined;
+    (contents.manifest.asOf as { resolvedAt?: unknown }).resolvedAt = undefined;
+    if (contents.manifest.tarballs[0]) {
+      (contents.manifest.tarballs[0] as { name?: unknown }).name = undefined;
+    }
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    await expect(store.get(HASH)).resolves.toBeNull();
+  });
+
   it('rejects an object whose manifest names DUPLICATE member files (client declines the same shape)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);

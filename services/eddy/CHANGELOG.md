@@ -11,6 +11,10 @@
   computes that start while an online refresh is active rank below it for
   mutable-link + packument write-throughs, so stale cached metadata cannot
   overwrite the fresh online result when it settles later.
+- **S3 store hits require the full manifest header shape.** Parseable bundles
+  missing `npmClientVersion`, `asOf.resolvedAt`, `asOf.registry`, or tarball
+  `name/version` now read as misses instead of returning malformed
+  `CachedBundle` metadata to the direct GET route.
 
 ### Fixed (PR #107 round 20)
 
@@ -277,8 +281,9 @@
 - **Cross-platform image build.** The Dockerfile's build stage is pinned to
   `--platform=$BUILDPLATFORM` (the artifact is a self-contained JS bundle), so
   an Apple-Silicon `docker buildx build --platform linux/amd64 --push` runs at
-  native speed instead of QEMU-emulating pnpm/tsup. rifty.dev runs `eddy:0.2.1`
-  behind the split-host CDN shape (`hosting-eddy.md` §CDN tier).
+  native speed instead of QEMU-emulating pnpm/tsup. The checked-in COI template
+  points at `eddy:0.2.1`; `hosting-eddy.md` §CDN tier remains the source of
+  truth for what is live vs awaiting operator redeploy.
 
 ### Fixed
 
