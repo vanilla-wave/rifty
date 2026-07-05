@@ -756,7 +756,10 @@ export class OpfsFsSync implements FsSync {
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'file') {
       this.copyFileSync(s, d);
       return;

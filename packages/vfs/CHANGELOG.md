@@ -26,6 +26,8 @@
 - **PR #115 review follow-up:** `OpfsVfs.rm(path, { force:true })` now
   suppresses only `ENOENT`; through-file (`ENOTDIR`), permission, quota, and
   browser I/O failures stay loud instead of being reported as success.
+  `OpfsFsSync.cpSync('/file/child', dst)` now reports `ENOTDIR` with the
+  source path instead of collapsing the traversal failure to `ENOENT`.
 - **`openReadable` validates its window.** `chunkSize: 0` previously looped the
   pull callback forever (reader hang); a negative `start`/`end` fell into
   `subarray`'s from-the-end semantics. Both are loud `RangeError`s now, in
@@ -80,7 +82,7 @@
 - Path utilities scoped to VFS (POSIX-style joins/resolves; no Node `path` dependency).
 - **ADR-0029:** `FsSync.utimes(path, atimeMs, mtimeMs)` on the interface. `MemoryFsSync` writes through to `MemoryBackend.utimes`; `OpfsFsSync` uses an in-memory atime/mtime side-table (no native `FileSystemSyncAccessHandle` mtime mutation). Throws `VfsError('ENOENT')` for unknown paths.
 - **ADR-0041:** `Vfs.utimes(path, atimeMs, mtimeMs): Promise<void>` symmetric with the sync side. `MemoryVfs` delegates to `MemoryBackend.utimes`; `OpfsVfs` keeps its own in-memory side-table (no native mtime mutation through `FileSystemFileHandle`).
-- `normalizeAbsolute(p)` path helper — normalises and coerces relative inputs to absolute (`./foo/../bar.txt → /bar.txt`). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
+- `normalizeAbsolute(p)` path helper — normalises absolute inputs and rejects relative inputs loudly (ADR-0197). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
 
 ### Changed
 

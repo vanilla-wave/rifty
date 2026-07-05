@@ -122,6 +122,11 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
     const copyDst = thrown(() => fs.copyFileSync('/plain.txt', '/plain.txt/x'));
     expect(copyDst.code).toBe('ENOTDIR');
     expect(copyDst.path).toBe('/plain.txt/x');
+    const cpSrcThroughFile = thrown(() =>
+      fs.cpSync('/plain.txt/x', '/copy-dir', { recursive: true }),
+    );
+    expect(cpSrcThroughFile.code).toBe('ENOTDIR');
+    expect(cpSrcThroughFile.path).toBe('/plain.txt/x');
   });
 
   it('existsSync through a file stays a plain false (Node existsSync never throws)', () => {
