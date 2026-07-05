@@ -1149,6 +1149,44 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
   });
 
+  it('a stamp write failure beyond the sampled failures still warns — the FULL ledger, not the sample', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    let call = 0;
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () =>
+          ++call === 1
+            ? { failures: [], total: 0 }
+            : {
+                failures: [
+                  {
+                    path: '/.rifty/eddy-learned-pins.json',
+                    op: 'write' as const,
+                    message: 'QuotaExceededError',
+                  },
+                ],
+                total: 21,
+                anyFailure: (pred: (p: string) => boolean) =>
+                  pred('/.rifty/eddy-learned-pins.json') ||
+                  pred('/proj/node_modules/.rifty-install-stamp.json'),
+              },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toContain('the install stamp failed to persist');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+  });
+
   it('a FOREIGN persist failure (outside node_modules) does not gate — the stamp attests THIS tree, not the whole VFS', async () => {
     // A learned-pins / other-project write failing to persist is not this
     // node_modules torn — it must NOT skip a good stamp (over-broad revoke bug).

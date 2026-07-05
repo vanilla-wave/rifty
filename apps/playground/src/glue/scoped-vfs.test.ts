@@ -1,4 +1,4 @@
-import { syncMirror } from '@riftydev/vfs';
+import { type PersistFailureReport, syncMirror } from '@riftydev/vfs';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach } from 'vitest';
 import { describe, expect, it } from 'vitest';
@@ -58,5 +58,28 @@ describe('workspace-scoped VFS', () => {
 
     expect(fsSync.existsSync('/scratch/marker.txt')).toBe(false);
     expect(fsSync.existsSync('/workspaces/active/scratch/marker.txt')).toBe(true);
+  });
+
+  it('passes through the inner OPFS persist-failure report instead of hiding durability gaps', async () => {
+    const { fsSync } = createMemoryFs();
+    const report: PersistFailureReport = {
+      failures: [
+        {
+          path: '/workspaces/active/proj/node_modules/pkg/package.json',
+          op: 'write',
+          message: 'QuotaExceededError',
+        },
+      ],
+      total: 1,
+      anyFailure(predicate) {
+        return this.failures.some((f) => predicate(f.path));
+      },
+    };
+    (fsSync as typeof fsSync & { flush: () => Promise<PersistFailureReport> }).flush = async () =>
+      report;
+
+    const scoped = new ScopedFsSync(fsSync, workspaceVfsPrefix('active'));
+
+    await expect(scoped.flush()).resolves.toBe(report);
   });
 });

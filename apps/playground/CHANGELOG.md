@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 20)
+
+- **Workspace-scoped OPFS flushes keep their durability report.** The scoped VFS
+  wrapper now returns the inner `PersistFailureReport` instead of hiding it, so
+  `npm install` stamp gates still see OPFS quota/permission failures under the
+  active workspace.
+- **Stamp-write warnings scan the full persist-failure ledger.** The post-stamp
+  drain now uses `reportHasFailure` for the stamp path instead of the sampled
+  `failures` list, so a failed stamp write cannot be hidden behind unrelated
+  sampled failures.
+
 ### Fixed (PR #107 round 18)
 
 - **Stamp durability gates on the FULL persist-failure ledger, not the sample.**

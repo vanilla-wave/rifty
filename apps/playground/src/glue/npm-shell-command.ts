@@ -639,10 +639,9 @@ async function stampInstalledTree(
   }
   try {
     const stampReport = await deps.flush?.();
-    // Scope to the STAMP FILE: a foreign/global path failing to persist doesn't
-    // mean THIS stamp failed. `failures` is a sample, but the stamp write just
-    // ran, so its own failure (if any) is freshly recorded in the ledger.
-    if (stampReport?.failures.some((f) => f.path === installStampPath(cwd))) {
+    // Scope to the STAMP FILE via the FULL ledger: foreign/global failures can
+    // fill the sample while the stamp's own failure sits beyond it.
+    if (stampReport && reportHasFailure(stampReport, (p) => p === installStampPath(cwd))) {
       ctx.stderr.write(
         'npm: WARNING: the install stamp failed to persist — the next boot re-installs\n',
       );

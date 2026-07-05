@@ -1,5 +1,6 @@
 import {
   type FsSync,
+  type PersistFailureReport,
   type Vfs,
   type VfsDirent,
   type VfsStat,
@@ -27,7 +28,7 @@ function scopePath(prefix: string, path: string): string {
 export class ScopedFsSync implements FsSync {
   constructor(
     private readonly inner: FsSync & {
-      flush?: () => Promise<void>;
+      flush?: () => Promise<PersistFailureReport | undefined>;
       loadFixture?: (files: Readonly<Record<string, string>>) => void;
     },
     private readonly prefix: string,
@@ -88,8 +89,8 @@ export class ScopedFsSync implements FsSync {
       this.inner.writeFileSync(path, enc.encode(content));
     }
   }
-  async flush(): Promise<void> {
-    await this.inner.flush?.();
+  async flush(): Promise<PersistFailureReport | undefined> {
+    return await this.inner.flush?.();
   }
 }
 
