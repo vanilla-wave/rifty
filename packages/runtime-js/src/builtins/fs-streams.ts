@@ -412,9 +412,11 @@ class FileWriteStream extends EventEmitter {
   private readonly highWaterMark: number;
   /** Resolved-at-open path — Node binds the fd at open; a later chdir must not retarget the file. */
   private np: string | null = null;
-  /** Full file image; writes overlay at {@link pos} (r+ overwrites, a appends). */
+  /** Full file image for positional writes; append streams re-read EOF at flush. */
   private bytes: Uint8Array = new Uint8Array();
   private pos = 0;
+  private appendChunks: Uint8Array[] = [];
+  private dirty = false;
   /**
    * Chunks written BEFORE the open() microtask ran (Node buffers pre-open
    * writes). open() initialises {@link bytes}/{@link pos} from the file, THEN
@@ -479,16 +481,22 @@ class FileWriteStream extends EventEmitter {
         throw fsError('ENOENT', pathToString(this.path), 'open');
       }
       this.bytes =
-        exists && !this.flags.truncate
+        exists && !this.flags.truncate && !this.flags.append
           ? syncMirror().readFileBytesSync(np).slice()
           : new Uint8Array();
-      this.pos = this.flags.append ? this.bytes.length : 0;
+      this.pos = 0;
       this.opened = true;
       buffered = this.preOpen ?? [];
       this.preOpen = null;
-      for (const write of buffered) this.overlay(write.buf);
-      // Truncate/create at open even if nothing is ever written.
-      syncMirror().writeFileSync(np, this.bytes);
+      for (const write of buffered) this.recordWrite(write.buf);
+      // Node open side-effects: 'w' truncates immediately, missing writable
+      // targets are created immediately, but append/r+ on an existing file do
+      // not rewrite the file before the first write.
+      if (this.flags.truncate || !exists || (!this.flags.append && this.dirty)) {
+        syncMirror().writeFileSync(np, this.bytes);
+        this.dirty = false;
+      }
+      if (this.flags.append && buffered.length > 0) this.flushAppendChunks(np);
       this.bufferedLength = 0;
       this.emit('open', 0);
       this.emit('ready');
@@ -617,7 +625,7 @@ class FileWriteStream extends EventEmitter {
       // Not yet open: buffer; open() overlays these onto the file image.
       this.preOpen.push({ buf, cb });
     } else {
-      this.overlay(buf);
+      this.recordWrite(buf);
       if (cb) this.pendingWriteCallbacks.push(cb);
       this.scheduleFlush();
     }
@@ -633,6 +641,30 @@ class FileWriteStream extends EventEmitter {
     }
     this.bytes.set(buf, this.pos);
     this.pos = needed;
+  }
+
+  private recordWrite(buf: Uint8Array): void {
+    if (this.flags.append) {
+      this.appendChunks.push(buf.slice());
+      return;
+    }
+    this.overlay(buf);
+    this.dirty = true;
+  }
+
+  private flushAppendChunks(np: string): void {
+    if (this.appendChunks.length === 0) return;
+    const current = syncMirror().readFileBytesSync(np);
+    const total = current.length + this.appendChunks.reduce((n, chunk) => n + chunk.length, 0);
+    const next = new Uint8Array(total);
+    next.set(current, 0);
+    let offset = current.length;
+    for (const chunk of this.appendChunks) {
+      next.set(chunk, offset);
+      offset += chunk.length;
+    }
+    syncMirror().writeFileSync(np, next);
+    this.appendChunks = [];
   }
 
   /**
@@ -665,7 +697,11 @@ class FileWriteStream extends EventEmitter {
     const np = this.np;
     if (np === null) return null;
     try {
-      syncMirror().writeFileSync(np, this.bytes);
+      if (this.flags.append) this.flushAppendChunks(np);
+      else if (this.dirty) {
+        syncMirror().writeFileSync(np, this.bytes);
+        this.dirty = false;
+      }
       return null;
     } catch (err) {
       this.failed = true;

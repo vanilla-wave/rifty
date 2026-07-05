@@ -134,4 +134,10 @@ describe('fs.watchFile', () => {
     fs.unwatchFile('/idle.txt');
     expect(calls).toEqual([]);
   });
+
+  it('rejects explicit undefined options before the listener', () => {
+    expect(() => fs.watchFile('/undef.txt', undefined as never, () => {})).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
 });

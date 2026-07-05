@@ -149,4 +149,10 @@ describe('fs.watchFile Stats truthfulness (review 2026-07-05)', () => {
     expect(seen[0]?.isDirectory()).toBe(true);
     expect(seen[0]?.isFile()).toBe(false);
   });
+
+  it('rejects an explicit undefined options slot like Node', () => {
+    const fs = syncMirror();
+    fs.writeFileSync('/undef.txt', new TextEncoder().encode('one'));
+    expect(() => watchFile('/undef.txt', undefined, () => {})).toThrow(/listener.*function/);
+  });
 });

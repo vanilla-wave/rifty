@@ -47,6 +47,16 @@ const c: ParityCase = {
       }
       console.log('append:', JSON.stringify(fs.readFileSync('log.txt', 'utf8')));
 
+      const shared = fs.createWriteStream('log.txt', { flags: 'a' });
+      await new Promise((res, rej) => {
+        shared.on('ready', res);
+        shared.on('error', rej);
+      });
+      await new Promise((res) => shared.write('line3\\n', res));
+      fs.appendFileSync('log.txt', 'line4\\n');
+      await new Promise((res) => shared.end('line5\\n', res));
+      console.log('append-shared-writer:', JSON.stringify(fs.readFileSync('log.txt', 'utf8')));
+
       // (1) exclusive flag raises EEXIST as an error EVENT with Node shape
       const wx = fs.createWriteStream('exists.txt', { flags: 'wx' });
       const e1 = await errored(wx);

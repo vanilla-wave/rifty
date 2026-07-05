@@ -8,7 +8,11 @@ import {
   createWriteStream,
 } from '../../../packages/runtime-js/src/builtins/fs-streams.ts';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
-import { promises as fsp, writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
+import {
+  appendFileSync,
+  promises as fsp,
+  writeFileSync,
+} from '../../../packages/runtime-js/src/builtins/fs.ts';
 
 afterEach(() => {
   resetSyncMirror();
@@ -60,6 +64,16 @@ describe('fs streams', () => {
     ws.write('second line\n');
     await new Promise((r) => setTimeout(r, 0));
     expect(await fsp.readFile('/app.log', 'utf8')).toBe('session started\nsecond line\n');
+  });
+
+  it('append streams append each flush to the current EOF, preserving external writers', async () => {
+    writeFileSync('/shared.log', 'base\n');
+    const ws = createWriteStream('/shared.log', { flags: 'a' });
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    await new Promise<void>((resolve) => ws.write('one\n', () => resolve()));
+    appendFileSync('/shared.log', 'two\n');
+    await new Promise<void>((resolve) => ws.end('three\n', () => resolve()));
+    expect(await fsp.readFile('/shared.log', 'utf8')).toBe('base\none\ntwo\nthree\n');
   });
 
   it("'w' with no writes truncates at open, not at end", async () => {

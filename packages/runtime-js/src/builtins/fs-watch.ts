@@ -225,6 +225,14 @@ export interface StatsLike {
 
 type WatchFileListener = (curr: StatsLike, prev: StatsLike) => void;
 
+function invalidWatchFileListener(value: unknown): TypeError {
+  const received = value === null ? 'null' : typeof value;
+  return Object.assign(
+    new TypeError(`The "listener" argument must be of type function. Received ${received}`),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
 interface PollEntry {
   timer: ReturnType<typeof setInterval>;
   listeners: WatchFileListener[];
@@ -248,12 +256,22 @@ const pollers = new Map<string, PollEntry>();
 
 export function watchFile(
   path: string,
-  optionsOrListener: WatchFileOptions | WatchFileListener,
+  optionsOrListener?: WatchFileOptions | WatchFileListener | null,
   listener?: WatchFileListener,
 ): void {
-  const opts: WatchFileOptions = typeof optionsOrListener === 'function' ? {} : optionsOrListener;
-  const cb = typeof optionsOrListener === 'function' ? optionsOrListener : listener;
-  if (!cb) return;
+  let opts: WatchFileOptions;
+  let cb: WatchFileListener;
+  if (typeof optionsOrListener === 'function') {
+    opts = {};
+    cb = optionsOrListener;
+  } else {
+    if (!optionsOrListener || typeof optionsOrListener !== 'object') {
+      throw invalidWatchFileListener(optionsOrListener);
+    }
+    if (typeof listener !== 'function') throw invalidWatchFileListener(listener);
+    opts = optionsOrListener;
+    cb = listener;
+  }
   const target = resolvePath(path);
   const interval = opts.interval ?? 5007;
   const existing = pollers.get(target);

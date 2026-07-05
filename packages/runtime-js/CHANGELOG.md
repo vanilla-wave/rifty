@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **PR #115 post-push review follow-up:** append-mode `createWriteStream`
+  flushes now append to the current EOF instead of rewriting a stale whole-file
+  snapshot, preserving interleaved external writers like real Node. Also,
+  `fs.watchFile(path, undefined, listener)` now rejects with Node's
+  `ERR_INVALID_ARG_TYPE` instead of leaking an accidental TypeError.
 - **PR #115 review follow-up:** `createWriteStream` now rejects same-tick
   write-after-`end()` before bytes can mutate; `r+` stream open through a file
   reports `ENOTDIR`; `fs.watch` throws Node-shaped `ENOENT` for a missing target;
