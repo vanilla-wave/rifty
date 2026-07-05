@@ -273,20 +273,23 @@ export class S3BundleStore implements BundleStore {
     const url = this.urlFor(closureHash);
     // Self-heal + skip-identical (ADR-0194 §5): HEAD first. S3 returns the
     // single-part PUT's ETag = MD5-hex of the body, so a byte-identical object is
-    // already durable → skip the upload. A missing OR non-matching object
-    // (truncated/foreign/mis-keyed, all of which get() reads as a miss) → PUT,
-    // overwriting the poisoned key so GET-by-hash heals. A non-MD5 ETag (bucket
-    // default-encryption, multipart) never matches → we re-upload, a safe degrade.
+    // already durable → skip the upload. A non-matching object is read through
+    // `get()`: valid content-addressed bytes win (first writer wins), while a
+    // poisoned miss is overwritten so GET-by-hash heals. A non-MD5 ETag (bucket
+    // default-encryption, multipart) never matches, so the verified GET path
+    // decides instead of trusting the opaque tag.
     // Skip ONLY when the metadata is ALSO already immutable — an existing
     // same-byte object missing the `Cache-Control` header (an older upload) still
     // gets re-PUT to repair the metadata the CDN path depends on.
-    const bodyMd5Hex = createHash('md5').update(bundle.bytes).digest('hex');
+    let bundleToStore = bundle;
+    let bodyMd5Hex = createHash('md5').update(bundleToStore.bytes).digest('hex');
     // The probe is an OPTIMIZATION: any failure (network, timeout) → PUT anyway.
     const probe = await this.boundedOp(`HEAD ${closureHash} (probe)`, async (signal) => {
       const head = await this.fetchImpl(url, { method: 'HEAD', signal });
       discardBody(head); // empty by spec
       return {
         ok: head.ok,
+        status: head.status,
         etagMatch: (head.headers.get('etag') ?? '').replace(/"/g, '') === bodyMd5Hex,
         immutable: head.headers.get('cache-control') === CACHE_CONTROL_IMMUTABLE,
       };
@@ -294,7 +297,19 @@ export class S3BundleStore implements BundleStore {
     if (probe?.ok && probe.etagMatch && probe.immutable) {
       return; // identical object already durable WITH the immutable header — no re-upload
     }
-    const payloadSha256Hex = createHash('sha256').update(bundle.bytes).digest('hex');
+    if (probe?.ok && !probe.etagMatch) {
+      // Another origin may have stored the FIRST artifact for this closure
+      // already. Preserve that verified content-addressed object; if its
+      // metadata is missing, repair by re-PUTing THOSE bytes, never fresh
+      // recompute bytes with a different as-of stamp.
+      const existing = await this.get(closureHash);
+      if (existing) {
+        if (probe.immutable) return;
+        bundleToStore = existing;
+        bodyMd5Hex = createHash('md5').update(bundleToStore.bytes).digest('hex');
+      }
+    }
+    const payloadSha256Hex = createHash('sha256').update(bundleToStore.bytes).digest('hex');
     const amzDate = toAmzDate(this.opts.now ? this.opts.now() : new Date());
     const headers: Record<string, string> = {
       // Immutable content-addressed object: S3 stores this as system metadata and
@@ -307,6 +322,12 @@ export class S3BundleStore implements BundleStore {
       'x-amz-content-sha256': payloadSha256Hex,
       'x-amz-date': amzDate,
     };
+    const conditionalCreate = !probe || !probe.ok;
+    if (conditionalCreate) {
+      // Apparent miss: create-only avoids the two-origin HEAD-miss race where
+      // the loser overwrites the winner's immutable bytes for the same hash.
+      headers['if-none-match'] = '*';
+    }
     const authorization = signV4({
       method: 'PUT',
       path: url.pathname,
@@ -322,21 +343,63 @@ export class S3BundleStore implements BundleStore {
     // `host` rides the connection itself; sending it again as an option is
     // ignored by fetch — it is signed above because S3 requires it signed.
     const { host: _host, ...sendHeaders } = headers;
-    await this.boundedOp(`PUT ${closureHash}`, async (signal) => {
+    const putOutcome = await this.boundedOp(`PUT ${closureHash}`, async (signal) => {
       const res = await this.fetchImpl(url, {
         method: 'PUT',
         headers: { ...sendHeaders, authorization },
-        body: bundle.bytes as unknown as BodyInit,
+        body: bundleToStore.bytes as unknown as BodyInit,
         signal,
       });
       if (!res.ok) {
+        if (conditionalCreate && isCreatePreconditionFailure(res.status)) {
+          discardBody(res);
+          return 'race-lost' as const;
+        }
         const snippet = await readErrorSnippet(res);
         throw new Error(
           `eddy: bundle store PUT ${closureHash} failed: HTTP ${res.status} ${snippet.slice(0, 200)}`,
         );
       }
       discardBody(res);
+      return 'stored' as const;
     });
+    if (putOutcome === 'race-lost') {
+      const raced = await this.boundedOp(
+        `GET ${closureHash} (create race proof)`,
+        async (signal) => {
+          const res = await this.fetchImpl(url, { signal });
+          if (!res.ok) {
+            discardBody(res);
+            throw new Error(`HTTP ${res.status}`);
+          }
+          return {
+            cacheControl: res.headers.get('cache-control'),
+            bytes: await readBodyBounded(
+              res,
+              this.opts.maxBundleBytes ?? DEFAULT_MAX_BUNDLE_BYTES,
+              `GET ${closureHash} (create race proof)`,
+            ),
+          };
+        },
+      ).catch((err) => {
+        throw new Error(
+          `eddy: bundle store PUT ${closureHash} lost a create race and the existing object could not be verified: ${errMsg(err)}`,
+        );
+      });
+      const verified = await this.verifyContentAddress(closureHash, raced.bytes);
+      if (!verified) {
+        throw new Error(
+          `eddy: bundle store PUT ${closureHash} lost a create race but the existing object is not a valid bundle`,
+        );
+      }
+      if (raced.cacheControl !== CACHE_CONTROL_IMMUTABLE) {
+        throw new Error(
+          `eddy: bundle store PUT ${closureHash} lost a create race but the existing object serves Cache-Control ` +
+            `${JSON.stringify(raced.cacheControl)} — not the immutable metadata the CDN tier depends on`,
+        );
+      }
+      return;
+    }
     // A settled put PROMISES GET-by-hash servability (bundle-store.ts contract)
     // — but the signed PUT succeeding says nothing about the UNSIGNED public
     // read path (a private/mis-ACL'd bucket 403s it, and the CDN + clients
@@ -440,6 +503,10 @@ function manifestShapeOk(manifest: unknown): manifest is {
       typeof t.version === 'string' &&
       typeof t.integrity === 'string',
   );
+}
+
+function isCreatePreconditionFailure(status: number): boolean {
+  return status === 409 || status === 412;
 }
 
 /** Fire-and-forget body discard: releases the connection without buffering. */

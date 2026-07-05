@@ -55,6 +55,17 @@ export interface CachedBundle {
   manifest: EddyBundleManifestV1;
 }
 
+type BundleResolveResult = EddyResolveResult & { kind: 'bundle' };
+
+function bundleResult(bundle: CachedBundle, storeDurable: boolean): BundleResolveResult {
+  return {
+    kind: 'bundle',
+    bytes: bundle.bytes,
+    manifest: bundle.manifest,
+    storeDurable,
+  };
+}
+
 /** Insertion-ordered LRU: `get` promotes; `set` evicts the oldest over cap. */
 class Lru<V> {
   private readonly map = new Map<string, V>();
@@ -176,7 +187,7 @@ export class EddyCache {
           );
           return null;
         });
-        if (hit) return { kind: 'bundle', bytes: hit.bytes, manifest: hit.manifest };
+        if (hit) return bundleResult(hit, true);
       }
       // Thundering herd: identical cached-policy cold requests join one compute.
       // Online refreshes are not joined by cached callers: they bypass shared
@@ -257,7 +268,7 @@ export class EddyCache {
    *  bytes (byte stability, ADR-0194 §5). Different hashes never contend. */
   private settleStore(
     closureHash: string,
-    result: EddyResolveResult & { kind: 'bundle' },
+    result: BundleResolveResult,
     key: string,
     gen: number,
   ): Promise<EddyResolveResult> {
@@ -277,7 +288,7 @@ export class EddyCache {
 
   private async doSettleStore(
     closureHash: string,
-    result: EddyResolveResult & { kind: 'bundle' },
+    result: BundleResolveResult,
     key: string,
     gen: number,
   ): Promise<EddyResolveResult> {
@@ -307,7 +318,7 @@ export class EddyCache {
       // closure instead of recomputing and retrying the store read.
       const cur = this.mutable.peek(key);
       if (cur && gen > cur.gen) this.mutable.delete(key);
-      return result;
+      return bundleResult(result, false);
     }
     if (stored) {
       // A verified GET proves the bytes, but durable-before-link also needs the
@@ -321,10 +332,10 @@ export class EddyCache {
         );
         const cur = this.mutable.peek(key);
         if (cur && gen > cur.gen) this.mutable.delete(key);
-        return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
+        return bundleResult(stored, false);
       }
       this.publishLink(key, closureHash, gen);
-      return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
+      return bundleResult(stored, true);
     }
     // A genuine MISS (absent OR poisoned — get() reads a corrupt object as null,
     // so self-heal is intact). Durable-BEFORE-link (ADR-0194 §5): the awaited put
@@ -348,10 +359,10 @@ export class EddyCache {
       // failed one.
       const cur = this.mutable.peek(key);
       if (cur && gen > cur.gen) this.mutable.delete(key);
-      return result;
+      return bundleResult(result, false);
     }
     this.publishLink(key, closureHash, gen);
-    return result;
+    return bundleResult(result, true);
   }
 
   /** Re-seed the mutable link — even on a prefer:'online' recompute, so a later

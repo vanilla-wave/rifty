@@ -338,6 +338,31 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     expect(fb.closureHash).toBeUndefined();
   });
 
+  it('does not expose a learned-pin closureHash for an unproven POST bundle', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/x-tar',
+        'x-eddy-store-durable': '0',
+      });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry: makeRegistry().registry,
+        resolverUrl: raw.url,
+      });
+      expect(result.source).toBe('eddy');
+      expect(result.closureHash).toBeUndefined();
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('is inert when resolverUrl is unset (source standard, identical to today)', async () => {
     const vfs = new MemoryVfs();
     await writePackageJson(vfs, DEPS);
@@ -375,6 +400,7 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
         resolverClosureHash: hash,
       });
       expect(result.source).toBe('eddy');
+      expect(result.closureHash).toBe(hash);
       expect(posts).toBe(0);
       expect(calls.packument + calls.tarball).toBe(0);
     } finally {

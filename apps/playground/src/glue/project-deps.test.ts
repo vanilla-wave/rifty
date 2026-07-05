@@ -548,6 +548,46 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
+  it('does not promote a pending stamp after package.json deps drift', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+    let resolveFirstFlush!: (report: PersistFailureReport) => void;
+    let flushCalls = 0;
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: () => {
+        flushCalls += 1;
+        if (flushCalls === 1) {
+          return new Promise<PersistFailureReport>((resolve) => {
+            resolveFirstFlush = resolve;
+          });
+        }
+        return Promise.resolve({ failures: [], total: 0 });
+      },
+    });
+    expect(result.source).toBe('snapshot');
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+
+    fsSync.writeFileSync(
+      `${ROOT}/package.json`,
+      enc.encode(JSON.stringify({ name: 'app', dependencies: { vite: '^6.0.0' } })),
+    );
+    resolveFirstFlush({ failures: [], total: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect(log.join('')).toContain('package.json deps changed before install stamp promotion');
+    expect(flushCalls).toBe(2);
+  });
+
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {
     // The faithful boot settles instant deps in RESTORE-ONLY mode. from-scratch deps
     // come SOLELY from the explicit `npm install` command — so omitting `install`

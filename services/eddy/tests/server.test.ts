@@ -37,6 +37,7 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('x-eddy-resolved-at')).toBeTruthy();
     expect(res.headers.get('x-eddy-closure-hash')).toBeTruthy();
     expect(res.headers.get('x-eddy-npm-client-version')).toBeTruthy();
+    expect(res.headers.get('x-eddy-store-durable')).toBe('1');
     // no-store: the response depends on the BODY — a URL-keyed cache (some
     // CDNs can cache POST) would serve one dep-set's bundle for another. Only
     // the content-addressed GET-by-hash is immutable.
@@ -96,6 +97,7 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     expect(res.headers.get('x-eddy-closure-hash')).toBe(hash);
     expect(res.headers.get('x-eddy-resolved-at')).toBeTruthy();
+    expect(res.headers.get('x-eddy-store-durable')).toBe('1');
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
     const got = new Uint8Array(await res.arrayBuffer());
@@ -237,6 +239,7 @@ describe('eddy HTTP server', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
     expect(res.headers.get('access-control-expose-headers')).toMatch(/x-eddy-closure-hash/);
+    expect(res.headers.get('access-control-expose-headers')).toMatch(/x-eddy-store-durable/);
   });
 
   it('422 decline is also CORS-readable cross-origin', async () => {

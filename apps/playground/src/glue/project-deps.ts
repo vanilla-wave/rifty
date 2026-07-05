@@ -212,6 +212,17 @@ function writeInstallStampSync(
 ): boolean {
   const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
   if (!deps) return false;
+  writeInstallStampForDepsSync(opts, deps, packages, durability, promotionId);
+  return true;
+}
+
+function writeInstallStampForDepsSync(
+  opts: EnsureProjectDepsOptions,
+  deps: Record<string, string>,
+  packages: number,
+  durability?: 'pending',
+  promotionId?: string,
+): void {
   const stamp: InstallStamp = {
     version: 1,
     slug: opts.slug,
@@ -225,7 +236,6 @@ function writeInstallStampSync(
     installStampPath(opts.root),
     stampEncoder.encode(`${JSON.stringify(stamp, null, 2)}\n`),
   );
-  return true;
 }
 
 async function pendingPromotionStillCurrent(
@@ -233,6 +243,7 @@ async function pendingPromotionStillCurrent(
   packages: number,
   arrivalEpoch: number,
   promotionId: string,
+  deps: Record<string, string>,
 ): Promise<boolean> {
   if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
   const stamp = await readInstallStamp(opts.vfs, opts.root);
@@ -241,7 +252,8 @@ async function pendingPromotionStillCurrent(
     stamp?.durability === 'pending' &&
     stamp.promotionId === promotionId &&
     stamp.slug === opts.slug &&
-    stamp.packages === packages
+    stamp.packages === packages &&
+    depsEqual(stamp.deps, deps)
   );
 }
 
@@ -262,8 +274,10 @@ async function stampTree(
   }
   if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
   const promotionId = nextPendingPromotionId(arrivalEpoch);
-  if (!writeInstallStampSync(opts, packages, 'pending', promotionId)) return;
-  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId);
+  const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
+  if (!deps) return;
+  writeInstallStampForDepsSync(opts, deps, packages, 'pending', promotionId);
+  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId, deps);
 }
 
 /**
@@ -280,13 +294,16 @@ function scheduleStampDurabilityCheck(
   packages: number,
   arrivalEpoch: number,
   promotionId: string,
+  deps: Record<string, string>,
 ): void {
   const flush = opts.flush;
   if (!flush) return;
   const stampPath = installStampPath(opts.root);
   void (async () => {
     const report = await flush();
-    if (!(await pendingPromotionStillCurrent(opts, packages, arrivalEpoch, promotionId))) return;
+    if (!(await pendingPromotionStillCurrent(opts, packages, arrivalEpoch, promotionId, deps))) {
+      return;
+    }
     // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
     // failures could fill the sample while `node_modules` damage sits beyond it,
     // and trusting a stamp over a torn tree is exactly what this check exists
@@ -313,10 +330,33 @@ function scheduleStampDurabilityCheck(
       return;
     }
 
+    const currentDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
+    if (!currentDeps || !depsEqual(currentDeps, deps)) {
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — pending install stamp discarded; the next boot re-runs dependency arrival\n',
+      );
+      const after = await flush();
+      if (after && reportHasFailure(after, (p) => p === stampPath)) {
+        opts.log(
+          '[real-vite/worker] WARNING: stale pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
+        );
+      }
+      return;
+    }
     if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
-    if (!writeInstallStampSync(opts, packages)) return;
+    writeInstallStampForDepsSync(opts, deps, packages);
     const promoted = await flush();
     if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
+    const promotedDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
+    if (!promotedDeps || !depsEqual(promotedDeps, deps)) {
+      opts.fsSync.rmSync(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: package.json deps changed during install stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+      );
+      await flush();
+      return;
+    }
     if (promoted && reportHasFailure(promoted, (p) => isStampedTreeDamage(p, opts.root))) {
       opts.fsSync.rmSync(stampPath, { force: true });
       opts.log(

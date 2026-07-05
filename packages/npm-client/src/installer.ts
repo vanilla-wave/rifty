@@ -207,10 +207,9 @@ export interface InstallResult {
    */
   source?: 'eddy' | 'standard';
   /**
-   * The adopted bundle's `manifest.asOf.closureHash` — set iff
-   * `source === 'eddy'` (ADR-0194). Callers persist it as a learned pin:
-   * `requestKey → closureHash` turns the next install of the same dep set into
-   * a cacheable `GET /bundle/<hash>`.
+   * The adopted bundle's `manifest.asOf.closureHash`, exposed only when it is
+   * safe to persist as a learned pin: a content-addressed GET/prefetch, or a
+   * POST whose server proved the immutable store is durable.
    */
   closureHash?: string;
 }
@@ -330,7 +329,7 @@ export async function install(
   // later point leaves the user's pre-existing lockfile untouched instead of
   // clobbering it with the resolver's root metadata.
   let source: 'eddy' | 'standard' = 'standard';
-  let eddyClosureHash: string | null = null;
+  let eddyClosureHash: string | undefined;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
@@ -383,7 +382,7 @@ export async function install(
     lockfile,
     conflicts: [],
     source,
-    ...(eddyClosureHash === null ? {} : { closureHash: eddyClosureHash }),
+    ...(eddyClosureHash === undefined ? {} : { closureHash: eddyClosureHash }),
   };
 }
 
@@ -603,12 +602,13 @@ function hasLockfileFastPath(
  * ADR-0182 opt-in fast path. Obtain an `EddyBundleV1` from the resolver, verify
  * it (bytes vs the bundle integrity — NON-disableable, mirror-grade trust),
  * check the bundle lockfile covers the request, seed the tarball cache, write
- * the lockfile. Returns the adopted bundle's closureHash + its STAGED lockfile
- * on success (the existing lockfile fast path then runs with zero packument
- * network from the in-memory lockfile; the hash feeds learned pins, ADR-0194 —
- * the caller commits the lockfile to disk only after link/shims succeed); on
- * ANY failure it warns and returns `null`, leaving the pre-existing lockfile
- * untouched so the standard verifying install runs. Never throws.
+ * the lockfile. Returns the adopted bundle's optional learnable closureHash +
+ * its STAGED lockfile on success (the existing lockfile fast path then runs
+ * with zero packument network from the in-memory lockfile; the hash feeds
+ * learned pins only when the response is safe to persist, ADR-0194 — the caller
+ * commits the lockfile to disk only after link/shims succeed); on ANY failure
+ * it warns and returns `null`, leaving the pre-existing lockfile untouched so
+ * the standard verifying install runs. Never throws.
  *
  * The bundle can arrive via THREE attempts, first survivor wins, each failure
  * falls through to the next: a prefetched response (`resolverPrefetch`,
@@ -624,7 +624,7 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<{ closureHash: string; lockfile: Lockfile } | null> {
+): Promise<{ closureHash?: string; lockfile: Lockfile } | null> {
   const url = opts.resolverUrl;
   if (!url) return null;
 
@@ -723,7 +723,10 @@ async function tryEddyFastPath(
         attempt.expectedHash,
       );
       if (typeof outcome !== 'string') {
-        return { closureHash: outcome.closureHash, lockfile: outcome.lockfile };
+        return {
+          ...(outcome.closureHash === undefined ? {} : { closureHash: outcome.closureHash }),
+          lockfile: outcome.lockfile,
+        };
       }
       reasons.push(`${attempt.label}: ${outcome}`);
     } catch (err) {
@@ -766,6 +769,7 @@ async function fetchHeadersBounded(
 }
 
 const eddyDecoder = new TextDecoder('utf-8');
+const EDDY_STORE_DURABLE_HEADER = 'x-eddy-store-durable';
 
 async function* bufferedTarEntries(
   bytes: Uint8Array,
@@ -774,10 +778,10 @@ async function* bufferedTarEntries(
 }
 
 /**
- * Verify + adopt ONE bundle response; `{adopted, closureHash}` on success, a
- * decline reason string otherwise (ADR-0194 threads the hash out for learned
- * pins). The bundle is consumed AS A STREAM (network overlaps hash + cache
- * writes): the format/v3/coverage gates run on the manifest + lockfile members
+ * Verify + adopt ONE bundle response; `{adopted, closureHash?}` on success, a
+ * decline reason string otherwise (ADR-0194 threads a learnable hash out for
+ * learned pins). The bundle is consumed AS A STREAM (network overlaps hash +
+ * cache writes): the format/v3/coverage gates run on the manifest + lockfile members
  * — the first two, by bundle contract — so a decline cancels the download
  * before tarball bytes transfer. Each tarball is verified against the
  * integrity the BUNDLE carries (ADR-0182 §5, non-disableable) and seeded into
@@ -799,7 +803,7 @@ async function consumeEddyResponse(
   opts: InstallOptions,
   tarballCache: TarballCache,
   expectedClosureHash?: string,
-): Promise<{ adopted: true; closureHash: string; lockfile: Lockfile } | string> {
+): Promise<{ adopted: true; closureHash?: string; lockfile: Lockfile } | string> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
@@ -940,7 +944,14 @@ async function consumeEddyResponse(
       return 'tarball cache did not retain seeded bytes (a non-retentive cache cannot back an eddy install)';
     }
   }
-  return { adopted: true, closureHash: manifest.asOf.closureHash, lockfile };
+  const canLearnClosureHash =
+    expectedClosureHash !== undefined || response.headers.get(EDDY_STORE_DURABLE_HEADER) === '1';
+  const closureHash = canLearnClosureHash ? manifest.asOf.closureHash : undefined;
+  return {
+    adopted: true,
+    ...(closureHash === undefined ? {} : { closureHash }),
+    lockfile,
+  };
 }
 
 function declineEddy(reason: string): null {

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 22)
+
+- **Learned pins are exposed only after immutable-store proof.** POST bundle
+  responses now carry `x-eddy-store-durable`; clients can learn the closure hash
+  only when the cache proved `GET /bundle/<hash>` is servable. Degraded store
+  puts still serve the computed bundle, but no longer teach an unservable hash.
+- **S3 first-writer-wins across origins.** Apparent-miss PUTs use conditional
+  create, and an existing valid object for the closure hash is preserved instead
+  of overwritten by fresh-`resolvedAt` bytes from another stateless origin.
+
 ### Fixed (PR #107 round 21)
 
 - **Cached-policy requests no longer join in-flight `prefer:'online'` refreshes.**

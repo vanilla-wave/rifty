@@ -84,6 +84,23 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
     expect(await readLearnedPin(vfs, 'ok')).toBeUndefined(); // savedAt missing → unverifiable TTL
   });
 
+  it('ignores non-finite and future savedAt values', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    await vfs.mkdir('/.rifty', { recursive: true });
+    await vfs.writeFile(
+      LEARNED_PINS_PATH,
+      '{"version":1,"entries":{"future":{"closureHash":"sha256-future","savedAt":2000},"inf":{"closureHash":"sha256-inf","savedAt":1e999}}}',
+    );
+
+    expect(await readLearnedPin(vfs, 'future', () => 1000)).toBeUndefined();
+    expect(readLearnedPinSync(fsSync, 'future', () => 1000)).toBeUndefined();
+    expect(await readLearnedPin(vfs, 'inf', () => 1000)).toBeUndefined();
+
+    await writeLearnedPin(vfs, KEY, HASH, () => 1000);
+    expect(await readLearnedPin(vfs, 'future', () => 1000)).toBeUndefined();
+    expect(await readLearnedPin(vfs, KEY, () => 1000)).toBe(HASH);
+  });
+
   it('learnedPinForPackageJsonSync keys on the canonical eddy request of the package.json text', async () => {
     const { vfs, fsSync } = createMemoryFs();
     const packageJson = JSON.stringify({

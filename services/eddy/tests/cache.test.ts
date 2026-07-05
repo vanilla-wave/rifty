@@ -192,10 +192,12 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     failPuts = true;
     const refresh = await cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' });
     expect(refresh.kind === 'bundle' && refresh.manifest.asOf.closureHash).toBe('sha256-NEW'); // degrade serves the computed bundle
+    expect(refresh.kind === 'bundle' && refresh.storeDurable).toBe(false);
     failPuts = false;
     // Pre-fix this served sha256-OLD straight from the store (stale link hit).
     const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+    expect(third.kind === 'bundle' && third.storeDurable).toBe(true);
     expect(computes).toBe(3); // recompute + put retry, never the stale closure
   });
 
@@ -399,8 +401,10 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
 
     const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(first.kind === 'bundle' && [...first.bytes]).toEqual([1, 1, 1]);
+    expect(first.kind === 'bundle' && first.storeDurable).toBe(false);
     failProof = false;
-    await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    const second = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(second.kind === 'bundle' && second.storeDurable).toBe(true);
     expect(computes).toBe(2); // first proof failure did not publish a reusable link
   });
 

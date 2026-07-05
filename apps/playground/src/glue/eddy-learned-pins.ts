@@ -59,7 +59,13 @@ function parseFile(text: string): LearnedPinsFile | null {
   for (const [key, value] of Object.entries(raw.entries as Record<string, unknown>)) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
     const e = value as { closureHash?: unknown; savedAt?: unknown };
-    if (typeof e.closureHash !== 'string' || typeof e.savedAt !== 'number') continue;
+    if (
+      typeof e.closureHash !== 'string' ||
+      typeof e.savedAt !== 'number' ||
+      !Number.isFinite(e.savedAt)
+    ) {
+      continue;
+    }
     entries[key] = { closureHash: e.closureHash, savedAt: e.savedAt };
   }
   return { version: 1, entries };
@@ -72,6 +78,7 @@ function pinFrom(
 ): string | undefined {
   const entry = file?.entries[requestKey];
   if (!entry) return undefined;
+  if (entry.savedAt > nowMs) return undefined;
   if (nowMs - entry.savedAt >= LEARNED_PIN_TTL_MS) return undefined;
   return entry.closureHash;
 }
@@ -147,7 +154,9 @@ export async function writeLearnedPin(
   }
   const entries: Record<string, LearnedPinEntry> = {};
   for (const [key, entry] of Object.entries(file?.entries ?? {})) {
-    if (nowMs - entry.savedAt < LEARNED_PIN_TTL_MS) entries[key] = entry;
+    if (entry.savedAt <= nowMs && nowMs - entry.savedAt < LEARNED_PIN_TTL_MS) {
+      entries[key] = entry;
+    }
   }
   entries[requestKey] = { closureHash, savedAt: nowMs };
   const keys = Object.keys(entries);

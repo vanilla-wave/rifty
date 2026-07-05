@@ -157,7 +157,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
       return;
     }
     res.writeHead(200, {
-      ...bundleHeaders(hit.manifest, CACHE_CONTROL_IMMUTABLE),
+      ...bundleHeaders(hit.manifest, CACHE_CONTROL_IMMUTABLE, true),
       // Explicit for HEAD (node suppresses the body, so nothing else sets it).
       'content-length': String(hit.bytes.byteLength),
     });
@@ -221,11 +221,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
   // no-store: a POST response depends on the BODY — a cache that keys on the
   // URL (some CDNs can be configured to cache POST) would serve one dep-set's
   // bundle for another. Only the content-addressed GET is immutable.
-  res.writeHead(200, bundleHeaders(result.manifest, 'no-store'));
+  res.writeHead(200, bundleHeaders(result.manifest, 'no-store', result.storeDurable === true));
   res.end(Buffer.from(result.bytes));
 }
 
 const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
+const EDDY_STORE_DURABLE_HEADER = 'x-eddy-store-durable';
 
 /** 200-bundle headers, shared by the POST resolve and the GET-by-hash route —
  * only the cache policy differs: `immutable` is load-bearing on the GET (a
@@ -234,6 +235,7 @@ const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
 function bundleHeaders(
   manifest: EddyBundleManifestV1,
   cacheControl: string,
+  storeDurable: boolean,
 ): Record<string, string> {
   return {
     'content-type': 'application/x-tar',
@@ -241,6 +243,7 @@ function bundleHeaders(
     'x-eddy-resolved-at': manifest.asOf.resolvedAt,
     'x-eddy-closure-hash': manifest.asOf.closureHash,
     'x-eddy-npm-client-version': manifest.npmClientVersion,
+    [EDDY_STORE_DURABLE_HEADER]: storeDurable ? '1' : '0',
     ...corsHeaders(),
   };
 }
@@ -349,7 +352,7 @@ function corsHeaders(): Record<string, string> {
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
     'access-control-expose-headers':
-      'x-eddy-resolved-at, x-eddy-closure-hash, x-eddy-npm-client-version',
+      'x-eddy-resolved-at, x-eddy-closure-hash, x-eddy-npm-client-version, x-eddy-store-durable',
     'cross-origin-resource-policy': 'cross-origin',
   };
 }

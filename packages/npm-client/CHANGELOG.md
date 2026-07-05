@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 22)
+
+- **`InstallResult.closureHash` no longer leaks unproven POST hashes.** Eddy
+  installs still report `source: 'eddy'`, but learned-pin hashes are returned
+  only for content-addressed GET/prefetch responses or POST responses whose
+  `x-eddy-store-durable` header proves the immutable store is servable.
+
 ### Fixed (PR #107 round 21)
 
 - **`EddyBundleContents` stays source-compatible.** `memberNames` is now optional

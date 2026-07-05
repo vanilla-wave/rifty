@@ -49,7 +49,13 @@ export interface EddyResolverDeps {
 }
 
 export type EddyResolveResult =
-  | { kind: 'bundle'; bytes: Uint8Array; manifest: EddyBundleManifestV1 }
+  | {
+      kind: 'bundle';
+      bytes: Uint8Array;
+      manifest: EddyBundleManifestV1;
+      /** Set by EddyCache: POST callers may learn pins only after durable store proof. */
+      storeDurable?: boolean;
+    }
   | { kind: 'unsupported'; feature: string; message: string };
 
 const ROOT = '/work';

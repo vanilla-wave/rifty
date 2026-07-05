@@ -143,6 +143,11 @@ function startFakeS3(): Promise<FakeS3> {
       req.on('data', (c: Buffer) => chunks.push(c));
       req.on('end', () => {
         const body = Buffer.concat(chunks);
+        if (req.headers['if-none-match'] === '*' && objects.has(path)) {
+          res.writeHead(412, { 'content-type': 'application/xml' });
+          res.end('<Error><Code>PreconditionFailed</Code></Error>');
+          return;
+        }
         objects.set(path, body);
         const cc = req.headers['cache-control'];
         if (typeof cc === 'string') cacheControls.set(path, cc);
@@ -227,6 +232,87 @@ describe('S3BundleStore', () => {
     expect(fake.requests.filter((r) => r.method === 'PUT').length).toBe(1);
     const hit = await store.get(HASH);
     expect([...(hit?.bytes ?? [])]).toEqual([...bundleBytes]);
+  });
+
+  it('preserves a valid existing object with different bytes for the same closure hash', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    contents.manifest.asOf.resolvedAt = '2026-07-02T00:00:00.000Z';
+    const firstStored = packEddyBundle(contents);
+    fake.objects.set(key, Buffer.from(firstStored));
+    fake.cacheControls.set(key, 'public, max-age=31536000, immutable');
+
+    await store.put(HASH, { bytes: bundleBytes, manifest });
+
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toEqual([]);
+    expect([...(fake.objects.get(key) ?? [])]).toEqual([...firstStored]);
+  });
+
+  it('loses an apparent-miss create race without overwriting the winner', async () => {
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    contents.manifest.asOf.resolvedAt = '2026-07-03T00:00:00.000Z';
+    const winnerBytes = Buffer.from(packEddyBundle(contents));
+    const requests: Array<{
+      method: string;
+      path: string;
+      headers: Record<string, string | string[] | undefined>;
+    }> = [];
+    const server = createServer((req, res) => {
+      const path = req.url ?? '';
+      requests.push({ method: req.method ?? '', path, headers: req.headers });
+      if (req.method === 'HEAD') {
+        // First origin view: apparent miss. After the failed conditional PUT,
+        // the recursive proof sees the winner.
+        const sawPut = requests.some((r) => r.method === 'PUT');
+        if (!sawPut) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
+        res.writeHead(200, {
+          etag: `"${createHash('md5').update(winnerBytes).digest('hex')}"`,
+          'cache-control': 'public, max-age=31536000, immutable',
+        });
+        res.end();
+        return;
+      }
+      if (req.method === 'PUT') {
+        req.resume();
+        res.writeHead(412, { 'content-type': 'application/xml' });
+        res.end('<Error><Code>PreconditionFailed</Code></Error>');
+        return;
+      }
+      if (path !== key) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'application/x-tar',
+        'content-length': winnerBytes.length,
+        etag: `"${createHash('md5').update(winnerBytes).digest('hex')}"`,
+        'cache-control': 'public, max-age=31536000, immutable',
+      });
+      res.end(req.method === 'HEAD' ? undefined : winnerBytes);
+    });
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+      );
+    });
+    try {
+      const store = makeStore(url);
+      await store.put(HASH, { bytes: bundleBytes, manifest });
+      expect(requests.map((r) => r.method)).toEqual(['HEAD', 'PUT', 'GET']);
+      expect(requests.find((r) => r.method === 'PUT')?.headers['if-none-match']).toBe('*');
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((e) => (e ? reject(e) : resolve())),
+      );
+    }
   });
 
   it('PUTs the immutable Cache-Control header so the bucket-backed CDN serves bundles forever', async () => {

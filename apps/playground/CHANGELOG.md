@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 22)
+
+- **Pending boot stamps do not promote across package.json dep drift.** The
+  deferred promoter now trusts only the dep-set it stamped; if deps change while
+  the non-blocking drain is in flight, the pending stamp is discarded.
+- **Learned eddy pins reject invalid clocks.** Non-finite or future `savedAt`
+  values no longer pass TTL checks as fresh pins.
+
 ### Fixed (PR #107 round 21)
 
 - **Boot/restore stamps now close the crash window.** Snapshot/boot restore
