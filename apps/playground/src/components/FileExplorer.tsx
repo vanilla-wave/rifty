@@ -23,7 +23,7 @@ import {
   planClipboardPaste,
   targetDirectoryForExplorerRow,
 } from '../glue/file-manager-clipboard.ts';
-import { batchUploadWrites, planDragMove, planUploadFiles } from '../glue/file-manager-dnd.ts';
+import { planDragMove, planUploadFiles } from '../glue/file-manager-dnd.ts';
 import {
   type NmNodeState,
   type NmRow,
@@ -39,7 +39,35 @@ import {
   gitStatusDecorationMaps,
 } from '../glue/git-decorations.ts';
 import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
+import {
+  type ContextMenuItem,
+  type ContextMenuItemId,
+  DRAG_PATHS_MIME,
+  type ExplorerCreateEdit,
+  type ExplorerEditState,
+  type ExplorerRenameEdit,
+  type ExplorerRowCaps,
+  type FileExplorerMutations,
+  UPLOAD_BATCH,
+  canOpenContextMenu,
+  contextMenuItems,
+  dropTargetForRow,
+  ensureMovablePaths,
+  explorerPathText,
+  isCutSource,
+  parseDragPayload,
+  pathsForRowAction,
+  planCompareSelected,
+  planDropReaction,
+  planEditSubmit,
+  rowActivation,
+  rowKeyIntent,
+  runClipboardActions,
+  runUploadPlan,
+} from './file-explorer-core.ts';
 import { Icon, type IconName } from './icons.tsx';
+
+export type { FileExplorerMutations } from './file-explorer-core.ts';
 
 /** Monochrome row icon per file category (Soft Panels: outline icons, no colour badges). */
 const CATEGORY_ICONS: Record<string, IconName> = {
@@ -61,39 +89,15 @@ type Row = NmRow;
 type MutableRow = Row & { readonly kind: 'file' | 'dir' };
 
 const POLL_MS = 1500;
-const UPLOAD_BATCH_MAX_FILES = 32;
-const UPLOAD_BATCH_MAX_BYTES = 4 * 1024 * 1024;
 
-export interface FileExplorerMutations {
-  createFile(path: string): Promise<void>;
-  createDir(path: string): Promise<void>;
-  deletePath(path: string): Promise<void>;
-  renamePath(from: string, to: string): Promise<void>;
-  renameMany(entries: readonly { readonly from: string; readonly to: string }[]): Promise<void>;
-  copyTree(from: string, to: string): Promise<void>;
-  writeFile(path: string, data: Uint8Array, options?: { recursive?: boolean }): Promise<void>;
-  writeFiles(
-    entries: readonly {
-      readonly path: string;
-      readonly data: Uint8Array;
-      readonly recursive?: boolean;
-    }[],
-  ): Promise<void>;
-}
-
-type EditState =
-  | { readonly kind: 'create-file'; readonly parent: string; readonly depth: number }
-  | { readonly kind: 'create-dir'; readonly parent: string; readonly depth: number }
-  | {
-      readonly kind: 'rename';
-      readonly path: string;
-      readonly parent: string;
-      readonly depth: number;
-      readonly name: string;
-      readonly rowKind: 'file' | 'dir';
-    };
-type RenameEditState = Extract<EditState, { readonly kind: 'rename' }>;
-type CreateEditState = Exclude<EditState, RenameEditState>;
+/** Context-menu target: row capabilities + identity + anchor point. */
+type ContextMenuState = ExplorerRowCaps & {
+  readonly path: string;
+  readonly name: string;
+  readonly depth: number;
+  readonly x: number;
+  readonly y: number;
+};
 
 export function FileExplorer(props: {
   vfs: FsOpsTarget;
@@ -128,25 +132,14 @@ export function FileExplorer(props: {
   let rootNow = props.root;
   const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set([props.root]));
   const [nonce, setNonce] = createSignal(0);
-  const [edit, setEdit] = createSignal<EditState | null>(null);
+  const [edit, setEdit] = createSignal<ExplorerEditState | null>(null);
   const [editName, setEditName] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [, setSelectedPath] = createSignal<string | null>(null);
   const [selectedPaths, setSelectedPaths] = createSignal<ReadonlySet<string>>(new Set());
   const [clipboard, setClipboard] = createSignal<FileManagerClipboard | null>(null);
   const [dragging, setDragging] = createSignal<readonly string[] | null>(null);
-  const [contextMenu, setContextMenu] = createSignal<{
-    readonly path: string;
-    readonly name: string;
-    readonly kind: 'file' | 'dir';
-    readonly depth: number;
-    readonly mutable: boolean;
-    readonly downloadable: boolean;
-    readonly comparable: boolean;
-    readonly headComparable: boolean;
-    readonly x: number;
-    readonly y: number;
-  } | null>(null);
+  const [contextMenu, setContextMenu] = createSignal<ContextMenuState | null>(null);
   let editInputEl: HTMLInputElement | undefined;
   const gitDecorations = createMemo(() => gitStatusDecorationMaps(props.gitStatus ?? new Map()));
   // Per-directory async state of the node_modules subtree (ADR-0080). Written
@@ -311,12 +304,10 @@ export function FileExplorer(props: {
 
   function selectedMutablePathsFor(row: Row): readonly string[] {
     if (!canMutateRow(row)) return [];
-    const selected = selectedPaths();
-    if (!selected.has(row.path)) return [row.path];
-    return rows()
+    const mutablePaths = rows()
       .filter((candidate): candidate is MutableRow => canMutateRow(candidate))
-      .filter((candidate) => selected.has(candidate.path))
       .map((candidate) => candidate.path);
+    return pathsForRowAction(row.path, selectedPaths(), mutablePaths);
   }
 
   function selectedComparableFilePaths(): readonly string[] {
@@ -354,21 +345,14 @@ export function FileExplorer(props: {
     setEditName('');
   }
 
-  function renameEditFor(path: string): RenameEditState | null {
+  function renameEditFor(path: string): ExplorerRenameEdit | null {
     const state = edit();
     return state?.kind === 'rename' && state.path === path ? state : null;
   }
 
-  function createEditForParent(parent: string): CreateEditState | null {
+  function createEditForParent(parent: string): ExplorerCreateEdit | null {
     const state = edit();
     return state && state.kind !== 'rename' && state.parent === parent ? state : null;
-  }
-
-  function targetPath(parent: string, name: string): string {
-    const trimmed = name.trim();
-    if (trimmed.length === 0) throw new Error('Name cannot be empty');
-    if (trimmed.includes('/')) throw new Error('Name cannot contain "/"');
-    return joinPath(parent, trimmed);
   }
 
   async function submitEdit(): Promise<void> {
@@ -377,19 +361,17 @@ export function FileExplorer(props: {
     if (!state || !mutations || busy()) return;
     setBusy(true);
     try {
-      if (state.kind === 'create-file') {
-        const path = targetPath(state.parent, editName());
-        await mutations.createFile(path);
-        props.onOpenFile(path);
-      } else if (state.kind === 'create-dir') {
-        const path = targetPath(state.parent, editName());
-        await mutations.createDir(path);
-        expand(path);
+      // reopenActive is planned before the await — the rename closes the old model.
+      const plan = planEditSubmit(state, editName(), props.activePath);
+      if (plan.kind === 'create-file') {
+        await mutations.createFile(plan.path);
+        props.onOpenFile(plan.path);
+      } else if (plan.kind === 'create-dir') {
+        await mutations.createDir(plan.path);
+        expand(plan.path);
       } else {
-        const path = targetPath(state.parent, editName());
-        const wasActive = state.rowKind === 'file' && props.activePath === state.path;
-        await mutations.renamePath(state.path, path);
-        if (wasActive) props.onOpenFile(path);
+        await mutations.renamePath(plan.from, plan.to);
+        if (plan.reopenActive) props.onOpenFile(plan.to);
       }
       cancelEdit();
       refresh();
@@ -424,30 +406,24 @@ export function FileExplorer(props: {
   }
 
   function openContextMenu(e: MouseEvent, row: Row): void {
-    const mutable = canMutateRow(row);
-    const downloadable = canDownloadRow(row);
-    const comparable = canCompareRow(row);
-    const headComparable = canCompareHeadRow(row);
-    if (!mutable && !downloadable && !comparable && !headComparable) return;
+    const caps: ExplorerRowCaps = {
+      kind: row.kind === 'dir' ? 'dir' : 'file',
+      mutable: canMutateRow(row),
+      downloadable: canDownloadRow(row),
+      comparable: canCompareRow(row),
+      headComparable: canCompareHeadRow(row),
+    };
+    if (!canOpenContextMenu(caps)) return;
     e.preventDefault();
     if (!selectedPaths().has(row.path)) selectSingle(row.path);
     setContextMenu({
+      ...caps,
       path: row.path,
       name: row.name,
-      kind: row.kind === 'dir' ? 'dir' : 'file',
       depth: row.depth,
-      mutable,
-      downloadable,
-      comparable,
-      headComparable,
       x: e.clientX,
       y: e.clientY,
     });
-  }
-
-  function cutSource(path: string): boolean {
-    const state = clipboard();
-    return state?.mode === 'cut' && state.paths.includes(path);
   }
 
   function copyRow(row: Row): void {
@@ -463,8 +439,7 @@ export function FileExplorer(props: {
   }
 
   async function copyExplorerPath(path: string, relative: boolean): Promise<void> {
-    const text = relative && path.startsWith(`${root()}/`) ? path.slice(root().length + 1) : path;
-    const ok = await copyToClipboard(text);
+    const ok = await copyToClipboard(explorerPathText(path, root(), relative));
     props.onNotify?.(ok ? 'Path copied' : 'Could not copy path', ok ? 'success' : 'error');
     setContextMenu(null);
   }
@@ -481,13 +456,7 @@ export function FileExplorer(props: {
     }
     setBusy(true);
     try {
-      if (state.mode === 'cut') {
-        await mutations.renameMany(
-          plan.actions.map((action) => ({ from: action.from, to: action.to })),
-        );
-      } else {
-        for (const action of plan.actions) await mutations.copyTree(action.from, action.to);
-      }
+      await runClipboardActions(mutations, state.mode, plan.actions);
       if (plan.clearAfter) setClipboard(null);
       setContextMenu(null);
       refresh();
@@ -510,7 +479,7 @@ export function FileExplorer(props: {
     const plan = planClipboardPaste(vfs, { paths: [row.path], mode: 'copy' }, targetDir);
     setBusy(true);
     try {
-      for (const action of plan.actions) await mutations.copyTree(action.from, action.to);
+      await runClipboardActions(mutations, 'copy', plan.actions);
       setContextMenu(null);
       refresh();
     } catch (err) {
@@ -544,22 +513,14 @@ export function FileExplorer(props: {
     const plan = planUploadFiles(vfs, files, targetDir);
     setBusy(true);
     try {
-      const writes: { path: string; data: Uint8Array; recursive: true }[] = [];
-      for (let i = 0; i < files.length; i += 1) {
-        const file = files[i];
-        const target = plan[i];
-        if (!file || !target) continue;
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        if (root() !== startRoot) throw new Error('workspace root changed during upload');
-        writes.push({ path: target.to, data: bytes, recursive: true });
-      }
-      for (const batch of batchUploadWrites(writes, {
-        maxFiles: UPLOAD_BATCH_MAX_FILES,
-        maxBytes: UPLOAD_BATCH_MAX_BYTES,
-      })) {
-        if (root() !== startRoot) throw new Error('workspace root changed during upload');
-        await mutations.writeFiles(batch);
-      }
+      await runUploadPlan({
+        files,
+        plan,
+        startRoot,
+        currentRoot: root,
+        batch: UPLOAD_BATCH,
+        writeFiles: (entries) => mutations.writeFiles(entries),
+      });
       setContextMenu(null);
       refresh();
     } catch (err) {
@@ -579,12 +540,11 @@ export function FileExplorer(props: {
           .filter((candidate): candidate is MutableRow => canMutateRow(candidate))
           .map((candidate) => candidate.path),
       );
-      for (const path of paths) {
-        if (!mutable.has(path)) throw new Error(`cannot move non-mutable path "${path}"`);
-      }
+      ensureMovablePaths(paths, mutable);
       const plan = planDragMove(vfs, paths, targetDir);
       if (plan.length === 0) return;
-      await mutations.renameMany(plan.map((action) => ({ from: action.from, to: action.to })));
+      // A drag-move is a cut-paste: ONE coalesced renameMany frame.
+      await runClipboardActions(mutations, 'cut', plan);
       setDragging(null);
       setContextMenu(null);
       refresh();
@@ -596,23 +556,14 @@ export function FileExplorer(props: {
   }
 
   function dragPathsFromEvent(e: DragEvent): readonly string[] {
-    const payload = e.dataTransfer?.getData('application/x-rifty-paths');
-    if (!payload) return dragging() ?? [];
-    try {
-      const parsed = JSON.parse(payload) as unknown;
-      return Array.isArray(parsed) && parsed.every((p) => typeof p === 'string')
-        ? (parsed as string[])
-        : [];
-    } catch {
-      return dragging() ?? [];
-    }
+    return parseDragPayload(e.dataTransfer?.getData(DRAG_PATHS_MIME), dragging() ?? []);
   }
 
   function startRowDrag(e: DragEvent, row: Row): void {
     const paths = selectedMutablePathsFor(row);
     if (paths.length === 0) return;
     setDragging(paths);
-    e.dataTransfer?.setData('application/x-rifty-paths', JSON.stringify(paths));
+    e.dataTransfer?.setData(DRAG_PATHS_MIME, JSON.stringify(paths));
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   }
 
@@ -627,35 +578,31 @@ export function FileExplorer(props: {
   async function dropOnTarget(e: DragEvent, targetDir: string, row?: Row): Promise<void> {
     e.preventDefault();
     e.stopPropagation();
-    if (row && !canMutateRow(row)) {
-      props.onNotify?.(`Cannot drop on ${row.name}`, 'error');
-      return;
-    }
-    if (hasDroppedDirectory(e)) {
-      props.onNotify?.('Folder drops are unsupported; drop files instead', 'error');
-      return;
-    }
     const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length > 0) {
+    const reaction = planDropReaction({
+      rowName: row?.name ?? null,
+      rowMutable: row ? canMutateRow(row) : true,
+      hasDirectory: hasDroppedDirectory(e),
+      fileCount: files.length,
+    });
+    if (reaction.kind === 'reject') {
+      props.onNotify?.(reaction.message, 'error');
+      return;
+    }
+    if (reaction.kind === 'upload') {
       await uploadFiles(files, targetDir);
       return;
     }
     await moveDraggedPaths(dragPathsFromEvent(e), targetDir);
   }
 
-  function dropTargetForRow(row: Row): string {
-    if (row.kind === 'dir') return row.path;
-    if (row.kind === 'file') return dirname(row.path);
-    return root();
-  }
-
   function compareSelected(): void {
-    const selected = selectedComparableFilePaths();
-    if (selected.length !== 2) {
-      props.onNotify?.('Select exactly two files to compare', 'error');
+    const plan = planCompareSelected(selectedComparableFilePaths());
+    if (plan.kind === 'error') {
+      props.onNotify?.(plan.message, 'error');
       return;
     }
-    props.onCompareFiles?.(selected[0]!, selected[1]!);
+    props.onCompareFiles?.(plan.left, plan.right);
     setContextMenu(null);
   }
 
@@ -703,6 +650,101 @@ export function FileExplorer(props: {
 
   function stopButtonKeyPropagation(e: KeyboardEvent): void {
     e.stopPropagation();
+  }
+
+  function activateRow(row: Row): void {
+    const action = rowActivation(row.kind);
+    if (action === 'toggle-dir') toggleDir(row.path);
+    else if (action === 'open-file') props.onOpenFile(row.path);
+  }
+
+  /** Thin binding: the intent decision lives in file-explorer-core. */
+  function handleRowKey(e: KeyboardEvent, row: Row): void {
+    const action = rowKeyIntent(e, {
+      mutable: canMutateRow(row),
+      downloadable: canDownloadRow(row),
+    });
+    if (!action) return;
+    e.preventDefault();
+    if (action.stopPropagation) e.stopPropagation();
+    switch (action.intent) {
+      case 'copy':
+        copyRow(row);
+        return;
+      case 'cut':
+        cutRow(row);
+        return;
+      case 'paste':
+        void pasteIntoRow(row);
+        return;
+      case 'download':
+        downloadRow(row);
+        return;
+      case 'rename':
+        beginRename(row);
+        return;
+      case 'delete':
+        void deleteRow(row);
+        return;
+      case 'activate':
+        activateRow(row);
+    }
+  }
+
+  function menuItemDisabled(rule: ContextMenuItem['disabled']): boolean {
+    if (rule === 'busy') return busy();
+    if (rule === 'busy-or-empty-clipboard') return clipboard() === null || busy();
+    if (rule === 'not-two-comparable') return selectedComparableFilePaths().length !== 2;
+    return false;
+  }
+
+  /** Thin binding: item composition lives in file-explorer-core. */
+  function runMenuItem(id: ContextMenuItemId, menu: ContextMenuState): void {
+    switch (id) {
+      case 'new-file':
+        beginCreate('create-file', menu.path, menu.depth + 1);
+        setContextMenu(null);
+        return;
+      case 'new-folder':
+        beginCreate('create-dir', menu.path, menu.depth + 1);
+        setContextMenu(null);
+        return;
+      case 'copy':
+        copyRow({ path: menu.path, name: menu.name, kind: menu.kind, depth: 0 });
+        return;
+      case 'cut':
+        cutRow({ path: menu.path, name: menu.name, kind: menu.kind, depth: 0 });
+        return;
+      case 'paste':
+        void applyClipboard(targetDirectoryForExplorerRow({ kind: menu.kind, path: menu.path }));
+        return;
+      case 'duplicate':
+        void duplicateRow({ path: menu.path, name: menu.name, kind: menu.kind, depth: 0 });
+        return;
+      case 'rename':
+        beginRename({ path: menu.path, name: menu.name, kind: menu.kind, depth: menu.depth });
+        setContextMenu(null);
+        return;
+      case 'delete':
+        setContextMenu(null);
+        void deleteRow({ path: menu.path, name: menu.name, kind: menu.kind, depth: menu.depth });
+        return;
+      case 'copy-path':
+        void copyExplorerPath(menu.path, false);
+        return;
+      case 'copy-relative-path':
+        void copyExplorerPath(menu.path, true);
+        return;
+      case 'compare-selected':
+        compareSelected();
+        return;
+      case 'compare-head':
+        compareWithHead(menu.path);
+        return;
+      case 'download':
+        props.onDownloadFile?.(menu.path);
+        setContextMenu(null);
+    }
   }
 
   function gitDecoration(row: Row): GitDecoration | null {
@@ -783,7 +825,7 @@ export function FileExplorer(props: {
                 data-dim={row.kind === 'dir' && row.name === 'node_modules'}
                 data-active={row.kind === 'file' && props.activePath === row.path}
                 data-selected={selectedPaths().has(row.path)}
-                data-cut={cutSource(row.path)}
+                data-cut={isCutSource(clipboard(), row.path)}
                 data-git={gitDecoration(row)?.kind}
                 draggable={canMutateRow(row)}
                 title={gitDecoration(row)?.title}
@@ -795,7 +837,7 @@ export function FileExplorer(props: {
                 onDragEnd={() => setDragging(null)}
                 onDragOver={(e) => dragOverMutableTarget(e, row)}
                 onDrop={(e) => {
-                  void dropOnTarget(e, dropTargetForRow(row), row);
+                  void dropOnTarget(e, dropTargetForRow(row, root()), row);
                 }}
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey) {
@@ -803,57 +845,9 @@ export function FileExplorer(props: {
                     return;
                   }
                   selectSingle(row.path);
-                  if (row.kind === 'dir') toggleDir(row.path);
-                  else if (row.kind === 'file') props.onOpenFile(row.path);
+                  activateRow(row);
                 }}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && canMutateRow(row)) {
-                    const key = e.key.toLowerCase();
-                    if (key === 'c') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      copyRow(row);
-                      return;
-                    }
-                    if (key === 'x') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      cutRow(row);
-                      return;
-                    }
-                    if (key === 'v') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void pasteIntoRow(row);
-                      return;
-                    }
-                  }
-                  if (
-                    (e.metaKey || e.ctrlKey) &&
-                    e.key.toLowerCase() === 's' &&
-                    canDownloadRow(row)
-                  ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    downloadRow(row);
-                    return;
-                  }
-                  if (e.key === 'F2' && canMutateRow(row)) {
-                    e.preventDefault();
-                    beginRename(row);
-                    return;
-                  }
-                  if ((e.key === 'Delete' || e.key === 'Backspace') && canMutateRow(row)) {
-                    e.preventDefault();
-                    void deleteRow(row);
-                    return;
-                  }
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    if (row.kind === 'dir') toggleDir(row.path);
-                    else if (row.kind === 'file') props.onOpenFile(row.path);
-                  }
-                }}
+                onKeyDown={(e) => handleRowKey(e, row)}
               >
                 <Show when={renameEditFor(row.path)}>
                   <span class="rf-row__ico" aria-hidden="true">
@@ -983,182 +977,20 @@ export function FileExplorer(props: {
               role="menu"
               style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
             >
-              <Show when={menu().mutable}>
-                <Show when={menu().kind === 'dir'}>
+              <For each={contextMenuItems(menu())}>
+                {(item) => (
                   <button
                     type="button"
                     class="rf-rowmenu__item"
                     role="menuitem"
-                    disabled={busy()}
-                    onClick={() => {
-                      beginCreate('create-file', menu().path, menu().depth + 1);
-                      setContextMenu(null);
-                    }}
+                    disabled={menuItemDisabled(item.disabled)}
+                    onClick={() => runMenuItem(item.id, menu())}
                   >
-                    <Icon name="file-plus" size={13} />
-                    New File
+                    <Icon name={item.icon} size={13} />
+                    {item.label}
                   </button>
-                  <button
-                    type="button"
-                    class="rf-rowmenu__item"
-                    role="menuitem"
-                    disabled={busy()}
-                    onClick={() => {
-                      beginCreate('create-dir', menu().path, menu().depth + 1);
-                      setContextMenu(null);
-                    }}
-                  >
-                    <Icon name="folder-plus" size={13} />
-                    New Folder
-                  </button>
-                </Show>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={busy()}
-                  onClick={() =>
-                    copyRow({ path: menu().path, name: menu().name, kind: menu().kind, depth: 0 })
-                  }
-                >
-                  <Icon name="copy" size={13} />
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={busy()}
-                  onClick={() =>
-                    cutRow({ path: menu().path, name: menu().name, kind: menu().kind, depth: 0 })
-                  }
-                >
-                  <Icon name="corner-down-left" size={13} />
-                  Cut
-                </button>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={clipboard() === null || busy()}
-                  onClick={() =>
-                    void applyClipboard(
-                      targetDirectoryForExplorerRow({ kind: menu().kind, path: menu().path }),
-                    )
-                  }
-                >
-                  <Icon name="corner-down-left" size={13} />
-                  Paste
-                </button>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={busy()}
-                  onClick={() =>
-                    void duplicateRow({
-                      path: menu().path,
-                      name: menu().name,
-                      kind: menu().kind,
-                      depth: 0,
-                    })
-                  }
-                >
-                  <Icon name="copy" size={13} />
-                  Duplicate
-                </button>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={busy()}
-                  onClick={() => {
-                    beginRename({
-                      path: menu().path,
-                      name: menu().name,
-                      kind: menu().kind,
-                      depth: menu().depth,
-                    });
-                    setContextMenu(null);
-                  }}
-                >
-                  <Icon name="pencil-to-square" size={13} />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={busy()}
-                  onClick={() => {
-                    setContextMenu(null);
-                    void deleteRow({
-                      path: menu().path,
-                      name: menu().name,
-                      kind: menu().kind,
-                      depth: menu().depth,
-                    });
-                  }}
-                >
-                  <Icon name="trash-bin" size={13} />
-                  Delete
-                </button>
-              </Show>
-              <button
-                type="button"
-                class="rf-rowmenu__item"
-                role="menuitem"
-                onClick={() => void copyExplorerPath(menu().path, false)}
-              >
-                <Icon name="copy" size={13} />
-                Copy Path
-              </button>
-              <button
-                type="button"
-                class="rf-rowmenu__item"
-                role="menuitem"
-                onClick={() => void copyExplorerPath(menu().path, true)}
-              >
-                <Icon name="copy" size={13} />
-                Copy Relative Path
-              </button>
-              <Show when={menu().comparable}>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  disabled={selectedComparableFilePaths().length !== 2}
-                  onClick={compareSelected}
-                >
-                  <Icon name="file-text" size={13} />
-                  Compare Selected
-                </button>
-              </Show>
-              <Show when={menu().headComparable}>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  onClick={() => compareWithHead(menu().path)}
-                >
-                  <Icon name="file-text" size={13} />
-                  Compare with HEAD
-                </button>
-              </Show>
-              <Show when={menu().downloadable}>
-                <button
-                  type="button"
-                  class="rf-rowmenu__item"
-                  role="menuitem"
-                  onClick={() => {
-                    props.onDownloadFile?.(menu().path);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Icon name="file-arrow-down" size={13} />
-                  Download
-                </button>
-              </Show>
+                )}
+              </For>
             </div>
           )}
         </Show>

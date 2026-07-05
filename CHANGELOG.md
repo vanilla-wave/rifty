@@ -6,8 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Source-grep test ratchet (`pnpm check:source-grep`, epic
+  playground-testable-core).** CI refuses new
+  `expect(source).toContain`-style tests in apps/playground and forces the
+  allowlist burn-down (opened at 15 files/888 asserts, closed at 11/141) to be
+  recorded (exact-count match, both directions). Wired into `pr:check` and the
+  CI lint-and-typecheck job. Review round 2: the scanner also walks the
+  `tests/browser-unit` lane (`*.spec.ts` — a grep there bypassed the gate) and
+  refuses a positive-count allowlist entry without a recorded `why`; the
+  repo-wide sweep of pre-existing package greps is backlog
+  `toolchain-build/source-grep-ratchet-repo-wide`. Review round 3: the ratchet
+  keys on assertion IDENTITY, not just count — each entry also records a
+  `digest` of the normalized assertion-signature multiset, so swapping one grep
+  for another at the same per-file count (invisible to a count-only ratchet) is
+  refused unless the entry is re-recorded (digest + why) in the same PR.
+- **Browser-unit test lane (ADR-0196, epic playground-testable-core).**
+  `pnpm test:browser-unit` — thin Playwright harness (`unit-harness.html`, no App
+  boot) on the playground vite dev server: worker-side modules behaviorally tested
+  against the REAL owner worker under COI (owner ready + pty exec + vfs-write ack +
+  preview republish handshake). Own CI job; serial; isolated port.
+
 ### Fixed
 
+- **browser-unit: the restore-gate spec no longer races the 250ms slow-progress
+  threshold.** The stamp rework (PR #107, ADR-0187 Corrected) removed the awaited
+  OPFS drains from the instant restore path, so a fast host could finish the
+  restore before the threshold and the gate's progress line never printed. The
+  spec now holds the snapshot response 600ms (latency shaping only — real bytes,
+  real restore path) so the gated exec provably overlaps the in-flight restore.
 - **`pnpm bench` refuses a partial or foreign-server measurement.** Two Fidelity
   hardenings on the install metric: (1) a pass now records `measured` ONLY when
   ALL `RUNS` samples reached first Vite response — a partial set (e.g. 1/5 after

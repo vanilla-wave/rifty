@@ -145,6 +145,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
+| 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 
 ### toolchain-build
 
@@ -159,6 +160,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0164 | Node 24 as the supported and parity-target version |
 | 0166 | In-browser TS language service over VFS |
 | 0177 | Workspace TypeScript is required for TS language service |
+| 0196 | Browser-unit test lane is a thin Playwright harness on the playground dev server |
 
 ### protocol
 

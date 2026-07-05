@@ -114,8 +114,18 @@ describe('BottomPanel', () => {
   });
 
   it('keys terminal panel instances by stable session id, not snapshot object identity', () => {
-    expect(bottomPanelSource).toContain('sessionIds');
-    expect(bottomPanelSource).toContain('<For each={sessionIds()}>');
+    // Behavioral half: every session renders its own keyed slot.
+    const html = render();
+    expect(html).toContain('class="rf-terminal-slot" data-session-id="terminal-1"');
+    expect(html).toContain('class="rf-terminal-slot" data-session-id="terminal-2"');
+    // residual source pin: keyed reconciliation is client-only — node vitest
+    // runs the solid SERVER runtime, renderToString renders once, so "a fresh
+    // sessions snapshot with unchanged ids must NOT recreate terminal slots"
+    // is unobservable here. Both <For>s (tab strip + terminal slots) must
+    // iterate the sessionIds() string memo, never props.sessions — fresh
+    // snapshot objects every poll would remount TerminalPanels and lose xterm
+    // scrollback + the live attach.
+    expect(bottomPanelSource.match(/<For each=\{sessionIds\(\)\}>/g)).toHaveLength(2);
   });
 
   it('renders Problems as a permanent terminal-session tab (ADR-0166 P1.9c)', () => {

@@ -52,10 +52,11 @@ export async function runChecks(tasks, { jobs = availableParallelism(), onResult
   return { results, ok: results.every((r) => r.code === 0) };
 }
 
-// Per-PR gate — mirrors ci.yml lint+unit jobs. e2e is NOT here: it spins up 6
-// playwright workers + a vite dev server and, run alongside these, starves the
-// timing-sensitive parity/stream checks. Run it separately: `pnpm test:e2e`
-// (CI keeps its own e2e-chromium job). All tasks below are mutually independent.
+// Per-PR gate — mirrors ci.yml lint+unit jobs. Playwright lanes are NOT here:
+// they spin up browser workers + a vite dev server and, run alongside these,
+// starve the timing-sensitive parity/stream checks. Run them separately:
+// `pnpm test:e2e` and `pnpm test:browser-unit` (CI keeps its own e2e-chromium
+// and browser-unit-chromium jobs). All tasks below are mutually independent.
 /** @type {Task[]} */
 const TASKS = [
   'lint',
@@ -64,6 +65,7 @@ const TASKS = [
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',
+  'check:source-grep',
   'backlog:check',
   'refs:check',
   'test:run',

@@ -2,177 +2,88 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+/**
+ * Residual source pins for the workspace-owner worker entry. The bulk of the
+ * former greps moved to BEHAVIORAL tests (epic playground-testable-core):
+ *
+ * browser-unit lane (ADR-0196, tests/browser-unit/):
+ *   - vfs-write kernel-IPC accept + real-error acks → owner-bridges.spec.ts
+ *   - snapshot push on owner mutation + serveVfsWrites bridge + OPFS
+ *     initBackend/persistence + hidden-empty boot (no README, scratch:null)
+ *     → owner-publish-and-persistence.spec.ts
+ *   - npm-run through the real shell, no owner `vite` command (honest 127),
+ *     node-cli dev wrapper lines, beforeRun deps gate + restore progress,
+ *     seedTemplateNodeModulesFiles post-restore → owner-shell-routing.spec.ts
+ *   - starter boot seeding, scratch index synthesis (reconcileOwnerIndexAtBoot),
+ *     archive/index/file-read bridges answering → owner-boot-modes.spec.ts
+ *
+ * e2e:
+ *   - editor write → owner fan-out → child HMR → preview update (incl.
+ *     liveBinChildren) → m7-preview-sw.spec.ts
+ *   - real .bin/vite dispatch + dev wrapper config → vite-command-honesty.spec.ts
+ *   - preview mode (--host synthetic local host) → vite7-build-preview.spec.ts
+ *   - uniform bin/preview-registry lifecycle → generic-dev-server-lifecycle,
+ *     node-command, socket-lab/hono-api/koa-api specs
+ *   - node-cli preset lifecycle → cli-report.spec.ts
+ *   - TS-LSP dependency gating → ts-language-service.spec.ts
+ *   - restore never wipes user files → starter-file-edit-survives-reload,
+ *     project-switch specs
+ *   - generated-baseline absorb into Initial commit → project-management.spec.ts
+ *   - index reset-refresh hook (re-seed republishes) → project-management.spec.ts
+ *   - dev-boot clean gating → dev-boot-clean.test.ts (decision fn) +
+ *     project-switch.spec.ts (full switch)
+ */
 const source = readFileSync(
   fileURLToPath(new URL('./real-vite-bootstrap.ts', import.meta.url)),
   'utf8',
 );
 
-describe('real Vite bootstrap preview routing', () => {
-  it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
-    // ADR-0148 (co-resident dev server runs inside the store owner): the owner's
-    // single vfs-write handler forwards editor writes to
-    // the running dev server's HMR (the virtual FS fires no real watcher events).
-    expect(source).toContain('const onVfsWrite = (paths: readonly string[]): void');
-    expect(source).toContain('for (const path of paths)');
-    expect(source).toContain('devServer.notifyFileChanged(path)');
-    expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
-  });
-
-  it('uses the status-aware owner publish wrapper for every owner mutation refresh hook', () => {
-    expect(source).toContain('onSnapshotDirty: publishOwnerState');
-    expect(source).not.toContain('onSnapshotDirty: publishSnapshot');
-    expect(source).toContain('flushSyncMirror,\n    publishOwnerState,');
-  });
-
-  it('pins hmr-off (ADR-0161) on vite .bin dev children; the endpoint-rewrite env is gone (ADR-0189)', () => {
-    expect(source).toContain('withViteCliArgs');
+describe('residual source pins', () => {
+  it('pins the ADR-0161 hmr-off env for vite .bin dev children (vite8 is opt-in — no default e2e)', () => {
+    // residual source pin: RIFTY_VITE_CLI_HMR_OFF only affects the opt-in vite8
+    // template; observing it needs a full Vite-8 dev child boot no default lane runs.
     expect(source).toContain('RIFTY_VITE_CLI_HMR_OFF');
+    // the ADR-0189 endpoint-rewrite envs must stay retired
     expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
     expect(source).not.toContain('VITE_DEFAULT_DEV_PORT');
   });
 
-  it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
-    expect(source).toContain("if (mode === 'preview')");
-    expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
-    expect(source).toContain("if (mode !== 'dev') return [...args]");
-    expect(source).toContain('const userConfigEnv: Record<string, string> = {}');
-    expect(source).toContain('...(previewMode ? userConfigEnv : {})');
-  });
-
-  it('forwards editor writes into every live bin child (no bin-name keying)', () => {
-    expect(source).toContain('const liveBinChildren = new Set<BinWorkerHandle>()');
-    expect(source).toContain("type: 'rifty:vite-file-change'");
-    expect(source).toContain('for (const child of liveBinChildren)');
-    expect(source).not.toContain('activeViteDevChild');
-  });
-
-  it('accepts VFS write frames over the kernel worker IPC channel', () => {
-    expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
-    expect(source).toContain('kernelIpc.onMessage?.((message) => {');
-    expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
-  });
-
-  it('acks owner-routed VFS writes with real owner-side apply errors', () => {
-    expect(source).toContain("type: 'rifty:vfs-write-ack'");
-    expect(source).toContain('opId: message.opId');
-    expect(source).toContain('ok: false');
-    expect(source).toContain('error: { name: error.name, message: error.message }');
-  });
-
-  it('re-seeds template-owned node_modules files into the owner before child dev boot', () => {
-    expect(source).toContain('function seedTemplateNodeModulesFiles(cfg: BootstrapConfig)');
-    expect(source).toContain('const nodeModulesRoot = `${cfg.root}/node_modules/`;');
-    expect(source).toContain('seedTemplateNodeModulesFiles(devCfg);');
-  });
-});
-
-describe('vite command — real installed bin routing', () => {
-  it('does not register an owner vite command that would shadow node_modules/.bin/vite', () => {
-    expect(source).not.toContain("shell.registerCommand('vite'");
-    expect(source).not.toContain('classifyViteCommand');
-    expect(source).toContain('createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl');
-  });
-
-  it('bin lifecycle is uniform — no bin-name dispatch outside the HMR CLI prep', () => {
-    // Generic dev-server lifecycle:
-    // the ONLY allowed vite-name checks are inside withViteCliArgs/withViteCliEnv
-    // (the HMR config wrapper, owned by backlog: net/preview-websocket-bridge).
-    expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
-    expect(source).not.toContain('[vite] dev server ready');
-    expect(source).not.toContain('[vite] preview ready');
+  it('bin lifecycle stays uniform — vite-name dispatch only inside the CLI wrapper prep', () => {
+    // residual source pin: the per-bin-name dispatch class regresses silently
+    // (webpack-dev-server et al. keep working through generic paths in e2e);
+    // only the HMR CLI wrapper (backlog: net/preview-websocket-bridge) may key
+    // on the vite name.
     const allowed = [...source.matchAll(/binNameOf\(binPath\) !== 'vite'/g)].length;
     expect(allowed).toBe(2); // withViteCliArgs + withViteCliEnv, nothing else
+    expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
   });
 
-  it('mirrors every server-capable bin into the preview registry (vite included)', () => {
-    expect(source).toContain('const binPreviewSids = new WeakMap<object, string>()');
-    expect(source).toContain('previews.addNode(sid, message.ports, message.previewScope');
-    expect(source).toContain('labelBase: binNameOf(req.shimPath)');
-    expect(source).toContain('previews.removeBySid(sid)');
-  });
-
-  it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
-    expect(source).toContain('const runPackageScript = async');
-    expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
-    expect(source).toContain('execBin: ownerBinExecutor');
-    expect(source).toContain('const scriptShell = makeShell(');
-    expect(source).toContain('{ cwd: scriptCtx.cwd, env: scriptCtx.env }');
-    expect(source).toContain('ptySidFromContext(scriptCtx)');
-    expect(source).toContain('const result = await scriptShell.run(scriptCommand');
-    expect(source).not.toContain('only the dev line boots the co-resident server');
-  });
-
-  it('runs node-cli lifecycle scripts by executing the package.json command', () => {
-    expect(source).toContain('const runNodeCliTemplate = async');
-    expect(source).toContain("devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)");
-    expect(source).toContain('scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
-    expect(source).toContain('return runNodeCliTemplate(command, ctx)');
-    expect(source).not.toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
-    expect(source).toContain('scriptCtx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
-  });
-
-  it('gates every pty run on the preset dependency restore INSIDE the run (echo never waits)', () => {
-    expect(source).toContain('let devConfigReady: Promise<void> = Promise.resolve()');
-    expect(source).toContain('devConfigReady = prepareActiveDevConfigDeps()');
-    // The dev-config ack must NOT await the restore — that gated the page's
-    // `$ <line>` echo behind the snapshot download (dead-silent terminal).
+  it('dev-config ack never awaits the deps restore (echo-behind-download regression)', () => {
+    // residual source pin: the GATE half is behavioral (browser-unit
+    // owner-shell-routing.spec.ts); the ack-latency half (dead-silent `$ <line>`
+    // echo behind a multi-MB snapshot download) has no deterministic seam.
     expect(source).not.toContain('return devConfigReady');
     expect(source).not.toContain('void devConfigReady.then(() => server.handleFrame(frame))');
-    // The per-run gate replaces the old pty:exec queue: same deps guarantee for
-    // vite/node/npm boot lines, with progress streamed to the run's stdout.
-    expect(source).toContain('beforeRun: (emit) =>');
-    expect(source).toContain('withSlowProgress(devConfigReady, {');
-    expect(source).toContain('restoring project dependencies');
   });
 
-  it('waits for preset dev-config dependency restore before relaying TS-LSP requests', () => {
-    expect(source).toContain('async function waitForWorkspaceTypeScript(root: string)');
-    expect(source).toContain('await devConfigReady;');
-    expect(source).toContain('await waitForWorkspaceTypeScript(devCfg.root);');
-    expect(source).toContain('relayTsLspRequest(message);');
+  it('calls builtin registrars explicitly so production bundling cannot drop them', () => {
+    // residual source pin: prod-bundle chunk-drop guard (the PROD dual-copy
+    // class); every test lane here runs the dev server, never the prod bundle.
+    expect(source).toContain('registerNetBuiltins()');
+    expect(source).toContain('registerSqliteBuiltin()');
   });
 
-  it('restores instant dependencies without wiping user files in the project root', () => {
-    const restoreStart = source.indexOf('async function restoreInstantDeps(');
-    const restoreEnd = source.indexOf('function seedTemplateNodeModulesFiles', restoreStart);
-    const restore = source.slice(restoreStart, restoreEnd);
-    expect(restoreStart).toBeGreaterThan(-1);
-    expect(restoreEnd).toBeGreaterThan(restoreStart);
-    expect(restore).not.toContain('clearProjectTree(fs, cfg.root)');
-    expect(restore).toContain('fs.rmSync(`${cfg.root}/node_modules`');
-    expect(restore).toContain('fs.rmSync(`${cfg.root}/package-lock.json`');
-    expect(restore).toContain('fs.rmSync(`${cfg.root}/package.json`');
+  it('roots the owner-realm process.cwd at the project root', () => {
+    // residual source pin: owner-realm process.cwd has no page-observable seam
+    // (child realms re-assert their own cwd); owner-resident tooling reads it.
+    expect(source).toContain('setProcessCwd(cfg.root)');
   });
 
-  it('absorbs generated baseline files immediately after dev-config instant restore', () => {
-    const prepareStart = source.indexOf('async function prepareActiveDevConfigDeps()');
-    const prepareEnd = source.indexOf('// Co-resident dev server', prepareStart);
-    const prepare = source.slice(prepareStart, prepareEnd);
-    expect(prepareStart).toBeGreaterThan(-1);
-    expect(prepareEnd).toBeGreaterThan(prepareStart);
-    expect(prepare.indexOf('await restoreInstantDeps(devCfg, devSpec.id, devSlug);')).toBeLessThan(
-      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
-    );
-    expect(
-      prepare.indexOf('await absorbPendingStarterGeneratedBaseline(devCfg.root);'),
-    ).toBeLessThan(prepare.indexOf('seedTemplateNodeModulesFiles(devCfg);'));
-  });
-
-  it('supports hidden empty boot without synthesizing a chosen scratch starter', () => {
-    expect(source).toContain("const hiddenEmptyBoot = env.RIFTY_RFV_HIDDEN_EMPTY_BOOT === '1'");
-    expect(source).toContain(
-      'if (!hiddenEmptyBoot && (freshRoot || starterGeneratedBaselinePending))',
-    );
-    expect(source).toMatch(
-      /if \(hiddenEmptyBoot\) \{[\s\S]*?syncMirror\(\)\.mkdirSync\(cfg\.root, \{ recursive: true \}\);[\s\S]*?\} else \{[\s\S]*?seedProject\(cfg\);[\s\S]*?if \(freshRoot\) seedStarterBaseline\(starter, cfg\.root\);[\s\S]*?await ensureStarterInitialCommit\(ownerGitVfs\(\), cfg\.root\);[\s\S]*?\}/,
-    );
-    expect(source).toContain('if (!fromScratch && !hiddenEmptyBoot)');
-    expect(source).toContain('if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);');
-    expect(source).toContain("if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/')");
-    expect(source).toContain('else reconcileOwnerIndexAtBoot(syncMirror(), starter)');
-  });
-
-  it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
+  it('publishes owner readiness only after IPC handlers and workspace bridges are served', () => {
+    // residual source pin: the ORDER is not page-observable — an early-ready
+    // mutation stayed green (the page's post-ready round-trip outlasts the
+    // owner's synchronous bridge registration). owner-boot-modes.spec.ts pins
+    // the served bridges themselves; this pins the order.
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');
     const readyAt = source.indexOf(
@@ -181,41 +92,5 @@ describe('vite command — real installed bin routing', () => {
     expect(onMessageAt).toBeGreaterThan(-1);
     expect(bridgeAt).toBeGreaterThan(onMessageAt);
     expect(readyAt).toBeGreaterThan(bridgeAt);
-  });
-});
-
-describe('node-server runtime branch', () => {
-  it('calls builtin registrars explicitly so production bundling cannot drop them', () => {
-    expect(source).toContain(
-      "import { registerNetBuiltins } from '@riftydev/net/register-builtins'",
-    );
-    expect(source).toContain(
-      "import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins'",
-    );
-    expect(source).toContain('registerNetBuiltins()');
-    expect(source).toContain('registerSqliteBuiltin()');
-  });
-
-  it('registers node:sqlite so require(node:sqlite) resolves in user code', () => {
-    // explicit registrar makes require('node:sqlite') resolvable in user code
-    expect(source).toContain('registerSqliteBuiltin()');
-  });
-
-  it('runs the entry as the server program with cwd at the project root', () => {
-    // express.static('public') resolves against process.cwd()
-    expect(source).toContain('setProcessCwd(cfg.root)');
-  });
-});
-
-describe('OPFS persistence wiring (owner OPFS persistence)', () => {
-  it('wires the OPFS-or-memory backend before serving the owner (initBackend)', () => {
-    // The owner is the workspace source-of-truth once the dev server is co-resident
-    // in it, but was the only worker realm not calling initBackend() → memory-only,
-    // losing the tree on reload. Owner OPFS persistence applies the established
-    // OPFS-boot pattern (runtime-js/worker-entry.ts).
-    // OPFS write-through (ADR-0072) is the durability mechanism on its own — no
-    // explicit per-command flush barrier (it only coupled command latency to the
-    // unrelated boot write-through queue).
-    expect(source).toContain('await initBackend()');
   });
 });

@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### Added (PR #113 review round 3)
+
+- **Owner durability barrier: `handle.flushDurable()` (`rifty:vfs-flush` acked
+  IPC).** A vfs-write ack only proves the owner's in-memory mirror; the OPFS
+  write-through drains behind it, so nothing page-side could prove durability
+  without a wall-clock sleep. The owner now answers an acked flush: drain via
+  `flushSyncMirror`, ack ok only on a clean ledger (ADR-0187 Corrected),
+  nack listing unhealed persist failures. The browser-unit persistence spec
+  replaces its 1s sleep-before-kill with this barrier (RED-checked: a broken
+  ack fails the spec).
+
+### Fixed (PR #113 review round 2)
+
+- **Owner swap rewires same-port preview bridges.** The SW bridge key now
+  includes the owner token: a project switch reusing port 5173 tears the dead
+  owner's bridge and rewires under the new token instead of keeping a bridge
+  that validates against the previous `previewOwnerToken`.
+- **Archive export/import land pending editor writes first.** `downloadArchive`
+  flushes the debounced Monaco queue before serializing the owner tree (an
+  archive could omit the latest edit while toasting success); `importArchiveText`
+  flushes before applying so a queued edit can no longer clobber freshly
+  imported content.
+- **save-flow project-id generation is a port.** `createProjectId()` is injected
+  from App.tsx (crypto.randomUUID + fallback) instead of a `globalThis` read in
+  the core (ADR-0197 §3).
+
 ### Fixed (PR #107 round 22)
 
 - **Pending boot stamps do not promote across package.json dep drift.** The
@@ -58,6 +84,87 @@
 
 ### Changed
 
+- **Epic playground-testable-core CLOSED: source-grep asserts 888 → 141, every
+  residual with a recorded why (`tools/checks/source-grep-ratchet.mjs`).**
+  Remaining App.tsx flows extracted to headless cores with mutation-RED-checked
+  behavioral tests (ADR-0197): `src/orchestration/save-flow.ts` (durable-post-first
+  Save, plain-Save auto-switch, Save/Discard-then-continue resume, launcher/pick
+  gates), `reset-refresh.ts` (on-disk re-seed + frame-gated live refresh, rename),
+  `terminal-state-persistence.ts` (single-snapshot cwd/env+devCommand). Component
+  cores: `components/editor-host-core.ts` (whole ADR-0075 editor session state
+  machine, 44 its), `file-explorer-core.ts` (keyboard/menu/clipboard/drag/upload
+  decisions), `preview-panel-core.ts` (warm-up hooks, route, open-tab).
+  realVite + ts-ls-monaco-providers greps replaced by behavioral heirs
+  (ts-ls-monaco-providers-source.test.ts deleted). Worker lanes: vite-cli-prep +
+  build-boot fully behavioral in node (patched CLI/wrapper configs EXECUTED);
+  real-vite-bootstrap/dev-server-boot contracts behavioral via tests/browser-unit
+  (ADR-0196: owner shell routing, publish/persistence, boot modes) + in-file node
+  boot tests. App.test.ts residual = negative architectural invariants + one
+  binding pin per wiring surface. Review fixes: editor git-status handler keys
+  on gitStatus+activeId only, gutter recompute `untrack`-ed (the memo→plain-fn
+  `activeTabKind` swap had widened the effect to raw `tabs()` — per-keystroke
+  HEAD-text refetch + cache wipe; pinned, RED-checked); archive import surfaces
+  a failed file READ as the `Import failed:` toast again (was an unhandled
+  rejection post-extraction; behavioral test).
+
+- **Owner file/archive + SCM flows extracted to headless orchestration cores
+  (ADR-0197, epic playground-testable-core, slice 4a).** The guarded owner byte
+  read (owner-change-mid-read fails loud) in
+  `src/orchestration/owner-file-read.ts`; owner-routed editor writes, the
+  starter re-seed (package.json install-owned), single-file download and the
+  archive export/import flows in `src/orchestration/workspace-files.ts`; the
+  git-status feed mirror + branch/history reads and every GIT action/diff flow
+  (stage/unstage/discard/commit, side-aware SCM diffs, explorer compares,
+  git-original reads) in `src/orchestration/scm.ts` (ADR-0185) — all behind
+  injected ports (DOM affordances injected too); App binds the real ones.
+  Behavior-preserving; contracts pinned by RED-checked behavioral node-vitest
+  tests (38) instead of ~103 `expect(source)` greps (App.test.ts 331 → 228).
+
+- **TerminalPanel/BottomPanel source-greps converted to behavioral tests (epic
+  playground-testable-core).** Overlay-absence pins now assert on
+  `renderToString(TerminalPanel)` output; caret/typography constants extracted
+  to `components/terminal-appearance.ts` (spread into the `RiftyTerminal`
+  options) and pinned by value. Source-asserts: TerminalPanel.test 6 → 1,
+  BottomPanel.test 2 → 1 — each residual is a recorded client-only pin (xterm
+  ctor options live in `onMount`; `<For>` keyed reconciliation is unobservable
+  under the solid server runtime).
+
+- **Preset boot extracted to a headless orchestration core (ADR-0197, epic
+  playground-testable-core, slice 3).** The preset-transition veil + one
+  serialization queue, the TS-request gate over an in-flight transition, the
+  dev-server preset boot (fresh session vs restart-in-place, ADR-0148) and the
+  gallery-pick flow (paint → owner start → stop-before-write → scratch establish
+  → memory-mode seed → boot; eager vs from-dequeue TS gate) now live in
+  `src/orchestration/preset-boot.ts` behind injected ports (the slice-1
+  dev-server core rides in as a port — dependency spine); App binds the real
+  ones. Behavior-preserving; contracts pinned by RED-checked behavioral
+  node-vitest tests (19) instead of ~56 `expect(source)` greps (App.test.ts
+  source-asserts 387 → 331).
+
+- **Boot/restore + project switch extracted to headless orchestration cores
+  (ADR-0197, epic playground-testable-core, slice 2).** The workspace-owner
+  start gate (`ensureStarted`), the sequential project switch (teardown →
+  respawn, ADR-0165 §3) with tracking/recovery, and the reload restore
+  (re-root/adopt + dev-server relaunch) now live in
+  `src/orchestration/workspace-lifecycle.ts`; the page project-index mirror,
+  store-hydrate flow, §56 eventually-consistent delete tracking and the
+  one-shot boot decision (first-run chooser / deep link / degraded fallback
+  beat) in `src/orchestration/project-index-boot.ts` — both behind injected
+  ports, App binds the real ones. Behavior-preserving; contracts pinned by
+  RED-checked behavioral node-vitest tests (31) instead of ~45 `expect(source)`
+  greps (App.test.ts source-asserts 432 → 387).
+
+- **Dev-server lifecycle extracted to a headless orchestration core (ADR-0197,
+  epic playground-testable-core, slice 1).** `App()`'s owner-frame mirror (LIVE
+  status, dev-command persist/clear, session bookkeeping), the preview-port set +
+  per-port SW bridges and the boot/stop/restart wait loops now live in
+  `src/orchestration/dev-server-lifecycle.ts` behind injected ports (owner,
+  terminal, exec funnel, persistence, bridge wiring); App binds the real ports and
+  a one-line `attachOwner` effect. Behavior-preserving; contracts now pinned by
+  RED-checked behavioral node-vitest tests (26) instead of ~60 `expect(source)`
+  greps (App.test.ts source-asserts 494 → 432, 8 grep tests deleted). dep-cruiser
+  rule `no-ui-imports-in-playground-orchestration` guards the core against
+  xterm/monaco/components/adapters imports.
 - **`npm install` gates the install stamp on a CLEAN persist drain (ADR-0187
   Corrected).** The write-through drain is checked before stamping: a dirty
   `PersistFailureReport` (OPFS quota/perm failure) skips the stamp with a loud

@@ -15,7 +15,9 @@ import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  type VfsFlushAckMessage,
   applyVfsWriteFrame,
+  handleVfsFlushRequest,
   sendGuardedVfsWrite,
   sendVfsWrite,
   serveVfsWrites,
@@ -483,5 +485,60 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     await tick();
 
     expect(changes).toEqual([['/workspace/src'], ['/workspace/src/extra.js']]);
+  });
+});
+
+describe('handleVfsFlushRequest (durability barrier, ADR-0187)', () => {
+  const collect = () => {
+    const acks: VfsFlushAckMessage[] = [];
+    return { acks, send: (m: VfsFlushAckMessage) => acks.push(m) };
+  };
+
+  it('acks ok when the drained ledger is clean (total 0)', async () => {
+    const { acks, send } = collect();
+    await handleVfsFlushRequest({
+      opId: 'op-1',
+      flush: async () => ({ failures: [], total: 0 }),
+      send,
+    });
+    expect(acks).toEqual([{ type: 'rifty:vfs-flush-ack', opId: 'op-1', ok: true }]);
+  });
+
+  it('acks ok on the memory backend (no durability tier — flush returns undefined)', async () => {
+    const { acks, send } = collect();
+    await handleVfsFlushRequest({ opId: 'op-2', flush: async () => undefined, send });
+    expect(acks).toEqual([{ type: 'rifty:vfs-flush-ack', opId: 'op-2', ok: true }]);
+  });
+
+  it('nacks with the failure sample when persist failures survive the drain', async () => {
+    const { acks, send } = collect();
+    await handleVfsFlushRequest({
+      opId: 'op-3',
+      flush: async () => ({
+        failures: [{ path: '/scratch/a.txt', op: 'write' as const, message: 'quota exceeded' }],
+        total: 2,
+      }),
+      send,
+    });
+    const [ack] = acks;
+    if (!ack || ack.ok) throw new Error('expected a nack');
+    expect(ack.opId).toBe('op-3');
+    expect(ack.error.name).toBe('PersistFailureError');
+    expect(ack.error.message).toContain('2 unhealed persist failure(s)');
+    expect(ack.error.message).toContain('write /scratch/a.txt: quota exceeded');
+  });
+
+  it('nacks (never hangs the requester) when the drain itself throws', async () => {
+    const { acks, send } = collect();
+    await handleVfsFlushRequest({
+      opId: 'op-4',
+      flush: async () => {
+        throw new Error('opfs root unavailable');
+      },
+      send,
+    });
+    const [ack] = acks;
+    if (!ack || ack.ok) throw new Error('expected a nack');
+    expect(ack.error.message).toBe('opfs root unavailable');
   });
 });
