@@ -156,3 +156,73 @@ describe('fs.watchFile Stats truthfulness (review 2026-07-05)', () => {
     expect(() => watchFile('/undef.txt', undefined, () => {})).toThrow(/listener.*function/);
   });
 });
+
+// Existence/kind transitions (review 2026-07-05 handoff #4). The clock is
+// PINNED to epoch 0 so created entries get mtime=0/size=0 — the OPFS
+// zero-stat shape that made a size/mtime-only comparison blind. Node truth:
+// parity case fs/watchfile-transitions.
+describe('fs.watchFile / fs.watch existence and kind transitions', () => {
+  beforeEach(() => {
+    resetSyncMirror();
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetSyncMirror();
+  });
+
+  it('missing target invokes the listener ONCE with all-zero curr and prev (Node ENOENT contract)', () => {
+    const calls: Array<[StatsLike, StatsLike]> = [];
+    watchFile('/ghost.txt', { interval: 50 }, (curr, prev) => calls.push([curr, prev]));
+    vi.advanceTimersByTime(60);
+    expect(calls.length).toBe(1);
+    const [curr, prev] = calls[0] as [StatsLike, StatsLike];
+    expect(curr.size).toBe(0);
+    expect(curr.mtime).toBe(0);
+    expect(curr.isFile()).toBe(false);
+    expect(prev.size).toBe(0);
+    // Still missing on later polls: no repeat calls.
+    vi.advanceTimersByTime(200);
+    expect(calls.length).toBe(1);
+    unwatchFile('/ghost.txt');
+  });
+
+  it('missing→created fires even when the new file has size 0 and mtime 0', () => {
+    const calls: Array<[StatsLike, StatsLike]> = [];
+    watchFile('/late.txt', { interval: 50 }, (curr, prev) => calls.push([curr, prev]));
+    vi.advanceTimersByTime(60); // the one-shot zeroed "missing" call
+    calls.length = 0;
+    syncMirror().writeFileSync('/late.txt', new Uint8Array());
+    vi.advanceTimersByTime(60);
+    expect(calls.length).toBe(1);
+    expect((calls[0] as [StatsLike, StatsLike])[0].isFile()).toBe(true);
+    unwatchFile('/late.txt');
+  });
+
+  it('file→directory swap with identical size and mtime is visible', () => {
+    syncMirror().writeFileSync('/swap', new Uint8Array());
+    const calls: Array<[StatsLike, StatsLike]> = [];
+    watchFile('/swap', { interval: 50 }, (curr, prev) => calls.push([curr, prev]));
+    syncMirror().rmSync('/swap', {});
+    syncMirror().mkdirSync('/swap', {});
+    vi.advanceTimersByTime(60);
+    expect(calls.length).toBe(1);
+    expect((calls[0] as [StatsLike, StatsLike])[0].isDirectory()).toBe(true);
+    expect((calls[0] as [StatsLike, StatsLike])[1].isFile()).toBe(true);
+    unwatchFile('/swap');
+  });
+
+  it('fs.watch reports a child file→directory swap as rename even with equal size/mtime', () => {
+    const fs = syncMirror();
+    fs.mkdirSync('/w', { recursive: true });
+    fs.writeFileSync('/w/entry', new Uint8Array());
+    const events: Array<[string, string | null]> = [];
+    const watcher = watch('/w', { interval: 50 }, (ev, name) => events.push([ev, name]));
+    fs.rmSync('/w/entry', {});
+    fs.mkdirSync('/w/entry', {});
+    vi.advanceTimersByTime(60);
+    expect(events).toContainEqual(['rename', 'entry']);
+    watcher.close();
+  });
+});

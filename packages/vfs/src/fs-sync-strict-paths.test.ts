@@ -110,6 +110,13 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
     expect(err.path).toBe('/plain.txt/sub');
   });
 
+  it('mkdir with a missing parent → ENOENT naming the TARGET, not the missing component', () => {
+    const fs = seed();
+    const err = thrown(() => fs.mkdirSync('/no/such/deep', {}));
+    expect(err.code).toBe('ENOENT');
+    expect(err.path).toBe('/no/such/deep');
+  });
+
   it('rename/copy report src/dst target paths', () => {
     const fs = seed();
     const renameSrc = thrown(() => fs.renameSync('/missing.txt', '/dst.txt'));

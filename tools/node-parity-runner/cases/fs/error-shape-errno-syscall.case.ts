@@ -74,6 +74,35 @@ const c: ParityCase = {
       fs.cpSync('dir', 'plain.txt/out', { recursive: true, force: false }));
     probe('opendir-missing', FULL, () => fs.opendirSync('missing-dir'));
 
+    // Flagged directory opens fail at OPEN (pathful), not at the later read
+    // (review 2026-07-05 handoff #2); appendFile 'ax' on a dir is EEXIST
+    // (O_EXCL existence check wins over EISDIR).
+    probe('readFile-dir-rplus', FULL, () => fs.readFileSync('dir', { flag: 'r+' }));
+    probe('readFile-dir-aplus', FULL, () => fs.readFileSync('dir', { flag: 'a+' }));
+    probe('readFile-dir-wplus', FULL, () => fs.readFileSync('dir', { flag: 'w+' }));
+    probe('writeFile-dir-rplus', FULL, () => fs.writeFileSync('dir', 'x', { flag: 'r+' }));
+    probe('appendFile-dir-ax', FULL, () => fs.appendFileSync('dir', 'x', { flag: 'ax' }));
+    probe('mkdir-missing-parent', FULL, () => fs.mkdirSync('no/such/deep'));
+
+    // fd-level failures are PATHLESS in Node and carry the op's syscall name;
+    // ftruncate on a non-writable fd is EINVAL, not EBADF (handoff #3).
+    const wfd = fs.openSync('fd-w.txt', 'w');
+    probe('readSync-wronly-fd', FULL, () => fs.readSync(wfd, Buffer.alloc(4), 0, 4, 0));
+    const rfd = fs.openSync('plain.txt', 'r');
+    probe('writeSync-rdonly-fd', FULL, () => fs.writeSync(rfd, Buffer.from('x')));
+    probe('ftruncate-rdonly-fd', FULL, () => fs.ftruncateSync(rfd, 1));
+    const dirfd = fs.openSync('dir', 'r');
+    probe('readSync-dir-fd', FULL, () => fs.readSync(dirfd, Buffer.alloc(4), 0, 4, 0));
+    probe('ftruncate-dir-fd', FULL, () => fs.ftruncateSync(dirfd, 1));
+    probe('readSync-badfd', FULL, () => fs.readSync(9999, Buffer.alloc(4), 0, 4, 0));
+    probe('writeSync-badfd', FULL, () => fs.writeSync(9999, Buffer.from('x')));
+    probe('ftruncate-badfd', FULL, () => fs.ftruncateSync(9999));
+    probe('fstat-badfd', FULL, () => fs.fstatSync(9999));
+    probe('close-badfd', FULL, () => fs.closeSync(9999));
+    fs.closeSync(wfd);
+    fs.closeSync(rfd);
+    fs.closeSync(dirfd);
+
     const fsp = require('node:fs/promises');
     const aprobe = async (label, fields, fn) => {
       try {

@@ -143,7 +143,9 @@ export class OpfsVfs implements Vfs {
       try {
         dir = await dir.getDirectoryHandle(part, { create: recursive || i === parts.length - 1 });
       } catch (err) {
-        throw mapOpfsError(err, `/${parts.slice(0, i + 1).join('/')}`, 'dir');
+        // Component-level failure (missing parent, through-file) still names
+        // the TARGET — the backend error contract (fs-sync-strict-paths).
+        throw mapOpfsError(err, np, 'dir');
       }
     }
   }

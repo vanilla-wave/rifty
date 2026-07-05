@@ -4,6 +4,35 @@
 
 ### Fixed
 
+- **PR #115 second-handoff fix round (2026-07-05, Node-probed + parity-pinned):**
+  - ONE shared open(2) preflight backs `openSync` + flagged
+    `readFileSync`/`writeFileSync`/`appendFileSync` (four hand-rolled copies had
+    drifted): flagged directory reads are `EISDIR, open '<dir>'` (were
+    read-shaped pathless), `appendFileSync(dir, {flag:'ax'})` is `EEXIST`
+    (O_EXCL existence check wins), and `writeFileSync(..., {flag:'r+'})`
+    preserves the tail beyond the written data (was: truncated the file).
+    `writeFileSync`/`appendFileSync` = one impl, default flag apart.
+  - fd-level errors are PATHLESS like Node — enforced inside `fsError` itself
+    so no call site can regress; bad-fd `EBADF` carries the failing op's
+    syscall (was synthetic `'fd'`); `ftruncateSync` on a non-writable fd is
+    `EINVAL` (was pathful `EBADF`). Parity: `fs/error-shape-errno-syscall`
+    (+16 probes).
+  - `createReadStream` abort/destroy order: a pre-aborted `signal` emits
+    `error|close` then still `open|ready` (Node completes the open; a missing
+    target's ENOENT is swallowed — abort error only); abort after `end` is a
+    no-op; pre-open `destroy()` emits `open|ready|close`. Parity:
+    `fs/read-stream-abort-destroy`.
+  - `WriteStream` accepts any TypedArray/DataView chunk (raw bytes) and renders
+    Node's `ERR_INVALID_ARG_TYPE` text for invalid ones; second `end(chunk, cb)`
+    errors BOTH end-callbacks + the stream (pre-open discards buffered data —
+    the file stays empty; post-open the in-flight first chunk still lands);
+    chunkless `end(cb)` after 'finish' is `ERR_STREAM_ALREADY_FINISHED`.
+    Parity: `fs/write-stream-chunk-kinds-end-semantics`.
+  - `watchFile`/`watch` compare existence+kind, not only size/mtime (OPFS
+    zero-size/zero-mtime entries made missing↔existing and file↔dir
+    transitions invisible); a missing-at-start target gets Node's single
+    zeroed listener call; a file↔dir swap is a `rename` event. Parity:
+    `fs/watchfile-transitions`.
 - **PR #115 post-push review follow-up:** append-mode `createWriteStream`
   flushes now append to the current EOF instead of rewriting a stale whole-file
   snapshot, preserving interleaved external writers like real Node. Append

@@ -384,10 +384,42 @@ function openFlagsFromString(flags: string): number {
   }
 }
 
-function getFd(fd: number): FdRecord {
+// Node attributes a bad-fd EBADF to the FAILING op's syscall ('read'/'write'/
+// 'ftruncate'/'fstat'…), never a synthetic 'fd' (review 2026-07-05 handoff #3).
+function getFd(fd: number, syscall: string): FdRecord {
   const record = fdTable.get(fd);
-  if (!record) throw fsError('EBADF', undefined, 'fd');
+  if (!record) throw fsError('EBADF', undefined, syscall);
   return record;
+}
+
+/**
+ * Node open(2) preflight shared by `openSync` and the flagged
+ * `readFileSync`/`writeFileSync`/`appendFileSync` branches (review 2026-07-05
+ * handoff #2: four hand-rolled copies drifted — flagged directory reads fell
+ * through to a read-shaped EISDIR, appendFile raised EISDIR where Node's
+ * O_EXCL existence check wins with EEXIST). Check order matches Node:
+ * EEXIST (O_CREAT|O_EXCL) → ENOTDIR (O_DIRECTORY on non-dir) → EISDIR
+ * (writable/truncating a directory) → ENOENT (miss without O_CREAT); applies
+ * the create/truncate open side effects. All failures are open-shaped.
+ */
+function openPreflight(p: PathLike, parsed: ParsedOpenFlags): { existed: boolean } {
+  const np = resolvePath(p);
+  const ps = pathToString(p);
+  const stat = withSyscall('open', p, () => statStrictOrNull(np));
+  if (stat) {
+    if (parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
+    if (parsed.directory && !stat.isDirectory) throw fsError('ENOTDIR', ps, 'open');
+    if (stat.isDirectory && (parsed.writable || parsed.truncate)) {
+      throw fsError('EISDIR', ps, 'open');
+    }
+    if (parsed.truncate && stat.isFile) {
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
+    }
+  } else {
+    if (!parsed.create || parsed.directory) throw fsError('ENOENT', ps, 'open');
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
+  }
+  return { existed: stat !== null };
 }
 
 function resizeFile(path: string, len: number): void {
@@ -399,9 +431,9 @@ function resizeFile(path: string, len: number): void {
 }
 
 function writeBytesAt(record: FdRecord, bytes: Uint8Array, position: number | null): number {
-  if (!record.writable) throw fsError('EBADF', record.path, 'write');
+  if (!record.writable) throw fsError('EBADF', undefined, 'write');
   const stat = withSyscall('write', record.path, () => syncMirror().statSync(record.path));
-  if (stat.isDirectory) throw fsError('EISDIR', record.path, 'write');
+  if (stat.isDirectory) throw fsError('EISDIR', undefined, 'write');
 
   const existing = withSyscall('write', record.path, () =>
     syncMirror().readFileBytesSync(record.path),
@@ -441,21 +473,13 @@ export function readFileSync(
   const np = resolvePath(p);
   const ps = pathToString(p);
   const flag = flagOf(opts);
-  // Honor the `flag` option through the open-flags engine (was: silently
-  // ignored): 'a+'/'w+' create a missing file, 'wx'-family raises EEXIST, etc.
+  // Honor the `flag` option through the shared open preflight (was: silently
+  // ignored): 'a+'/'w+' create a missing file, 'wx'-family raises EEXIST, a
+  // writable flag on a directory is EISDIR at OPEN (handoff #2), etc.
   if (flag !== undefined && flag !== 'r') {
     const parsed = parseOpenFlags(flag);
     if (!parsed.readable) throw fsError('EBADF', ps, 'read');
-    // Strict probe: ENOTDIR through a file must surface as the OPEN error,
-    // not collapse to a miss→ENOENT (Node parity, review 2026-07-05 handoff).
-    const exists = withSyscall('open', p, () => statStrictOrNull(np)) !== null;
-    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
-    if (!exists) {
-      if (!parsed.create) throw fsError('ENOENT', ps, 'open');
-      withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
-    } else if (parsed.truncate) {
-      withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
-    }
+    openPreflight(p, parsed);
   }
   const bytes = withSyscall({ default: 'open', EISDIR: 'read' }, p, () =>
     syncMirror().readFileBytesSync(np),
@@ -468,23 +492,7 @@ export function writeFileSync(
   data: Uint8Array | string,
   opts?: WriteFileOptions | Encoding | null,
 ): void {
-  const enc = toEncodingOrNull(opts);
-  const np = resolvePath(p);
-  const ps = pathToString(p);
-  const flag = flagOf(opts);
-  if (flag !== undefined && flag !== 'w' && flag !== 'w+') {
-    const parsed = parseOpenFlags(flag);
-    if (!parsed.writable) throw fsError('EBADF', ps, 'write');
-    // Strict probe — see readFileSync: through-file is ENOTDIR open, not ENOENT.
-    const exists = withSyscall('open', p, () => statStrictOrNull(np)) !== null;
-    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
-    if (!exists && !parsed.create) throw fsError('ENOENT', ps, 'open');
-    if (parsed.append) {
-      appendFileSync(p, data, opts);
-      return;
-    }
-  }
-  withSyscall('open', p, () => syncMirror().writeFileSync(np, encodeData(data, enc)));
+  writeFileImpl(p, data, opts, 'w');
 }
 
 export function appendFileSync(
@@ -492,45 +500,56 @@ export function appendFileSync(
   data: Uint8Array | string,
   opts?: WriteFileOptions | Encoding | null,
 ): void {
+  writeFileImpl(p, data, opts, 'a');
+}
+
+/**
+ * Shared body of `writeFileSync`/`appendFileSync` — in Node they are the SAME
+ * operation modulo the default flag ('w' vs 'a'), both honoring an explicit
+ * `flag` through open semantics. One impl (review 2026-07-05 handoff #2: the
+ * two hand-rolled flag branches drifted — writeFileSync `r+` truncated the
+ * tail Node preserves). Flag semantics after {@link openPreflight}:
+ * append → concat at EOF; truncate/created → plain write; 'r+' on an existing
+ * file → write from offset 0 PRESERVING the tail beyond the data.
+ */
+function writeFileImpl(
+  p: string,
+  data: Uint8Array | string,
+  opts: WriteFileOptions | Encoding | null | undefined,
+  defaultFlag: 'w' | 'a',
+): void {
   const enc = toEncodingOrNull(opts);
   const np = resolvePath(p);
   const ps = pathToString(p);
-  const flag = flagOf(opts);
-  if (flag !== undefined && flag !== 'a' && flag !== 'a+') {
-    const parsed = parseOpenFlags(flag);
-    if (!parsed.writable) throw fsError('EBADF', ps, 'write');
-    const stat = withSyscall('open', p, () => statStrictOrNull(np));
-    if (stat?.isDirectory) throw fsError('EISDIR', ps, 'open');
-    if (stat && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
-    if (!stat && !parsed.create) throw fsError('ENOENT', ps, 'open');
-    const next = encodeData(data, enc);
-    if (parsed.truncate) {
-      // 'w'-family flag on appendFile truncates first (Node honors the flag).
-      withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
-      return;
-    }
-    if (!parsed.append) {
-      // Non-append write flags (e.g. `r+`) write from offset 0, preserving any
-      // tail beyond the written data. Node uses the supplied open flag; it does
-      // not silently create a miss or append to the end.
-      const existing = stat
-        ? withSyscall('open', p, () => syncMirror().readFileBytesSync(np))
-        : new Uint8Array();
-      const merged = new Uint8Array(Math.max(existing.length, next.length));
+  const flag = flagOf(opts) ?? defaultFlag;
+  const parsed = parseOpenFlags(flag);
+  if (!parsed.writable) throw fsError('EBADF', ps, 'write');
+  const next = encodeData(data, enc);
+  // 'w'/'w+' fast path: plain overwrite, one mirror call (errors open-shaped).
+  if (parsed.truncate && parsed.create && !parsed.exclusive && !parsed.append) {
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
+    return;
+  }
+  const { existed } = openPreflight(p, parsed);
+  if (parsed.append) {
+    withSyscall('open', p, () => {
+      const existing = existed ? syncMirror().readFileBytesSync(np) : new Uint8Array();
+      const merged = new Uint8Array(existing.length + next.length);
       merged.set(existing, 0);
-      merged.set(next, 0);
-      withSyscall('open', p, () => syncMirror().writeFileSync(np, merged));
-      return;
-    }
+      merged.set(next, existing.length);
+      syncMirror().writeFileSync(np, merged);
+    });
+    return;
+  }
+  if (parsed.truncate || !existed) {
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
+    return;
   }
   withSyscall('open', p, () => {
-    const existing = syncMirror().existsSync(np)
-      ? syncMirror().readFileBytesSync(np)
-      : new Uint8Array();
-    const next = encodeData(data, enc);
-    const merged = new Uint8Array(existing.length + next.length);
+    const existing = syncMirror().readFileBytesSync(np);
+    const merged = new Uint8Array(Math.max(existing.length, next.length));
     merged.set(existing, 0);
-    merged.set(next, existing.length);
+    merged.set(next, 0);
     syncMirror().writeFileSync(np, merged);
   });
 }
@@ -799,26 +818,11 @@ function cpEntry(
 }
 
 export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): number {
-  const path = resolvePath(p);
-  const ps = pathToString(p);
   const parsed = parseOpenFlags(flags);
-  const stat = withSyscall('open', p, () => statStrictOrNull(path));
-
-  if (stat) {
-    if (parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
-    if (parsed.directory && !stat.isDirectory) throw fsError('ENOTDIR', ps, 'open');
-    if (stat.isDirectory && (parsed.writable || parsed.truncate)) {
-      throw fsError('EISDIR', ps, 'open');
-    }
-    if (parsed.truncate && stat.isFile) syncMirror().writeFileSync(path, new Uint8Array());
-  } else {
-    if (!parsed.create || parsed.directory) throw fsError('ENOENT', ps, 'open');
-    withSyscall('open', p, () => syncMirror().writeFileSync(path, new Uint8Array()));
-  }
-
+  openPreflight(p, parsed);
   const fd = nextFd++;
   fdTable.set(fd, {
-    path,
+    path: resolvePath(p),
     readable: parsed.readable,
     writable: parsed.writable,
     append: parsed.append,
@@ -846,8 +850,8 @@ export function readSync(
   length?: number,
   position?: number | null,
 ): number {
-  const record = getFd(fd);
-  if (!record.readable) throw fsError('EBADF', record.path, 'read');
+  const record = getFd(fd, 'read');
+  if (!record.readable) throw fsError('EBADF', undefined, 'read');
   if (!(buffer instanceof Uint8Array)) throw new TypeError('buffer must be a Uint8Array');
 
   const offset =
@@ -864,7 +868,7 @@ export function readSync(
   if (pos !== null) assertNonNegativeInteger(pos, 'position');
 
   const stat = withSyscall('read', record.path, () => syncMirror().statSync(record.path));
-  if (stat.isDirectory) throw fsError('EISDIR', record.path, 'read');
+  if (stat.isDirectory) throw fsError('EISDIR', undefined, 'read');
   const bytes = withSyscall('read', record.path, () => syncMirror().readFileBytesSync(record.path));
   const start = pos ?? record.position;
   const end = Math.min(bytes.byteLength, start + count);
@@ -894,7 +898,7 @@ export function writeSync(
   lengthOrEncoding?: number | Encoding,
   position?: number | null,
 ): number {
-  const record = getFd(fd);
+  const record = getFd(fd, 'write');
   if (typeof data === 'string') {
     const rawPos =
       typeof offsetOrPosition === 'number' || offsetOrPosition === null ? offsetOrPosition : null;
@@ -912,13 +916,15 @@ export function writeSync(
 }
 
 export function fstatSync(fd: number): Stats {
-  const record = getFd(fd);
+  const record = getFd(fd, 'fstat');
   return withSyscall('fstat', record.path, () => new Stats(syncMirror().statSync(record.path)));
 }
 
 export function ftruncateSync(fd: number, len = 0): void {
-  const record = getFd(fd);
-  if (!record.writable) throw fsError('EBADF', record.path, 'ftruncate');
+  const record = getFd(fd, 'ftruncate');
+  // Node: ftruncate on a non-writable fd (read-only file OR directory) is
+  // EINVAL, not EBADF (probed v24, review 2026-07-05 handoff #3).
+  if (!record.writable) throw fsError('EINVAL', undefined, 'ftruncate');
   withSyscall('ftruncate', record.path, () => resizeFile(record.path, len));
 }
 
@@ -990,8 +996,7 @@ export function lutimesSync(p: string, atime: number | Date, mtime: number | Dat
 // `fs.futimesSync` — resolve the fd → path via the fd table and delegate to VFS
 // utimes. `EBADF` (syscall `futime`, matching Node) on an unknown fd.
 export function futimesSync(fd: number, atime: number | Date, mtime: number | Date): void {
-  if (!fdTable.has(fd)) throw fsError('EBADF', undefined, 'futime');
-  const record = getFd(fd);
+  const record = getFd(fd, 'futime');
   withSyscall('futime', record.path, () =>
     syncMirror().utimes(record.path, toMs(atime), toMs(mtime)),
   );

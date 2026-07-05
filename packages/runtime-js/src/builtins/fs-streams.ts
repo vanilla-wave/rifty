@@ -108,19 +108,40 @@ function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean }
 const WRITE_AFTER_END = (): Error => streamError('ERR_STREAM_WRITE_AFTER_END', 'write after end');
 const STREAM_DESTROYED = (): Error =>
   streamError('ERR_STREAM_DESTROYED', 'Cannot call write after a stream was destroyed');
+const ALREADY_FINISHED = (): Error =>
+  streamError('ERR_STREAM_ALREADY_FINISHED', 'Stream is already finished');
 
-function assertValidChunk(chunk: unknown): asserts chunk is string | Uint8Array {
-  if (typeof chunk !== 'string' && !(chunk instanceof Uint8Array)) {
+/** Node's ERR_INVALID_ARG_TYPE "Received …" rendering for the common shapes. */
+function receivedText(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'object' || typeof value === 'function') {
+    const name = (value as object).constructor?.name;
+    return name ? `an instance of ${name}` : `type ${typeof value}`;
+  }
+  return `type ${typeof value} (${String(value)})`;
+}
+
+function assertValidChunk(chunk: unknown): asserts chunk is string | ArrayBufferView {
+  if (typeof chunk !== 'string' && !ArrayBuffer.isView(chunk)) {
     // Node throws SYNCHRONOUSLY — an invalid chunk is a programming error, and
     // the old array-like overlay of a function chunk minted a NUL byte into
-    // the file (review 2026-07-05).
+    // the file (review 2026-07-05). Any TypedArray/DataView is VALID (its raw
+    // bytes land) — the old string|Uint8Array gate rejected them (handoff #6).
     throw Object.assign(
       new TypeError(
-        'The "chunk" argument must be of type string or an instance of Buffer or Uint8Array',
+        `The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ${receivedText(chunk)}`,
       ),
       { code: 'ERR_INVALID_ARG_TYPE' },
     );
   }
+}
+
+/** Raw-bytes view over any TypedArray/DataView chunk (no copy). */
+function chunkBytes(chunk: ArrayBufferView): Uint8Array {
+  return chunk instanceof Uint8Array
+    ? chunk
+    : new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
 }
 
 /**
@@ -216,6 +237,10 @@ class FileReadStream extends EventEmitter {
   private readonly emitCloseOpt: boolean;
   private readonly strDecoder: ChunkDecoder | null;
   private destroyed = false;
+  private ended = false;
+  private openEmitted = false;
+  /** destroy() before open: Node completes the open ('open'/'ready' fire) and only THEN closes. */
+  private closeAfterOpen = false;
   private closeEmitted = false;
 
   constructor(path: string, opts: ReadStreamOptions = {}) {
@@ -256,7 +281,8 @@ class FileReadStream extends EventEmitter {
   }
 
   private abort(): void {
-    if (this.destroyed) return;
+    // Post-'end' abort is a no-op in Node — the stream already finished.
+    if (this.destroyed || this.ended) return;
     this.destroyed = true;
     const err = Object.assign(new Error('The operation was aborted'), {
       name: 'AbortError',
@@ -268,8 +294,20 @@ class FileReadStream extends EventEmitter {
 
   /** Node default: an errored stream still emits 'close' after 'error'. */
   private emitError(err: unknown): void {
+    this.destroyed = true; // terminal — a later signal abort must not double-error
     this.emit('error', toNodeFsError(err, 'open', this.path));
     this.closeOnce();
+  }
+
+  /** 'open' → 'ready', plus the deferred 'close' a pre-open destroy() parked. */
+  private emitOpenReady(): void {
+    this.openEmitted = true;
+    this.emit('open', 0);
+    this.emit('ready');
+    if (this.closeAfterOpen) {
+      this.closeAfterOpen = false;
+      this.closeOnce();
+    }
   }
 
   private emitData(bytes: Uint8Array): void {
@@ -286,14 +324,28 @@ class FileReadStream extends EventEmitter {
   private finishEnd(): void {
     const tail = this.strDecoder?.flush();
     if (tail) this.emit('data', tail);
+    this.ended = true;
     this.emit('end');
     this.closeOnce();
   }
 
   private start(): void {
-    if (this.destroyed) return;
     const hwm = this.opts.highWaterMark ?? 64 * 1024;
     const np = resolvePath(this.path);
+    if (this.destroyed) {
+      // Aborted or destroy()ed before open: Node still completes the open —
+      // 'open'/'ready' fire when it succeeds (after the abort's error|close;
+      // before destroy()'s deferred close). An open FAILURE is swallowed: the
+      // pre-aborted missing-file probe shows no ENOENT, only the abort error.
+      try {
+        syncMirror().statSync(np);
+        this.emitOpenReady();
+      } catch {
+        this.closeAfterOpen = false;
+        this.closeOnce();
+      }
+      return;
+    }
     // Node accepts highWaterMark 0: the stream opens, reads nothing and ends
     // immediately for an existing target, but still performs the open/stat
     // checks first (missing / path-through-file emit ENOENT / ENOTDIR).
@@ -302,8 +354,7 @@ class FileReadStream extends EventEmitter {
     if (hwm === 0) {
       try {
         syncMirror().statSync(np);
-        this.emit('open', 0);
-        this.emit('ready');
+        this.emitOpenReady();
         this.finishEnd();
       } catch (err) {
         this.emitError(err);
@@ -333,8 +384,7 @@ class FileReadStream extends EventEmitter {
         this.emitData(slice);
         queueMicrotask(emitChunk);
       };
-      this.emit('open', 0);
-      this.emit('ready');
+      this.emitOpenReady();
       emitChunk();
     };
 
@@ -348,11 +398,13 @@ class FileReadStream extends EventEmitter {
         })
         .then(async (stream) => {
           if (this.destroyed) {
+            // Aborted/destroyed while the open was in flight: the open still
+            // COMPLETED — emit 'open'/'ready' (Node), just never read.
+            this.emitOpenReady();
             await stream.cancel().catch(() => {});
             return;
           }
-          this.emit('open', 0);
-          this.emit('ready');
+          this.emitOpenReady();
           const reader = stream.getReader();
           try {
             while (true) {
@@ -366,10 +418,23 @@ class FileReadStream extends EventEmitter {
             }
             this.finishEnd();
           } catch (err) {
+            if (this.destroyed) {
+              // Read failure racing an abort/destroy — swallowed like Node.
+              this.closeOnce();
+              return;
+            }
             this.emitError(err);
           }
         })
-        .catch((err) => this.emitError(err));
+        .catch((err) => {
+          if (this.destroyed) {
+            // Open failed after abort/destroy — Node swallows it (see above).
+            this.closeAfterOpen = false;
+            this.closeOnce();
+            return;
+          }
+          this.emitError(err);
+        });
       return;
     }
 
@@ -395,6 +460,12 @@ class FileReadStream extends EventEmitter {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    if (!this.openEmitted && !this.ended) {
+      // Pre-open destroy: Node finishes the open first — open|ready|close
+      // (probed v24). start()/the open continuation emits the parked close.
+      this.closeAfterOpen = true;
+      return;
+    }
     // Async like Node's destroy teardown; closeOnce dedupes vs a prior end.
     queueMicrotask(() => this.closeOnce());
   }
@@ -621,7 +692,9 @@ class FileWriteStream extends EventEmitter {
       return false;
     }
     const buf =
-      typeof chunk === 'string' ? Buffer.from(chunk, (encoding ?? 'utf8') as never) : chunk;
+      typeof chunk === 'string'
+        ? Buffer.from(chunk, (encoding ?? 'utf8') as never)
+        : chunkBytes(chunk);
     this.bufferedLength += buf.byteLength;
     const overHighWaterMark = this.bufferedLength >= this.highWaterMark;
     if (overHighWaterMark) this.needDrain = true;
@@ -752,10 +825,19 @@ class FileWriteStream extends EventEmitter {
           : maybeCb;
     const encoding = typeof encodingOrCb === 'function' ? undefined : encodingOrCb;
     if (this.finished) {
-      // Node: a second end() still fires its callback, with no error (verified
-      // 2026-07-05); the write path already emitted 'error' for any chunk.
-      if (chunk !== undefined) this.write(chunk, encoding as string | undefined);
-      queueMicrotask(() => cb?.());
+      if (chunk !== undefined) {
+        this.endAfterEnd(chunk, cb);
+        return;
+      }
+      if (this.finishEmitted) {
+        // Node (probed v24): chunkless end() AFTER 'finish' errors the
+        // callback with ERR_STREAM_ALREADY_FINISHED — no 'error' event.
+        const err = ALREADY_FINISHED();
+        queueMicrotask(() => cb?.(err));
+        return;
+      }
+      // Same-tick second end(): the callback rides the pending finish, clean.
+      if (cb) this.finishCallbacks.push(cb);
       return;
     }
     if (this.destroyed) return; // Node: end() on a destroyed stream drops the callback (verified)
@@ -763,6 +845,47 @@ class FileWriteStream extends EventEmitter {
     this.finished = true;
     if (cb) this.finishCallbacks.push(cb);
     queueMicrotask(() => this.finishIfReady());
+  }
+
+  /**
+   * Second end() WITH a chunk (probed v24, handoff #5): every callback —
+   * this one, the first end()'s, buffered writes' — gets
+   * ERR_STREAM_WRITE_AFTER_END, and pre-'finish' the stream errors too.
+   * Post-open the first chunk's in-flight write still COMPLETES (Node keeps
+   * it, same as write-after-end) and this cb errors before the first end's;
+   * pre-open the buffered writes are DISCARDED (Node leaves the file empty)
+   * and the callbacks error in registration order once open settles.
+   * Post-'finish' it is callback-only and the file stays as finished.
+   */
+  private endAfterEnd(chunk: unknown, cb?: (err?: unknown) => void): void {
+    assertValidChunk(chunk);
+    const err = WRITE_AFTER_END();
+    if (this.finishEmitted || this.failed || this.destroyed) {
+      queueMicrotask(() => cb?.(err));
+      return;
+    }
+    if (this.opened) {
+      this.persist();
+      this.failed = true;
+      const pendingCbs = this.pendingWriteCallbacks.splice(0);
+      queueMicrotask(() => cb?.(err));
+      this.queueCallbacks(pendingCbs, STREAM_DESTROYED());
+      this.queueFinishCallbacks(err);
+      queueMicrotask(() => {
+        this.emit('error', err);
+        this.closeOnce();
+      });
+      return;
+    }
+    const buffered = this.preOpen ?? [];
+    this.preOpen = null;
+    this.bufferedLength = 0;
+    this.failed = true; // blocks the queued flush and finishIfReady persists
+    this.pendingErrorAfterOpen = err;
+    this.queueCallbacks(this.pendingWriteCallbacks.splice(0), STREAM_DESTROYED());
+    this.queueWriteCallbacks(buffered, err);
+    this.queueFinishCallbacks(err);
+    queueMicrotask(() => cb?.(err));
   }
 
   /** Node semantics: destroy discards buffered-but-unflushed data, no 'finish'. */

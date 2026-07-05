@@ -162,7 +162,8 @@ export class MemoryBackend {
       const next = node.children.get(part);
       if (!next) {
         if (!recursive && i < parts.length - 1) {
-          throw new VfsError('ENOENT', `/${parts.slice(0, i + 1).join('/')}`);
+          // Missing parent still names the TARGET (same rule as ENOTDIR above).
+          throw new VfsError('ENOENT', path);
         }
         const newDir = makeDir();
         node.children.set(part, newDir);

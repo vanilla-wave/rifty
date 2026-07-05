@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- **mkdir missing-parent errors name the TARGET** in `MemoryBackend`,
+  `OpfsFsSync` and async `OpfsVfs.mkdir` (was: the missing/failing component —
+  the one gap in the "errors name the TARGET path" contract above; review
+  2026-07-05 handoff #7).
 - **PR #115 review follow-up:** `OpfsVfs.rm(path, { force:true })` now
   suppresses only `ENOENT`; through-file (`ENOTDIR`), permission, quota, and
   browser I/O failures stay loud instead of being reported as success.

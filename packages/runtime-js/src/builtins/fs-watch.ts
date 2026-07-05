@@ -96,6 +96,26 @@ function snapshotFile(p: string): FileSnapshot {
 }
 
 /**
+ * Full-snapshot comparison (review 2026-07-05 handoff #4): size/mtime alone
+ * miss existence flips and file↔dir swaps — OPFS entries can legitimately
+ * carry size 0 / mtime 0, making those transitions otherwise invisible.
+ */
+function snapshotChanged(a: FileSnapshot, b: FileSnapshot): boolean {
+  return (
+    a.exists !== b.exists ||
+    a.isFile !== b.isFile ||
+    a.isDirectory !== b.isDirectory ||
+    a.size !== b.size ||
+    a.mtime !== b.mtime
+  );
+}
+
+/** Existence or kind change — Node's `fs.watch` reports these as 'rename'. */
+function kindChanged(a: FileSnapshot, b: FileSnapshot): boolean {
+  return a.exists !== b.exists || a.isFile !== b.isFile || a.isDirectory !== b.isDirectory;
+}
+
+/**
  * Snapshot of a directory's children keyed by the path RELATIVE to the watch
  * root — one name deep without `recursive`, the whole subtree with it (the
  * relative key is exactly the `filename` Node hands recursive listeners).
@@ -171,10 +191,13 @@ export function watch(
             watcher.emit('change', 'rename', name);
           }
         }
-        // modifications
+        // modifications; a file↔dir swap under the same name is a 'rename'
         for (const [name, snap] of next) {
           const old = prev.get(name);
-          if (old && (old.mtime !== snap.mtime || old.size !== snap.size)) {
+          if (!old) continue;
+          if (kindChanged(old, snap)) {
+            watcher.emit('change', 'rename', name);
+          } else if (old.mtime !== snap.mtime || old.size !== snap.size) {
             watcher.emit('change', 'change', name);
           }
         }
@@ -189,7 +212,7 @@ export function watch(
     watcher._start(
       () => {
         const next = snapshotFile(target);
-        if (prev.exists !== next.exists) {
+        if (kindChanged(prev, next)) {
           watcher.emit('change', 'rename', filename);
         } else if (next.exists && (prev.mtime !== next.mtime || prev.size !== next.size)) {
           watcher.emit('change', 'change', filename);
@@ -236,7 +259,9 @@ function invalidWatchFileListener(value: unknown): TypeError {
 interface PollEntry {
   timer: ReturnType<typeof setInterval>;
   listeners: WatchFileListener[];
-  last: StatsLike;
+  last: FileSnapshot;
+  /** Node ENOENT contract: a missing-at-start target gets ONE zeroed listener call. */
+  notifyMissingOnce: boolean;
 }
 
 function toStats(snap: FileSnapshot): StatsLike {
@@ -279,18 +304,28 @@ export function watchFile(
     existing.listeners.push(cb);
     return;
   }
-  const initial = toStats(snapshotFile(target));
+  const initial = snapshotFile(target);
   const entry: PollEntry = {
     timer: setInterval(() => {
-      const next = toStats(snapshotFile(target));
-      if (next.size !== entry.last.size || next.mtime !== entry.last.mtime) {
+      const next = snapshotFile(target);
+      if (entry.notifyMissingOnce && !next.exists) {
+        // Missing at watchFile() time and still missing: Node invokes the
+        // listener ONCE with all fields zeroed (curr === prev === zeros).
+        entry.notifyMissingOnce = false;
+        for (const fn of entry.listeners.slice()) fn(toStats(next), toStats(entry.last));
+        entry.last = next;
+        return;
+      }
+      entry.notifyMissingOnce = false;
+      if (snapshotChanged(entry.last, next)) {
         const prev = entry.last;
         entry.last = next;
-        for (const fn of entry.listeners.slice()) fn(next, prev);
+        for (const fn of entry.listeners.slice()) fn(toStats(next), toStats(prev));
       }
     }, interval),
     listeners: [cb],
     last: initial,
+    notifyMissingOnce: !initial.exists,
   };
   if (opts.persistent === false) {
     (entry.timer as { unref?: () => unknown }).unref?.();

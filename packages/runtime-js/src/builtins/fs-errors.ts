@@ -28,12 +28,27 @@ export const FS_ERRNO: Record<string, { errno: number; description: string }> = 
   EPERM: { errno: -1, description: 'operation not permitted' },
 };
 
+// Syscalls Node renders WITHOUT a path (fd-level ops + opendir). Enforced
+// inside `fsError` itself so no call site can mint a pathful fd error —
+// review 2026-07-05 handoff #3 found several (readSync/writeSync/ftruncate
+// carried the fd's backing path).
+const PATHLESS_SYSCALLS = new Set([
+  'read',
+  'write',
+  'ftruncate',
+  'fstat',
+  'futime',
+  'close',
+  'opendir',
+]);
+
 export function fsError(
   code: string,
-  path?: string,
+  rawPath?: string,
   syscall?: string,
   dest?: string,
 ): NodeJS.ErrnoException {
+  const path = syscall !== undefined && PATHLESS_SYSCALLS.has(syscall) ? undefined : rawPath;
   const info = FS_ERRNO[code];
   // Node renders every combination: ", open 'x'", ", rename 'a' -> 'b'", and
   // syscall-only (fd/opendir paths carry no name): "EISDIR: …, read".
@@ -59,9 +74,6 @@ export function fsError(
  */
 export type SyscallSpec = string | { readonly default: string; readonly [code: string]: string };
 
-// Syscalls Node renders WITHOUT a path (fd-level ops + opendir).
-const PATHLESS_SYSCALLS = new Set(['read', 'write', 'opendir']);
-
 /** `withSyscall`'s translation step, usable directly in async/event error paths. */
 export function toNodeFsError(
   err: unknown,
@@ -71,8 +83,8 @@ export function toNodeFsError(
 ): unknown {
   if (err instanceof VfsError) {
     const syscall = typeof spec === 'string' ? spec : (spec[err.code] ?? spec.default);
-    const path = PATHLESS_SYSCALLS.has(syscall) || p === undefined ? undefined : pathToString(p);
-    return fsError(err.code, path, syscall, dest);
+    // fsError drops the path for PATHLESS_SYSCALLS.
+    return fsError(err.code, p === undefined ? undefined : pathToString(p), syscall, dest);
   }
   return err;
 }

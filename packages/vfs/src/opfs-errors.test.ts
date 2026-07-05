@@ -182,6 +182,14 @@ describe('OpfsVfs error mapping', () => {
       code: 'ENOTDIR',
     });
   });
+
+  it('mkdir with a missing parent names the TARGET path, not the failing component', async () => {
+    const vfs = fakeVfs({ dirError: 'NotFoundError' });
+    await expect(vfs.mkdir('/no/such/deep')).rejects.toMatchObject({
+      code: 'ENOENT',
+      path: '/no/such/deep',
+    });
+  });
 });
 
 // --- Item #4: readFile honours encoding -----------------------------------

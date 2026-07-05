@@ -39,6 +39,17 @@ const c: ParityCase = {
     fs.writeFileSync('existing.txt', 'abc');
     fs.appendFileSync('existing.txt', 'X', { flag: 'w' });
     console.log('truncate-existing:', JSON.stringify(fs.readFileSync('existing.txt', 'utf8')));
+
+    // writeFileSync honors the open flag the same way: 'r+' writes from
+    // offset 0 WITHOUT truncating — the tail beyond the data survives
+    // (review 2026-07-05 handoff; rifty used to overwrite the whole file).
+    fs.writeFileSync('tail.txt', 'hello world tail');
+    fs.writeFileSync('tail.txt', 'ABC', { flag: 'r+' });
+    console.log('writefile-rplus-tail:', JSON.stringify(fs.readFileSync('tail.txt', 'utf8')));
+
+    fs.writeFileSync('tail.txt', 'abc');
+    fs.writeFileSync('tail.txt', 'XYZW', { flag: 'a' });
+    console.log('writefile-a-appends:', JSON.stringify(fs.readFileSync('tail.txt', 'utf8')));
   `,
 };
 

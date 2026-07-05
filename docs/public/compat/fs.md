@@ -23,7 +23,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO |
 | `truncate` / zero fill | ✅ | Sync and promises paths |
 | `mkdtemp` / `opendir` | ✅ | Sync and promises; async directory iteration |
-| `createReadStream` / `createWriteStream` | ✅ | Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), pipe and `end` parity tests |
+| `createReadStream` / `createWriteStream` | ✅ | Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, pipe and `end` parity tests |
 | Stream unsupported options | ❌ | `fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore |
 | `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics |
 | `fs.watch` buffer/exotic filename encodings | ❌ | `encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError`; UTF-8 string filenames are the claimed subset |

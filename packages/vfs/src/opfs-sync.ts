@@ -665,7 +665,8 @@ export class OpfsFsSync implements FsSync {
         continue;
       }
       if (!recursive && i < parts.length - 1) {
-        throw new VfsError('ENOENT', cumulative);
+        // Missing parent still names the TARGET (same rule as ENOTDIR above).
+        throw new VfsError('ENOENT', path);
       }
       this.index.set(cumulative, { kind: 'dir', size: 0, children: new Set() });
       this.attachChild(cumulative);
