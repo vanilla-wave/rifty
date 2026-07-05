@@ -7,7 +7,7 @@
 # copy with those secrets filled and passed via `--metadata-from-file`.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.1
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2
     container_name: rifty-eddy
     restart: unless-stopped
     expose:

@@ -282,10 +282,13 @@ first.
 
 ## CDN tier on rifty.dev (deployed 2026-07-01)
 
-The resources below are LIVE from the **v1.1** deploy (2026-07-01). The **v1.2**
-image (this batch: h3/UDP, eddy wire protocol v1.1, non-blocking stamp) needs an
-operator REDEPLOY — tracked in `docs/backlog/distribution/eddy-package-and-deploy.md`
-(confirm-first/outward), and it gates `docs/backlog/perf/eddy-upstream-registry-ab.md`.
+The resources below are LIVE from the 2026-07-01 CDN setup. The running image is
+**v1.2** (tag `0.2.2`, redeployed 2026-07-05 — h3/UDP, eddy wire protocol v1.1,
+non-blocking stamp; a live POST now emits `x-eddy-store-durable` + a
+deep-canonical closure hash independent of the upstream registry URL). This
+unblocks `docs/backlog/perf/eddy-upstream-registry-ab.md`. Still MEMORY store
+(no `EDDY_S3_*` — bundles die with the container); the S3 tier is a separate
+operator step (§Object-Storage).
 
 Live resources (ADR-0195; Yandex CDN provider `ourcdn` refuses POST at the
 edge, hence the split-host shape):
