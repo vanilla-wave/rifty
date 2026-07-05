@@ -129,6 +129,18 @@ describe('parseS3Config (EDDY_S3_* — all-or-none)', () => {
     }
   });
 
+  it('refuses a cleartext http endpoint — signed PUTs would leak the Authorization header', () => {
+    expect(() =>
+      parseS3Config({ ...full, EDDY_S3_ENDPOINT: 'http://storage.example.com' }),
+    ).toThrow(/must be HTTPS/);
+  });
+
+  it('allows plain http ONLY for a loopback test seam (local mock S3)', () => {
+    for (const seam of ['http://localhost:9000', 'http://127.0.0.1:9000', 'http://[::1]:9000']) {
+      expect(parseS3Config({ ...full, EDDY_S3_ENDPOINT: seam })?.endpoint).toBe(seam);
+    }
+  });
+
   it('refuses inner whitespace in bucket/region', () => {
     expect(() => parseS3Config({ ...full, EDDY_S3_BUCKET: 'my bucket' })).toThrow(/EDDY_S3_BUCKET/);
     expect(() => parseS3Config({ ...full, EDDY_S3_REGION: 'ru central1' })).toThrow(

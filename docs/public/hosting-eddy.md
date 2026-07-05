@@ -5,8 +5,10 @@ rifty's OWN resolution server-side and returns one `EddyBundleV1` (lockfile +
 compressed tarballs); the client pre-seeds its tarball cache + writes the
 lockfile, then the existing lockfile fast path installs with zero packument
 network — structurally ~100 cold round-trips collapse to 1 POST. Measured on a
-real browser over warm h2: **1.70x** (standard 4284ms → eddy 2517ms). (The older
-"~6x" is a Node/sandbox model, not a browser number — don't quote it at launch.)
+real browser over warm h2: **~1.7x** (2026-07-01 run: standard 4284ms → eddy
+2517ms; `perf/benchmarks.json` tracks the current figure, which drifts with the
+standard baseline's network variance). (The older "~6x" is a Node/sandbox model,
+not a browser number — don't quote it at launch.)
 It is **additive and opt-in** — standard install is untouched and is the
 always-on fallback.
 
@@ -30,7 +32,9 @@ docker run -p 8788:8788 \
 Or with compose (`deploy/yandex/eddy/docker-compose.yml`), mirroring the
 ADR-0163 registry-proxy deploy: hand the compose file to a Yandex
 Container-Optimized-Image VM exactly as `docs/public/hosting-yandex.md` does for
-the proxy.
+the proxy. Note: `docker-compose.yml` uses `build:` (local self-host); a COI VM
+PULLS images, so it takes `docker-compose.coi.yml` (`image:`) instead — the
+"Deploy to rifty.dev" section below covers the build+push+swap.
 
 Once `@riftydev/eddy` is published to npm, a thin image is just
 `FROM node:24-alpine` + `npm i -g @riftydev/eddy` + `CMD ["eddy"]`.
@@ -267,6 +271,11 @@ first.
    ```
 
 ## CDN tier on rifty.dev (deployed 2026-07-01)
+
+The resources below are LIVE from the **v1.1** deploy (2026-07-01). The **v1.2**
+image (this batch: h3/UDP, eddy wire protocol v1.1, non-blocking stamp) needs an
+operator REDEPLOY — tracked in `docs/backlog/distribution/eddy-package-and-deploy.md`
+(confirm-first/outward), and it gates `docs/backlog/perf/eddy-upstream-registry-ab.md`.
 
 Live resources (ADR-0195; Yandex CDN provider `ourcdn` refuses POST at the
 edge, hence the split-host shape):

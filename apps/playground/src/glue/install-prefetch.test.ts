@@ -1,6 +1,6 @@
 import { canonicalEddyRequestKey, eddyRequestFromPackageJson } from '@riftydev/npm-client';
-import { describe, expect, it } from 'vitest';
-import { startInstallPrefetch } from './install-prefetch.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { decideInstallPrefetch, startInstallPrefetch } from './install-prefetch.ts';
 
 const PKG = JSON.stringify({
   name: 'app',
@@ -59,5 +59,71 @@ describe('startInstallPrefetch (ADR-0195 owner-boot prefetch)', () => {
       }),
     ).toBeUndefined();
     expect(calls.length).toBe(0);
+  });
+});
+
+describe('decideInstallPrefetch (owner-boot composition policy)', () => {
+  const base = {
+    devFromScratch: true,
+    resolverUrl: 'http://eddy.test',
+    config: 'cfg-A',
+    hasHandle: false,
+    prevConfig: undefined as string | undefined,
+    isStamped: () => false,
+    pinFor: () => undefined as string | undefined,
+  };
+
+  it('CLEARS when not from-scratch or the resolver is off — a reload never prefetches', () => {
+    expect(decideInstallPrefetch({ ...base, devFromScratch: false })).toEqual({ kind: 'clear' });
+    expect(decideInstallPrefetch({ ...base, resolverUrl: undefined })).toEqual({ kind: 'clear' });
+  });
+
+  it('KEEPS an in-flight handle for the SAME config — never fires a duplicate POST', () => {
+    const isStamped = vi.fn(() => false);
+    const pinFor = vi.fn(() => undefined);
+    const d = decideInstallPrefetch({
+      ...base,
+      hasHandle: true,
+      prevConfig: 'cfg-A',
+      config: 'cfg-A',
+      isStamped,
+      pinFor,
+    });
+    expect(d).toEqual({ kind: 'keep' });
+    expect(isStamped).not.toHaveBeenCalled(); // dedupe gates BEFORE the stamp read
+    expect(pinFor).not.toHaveBeenCalled();
+  });
+
+  it('re-primes when the config CHANGED even with a handle in flight', () => {
+    const d = decideInstallPrefetch({
+      ...base,
+      hasHandle: true,
+      prevConfig: 'cfg-OLD',
+      config: 'cfg-A',
+    });
+    expect(d).toEqual({ kind: 'start', config: 'cfg-A', closureHash: undefined });
+  });
+
+  it('SKIPS the prefetch when a stamp will suppress the install (records the config)', () => {
+    const pinFor = vi.fn(() => 'sha256-x');
+    const d = decideInstallPrefetch({ ...base, isStamped: () => true, pinFor });
+    expect(d).toEqual({ kind: 'skip', config: 'cfg-A' });
+    expect(pinFor).not.toHaveBeenCalled(); // no pin read when nothing starts
+  });
+
+  it('STARTS pinned by the LEARNED pin over the env pin (ADR-0194)', () => {
+    const d = decideInstallPrefetch({
+      ...base,
+      pinFor: () => 'sha256-learned', // learnedPin ?? envPin resolved by the caller
+    });
+    expect(d).toEqual({ kind: 'start', config: 'cfg-A', closureHash: 'sha256-learned' });
+  });
+
+  it('STARTS unpinned (first boot, no learned/env pin) → the handle POSTs', () => {
+    expect(decideInstallPrefetch(base)).toEqual({
+      kind: 'start',
+      config: 'cfg-A',
+      closureHash: undefined,
+    });
   });
 });

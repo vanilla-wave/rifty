@@ -61,9 +61,18 @@ describe('eddy HTTP server', () => {
     expect(body.feature).toMatch(/file/);
   });
 
-  it('GET / → 405 method not allowed', async () => {
+  it('GET / → 405 method not allowed, with an Allow header (RFC 9110)', async () => {
     const res = await fetch(baseUrl, { method: 'GET' });
     expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('GET, HEAD, POST');
+    await res.body?.cancel();
+  });
+
+  it('an unsupported method (PUT) → 405 with an Allow header', async () => {
+    const res = await fetch(baseUrl, { method: 'PUT' });
+    expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('GET, HEAD, POST');
+    await res.body?.cancel();
   });
 
   // CDN tier: the closure hash names an immutable artifact, so a GET by hash is

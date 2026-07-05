@@ -232,10 +232,12 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
   it('REVOKES the stamp when the deferred drain reports tree persist failures — a later boot must not trust a torn tree (ADR-0187 Corrected)', async () => {
     const { vfs, fsSync, log, logFn } = project();
-    let resolveFlush!: (report: {
+    type Report = {
       failures: Array<{ path: string; op: 'write'; message: string }>;
       total: number;
-    }) => void;
+    };
+    let resolveFlush!: (report: Report) => void;
+    let flushCalls = 0;
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
@@ -245,10 +247,18 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       log: logFn,
-      flush: () =>
-        new Promise((r) => {
-          resolveFlush = r;
-        }),
+      // Call 1: the controlled detection drain (proves the stamp landed
+      // non-blocking BEFORE it settles). Call 2: the revoke-proof re-drain —
+      // CLEAN here (the stamp deletion reached disk).
+      flush: (): Promise<Report> => {
+        flushCalls += 1;
+        if (flushCalls === 1) {
+          return new Promise<Report>((r) => {
+            resolveFlush = r;
+          });
+        }
+        return Promise.resolve({ failures: [], total: 0 });
+      },
     });
     expect(result.source).toBe('snapshot');
     // The stamp landed non-blocking, BEFORE the drain settled…
@@ -268,6 +278,87 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
     expect(log.join('')).toContain('install stamp revoked');
+    expect(log.join('')).not.toContain('CRITICAL'); // the revoke proved durable
+  });
+
+  it('does NOT revoke on a FOREIGN persist failure — a global path (learned pins, another project) is not this tree torn', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+    let flushCalls = 0;
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: async () => {
+        flushCalls += 1;
+        return {
+          // Outside `<root>/node_modules` → not the stamped tree.
+          failures: [
+            {
+              path: '/.rifty/eddy-learned-pins.json',
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 1,
+        };
+      },
+    });
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
+    expect(log.join('')).not.toContain('revoked');
+    expect(flushCalls).toBe(1); // no revoke → no second (proof) drain
+  });
+
+  it('ESCALATES when the revoke itself fails to persist — the deleted stamp must not silently remain trusted', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+    let flushCalls = 0;
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: async () => {
+        flushCalls += 1;
+        // Call 1: torn tree. Call 2 (after the revoke rm): the stamp DELETE
+        // itself never reached disk — the revoke is unproven.
+        return flushCalls === 1
+          ? {
+              failures: [
+                {
+                  path: `${ROOT}/node_modules/vite/package.json`,
+                  op: 'write' as const,
+                  message: 'QuotaExceededError',
+                },
+              ],
+              total: 1,
+            }
+          : {
+              failures: [
+                {
+                  path: `${ROOT}/node_modules/.rifty-install-stamp.json`,
+                  op: 'rm' as const,
+                  message: 'QuotaExceededError',
+                },
+              ],
+              total: 1,
+            };
+      },
+    });
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(log.join('')).toContain('install stamp revoked'); // it TRIED to revoke…
+    expect(log.join('')).toContain('CRITICAL'); // …but couldn't prove it reached disk
+    expect(flushCalls).toBe(2);
   });
 
   it('a deferred-drain failure on the STAMP FILE ITSELF does not revoke — no stamp on disk already re-runs arrival', async () => {

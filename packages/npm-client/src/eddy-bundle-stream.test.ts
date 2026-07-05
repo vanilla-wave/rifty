@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { streamTarEntries } from './eddy-bundle-stream.ts';
+import { drainBodyBounded, streamTarEntries } from './eddy-bundle-stream.ts';
 import { EDDY_BUNDLE_FORMAT, type EddyBundleSource, packEddyBundle } from './eddy-bundle.ts';
 import { parseTarEntries } from './unpacker.ts';
 
@@ -222,5 +222,50 @@ describe('streamTarEntries — incremental EddyBundleV1 outer-tar reader', () =>
     await gen.next(); // manifest
     await gen.return(undefined); // consumer aborts (e.g. lockfile gate declined)
     expect(cancelled).toBe(true);
+  });
+});
+
+describe('drainBodyBounded', () => {
+  it('returns the whole body when it completes', async () => {
+    const res = new Response(enc.encode('{"feature":"native-modules"}'), {
+      headers: { 'content-type': 'application/json' },
+    });
+    const bytes = await drainBodyBounded(res);
+    expect(new TextDecoder().decode(bytes)).toBe('{"feature":"native-modules"}');
+  });
+
+  it('a NEVER-ENDING body rejects after the no-progress bound instead of parking the caller', async () => {
+    // The installer drains a `content-type: application/json` decline through
+    // this; `response.json()` has no timeout, so an open-held body would park
+    // `npm install` forever — the bound is the only backstop.
+    let cancelled = false;
+    const res = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(enc.encode('{"fea')); // partial, then silence
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+      { headers: { 'content-type': 'application/json' } },
+    );
+    await expect(drainBodyBounded(res, { stallTimeoutMs: 25 })).rejects.toThrow(
+      /no body progress for 25ms/,
+    );
+    expect(cancelled).toBe(true); // the dead stream was released, not leaked
+  });
+
+  it('an OVER-CAP body rejects', async () => {
+    const res = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(64));
+        },
+      }),
+    );
+    await expect(drainBodyBounded(res, { maxBytes: 128, stallTimeoutMs: 1000 })).rejects.toThrow(
+      /body exceeded 128 bytes/,
+    );
   });
 });

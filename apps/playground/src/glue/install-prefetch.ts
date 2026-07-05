@@ -14,6 +14,45 @@ import {
   startEddyPrefetch,
 } from '@riftydev/npm-client';
 
+/**
+ * The owner-boot prefetch COMPOSITION policy (ADR-0194/0195), factored out of
+ * the boot closure so it is unit-testable without a worker realm:
+ *
+ *   - `clear` — not a from-scratch preset, or the resolver is off: drop any
+ *     in-flight handle (a reload of an installed tree never prefetches).
+ *   - `keep` — same `config` as the in-flight handle: DON'T re-prime (a second
+ *     POST would discard the download and race a duplicate 7MB stream — measured
+ *     2026-07-02). Config = the boot identity `[specId, root, slug, packageJson]`.
+ *   - `skip` — a stamp will suppress the install: record the config but fire no
+ *     prefetch (nothing to feed).
+ *   - `start` — fetch, pinned by a LEARNED pin over the coarse env pin (ADR-0194).
+ *
+ * `isStamped`/`pinFor` are THUNKS so the deliberate ordering holds — the stamp
+ * read (sync, `syncMirror`) runs only AFTER the cheap clear/keep gates, and the
+ * pin read only when actually starting.
+ */
+export type InstallPrefetchDecision =
+  | { readonly kind: 'clear' }
+  | { readonly kind: 'keep' }
+  | { readonly kind: 'skip'; readonly config: string }
+  | { readonly kind: 'start'; readonly config: string; readonly closureHash: string | undefined };
+
+export function decideInstallPrefetch(inputs: {
+  readonly devFromScratch: boolean;
+  readonly resolverUrl: string | undefined;
+  readonly config: string;
+  readonly hasHandle: boolean;
+  readonly prevConfig: string | undefined;
+  readonly isStamped: () => boolean;
+  /** Learned pin ?? env pin — read only when a prefetch actually starts. */
+  readonly pinFor: () => string | undefined;
+}): InstallPrefetchDecision {
+  if (!inputs.devFromScratch || !inputs.resolverUrl) return { kind: 'clear' };
+  if (inputs.hasHandle && inputs.prevConfig === inputs.config) return { kind: 'keep' };
+  if (inputs.isStamped()) return { kind: 'skip', config: inputs.config };
+  return { kind: 'start', config: inputs.config, closureHash: inputs.pinFor() };
+}
+
 export function startInstallPrefetch(opts: {
   readonly packageJsonText: string;
   readonly resolverUrl: string | undefined;

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 17)
+
+- **Stamp durability is scoped to `<root>/node_modules` and the revoke is
+  proven.** A persist failure on a foreign/global path
+  (`/.rifty/eddy-learned-pins.json`, another project's tree) no longer revokes —
+  or, on the `npm install` path, skips — a good install stamp; only the stamped
+  tree's own failures gate it (`isStampedTreeDamage`). After revoking a
+  torn-tree stamp, a re-drain confirms the deletion reached disk and escalates
+  LOUDLY when it did not (a stamp that failed to delete would be wrongly trusted
+  next boot).
+- **Owner-boot prefetch composition policy is unit-tested.** The
+  skip-stamped / dedupe-same-config / learned-pin-beats-env-pin decision moved
+  into a pure `decideInstallPrefetch` helper with coverage (was an untested boot
+  closure).
+
 ### Changed
 
 - **`npm install` gates the install stamp on a CLEAN persist drain (ADR-0187

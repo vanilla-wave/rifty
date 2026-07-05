@@ -37,7 +37,7 @@ import {
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
-import { installStampPath, writeInstallStamp } from './install-stamp.ts';
+import { installStampPath, isStampedTreeDamage, writeInstallStamp } from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -606,14 +606,16 @@ async function stampInstalledTree(
     return;
   }
   if (treeReport && treeReport.total > 0) {
-    // A leftover failure on the stamp file ITSELF (a previous install's stamp
-    // never persisted) is not a torn TREE — that path is about to be
-    // rewritten, which heals it. Everything else gates the stamp.
-    const stampPath = installStampPath(cwd);
-    const failures = treeReport.failures.filter((f) => f.path !== stampPath);
-    const total = treeReport.total - (treeReport.failures.length - failures.length);
-    if (total > 0) {
-      notDurable(persistFailureLine({ failures, total }));
+    // Only failures INSIDE the stamped tree (`<cwd>/node_modules`, minus the
+    // stamp file — which is about to be rewritten, healing it) gate the stamp.
+    // A global/foreign path (`/.rifty/eddy-learned-pins.json`, another project)
+    // failing to persist is not THIS tree torn and must not skip a good stamp
+    // (`isStampedTreeDamage`). The sample can't give an exact tree-scoped count,
+    // so report the FULL OPFS failure count with a tree example as the trigger:
+    // any tree-damage entry proves the stamp would lie.
+    const failures = treeReport.failures.filter((f) => isStampedTreeDamage(f.path, cwd));
+    if (failures.length > 0) {
+      notDurable(persistFailureLine({ failures, total: treeReport.total }));
       return;
     }
   }
@@ -629,9 +631,12 @@ async function stampInstalledTree(
   }
   try {
     const stampReport = await deps.flush?.();
-    if (stampReport && stampReport.total > 0) {
+    // Scope to the STAMP FILE: a foreign/global path failing to persist doesn't
+    // mean THIS stamp failed. `failures` is a sample, but the stamp write just
+    // ran, so its own failure (if any) is freshly recorded in the ledger.
+    if (stampReport?.failures.some((f) => f.path === installStampPath(cwd))) {
       ctx.stderr.write(
-        `npm: WARNING: the install stamp failed to persist (${persistFailureLine(stampReport)}) — the next boot re-installs\n`,
+        'npm: WARNING: the install stamp failed to persist — the next boot re-installs\n',
       );
     }
   } catch (err) {

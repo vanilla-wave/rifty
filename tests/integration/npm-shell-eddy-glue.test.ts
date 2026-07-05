@@ -8,10 +8,16 @@
  * real tree, and the `via eddy (fast)` provenance line.
  */
 import type { AddressInfo } from 'node:net';
-import { RegistryClient, canonicalEddyRequestKey, unpackEddyBundle } from '@riftydev/npm-client';
+import {
+  RegistryClient,
+  type TarballCache,
+  canonicalEddyRequestKey,
+  install,
+  unpackEddyBundle,
+} from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNpmShellCommand } from '../../apps/playground/src/glue/npm-shell-command.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
@@ -197,5 +203,65 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
     expect(pinCalls).toBe(0); // learned pins are eddy-only (inert without resolverUrl)
+  });
+
+  it('a NON-RETENTIVE tarball cache declines eddy — never claims source=eddy over registry bytes (provenance guard)', async () => {
+    // InstallOptions.tarballCache documents a no-op instance to disable caching.
+    // eddy adoption seeds the cache then REPLAYS the install by reading it back;
+    // a cache that never retains would re-fetch every package from the REGISTRY
+    // under an `eddy` label (a provenance lie, and a hard failure if the
+    // registry is down). The retention probe must decline to the standard path.
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    const noop: TarballCache = { get: async () => null, put: async () => '' };
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: makeRegistry(),
+      resolverUrl: eddyUrl,
+      tarballCache: noop,
+    });
+    // The bundle really arrives + verifies over the wire, yet adoption is
+    // refused because the cache can't back the replay — honestly `standard`.
+    expect(result.source ?? 'standard').toBe('standard');
+    // The standard path still installs (real tree), it just isn't labelled eddy.
+    expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
+  });
+
+  it('a resolver that stalls a JSON decline body falls back within the bound — never parks the install', async () => {
+    // The eddy attempts fetch via GLOBAL fetch. A resolver (or a URL-keyed
+    // proxy) can send `content-type: application/json` then hold the body open
+    // forever: `response.json()` has NO timeout, so the JSON-decline branch used
+    // to park `npm install` indefinitely, bypassing resolverStallTimeoutMs.
+    const enc = new TextEncoder();
+    const hangingJson = (): Response =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(enc.encode('{"feat')); // partial JSON, never closes
+          },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => hangingJson()),
+    );
+    try {
+      const vfs = new MemoryVfs();
+      await seedProject(vfs);
+      const result = await install({
+        vfs,
+        cwd: '/proj',
+        registry: makeRegistry(), // its own injected fetch — untouched by the stub
+        resolverUrl: 'http://resolver.invalid',
+        resolverStallTimeoutMs: 50,
+      });
+      // Bounded → the eddy attempt declines → standard install completes.
+      expect(result.source ?? 'standard').toBe('standard');
+      expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -49,7 +49,7 @@ import {
 } from '../glue/eddy-learned-pins.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
-import { startInstallPrefetch } from '../glue/install-prefetch.ts';
+import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
 import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
@@ -459,40 +459,46 @@ async function bootShellOwner(opts: {
   let installPrefetchConfig: string | undefined;
   function primeInstallPrefetch(): void {
     const resolverUrl = getResolverUrl();
-    if (!devFromScratch || !resolverUrl) {
+    // Config = the boot identity that must invalidate an in-flight prefetch.
+    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
+    // The policy lives in a pure, unit-tested helper (`decideInstallPrefetch`);
+    // the thunks keep the deliberate ordering — stamp/pin reads (sync,
+    // `syncMirror`) run only when the cheap clear/keep gates fall through. Read
+    // SYNC: an async gate starves behind the busy boot loop and fires the
+    // prefetch AFTER the install it feeds (measured 2026-07-02: two POSTs, no
+    // overlap). Learned pin beats the coarse env pin (ADR-0194).
+    const decision = decideInstallPrefetch({
+      devFromScratch,
+      resolverUrl,
+      config,
+      hasHandle: installPrefetch !== undefined,
+      prevConfig: installPrefetchConfig,
+      isStamped: () =>
+        installStampSatisfiedForPackageJsonSync(
+          syncMirror(),
+          devCfg.root,
+          devSlug,
+          devCfg.packageJson,
+        ) !== null,
+      pinFor: () =>
+        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
+    });
+    if (decision.kind === 'keep') return;
+    if (decision.kind === 'clear') {
       installPrefetch = undefined;
       installPrefetchConfig = undefined;
       return;
     }
-    // A deep-link boot primes at spawn AND again on the page's `pty:dev-config`
-    // for the SAME config — re-priming then would discard the in-flight
-    // download and fire a second POST (measured 2026-07-02: duplicate POSTs
-    // 40ms apart, and the two concurrent 7MB streams intermittently stalled
-    // ~10s). Keep the handle when nothing changed.
-    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
-    if (installPrefetch && installPrefetchConfig === config) return;
-    installPrefetch = undefined;
-    installPrefetchConfig = config;
-    const stamped = installStampSatisfiedForPackageJsonSync(
-      syncMirror(),
-      devCfg.root,
-      devSlug,
-      devCfg.packageJson,
-    );
-    if (stamped) return;
-    installPrefetch = startInstallPrefetch({
-      packageJsonText: devCfg.packageJson,
-      resolverUrl,
-      // Pin priority mirrors the install path (ADR-0194): a LEARNED pin (exact
-      // post-merge dep set) wins over the coarse template env pin (keyed on the
-      // template id — the slug is the root id 'scratch'|projectId, ADR-0165, and
-      // says nothing about the closure). Env pin is the fallback for the first
-      // boot. Read SYNC — this whole gate is sync by design; else install would
-      // consume a stale env prefetch before the exact learned pin.
-      closureHash:
-        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
-      bundleBaseUrl: getEddyBundleBaseUrl(),
-    });
+    installPrefetchConfig = decision.config;
+    installPrefetch =
+      decision.kind === 'start'
+        ? startInstallPrefetch({
+            packageJsonText: devCfg.packageJson,
+            resolverUrl: resolverUrl as string,
+            closureHash: decision.closureHash,
+            bundleBaseUrl: getEddyBundleBaseUrl(),
+          })
+        : undefined;
   }
   // A hidden empty boot has no chosen starter — nothing installs until the
   // page's `pty:dev-config` picks one (its handler re-primes with that config).

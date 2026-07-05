@@ -10,7 +10,11 @@
  * (format, v3, integrity, coverage) like any other bundle.
  */
 
-import { DEFAULT_BUNDLE_MAX_BYTES, DEFAULT_BUNDLE_STALL_MS } from './eddy-bundle-stream.ts';
+import {
+  DEFAULT_BUNDLE_MAX_BYTES,
+  DEFAULT_BUNDLE_STALL_MS,
+  drainBodyBounded,
+} from './eddy-bundle-stream.ts';
 import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
 
 export interface EddyPrefetchHandle {
@@ -50,58 +54,6 @@ export interface StartEddyPrefetchOptions {
  * (`streamTarEntries`) and this eager drain share the same constants. */
 export const DEFAULT_PREFETCH_MAX_BYTES = DEFAULT_BUNDLE_MAX_BYTES;
 export const DEFAULT_PREFETCH_STALL_MS = DEFAULT_BUNDLE_STALL_MS;
-
-/**
- * Buffer the whole body with a no-progress timeout + byte cap. A never-ending
- * or runaway stream must REJECT (→ installer fallback), never park the
- * consumer forever: an unbounded `arrayBuffer()` here once hung `npm install`
- * with no error when the resolver held the connection open.
- */
-async function drainBounded(
-  response: Response,
-  stallMs: number,
-  maxBytes: number,
-): Promise<Uint8Array<ArrayBuffer>> {
-  const body = response.body;
-  if (!body) return new Uint8Array(await response.arrayBuffer());
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const read = reader.read();
-      // A raced-out read settles later (cancel() resolves it {done:true});
-      // never let a late rejection surface as unhandled.
-      read.catch(() => {});
-      const next = await Promise.race([
-        read,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`eddy prefetch: no body progress for ${stallMs}ms`)),
-            stallMs,
-          );
-        }),
-      ]).finally(() => clearTimeout(timer));
-      if (next.done) break;
-      total += next.value.length;
-      if (total > maxBytes) {
-        throw new Error(`eddy prefetch: body exceeded ${maxBytes} bytes`);
-      }
-      chunks.push(next.value);
-    }
-  } catch (err) {
-    void reader.cancel().catch(() => {});
-    throw err;
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
 
 /**
  * Bound the HEADER phase of the prefetch fetch: the drain bounds only start
@@ -173,7 +125,7 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
     status: r.status,
     statusText: r.statusText,
     headers: r.headers,
-    bytes: await drainBounded(r, stallMs, maxBytes),
+    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes }),
   }));
   // An untaken failed prefetch must never surface as an unhandled rejection;
   // the ORIGINAL rejection still reaches whoever takes the handle.

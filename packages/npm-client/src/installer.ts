@@ -31,7 +31,11 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import { closureHashOf } from './closure-hash.ts';
-import { DEFAULT_BUNDLE_STALL_MS, streamTarEntries } from './eddy-bundle-stream.ts';
+import {
+  DEFAULT_BUNDLE_STALL_MS,
+  drainBodyBounded,
+  streamTarEntries,
+} from './eddy-bundle-stream.ts';
 import {
   EDDY_BUNDLE_FORMAT,
   type EddyBundleManifestV1,
@@ -786,10 +790,29 @@ async function consumeEddyResponse(
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
-    const decline = (await response.json().catch(() => null)) as {
-      feature?: string;
-      error?: string;
-    } | null;
+    // A JSON decline body is proxy/attacker-controlled just like the tar stream:
+    // `response.json()` has NO timeout, so a resolver that sends
+    // `content-type: application/json` then holds the body open parks
+    // `npm install` forever — bypassing `resolverStallTimeoutMs`. Drain it
+    // through the same no-progress/byte bound, then parse.
+    let declineText: string;
+    try {
+      const bytes = await drainBodyBounded(
+        response,
+        opts.resolverStallTimeoutMs === undefined
+          ? {}
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs },
+      );
+      declineText = eddyDecoder.decode(bytes);
+    } catch {
+      return 'resolver decline body stalled or exceeded its byte cap';
+    }
+    let decline: { feature?: string; error?: string } | null;
+    try {
+      decline = JSON.parse(declineText) as { feature?: string; error?: string };
+    } catch {
+      decline = null;
+    }
     return `resolver declined (${decline?.feature ?? decline?.error ?? 'unsupported'})`;
   }
   if (!response.ok) return `resolver returned HTTP ${response.status}`;
@@ -811,6 +834,7 @@ async function consumeEddyResponse(
   let lockfile: Lockfile | null = null;
   const byFile = new Map<string, EddyBundleTarballEntry>();
   const seededFiles = new Set<string>();
+  let lastSeeded: EddyBundleTarballEntry | null = null;
   for await (const entry of entries) {
     if (manifest === null) {
       if (entry.name !== MANIFEST_FILE) return `bundle does not start with ${MANIFEST_FILE}`;
@@ -880,12 +904,27 @@ async function consumeEddyResponse(
     }
     await tarballCache.put(t.name, t.version, t.integrity, entry.data);
     seededFiles.add(entry.name);
+    lastSeeded = t;
   }
   if (manifest === null || lockfile === null) {
     return 'malformed EddyBundleV1 bundle: missing manifest or lockfile';
   }
   if (seededFiles.size !== byFile.size) {
     return 'bundle is missing tarball member(s) named by its manifest';
+  }
+  // Provenance guard: adoption reports `source: 'eddy'` and then REPLAYS the
+  // install by reading `tarballCache` back. A NON-RETENTIVE cache — the
+  // documented no-op `{ get: async () => null, put: async () => '' }` — would
+  // silently re-fetch every package from the REGISTRY under an eddy label (and
+  // fail outright if the registry is unreachable). Prove the cache retained the
+  // seed by reading the last-seeded entry back; a miss means eddy cannot
+  // honestly own this install → decline to the standard verifying path (which
+  // uses the same cache and is labelled `source: 'standard'`, no lie).
+  if (lastSeeded !== null) {
+    const back = await tarballCache.get(lastSeeded.name, lastSeeded.version, lastSeeded.integrity);
+    if (back === null) {
+      return 'tarball cache did not retain seeded bytes (a non-retentive cache cannot back an eddy install)';
+    }
   }
   return { adopted: true, closureHash: manifest.asOf.closureHash, lockfile };
 }

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 17)
+
+- **Eddy JSON declines read under the tarball stream's bounds.** A resolver that
+  sent `content-type: application/json` then held the body open parked
+  `npm install` forever — `response.json()` has no timeout. The decline body now
+  drains through the shared `drainBodyBounded` (no-progress timeout + byte cap),
+  so a stalled decline fails the attempt → standard install, never a hang.
+- **Eddy adoption proves the tarball cache is retentive.** A no-op/non-retentive
+  `tarballCache` seeded nothing yet reported `source: 'eddy'` while replaying
+  every package from the REGISTRY (a provenance lie, and a hard failure offline).
+  Adoption now reads a seeded entry back; a miss declines to the standard path.
+
 ### Fixed (PR #107 round 13)
 
 - **`prefer: 'online'` now really forces a fresh recompute.** The pinned

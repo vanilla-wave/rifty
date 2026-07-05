@@ -96,9 +96,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     // below is the validator; the route must not 405 a valid hash first.
     const match = /^\/bundle\/(.+)$/.exec(req.url ?? '');
     if (!match) {
-      sendJson(res, 405, {
-        error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>',
-      });
+      sendJson(
+        res,
+        405,
+        { error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>' },
+        { allow: 'GET, HEAD, POST' }, // RFC 9110: 405 MUST advertise the allowed methods
+      );
       return;
     }
     // The closure hash is `sha256-<base64>` — base64 carries `/`+`=`, so the
@@ -159,9 +162,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     return;
   }
   if (req.method !== 'POST') {
-    sendJson(res, 405, {
-      error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>',
-    });
+    sendJson(
+      res,
+      405,
+      { error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>' },
+      { allow: 'GET, HEAD, POST' }, // RFC 9110: 405 MUST advertise the allowed methods
+    );
     return;
   }
   let body: string;

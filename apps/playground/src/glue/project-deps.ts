@@ -33,6 +33,7 @@ import {
   depsEqual,
   installStampPath,
   installStampSatisfied,
+  isStampedTreeDamage,
   readEffectiveDeps,
   writeInstallStamp,
 } from './install-stamp.ts';
@@ -179,12 +180,16 @@ async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Prom
 
 /**
  * Fire-and-forget: drain → inspect the ledger → revoke the stamp on a dirty
- * report. A failure on the stamp file ITSELF doesn't revoke (no stamp on disk
- * already means the next boot re-runs arrival — consistent); any OTHER
- * failure means OPFS may hold a torn tree under a durable stamp — exactly the
- * state `installStampSatisfied` would wrongly trust. The revoke's own rm
- * rides the same FIFO (best-effort: under quota pressure a delete frees
- * space; a NotFound persist already reads as success).
+ * report. Only failures INSIDE the stamped tree (`<root>/node_modules`, minus
+ * the stamp file itself) count: a foreign/global path failing to persist
+ * (`/.rifty/eddy-learned-pins.json`, another project's tree) is not THIS tree
+ * torn and must not revoke a good stamp (`isStampedTreeDamage`). Tree damage
+ * means OPFS may hold a torn tree under a durable stamp — exactly the state
+ * `installStampSatisfied` would wrongly trust — so the stamp is revoked, then
+ * the revoke is PROVEN durable: a torn tree under a stamp that ALSO failed to
+ * delete would be trusted next boot, so a re-drain that still shows the stamp
+ * unhealed escalates LOUDLY (a deferred best-effort can't self-heal, but it
+ * must never be silent).
  */
 function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
   const flush = opts.flush;
@@ -193,15 +198,29 @@ function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
   void (async () => {
     const report = await flush();
     if (!report || report.total === 0) return;
-    const foreign = report.failures.filter((f) => f.path !== stampPath);
-    const total = report.total - (report.failures.length - foreign.length);
-    if (total === 0) return;
-    const first = foreign[0];
-    const sample = first ? ` (first: ${first.op} ${first.path}: ${first.message})` : '';
+    // `failures` is a SAMPLE, `total` the full count. A torn node_modules writes
+    // many files, so its damage surfaces in the sample; a sample with zero
+    // tree-damage entries ⇒ the failures are foreign — trust the stamp. (The
+    // dangerous "stamp uniquely persisted" case is a SMALL tear that fits the
+    // sample; a big meltdown fails the stamp write too → no durable stamp.)
+    const damaging = report.failures.filter((f) => isStampedTreeDamage(f.path, opts.root));
+    const first = damaging[0];
+    if (!first) return; // no tree damage in the sample → trust the stamp
+    const sample = ` (first: ${first.op} ${first.path}: ${first.message})`;
     await opts.vfs.rm(stampPath, { force: true });
     opts.log(
-      `[real-vite/worker] WARNING: ${total} file(s) failed to persist${sample} — install stamp revoked; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
+      `[real-vite/worker] WARNING: node_modules failed to persist${sample} — install stamp revoked; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
     );
+    // Prove the revoke reached disk: a torn tree under a stamp that ALSO failed
+    // to delete would be trusted next boot. Re-drain; if the stamp deletion is
+    // still unhealed the revoke didn't persist — escalate LOUDLY (a deferred
+    // best-effort can't self-heal, but it must never be silent).
+    const after = await flush();
+    if (after?.failures.some((f) => f.path === stampPath)) {
+      opts.log(
+        '[real-vite/worker] CRITICAL: the stamp revoke did not reach disk — a later boot may still trust the torn tree; reinstall dependencies to heal it\n',
+      );
+    }
   })().catch((err) => {
     // The check itself failing (rm error, throwing flush impl) must not
     // surface as an unhandled rejection — but it must not stay silent either.

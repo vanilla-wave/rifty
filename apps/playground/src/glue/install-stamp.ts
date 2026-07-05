@@ -32,8 +32,26 @@ export interface InstallStamp {
   readonly packages: number;
 }
 
+/** The dependency tree the stamp attests durable: `<root>/node_modules`. The
+ * stamp trusts THIS subtree wholesale — so only persist failures UNDER it mean
+ * the stamped tree is torn. A global/foreign path failing to persist (e.g.
+ * `/.rifty/eddy-learned-pins.json`, another project's tree) must NOT gate or
+ * revoke this project's stamp. */
+export function installTreeDir(root: string): string {
+  return joinPath(root, 'node_modules');
+}
+
 export function installStampPath(root: string): string {
-  return joinPath(root, 'node_modules/.rifty-install-stamp.json');
+  return joinPath(installTreeDir(root), '.rifty-install-stamp.json');
+}
+
+/** True iff `path` is inside the stamped tree AND is not the stamp file itself
+ * (a stamp-file failure is not a torn TREE: no stamp on disk simply re-runs
+ * arrival; a stamp about to be rewritten heals). */
+export function isStampedTreeDamage(path: string, root: string): boolean {
+  if (path === installStampPath(root)) return false;
+  const dir = installTreeDir(root);
+  return path === dir || path.startsWith(`${dir}/`);
 }
 
 function readStringMap(value: unknown): Record<string, string> {

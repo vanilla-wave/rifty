@@ -1149,6 +1149,39 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
   });
 
+  it('a FOREIGN persist failure (outside node_modules) does not gate — the stamp attests THIS tree, not the whole VFS', async () => {
+    // A learned-pins / other-project write failing to persist is not this
+    // node_modules torn — it must NOT skip a good stamp (over-broad revoke bug).
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            {
+              path: '/.rifty/eddy-learned-pins.json',
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 1,
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toBe(''); // no NOT-durable warning
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true); // stamped
+  });
+
   it('a THROWING flush skips the stamp and warns — a drain that cannot even report is not durable', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });

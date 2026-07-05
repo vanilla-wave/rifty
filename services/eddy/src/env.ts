@@ -110,6 +110,17 @@ export function parseS3Config(env: Record<string, string | undefined>): S3EnvCon
       `${S3_ENV_KEYS.endpoint} must be an http(s) URL (e.g. https://storage.yandexcloud.net); got ${JSON.stringify(endpoint)}`,
     );
   }
+  // Signed PUTs (SigV4) carry an `Authorization` header — cleartext HTTP would
+  // expose the signature to a network MITM. Require HTTPS; permit http:// only
+  // for a LOOPBACK test seam (a local mock S3), never a remote endpoint.
+  const host = parsed.hostname;
+  const loopback =
+    host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  if (parsed.protocol === 'http:' && !loopback) {
+    throw new Error(
+      `${S3_ENV_KEYS.endpoint} must be HTTPS — signed PUTs carry an Authorization header cleartext HTTP would expose to a network MITM (e.g. https://storage.yandexcloud.net); got ${JSON.stringify(endpoint)} (plain http:// is allowed only for a loopback test seam)`,
+    );
+  }
   // Conservative shape gates: `urlFor` interpolates the bucket RAW into the
   // request path, so `/`, `\` or dot segments would silently address
   // nested/normalized bucket paths instead of failing at startup.

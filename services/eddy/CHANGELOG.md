@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 17)
+
+- **`EDDY_S3_ENDPOINT` requires HTTPS.** Signed SigV4 PUTs carry an
+  `Authorization` header cleartext HTTP would expose to a network MITM; a plain
+  `http://` endpoint now throws at startup (loopback hosts stay allowed as a
+  local mock-S3 test seam).
+- **405 responses advertise an `Allow` header** (`GET, HEAD, POST`, RFC 9110).
+
 ### Fixed (PR #107 round 16)
 
 - **Store validates the raw member SEQUENCE.** `manifest → lockfile →
