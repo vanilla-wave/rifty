@@ -124,6 +124,45 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
   });
 
+  it('a cached compute started DURING a prefer:online refresh does not clobber the fresh link', async () => {
+    const { fetch } = makeLocalFetcher();
+    let releaseCached = (): void => {};
+    let releaseOnline = (): void => {};
+    const cachedGate = new Promise<void>((r) => {
+      releaseCached = r;
+    });
+    const onlineGate = new Promise<void>((r) => {
+      releaseOnline = r;
+    });
+    let computes = 0;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: new MemoryBundleStore({ maxBytes: 1024 }),
+      resolveFn: async (req) => {
+        computes++;
+        if (req.prefer === 'online') {
+          await onlineGate;
+          return bundleFor('sha256-NEW');
+        }
+        await cachedGate;
+        return bundleFor('sha256-OLD');
+      },
+    });
+
+    const onlineP = cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' }); // active online gen
+    const cachedP = cache.resolve({ dependencies: { debug: '^4.4.1' } }); // lower than active online
+    releaseOnline();
+    const online = await onlineP;
+    expect(online.kind === 'bundle' && online.manifest.asOf.closureHash).toBe('sha256-NEW');
+    releaseCached();
+    const cached = await cachedP;
+    expect(cached.kind === 'bundle' && cached.manifest.asOf.closureHash).toBe('sha256-OLD');
+
+    const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+    expect(computes).toBe(2);
+  });
+
   it('a FRESHER compute whose store put FAILS kills the stale mutable link — the next cached request recomputes', async () => {
     // Regression (round 11): "failed put skips the link" is not enough when an
     // OLDER link already exists for the key — it outlived the fresher failed

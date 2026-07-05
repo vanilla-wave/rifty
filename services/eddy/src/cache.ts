@@ -112,7 +112,16 @@ export class EddyCache {
   private readonly store: BundleStore;
   private readonly packuments: TtlPackumentCache;
   private readonly tarballs: MemoryTarballCache;
-  private readonly inflight = new Map<string, Promise<EddyResolveResult>>();
+  /** Cached-policy single-flight. `prefer:'online'` computes are deliberately
+   *  NOT joinable: a normal cached request must not inherit an online refresh's
+   *  live-registry latency/failure mode. */
+  private readonly cachedInflight = new Map<string, Promise<EddyResolveResult>>();
+  /** Generations of online refreshes currently in flight. Cached computes that
+   * start while one is active are allowed to serve their caller, but their
+   * write-throughs/publishes rank below the online refresh so stale cached
+   * metadata cannot clobber fresh online state when it settles later. */
+  private readonly activeOnlineGens = new Set<number>();
+  private cachedDuringOnlineSeq = 0;
   /** Per-closureHash FIFO tail: serializes the store settle (get→serve|put) so
    *  concurrent computes of the SAME closure can't each PUT different-`resolvedAt`
    *  bytes over one immutable key — the second sees the first's stored artifact
@@ -169,33 +178,68 @@ export class EddyCache {
         });
         if (hit) return { kind: 'bundle', bytes: hit.bytes, manifest: hit.manifest };
       }
-      // Thundering herd: identical cold requests join one compute. An 'online'
-      // request never joins (the flight may have read TTL-cached packuments)…
-      const joined = this.inflight.get(key);
+      // Thundering herd: identical cached-policy cold requests join one compute.
+      // Online refreshes are not joined by cached callers: they bypass shared
+      // packument reads and may be slow/failing while cached-policy can still
+      // make progress from warm state.
+      const joined = this.cachedInflight.get(key);
       if (joined) return joined;
     }
 
-    const flight = this.compute(req, key);
-    // …but every flight — online included — registers: an online compute is
-    // fresher than any cached-policy joiner requires.
-    this.inflight.set(key, flight);
-    void flight
-      .catch(() => undefined)
-      .then(() => {
-        if (this.inflight.get(key) === flight) this.inflight.delete(key);
-      });
+    const flight = this.startCompute(req, key, online);
+    if (!online) {
+      this.cachedInflight.set(key, flight);
+      void flight
+        .catch(() => undefined)
+        .then(() => {
+          if (this.cachedInflight.get(key) === flight) this.cachedInflight.delete(key);
+        });
+    }
     return flight;
   }
 
-  private async compute(req: EddyResolveRequest, key: string): Promise<EddyResolveResult> {
-    // Stamp BEFORE the first await so the gen reflects START order (= the order
-    // flights registered): a concurrent prefer:'online' compute starts after a
-    // cached one and thus outranks it.
-    const gen = ++this.computeSeq;
+  private startCompute(
+    req: EddyResolveRequest,
+    key: string,
+    online: boolean,
+  ): Promise<EddyResolveResult> {
+    const gen = this.nextGeneration(online);
+    const flight = this.compute(req, key, gen);
+    if (online) {
+      void flight
+        .finally(() => {
+          this.activeOnlineGens.delete(gen);
+          if (this.activeOnlineGens.size === 0) this.cachedDuringOnlineSeq = 0;
+        })
+        .catch(() => undefined);
+    }
+    return flight;
+  }
+
+  private nextGeneration(online: boolean): number {
+    if (online) {
+      const gen = ++this.computeSeq;
+      this.activeOnlineGens.add(gen);
+      return gen;
+    }
+    if (this.activeOnlineGens.size > 0) {
+      this.cachedDuringOnlineSeq += 1;
+      return Math.min(...this.activeOnlineGens) - 1 / (this.cachedDuringOnlineSeq + 1);
+    }
+    return ++this.computeSeq;
+  }
+
+  private async compute(
+    req: EddyResolveRequest,
+    key: string,
+    gen: number,
+  ): Promise<EddyResolveResult> {
     // Stamp this flight's packument write-throughs with `gen` so an OLDER cached
     // flight can't roll back the shared metadata cache after a newer online
-    // refresh (ADR-0194). Reads stay direct; the per-request overlay (resolver.ts)
-    // still layers self-consistency on top.
+    // refresh (ADR-0194). A cached flight started DURING an online refresh gets
+    // a lower gen than that active online flight, even though it started later,
+    // because it may have read the pre-refresh TTL cache. Reads stay direct; the
+    // per-request overlay (resolver.ts) still layers self-consistency on top.
     const packumentCache: PackumentCacheLike = {
       get: (name) => this.packuments.get(name),
       set: (name, packument) => this.packuments.setWithGen(name, packument, gen),
@@ -315,8 +359,9 @@ export class EddyCache {
    * writes the lockfile it fetched). Generation guard: an OLDER compute (read
    * staler packuments) must not clobber a link a NEWER compute already
    * published — else a slow cached-policy compute finishing AFTER a fresh
-   * prefer:'online' refresh would republish the stale closure. Only the
-   * latest-started compute for the key wins. */
+   * prefer:'online' refresh would republish the stale closure. Cached computes
+   * started while an online refresh is active rank below that refresh, even if
+   * they start later, because they may have read the pre-refresh TTL cache. */
   private publishLink(key: string, closureHash: string, gen: number): void {
     if (this.ttlMs <= 0) return;
     const cur = this.mutable.peek(key);

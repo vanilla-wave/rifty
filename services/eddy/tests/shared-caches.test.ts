@@ -229,6 +229,36 @@ describe('single-flight per depSetKey (ADR-0194 §3)', () => {
     expect(computes).toBe(2);
   });
 
+  it("cached requests do not join an in-flight prefer:'online' refresh", async () => {
+    const { fetch } = makeLocalFetcher();
+    let computes = 0;
+    let releaseOnline!: () => void;
+    const onlineGate = new Promise<void>((r) => {
+      releaseOnline = r;
+    });
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      resolveFn: async (req, deps) => {
+        computes++;
+        if (req.prefer === 'online') {
+          await onlineGate;
+          return { kind: 'unsupported', feature: 'registry-down', message: 'online failed' };
+        }
+        return resolveBundle(req, deps);
+      },
+    });
+    const online = cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' });
+    const cached = cache.resolve({ dependencies: { debug: '^4.4.1' } });
+
+    const cachedResult = await cached;
+    releaseOnline();
+    const onlineResult = await online;
+
+    expect(cachedResult.kind).toBe('bundle');
+    expect(onlineResult).toMatchObject({ kind: 'unsupported', feature: 'registry-down' });
+    expect(computes).toBe(2);
+  });
+
   it('a failed flight is not cached — the next request recomputes', async () => {
     const { fetch } = makeLocalFetcher();
     let computes = 0;

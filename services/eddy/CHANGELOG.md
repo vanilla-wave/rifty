@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 21)
+
+- **Cached-policy requests no longer join in-flight `prefer:'online'` refreshes.**
+  Online resolves bypass shared packument reads and can be slow/failing against
+  the live registry; a normal cached request now starts/joins only a
+  cached-policy flight instead of inheriting the online failure mode. Cached
+  computes that start while an online refresh is active rank below it for
+  mutable-link + packument write-throughs, so stale cached metadata cannot
+  overwrite the fresh online result when it settles later.
+
 ### Fixed (PR #107 round 20)
 
 - **Fresh recompute with a transient store-read failure kills stale mutable
