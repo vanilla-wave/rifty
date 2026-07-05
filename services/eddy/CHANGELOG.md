@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 19)
+
+- **405 `Allow` header advertises OPTIONS.** OPTIONS is handled (the CORS
+  preflight branch) so it now appears in `Allow` alongside `GET, HEAD, POST` —
+  matching `access-control-allow-methods` (RFC 9110: 405 advertises the
+  resource's methods).
+
 ### Fixed (PR #107 round 18)
 
 - **Store rejects a DUPLICATE tarball member.** A poisoned object naming the same

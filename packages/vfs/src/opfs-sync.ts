@@ -432,6 +432,9 @@ export class OpfsFsSync implements FsSync {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.persistFailures.delete(path);
+        // A persisted dir proves its ancestors exist on disk too (same rule as
+        // the write-through) — heal any stale ancestor mkdir failure.
+        this.healAncestorPersistFailures(path);
       } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
         // reconciles on next refresh — but the divergence is RECORDED so a
@@ -476,6 +479,21 @@ export class OpfsFsSync implements FsSync {
     const prefix = path === '/' ? '/' : `${path}/`;
     for (const key of [...this.persistFailures.keys()]) {
       if (key === path || key.startsWith(prefix)) this.persistFailures.delete(key);
+    }
+  }
+
+  /** A persisted write/dir at `path` proves each ANCESTOR directory now exists
+   * on disk (OPFS creates the parent chain), so a stale ancestor mkdir failure
+   * no longer describes a divergence — clear it. Guarded on a non-empty ledger
+   * so the common (nothing-failed) path stays O(1). */
+  private healAncestorPersistFailures(path: string): void {
+    if (this.persistFailures.size === 0) return;
+    let parent = dirnameNormalized(path);
+    while (parent !== '/') {
+      this.persistFailures.delete(parent);
+      const next = dirnameNormalized(parent);
+      if (next === parent) break;
+      parent = next;
     }
   }
 
@@ -541,6 +559,11 @@ export class OpfsFsSync implements FsSync {
       try {
         await surface.writeFile(normalized, data);
         this.persistFailures.delete(normalized);
+        // A persisted write proves every ANCESTOR directory now exists on disk
+        // (a real OPFS write walks getDirectoryHandle(create) for each parent),
+        // so a stale ancestor mkdir failure no longer describes a divergence —
+        // heal it, else a durable node_modules tree wrongly revokes its stamp.
+        this.healAncestorPersistFailures(normalized);
       } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
         // refreshIndex/preload reconciles. Cache stays correct for sync
@@ -939,10 +962,21 @@ export class OpfsFsSync implements FsSync {
             const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
             await surface.writeFile(move.newPath, bytes);
           }
-          await surface.rm(srcRoot, { recursive: true });
-        } else {
-          const parent = await this.resolveParent(srcRoot);
-          await parent.removeEntry(basename(srcRoot), { recursive: true });
+        }
+        // Remove the source subtree AFTER the destinations wrote durably.
+        // Already-gone (NotFoundError) counts as a successful removal (same
+        // rule as persistRmAsync): a rename whose source never reached disk
+        // must still HEAL its durably-written destinations below, not record
+        // bogus per-destination failures for a move that actually persisted.
+        try {
+          if (surface) {
+            await surface.rm(srcRoot, { recursive: true });
+          } else {
+            const parent = await this.resolveParent(srcRoot);
+            await parent.removeEntry(basename(srcRoot), { recursive: true });
+          }
+        } catch (err) {
+          if ((err as { name?: string }).name !== 'NotFoundError') throw err;
         }
         // A fully-persisted move heals both sides of the ledger: each
         // destination just got written durably, and the removed source

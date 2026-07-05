@@ -100,7 +100,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
         res,
         405,
         { error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>' },
-        { allow: 'GET, HEAD, POST' }, // RFC 9110: 405 MUST advertise the allowed methods
+        // RFC 9110: 405 MUST advertise the target resource's methods. OPTIONS is
+        // handled (CORS preflight above) so it belongs here too — same set the
+        // CORS `access-control-allow-methods` advertises.
+        { allow: 'GET, HEAD, POST, OPTIONS' },
       );
       return;
     }
@@ -166,7 +169,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
       res,
       405,
       { error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>' },
-      { allow: 'GET, HEAD, POST' }, // RFC 9110: 405 MUST advertise the allowed methods
+      // RFC 9110: 405 MUST advertise the allowed methods; OPTIONS is handled
+      // (CORS preflight) so it is included, matching `corsHeaders()`.
+      { allow: 'GET, HEAD, POST, OPTIONS' },
     );
     return;
   }

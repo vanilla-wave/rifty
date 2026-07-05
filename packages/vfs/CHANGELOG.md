@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 19)
+
+- **The persist-failure ledger heals ANCESTOR dirs on a descendant persist.** A
+  successful write-through (or mkdir) now clears any stale ancestor mkdir
+  failure — a persisted descendant proves the whole parent chain exists on disk
+  (OPFS creates it), so the old entry no longer described a divergence yet still
+  made a durable tree look torn and wrongly skipped/revoked its install stamp.
+- **A rename whose SOURCE is already gone (`NotFoundError`) heals its
+  destinations.** The source removal now treats already-gone as a successful
+  removal (same rule as `rm`) instead of recording every durably-written
+  destination as a bogus `rename` failure.
+
 ### Added (PR #107 round 18)
 
 - **`PersistFailureReport.anyFailure(predicate)`** — a FULL-ledger query

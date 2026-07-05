@@ -1216,4 +1216,45 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     fs.rmSync('/f.txt');
     expect((await fs.flush()).total).toBe(0); // never-persisted entry: rm target absent = durable
   });
+
+  it('a persisted DESCENDANT write heals a stale ANCESTOR mkdir failure — a proven-present dir is not a torn dir', async () => {
+    // /dir's mkdir persist FAILS (the fake root ignores `create`), leaving a
+    // mkdir ledger entry. A later write to /dir/a.txt that PERSISTS proves /dir
+    // now exists on disk (a real OPFS write walks getDirectoryHandle(create)
+    // for every ancestor). The old code cleared only the exact file path, so
+    // the stale ancestor entry lingered and a durable node_modules tree wrongly
+    // revoked its install stamp.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(), // the descendant write PERSISTS
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dir', { recursive: true }); // persist FAILS — fake root has no /dir
+    expect(fs.existsSync('/dir')).toBe(true); // mirror has it
+    expect((await fs.flush()).total).toBe(1); // stale /dir mkdir entry
+    fs.writeFileSync('/dir/a.txt', new Uint8Array([1])); // write-through persists
+    expect((await fs.flush()).total).toBe(0); // ancestor /dir healed by the descendant write
+  });
+
+  it('a rename whose SOURCE is already gone (NotFoundError) still heals — a durably-written destination is not torn', async () => {
+    // The destination write PERSISTS; only the source removal hits NotFoundError
+    // (source never reached disk / already gone = removal success, same rule as
+    // persistRmAsync). The old catch recorded EVERY destination as a 'rename'
+    // failure, so a durable move read as torn forever and revoked the stamp.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array([1])),
+      writeFile: () => Promise.resolve(), // destination persists
+      rm: () => Promise.reject(new DomError('NotFoundError')), // source already gone
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a.txt', new Uint8Array([1]));
+    await fs.flush(); // seed the source (persists)
+    fs.renameSync('/a.txt', '/b.txt'); // dest persists; source rm → NotFoundError
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0); // dest durable + source already-gone = clean
+    expect([...fs.readFileBytesSync('/b.txt')]).toEqual([1]);
+  });
 });

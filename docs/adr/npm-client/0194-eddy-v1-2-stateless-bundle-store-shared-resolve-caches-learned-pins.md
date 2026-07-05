@@ -7,7 +7,7 @@ Date: 2026-07
 
 ## Context
 
-Measured 2026-07-02 (install-only, express+eslint, 137 pkgs): eddy warm POST 0.88s (8.1× vs standard), but COLD-origin POST 17.3s — worse than the warm standard path (7.1s). Anatomy: the server runs `install()` with per-request caches (fresh `MemoryVfs`, fresh packument map), so every unseen dep set refetches everything; the walk is graph-depth-bound (concurrency inert, corgi bytes-only). Separately, the in-process immutable LRU (256 × 3–7MB) risks ~1.5GB RSS, dies on every deploy/restart, and pins GET traffic to the VM; pins today are env-config per TEMPLATE only, so arbitrary `npm install` sets always POST the origin. Backlog contracts: `perf/eddy-cold-origin-resolve-floor`, `npm-client/eddy-learned-pins`.
+Measured 2026-07-02 (install-only, express+eslint, 137 pkgs): eddy warm POST 0.88s (8.1× vs standard), but COLD-origin POST 17.3s — worse than the warm standard path (7.1s). Anatomy: the server runs `install()` with per-request caches (fresh `MemoryVfs`, fresh packument map), so every unseen dep set refetches everything; the walk is graph-depth-bound (concurrency inert, corgi bytes-only). Separately, the in-process immutable LRU (256 × 3–7MB) risks ~1.5GB RSS, dies on every deploy/restart, and pins GET traffic to the VM; pins today are env-config per TEMPLATE only, so arbitrary `npm install` sets always POST the origin. This ADR delivers the two motivating backlog contracts (`perf/eddy-cold-origin-resolve-floor`, `npm-client/eddy-learned-pins`), now removed per the repo's delete-on-done convention — the Decision below IS their fulfilled acceptance.
 
 ## Decision
 
