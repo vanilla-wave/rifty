@@ -122,6 +122,10 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
       return;
     }
     try {
+      // Debounced Monaco edits may still sit in the page queue — land them in
+      // the owner tree first, or the archive silently omits the latest edit
+      // while toasting success (same discipline as downloadFile).
+      await deps.flushEditorWrites();
       // Single store owner, page holds no authoritative fs: serialize the OWNER
       // tree (the single store), not a page copy — so the archive includes
       // shell/CLI-authored files, full content (no cap).
@@ -138,6 +142,10 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
 
   async function importArchiveText(text: string): Promise<void> {
     try {
+      // Land pending debounced edits BEFORE the import: a queued editor write
+      // firing after importArchive would clobber the freshly imported file with
+      // the pre-import editor bytes; flushed first, the archive content wins.
+      await deps.flushEditorWrites();
       // Apply into the OWNER tree, then pull a fresh snapshot so the
       // explorer/editor reflect it (no page store to write).
       const owner = deps.currentOwner();

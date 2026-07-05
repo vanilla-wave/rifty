@@ -179,17 +179,23 @@ export function createDevServerLifecycle<S extends DevServerSessionLike>(
   // (dev server, `vite preview`, node/bin servers alike): the `pty:preview` set
   // is the single source, so no port can ever be double-bridged (ADR-0157 review
   // C3 — a second clobbering bridge's teardown deletes the shared route; the set
-  // itself dedups by port). Diff the live port+scope bridges against active
-  // teardowns: wire a newly-present port, tear a departed one.
-  function previewBridgeKey(port: number, previewScope?: string): string {
-    return JSON.stringify([port, previewScope ?? null]);
+  // itself dedups by port). Diff the live token+port+scope bridges against active
+  // teardowns: wire a newly-present port, tear a departed one. The owner token is
+  // PART of the bridge identity: wirePreviewBridge captures it at creation, so an
+  // owner respawn (project switch) reusing the same port must tear the dead
+  // owner's bridge and rewire under the new token — the plain reconcile does
+  // both, because the old-token key is never in the live set.
+  function previewBridgeKey(ownerToken: string, port: number, previewScope?: string): string {
+    return JSON.stringify([ownerToken, port, previewScope ?? null]);
   }
   const nodePortBridges = new Map<string, () => void>();
   function reconcileBridges(): void {
     const owner = currentOwner;
     if (!owner) return;
     const entries = previewPorts();
-    const live = new Set(entries.map((p) => previewBridgeKey(p.port, p.previewScope)));
+    const live = new Set(
+      entries.map((p) => previewBridgeKey(owner.previewOwnerToken, p.port, p.previewScope)),
+    );
     for (const [key, tear] of nodePortBridges) {
       if (!live.has(key)) {
         tear();
@@ -197,7 +203,7 @@ export function createDevServerLifecycle<S extends DevServerSessionLike>(
       }
     }
     for (const p of entries) {
-      const key = previewBridgeKey(p.port, p.previewScope);
+      const key = previewBridgeKey(owner.previewOwnerToken, p.port, p.previewScope);
       if (!nodePortBridges.has(key)) {
         nodePortBridges.set(
           key,

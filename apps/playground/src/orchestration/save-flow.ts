@@ -55,6 +55,13 @@ export interface SaveFlowDeps {
   rootForId(id: ActiveId): string;
   /** Active starter read while the store is still scratch-active. */
   activeStarterId(): string;
+  /**
+   * Collision-free project id for a Save (App binds crypto.randomUUID) — a
+   * collision would make saveScratchAsProject throw `already exists` owner-side
+   * while the page optimistically flipped activeId onto another project's tree.
+   * A port, not a global read: cores declare their needs (ADR-0197 §3).
+   */
+  createProjectId(): string;
   /** `saveAffordance(storageMode).ephemeral` — memory mode has no durable index. */
   ephemeral(): boolean;
   /** Post the durable on-disk move to the owner (port read at fire time). */
@@ -156,10 +163,7 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
   async function confirmSave(name: string): Promise<void> {
     const trimmed = name.trim();
     if (!trimmed) return;
-    // Collision-free project id (crypto.randomUUID, Math.random fallback) — a
-    // collision would make saveScratchAsProject throw `already exists` owner-side
-    // while the page optimistically flipped activeId onto another project's tree.
-    const id = `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
+    const id = deps.createProjectId();
     const ephemeral = deps.ephemeral();
     // ADR-0165 §7 durable Save: post the on-disk move FIRST (owner copies /scratch
     // → /projects/<id>, flips+persists the index, deletes /scratch), reading the

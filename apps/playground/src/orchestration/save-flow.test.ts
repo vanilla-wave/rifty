@@ -14,6 +14,7 @@ type Harness = ReturnType<typeof harness>;
 
 function harness(overrides: Partial<SaveFlowDeps> = {}) {
   const dialog: { current: ({ kind: string } & PendingSwitchTarget) | null } = { current: null };
+  let idSeq = 0;
   const deps = {
     store: {
       activeId: vi.fn(() => 'scratch' as string),
@@ -36,6 +37,9 @@ function harness(overrides: Partial<SaveFlowDeps> = {}) {
     ownerRoot: vi.fn(() => '/scratch'),
     rootForId: (id: string) => (id === 'scratch' ? '/scratch' : `/projects/${id}`),
     activeStarterId: vi.fn(() => 'react'),
+    // The entropy source is an injected port (ADR-0197) — the fake proves the
+    // flow allocates ONE fresh id per save and threads it everywhere.
+    createProjectId: vi.fn(() => `p-test-${++idSeq}`),
     ephemeral: vi.fn(() => false),
     saveIndexPhases: vi.fn((id: string, _name: string, _starter: string) => ({
       applied: Promise.resolve<ProjectIndex | null>(indexWith(id)),

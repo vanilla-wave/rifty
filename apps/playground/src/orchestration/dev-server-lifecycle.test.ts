@@ -308,6 +308,25 @@ describe('preview-port set + SW bridges (ADR-0155/0157 single wiring path)', () 
     expect(h.bridges.every((b) => b.torn)).toBe(true);
   });
 
+  it('rewires a same-port bridge under the NEW owner token on an owner swap', async () => {
+    const { h, dev, dispose } = setup();
+    h.owner.emitPreview([portEntry(5173)]);
+    expect(h.bridges).toEqual([{ port: 5173, token: 'token-A', scope: undefined, torn: false }]);
+    // owner respawn (project switch) reuses port 5173: wirePreviewBridge captured
+    // token-A at creation, so keeping that bridge would validate preview fetches
+    // against the DEAD owner — the swap must tear it and rewire under token-B.
+    const next = new FakeOwner('token-B');
+    dev.attachOwner(next);
+    expect(h.bridges.filter((b) => b.token === 'token-A').every((b) => b.torn)).toBe(true);
+    const rewired = h.bridges.filter((b) => b.token === 'token-B');
+    expect(rewired).toEqual([{ port: 5173, token: 'token-B', scope: undefined, torn: false }]);
+    // the new owner's own preview publish keeps (not re-wires) the fresh bridge
+    next.emitPreview([portEntry(5173)]);
+    expect(h.bridges.filter((b) => b.token === 'token-B')).toHaveLength(1);
+    dispose();
+    expect(h.bridges.every((b) => b.torn)).toBe(true);
+  });
+
   it('keeps a second server’s preview when one session stops (owner-derived set, no page wipe)', async () => {
     const { h, dev, dispose } = setup();
     h.session('t1', 'running');

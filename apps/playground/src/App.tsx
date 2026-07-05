@@ -1616,6 +1616,10 @@ export function App(props: AppProps) {
     ownerRoot: () => workspaceOwner().root,
     rootForId,
     activeStarterId,
+    // crypto.randomUUID with a Math.random fallback — the page realm owns the
+    // entropy source; the core only declares the port (ADR-0197 §3).
+    createProjectId: () =>
+      `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`,
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     // Read the port at fire time (the live channel); memory mode never posts.
     saveIndexPhases: (id, name, starter) =>

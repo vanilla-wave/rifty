@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed (PR #113 review round 2)
+
+- **Owner swap rewires same-port preview bridges.** The SW bridge key now
+  includes the owner token: a project switch reusing port 5173 tears the dead
+  owner's bridge and rewires under the new token instead of keeping a bridge
+  that validates against the previous `previewOwnerToken`.
+- **Archive export/import land pending editor writes first.** `downloadArchive`
+  flushes the debounced Monaco queue before serializing the owner tree (an
+  archive could omit the latest edit while toasting success); `importArchiveText`
+  flushes before applying so a queued edit can no longer clobber freshly
+  imported content.
+- **save-flow project-id generation is a port.** `createProjectId()` is injected
+  from App.tsx (crypto.randomUUID + fallback) instead of a `globalThis` read in
+  the core (ADR-0197 §3).
+
 ### Fixed (PR #107 round 22)
 
 - **Pending boot stamps do not promote across package.json dep drift.** The

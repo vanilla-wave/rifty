@@ -196,6 +196,32 @@ describe('workspace archive export/import (owner tree, dev-server gate)', () => 
     expect(h.successes).toEqual(['Workspace archive downloaded']);
   });
 
+  it('export lands pending editor writes BEFORE serializing the owner tree', async () => {
+    const h = new Harness();
+    const owner = h.owner;
+    let flushesAtExport = -1;
+    owner.exportArchive = async () => {
+      flushesAtExport = h.flushes; // a post-export flush would still read 0 here
+      return owner.archive;
+    };
+    await h.files().downloadArchive();
+    expect(flushesAtExport).toBe(1);
+    expect(h.saved).toHaveLength(1);
+  });
+
+  it('import lands pending editor writes BEFORE applying — the archive content wins', async () => {
+    const h = new Harness();
+    const owner = h.owner;
+    let flushesAtImport = -1;
+    owner.importArchive = async (text: string) => {
+      flushesAtImport = h.flushes; // a queued edit firing after would clobber the import
+      owner.imported.push(text);
+    };
+    await h.files().importArchiveText('{"files":{"a":"1"}}');
+    expect(flushesAtImport).toBe(1);
+    expect(h.owner.imported).toEqual(['{"files":{"a":"1"}}']);
+  });
+
   it('a running dev server blocks export AND import with the stop-first copy', async () => {
     const h = new Harness();
     h.blocked = true;

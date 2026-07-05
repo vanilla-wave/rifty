@@ -13,7 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `expect(source).toContain`-style tests in apps/playground and forces the
   allowlist burn-down (opened at 15 files/888 asserts, closed at 11/141) to be
   recorded (exact-count match, both directions). Wired into `pr:check` and the
-  CI lint-and-typecheck job.
+  CI lint-and-typecheck job. Review round 2: the scanner also walks the
+  `tests/browser-unit` lane (`*.spec.ts` — a grep there bypassed the gate) and
+  refuses a positive-count allowlist entry without a recorded `why`; the
+  repo-wide sweep of pre-existing package greps is backlog
+  `toolchain-build/source-grep-ratchet-repo-wide`.
 - **Browser-unit test lane (ADR-0196, epic playground-testable-core).**
   `pnpm test:browser-unit` — thin Playwright harness (`unit-harness.html`, no App
   boot) on the playground vite dev server: worker-side modules behaviorally tested

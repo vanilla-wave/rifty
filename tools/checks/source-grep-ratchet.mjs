@@ -15,6 +15,11 @@
  * Doc reads (`.md`) and fixture reads don't count — only `.ts`/`.tsx` sources.
  * Known under-approximation is accepted (recorded at refine, epic
  * playground-testable-core); new evasion variants get added here when seen.
+ *
+ * Scope = the playground test surface: `apps/playground/src` unit tests AND the
+ * `tests/browser-unit` lane (`*.spec.ts` — a grep there would bypass the gate
+ * otherwise). Other packages' pre-existing greps are inventoried but NOT yet
+ * ratcheted — TODO(backlog: toolchain-build/source-grep-ratchet-repo-wide).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -83,7 +88,7 @@ export const ALLOWLIST = [
   },
 ];
 
-const SCAN_ROOT = 'apps/playground/src';
+export const SCAN_ROOTS = ['apps/playground/src', 'tests/browser-unit'];
 /** Window after a binding's `=` in which the readFileSync target path must
  *  appear — covers the multi-line `fileURLToPath(new URL('…', import.meta.url))`
  *  formatting without swallowing the whole file. */
@@ -180,6 +185,13 @@ export function compareToAllowlist(measured, allowlist) {
   const violations = [];
   const allowed = new Map(allowlist.map((e) => [e.file, e]));
   const seen = new Set();
+  for (const entry of allowlist) {
+    if (entry.count > 0 && !(typeof entry.why === 'string' && entry.why.trim().length > 0)) {
+      violations.push(
+        `${entry.file}: allowlisted at ${entry.count} without a recorded why — every residual entry carries its why-behavioral-is-impossible constraint`,
+      );
+    }
+  }
   for (const { file, count } of measured) {
     if (count === 0) continue;
     seen.add(file);
@@ -208,20 +220,23 @@ export function compareToAllowlist(measured, allowlist) {
   return violations;
 }
 
-function* walkTestFiles(dir) {
+/** Unit tests (`.test.ts(x)`) and playwright lane specs (`.spec.ts(x)`) alike. */
+export function* walkTestFiles(dir) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) yield* walkTestFiles(p);
-    else if (/\.test\.tsx?$/.test(name)) yield p;
+    else if (/\.(test|spec)\.tsx?$/.test(name)) yield p;
   }
 }
 
 function main() {
   const root = process.cwd();
   const measured = [];
-  for (const p of walkTestFiles(join(root, SCAN_ROOT))) {
-    const rel = relative(root, p);
-    measured.push({ file: rel, count: countSourceAssertions(readFileSync(p, 'utf8')) });
+  for (const scanRoot of SCAN_ROOTS) {
+    for (const p of walkTestFiles(join(root, scanRoot))) {
+      const rel = relative(root, p);
+      measured.push({ file: rel, count: countSourceAssertions(readFileSync(p, 'utf8')) });
+    }
   }
   const violations = compareToAllowlist(measured, ALLOWLIST);
   const total = measured.reduce((n, e) => n + e.count, 0);

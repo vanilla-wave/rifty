@@ -1,8 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  SCAN_ROOTS,
   compareToAllowlist,
   countSourceAssertions,
   findSourceTextBindings,
+  walkTestFiles,
 } from './source-grep-ratchet.mjs';
 
 const direct = `
@@ -74,8 +77,17 @@ expect(readFileSyncCalls).toBe(3);
   });
 });
 
+describe('scanner scope', () => {
+  it('covers the browser-unit lane (.spec.ts) — a grep there must not bypass the gate', () => {
+    expect(SCAN_ROOTS).toContain('tests/browser-unit');
+    const dir = fileURLToPath(new URL('../../tests/browser-unit', import.meta.url));
+    const files = [...walkTestFiles(dir)];
+    expect(files.some((p) => p.endsWith('.spec.ts'))).toBe(true);
+  });
+});
+
 describe('allowlist ratchet', () => {
-  const allow = [{ file: 'a.test.ts', count: 3 }];
+  const allow = [{ file: 'a.test.ts', count: 3, why: 'recorded constraint' }];
 
   it('passes on exact match', () => {
     expect(compareToAllowlist([{ file: 'a.test.ts', count: 3 }], allow)).toEqual([]);
@@ -115,5 +127,16 @@ describe('allowlist ratchet', () => {
   it('accepts a why-carrying residual entry at its exact count', () => {
     const residual = [{ file: 'a.test.ts', count: 3, why: 'prod-bundle wiring invisible to e2e' }];
     expect(compareToAllowlist([{ file: 'a.test.ts', count: 3 }], residual)).toEqual([]);
+  });
+
+  it('refuses a positive-count entry without a recorded why (blank counts as missing)', () => {
+    for (const entry of [
+      { file: 'a.test.ts', count: 3 },
+      { file: 'a.test.ts', count: 3, why: '   ' },
+    ]) {
+      const v = compareToAllowlist([{ file: 'a.test.ts', count: 3 }], [entry]);
+      expect(v).toHaveLength(1);
+      expect(v[0]).toContain('without a recorded why');
+    }
   });
 });
