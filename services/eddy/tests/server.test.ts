@@ -124,6 +124,15 @@ describe('eddy HTTP server', () => {
     expect(body.error).toMatch(/unknown bundle/);
   });
 
+  it('a RAW (un-encoded) base64 slash inside the hash reaches the validator — 404 miss, never a 405 (round 15)', async () => {
+    // Normal clients percent-encode; a proxy/raw client may forward the
+    // decoded form. The old one-segment route regex 405'd it before the
+    // shape gate ever saw a perfectly valid hash.
+    const res = await fetch(`${baseUrl}/bundle/sha256-ab/cd+ef=`);
+    expect(res.status).toBe(404); // valid shape → store miss, not a routing reject
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('GET /bundle/<junk> that is not a sha256-<base64> hash → 400 no-store, never reaches the store', async () => {
     for (const junk of ['foo', 'sha256-%20', 'md5-abcd']) {
       const res = await fetch(`${baseUrl}/bundle/${junk}`);

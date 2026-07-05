@@ -192,6 +192,40 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect(computes).toBe(2); // served via the surviving link + store hit, no recompute
   });
 
+  it('a TTL recompute of the SAME closure serves the ORIGINAL stored bytes — the immutable GET URL never changes bytes (round 15)', async () => {
+    // The closure hash addresses the lockfile CLOSURE, not the tar bytes: a
+    // recompute packs a fresh `asOf.resolvedAt`, so overwriting the store
+    // would let the one-year-immutable `/bundle/<hash>` URL serve different
+    // bytes than a browser/CDN already holds for the same hash.
+    const { fetch } = makeLocalFetcher();
+    let nowMs = 1_000_000;
+    let resolutions = 0;
+    const cache = new EddyCache({
+      resolver: {
+        registryBaseUrl: LOCAL_REGISTRY_BASE_URL,
+        fetch,
+        // Distinct per compute — exactly what varies on a real recompute.
+        now: () => new Date(1_700_000_000_000 + ++resolutions * 60_000).toISOString(),
+      },
+      ttlSeconds: 60,
+      clock: () => nowMs,
+    });
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(first.kind).toBe('bundle');
+    if (first.kind !== 'bundle') return;
+    nowMs += 61_000; // past the mutable TTL → full recompute with a fresh resolvedAt
+    const second = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(second.kind).toBe('bundle');
+    if (second.kind !== 'bundle') return;
+    // The FIRST stored artifact wins: original as-of stamp (ADR-0194 —
+    // staleness visible, never silently refreshed), byte-identical answer…
+    expect(second.manifest.asOf.resolvedAt).toBe(first.manifest.asOf.resolvedAt);
+    expect([...second.bytes]).toEqual([...first.bytes]);
+    // …and the immutable tier itself never changed under the hash.
+    const got = await cache.getBundle(first.manifest.asOf.closureHash);
+    expect([...(got?.bytes ?? [])]).toEqual([...first.bytes]);
+  });
+
   it('getBundle returns the immutable-tier bundle by closure hash, null for unknown', async () => {
     const { fetch } = makeLocalFetcher();
     const cache = new EddyCache({ resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch } });

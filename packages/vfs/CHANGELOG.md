@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 15)
+
+- **The persist-failure ledger heals on structural ops.** A durably-removed
+  subtree (recursive `rm`, or the source side of a fully-persisted rename)
+  clears every ledger entry beneath it, and a rename's destination write heals
+  its path — disk and mirror agree, so the old entries no longer describe a
+  divergence. Stale entries used to make a durable tree look torn forever,
+  wrongly skipping/revoking install stamps.
+
 ### Added
 
 - **Persist-failure ledger — `flush()` reports swallowed OPFS failures

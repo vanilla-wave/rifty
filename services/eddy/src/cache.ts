@@ -198,6 +198,27 @@ export class EddyCache {
     const result = await this.resolveFn(req, { ...this.resolver, packumentCache });
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
+    // Immutable-tier BYTE stability (round 15): the closure hash addresses the
+    // LOCKFILE CLOSURE, not the tar bytes — a recompute of the same closure
+    // packs different bytes (fresh `asOf.resolvedAt`), and overwriting the
+    // stored object would make the one-year-`immutable` GET URL serve
+    // different bytes depending on which cache layer answers (browser/CDN vs
+    // origin). The FIRST stored artifact wins: a verified store hit is served
+    // as-is — keeping the ORIGINAL as-of stamp, exactly this file's recorded
+    // contract (staleness visible, never silently refreshed) — and the fresh
+    // compute's bytes only seed a missing/poisoned key (get() reads a corrupt
+    // object as a miss, so self-heal is intact). A throwing store read
+    // degrades to the fresh bytes, same as a failed put.
+    const stored = await this.store.get(closureHash).catch((err) => {
+      console.error(
+        `eddy: bundle store read failed for recomputed ${closureHash}: ${err instanceof Error ? err.message : String(err)} — serving the fresh compute`,
+      );
+      return null;
+    });
+    if (stored) {
+      this.publishLink(key, closureHash, gen);
+      return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
+    }
     // Durable-BEFORE-link (ADR-0194 §5): the awaited put guarantees a linked
     // hash is servable (GET-by-hash via CDN/bucket) before any client learns it.
     // put is idempotent + self-healing — it re-seeds a missing OR corrupt/foreign
@@ -222,19 +243,22 @@ export class EddyCache {
       if (cur && gen > cur.gen) this.mutable.delete(key);
       return result;
     }
-    // Re-seed the mutable link even on a prefer:'online' recompute, so a later
-    // cached request reuses the just-computed closure (npm --prefer-online too
-    // writes the lockfile it fetched). Generation guard: an OLDER compute (read
-    // staler packuments) must not clobber a link a NEWER compute already
-    // published — else a slow cached-policy compute finishing AFTER a fresh
-    // prefer:'online' refresh would republish the stale closure. Only the
-    // latest-started compute for the key wins.
-    if (this.ttlMs > 0) {
-      const cur = this.mutable.peek(key);
-      if (!cur || gen > cur.gen) {
-        this.mutable.set(key, { closureHash, expiresAt: this.clock() + this.ttlMs, gen });
-      }
-    }
+    this.publishLink(key, closureHash, gen);
     return result;
+  }
+
+  /** Re-seed the mutable link — even on a prefer:'online' recompute, so a later
+   * cached request reuses the just-computed closure (npm --prefer-online too
+   * writes the lockfile it fetched). Generation guard: an OLDER compute (read
+   * staler packuments) must not clobber a link a NEWER compute already
+   * published — else a slow cached-policy compute finishing AFTER a fresh
+   * prefer:'online' refresh would republish the stale closure. Only the
+   * latest-started compute for the key wins. */
+  private publishLink(key: string, closureHash: string, gen: number): void {
+    if (this.ttlMs <= 0) return;
+    const cur = this.mutable.peek(key);
+    if (!cur || gen > cur.gen) {
+      this.mutable.set(key, { closureHash, expiresAt: this.clock() + this.ttlMs, gen });
+    }
   }
 }

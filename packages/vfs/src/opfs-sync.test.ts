@@ -1135,6 +1135,52 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect(healed.failures).toEqual([]);
   });
 
+  it('a recursive rm HEALS ledger entries under the removed subtree — a gone tree is not a torn tree (round 15)', async () => {
+    // A failed write under /dir left a ledger entry; removing /dir durably
+    // means disk and mirror AGREE the path is gone — the stale entry must not
+    // keep making flush() report a divergence (it wrongly skipped/revoked
+    // install stamps).
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/dir']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dir', { recursive: true }); // persist succeeds — the fake root has /dir
+    fs.writeFileSync('/dir/a.txt', new Uint8Array([1]));
+    expect((await fs.flush()).total).toBe(1); // the write never persisted
+    fail = false;
+    fs.rmSync('/dir', { recursive: true }); // removeEntry succeeds in the fake
+    expect((await fs.flush()).total).toBe(0); // subtree gone → entries healed
+  });
+
+  it('a fully-persisted RENAME heals the moved paths — the destination write is the heal (round 15)', async () => {
+    // '/a.txt' failed to persist, then was renamed to '/b.txt': the rename's
+    // persist writes the CURRENT bytes at the destination and removes the
+    // source — no divergence remains on either path.
+    let failWrites = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.reject(new DomError('NotFoundError')),
+      writeFile: (path: string) =>
+        failWrites && path === '/a.txt'
+          ? Promise.reject(new DomError('QuotaExceededError'))
+          : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a.txt', new Uint8Array([1]));
+    expect((await fs.flush()).total).toBe(1); // '/a.txt' never persisted
+    failWrites = false;
+    fs.renameSync('/a.txt', '/b.txt'); // rename persist writes '/b.txt' + rms '/a.txt'
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect([...fs.readFileBytesSync('/b.txt')]).toEqual([1]); // mirror moved the bytes
+  });
+
   it('an rm whose OPFS entry is ALREADY GONE reads as success (disk agrees), not a failure', async () => {
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),

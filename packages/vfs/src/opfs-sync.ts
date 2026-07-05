@@ -442,17 +442,31 @@ export class OpfsFsSync implements FsSync {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
-        this.persistFailures.delete(path);
+        // A durably-removed subtree heals EVERY ledger entry under it: disk
+        // and mirror now agree the paths are gone, so an unhealed child write
+        // failure is moot — leaving it would make a durable tree look torn
+        // and wrongly skip/revoke install stamps.
+        this.clearPersistFailuresUnder(path);
       } catch (err) {
         // See `persistMkdirAsync` — mismatch reconciles on refresh; recorded
         // meanwhile. A missing OPFS entry is already-removed = success.
         if ((err as { name?: string }).name === 'NotFoundError') {
-          this.persistFailures.delete(path);
+          this.clearPersistFailuresUnder(path);
           return;
         }
         this.recordPersistFailure(path, 'rm', err);
       }
     });
+  }
+
+  /** Heal `path` and every ledger entry beneath it (recursive rm / moved-away
+   * subtree): once disk agrees the subtree is gone, its unhealed write
+   * failures no longer describe a divergence. */
+  private clearPersistFailuresUnder(path: string): void {
+    const prefix = path === '/' ? '/' : `${path}/`;
+    for (const key of [...this.persistFailures.keys()]) {
+      if (key === path || key.startsWith(prefix)) this.persistFailures.delete(key);
+    }
   }
 
   existsSync(path: string): boolean {
@@ -909,6 +923,13 @@ export class OpfsFsSync implements FsSync {
           const parent = await this.resolveParent(srcRoot);
           await parent.removeEntry(basename(srcRoot), { recursive: true });
         }
+        // A fully-persisted move heals both sides of the ledger: each
+        // destination just got written durably, and the removed source
+        // subtree no longer describes any divergence (same rule as
+        // `persistRmAsync`). Without this, a pre-rename write failure on a
+        // moved path would read as torn forever.
+        for (const move of fileMoves) this.persistFailures.delete(move.newPath);
+        this.clearPersistFailuresUnder(srcRoot);
       } catch (err) {
         // Mismatch reconciles on the next refreshIndex (same posture as
         // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION

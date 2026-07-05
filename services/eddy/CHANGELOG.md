@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 15)
+
+- **Immutable GET bytes are byte-STABLE under a closure hash.** The hash
+  addresses the lockfile closure, not the tar bytes — a recompute packed a
+  fresh `asOf.resolvedAt` and OVERWROTE the stored object, so the
+  one-year-`immutable` `/bundle/<hash>` URL could serve different bytes than
+  a browser/CDN already held. A recompute of an already-stored closure now
+  serves the VERIFIED stored artifact as-is (original as-of stamp, per the
+  recorded staleness-visible contract) and puts only on a miss/poisoned key
+  (the verified `get` still reads corrupt objects as misses — self-heal
+  intact).
+- **`/bundle/<hash>` routes a RAW base64 slash to the validator.** The
+  one-segment route regex 405'd a valid hash a proxy/raw client forwarded
+  decoded; the shape gate is the validator, junk still 400s.
+
 ### Fixed (PR #107 round 14)
 
 - **POST body validation is loud.** Malformed dependency fields (a string, an

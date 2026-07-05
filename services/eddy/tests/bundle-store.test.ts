@@ -132,7 +132,7 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     expect(events).toEqual(['put-settled', 'resolved']);
   });
 
-  it('a cold recompute re-affirms durability with an idempotent put (the store dedups the upload, not the cache)', async () => {
+  it('a cold recompute of an ALREADY-STORED closure serves the stored artifact — no re-put, byte-stable immutable tier (round 15)', async () => {
     const { fetch } = makeLocalFetcher();
     const log: string[] = [];
     const store = recordingStore(new MemoryBundleStore({ maxBytes: 1024 * 1024 }), log);
@@ -143,16 +143,21 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
       ttlSeconds: 60,
       clock: () => nowMs,
     });
-    await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(log.filter((l) => l.startsWith('put ')).length).toBe(1);
     nowMs += 61_000; // expire the mutable link → recompute, same closure
     const again = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(again.kind).toBe('bundle');
-    // No has()-gate: the cache re-puts on every cold recompute; the STORE
-    // (S3 via its ETag check, `s3-bundle-store.test.ts`) skips the redundant
-    // upload. Self-heal depends on this — a cache-side gated skip would never
-    // overwrite a poisoned key.
-    expect(log.filter((l) => l.startsWith('put ')).length).toBe(2);
+    // The recompute gate is a VERIFIED store.get, not a HEAD-exists check
+    // (ADR-0194 §5: existence can't tell a valid object from a poisoned one;
+    // the S3 get() fully content-addresses, so a poisoned key still reads as
+    // a MISS → the put path re-seeds it). A verified hit is served AS-IS —
+    // re-putting fresh bytes (new `asOf.resolvedAt`) would let the immutable
+    // GET URL serve different bytes than a browser/CDN already holds.
+    expect(log.filter((l) => l.startsWith('put ')).length).toBe(1);
+    if (first.kind === 'bundle' && again.kind === 'bundle') {
+      expect([...again.bytes]).toEqual([...first.bytes]);
+    }
   });
 
   it('an OVER-CAP bundle never becomes a servable GET-by-hash or a mutable link (degrades, no 500)', async () => {

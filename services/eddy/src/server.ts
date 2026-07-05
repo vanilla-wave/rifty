@@ -91,7 +91,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     // HEAD rides the same branch (RFC 9110: identical to GET minus the body —
     // node suppresses body writes for HEAD): the route is CDN-fronted, and
     // edge health checks / `curl -I` smoke tests probe it with HEAD.
-    const match = /^\/bundle\/([^/]+)$/.exec(req.url ?? '');
+    // `(.+)`, not `([^/]+)`: a closure hash is standard base64 and may carry
+    // RAW `/` when a proxy/raw client forwards it decoded — the shape gate
+    // below is the validator; the route must not 405 a valid hash first.
+    const match = /^\/bundle\/(.+)$/.exec(req.url ?? '');
     if (!match) {
       sendJson(res, 405, {
         error: 'method not allowed — POST a dep-set as JSON, or GET /bundle/<closureHash>',
