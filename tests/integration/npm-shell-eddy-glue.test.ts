@@ -228,6 +228,41 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
   });
 
+  it('a cache that retained only the last seeded tarball declines eddy — every bundle tarball must survive replay', async () => {
+    // A small bounded cache can pass a "last seeded tarball exists" probe while
+    // evicting earlier bundle members. That would replay those earlier packages
+    // from the registry under an eddy label. Adoption must prove all seeds.
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    let retained:
+      | {
+          key: string;
+          bytes: Uint8Array;
+        }
+      | undefined;
+    const oneEntryCache: TarballCache = {
+      async get(name, version, integrity) {
+        return retained?.key === `${name}@${version}@${integrity}` ? retained.bytes : null;
+      },
+      async put(name, version, integrity, bytes) {
+        retained = { key: `${name}@${version}@${integrity}`, bytes };
+        return '';
+      },
+    };
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: makeRegistry(),
+      resolverUrl: eddyUrl,
+      tarballCache: oneEntryCache,
+    });
+
+    expect(result.source ?? 'standard').toBe('standard');
+    expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/ms/package.json')).toBe(true);
+  });
+
   it('a resolver that stalls a JSON decline body falls back within the bound — never parks the install', async () => {
     // The eddy attempts fetch via GLOBAL fetch. A resolver (or a URL-keyed
     // proxy) can send `content-type: application/json` then hold the body open

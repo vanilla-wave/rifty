@@ -834,7 +834,7 @@ async function consumeEddyResponse(
   let lockfile: Lockfile | null = null;
   const byFile = new Map<string, EddyBundleTarballEntry>();
   const seededFiles = new Set<string>();
-  let lastSeeded: EddyBundleTarballEntry | null = null;
+  const seededTarballs: EddyBundleTarballEntry[] = [];
   for await (const entry of entries) {
     if (manifest === null) {
       if (entry.name !== MANIFEST_FILE) return `bundle does not start with ${MANIFEST_FILE}`;
@@ -904,7 +904,7 @@ async function consumeEddyResponse(
     }
     await tarballCache.put(t.name, t.version, t.integrity, entry.data);
     seededFiles.add(entry.name);
-    lastSeeded = t;
+    seededTarballs.push(t);
   }
   if (manifest === null || lockfile === null) {
     return 'malformed EddyBundleV1 bundle: missing manifest or lockfile';
@@ -913,15 +913,14 @@ async function consumeEddyResponse(
     return 'bundle is missing tarball member(s) named by its manifest';
   }
   // Provenance guard: adoption reports `source: 'eddy'` and then REPLAYS the
-  // install by reading `tarballCache` back. A NON-RETENTIVE cache — the
-  // documented no-op `{ get: async () => null, put: async () => '' }` — would
-  // silently re-fetch every package from the REGISTRY under an eddy label (and
-  // fail outright if the registry is unreachable). Prove the cache retained the
-  // seed by reading the last-seeded entry back; a miss means eddy cannot
-  // honestly own this install → decline to the standard verifying path (which
-  // uses the same cache and is labelled `source: 'standard'`, no lie).
-  if (lastSeeded !== null) {
-    const back = await tarballCache.get(lastSeeded.name, lastSeeded.version, lastSeeded.integrity);
+  // install by reading `tarballCache` back. A NON-RETENTIVE or bounded cache
+  // could silently re-fetch some packages from the REGISTRY under an eddy label
+  // (and fail outright if the registry is unreachable). Prove every seeded
+  // tarball is still retained; a miss means eddy cannot honestly own this
+  // install → decline to the standard verifying path (which uses the same cache
+  // and is labelled `source: 'standard'`, no lie).
+  for (const seeded of seededTarballs) {
+    const back = await tarballCache.get(seeded.name, seeded.version, seeded.integrity);
     if (back === null) {
       return 'tarball cache did not retain seeded bytes (a non-retentive cache cannot back an eddy install)';
     }

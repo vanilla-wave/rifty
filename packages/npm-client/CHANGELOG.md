@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 20)
+
+- **Eddy adoption proves every seeded tarball survives cache replay.** A bounded
+  cache that retained only the last bundle member could pass the old probe while
+  earlier packages were fetched from the registry under `source: 'eddy'`. The
+  client now reads back every seeded tarball before adopting the bundle.
+
 ### Fixed (PR #107 round 17)
 
 - **Eddy JSON declines read under the tarball stream's bounds.** A resolver that
