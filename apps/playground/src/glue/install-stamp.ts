@@ -11,12 +11,10 @@
  * freshness guard.
  *
  * Trust model: the stamp trusts the tree wholesale — no per-file verification.
- * Durability ordering (ADR-0187 Corrected): the write-through queue is FIFO,
- * so the stamp — written after the tree — lands durably after it by
- * construction. Order alone can't survive a swallowed per-op persist failure,
- * so the visible `npm install` additionally GATES the stamp on a clean drain
- * (`stampInstalledTree`); the boot/restore stamp stays non-blocking with a
- * DEFERRED check that revokes it on a dirty ledger (`project-deps.ts`).
+ * Durability ordering (ADR-0187 Corrected): trusted stamps mean durable tree.
+ * Visible `npm install` gates the stamp on a clean drain (`stampInstalledTree`).
+ * Boot/restore writes a non-blocking PENDING stamp first (`project-deps.ts`);
+ * pending stamps never satisfy reuse and are promoted only after a clean drain.
  */
 // TODO(backlog: playground/install-stamp-invalidation)
 import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
@@ -30,6 +28,8 @@ export interface InstallStamp {
   readonly deps: Readonly<Record<string, string>>;
   /** `result.packages.length` of the install that produced the tree. */
   readonly packages: number;
+  /** Pending boot/restore stamps are visible for diagnostics but never trusted. */
+  readonly durability?: 'pending';
 }
 
 /** The dependency tree the stamp attests durable: `<root>/node_modules`. The
@@ -138,15 +138,22 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
     slug?: unknown;
     deps?: unknown;
     packages?: unknown;
+    durability?: unknown;
   };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
+  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
   return {
     version: 1,
     slug: typeof raw.slug === 'string' ? raw.slug : '',
     deps: readStringMap(raw.deps),
     packages: raw.packages,
+    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
   };
+}
+
+export function stampTrusted(stamp: InstallStamp): boolean {
+  return stamp.durability !== 'pending';
 }
 
 /**
@@ -159,10 +166,17 @@ export async function writeInstallStamp(
   root: string,
   packages: number,
   slug = '',
+  durability?: 'pending',
 ): Promise<void> {
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps) return;
-  const stamp: InstallStamp = { version: 1, slug, deps, packages };
+  const stamp: InstallStamp = {
+    version: 1,
+    slug,
+    deps,
+    packages,
+    ...(durability === 'pending' ? { durability } : {}),
+  };
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
   await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
@@ -195,6 +209,7 @@ export async function installStampSatisfied(
 ): Promise<InstallStamp | null> {
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const deps = await readEffectiveDeps(vfs, root);
@@ -220,6 +235,7 @@ export async function installStampSatisfiedForPackageJson(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   if (!depsEqual(stamp.deps, currentDeps)) return null;
@@ -253,6 +269,7 @@ export function installStampSatisfiedForPackageJsonSync(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = readInstallStampSync(fs, root);
   if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
   if (!depsEqual(stamp.deps, currentDeps)) return null;
@@ -286,13 +303,21 @@ function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStam
     return null;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as { version?: unknown; slug?: unknown; deps?: unknown; packages?: unknown };
+  const raw = parsed as {
+    version?: unknown;
+    slug?: unknown;
+    deps?: unknown;
+    packages?: unknown;
+    durability?: unknown;
+  };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
+  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
   return {
     version: 1,
     slug: typeof raw.slug === 'string' ? raw.slug : '',
     deps: readStringMap(raw.deps),
     packages: raw.packages,
+    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
   };
 }

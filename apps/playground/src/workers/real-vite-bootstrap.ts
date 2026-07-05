@@ -242,9 +242,9 @@ async function restoreInstantDeps(
     snapshotUrl: cfg.bakedNodeModulesUrl,
     // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
     log: (line) => console.log(line.trimEnd()),
-    // Deferred stamp-durability check (never awaited on the boot path): a
-    // dirty persist report revokes the stamp so the next boot re-restores
-    // instead of trusting a torn tree (ADR-0187 Corrected).
+    // Deferred stamp-durability check (never awaited on the boot path):
+    // pending stamp promotes only after a clean report; dirty reports leave
+    // the next boot to re-run arrival instead of trusting a torn tree.
     flush: flushSyncMirror,
   });
   if (result.source === 'none') {

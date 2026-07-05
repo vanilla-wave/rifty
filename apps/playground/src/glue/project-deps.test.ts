@@ -2,7 +2,7 @@ import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { type DepSnapshotV1, buildDepSnapshot } from './dep-snapshot.ts';
-import { installStampSatisfied, writeInstallStamp } from './install-stamp.ts';
+import { installStampSatisfied, readInstallStamp, writeInstallStamp } from './install-stamp.ts';
 import { ensureProjectDependencies } from './project-deps.ts';
 import { ScopedFsSync, ScopedVfs, workspaceVfsPrefix } from './scoped-vfs.ts';
 
@@ -206,7 +206,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect((await installStampSatisfied(vfs, ROOT, 'express-sqlite'))?.packages).toBe(60);
   });
 
-  it('stamps WITHOUT draining the write-through on the snapshot path (ADR-0187)', async () => {
+  it('writes only a pending stamp without draining the write-through on the snapshot path (ADR-0187)', async () => {
     const { vfs, fsSync, logFn } = project();
 
     // Tripwire: `flush` powers only the DEFERRED stamp-durability check
@@ -229,10 +229,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result.source).toBe('snapshot');
-    expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
-  it('REVOKES the stamp when the deferred drain reports tree persist failures — a later boot must not trust a torn tree (ADR-0187 Corrected)', async () => {
+  it('discards the pending stamp when the deferred drain reports tree persist failures — a later boot must not trust a torn tree (ADR-0187 Corrected)', async () => {
     const { vfs, fsSync, log, logFn } = project();
     type Report = {
       failures: Array<{ path: string; op: 'write'; message: string }>;
@@ -249,9 +250,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       log: logFn,
-      // Call 1: the controlled detection drain (proves the stamp landed
-      // non-blocking BEFORE it settles). Call 2: the revoke-proof re-drain —
-      // CLEAN here (the stamp deletion reached disk).
+      // Call 1: the controlled detection drain (proves the pending stamp landed
+      // non-blocking BEFORE it settles). Call 2: the discard-proof re-drain —
+      // CLEAN here (the pending-stamp deletion reached disk).
       flush: (): Promise<Report> => {
         flushCalls += 1;
         if (flushCalls === 1) {
@@ -263,8 +264,10 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       },
     });
     expect(result.source).toBe('snapshot');
-    // The stamp landed non-blocking, BEFORE the drain settled…
-    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull();
+    // The pending stamp landed non-blocking, BEFORE the drain settled, but it is
+    // untrusted until the deferred durability check promotes it.
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
 
     // …then the drain reports a TREE file that never persisted.
     resolveFlush({
@@ -278,12 +281,13 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       total: 1,
     });
     await new Promise((r) => setTimeout(r, 0));
-    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
-    expect(log.join('')).toContain('install stamp revoked');
-    expect(log.join('')).not.toContain('CRITICAL'); // the revoke proved durable
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect(log.join('')).toContain('pending install stamp discarded');
+    expect(log.join('')).not.toContain('CRITICAL');
   });
 
-  it('REVOKES a scoped-workspace stamp when OPFS reports physical tree damage', async () => {
+  it('discards a scoped-workspace pending stamp when OPFS reports physical tree damage', async () => {
     const { vfs: innerVfs, fsSync: innerFs } = createMemoryFs();
     const prefix = workspaceVfsPrefix('active');
     const vfs = new ScopedVfs(innerVfs, prefix);
@@ -328,7 +332,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(log.join('')).toContain('install stamp revoked');
+    expect(log.join('')).toContain('pending install stamp discarded');
   });
 
   it('does NOT revoke on a FOREIGN persist failure — a global path (learned pins, another project) is not this tree torn', async () => {
@@ -361,11 +365,12 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
+    expect(log.join('')).not.toContain('discarded');
     expect(log.join('')).not.toContain('revoked');
-    expect(flushCalls).toBe(1); // no revoke → no second (proof) drain
+    expect(flushCalls).toBe(2); // detection drain + trusted-stamp promotion drain
   });
 
-  it('REVOKES on tree damage BEYOND the sampled failures — the FULL ledger gates, not the 20-entry sample', async () => {
+  it('discards on tree damage BEYOND the sampled failures — the FULL ledger gates, not the 20-entry sample', async () => {
     // The report sample is all foreign (tree damage sits outside the first
     // PERSIST_REPORT_SAMPLE); `anyFailure` scans the whole ledger and sees the
     // node_modules failure. Scanning only `failures` would trust a torn tree.
@@ -391,11 +396,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
-    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
-    expect(log.join('')).toContain('install stamp revoked');
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect(log.join('')).toContain('pending install stamp discarded');
   });
 
-  it('ESCALATES when the revoke itself fails to persist — the deleted stamp must not silently remain trusted', async () => {
+  it('keeps a failed pending-stamp delete untrusted instead of silently trusting it', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let flushCalls = 0;
     const result = await ensureProjectDependencies({
@@ -409,8 +414,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       log: logFn,
       flush: async () => {
         flushCalls += 1;
-        // Call 1: torn tree. Call 2 (after the revoke rm): the stamp DELETE
-        // itself never reached disk — the revoke is unproven.
+        // Call 1: torn tree. Call 2 (after the pending-stamp rm): the stamp
+        // DELETE itself never reached disk. It remains untrusted because the
+        // only durable stamp could still be the pending one.
         return flushCalls === 1
           ? {
               failures: [
@@ -436,12 +442,14 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
-    expect(log.join('')).toContain('install stamp revoked'); // it TRIED to revoke…
-    expect(log.join('')).toContain('CRITICAL'); // …but couldn't prove it reached disk
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect(log.join('')).toContain('pending install stamp discarded');
+    expect(log.join('')).toContain('pending install stamp delete did not reach disk');
+    expect(log.join('')).not.toContain('CRITICAL');
     expect(flushCalls).toBe(2);
   });
 
-  it('a deferred-drain failure on the STAMP FILE ITSELF does not revoke — no stamp on disk already re-runs arrival', async () => {
+  it('a deferred-drain failure on the STAMP FILE ITSELF leaves the pending stamp untrusted', async () => {
     const { vfs, fsSync, log, logFn } = project();
     const result = await ensureProjectDependencies({
       vfs,
@@ -465,12 +473,15 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
-    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(log.join('')).toContain('promotion skipped');
     expect(log.join('')).not.toContain('revoked');
   });
 
   it('a CLEAN deferred drain keeps the stamp', async () => {
     const { vfs, fsSync, logFn } = project();
+    let flushCalls = 0;
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
@@ -480,11 +491,16 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       log: logFn,
-      flush: async () => ({ failures: [], total: 0 }),
+      flush: async () => {
+        flushCalls += 1;
+        return { failures: [], total: 0 };
+      },
     });
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull();
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBeUndefined();
+    expect(flushCalls).toBe(2);
   });
 
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {

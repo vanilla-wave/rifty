@@ -63,6 +63,30 @@ describe('install stamp (ADR-0135)', () => {
     expect(hit?.packages).toBe(14);
   });
 
+  it('reads pending stamps but never satisfies reuse from them', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14, 'real-vite', 'pending');
+
+    expect(await readInstallStamp(vfs, ROOT)).toEqual({
+      version: 1,
+      slug: 'real-vite',
+      deps: { vite: '^5.4.0' },
+      packages: 14,
+      durability: 'pending',
+    });
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+    expect(
+      await installStampSatisfiedForPackageJson(
+        vfs,
+        ROOT,
+        'real-vite',
+        JSON.stringify({ dependencies: { vite: '^5.4.0' } }),
+      ),
+    ).toBeNull();
+  });
+
   it('is not satisfied when the project slug differs (shared-deps presets)', async () => {
     // project-files (instant) and real-vite (from-scratch) share the vite deps;
     // a stamp one wrote must not let the other skip its install.
@@ -224,5 +248,9 @@ describe('install stamp (ADR-0135)', () => {
       ),
     ).toBeNull();
     expect(await installStampSatisfiedForPackageJson(vfs, ROOT, 'scratch', pkgText)).not.toBeNull();
+
+    await writeInstallStamp(vfs, ROOT, 14, 'scratch', 'pending');
+    files.set(installStampPath(ROOT), await vfs.readFileText(installStampPath(ROOT)));
+    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)).toBeNull();
   });
 });

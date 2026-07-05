@@ -15,13 +15,13 @@
  * from the instant default that shares the same template, a from-scratch preset
  * shows its install even when OPFS was already warmed by an instant preset.
  *
- * Paths 2 and 3 finish by stamping the tree. Durability ordering is the
- * write-through queue's FIFO (ADR-0187): the stamp is enqueued after every
- * tree write, so a durable stamp implies a durable tree WITHOUT a blocking
- * drain on the boot path. Any snapshot failure — fetch, deps drift, restore —
- * degrades to install; a broken asset never bricks the boot. Extracted from
- * the worker bootstrap so the priority logic is unit-testable outside a
- * worker realm.
+ * Paths 2 and 3 finish by stamping the tree. On OPFS, boot/restore first writes
+ * a PENDING stamp (visible but untrusted), then a fire-and-forget drain promotes
+ * it to a trusted stamp only after the tree is clean. The dev line never waits;
+ * a reload before promotion just re-runs dependency arrival. Any snapshot
+ * failure — fetch, deps drift, restore — degrades to install; a broken asset
+ * never bricks the boot. Extracted from the worker bootstrap so the priority
+ * logic is unit-testable outside a worker realm.
  */
 import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
@@ -74,10 +74,9 @@ export interface EnsureProjectDepsOptions {
   readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV1 | null>;
   /**
    * Drains the realm's OPFS write-through and reports persist failures
-   * (ADR-0187 Corrected). NEVER awaited on the boot critical path — the stamp
-   * stays non-blocking; it powers the DEFERRED durability check that revokes
-   * a stamp whose tree failed to persist (see {@link stampTree}). Optional:
-   * absent on the memory backend and in restore-only harnesses.
+   * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
+   * a PENDING stamp after a clean drain or discards it after tree damage.
+   * Optional: absent on the memory backend and in restore-only harnesses.
    */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
 }
@@ -166,58 +165,75 @@ async function tryRestoreSnapshot(
   return { source: 'snapshot', packages: snapshot.packages };
 }
 
-/** Non-blocking stamp (ADR-0187): the stamp's write-through is enqueued after
- * every tree write, so FIFO ordering lands it after the tree — no drain on
- * the boot path. Durability is checked DEFERRED (ADR-0187 Corrected): a
- * background drain reads the persist-failure ledger after everything settled
- * and REVOKES the stamp when the tree failed to persist — a persisted stamp
- * must never make a later boot skip restore over a known-torn tree. The boot
- * itself never waits (~0.5s saved stays saved); this session's in-memory tree
- * is unaffected either way. */
+/** Non-blocking stamp (ADR-0187): OPFS-backed boot/restore writes a PENDING
+ * stamp first. Pending stamps are never trusted by `installStampSatisfied`, so
+ * a crash/reload before the deferred drain re-runs arrival instead of trusting
+ * an unproven tree. The deferred drain promotes the stamp after a clean report
+ * or discards it after tree damage. Memory/no-flush harnesses have no durability
+ * tier, so they keep the old immediate trusted stamp. */
 async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
-  await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
-  scheduleStampDurabilityCheck(opts);
+  if (!opts.flush) {
+    await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
+    return;
+  }
+  await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug, 'pending');
+  scheduleStampDurabilityCheck(opts, packages);
 }
 
 /**
- * Fire-and-forget: drain → inspect the ledger → revoke the stamp on a dirty
- * report. Only failures INSIDE the stamped tree (`<root>/node_modules`, minus
- * the stamp file itself) count: a foreign/global path failing to persist
- * (`/.rifty/eddy-learned-pins.json`, another project's tree) is not THIS tree
- * torn and must not revoke a good stamp (`isStampedTreeDamage`). Tree damage
- * means OPFS may hold a torn tree under a durable stamp — exactly the state
- * `installStampSatisfied` would wrongly trust — so the stamp is revoked, then
- * the revoke is PROVEN durable: a torn tree under a stamp that ALSO failed to
- * delete would be trusted next boot, so a re-drain that still shows the stamp
- * unhealed escalates LOUDLY (a deferred best-effort can't self-heal, but it
- * must never be silent).
+ * Fire-and-forget: drain → inspect ledger → promote or discard the PENDING
+ * stamp. Only failures INSIDE the stamped tree (`<root>/node_modules`, minus
+ * the stamp file itself) count as tree damage: a foreign/global path failing to
+ * persist (`/.rifty/eddy-learned-pins.json`, another project's tree) is not THIS
+ * tree torn and must not block promotion (`isStampedTreeDamage`). A stamp-file
+ * failure means the pending marker itself was not durable, so promotion is
+ * skipped; a later boot will re-run arrival instead of trusting a stamp.
  */
-function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
+function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions, packages: number): void {
   const flush = opts.flush;
   if (!flush) return;
   const stampPath = installStampPath(opts.root);
   void (async () => {
     const report = await flush();
-    if (!report || report.total === 0) return;
     // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
     // failures could fill the sample while `node_modules` damage sits beyond it,
-    // and trusting the stamp over a torn tree is exactly what this check exists
+    // and trusting a stamp over a torn tree is exactly what this check exists
     // to prevent. The example for the message comes from the sample when present.
-    if (!reportHasFailure(report, (p) => isStampedTreeDamage(p, opts.root))) return;
-    const example = report.failures.find((f) => isStampedTreeDamage(f.path, opts.root));
-    const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
-    await opts.vfs.rm(stampPath, { force: true });
-    opts.log(
-      `[real-vite/worker] WARNING: node_modules failed to persist${sample} — install stamp revoked; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
-    );
-    // Prove the revoke reached disk: a torn tree under a stamp that ALSO failed
-    // to delete would be trusted next boot. Re-drain; if the stamp deletion is
-    // still unhealed the revoke didn't persist — escalate LOUDLY (a deferred
-    // best-effort can't self-heal, but it must never be silent).
-    const after = await flush();
-    if (after && reportHasFailure(after, (p) => p === stampPath)) {
+    if (report && reportHasFailure(report, (p) => isStampedTreeDamage(p, opts.root))) {
+      const example = report.failures.find((f) => isStampedTreeDamage(f.path, opts.root));
+      const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
+      await opts.vfs.rm(stampPath, { force: true });
       opts.log(
-        '[real-vite/worker] CRITICAL: the stamp revoke did not reach disk — a later boot may still trust the torn tree; reinstall dependencies to heal it\n',
+        `[real-vite/worker] WARNING: node_modules failed to persist${sample} — pending install stamp discarded; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
+      );
+      const after = await flush();
+      if (after && reportHasFailure(after, (p) => p === stampPath)) {
+        opts.log(
+          '[real-vite/worker] WARNING: pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
+        );
+      }
+      return;
+    }
+    if (report && reportHasFailure(report, (p) => p === stampPath)) {
+      opts.log(
+        '[real-vite/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
+      );
+      return;
+    }
+
+    await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
+    const promoted = await flush();
+    if (promoted && reportHasFailure(promoted, (p) => isStampedTreeDamage(p, opts.root))) {
+      await opts.vfs.rm(stampPath, { force: true });
+      opts.log(
+        '[real-vite/worker] WARNING: node_modules failed to persist during stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+      );
+      await flush();
+      return;
+    }
+    if (promoted && reportHasFailure(promoted, (p) => p === stampPath)) {
+      opts.log(
+        '[real-vite/worker] WARNING: trusted install stamp promotion did not reach disk — this session can reuse the tree, but a later boot will re-run dependency arrival\n',
       );
     }
   })().catch((err) => {

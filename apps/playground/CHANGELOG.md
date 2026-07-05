@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 21)
+
+- **Boot/restore stamps now close the crash window.** Snapshot/boot restore
+  writes `durability:"pending"` first, and pending stamps never satisfy
+  `installStampSatisfied`. The deferred OPFS drain promotes the stamp only
+  after a clean tree+stamp report; tree damage discards it, and stamp-file
+  damage leaves it untrusted so the next boot re-runs dependency arrival.
+
 ### Fixed (PR #107 round 20)
 
 - **Workspace-scoped OPFS flushes keep their durability report.** The scoped VFS
