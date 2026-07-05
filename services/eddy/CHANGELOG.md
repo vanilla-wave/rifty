@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 20)
+
+- **Fresh recompute with a transient store-read failure kills stale mutable
+  links.** Eddy still avoids overwriting a possibly valid immutable object, but
+  a newer `prefer: 'online'` result no longer leaves an older dep-set link that
+  would serve the stale closure on the next cached request.
+
 ### Fixed (PR #107 round 19)
 
 - **405 `Allow` header advertises OPTIONS.** OPTIONS is handled (the CORS

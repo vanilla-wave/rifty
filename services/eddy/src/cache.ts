@@ -257,6 +257,12 @@ export class EddyCache {
       console.error(
         `eddy: bundle store read failed for recomputed ${closureHash}: ${err instanceof Error ? err.message : String(err)} — serving the fresh compute WITHOUT overwriting a possibly-durable object`,
       );
+      // Stale-link kill: a fresher compute is still the freshest answer even
+      // when we cannot safely prove/store its immutable artifact. Leaving an
+      // OLDER mutable link would make the next cached request serve the stale
+      // closure instead of recomputing and retrying the store read.
+      const cur = this.mutable.peek(key);
+      if (cur && gen > cur.gen) this.mutable.delete(key);
       return result;
     }
     if (stored) {

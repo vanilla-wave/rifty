@@ -160,6 +160,41 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect(computes).toBe(3); // recompute + put retry, never the stale closure
   });
 
+  it('a FRESHER compute whose store read FAILS kills the stale mutable link — the next cached request recomputes', async () => {
+    // Store-read failure is NOT a miss: do not overwrite a possibly-durable
+    // same-hash object. But the fresher compute also must not leave an OLDER
+    // mutable link behind, or cached requests keep serving the stale closure.
+    const { fetch } = makeLocalFetcher();
+    let failFreshRead = false;
+    let computes = 0;
+    const store = new MemoryBundleStore({ maxBytes: 1024 });
+    const flaky: BundleStore = {
+      get: async (hash) => {
+        if (failFreshRead && hash === 'sha256-NEW') throw new Error('bucket down');
+        return await store.get(hash);
+      },
+      put: (hash, bundle) => store.put(hash, bundle),
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: flaky,
+      resolveFn: async () => {
+        computes++;
+        return bundleFor(computes === 1 ? 'sha256-OLD' : 'sha256-NEW');
+      },
+    });
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } }); // link -> OLD
+    expect(first.kind === 'bundle' && first.manifest.asOf.closureHash).toBe('sha256-OLD');
+    failFreshRead = true;
+    const refresh = await cache.resolve({ dependencies: { debug: '^4.4.1' }, prefer: 'online' });
+    expect(refresh.kind === 'bundle' && refresh.manifest.asOf.closureHash).toBe('sha256-NEW');
+    failFreshRead = false;
+
+    const third = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(third.kind === 'bundle' && third.manifest.asOf.closureHash).toBe('sha256-NEW');
+    expect(computes).toBe(3); // recompute + retry store read/put, never the stale closure
+  });
+
   it('an OLDER compute whose put fails does NOT kill the link a NEWER refresh published (generation guard on the kill)', async () => {
     const { fetch } = makeLocalFetcher();
     let releaseCached = (): void => {};
