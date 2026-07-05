@@ -605,7 +605,8 @@ export function statSync(p: string, options?: { throwIfNoEntry?: boolean }): Sta
   try {
     return withSyscall('stat', p, () => new Stats(syncMirror().statSync(resolvePath(p))));
   } catch (err) {
-    if (options?.throwIfNoEntry === false && (err as { code?: string } | null)?.code === 'ENOENT') {
+    const code = (err as { code?: string } | null)?.code;
+    if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) {
       return undefined;
     }
     throw err;

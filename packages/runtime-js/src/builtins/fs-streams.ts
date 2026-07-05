@@ -291,13 +291,21 @@ class FileReadStream extends EventEmitter {
   private start(): void {
     if (this.destroyed) return;
     const hwm = this.opts.highWaterMark ?? 64 * 1024;
+    const np = resolvePath(this.path);
     // Node accepts highWaterMark 0: the stream opens, reads nothing and ends
-    // immediately (verified vs real Node 2026-07-05). The VFS chunkSize
-    // contract treats 0 as a RangeError, so short-circuit here.
+    // immediately for an existing target, but still performs the open/stat
+    // checks first (missing / path-through-file emit ENOENT / ENOTDIR).
+    // The VFS chunkSize contract treats 0 as a RangeError, so short-circuit
+    // only after the openability probe.
     if (hwm === 0) {
-      this.emit('open', 0);
-      this.emit('ready');
-      this.finishEnd();
+      try {
+        syncMirror().statSync(np);
+        this.emit('open', 0);
+        this.emit('ready');
+        this.finishEnd();
+      } catch (err) {
+        this.emitError(err);
+      }
       return;
     }
     // Node's `createReadStream` byte range is INCLUSIVE of `end`; the half-open
@@ -328,7 +336,6 @@ class FileReadStream extends EventEmitter {
       emitChunk();
     };
 
-    const np = resolvePath(this.path);
     const vfs = asyncVfs();
     if (vfs) {
       vfs
@@ -391,10 +398,16 @@ class FileReadStream extends EventEmitter {
   }
 }
 
+interface PendingWrite {
+  readonly buf: Uint8Array;
+  readonly cb?: (err?: unknown) => void;
+}
+
 class FileWriteStream extends EventEmitter {
   readonly path: string;
   private readonly emitCloseOpt: boolean;
   private readonly flags: ParsedStreamFlags;
+  private readonly highWaterMark: number;
   /** Resolved-at-open path — Node binds the fd at open; a later chdir must not retarget the file. */
   private np: string | null = null;
   /** Full file image; writes overlay at {@link pos} (r+ overwrites, a appends). */
@@ -405,7 +418,7 @@ class FileWriteStream extends EventEmitter {
    * writes). open() initialises {@link bytes}/{@link pos} from the file, THEN
    * overlays these — a plain write() here would be wiped by that init.
    */
-  private preOpen: Uint8Array[] | null = [];
+  private preOpen: PendingWrite[] | null = [];
   private opened = false;
   private failed = false;
   private destroyed = false;
@@ -413,12 +426,17 @@ class FileWriteStream extends EventEmitter {
   private finishEmitted = false;
   private flushScheduled = false;
   private closeEmitted = false;
+  private bufferedLength = 0;
+  private needDrain = false;
+  private readonly finishCallbacks: Array<(err?: unknown) => void> = [];
 
   constructor(path: string, opts: WriteStreamOptions = {}) {
     super();
     assertSupportedStreamOptions(opts, 'fs.createWriteStream', ['start']);
+    assertStreamRange('highWaterMark', opts.highWaterMark);
     this.flags = parseWriteFlags(opts.flags ?? 'w', 'fs.createWriteStream');
     this.emitCloseOpt = opts.emitClose ?? true;
+    this.highWaterMark = opts.highWaterMark ?? 64 * 1024;
     this.path = path;
     queueMicrotask(() => this.open());
   }
@@ -438,6 +456,7 @@ class FileWriteStream extends EventEmitter {
     if (this.destroyed) return;
     const np = resolvePath(this.path);
     this.np = np;
+    let buffered: PendingWrite[] | null = null;
     try {
       const exists = statStrictOrNull(np) !== null;
       if (exists && this.flags.exclusive) {
@@ -452,18 +471,37 @@ class FileWriteStream extends EventEmitter {
           : new Uint8Array();
       this.pos = this.flags.append ? this.bytes.length : 0;
       this.opened = true;
-      const buffered = this.preOpen ?? [];
+      buffered = this.preOpen ?? [];
       this.preOpen = null;
-      for (const chunk of buffered) this.overlay(chunk);
+      for (const write of buffered) this.overlay(write.buf);
       // Truncate/create at open even if nothing is ever written.
       syncMirror().writeFileSync(np, this.bytes);
+      this.bufferedLength = 0;
       this.emit('open', 0);
       this.emit('ready');
+      for (const write of buffered) queueMicrotask(() => write.cb?.());
+      this.emitDrainIfNeeded();
+      if (this.finished) this.finishIfReady();
     } catch (err) {
       this.failed = true;
-      this.emit('error', toNodeFsError(err, 'open', this.path));
+      const nodeErr = toNodeFsError(err, 'open', this.path);
+      this.failPending(nodeErr, buffered ?? undefined);
+      this.emit('error', nodeErr);
       this.closeOnce();
     }
+  }
+
+  private failPending(err: unknown, pending?: PendingWrite[]): void {
+    const buffered = pending ?? this.preOpen ?? [];
+    this.preOpen = null;
+    this.bufferedLength = 0;
+    for (const write of buffered) queueMicrotask(() => write.cb?.(err));
+    this.flushFinishCallbacks(err);
+  }
+
+  private flushFinishCallbacks(err?: unknown): void {
+    const callbacks = this.finishCallbacks.splice(0);
+    for (const cb of callbacks) queueMicrotask(() => cb(err));
   }
 
   write(
@@ -502,15 +540,18 @@ class FileWriteStream extends EventEmitter {
     }
     const buf =
       typeof chunk === 'string' ? Buffer.from(chunk, (encoding ?? 'utf8') as never) : chunk;
+    this.bufferedLength += buf.byteLength;
+    const overHighWaterMark = this.bufferedLength >= this.highWaterMark;
+    if (overHighWaterMark) this.needDrain = true;
     if (this.preOpen !== null) {
       // Not yet open: buffer; open() overlays these onto the file image.
-      this.preOpen.push(buf);
+      this.preOpen.push({ buf, cb });
     } else {
       this.overlay(buf);
       this.scheduleFlush();
+      queueMicrotask(() => cb?.());
     }
-    queueMicrotask(() => cb?.());
-    return true;
+    return !overHighWaterMark;
   }
 
   private overlay(buf: Uint8Array): void {
@@ -538,28 +579,61 @@ class FileWriteStream extends EventEmitter {
       if (this.failed || this.destroyed) return;
       // open() runs before any flush (both are microtasks, open queued first).
       this.persist();
+      if (!this.failed) {
+        this.bufferedLength = 0;
+        this.emitDrainIfNeeded();
+      }
     });
   }
 
-  private persist(): void {
+  private persist(): unknown | null {
     // np bound at open (Node binds the fd there): persist never re-resolves,
     // so a chdir mid-stream cannot retarget the file (review 2026-07-05).
     const np = this.np;
-    if (np === null) return;
+    if (np === null) return null;
     try {
       syncMirror().writeFileSync(np, this.bytes);
+      return null;
     } catch (err) {
       this.failed = true;
-      this.emit('error', toNodeFsError(err, 'write', this.path));
+      const nodeErr = toNodeFsError(err, 'write', this.path);
+      this.emit('error', nodeErr);
+      this.closeOnce();
+      return nodeErr;
     }
   }
 
-  end(chunkOrCb?: unknown, encodingOrCb?: string | (() => void), maybeCb?: () => void): void {
+  private emitDrainIfNeeded(): void {
+    if (!this.needDrain || this.destroyed || this.failed) return;
+    this.needDrain = false;
+    queueMicrotask(() => {
+      if (!this.destroyed && !this.failed) this.emit('drain');
+    });
+  }
+
+  private finishIfReady(): void {
+    if (!this.opened || this.failed || this.destroyed || this.finishEmitted) return;
+    this.finishEmitted = true;
+    const err = this.persist();
+    if (err) {
+      this.flushFinishCallbacks(err);
+      return;
+    }
+    this.emit('finish');
+    this.closeOnce();
+    this.flushFinishCallbacks();
+  }
+
+  end(
+    chunkOrCb?: unknown,
+    encodingOrCb?: string | ((err?: unknown) => void),
+    maybeCb?: (err?: unknown) => void,
+  ): void {
     // Node overloads: end(cb), end(chunk, cb), end(chunk, encoding, cb).
     const chunk = typeof chunkOrCb === 'function' ? undefined : chunkOrCb;
     const cb =
       typeof chunkOrCb === 'function'
-        ? (chunkOrCb as () => void)
+        ? (chunkOrCb as (err?: unknown) => void)
         : typeof encodingOrCb === 'function'
           ? encodingOrCb
           : maybeCb;
@@ -574,15 +648,8 @@ class FileWriteStream extends EventEmitter {
     if (this.destroyed) return; // Node: end() on a destroyed stream drops the callback (verified)
     if (chunk !== undefined) this.write(chunk, encoding as string | undefined);
     this.finished = true;
-    queueMicrotask(() => {
-      if (this.failed || this.destroyed || this.finishEmitted) return;
-      this.finishEmitted = true;
-      if (this.opened) this.persist();
-      if (this.failed) return;
-      this.emit('finish');
-      this.closeOnce();
-      cb?.();
-    });
+    if (cb) this.finishCallbacks.push(cb);
+    queueMicrotask(() => this.finishIfReady());
   }
 
   /** Node semantics: destroy discards buffered-but-unflushed data, no 'finish'. */

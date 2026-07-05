@@ -80,6 +80,12 @@ describe('node:fs sync API', () => {
     expect(st.size).toBe(2);
   });
 
+  it('statSync throwIfNoEntry:false suppresses ENOENT and ENOTDIR probes', () => {
+    writeFileSync('/plain.txt', 'x');
+    expect(statSync('/missing', { throwIfNoEntry: false })).toBeUndefined();
+    expect(statSync('/plain.txt/deep', { throwIfNoEntry: false })).toBeUndefined();
+  });
+
   it('rmSync recursive removes a tree', () => {
     mkdirSync('/a/b/c', { recursive: true });
     writeFileSync('/a/b/c/x', 'x');

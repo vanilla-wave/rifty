@@ -61,6 +61,7 @@ describe('fs.watch options honesty (review 2026-07-05)', () => {
 
   it("encoding:'buffer' is a loud gap, not a silently-utf8 string", () => {
     expect(() => watch('/w', { encoding: 'buffer' }, () => {})).toThrow(/Not implemented/);
+    expect(() => watch('/w', 'buffer', () => {})).toThrow(/Not implemented/);
   });
 });
 

@@ -122,11 +122,15 @@ function snapshotDir(root: string, recursive: boolean): Map<string, FileSnapshot
 
 export function watch(
   path: string,
-  optionsOrListener?: WatchOptions | WatchListener,
+  optionsOrListener?: WatchOptions | WatchListener | string,
   listener?: WatchListener,
 ): FSWatcher {
   const opts: WatchOptions =
-    typeof optionsOrListener === 'function' ? {} : (optionsOrListener ?? {});
+    typeof optionsOrListener === 'function'
+      ? {}
+      : typeof optionsOrListener === 'string'
+        ? { encoding: optionsOrListener }
+        : (optionsOrListener ?? {});
   const cb = typeof optionsOrListener === 'function' ? optionsOrListener : listener;
 
   if (opts.encoding !== undefined && opts.encoding !== 'utf8' && opts.encoding !== 'utf-8') {

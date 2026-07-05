@@ -218,6 +218,41 @@ describe('fs streams', () => {
     expect(events).toEqual(['end']);
   });
 
+  it('highWaterMark: 0 still opens the target and reports ENOENT for a miss', async () => {
+    const events: string[] = [];
+    await new Promise<void>((resolve) => {
+      const rs = createReadStream('/missing-hwm0.txt', { highWaterMark: 0 });
+      rs.on('error', (err: unknown) => {
+        events.push(`error:${(err as { code?: string }).code}`);
+      });
+      rs.on('close', () => {
+        events.push('close');
+        resolve();
+      });
+    });
+    expect(events).toEqual(['error:ENOENT', 'close']);
+  });
+
+  it('pre-open write/end callbacks receive the open error', async () => {
+    const ws = createWriteStream('/missing-dir/out.txt');
+    const eventErr = new Promise<unknown>((resolve) => ws.on('error', resolve));
+    const writeErr = new Promise<unknown>((resolve) => ws.write('x', resolve));
+    const endErr = new Promise<unknown>((resolve) => ws.end(resolve));
+    expect(((await writeErr) as { code?: string }).code).toBe('ENOENT');
+    expect(((await endErr) as { code?: string }).code).toBe('ENOENT');
+    expect(((await eventErr) as { code?: string }).code).toBe('ENOENT');
+  });
+
+  it('write stream highWaterMark participates in write() backpressure', async () => {
+    const ws = createWriteStream('/hwm.log', { highWaterMark: 1 });
+    await new Promise<void>((resolve) => ws.on('ready', () => resolve()));
+    const drained = new Promise<void>((resolve) => ws.on('drain', () => resolve()));
+    expect(ws.write('ab')).toBe(false);
+    await drained;
+    await new Promise<void>((resolve) => ws.end(() => resolve()));
+    expect(await fsp.readFile('/hwm.log', 'utf8')).toBe('ab');
+  });
+
   it('utf8 encoding never splits a multibyte char across chunk boundaries', async () => {
     await fsp.writeFile('/euro.txt', 'a€b');
     let out = '';

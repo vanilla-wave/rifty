@@ -9,7 +9,12 @@
   reports `ENOTDIR`; `fs.watch` throws Node-shaped `ENOENT` for a missing target;
   `readlinkSync`/`realpathSync` keep `ENOTDIR` through-file fidelity; fd-backed
   read/write/stat/truncate/time ops route backend failures through the fs error
-  boundary.
+  boundary; `fs.watch(path, 'buffer', cb)` now hits the same loud unsupported
+  encoding guard as the object-form overload; `statSync(path,
+  { throwIfNoEntry:false })` suppresses path-through-file `ENOTDIR` probes like
+  Node; read streams with `highWaterMark: 0` still open/stat the target before
+  ending; and pre-open write/end callbacks now receive open failures instead of
+  false success.
 - **Node-shaped fs errors everywhere (review 2026-07-05).** A single
   VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
   `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path
@@ -40,11 +45,14 @@
     (`write(chunk, cb)`, `end(cb)`, `end(chunk, cb)`). Previously a function in
     the chunk slot was overlaid as an array-like — `end(cb)` wrote a NUL byte
     into the file and silently dropped the callback; `write(chunk, cb)` threw
-    "Unsupported encoding". Post-end writes error the callback AND emit 'error'
-    (`ERR_STREAM_WRITE_AFTER_END`); post-destroy writes error the callback only
-    (`ERR_STREAM_DESTROYED`); invalid chunk types throw synchronously
+    "Unsupported encoding". Same-tick write-after-`end()` before finish errors
+    the callback and emits `'error'` (`ERR_STREAM_WRITE_AFTER_END`);
+    post-finish writes error the callback only; post-destroy writes error the
+    callback only (`ERR_STREAM_DESTROYED`); invalid chunk types throw synchronously
     (`ERR_INVALID_ARG_TYPE`) — all verified against real Node. Parity probes
     added to `fs/streams-flags-relative-cwd`.
+  - `createWriteStream` participates in Node-style backpressure from
+    `highWaterMark`, including writes queued before the async open.
   - Write streams bind their resolved target at open (Node binds the fd): a
     `process.chdir` mid-stream no longer retargets a relative-path stream.
   - `createReadStream` honors `emitClose:false` (was a silently-ignored option)
