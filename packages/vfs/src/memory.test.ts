@@ -105,13 +105,14 @@ describe('MemoryVfs', () => {
     await expect(fs.rm('/nope', { force: true })).resolves.toBeUndefined();
   });
 
-  it('normalises relative paths at entry — write to ./foo/../bar.txt reads as /bar.txt', async () => {
+  it('rejects relative paths loudly — silent root-anchoring masked cwd bugs (review 2026-07-05)', async () => {
     const fs = new MemoryVfs();
-    await fs.writeFile('./foo/../bar.txt', 'normalised');
+    await expect(fs.writeFile('./foo/../bar.txt', 'x')).rejects.toThrow(/absolute/);
+    await expect(fs.exists('bar.txt')).rejects.toThrow(/absolute/);
+    await expect(fs.readFile('foo/bar.txt')).rejects.toThrow(/absolute/);
+    // Dot-segments in an ABSOLUTE path still normalise fine.
+    await fs.writeFile('/foo/../bar.txt', 'normalised');
     expect(await fs.readFileText('/bar.txt')).toBe('normalised');
-    expect(await fs.exists('/bar.txt')).toBe(true);
-    expect(await fs.exists('bar.txt')).toBe(true);
-    expect(await fs.exists('/foo/../bar.txt')).toBe(true);
   });
 
   describe('openReadable', () => {
@@ -171,6 +172,22 @@ describe('MemoryVfs', () => {
       const out = concat(chunks);
       expect(out.byteLength).toBe(5);
       expect(Array.from(out)).toEqual([5, 6, 7, 8, 9]);
+    });
+
+    it('rejects a non-positive chunkSize instead of looping the pull forever (review 2026-07-05)', async () => {
+      const fs = new MemoryVfs();
+      await fs.writeFile('/loop.txt', 'x');
+      await expect(fs.openReadable('/loop.txt', { chunkSize: 0 })).rejects.toThrow(RangeError);
+      await expect(fs.openReadable('/loop.txt', { chunkSize: -8 })).rejects.toThrow(RangeError);
+      await expect(fs.openReadable('/loop.txt', { chunkSize: 1.5 })).rejects.toThrow(RangeError);
+    });
+
+    it('rejects negative or inverted start/end windows instead of subarray-from-the-end reads', async () => {
+      const fs = new MemoryVfs();
+      await fs.writeFile('/win.txt', 'abcdef');
+      await expect(fs.openReadable('/win.txt', { start: -2 })).rejects.toThrow(RangeError);
+      await expect(fs.openReadable('/win.txt', { end: -1 })).rejects.toThrow(RangeError);
+      await expect(fs.openReadable('/win.txt', { start: 4, end: 2 })).rejects.toThrow(RangeError);
     });
 
     it('rejects with ENOENT for missing file', async () => {

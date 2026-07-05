@@ -11,7 +11,7 @@
  * (`ENOENT`, `EACCES`, `EDQUOT`, `EISDIR`, `ENOTDIR`, `EIO`) — ADR-0013.
  */
 
-import { VfsError } from './errors.ts';
+import { VfsError, assertReadWindow } from './errors.ts';
 import { type OpfsErrorContext, mapOpfsError } from './opfs-errors.ts';
 import { basename, dirname, segments } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
@@ -245,6 +245,7 @@ export function chunkedFileStream(
   file: Blob,
   opts?: { chunkSize?: number; start?: number; end?: number },
 ): ReadableStream<Uint8Array> {
+  assertReadWindow(opts);
   const start = opts?.start ?? 0;
   const end = Math.min(opts?.end ?? file.size, file.size);
   const chunkSize = opts?.chunkSize ?? 64 * 1024;

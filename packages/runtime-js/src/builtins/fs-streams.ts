@@ -68,6 +68,16 @@ function assertSupportedStreamOptions(
   }
 }
 
+/** Node throws ERR_OUT_OF_RANGE SYNCHRONOUSLY at createReadStream for a bad window. */
+function assertStreamRange(name: string, value: number | undefined, min = 0): void {
+  if (value !== undefined && (!Number.isInteger(value) || value < min)) {
+    throw Object.assign(
+      new RangeError(`The value of "${name}" is out of range. Received ${value}`),
+      { code: 'ERR_OUT_OF_RANGE' },
+    );
+  }
+}
+
 interface ParsedStreamFlags {
   readonly append: boolean;
   readonly exclusive: boolean;
@@ -111,6 +121,15 @@ class FileReadStream extends EventEmitter {
     if (opts.flags !== undefined && opts.flags !== 'r') {
       // Non-'r' read-stream flags change open side-effects we don't model.
       throw new NotImplementedError(`fs.createReadStream.flags:'${opts.flags}'`);
+    }
+    assertStreamRange('start', opts.start);
+    assertStreamRange('end', opts.end);
+    assertStreamRange('highWaterMark', opts.highWaterMark, 1);
+    if (opts.start !== undefined && opts.end !== undefined && opts.end < opts.start) {
+      throw Object.assign(
+        new RangeError(`The value of "start" is out of range. Received ${opts.start}`),
+        { code: 'ERR_OUT_OF_RANGE' },
+      );
     }
     this.path = path;
     this.opts = opts;
