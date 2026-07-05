@@ -10,7 +10,7 @@
  */
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
-import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { VfsError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { getProcessCwd } from './process.ts';
@@ -139,16 +139,66 @@ const FS_ERRNO: Record<string, { errno: number; description: string }> = {
   ENOTEMPTY: { errno: -39, description: 'directory not empty' },
 };
 
-function fsError(code: string, path?: string, syscall?: string): NodeJS.ErrnoException {
+function fsError(
+  code: string,
+  path?: string,
+  syscall?: string,
+  dest?: string,
+): NodeJS.ErrnoException {
   const info = FS_ERRNO[code];
-  const suffix = syscall && path ? `, ${syscall} '${path}'` : path ? `: ${path}` : '';
+  // Node renders every combination: ", open 'x'", ", rename 'a' -> 'b'", and
+  // syscall-only (fd/opendir paths carry no name): "EISDIR: …, read".
+  const suffix = syscall
+    ? `, ${syscall}${path !== undefined ? ` '${path}'` : ''}${dest !== undefined ? ` -> '${dest}'` : ''}`
+    : path !== undefined
+      ? `: ${path}`
+      : '';
   const message = info ? `${code}: ${info.description}${suffix}` : `${code}${suffix}`;
-  const err = new Error(message) as NodeJS.ErrnoException;
+  const err = new Error(message) as NodeJS.ErrnoException & { dest?: string };
   err.code = code;
   if (info) err.errno = info.errno;
   err.path = path;
   err.syscall = syscall;
+  if (dest !== undefined) err.dest = dest;
   return err;
+}
+
+/**
+ * Per-op syscall name for the error a `VfsError` code maps to. A plain string
+ * covers ops whose failures Node attributes to one syscall; the record form
+ * covers split attribution (`readFileSync`: ENOENT → `open`, EISDIR → `read`).
+ */
+type SyscallSpec = string | { readonly default: string; readonly [code: string]: string };
+
+// Syscalls Node renders WITHOUT a path (fd-level ops + opendir).
+const PATHLESS_SYSCALLS = new Set(['read', 'write', 'opendir']);
+
+/**
+ * The single VfsError→Node translation boundary (review 2026-07-05). Every
+ * public `fs` entry point funnels backend errors through here so user programs
+ * always observe Node-shaped errors: `code` + `errno` + `syscall` + `path`
+ * (the path AS PASSED by the caller, not the resolved absolute — Node parity)
+ * + `dest` on two-path ops + Node's message rendering. Parity contract:
+ * `cases/fs/error-shape-errno-syscall.case.ts`. Non-VfsError errors (already
+ * Node-shaped `fsError`s, TypeError validation) pass through untouched.
+ */
+function withSyscall<T>(
+  spec: SyscallSpec,
+  p: PathLike | undefined,
+  fn: () => T,
+  dest?: string,
+): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof VfsError) {
+      const syscall = typeof spec === 'string' ? spec : (spec[err.code] ?? spec.default);
+      const path =
+        PATHLESS_SYSCALLS.has(syscall) || p === undefined ? undefined : pathToString(p);
+      throw fsError(err.code, path, syscall, dest);
+    }
+    throw err;
+  }
 }
 
 function assertNonNegativeInteger(value: number, name: string): void {
@@ -474,22 +524,25 @@ export function readFileSync(
 ): Uint8Array | string {
   const enc = toEncodingOrNull(opts);
   const np = resolvePath(p);
+  const ps = pathToString(p);
   const flag = flagOf(opts);
   // Honor the `flag` option through the open-flags engine (was: silently
   // ignored): 'a+'/'w+' create a missing file, 'wx'-family raises EEXIST, etc.
   if (flag !== undefined && flag !== 'r') {
     const parsed = parseOpenFlags(flag);
-    if (!parsed.readable) throw fsError('EBADF', np, 'read');
+    if (!parsed.readable) throw fsError('EBADF', ps, 'read');
     const exists = syncMirror().existsSync(np);
-    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', np, 'open');
+    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
     if (!exists) {
-      if (!parsed.create) throw fsError('ENOENT', np, 'open');
-      syncMirror().writeFileSync(np, new Uint8Array());
+      if (!parsed.create) throw fsError('ENOENT', ps, 'open');
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
     } else if (parsed.truncate) {
-      syncMirror().writeFileSync(np, new Uint8Array());
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, new Uint8Array()));
     }
   }
-  const bytes = syncMirror().readFileBytesSync(np);
+  const bytes = withSyscall({ default: 'open', EISDIR: 'read' }, p, () =>
+    syncMirror().readFileBytesSync(np),
+  );
   return decodeResult(bytes, enc);
 }
 
@@ -500,19 +553,20 @@ export function writeFileSync(
 ): void {
   const enc = toEncodingOrNull(opts);
   const np = resolvePath(p);
+  const ps = pathToString(p);
   const flag = flagOf(opts);
   if (flag !== undefined && flag !== 'w' && flag !== 'w+') {
     const parsed = parseOpenFlags(flag);
-    if (!parsed.writable) throw fsError('EBADF', np, 'write');
+    if (!parsed.writable) throw fsError('EBADF', ps, 'write');
     const exists = syncMirror().existsSync(np);
-    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', np, 'open');
-    if (!exists && !parsed.create) throw fsError('ENOENT', np, 'open');
+    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
+    if (!exists && !parsed.create) throw fsError('ENOENT', ps, 'open');
     if (parsed.append) {
       appendFileSync(p, data, opts);
       return;
     }
   }
-  syncMirror().writeFileSync(np, encodeData(data, enc));
+  withSyscall('open', p, () => syncMirror().writeFileSync(np, encodeData(data, enc)));
 }
 
 export function appendFileSync(
@@ -522,30 +576,40 @@ export function appendFileSync(
 ): void {
   const enc = toEncodingOrNull(opts);
   const np = resolvePath(p);
+  const ps = pathToString(p);
   const flag = flagOf(opts);
   if (flag !== undefined && flag !== 'a' && flag !== 'a+') {
     const parsed = parseOpenFlags(flag);
-    if (!parsed.writable) throw fsError('EBADF', np, 'write');
+    if (!parsed.writable) throw fsError('EBADF', ps, 'write');
     if (parsed.create && parsed.exclusive && syncMirror().existsSync(np)) {
-      throw fsError('EEXIST', np, 'open');
+      throw fsError('EEXIST', ps, 'open');
     }
     if (parsed.truncate) {
       // 'w'-family flag on appendFile truncates first (Node honors the flag).
-      syncMirror().writeFileSync(np, encodeData(data, enc));
+      withSyscall('open', p, () => syncMirror().writeFileSync(np, encodeData(data, enc)));
       return;
     }
   }
-  const existing = syncMirror().existsSync(np)
-    ? syncMirror().readFileBytesSync(np)
-    : new Uint8Array();
-  const next = encodeData(data, enc);
-  const merged = new Uint8Array(existing.length + next.length);
-  merged.set(existing, 0);
-  merged.set(next, existing.length);
-  syncMirror().writeFileSync(np, merged);
+  withSyscall('open', p, () => {
+    const existing = syncMirror().existsSync(np)
+      ? syncMirror().readFileBytesSync(np)
+      : new Uint8Array();
+    const next = encodeData(data, enc);
+    const merged = new Uint8Array(existing.length + next.length);
+    merged.set(existing, 0);
+    merged.set(next, existing.length);
+    syncMirror().writeFileSync(np, merged);
+  });
 }
 
 export function readdirSync(
+  p: string,
+  opts?: { withFileTypes?: boolean; recursive?: boolean },
+): string[] | Dirent[] {
+  return withSyscall('scandir', p, () => readdirSyncImpl(p, opts));
+}
+
+function readdirSyncImpl(
   p: string,
   opts?: { withFileTypes?: boolean; recursive?: boolean },
 ): string[] | Dirent[] {
@@ -601,7 +665,9 @@ export function readdirSync(
 }
 
 export function mkdirSync(p: string, opts?: MkdirOptions): void {
-  syncMirror().mkdirSync(resolvePath(p), { recursive: opts?.recursive ?? false });
+  withSyscall('mkdir', p, () =>
+    syncMirror().mkdirSync(resolvePath(p), { recursive: opts?.recursive ?? false }),
+  );
 }
 
 /**
@@ -619,7 +685,7 @@ export function statSync(p: string): Stats;
 export function statSync(p: string, options: { throwIfNoEntry: false }): Stats | undefined;
 export function statSync(p: string, options?: { throwIfNoEntry?: boolean }): Stats | undefined {
   try {
-    return new Stats(syncMirror().statSync(resolvePath(p)));
+    return withSyscall('stat', p, () => new Stats(syncMirror().statSync(resolvePath(p))));
   } catch (err) {
     if (options?.throwIfNoEntry === false && (err as { code?: string } | null)?.code === 'ENOENT') {
       return undefined;
@@ -633,21 +699,37 @@ export function existsSync(p: string): boolean {
 }
 
 export function unlinkSync(p: string): void {
-  syncMirror().rmSync(resolvePath(p), {});
+  withSyscall('unlink', p, () => syncMirror().rmSync(resolvePath(p), {}));
 }
 
 export function rmSync(p: string, opts?: RmOptions): void {
-  syncMirror().rmSync(resolvePath(p), { recursive: opts?.recursive, force: opts?.force });
+  // Node's rm stats the target before removing — a missing path (without
+  // `force`) reports syscall 'lstat', not 'unlink'.
+  withSyscall('lstat', p, () =>
+    syncMirror().rmSync(resolvePath(p), { recursive: opts?.recursive, force: opts?.force }),
+  );
 }
 
 export function rmdirSync(p: string, opts?: { recursive?: boolean }): void {
-  syncMirror().rmSync(resolvePath(p), { recursive: opts?.recursive });
+  withSyscall('rmdir', p, () => {
+    const np = resolvePath(p);
+    // Node parity: rmdir on a non-directory is ENOTDIR — the shared rmSync
+    // backend happily unlinks files, which would silently DELETE them here.
+    const st = syncMirror().statSyncOrNull(np);
+    if (st && !st.isDirectory) throw new VfsError('ENOTDIR', np);
+    syncMirror().rmSync(np, { recursive: opts?.recursive });
+  });
 }
 
 export function renameSync(src: string, dst: string): void {
   // ADR-0090: native VFS rename — atomic-where-possible and mtime-preserving
   // (the prior read+write+rm restamped mtime and copied subtrees).
-  syncMirror().renameSync(resolvePath(src), resolvePath(dst));
+  withSyscall(
+    'rename',
+    src,
+    () => syncMirror().renameSync(resolvePath(src), resolvePath(dst)),
+    pathToString(dst),
+  );
 }
 
 // VFS has no symlinks until M12, so `lstat` === `stat` and `realpath` is just
@@ -658,23 +740,22 @@ export function renameSync(src: string, dst: string): void {
 // TODO(M12): when a symlink layer lands, revisit `lstatSync`/`realpathSync`/
 // `readlinkSync`/`Stats.isSymbolicLink()` together to resolve/inspect links.
 export function lstatSync(p: string): Stats {
-  return statSync(p);
+  return withSyscall('lstat', p, () => new Stats(syncMirror().statSync(resolvePath(p))));
 }
 
 export function readlinkSync(p: string): string {
   // No symlinks: a path either doesn't exist (ENOENT) or is not a link (EINVAL).
   const np = resolvePath(p);
-  if (!syncMirror().existsSync(np)) {
-    throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
-  }
-  throw Object.assign(new Error(`EINVAL: ${p}`), { code: 'EINVAL', path: p });
+  const ps = pathToString(p);
+  if (!syncMirror().existsSync(np)) throw fsError('ENOENT', ps, 'readlink');
+  throw fsError('EINVAL', ps, 'readlink');
 }
 
 function _realpathSyncImpl(p: string): string {
   const np = resolvePath(p);
-  if (!syncMirror().existsSync(np)) {
-    throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
-  }
+  // Node absolutizes before the failing lstat, so the error path is the
+  // RESOLVED one (unlike the as-passed rule everywhere else).
+  if (!syncMirror().existsSync(np)) throw fsError('ENOENT', np, 'lstat');
   return np;
 }
 
@@ -695,10 +776,10 @@ export function copyFileSync(src: string, dst: string, mode = 0): void {
     throw new NotImplementedError('fs.copyFileSync.COPYFILE_FICLONE_FORCE');
   }
   if ((mode & constants.COPYFILE_EXCL) !== 0 && existsSync(dst)) {
-    throw fsError('EEXIST', resolvePath(dst), 'copyfile');
+    throw fsError('EEXIST', src, 'copyfile', dst);
   }
   // ADR-0090: native VFS copy (single regular file; dst mtime=now). FICLONE degrades here.
-  syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
+  withSyscall('copyfile', src, () => syncMirror().copyFileSync(resolvePath(src), resolvePath(dst)), dst);
 }
 
 export function cpSync(src: string, dst: string, opts?: CpOptions): void {
@@ -719,7 +800,10 @@ export function cpSync(src: string, dst: string, opts?: CpOptions): void {
     // TODO(backlog: runtime-js/fs-cp-type-mismatch-error-codes) — VFS cpSync surfaces
     // EISDIR/EEXIST for file→dir / dir→file overwrites; Node uses ERR_FS_CP_NON_DIR_TO_DIR
     // / ERR_FS_CP_DIR_TO_NON_DIR.
-    syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
+    // Node's cp lstats the source first: a missing src reports 'lstat' with no dest.
+    withSyscall({ default: 'copyfile', ENOENT: 'lstat' }, src, () =>
+      syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive }),
+    );
     return;
   }
   cpEntry(resolvePath(src), resolvePath(dst), src, dst, opts as CpOptions);
@@ -734,7 +818,7 @@ function cpEntry(
   opts: CpOptions,
 ): void {
   if (opts.filter && !opts.filter(srcDisplay, dstDisplay)) return; // skip entry (+ subtree for a dir)
-  const st = syncMirror().statSync(srcAbs);
+  const st = withSyscall('lstat', srcDisplay, () => syncMirror().statSync(srcAbs));
   if (st.isDirectory) {
     if (!opts.recursive) throw fsError('EISDIR', srcAbs, 'cp');
     syncMirror().mkdirSync(dstAbs, { recursive: true });
@@ -770,19 +854,20 @@ function cpEntry(
 
 export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): number {
   const path = resolvePath(p);
+  const ps = pathToString(p);
   const parsed = parseOpenFlags(flags);
   const stat = syncMirror().statSyncOrNull(path);
 
   if (stat) {
-    if (parsed.create && parsed.exclusive) throw fsError('EEXIST', path, 'open');
-    if (parsed.directory && !stat.isDirectory) throw fsError('ENOTDIR', path, 'open');
+    if (parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
+    if (parsed.directory && !stat.isDirectory) throw fsError('ENOTDIR', ps, 'open');
     if (stat.isDirectory && (parsed.writable || parsed.truncate)) {
-      throw fsError('EISDIR', path, 'open');
+      throw fsError('EISDIR', ps, 'open');
     }
     if (parsed.truncate && stat.isFile) syncMirror().writeFileSync(path, new Uint8Array());
   } else {
-    if (!parsed.create || parsed.directory) throw fsError('ENOENT', path, 'open');
-    syncMirror().writeFileSync(path, new Uint8Array());
+    if (!parsed.create || parsed.directory) throw fsError('ENOENT', ps, 'open');
+    withSyscall('open', p, () => syncMirror().writeFileSync(path, new Uint8Array()));
   }
 
   const fd = nextFd++;
@@ -891,7 +976,7 @@ export function ftruncateSync(fd: number, len = 0): void {
 }
 
 export function truncateSync(p: PathLike, len = 0): void {
-  resizeFile(resolvePath(p), len);
+  withSyscall('open', p, () => resizeFile(resolvePath(p), len));
 }
 
 export function mkdtempSync(
@@ -916,7 +1001,12 @@ export function opendirSync(
   _opts?: { encoding?: Encoding; bufferSize?: number },
 ): Dir {
   const displayPath = pathToString(p);
-  const entries = readdirSync(p as string, { withFileTypes: true }) as Dirent[];
+  // 'opendir' is PATHLESS in Node's rendering — withSyscall omits the name.
+  const entries = withSyscall(
+    'opendir',
+    p,
+    () => readdirSyncImpl(p as string, { withFileTypes: true }) as Dirent[],
+  );
   return new Dir(displayPath, entries.slice());
 }
 
@@ -940,7 +1030,7 @@ function toMs(t: number | string | Date): number {
 }
 
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
-  syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime));
+  withSyscall('utime', p, () => syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime)));
 }
 
 // `fs.lutimesSync` — under the no-symlink VFS model (ADR-0050) a path is never a
@@ -1047,9 +1137,7 @@ export const promises = {
     return realpathSync(p);
   },
   async access(p: string): Promise<void> {
-    if (!existsSync(p)) {
-      throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
-    }
+    if (!existsSync(p)) throw fsError('ENOENT', pathToString(p), 'access');
   },
   async copyFile(src: string, dst: string, mode = 0): Promise<void> {
     copyFileSync(src, dst, mode);

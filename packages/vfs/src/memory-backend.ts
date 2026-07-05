@@ -64,12 +64,32 @@ export class MemoryBackend {
     return node;
   }
 
+  /**
+   * Strict walk (Node parity): a non-final component that exists as a FILE is
+   * `ENOTDIR`, never a silent `null`→ENOENT — open/stat/scandir/unlink through
+   * a file must report ENOTDIR (parity case fs/error-shape-errno-syscall).
+   * Missing components still return `null` (caller picks ENOENT vs `force`).
+   * `reportPath` is the path the error names — callers resolving a PARENT pass
+   * the full target so the error points at what the user asked for.
+   */
+  resolveStrict(path: string, reportPath: string = path): Node | null {
+    const parts = segments(path);
+    let node: Node = this.root;
+    for (const part of parts) {
+      if (node.kind !== 'dir') throw new VfsError('ENOTDIR', reportPath);
+      const next = node.children.get(part);
+      if (!next) return null;
+      node = next;
+    }
+    return node;
+  }
+
   exists(path: string): boolean {
     return this.resolve(path) !== null;
   }
 
   readFile(path: string): Uint8Array {
-    const node = this.resolve(path);
+    const node = this.resolveStrict(path);
     if (!node) throw new VfsError('ENOENT', path);
     if (node.kind !== 'file') throw new VfsError('EISDIR', path);
     return node.data;
@@ -80,9 +100,10 @@ export class MemoryBackend {
     // `normalized` is already normalized (#10): dirnameNormalized skips the
     // redundant normalizePath pass dirname would run.
     const parent = dirnameNormalized(normalized);
-    const parentNode = this.resolve(parent);
-    if (!parentNode) throw new VfsError('ENOENT', parent);
-    if (parentNode.kind !== 'dir') throw new VfsError('ENOTDIR', parent);
+    // Errors name the TARGET path, not the parent (Node parity: `open 'a/b/c'`).
+    const parentNode = this.resolveStrict(parent, path);
+    if (!parentNode) throw new VfsError('ENOENT', path);
+    if (parentNode.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     const name = normalized.slice(parent === '/' ? 1 : parent.length + 1);
     if (name === '') throw new VfsError('EINVAL', path);
     const bytes = typeof data === 'string' ? encoder.encode(data) : data;
@@ -111,7 +132,7 @@ export class MemoryBackend {
   }
 
   readdirEntries(path: string): readonly Dirent[] {
-    const node = this.resolve(path);
+    const node = this.resolveStrict(path);
     if (!node) throw new VfsError('ENOENT', path);
     if (node.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     if (node.sortedDirents !== null) return node.sortedDirents;
@@ -134,7 +155,8 @@ export class MemoryBackend {
     }
     let node: Node = this.root;
     for (let i = 0; i < parts.length; i++) {
-      if (node.kind !== 'dir') throw new VfsError('ENOTDIR', `/${parts.slice(0, i).join('/')}`);
+      // Full target path in the error (Node parity: `mkdir 'plain.txt/sub'`).
+      if (node.kind !== 'dir') throw new VfsError('ENOTDIR', path);
       const part = parts[i];
       if (part === undefined) continue;
       const next = node.children.get(part);
@@ -171,11 +193,14 @@ export class MemoryBackend {
     }
     // `normalized` is already normalized (#10) — see writeFile above.
     const parent = dirnameNormalized(normalized);
-    const parentNode = this.resolve(parent);
-    if (!parentNode || parentNode.kind !== 'dir') {
+    // ENOTDIR (path through a file) throws even under `force` — Node's force
+    // suppresses only ENOENT (verified against real Node, 2026-07-05).
+    const parentNode = this.resolveStrict(parent, path);
+    if (!parentNode) {
       if (force) return;
-      throw new VfsError('ENOENT', parent);
+      throw new VfsError('ENOENT', path);
     }
+    if (parentNode.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     const name = normalized.slice(parent === '/' ? 1 : parent.length + 1);
     const target = parentNode.children.get(name);
     if (!target) {
@@ -195,7 +220,7 @@ export class MemoryBackend {
   }
 
   stat(path: string): MemoryStat {
-    const node = this.resolve(path);
+    const node = this.resolveStrict(path);
     if (!node) throw new VfsError('ENOENT', path);
     if (node.kind === 'file') {
       return {
@@ -209,7 +234,7 @@ export class MemoryBackend {
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    const node = this.resolve(path);
+    const node = this.resolveStrict(path);
     if (!node) throw new VfsError('ENOENT', path);
     node.atime = atimeMs;
     node.mtime = mtimeMs;
@@ -218,7 +243,7 @@ export class MemoryBackend {
   copyFile(src: string, dst: string): void {
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
-    const node = this.resolve(s);
+    const node = this.resolveStrict(s, src);
     if (!node) throw new VfsError('ENOENT', src);
     if (node.kind !== 'file') throw new VfsError('EISDIR', src);
     const dstNode = this.resolve(d);
@@ -231,7 +256,7 @@ export class MemoryBackend {
   cpRecursive(src: string, dst: string, recursive: boolean): void {
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
-    const node = this.resolve(s);
+    const node = this.resolveStrict(s, src);
     if (!node) throw new VfsError('ENOENT', src);
     if (node.kind === 'file') {
       this.copyFile(s, d);
@@ -254,18 +279,19 @@ export class MemoryBackend {
     const d = normalizeAbsolute(dst);
     if (s === d) return;
     if (s === '/') throw new VfsError('EINVAL', src);
-    const srcNode = this.resolve(s);
+    const srcNode = this.resolveStrict(s, src);
     if (!srcNode) throw new VfsError('ENOENT', src);
     if (srcNode.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
 
     const srcParentPath = dirnameNormalized(s);
-    const srcParent = this.resolve(srcParentPath);
-    if (!srcParent || srcParent.kind !== 'dir') throw new VfsError('ENOENT', srcParentPath);
+    const srcParent = this.resolveStrict(srcParentPath, src);
+    if (!srcParent || srcParent.kind !== 'dir') throw new VfsError('ENOENT', src);
     const srcName = s.slice(srcParentPath === '/' ? 1 : srcParentPath.length + 1);
 
     const dstParentPath = dirnameNormalized(d);
-    const dstParent = this.resolve(dstParentPath);
-    if (!dstParent || dstParent.kind !== 'dir') throw new VfsError('ENOENT', dstParentPath);
+    const dstParent = this.resolveStrict(dstParentPath, dst);
+    if (!dstParent) throw new VfsError('ENOENT', dst);
+    if (dstParent.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
     const dstName = d.slice(dstParentPath === '/' ? 1 : dstParentPath.length + 1);
     if (dstName === '') throw new VfsError('EINVAL', dst);
 
