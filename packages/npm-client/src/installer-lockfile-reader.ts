@@ -90,6 +90,12 @@ export function pinnedEntryForParent(
   }
 }
 
+/** Bare package name of a v3 lockfile install path (last `node_modules/` segment). */
+export function lockfilePathBareName(key: string): string {
+  const idx = key.lastIndexOf('/node_modules/');
+  return idx < 0 ? key.slice('node_modules/'.length) : key.slice(idx + '/node_modules/'.length);
+}
+
 export function lockfileSubgraph(lockfile: Lockfile, roots: string[]): Set<string> {
   // name → install-path index over every entry so the BFS visits nested
   // copies too. Pre-ADR-0042-follow-on only flat entries existed on the fast
@@ -98,9 +104,7 @@ export function lockfileSubgraph(lockfile: Lockfile, roots: string[]): Set<strin
   const namesToPaths = new Map<string, string[]>();
   for (const key of Object.keys(lockfile.packages)) {
     if (key === '') continue;
-    const idx = key.lastIndexOf('/node_modules/');
-    const bare =
-      idx < 0 ? key.slice('node_modules/'.length) : key.slice(idx + '/node_modules/'.length);
+    const bare = lockfilePathBareName(key);
     const existing = namesToPaths.get(bare);
     if (existing) existing.push(key);
     else namesToPaths.set(bare, [key]);
@@ -141,6 +145,46 @@ export function lockfileCovers(
     pinned.set(name, hit.entry.version);
   }
   return pinned;
+}
+
+/**
+ * Eddy-bundle completeness gate (round 6): every lockfile package REACHABLE
+ * from the request must be replayable FROM THE BUNDLE — a `resolved` +
+ * `integrity` on the entry, and a manifest tarball matching its
+ * name@version+integrity. Without this, a divergent/buggy resolver could send
+ * a covering lockfile while omitting tarballs; the client would adopt the
+ * lockfile, then the replay would quietly fetch the omissions from the
+ * ORDINARY registry on cache miss while still reporting (and learning)
+ * `source: 'eddy'` — a provenance lie. An honest bundle can never trip this:
+ * the server harvests one tarball per resolved package from the SAME install
+ * that produced the lockfile (`services/eddy/resolver.ts`).
+ *
+ * @returns a decline reason, or `null` when the bundle is complete.
+ */
+export function bundleCompletenessGap(
+  lockfile: Lockfile,
+  request: Record<string, string>,
+  tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
+): string | null {
+  const integrityByNameVersion = new Map<string, string>();
+  for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
+  const reachable = lockfileSubgraph(lockfile, Object.keys(request));
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    if (path === '') continue; // the root project is not a tarball
+    const name = lockfilePathBareName(path);
+    if (!reachable.has(name)) continue;
+    if (!entry.version || !entry.resolved || !entry.integrity) {
+      return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
+    }
+    const integrity = integrityByNameVersion.get(`${name}@${entry.version}`);
+    if (integrity === undefined) {
+      return `bundle omits the tarball for ${name}@${entry.version}`;
+    }
+    if (integrity !== entry.integrity) {
+      return `bundle tarball integrity for ${name}@${entry.version} does not match its lockfile`;
+    }
+  }
+  return null;
 }
 
 /**

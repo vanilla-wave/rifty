@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EDDY_BUNDLE_FORMAT,
-  type EddyBundleContents,
+  type EddyBundleSource,
   packEddyBundle,
   unpackEddyBundle,
 } from './eddy-bundle.ts';
@@ -10,7 +10,7 @@ function bytes(...nums: number[]): Uint8Array {
   return new Uint8Array(nums);
 }
 
-function sampleContents(): EddyBundleContents {
+function sampleContents(): EddyBundleSource {
   return {
     manifest: {
       format: EDDY_BUNDLE_FORMAT,
@@ -76,7 +76,7 @@ describe('EddyBundleV1 codec', () => {
     const longName =
       'tarballs/@really-long-scope__a-package-with-an-extremely-long-name-that-exceeds-one-hundred-bytes-easily-1.2.3.tgz';
     expect(longName.length).toBeGreaterThan(100);
-    const contents: EddyBundleContents = {
+    const contents: EddyBundleSource = {
       manifest: {
         format: EDDY_BUNDLE_FORMAT,
         npmClientVersion: '0.1.0',
@@ -112,7 +112,7 @@ describe('EddyBundleV1 codec', () => {
   });
 
   it('round-trips an empty tarball set (lockfile-only)', () => {
-    const contents: EddyBundleContents = {
+    const contents: EddyBundleSource = {
       manifest: {
         format: EDDY_BUNDLE_FORMAT,
         npmClientVersion: '0.1.0',

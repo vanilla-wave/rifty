@@ -1,29 +1,43 @@
-import type { Lockfile } from '@riftydev/npm-client';
+/**
+ * Drift tripwire: `@riftydev/eddy`'s SYNC `closureHashOf` (compat string API,
+ * node:crypto) must byte-match the shared async one in `@riftydev/npm-client`
+ * (WebCrypto) — both hash the same `canonicalClosureJson`.
+ */
+import { type Lockfile, closureHashOf as closureHashOfAsync } from '@riftydev/npm-client';
 import { describe, expect, it } from 'vitest';
 import { closureHashOf } from '../src/closure-hash.ts';
 
-function lf(packages: Lockfile['packages']): Lockfile {
-  return { name: 'r', version: '0.0.0', lockfileVersion: 3, requires: true, packages };
-}
+const LOCKFILE: Lockfile = {
+  name: 'app',
+  version: '1.0.0',
+  lockfileVersion: 3,
+  requires: true,
+  packages: {
+    '': { name: 'app', version: '1.0.0' },
+    'node_modules/debug': {
+      version: '4.4.1',
+      resolved: 'http://r/debug/-/debug-4.4.1.tgz',
+      integrity: 'sha512-a',
+      dependencies: { ms: '^2.1.3' },
+    },
+    'node_modules/ms': {
+      version: '2.1.3',
+      resolved: 'http://r/ms/-/ms-2.1.3.tgz',
+      integrity: 'sha512-b',
+    },
+    'node_modules/debug/node_modules/ms': {
+      version: '2.0.0',
+      resolved: 'http://r/ms/-/ms-2.0.0.tgz',
+      integrity: 'sha512-c',
+    },
+  },
+} as unknown as Lockfile;
 
-describe('closureHashOf', () => {
-  it('is identical for the same closure regardless of package key order', () => {
-    const a = lf({
-      '': { version: '0.0.0', dependencies: { x: '1.0.0', y: '2.0.0' } },
-      'node_modules/x': { version: '1.0.0', integrity: 'sha512-x' },
-      'node_modules/y': { version: '2.0.0', integrity: 'sha512-y' },
-    });
-    const b = lf({
-      'node_modules/y': { version: '2.0.0', integrity: 'sha512-y' },
-      'node_modules/x': { version: '1.0.0', integrity: 'sha512-x' },
-      '': { version: '0.0.0', dependencies: { x: '1.0.0', y: '2.0.0' } },
-    });
-    expect(closureHashOf(a)).toBe(closureHashOf(b));
-  });
-
-  it('differs when any pinned integrity differs', () => {
-    const a = lf({ 'node_modules/x': { version: '1.0.0', integrity: 'sha512-x' } });
-    const b = lf({ 'node_modules/x': { version: '1.0.0', integrity: 'sha512-DIFFERENT' } });
-    expect(closureHashOf(a)).not.toBe(closureHashOf(b));
+describe('eddy sync closureHashOf (compat API)', () => {
+  it('returns a plain string byte-identical to the shared async hash', async () => {
+    const sync = closureHashOf(LOCKFILE);
+    expect(typeof sync).toBe('string');
+    expect(sync).toMatch(/^sha256-/);
+    expect(sync).toBe(await closureHashOfAsync(LOCKFILE));
   });
 });

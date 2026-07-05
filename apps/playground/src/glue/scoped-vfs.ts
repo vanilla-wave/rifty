@@ -1,5 +1,6 @@
 import {
   type FsSync,
+  type PersistFailureReport,
   type Vfs,
   type VfsDirent,
   type VfsStat,
@@ -21,13 +22,22 @@ export function workspaceVfsPrefix(workspaceId: string): string {
 
 function scopePath(prefix: string, path: string): string {
   const normalized = normalizePath(path);
+  // Profile-wide owner metadata; project trees stay workspace-scoped.
+  if (normalized === '/.rifty' || normalized.startsWith('/.rifty/')) return normalized;
   return normalized === '/' ? prefix : normalizePath(`${prefix}${normalized}`);
+}
+
+function unscopePath(prefix: string, path: string): string {
+  const normalized = normalizePath(path);
+  if (normalized === prefix) return '/';
+  if (normalized.startsWith(`${prefix}/`)) return normalizePath(normalized.slice(prefix.length));
+  return normalized;
 }
 
 export class ScopedFsSync implements FsSync {
   constructor(
     private readonly inner: FsSync & {
-      flush?: () => Promise<void>;
+      flush?: () => Promise<PersistFailureReport | undefined>;
       loadFixture?: (files: Readonly<Record<string, string>>) => void;
     },
     private readonly prefix: string,
@@ -88,8 +98,23 @@ export class ScopedFsSync implements FsSync {
       this.inner.writeFileSync(path, enc.encode(content));
     }
   }
-  async flush(): Promise<void> {
-    await this.inner.flush?.();
+  async flush(): Promise<PersistFailureReport | undefined> {
+    const report = await this.inner.flush?.();
+    if (!report) return undefined;
+    const failures = report.failures.map((failure) => ({
+      ...failure,
+      path: unscopePath(this.prefix, failure.path),
+    }));
+    return {
+      failures,
+      total: report.total,
+      anyFailure: (predicate) => {
+        const mappedPredicate = (path: string): boolean =>
+          predicate(unscopePath(this.prefix, path));
+        if (report.anyFailure) return report.anyFailure(mappedPredicate);
+        return report.failures.some((failure) => mappedPredicate(failure.path));
+      },
+    };
   }
 }
 

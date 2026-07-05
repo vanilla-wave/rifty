@@ -12,13 +12,23 @@
  * The real `install` flow is exercised by `@riftydev/npm-client`'s own suite;
  * we inject a stub via the `install` DI seam so this file does not depend on
  * tarball fixtures from another package's private `_test-fixtures/` (would
- * violate CLAUDE.md "no internal imports across packages").
+ * violate CLAUDE.md "no internal imports across packages"). The seam is the
+ * command's REAL contract (`deps.install ?? realInstall` — the compiler pins
+ * `InstallFn` to the real signature), not a convenience mock; what a stub
+ * can't vouch for — real result shape, learned-pin write-back with the
+ * eddy-computed hash, stamp over a real tree — is covered without any stub by
+ * `tests/integration/npm-shell-eddy-glue.test.ts` (real npm-client + real eddy
+ * server over the fixture registry).
  */
 import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
-import { RegistryClient } from '@riftydev/npm-client';
+import {
+  RegistryClient,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
+} from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type InstallFn,
   createNpmShellCommand,
@@ -1026,32 +1036,290 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     );
   });
 
-  it('flushes, then writes the install stamp, then flushes again after a successful install', async () => {
+  it('drains + CHECKS before the stamp, then drains the stamp — durable-on-exit npm parity (ADR-0187 Corrected)', async () => {
+    // A reload right after `npm install` must not lose the tree
+    // (owner-snapshot-restore-exec e2e). The tree drain is checked FIRST — a
+    // stamp must never claim a tree whose write-through failed — then the
+    // stamp rides its own (tiny) drain.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
-    const flushSawStamp: boolean[] = [];
-    const flush = async (): Promise<void> => {
-      flushSawStamp.push(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json'));
-    };
     const shell = new Shell({ cwd: '/proj' });
+    const events: string[] = [];
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install, flush }),
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          events.push(
+            (await vfs.exists('/proj/node_modules/.rifty-install-stamp.json'))
+              ? 'flush-after-stamp'
+              : 'flush-before-stamp',
+          );
+          return undefined;
+        },
+      }),
     );
 
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
-    // First flush drains the tree BEFORE the stamp exists; second flush makes
-    // the stamp itself durable (ADR-0135 ordering: stamp implies tree).
-    expect(flushSawStamp).toEqual([false, true]);
+    expect(events).toEqual(['flush-before-stamp', 'flush-after-stamp']);
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
     expect(stamp.version).toBe(1);
     expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
     expect(stamp.packages).toBe(2);
+  });
+
+  it('a DIRTY drain (persist failures) skips the stamp and warns loudly — never stamp a torn tree', async () => {
+    // OPFS quota/perm failure: the write-through swallowed it per-op, but the
+    // flush report exposes it (ADR-0187 Corrected). The install stays usable
+    // this session (exit 0), the stamp is SKIPPED (next boot re-installs
+    // instead of trusting a tree OPFS failed to hold), stderr says so.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            {
+              path: '/proj/node_modules/lodash/package.json',
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 137,
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0); // the live tree works — durability, not the install, failed
+    const stderr = rec.stderr.join('');
+    expect(stderr).toContain('137 file(s) failed to persist');
+    expect(stderr).toContain('QuotaExceededError');
+    expect(stderr).toContain('NOT durable');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
+  it('a leftover failure on the stamp file ITSELF does not gate — the stamp rewrite heals that path', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    let call = 0;
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () =>
+          ++call === 1
+            ? {
+                // A previous install's stamp never persisted — not a torn TREE.
+                failures: [
+                  {
+                    path: '/proj/node_modules/.rifty-install-stamp.json',
+                    op: 'write' as const,
+                    message: 'QuotaExceededError',
+                  },
+                ],
+                total: 1,
+              }
+            : { failures: [], total: 0 },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toBe('');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+  });
+
+  it('a stamp write failure beyond the sampled failures still warns — the FULL ledger, not the sample', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    let call = 0;
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () =>
+          ++call === 1
+            ? { failures: [], total: 0 }
+            : {
+                failures: [
+                  {
+                    path: '/.rifty/eddy-learned-pins.json',
+                    op: 'write' as const,
+                    message: 'QuotaExceededError',
+                  },
+                ],
+                total: 21,
+                anyFailure: (pred: (p: string) => boolean) =>
+                  pred('/.rifty/eddy-learned-pins.json') ||
+                  pred('/proj/node_modules/.rifty-install-stamp.json'),
+              },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toContain('the install stamp failed to persist');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+  });
+
+  it('a FOREIGN persist failure (outside node_modules) does not gate — the stamp attests THIS tree, not the whole VFS', async () => {
+    // A learned-pins / other-project write failing to persist is not this
+    // node_modules torn — it must NOT skip a good stamp (over-broad revoke bug).
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            {
+              path: '/.rifty/eddy-learned-pins.json',
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 1,
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toBe(''); // no NOT-durable warning
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true); // stamped
+  });
+
+  it('a tree failure BEYOND the sampled failures still gates the stamp — the FULL ledger, not the sample', async () => {
+    // Foreign failures fill the report sample; the node_modules failure sits
+    // beyond it and is only visible via `anyFailure` (the full ledger). Scanning
+    // `failures` alone would stamp a torn tree.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            { path: '/.rifty/eddy-learned-pins.json', op: 'write' as const, message: 'Quota' },
+          ],
+          total: 21,
+          anyFailure: (pred: (p: string) => boolean) =>
+            pred('/.rifty/eddy-learned-pins.json') ||
+            pred('/proj/node_modules/lodash/package.json'),
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0); // live tree works
+    expect(rec.stderr.join('')).toContain('NOT durable'); // …but stamp SKIPPED
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
+  it('a THROWING flush skips the stamp and warns — a drain that cannot even report is not durable', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          throw new Error('rpc torn');
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stderr.join('')).toContain('install flush failed: rpc torn');
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
+  it('drains the write-through even when the stamp write FAILS — durable-on-exit must not hinge on the stamp', async () => {
+    // A stamp failure only costs the next boot's skip optimization; the TREE must
+    // still be flushed or an immediate reload loses the user's install. So flush
+    // runs regardless of the stamp's outcome.
+    const base = new MemoryVfs();
+    await base.mkdir('/proj/node_modules', { recursive: true });
+    const vfs = new Proxy(base, {
+      get(target, prop, receiver) {
+        if (prop === 'writeFile') {
+          return async (path: string, data: unknown) => {
+            if (String(path).endsWith('.rifty-install-stamp.json')) {
+              throw new Error('stamp write boom');
+            }
+            return (target.writeFile as (p: string, d: unknown) => Promise<void>)(path, data);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    }) as unknown as MemoryVfs;
+    let flushed = false;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushed = true;
+          return undefined;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    warnSpy.mockRestore();
+
+    expect(exitCode).toBe(0); // install still succeeds
+    expect(flushed).toBe(true); // …and the tree was flushed despite the stamp failure
+    expect(await base.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
   it('keys the install stamp on the owner project slug so a reload reuses the tree', async () => {
@@ -1137,6 +1405,70 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(rec.stdout.join('')).toContain('via eddy (fast)');
   });
 
+  it('forwards the ACTIVE preset pin + prefetch handle into install() (ADR-0195)', async () => {
+    const vfs = await projVfs();
+    const prefetchHandle = { take: () => null };
+    let seen: Pick<InstallOptions, 'resolverClosureHash' | 'resolverPrefetch'> | null = null;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-pin',
+        resolverPrefetch: () => prefetchHandle,
+        install: async (arg1) => {
+          const opts = arg1 as InstallOptions;
+          seen = {
+            resolverClosureHash: opts.resolverClosureHash,
+            resolverPrefetch: opts.resolverPrefetch,
+          };
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual({ resolverClosureHash: 'sha256-pin', resolverPrefetch: prefetchHandle });
+  });
+
+  it('does not even INVOKE the pin/prefetch getters when resolverUrl is unset (documented inert)', async () => {
+    // Regression (round 9): the getters ran unconditionally — a throwing pin
+    // store or prefetch handle broke eddy-DISABLED installs.
+    const vfs = await projVfs();
+    let seen: Pick<InstallOptions, 'resolverClosureHash' | 'resolverPrefetch'> | null = null;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverClosureHash: () => {
+          throw new Error('must not run without resolverUrl');
+        },
+        resolverPrefetch: () => {
+          throw new Error('must not run without resolverUrl');
+        },
+        install: async (arg1) => {
+          const opts = arg1 as InstallOptions;
+          seen = {
+            resolverClosureHash: opts.resolverClosureHash,
+            resolverPrefetch: opts.resolverPrefetch,
+          };
+          return { ...singletonResult('debug', '4.4.1'), source: 'standard' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual({ resolverClosureHash: undefined, resolverPrefetch: undefined });
+  });
+
   it('is inert when resolverUrl is unset — no resolverUrl forwarded, no provenance tag', async () => {
     const vfs = await projVfs();
     let seenResolverUrl: string | undefined = 'UNSET';
@@ -1158,5 +1490,240 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
     expect(exitCode).toBe(0);
     expect(seenResolverUrl).toBeUndefined();
     expect(rec.stdout.join('')).not.toContain('via eddy');
+  });
+});
+
+describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
+  async function projVfs(deps: Record<string, string> = { debug: '^4.4.1' }): Promise<MemoryVfs> {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', version: '0.0.0', dependencies: deps }, null, 2)}\n`,
+    );
+    return vfs;
+  }
+
+  function keyFor(deps: Record<string, string>): string {
+    const body = eddyRequestFromPackageJson(JSON.stringify({ dependencies: deps }));
+    if (!body) throw new Error('test setup: bad package.json');
+    return canonicalEddyRequestKey(body);
+  }
+
+  /** Let a fire-and-forget write-back settle. */
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('a learned pin rides into install() as resolverClosureHash when no env pin exists', async () => {
+    const vfs = await projVfs();
+    const getKeys: string[] = [];
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async (key) => {
+            getKeys.push(key);
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(seenPin).toBe('sha256-learned');
+    expect(getKeys).toEqual([keyFor({ debug: '^4.4.1' })]);
+  });
+
+  it('a learned pin WINS over the env pin — the exact post-merge request beats the coarse template pin', async () => {
+    const vfs = await projVfs();
+    const getKeys: string[] = [];
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-env',
+        learnedPins: {
+          get: async (key) => {
+            getKeys.push(key);
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
+    // A learned pin matches the EXACT dep set, so it beats the template env pin —
+    // otherwise a modified set (`npm i <pkg>`) never rides its learned GET.
+    expect(seenPin).toBe('sha256-learned');
+    expect(getKeys).toEqual([keyFor({ debug: '^4.4.1' })]);
+  });
+
+  it('the env pin is the FALLBACK when no learned pin covers the set yet', async () => {
+    const vfs = await projVfs();
+    let seenPin: string | undefined;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        resolverClosureHash: () => 'sha256-env',
+        learnedPins: {
+          get: async () => undefined, // first install of this set — nothing learned
+          set: async () => {},
+        },
+        install: async (arg1) => {
+          seenPin = (arg1 as InstallOptions).resolverClosureHash;
+          return { ...singletonResult('debug', '4.4.1'), source: 'eddy' };
+        },
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
+    expect(seenPin).toBe('sha256-env');
+  });
+
+  it('an eddy install writes the pin back under the MERGED package.json request key', async () => {
+    const vfs = await projVfs({ debug: '^4.4.1' });
+    const sets: Array<{ key: string; hash: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async (key, hash) => {
+            sets.push({ key, hash });
+          },
+        },
+        install: async () => ({
+          ...singletonResult('kleur', '4.1.5'),
+          source: 'eddy',
+          closureHash: 'sha256-new',
+        }),
+      }),
+    );
+
+    // A named install MERGES into package.json first — the learned key must be
+    // the post-merge request (debug + kleur), not the pre-install file.
+    const { exitCode } = await runShell(shell, 'npm install kleur@4.1.5');
+    await flush();
+
+    expect(exitCode).toBe(0);
+    expect(sets).toEqual([
+      { key: keyFor({ debug: '^4.4.1', kleur: '4.1.5' }), hash: 'sha256-new' },
+    ]);
+  });
+
+  it('a standard-source install never writes a pin', async () => {
+    const vfs = await projVfs();
+    let sets = 0;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async () => {
+            sets++;
+          },
+        },
+        install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+    await flush();
+
+    expect(sets).toBe(0);
+  });
+
+  it('a failing pin write-back is swallowed (warn) — the install still succeeds', async () => {
+    const vfs = await projVfs();
+    const shell = new Shell({ cwd: '/proj' });
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map((a) => String(a)).join(' '));
+    });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: {
+          get: async () => undefined,
+          set: async () => {
+            throw new Error('opfs exploded');
+          },
+        },
+        install: async () => ({
+          ...singletonResult('debug', '4.4.1'),
+          source: 'eddy',
+          closureHash: 'sha256-new',
+        }),
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+    await flush();
+    warnSpy.mockRestore();
+
+    expect(exitCode).toBe(0);
+    expect(warnings.some((w) => /learned pin/.test(w))).toBe(true);
+  });
+
+  it('is inert without resolverUrl — the learned store is never consulted', async () => {
+    const vfs = await projVfs();
+    let gets = 0;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        learnedPins: {
+          get: async () => {
+            gets++;
+            return 'sha256-learned';
+          },
+          set: async () => {},
+        },
+        install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
+      }),
+    );
+
+    await runShell(shell, 'npm install');
+
+    expect(gets).toBe(0);
   });
 });
