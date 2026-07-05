@@ -76,11 +76,13 @@ bucket. Object key = `bundle/<closure-hash>` with the hash RAW (base64 `/`
 `=` as-is): the client percent-encodes and S3 percent-decodes, so re-pointing
 the CDN origin from the VM to the bucket needs no client/wire change.
 
-**Deploy status (honest):** the committed `docker-compose.coi.yml` (and the
-live rifty.dev VM it tracks) runs the MEMORY store — the S3 tier activates
-only after this operator step. The access-key pair is a secret and is never
-committed: fill the commented `EDDY_S3_*` placeholders in a LOCAL copy of the
-COI compose and hand it to the VM via
+**Deploy status (honest):** the committed `docker-compose.coi.yml` is the
+checked-in COI template for the next VM metadata update; the live rifty.dev VM
+may lag it until the confirm-first redeploy below. Both the committed template
+and the current live VM run the MEMORY store unless an operator supplies the
+S3 group locally. The access-key pair is a secret and is never committed: fill
+the commented `EDDY_S3_*` placeholders in a LOCAL copy of the COI compose and
+hand it to the VM via
 `yc compute instance add-metadata --metadata-from-file docker-compose=<local-copy>`
 (then restart). The committed file keeps placeholders only.
 
@@ -244,7 +246,8 @@ first.
 
 4. A COI compose = `deploy/yandex/eddy/docker-compose.yml` with eddy's `build:`
    replaced by `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed tag; the
-   committed `docker-compose.coi.yml` tracks the live one — Caddy unchanged).
+   committed `docker-compose.coi.yml` is the deploy input and may be ahead of
+   the live VM until the operator redeploys it — Caddy unchanged).
    Create the VM with that service account (mirrors the proxy specs):
 
    ```bash
