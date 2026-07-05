@@ -98,6 +98,22 @@ let nextFd = 3;
 // fsError / withSyscall / FS_ERRNO live in fs-errors.ts (shared with
 // fs-streams.ts); pathToString / resolvePath in fs-path.ts.
 
+/**
+ * Strict preflight probe for open-semantics entry points (openSync + flagged
+ * read/write + access): only a true miss is `null`; ENOTDIR through a file
+ * propagates (Node: `open 'plain.txt/deep'` → ENOTDIR). The non-throwing
+ * `statSyncOrNull`/`existsSync` probes collapse that case to "missing" —
+ * correct for the module resolver's candidate walk (ADR-0083), wrong here.
+ */
+function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean } | null {
+  try {
+    return syncMirror().statSync(np);
+  } catch (err) {
+    if (err instanceof VfsError && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 function assertNonNegativeInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative integer`);
@@ -428,7 +444,9 @@ export function readFileSync(
   if (flag !== undefined && flag !== 'r') {
     const parsed = parseOpenFlags(flag);
     if (!parsed.readable) throw fsError('EBADF', ps, 'read');
-    const exists = syncMirror().existsSync(np);
+    // Strict probe: ENOTDIR through a file must surface as the OPEN error,
+    // not collapse to a miss→ENOENT (Node parity, review 2026-07-05 handoff).
+    const exists = withSyscall('open', p, () => statStrictOrNull(np)) !== null;
     if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
     if (!exists) {
       if (!parsed.create) throw fsError('ENOENT', ps, 'open');
@@ -455,7 +473,8 @@ export function writeFileSync(
   if (flag !== undefined && flag !== 'w' && flag !== 'w+') {
     const parsed = parseOpenFlags(flag);
     if (!parsed.writable) throw fsError('EBADF', ps, 'write');
-    const exists = syncMirror().existsSync(np);
+    // Strict probe — see readFileSync: through-file is ENOTDIR open, not ENOENT.
+    const exists = withSyscall('open', p, () => statStrictOrNull(np)) !== null;
     if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
     if (!exists && !parsed.create) throw fsError('ENOENT', ps, 'open');
     if (parsed.append) {
@@ -758,7 +777,7 @@ export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): n
   const path = resolvePath(p);
   const ps = pathToString(p);
   const parsed = parseOpenFlags(flags);
-  const stat = syncMirror().statSyncOrNull(path);
+  const stat = withSyscall('open', p, () => statStrictOrNull(path));
 
   if (stat) {
     if (parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
@@ -1039,7 +1058,9 @@ export const promises = {
     return realpathSync(p);
   },
   async access(p: string): Promise<void> {
-    if (!existsSync(p)) throw fsError('ENOENT', pathToString(p), 'access');
+    // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
+    const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
+    if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
   },
   async copyFile(src: string, dst: string, mode = 0): Promise<void> {
     copyFileSync(src, dst, mode);

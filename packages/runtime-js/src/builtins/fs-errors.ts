@@ -12,15 +12,20 @@ import { type PathLike, pathToString } from './fs-path.ts';
 
 // Node-shaped errno (negative Linux ABI, matches builtins/os.ts table) + the
 // message prose Node renders: "ENOENT: no such file or directory, open '/x'".
+// Covers every code `VfsErrorCode` can emit (plus fd-level EBADF) so no
+// VfsError crosses the boundary without errno/description.
 export const FS_ERRNO: Record<string, { errno: number; description: string }> = {
   EACCES: { errno: -13, description: 'permission denied' },
   EBADF: { errno: -9, description: 'bad file descriptor' },
+  EDQUOT: { errno: -122, description: 'disk quota exceeded' },
   EEXIST: { errno: -17, description: 'file already exists' },
   EINVAL: { errno: -22, description: 'invalid argument' },
+  EIO: { errno: -5, description: 'i/o error' },
   EISDIR: { errno: -21, description: 'illegal operation on a directory' },
   ENOENT: { errno: -2, description: 'no such file or directory' },
   ENOTDIR: { errno: -20, description: 'not a directory' },
   ENOTEMPTY: { errno: -39, description: 'directory not empty' },
+  EPERM: { errno: -1, description: 'operation not permitted' },
 };
 
 export function fsError(

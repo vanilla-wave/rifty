@@ -56,6 +56,12 @@ const c: ParityCase = {
     probe('rename-missing-src', DUAL, () => fs.renameSync('missing.txt', 'dst.txt'));
     probe('copyFile-missing-src', DUAL, () => fs.copyFileSync('missing.txt', 'dst.txt'));
     probe('open-missing', FULL, () => fs.openSync('missing.txt', 'r'));
+    probe('open-notdir', FULL, () => fs.openSync('plain.txt/deep', 'r'));
+    probe('open-create-notdir', FULL, () => fs.openSync('plain.txt/deep', 'w'));
+    probe('readFile-rplus-notdir', FULL, () => fs.readFileSync('plain.txt/deep', { flag: 'r+' }));
+    probe('writeFile-rplus-notdir', FULL, () =>
+      fs.writeFileSync('plain.txt/deep', 'x', { flag: 'r+' }));
+    probe('appendFile-notdir', FULL, () => fs.appendFileSync('plain.txt/deep.log', 'x'));
     probe('cp-missing-src', DUAL, () => fs.cpSync('missing-dir', 'dst-dir', { recursive: true }));
     probe('opendir-missing', FULL, () => fs.opendirSync('missing-dir'));
 
@@ -72,6 +78,7 @@ const c: ParityCase = {
     (async () => {
       await aprobe('p.readFile-missing', FULL, () => fsp.readFile('missing.txt'));
       await aprobe('p.access-missing', FULL, () => fsp.access('missing.txt'));
+      await aprobe('p.access-notdir', FULL, () => fsp.access('plain.txt/deep'));
       await aprobe('p.readlink-plain-file', FULL, () => fsp.readlink('plain.txt'));
       await aprobe('cb.readFile-missing', FULL, () => new Promise((res, rej) =>
         fs.readFile('missing.txt', (e) => (e ? rej(e) : res()))));
