@@ -19,7 +19,12 @@
  * skips the link (the hash is never published unservable); a silent drop here
  * once linked hashes that 404'd on GET.
  */
-import type { CachedBundle } from './cache.ts';
+import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
+
+export interface CachedBundle {
+  bytes: Uint8Array;
+  manifest: EddyBundleManifestV1;
+}
 
 export interface BundleStore {
   get(closureHash: string): Promise<CachedBundle | null>;

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 23)
+
+- **Eddy bundle-store modules stay acyclic.** `CachedBundle` now lives with the
+  `BundleStore` contract instead of making `bundle-store.ts` import its cache
+  consumer.
+
 ### Fixed (PR #107 round 22)
 
 - **Learned pins are exposed only after immutable-store proof.** POST bundle

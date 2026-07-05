@@ -28,8 +28,7 @@ import {
   parseIntegrityAlgorithm,
   unpackEddyBundle,
 } from '@riftydev/npm-client';
-import type { BundleStore } from './bundle-store.ts';
-import type { CachedBundle } from './cache.ts';
+import type { BundleStore, CachedBundle } from './bundle-store.ts';
 import { signV4 } from './sigv4.ts';
 
 const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';

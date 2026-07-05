@@ -12,11 +12,12 @@ export {
   type EddyResolveResult,
   type EddyResolverDeps,
 } from './resolver.ts';
-export { EddyCache, type EddyCacheOptions, type CachedBundle } from './cache.ts';
+export { EddyCache, type EddyCacheOptions } from './cache.ts';
 export { createEddyServer, type EddyServer, type EddyServerOptions } from './server.ts';
 export {
   MemoryBundleStore,
   type BundleStore,
+  type CachedBundle,
   type MemoryBundleStoreOptions,
 } from './bundle-store.ts';
 export { S3BundleStore, type S3BundleStoreOptions } from './s3-bundle-store.ts';

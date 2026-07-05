@@ -14,8 +14,8 @@ import { createHash } from 'node:crypto';
  * ORIGINAL as-of stamp (when it was first resolved) — staleness is visible,
  * never silently refreshed.
  */
-import type { EddyBundleManifestV1, PackumentCacheLike } from '@riftydev/npm-client';
-import { type BundleStore, MemoryBundleStore } from './bundle-store.ts';
+import type { PackumentCacheLike } from '@riftydev/npm-client';
+import { type BundleStore, type CachedBundle, MemoryBundleStore } from './bundle-store.ts';
 import {
   type EddyResolveRequest,
   type EddyResolveResult,
@@ -48,11 +48,6 @@ export interface EddyCacheOptions {
   clock?: () => number;
   /** Injectable resolver (defaults to {@link resolveBundle}). */
   resolveFn?: typeof resolveBundle;
-}
-
-export interface CachedBundle {
-  bytes: Uint8Array;
-  manifest: EddyBundleManifestV1;
 }
 
 type BundleResolveResult = EddyResolveResult & { kind: 'bundle' };
