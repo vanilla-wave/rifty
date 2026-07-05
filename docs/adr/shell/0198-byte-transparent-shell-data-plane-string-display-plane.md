@@ -34,6 +34,6 @@ a text-only shell plumbing.
   (packages/shell/tests/binary-transparency.test.ts).
 - Text FILTERS (`grep`/`head`/`tail`/…) still decode stdin to strings — binary
   through a text filter is text semantics, not byte-exact
-  (docs/backlog/shell/byte-exact-text-filters.md).
+  (docs/backlog/shell/byte-exact-command-output.md).
 - Terminal display of binary output shows replacement chars — display-plane
   decode is lossy BY DESIGN; the data plane is not.

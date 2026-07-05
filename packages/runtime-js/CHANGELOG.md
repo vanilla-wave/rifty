@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Node-shaped fs errors everywhere (review 2026-07-05).** A single
+  VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
+  `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path
+  ops) and Node's exact message rendering, with `err.path` reported AS PASSED
+  (relative stays relative). Previously the most common path
+  (`readFileSync` ENOENT) leaked a raw `VfsError` with no errno/syscall —
+  libraries switching on `err.errno` misbehaved. Contract: parity case
+  `fs/error-shape-errno-syscall` (28 probes vs real Node).
+- **`rmdirSync` on a file no longer silently DELETES it** — Node parity ENOTDIR.
+- **`createReadStream`/`createWriteStream` resolve relative paths against
+  `process.cwd()`.** They previously hit `/<path>` — a program at
+  `/workspace` streaming `./data.csv` read or wrote the wrong file.
+- **`createWriteStream` honors `flags`.** `{flags:'a'}` silently OVERWROTE the
+  file (logger data loss); now 'a'/'ax'/'wx'/'r+' behave like Node incl.
+  truncate-at-open for 'w', EEXIST error events for exclusive flags, and
+  write-through per burst so a long-lived logger's file is readable before
+  `end()`. Unsupported options (`fd`, `fs`, `start`, `autoClose:false`) are
+  loud `NotImplementedError`s, never silently accepted. Contract: parity case
+  `fs/streams-flags-relative-cwd`.
+- **`fs.watch` `recursive:true` actually watches the subtree** (was silently
+  non-recursive → vite-style watchers missed every nested change); events carry
+  the relative subpath; default is `false` (Node parity). `persistent:false`
+  unrefs the poll timer; `encoding:'buffer'` is a loud gap.
+- **`fs.watchFile` Stats report the real `isFile()`/`isDirectory()`** (was
+  hardcoded file=exists, directory=false).
+
 ### Added
 
 - **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —

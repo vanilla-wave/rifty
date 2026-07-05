@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **Byte-transparent data plane (ADR-0198).** `Writer.write` accepts
+  `string | Uint8Array`; stdout capture, pipe hand-off and `>`/`>>` redirects
+  carry bytes end-to-end, and `cat` pumps raw bytes on its plain path.
+  Previously every chunk round-tripped through a JS string, so
+  `cat img.png > copy.png` (and any binary through a pipe) permanently minted
+  U+FFFD into the payload. Display plane (`RunResult.stdout`, `onChunk`) stays
+  string-typed; byte chunks decode through streaming decoders. Guard:
+  `tests/binary-transparency.test.ts`.
+
 - **A pre-aborted `run()` never starts segment 0 and resolves 130.** The
   documented contract ("resolves immediately when already aborted") was
   violated: the segment loop checked the abort AFTER `runSegment`, so a run

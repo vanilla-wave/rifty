@@ -671,13 +671,11 @@ export class Shell {
       // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
       // not the terminal; stderr always streams (bash never pipes stderr).
       if (stream === 'stdout') {
-        const text =
-          typeof chunk === 'string' ? chunk : stdoutTap.decode(chunk, { stream: true });
+        const text = typeof chunk === 'string' ? chunk : stdoutTap.decode(chunk, { stream: true });
         if (streamStdout) options.onChunk?.(text, 'stdout');
         stdoutChunks.push(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
       } else {
-        const text =
-          typeof chunk === 'string' ? chunk : stderrTap.decode(chunk, { stream: true });
+        const text = typeof chunk === 'string' ? chunk : stderrTap.decode(chunk, { stream: true });
         options.onChunk?.(text, 'stderr');
         stderr += text;
       }

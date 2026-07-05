@@ -676,7 +676,12 @@ export function copyFileSync(src: string, dst: string, mode = 0): void {
     throw fsError('EEXIST', src, 'copyfile', dst);
   }
   // ADR-0090: native VFS copy (single regular file; dst mtime=now). FICLONE degrades here.
-  withSyscall('copyfile', src, () => syncMirror().copyFileSync(resolvePath(src), resolvePath(dst)), dst);
+  withSyscall(
+    'copyfile',
+    src,
+    () => syncMirror().copyFileSync(resolvePath(src), resolvePath(dst)),
+    dst,
+  );
 }
 
 export function cpSync(src: string, dst: string, opts?: CpOptions): void {

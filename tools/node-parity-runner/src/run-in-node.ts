@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { caseCwd, type ParityCase } from './types.ts';
+import { type ParityCase, caseCwd } from './types.ts';
 
 /**
  * Preamble injected ahead of a `kind: 'http'` case so the SAME case `code`

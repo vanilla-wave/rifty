@@ -44,7 +44,7 @@ import {
   loadVendoredEsbuildWasm,
   transformWithEsbuild,
 } from '../../shadow-registry/src/esbuild-binding.ts';
-import { caseCwd, type ParityCase } from './types.ts';
+import { type ParityCase, caseCwd } from './types.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both

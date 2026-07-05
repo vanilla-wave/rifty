@@ -2,7 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Absolute-only path contract (ADR-0197).** `normalizeAbsolute` (and thus every
+  `Vfs`/`FsSync` entry point) throws on a relative path instead of silently
+  anchoring it at `/` — the silent coercion masked missing cwd resolution in
+  callers (the fs-streams wrong-file bug). cwd anchoring lives strictly above
+  the VFS.
+- **Backend errors name the TARGET path and distinguish ENOTDIR.** Traversal
+  through a file is `ENOTDIR` (never a silent miss→`ENOENT`), `rm force`
+  suppresses only `ENOENT`, and `writeFile`/`mkdir`/`rename`/`copyFile` errors
+  carry the full target path instead of the parent — identical semantics in
+  `MemoryBackend` and `OpfsFsSync` (guard: `fs-sync-strict-paths.test.ts`,
+  Node truth: parity case `fs/error-shape-errno-syscall`).
+
 ### Fixed
+
+- **`openReadable` validates its window.** `chunkSize: 0` previously looped the
+  pull callback forever (reader hang); a negative `start`/`end` fell into
+  `subarray`'s from-the-end semantics. Both are loud `RangeError`s now, in
+  `MemoryVfs` and OPFS `chunkedFileStream`.
 
 - **`MemoryBackend.rename` now invalidates cached dirents for both source and
   destination parents.** A move after `readdirSync()` no longer leaves stale

@@ -58,7 +58,12 @@ export type SyscallSpec = string | { readonly default: string; readonly [code: s
 const PATHLESS_SYSCALLS = new Set(['read', 'write', 'opendir']);
 
 /** `withSyscall`'s translation step, usable directly in async/event error paths. */
-export function toNodeFsError(err: unknown, spec: SyscallSpec, p?: PathLike, dest?: string): unknown {
+export function toNodeFsError(
+  err: unknown,
+  spec: SyscallSpec,
+  p?: PathLike,
+  dest?: string,
+): unknown {
   if (err instanceof VfsError) {
     const syscall = typeof spec === 'string' ? spec : (spec[err.code] ?? spec.default);
     const path = PATHLESS_SYSCALLS.has(syscall) || p === undefined ? undefined : pathToString(p);

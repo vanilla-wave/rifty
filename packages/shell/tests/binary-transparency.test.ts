@@ -29,9 +29,7 @@ describe('shell binary transparency (ADR-0198)', () => {
     const sh = new Shell();
     const res = await sh.run('cat /bin.dat > /copy.dat');
     expect(res.exitCode).toBe(0);
-    expect(Array.from(syncMirror().readFileBytesSync('/copy.dat'))).toEqual(
-      Array.from(allBytes()),
-    );
+    expect(Array.from(syncMirror().readFileBytesSync('/copy.dat'))).toEqual(Array.from(allBytes()));
   });
 
   it('cat >> appends bytes without re-encoding', async () => {
