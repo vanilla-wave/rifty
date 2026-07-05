@@ -653,18 +653,28 @@ async function tryEddyFastPath(
   // MUST self-report that hash — else the CDN/cache served the wrong object and we
   // decline (defence-in-depth over the origin's own key check). A POST has no
   // pre-known hash (the server computes it), so it carries none.
-  const attempts: Array<{
-    label: string;
-    expectedHash?: string;
-    run: (signal: AbortSignal) => Promise<Response>;
-  }> = [];
+  type EddyAttempt =
+    | {
+        kind: 'prefetch';
+        label: string;
+        expectedHash?: string;
+        response: Promise<Response>;
+      }
+    | {
+        kind: 'fetch';
+        label: string;
+        expectedHash?: string;
+        run: (signal: AbortSignal) => Promise<Response>;
+      };
+  const attempts: EddyAttempt[] = [];
   if (prefetched) {
     attempts.push({
+      kind: 'prefetch',
       label: 'prefetch',
       ...(opts.resolverPrefetch?.closureHash
         ? { expectedHash: opts.resolverPrefetch.closureHash }
         : {}),
-      run: () => prefetched,
+      response: prefetched,
     });
   }
   const pin = online ? undefined : opts.resolverClosureHash;
@@ -677,12 +687,14 @@ async function tryEddyFastPath(
   if (pin) {
     const bundleBase = opts.resolverBundleBaseUrl ?? url;
     attempts.push({
+      kind: 'fetch',
       label: 'get',
       expectedHash: pin,
       run: (signal) => fetch(bundleUrlFor(bundleBase, pin), { signal }),
     });
   }
   attempts.push({
+    kind: 'fetch',
     label: 'post',
     run: (signal) => {
       const requestBody: Record<string, unknown> = { ...body };
@@ -699,8 +711,12 @@ async function tryEddyFastPath(
   const reasons: string[] = [];
   for (const attempt of attempts) {
     try {
+      const response =
+        attempt.kind === 'prefetch'
+          ? await attempt.response
+          : await fetchHeadersBounded(attempt.run, headersStallMs, attempt.label);
       const outcome = await consumeEddyResponse(
-        await fetchHeadersBounded(attempt.run, headersStallMs, attempt.label),
+        response,
         effectiveRequest,
         opts,
         tarballCache,
@@ -718,13 +734,12 @@ async function tryEddyFastPath(
 }
 
 /**
- * Bound the HEADER phase of one attempt: `resolverStallTimeoutMs` (and the
- * default stall bound) only start once a body exists — a fetch whose
+ * Bound the HEADER phase of one direct GET/POST attempt: `resolverStallTimeoutMs`
+ * (and the default stall bound) only start once a body exists — a fetch whose
  * connection/headers hang parked `npm install` before any body bound could
- * run. The race rejects even when the fetch ignores the abort signal (a
- * prefetched attempt's fetch is already in flight and unsignalled), so the
- * attempt pipeline always falls through to the next attempt / standard
- * install.
+ * run. Prefetch carries its own header + eager-drain bounds in
+ * `startEddyPrefetch`; racing its already-buffering promise here would abandon
+ * a slow-but-progressing download and duplicate the request.
  */
 async function fetchHeadersBounded(
   run: (signal: AbortSignal) => Promise<Response>,

@@ -266,6 +266,19 @@ export class EddyCache {
       return result;
     }
     if (stored) {
+      // A verified GET proves the bytes, but durable-before-link also needs the
+      // store's delivery metadata (S3 `immutable`) proven/repaired before this
+      // process publishes a mutable dep-set link to that hash.
+      try {
+        await this.store.put(closureHash, { bytes: stored.bytes, manifest: stored.manifest });
+      } catch (err) {
+        console.error(
+          `eddy: bundle store repair/proof failed for ${closureHash}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        const cur = this.mutable.peek(key);
+        if (cur && gen > cur.gen) this.mutable.delete(key);
+        return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
+      }
       this.publishLink(key, closureHash, gen);
       return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
     }

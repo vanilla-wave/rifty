@@ -2,7 +2,8 @@
  * BundleStore (ADR-0194 §4–5): the immutable `closureHash → bundle` tier
  * behind `EddyCache`. Memory implementation here; the S3 one lives in
  * `s3-bundle-store.test.ts`. Plus the cache↔store contract: durable-before-
- * link, store-hit skips put, failed put degrades (no link, no 500).
+ * link, store-hit proof/repair without fresh-byte overwrite, failed put
+ * degrades (no link, no 500).
  */
 import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
 import { describe, expect, it, vi } from 'vitest';
@@ -132,7 +133,7 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     expect(events).toEqual(['put-settled', 'resolved']);
   });
 
-  it('a cold recompute of an ALREADY-STORED closure serves the stored artifact — no re-put, byte-stable immutable tier (round 15)', async () => {
+  it('a cold recompute of an ALREADY-STORED closure proves the stored artifact without fresh-byte overwrite (round 15)', async () => {
     const { fetch } = makeLocalFetcher();
     const log: string[] = [];
     const store = recordingStore(new MemoryBundleStore({ maxBytes: 1024 * 1024 }), log);
@@ -149,14 +150,16 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
     const again = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
     expect(again.kind).toBe('bundle');
     // The recompute gate is a VERIFIED store.get, not a HEAD-exists check
-    // (ADR-0194 §5: existence can't tell a valid object from a poisoned one;
-    // the S3 get() fully content-addresses, so a poisoned key still reads as
-    // a MISS → the put path re-seeds it). A verified hit is served AS-IS —
-    // re-putting fresh bytes (new `asOf.resolvedAt`) would let the immutable
-    // GET URL serve different bytes than a browser/CDN already holds.
-    expect(log.filter((l) => l.startsWith('put ')).length).toBe(1);
+    // (ADR-0194 §5: existence can't tell a valid object from a poisoned one).
+    // A verified hit is served AS-IS, then idempotently put for metadata
+    // proof/repair. That put must use the STORED bytes: re-putting fresh bytes
+    // (new `asOf.resolvedAt`) would let the immutable GET URL serve different
+    // bytes than a browser/CDN already holds.
+    expect(log.filter((l) => l.startsWith('put ')).length).toBe(2);
     if (first.kind === 'bundle' && again.kind === 'bundle') {
       expect([...again.bytes]).toEqual([...first.bytes]);
+      const stored = await cache.getBundle(first.manifest.asOf.closureHash);
+      expect([...(stored?.bytes ?? [])]).toEqual([...first.bytes]);
     }
   });
 

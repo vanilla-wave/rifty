@@ -8,9 +8,12 @@
  * The contract `EddyCache` relies on (ADR-0194 §5): `put` completes before the
  * dep-set link is written (durable-before-link) AND is idempotent + self-healing
  * — it re-seeds a missing OR corrupt/foreign object (`get` reads either as a
- * miss) and skips the upload only when the SAME bytes are already durable. There
- * is deliberately no cheap `has`: a HEAD-exists check can't tell a valid object
- * from a poisoned one, so gating the heal on it would silently skip re-seeding.
+ * miss) and skips the upload only when the SAME bytes are already durable.
+ * `EddyCache` may call `put` after a verified `get` hit: that is the same
+ * idempotent proof/repair path, needed for delivery metadata such as S3
+ * `Cache-Control: immutable`. There is deliberately no cheap `has`: a
+ * HEAD-exists check can't tell a valid object from a poisoned one, so gating
+ * the heal on it would silently skip re-seeding.
  * `put` is durable-or-THROW — a settled put means GET-by-hash serves the bundle.
  * A put that cannot store (over-cap, bucket down) must reject so `EddyCache`
  * skips the link (the hash is never published unservable); a silent drop here

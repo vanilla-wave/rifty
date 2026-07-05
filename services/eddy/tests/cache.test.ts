@@ -310,17 +310,72 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect([...(stored?.bytes ?? [])]).toEqual([1, 1, 1]); // original bytes intact
   });
 
-  it('concurrent computes of the SAME closure store ONE artifact — both serve identical bytes (round 18)', async () => {
+  it('repairs/proves a stored SAME-closure hit before publishing the mutable link', async () => {
+    // Regression (round 19): S3 `get()` verifies bytes but cannot prove
+    // cache-control metadata. A store-hit must still run the idempotent `put`
+    // repair path before publishing a dep-set link to that hash.
+    const { fetch } = makeLocalFetcher();
+    const original = bundleBytes('sha256-H', [1, 1, 1]);
+    const fresh = bundleBytes('sha256-H', [2, 2, 2]);
+    const putBytes: number[][] = [];
+    const store: BundleStore = {
+      get: async () => ({ bytes: original.bytes, manifest: original.manifest }),
+      put: async (_hash, bundle) => {
+        putBytes.push([...bundle.bytes]);
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store,
+      resolveFn: async () => fresh,
+    });
+
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(first.kind === 'bundle' && [...first.bytes]).toEqual([1, 1, 1]);
+    expect(putBytes).toEqual([[1, 1, 1]]); // repair/proof uses the durable bytes, not recompute bytes
+
+    await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(putBytes).toEqual([[1, 1, 1]]); // mutable hit is safe because the proof already happened
+  });
+
+  it('skips the mutable link when stored-hit metadata repair/proof fails', async () => {
+    const { fetch } = makeLocalFetcher();
+    const original = bundleBytes('sha256-H', [1, 1, 1]);
+    let computes = 0;
+    let failProof = true;
+    const store: BundleStore = {
+      get: async () => ({ bytes: original.bytes, manifest: original.manifest }),
+      put: async () => {
+        if (failProof) throw new Error('metadata write failed');
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store,
+      resolveFn: async () => {
+        computes += 1;
+        return bundleBytes('sha256-H', [2, 2, computes]);
+      },
+    });
+
+    const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(first.kind === 'bundle' && [...first.bytes]).toEqual([1, 1, 1]);
+    failProof = false;
+    await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(computes).toBe(2); // first proof failure did not publish a reusable link
+  });
+
+  it('concurrent computes of the SAME closure never overwrite with recompute bytes (round 18)', async () => {
     // Two DIFFERENT dep sets resolve to the SAME closure with different bytes,
     // concurrently. Without per-hash serialization both PUT (last wins) and the
     // two callers see different bytes for one immutable hash.
     const { fetch } = makeLocalFetcher();
     const inner = new MemoryBundleStore({ maxBytes: 4096 });
-    let putCalls = 0;
+    const putBytes: number[][] = [];
     const counting: BundleStore = {
       get: (h) => inner.get(h),
       put: async (h, b) => {
-        putCalls += 1;
+        putBytes.push([...b.bytes]);
         await inner.put(h, b);
       },
     };
@@ -352,7 +407,7 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     const aBytes = a.kind === 'bundle' ? [...a.bytes] : [];
     const bBytes = b.kind === 'bundle' ? [...b.bytes] : [];
     expect(bBytes).toEqual(aBytes); // both callers serve the SAME (first-stored) bytes
-    expect(putCalls).toBe(1); // exactly one artifact stored under the hash
+    expect(putBytes).toEqual([aBytes, aBytes]); // second proof never overwrites with recompute bytes
     const stored = await cache.getBundle('sha256-SAME');
     expect([...(stored?.bytes ?? [])]).toEqual(aBytes); // the immutable key is byte-stable
   });

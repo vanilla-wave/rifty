@@ -521,6 +521,49 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('resolverPrefetch: an already-bounded slow buffered response is not raced by the direct header timeout', async () => {
+    const bytes = await buildBundleFor(DEPS);
+    let fallbackRequests = 0;
+    const raw = await startRaw((_req, res) => {
+      fallbackRequests++;
+      res.writeHead(500);
+      res.end();
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const prefetch = {
+        take: (_requestKey: string) =>
+          new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              const body = new ArrayBuffer(bytes.byteLength);
+              new Uint8Array(body).set(bytes);
+              resolve(
+                new Response(body, {
+                  status: 200,
+                  headers: { 'content-type': 'application/x-tar' },
+                }),
+              );
+            }, 50);
+          }),
+      };
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        resolverPrefetch: prefetch,
+        resolverStallTimeoutMs: 5,
+      });
+
+      expect(result.source).toBe('eddy');
+      expect(fallbackRequests).toBe(0);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('resolverPrefetch: a prefetch for STALE deps is ignored (never trusted) — install fetches its own', async () => {
     const bytes = await buildBundleFor(DEPS);
     let requests = 0;

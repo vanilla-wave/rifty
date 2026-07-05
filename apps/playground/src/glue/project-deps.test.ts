@@ -1,8 +1,10 @@
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { type DepSnapshotV1, buildDepSnapshot } from './dep-snapshot.ts';
 import { installStampSatisfied, writeInstallStamp } from './install-stamp.ts';
 import { ensureProjectDependencies } from './project-deps.ts';
+import { ScopedFsSync, ScopedVfs, workspaceVfsPrefix } from './scoped-vfs.ts';
 
 const ROOT = '/workspace';
 const enc = new TextEncoder();
@@ -279,6 +281,54 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
     expect(log.join('')).toContain('install stamp revoked');
     expect(log.join('')).not.toContain('CRITICAL'); // the revoke proved durable
+  });
+
+  it('REVOKES a scoped-workspace stamp when OPFS reports physical tree damage', async () => {
+    const { vfs: innerVfs, fsSync: innerFs } = createMemoryFs();
+    const prefix = workspaceVfsPrefix('active');
+    const vfs = new ScopedVfs(innerVfs, prefix);
+    const fsSync = new ScopedFsSync(innerFs, prefix);
+    fsSync.mkdirSync(ROOT, { recursive: true });
+    fsSync.writeFileSync(
+      `${ROOT}/package.json`,
+      enc.encode(JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } })),
+    );
+    const log: string[] = [];
+    let flushCalls = 0;
+    (innerFs as typeof innerFs & { flush: () => Promise<PersistFailureReport> }).flush =
+      async () => {
+        flushCalls += 1;
+        if (flushCalls === 1) {
+          return {
+            failures: [
+              {
+                path: `${prefix}${ROOT}/node_modules/vite/package.json`,
+                op: 'write',
+                message: 'QuotaExceededError',
+              },
+            ],
+            total: 1,
+          };
+        }
+        return { failures: [], total: 0 };
+      };
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: (line) => log.push(line),
+      flush: () => fsSync.flush(),
+    });
+
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+    expect(log.join('')).toContain('install stamp revoked');
   });
 
   it('does NOT revoke on a FOREIGN persist failure — a global path (learned pins, another project) is not this tree torn', async () => {

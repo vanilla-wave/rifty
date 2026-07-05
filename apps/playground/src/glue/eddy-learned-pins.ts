@@ -5,13 +5,14 @@
  * cacheable `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an
  * origin POST.
  *
- * Storage: `/.rifty/eddy-learned-pins.json` on the owner VFS (dot-dir
- * precedent: `VfsTarballCache`). TTL = the server's mutable-tier DEFAULT
- * (1800s) — the client does NOT track a deploy's custom `EDDY_TTL_SECONDS`;
- * a pin outliving the server link degrades to a verified 404 → POST which
- * re-learns. Corrupt/wrong-shape file reads as absent, never an error. A
- * stale pin is harmless either way: the installer's verification gates
- * (coverage, integrity) already degrade it to POST.
+ * Storage: profile-wide `/.rifty/eddy-learned-pins.json` on the owner VFS
+ * (dot-dir precedent: `VfsTarballCache`; `ScopedVfs` deliberately leaves
+ * `/.rifty` unscoped). TTL = the server's mutable-tier DEFAULT (1800s) — the
+ * client does NOT track a deploy's custom `EDDY_TTL_SECONDS`; a pin outliving
+ * the server link degrades to a verified 404 → POST which re-learns.
+ * Corrupt/wrong-shape file reads as absent, never an error. A stale pin is
+ * harmless either way: the installer's verification gates (coverage,
+ * integrity) already degrade it to POST.
  *
  * Sync reader exists for `primeInstallPrefetch`, which is sync BY DESIGN (an
  * async gate starves behind the owner boot loop — measured double-POST,
