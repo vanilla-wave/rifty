@@ -651,15 +651,39 @@ export function existsSync(p: string): boolean {
   return syncMirror().existsSync(resolvePath(p));
 }
 
+// Remove-family kind gates (review 2026-07-05 handoff r3): the generic VFS
+// rmSync removes any empty-or-file path, so each Node entry point enforces
+// its own target-kind contract here — unlink never removes a directory,
+// plain rm refuses one, rmdir refuses a file (the gate below).
+
 export function unlinkSync(p: string): void {
-  withSyscall('unlink', p, () => syncMirror().rmSync(resolvePath(p), {}));
+  withSyscall('unlink', p, () => {
+    const np = resolvePath(p);
+    // Errno persona: Linux EISDIR (FS_ERRNO's Linux ABI + the WASI layer's
+    // E_ISDIR choice); darwin Node reports EPERM — host-divergent, so the
+    // guard is conformance-pinned, not parity-pinned.
+    if (syncMirror().statSyncOrNull(np)?.isDirectory) throw new VfsError('EISDIR', np);
+    syncMirror().rmSync(np, {});
+  });
 }
 
 export function rmSync(p: string, opts?: RmOptions): void {
+  const np = resolvePath(p);
+  // Node's rm refuses ANY directory without `recursive` — ERR_FS_EISDIR, a
+  // JS-layer SystemError (POSITIVE errno, message embeds the path AS PASSED).
+  // `force` does not suppress it, and a non-empty dir is the SAME error, not
+  // ENOTEMPTY (probed v24). Parity: fs/error-shape-errno-syscall.
+  if (!opts?.recursive && syncMirror().statSyncOrNull(np)?.isDirectory) {
+    const ps = pathToString(p);
+    throw Object.assign(
+      new Error(`Path is a directory: rm returned EISDIR (is a directory) ${ps}`),
+      { name: 'SystemError', code: 'ERR_FS_EISDIR', errno: 21, syscall: 'rm', path: ps },
+    );
+  }
   // Node's rm stats the target before removing — a missing path (without
   // `force`) reports syscall 'lstat', not 'unlink'.
   withSyscall('lstat', p, () =>
-    syncMirror().rmSync(resolvePath(p), { recursive: opts?.recursive, force: opts?.force }),
+    syncMirror().rmSync(np, { recursive: opts?.recursive, force: opts?.force }),
   );
 }
 

@@ -8,13 +8,16 @@ export interface ParityCase {
   /** Files preloaded into the runtime's in-memory VFS, relative to /work/. */
   readonly setup?: { readonly files?: Readonly<Record<string, string>> };
   /**
-   * Process cwd for BOTH runtimes, as an absolute POSIX path anchored at the
+   * Relative-path ANCHOR for both runtimes, as an absolute POSIX path from the
    * case's fs root (default `'/'`). Rifty: `setProcessCwd(cwd)`; Node child:
    * `<workDir>/<cwd>` (created if absent). Setup files keep their root-relative
    * anchors — a case with `files: {'app/data.txt': …}, cwd: '/app'` reads it as
    * `data.txt`. This is what makes relative-path resolution bugs parity-visible:
    * at the historical pinned cwd `/`, an fs surface that DROPS cwd resolution
    * (treating `data.txt` as `/data.txt`) still resolved identically by accident.
+   * The `process.cwd()` VALUES differ (Node: the absolute temp `<workDir>/<cwd>`;
+   * rifty: `<cwd>`) — a case must never PRINT cwd or resolved-absolute paths,
+   * only rely on the anchoring.
    */
   readonly cwd?: string;
   /** Optional stdin chunks written to both runtimes after the entry attaches listeners. */

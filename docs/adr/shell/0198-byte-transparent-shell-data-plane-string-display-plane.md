@@ -25,8 +25,12 @@ a text-only shell plumbing.
   intact). Public `RunResult` shape is unchanged.
 - `cat` writes raw bytes on its plain path (no `-n`/`-b`/`-E`/`-A`); the
   transform flags stay text-typed — GNU cat's numbering is line/text semantics.
-- stderr stays string-typed end-to-end: this shell never pipes or redirects
-  stderr (bash parity), so it has no byte data plane.
+- stderr has NO byte data plane: this shell never pipes or redirects stderr
+  (bash parity). `Writer.write` still accepts `Uint8Array` on stderr — those
+  bytes go straight to the display decode (`RunResult.stderr`, `onChunk`), they
+  are never captured/piped as bytes. (Corrected 2026-07-06: the original
+  "stderr stays string-typed end-to-end" wrongly implied byte writes were
+  rejected.)
 
 ## Consequences
 

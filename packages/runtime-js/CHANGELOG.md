@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **PR #115 handoff round 3 (2026-07-06):** remove-family kind gates at the fs
+  layer (the generic VFS `rmSync` removes any empty-or-file path; sibling of
+  the `rmdirSync` ENOTDIR gate) — `unlinkSync(dir)` is `EISDIR, unlink '<dir>'`
+  (Linux-ABI errno persona, matching FS_ERRNO + WASI `E_ISDIR`; darwin Node
+  says EPERM — conformance-pinned; was: silently DELETED an empty directory),
+  and plain `rmSync(dir)` is Node's `ERR_FS_EISDIR` SystemError (positive
+  errno 21, `force` does not suppress, a non-empty dir is the SAME error — was:
+  ENOTEMPTY, or silent delete when empty). Shell `rm` and WASI
+  `path_unlink_file`/`path_remove_directory` were already gated (sweep).
 - **PR #115 second-handoff fix round (2026-07-05, Node-probed + parity-pinned):**
   - ONE shared open(2) preflight backs `openSync` + flagged
     `readFileSync`/`writeFileSync`/`appendFileSync` (four hand-rolled copies had

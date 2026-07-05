@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Byte snapshot copies Buffer chunks (handoff r3).** `Writer.write` snapshots
+  via `new Uint8Array(chunk)` — Node `Buffer#slice()` ALIASES memory, so the
+  old `.slice()` let a command mutate its buffer after write and corrupt the
+  captured/redirected bytes. Guard: binary-transparency Buffer-mutation test.
 - **`cat` byte pump now has a frozen GNU coreutils fixture guard** for raw
   binary output, complementing the ADR-0198 pipe/redirect byte-transparency
   package tests.

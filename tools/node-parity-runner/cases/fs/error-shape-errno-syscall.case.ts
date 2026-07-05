@@ -84,6 +84,20 @@ const c: ParityCase = {
     probe('appendFile-dir-ax', FULL, () => fs.appendFileSync('dir', 'x', { flag: 'ax' }));
     probe('mkdir-missing-parent', FULL, () => fs.mkdirSync('no/such/deep'));
 
+    // Node's rm refuses ANY directory without recursive — ERR_FS_EISDIR, a
+    // JS-layer SystemError (POSITIVE errno 21, message embeds the path AS
+    // PASSED, host-independent); force does not suppress it and a non-empty
+    // dir is the SAME error, not ENOTEMPTY (review 2026-07-05 handoff r3).
+    // unlink-on-dir is deliberately absent: the errno diverges per host
+    // (linux EISDIR / darwin EPERM) — pinned in conformance instead.
+    const SYS = ['name', 'code', 'errno', 'syscall', 'path', 'message'];
+    fs.mkdirSync('emptydir');
+    probe('rm-emptydir', SYS, () => fs.rmSync('emptydir'));
+    probe('rm-emptydir-force', SYS, () => fs.rmSync('emptydir', { force: true }));
+    probe('rm-dir-nonempty', SYS, () => fs.rmSync('dir'));
+    probe('rm-through-file', FULL, () => fs.rmSync('plain.txt/deep'));
+    console.log('rm-emptydir-survives:', fs.existsSync('emptydir'), fs.existsSync('dir'));
+
     // fd-level failures are PATHLESS in Node and carry the op's syscall name;
     // ftruncate on a non-writable fd is EINVAL, not EBADF (handoff #3).
     const wfd = fs.openSync('fd-w.txt', 'w');

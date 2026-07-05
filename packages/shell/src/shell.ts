@@ -670,7 +670,11 @@ export class Shell {
       // design, so semantics stay composable. A non-final pipe stage
       // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
       // not the terminal; stderr always streams (bash never pipes stderr).
-      const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : chunk.slice();
+      // new Uint8Array(view) is a guaranteed COPY — `.slice()` is not: Node
+      // Buffer (a Uint8Array subclass real programs write) overrides slice()
+      // with an ALIASING view, letting post-write mutation corrupt the
+      // captured bytes (review 2026-07-05 handoff r3).
+      const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : new Uint8Array(chunk);
       if (stream === 'stdout') {
         const text = stdoutTap.decode(bytes, { stream: true });
         if (streamStdout) options.onChunk?.(text, 'stdout');

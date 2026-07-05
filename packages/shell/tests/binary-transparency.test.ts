@@ -86,6 +86,22 @@ describe('shell binary transparency (ADR-0198)', () => {
     expect(Array.from(syncMirror().readFileBytesSync('/mutated.bin'))).toEqual([0x41]);
   });
 
+  it('snapshots Buffer chunks too — Buffer#slice() ALIASES, unlike Uint8Array#slice()', async () => {
+    // Node programs hand Buffers to Writer.write; a subclass slice() that
+    // returns a view would let post-write mutation corrupt the captured bytes
+    // (review 2026-07-05 handoff r3). Real Node Buffer is the canonical case.
+    const sh = new Shell();
+    sh.registerCommand('mutbuf', async (_args, ctx) => {
+      const buf = Buffer.from([0x41, 0x41, 0x41]);
+      ctx.stdout.write(buf);
+      buf.fill(0x42);
+      return 0;
+    });
+    const res = await sh.run('mutbuf > /mutbuf.bin');
+    expect(res.exitCode).toBe(0);
+    expect(Array.from(syncMirror().readFileBytesSync('/mutbuf.bin'))).toEqual([0x41, 0x41, 0x41]);
+  });
+
   it('keeps onChunk display order aligned when byte and string writes share one decoder', async () => {
     const sh = new Shell();
     sh.registerCommand('mixed', async (_args, ctx) => {
