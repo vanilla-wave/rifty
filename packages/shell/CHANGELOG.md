@@ -16,7 +16,10 @@
   string-typed; byte chunks decode through streaming decoders, and the decoders
   FLUSH at segment end (fix round 2026-07-05) — a trailing incomplete UTF-8
   sequence lands in `onChunk`/`RunResult.stderr` as U+FFFD instead of silently
-  vanishing. Guard: `tests/binary-transparency.test.ts`.
+  vanishing. PR #115 review follow-up: captured byte chunks are snapshotted
+  before command-owned buffers can mutate, and string writes share the same
+  streaming decoder as byte writes so live `onChunk` display matches final
+  stdout/stderr ordering. Guard: `tests/binary-transparency.test.ts`.
 
 - **A pre-aborted `run()` never starts segment 0 and resolves 130.** The
   documented contract ("resolves immediately when already aborted") was

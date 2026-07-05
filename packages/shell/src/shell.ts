@@ -670,12 +670,13 @@ export class Shell {
       // design, so semantics stay composable. A non-final pipe stage
       // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
       // not the terminal; stderr always streams (bash never pipes stderr).
+      const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : chunk.slice();
       if (stream === 'stdout') {
-        const text = typeof chunk === 'string' ? chunk : stdoutTap.decode(chunk, { stream: true });
+        const text = stdoutTap.decode(bytes, { stream: true });
         if (streamStdout) options.onChunk?.(text, 'stdout');
-        stdoutChunks.push(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+        stdoutChunks.push(bytes);
       } else {
-        const text = typeof chunk === 'string' ? chunk : stderrTap.decode(chunk, { stream: true });
+        const text = stderrTap.decode(bytes, { stream: true });
         options.onChunk?.(text, 'stderr');
         stderr += text;
       }

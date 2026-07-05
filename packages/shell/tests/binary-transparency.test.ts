@@ -73,6 +73,36 @@ describe('shell binary transparency (ADR-0198)', () => {
     expect(out).toBe('hi�');
   });
 
+  it('captures a byte chunk snapshot even if the command reuses its buffer', async () => {
+    const sh = new Shell();
+    sh.registerCommand('mutate', async (_args, ctx) => {
+      const bytes = new Uint8Array([0x41]);
+      ctx.stdout.write(bytes);
+      bytes[0] = 0x42;
+      return 0;
+    });
+    const res = await sh.run('mutate > /mutated.bin');
+    expect(res.exitCode).toBe(0);
+    expect(Array.from(syncMirror().readFileBytesSync('/mutated.bin'))).toEqual([0x41]);
+  });
+
+  it('keeps onChunk display order aligned when byte and string writes share one decoder', async () => {
+    const sh = new Shell();
+    sh.registerCommand('mixed', async (_args, ctx) => {
+      ctx.stdout.write(new Uint8Array([0xe2, 0x82]));
+      ctx.stdout.write('x');
+      return 0;
+    });
+    let out = '';
+    const res = await sh.run('mixed', {
+      onChunk: (c, s) => {
+        if (s === 'stdout') out += c;
+      },
+    });
+    expect(res.stdout).toBe('�x');
+    expect(out).toBe('�x');
+  });
+
   it('RunResult.stderr keeps a trailing incomplete multibyte from a byte-writing command', async () => {
     const sh = new Shell();
     sh.registerCommand('errbytes', async (_args, ctx) => {
