@@ -310,6 +310,10 @@ function sendJson(
 ): void {
   res.writeHead(status, {
     'content-type': 'application/json',
+    // Every JSON reply is an error/decline/miss for a body- or state-dependent
+    // request — a URL-keyed proxy/CDN (some cache POST, and this service sits
+    // behind one) must never pin any of them.
+    'cache-control': 'no-store',
     ...corsHeaders(),
     ...extraHeaders,
   });

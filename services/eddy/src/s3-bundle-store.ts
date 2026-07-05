@@ -148,6 +148,16 @@ export class S3BundleStore implements BundleStore {
       return null;
     }
     const { manifest, lockfileText, tarballs, memberNames } = contents;
+    // The manifest parsed as JSON but may still be the WRONG SHAPE (missing
+    // `asOf`, non-array `tarballs`): validate before dereferencing — a
+    // malformed-but-parseable object must read as a poisoned MISS
+    // (self-heal), never throw into the direct GET route as a 500.
+    if (!manifestShapeOk(manifest)) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} has a malformed manifest shape — treating as a miss`,
+      );
+      return null;
+    }
     // Same malformed shape CLIENT adoption declines: duplicate `file` values
     // let two required name@version entries share one member (partial bundle).
     const files = new Set<string>();
@@ -160,12 +170,22 @@ export class S3BundleStore implements BundleStore {
       }
       files.add(t.file);
     }
-    // UNEXPECTED members are a client decline too (`unexpected bundle member`)
-    // — an object smuggling extra entries past the manifest would be a
-    // permanent store hit strict clients bounce. `unpackEddyBundle` surfaces
-    // only manifest-named tarballs, so check the raw member list.
-    for (const name of memberNames) {
-      if (name !== MANIFEST_FILE && name !== LOCKFILE_FILE && !files.has(name)) {
+    // The raw member SEQUENCE must match what the streaming client accepts:
+    // manifest FIRST, lockfile SECOND, then ONLY manifest-named tarballs.
+    // This also rejects duplicate reserved members (a second eddy-bundle.json
+    // / package-lock.json later in the tar): `unpackEddyBundle`'s by-name map
+    // keeps the LAST occurrence, so a poisoned object could pass every
+    // content gate here while the streaming client — which reads the FIRST —
+    // declines it (`unexpected bundle member`): a permanent hit strict
+    // clients bounce.
+    if (memberNames[0] !== MANIFEST_FILE || memberNames[1] !== LOCKFILE_FILE) {
+      console.error(
+        `eddy: bundle store object at ${closureHash} does not start manifest→lockfile — treating as a miss`,
+      );
+      return null;
+    }
+    for (const name of memberNames.slice(2)) {
+      if (!files.has(name)) {
         console.error(
           `eddy: bundle store object at ${closureHash} carries an unexpected member ${name} — treating as a miss`,
         );
@@ -371,6 +391,28 @@ export class S3BundleStore implements BundleStore {
       );
     }
   }
+}
+
+/** The manifest fields {@link S3BundleStore.verifyContentAddress} dereferences
+ * — a parseable-but-malformed object (missing `asOf`, junk `tarballs`) must
+ * fail HERE as a miss, not throw mid-verification into a GET 500. */
+function manifestShapeOk(manifest: unknown): manifest is {
+  asOf: { closureHash: string };
+  tarballs: Array<{ file: string; name: string; version: string; integrity: string }>;
+} {
+  const m = manifest as {
+    asOf?: { closureHash?: unknown };
+    tarballs?: unknown;
+  } | null;
+  if (!m || typeof m !== 'object') return false;
+  if (!m.asOf || typeof m.asOf !== 'object' || typeof m.asOf.closureHash !== 'string') {
+    return false;
+  }
+  if (!Array.isArray(m.tarballs)) return false;
+  return m.tarballs.every(
+    (t: { file?: unknown; integrity?: unknown }) =>
+      !!t && typeof t === 'object' && typeof t.file === 'string' && typeof t.integrity === 'string',
+  );
 }
 
 /** Fire-and-forget body discard: releases the connection without buffering. */

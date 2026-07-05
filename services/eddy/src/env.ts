@@ -110,13 +110,20 @@ export function parseS3Config(env: Record<string, string | undefined>): S3EnvCon
       `${S3_ENV_KEYS.endpoint} must be an http(s) URL (e.g. https://storage.yandexcloud.net); got ${JSON.stringify(endpoint)}`,
     );
   }
-  for (const field of ['bucket', 'region'] as const) {
-    const value = values.get(field) as string;
-    if (/\s/.test(value)) {
-      throw new Error(
-        `${S3_ENV_KEYS[field]} must not contain whitespace; got ${JSON.stringify(value)}`,
-      );
-    }
+  // Conservative shape gates: `urlFor` interpolates the bucket RAW into the
+  // request path, so `/`, `\` or dot segments would silently address
+  // nested/normalized bucket paths instead of failing at startup.
+  const bucket = values.get('bucket') as string;
+  if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) || bucket.includes('..')) {
+    throw new Error(
+      `${S3_ENV_KEYS.bucket} must be an S3 bucket name (3-63 chars of a-z 0-9 . -, no '..'); got ${JSON.stringify(bucket)}`,
+    );
+  }
+  const region = values.get('region') as string;
+  if (!/^[a-z0-9-]+$/.test(region)) {
+    throw new Error(
+      `${S3_ENV_KEYS.region} must be a region id (a-z 0-9 -); got ${JSON.stringify(region)}`,
+    );
   }
   const out = {} as Record<keyof S3EnvConfig, string>;
   for (const [field] of entries) out[field] = values.get(field) as string;

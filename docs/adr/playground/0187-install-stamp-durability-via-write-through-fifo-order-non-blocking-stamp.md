@@ -15,7 +15,7 @@ An earlier revision of this ADR dropped the drain from BOTH sites. The `owner-sn
 
 ## Decision
 
-- **Boot/restore stamp (`stampTree`, `project-deps.ts`): non-blocking.** No drain; the stamp rides the FIFO. A reload inside the drain window re-runs dependency arrival — idempotent (snapshot re-restore), no user data at stake. `EnsureProjectDepsOptions.flush` removed; the dev line starts ~0.5s earlier.
+- **Boot/restore stamp (`stampTree`, `project-deps.ts`): non-blocking.** No drain; the stamp rides the FIFO. A reload inside the drain window re-runs dependency arrival — idempotent (snapshot re-restore), no user data at stake. `EnsureProjectDepsOptions.flush` removed; the dev line starts ~0.5s earlier. *(Corrected round 14: `flush` RETURNED to the options — but as the never-awaited seam of the deferred durability check above, not a boot-path drain; the ~0.5s stays saved.)*
 - **Command stamp (`stampInstalledTree`, `npm-shell-command.ts`): ONE post-stamp drain** (vs the historical flush→stamp→flush pair — FIFO makes the pre-stamp flush redundant). `npm install` returns only when tree + stamp are durable: npm parity, reload-safe. *(Corrected 2026-07-04: the command site is drain→check→stamp→drain — the tree drain is CHECKED against the persist-failure ledger before the stamp; see the note above. Wall-cost ≈ the single drain.)*
 - The FIFO itself is a recorded contract: `enqueuePending` order is load-bearing (comment at the site + a RED-on-parallelize pin in `opfs-sync.test.ts` — inverted-latency writes must complete in call order). Reload-critical drains are untouched: the dev-ready drain (`devServerChild.boot({flush})`), the eval-boundary flush, project-index and starter-baseline flushes.
 

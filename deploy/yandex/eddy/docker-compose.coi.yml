@@ -12,6 +12,9 @@ services:
     expose:
       - "8788"
     environment:
+      # The CDN registry-proxy exists for BROWSER CORS the server doesn't need
+      # — direct npmjs may be faster from the VM, but needs an on-VM A/B first
+      # (ADR-0194 §Deferred). TODO(backlog: perf/eddy-upstream-registry-ab)
       REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
       PORT: "8788"
       EDDY_TTL_SECONDS: "1800"

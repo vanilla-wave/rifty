@@ -620,7 +620,11 @@ async function stampInstalledTree(
   try {
     await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
   } catch (err) {
-    console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
+    // Terminal, not console: the user's reload behavior changes (next boot
+    // re-installs) — that must be visible where the install ran.
+    ctx.stderr.write(
+      `npm: WARNING: install stamp write failed (${(err as Error).message}) — the next boot re-installs\n`,
+    );
     return;
   }
   try {
@@ -631,7 +635,9 @@ async function stampInstalledTree(
       );
     }
   } catch (err) {
-    console.warn(`npm: install stamp flush failed: ${(err as Error).message}`);
+    ctx.stderr.write(
+      `npm: WARNING: install stamp flush failed (${(err as Error).message}) — the next boot may re-install\n`,
+    );
   }
 }
 

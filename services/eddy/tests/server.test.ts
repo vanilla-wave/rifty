@@ -265,6 +265,26 @@ describe('eddy HTTP server', () => {
     expect(res.status).toBe(400);
   });
 
+  it('POST error/decline responses are no-store — body-dependent replies must never pin in a URL-keyed cache (round 16)', async () => {
+    const badJson = await fetch(baseUrl, { method: 'POST', body: '{not json' });
+    expect(badJson.status).toBe(400);
+    expect(badJson.headers.get('cache-control')).toBe('no-store');
+
+    const badShape = await fetch(baseUrl, {
+      method: 'POST',
+      body: JSON.stringify({ dependencies: 'junk' }),
+    });
+    expect(badShape.status).toBe(400);
+    expect(badShape.headers.get('cache-control')).toBe('no-store');
+
+    const decline = await fetch(baseUrl, {
+      method: 'POST',
+      body: JSON.stringify({ dependencies: { x: 'file:./y' } }),
+    });
+    expect(decline.status).toBe(422);
+    expect(decline.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('POST with MALFORMED dependency fields → 400, never a silently-filtered happy path (round 14)', async () => {
     // The old parser dropped junk entries and resolved the REMAINDER — a
     // malformed request got a successful bundle for an empty/partial closure.

@@ -136,6 +136,28 @@ describe('parseS3Config (EDDY_S3_* — all-or-none)', () => {
     );
   });
 
+  it('refuses a bucket outside the conservative S3 name subset — urlFor interpolates it into the path (round 16)', () => {
+    // `/`, `\` or dot segments would silently address nested/normalized
+    // bucket paths instead of failing loudly at startup.
+    for (const bad of ['my/bucket', 'my\\bucket', '..', 'a..b', 'UPPER', 'x', '-lead', 'trail-']) {
+      expect(() => parseS3Config({ ...full, EDDY_S3_BUCKET: bad })).toThrow(
+        /EDDY_S3_BUCKET must be an S3 bucket name/,
+      );
+    }
+    expect(parseS3Config({ ...full, EDDY_S3_BUCKET: 'my.dotted-bucket9' })?.bucket).toBe(
+      'my.dotted-bucket9',
+    );
+  });
+
+  it('refuses a region outside a-z 0-9 - (round 16)', () => {
+    for (const bad of ['ru_central1', 'ru/central1', 'RU-CENTRAL1', 'ru.central1']) {
+      expect(() => parseS3Config({ ...full, EDDY_S3_REGION: bad })).toThrow(
+        /EDDY_S3_REGION must be a region id/,
+      );
+    }
+    expect(parseS3Config({ ...full, EDDY_S3_REGION: 'us-east-1' })?.region).toBe('us-east-1');
+  });
+
   it('never includes the secret pair values in error messages', () => {
     try {
       parseS3Config({ ...full, EDDY_S3_ENDPOINT: 'junk' });

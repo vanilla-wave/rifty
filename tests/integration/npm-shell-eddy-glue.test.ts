@@ -112,6 +112,61 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     ]);
   });
 
+  it('learned-pin loop: the first eddy install TEACHES the pin; a later FRESH PROJECT rides GET-by-hash with zero POSTs (round 16)', async () => {
+    // The ADR-0194 promise end-to-end: same profile (one learned-pin store),
+    // two projects. Cold install POSTs and writes the pin; the second
+    // project's identical dep set turns into a cacheable GET.
+    const methods: string[] = [];
+    eddy.raw.on('request', (req) => {
+      methods.push(req.method ?? '');
+    });
+    const pinStore = new Map<string, string>();
+    const learnedPins = {
+      get: async (key: string) => pinStore.get(key),
+      set: async (key: string, hash: string) => {
+        pinStore.set(key, hash);
+      },
+    };
+
+    const vfs1 = new MemoryVfs();
+    await seedProject(vfs1);
+    const shell1 = new Shell({ cwd: '/proj' });
+    shell1.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs: vfs1,
+        registry: makeRegistry(),
+        resolverUrl: eddyUrl,
+        learnedPins,
+      }),
+    );
+    const first = await runShell(shell1, 'npm install');
+    await new Promise((r) => setTimeout(r, 0)); // fire-and-forget pin write-back
+    expect(first.exitCode).toBe(0);
+    expect(first.out).toContain('via eddy (fast)');
+    expect(methods).toContain('POST'); // cold: taught by the resolve
+    expect(pinStore.size).toBe(1);
+    methods.length = 0;
+
+    const vfs2 = new MemoryVfs(); // a FRESH project tree, same profile pin store
+    await seedProject(vfs2);
+    const shell2 = new Shell({ cwd: '/proj' });
+    shell2.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs: vfs2,
+        registry: makeRegistry(),
+        resolverUrl: eddyUrl,
+        learnedPins,
+      }),
+    );
+    const second = await runShell(shell2, 'npm install');
+    expect(second.exitCode).toBe(0);
+    expect(second.out).toContain('via eddy (fast)');
+    expect(methods).toContain('GET'); // the learned pin carried it…
+    expect(methods.filter((m) => m === 'POST')).toEqual([]); // …with ZERO POSTs
+  });
+
   it('standard path (no resolverUrl): real install, stamp written, pins never touched', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);

@@ -420,6 +420,11 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     // GET serves an old bundle for {debug} only; the project now also wants kleur.
     const staleBytes = await buildBundleFor({ debug: '^4.4.1' });
     const freshBytes = await buildBundleFor({ debug: '^4.4.1', kleur: '4.1.5' });
+    // The pin is the stale bundle's REAL manifest hash: the content-address
+    // gates PASS (the CDN served exactly what was asked) and the decline is
+    // the COVERAGE gate — the scenario this test names. A made-up pin would
+    // trip the hash-mismatch gate first and never exercise coverage.
+    const stalePin = unpackEddyBundle(staleBytes).manifest.asOf.closureHash;
     const raw = await startRaw((req, res) => {
       res.writeHead(200, { 'content-type': 'application/x-tar' });
       res.end(Buffer.from(req.method === 'GET' ? staleBytes : freshBytes));
@@ -433,7 +438,7 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
         cwd: '/app',
         registry,
         resolverUrl: raw.url,
-        resolverClosureHash: 'sha256-old',
+        resolverClosureHash: stalePin,
       });
       expect(result.source).toBe('eddy');
       expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
@@ -692,10 +697,14 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     const lockfileSize = entries[1]?.data.length ?? 0;
     const boundary =
       512 + Math.ceil(manifestSize / 512) * 512 + 512 + Math.ceil(lockfileSize / 512) * 512;
+    let serverSawCancel = false;
     const raw = await startRaw((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/x-tar' });
       res.write(Buffer.from(bytes.slice(0, boundary)));
-      // never end()
+      // never end() — only a client-side CANCEL can close this response.
+      res.on('close', () => {
+        serverSawCancel = true;
+      });
     });
     try {
       const vfs = new MemoryVfs();
@@ -704,6 +713,14 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
       expect(result.source).toBe('standard');
       expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
+      // The decline CANCELLED the download (gen.return → stream cancel → the
+      // server's response closes) — not merely out-waited a stall timeout:
+      // install (incl. the standard fallback) finished well under the 10s
+      // stall bound, so a close here proves the early abort.
+      for (let i = 0; i < 100 && !serverSawCancel; i++) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(serverSawCancel).toBe(true);
     } finally {
       await closeServer(raw.server);
     }

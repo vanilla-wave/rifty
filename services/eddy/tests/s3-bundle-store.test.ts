@@ -319,6 +319,36 @@ describe('S3BundleStore', () => {
     expect(await store.get(HASH)).toBeNull(); // unexpected member → miss
   });
 
+  it('rejects an object with DUPLICATE reserved members (a second manifest/lockfile later in the tar) — round 16', async () => {
+    // `unpackEddyBundle` keeps the LAST occurrence by name, so a duplicate
+    // that byte-equals the real manifest/lockfile passes every content gate —
+    // while the streaming client reads the FIRST members positionally and
+    // declines the duplicate as `unexpected bundle member`. The store must
+    // validate the raw member SEQUENCE, not just the by-name view.
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(contents.manifest));
+    contents.tarballs.push({
+      // Emits a SECOND eddy-bundle.json member after the tarballs.
+      entry: { file: 'eddy-bundle.json', name: 'dup', version: '0.0.0', integrity: 'sha512-x' },
+      bytes: manifestBytes,
+    });
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // duplicate reserved member → miss
+  });
+
+  it('a parseable object whose manifest is the WRONG SHAPE (missing asOf) reads as a MISS, never a store throw/500 — round 16', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    (contents.manifest as { asOf?: unknown }).asOf = undefined; // format+tarballs intact
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    await expect(store.get(HASH)).resolves.toBeNull(); // miss + self-heal, not a rejection
+  });
+
   it('rejects an object whose manifest names DUPLICATE member files (client declines the same shape)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
@@ -430,6 +460,45 @@ describe('S3BundleStore', () => {
       const store = makeStore(url);
       await store.put(HASH, { bytes: bundleBytes, manifest }); // must NOT throw
       expect(gets).toBe(1); // proof degraded to the read-back GET + hash compare
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((e) => (e ? reject(e) : resolve())),
+      );
+    }
+  });
+
+  it('a non-MD5-ETag put proof whose read-back GET serves FOREIGN bytes rejects — round 16', async () => {
+    // Opaque ETag → the proof degrades to GET + byte-hash compare; a public
+    // path serving a DIFFERENT object (mis-routed CDN/bucket) must fail the
+    // put so the unservable hash is never linked.
+    const server = createServer((req, res) => {
+      if (req.method === 'PUT') {
+        req.on('data', () => {});
+        req.on('end', () => {
+          res.writeHead(200, { etag: '"opaque-provider-etag-1"' });
+          res.end();
+        });
+        return;
+      }
+      const foreign = Buffer.from('not-the-bundle-you-uploaded');
+      res.writeHead(200, {
+        'content-type': 'application/x-tar',
+        'content-length': foreign.length,
+        etag: '"opaque-provider-etag-1"',
+        'cache-control': 'public, max-age=31536000, immutable', // metadata is fine — the BYTES are wrong
+      });
+      res.end(req.method === 'HEAD' ? undefined : foreign);
+    });
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+      );
+    });
+    try {
+      const store = makeStore(url);
+      await expect(store.put(HASH, { bytes: bundleBytes, manifest })).rejects.toThrow(
+        /read back DIFFERENT bytes/,
+      );
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((e) => (e ? reject(e) : resolve())),

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 16)
+
+- **Store validates the raw member SEQUENCE.** `manifest → lockfile →
+  manifest-named tarballs` — a poisoned object with a DUPLICATE reserved
+  member (`unpackEddyBundle`'s by-name map keeps the last, the streaming
+  client reads the first and declines) or a malformed-but-parseable manifest
+  (missing `asOf`) now reads as a MISS (self-heal), never a store hit strict
+  clients bounce or a direct-GET 500.
+- **Every JSON reply is `no-store`.** POST errors/declines (malformed JSON,
+  validation 400s, resolver 500s, 422) are body-dependent — a URL-keyed
+  proxy/CDN must never pin them (success POST was already `no-store`).
+- **`EDDY_S3_BUCKET`/`REGION` shape-gated at startup.** `urlFor` interpolates
+  the bucket raw into the request path — `/`, `\` or dot segments would
+  silently address nested/normalized paths; refused loudly now (conservative
+  S3 name subset).
+
 ### Fixed (PR #107 round 15)
 
 - **Immutable GET bytes are byte-STABLE under a closure hash.** The hash
