@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed (PR #113 follow-up)
+
+- **SCM diffs re-check the same owner snapshot before opening stale text
+  diffs.** Git-original reads, side-aware SCM rows, working-file compares, and
+  compare-with-HEAD now fail loud if the workspace owner respawns mid-read.
+- **Browser-unit HTML reports land under CI's uploaded artifact path.** The
+  browser-unit Playwright config writes HTML to
+  `playwright-report/browser-unit`, with a regression check pinning the config
+  to the workflow upload path.
+
 ### Added (PR #113 review round 3)
 
 - **Owner durability barrier: `handle.flushDurable()` (`rifty:vfs-flush` acked
