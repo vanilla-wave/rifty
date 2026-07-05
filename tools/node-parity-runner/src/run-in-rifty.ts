@@ -44,7 +44,7 @@ import {
   loadVendoredEsbuildWasm,
   transformWithEsbuild,
 } from '../../shadow-registry/src/esbuild-binding.ts';
-import type { ParityCase } from './types.ts';
+import { caseCwd, type ParityCase } from './types.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both
@@ -393,11 +393,11 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   fsMirror.loadFixture(fsFiles);
   setSyncMirror(fsMirror);
 
-  // Mirror Node's view: process.cwd() = '/'. Important so `fs.readFileSync('a.txt')`
-  // resolves against the same anchor as the Node child running with cwd=tmpdir.
-  // Use the runtime's per-Worker cwd cell rather than monkey-patching the
-  // `process` object (ADR-0019).
-  setProcessCwd('/');
+  // Mirror Node's view: process.cwd() = ParityCase.cwd (default '/'). Important
+  // so `fs.readFileSync('a.txt')` resolves against the same anchor as the Node
+  // child running with cwd=<workDir>/<cwd>. Use the runtime's per-Worker cwd
+  // cell rather than monkey-patching the `process` object (ADR-0019).
+  setProcessCwd(caseCwd(testCase));
 
   // `ts-esm` threads the real esbuild type-strip hook (ADR-0052) so `.ts`
   // resolves and its types are stripped before the AST ESM rewrite, with the

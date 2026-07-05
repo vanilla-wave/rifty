@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ParityCase } from './types.ts';
+import { caseCwd, type ParityCase } from './types.ts';
 
 /**
  * Preamble injected ahead of a `kind: 'http'` case so the SAME case `code`
@@ -133,9 +133,15 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     // throw `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on those (see `nodeRunnerFor`).
     const [runner, runnerArgs] = nodeRunnerFor(testCase, entry);
 
+    // Per-case cwd (ParityCase.cwd): the child runs at `<workDir>/<cwd>` so
+    // relative fs paths anchor exactly where the rifty side's setProcessCwd
+    // anchors them. Created even without setup files inside it.
+    const childCwd = join(workDir, ...caseCwd(testCase).split('/').filter(Boolean));
+    await mkdir(childCwd, { recursive: true });
+
     return await new Promise<string>((resolve, reject) => {
       const proc = spawn(runner, runnerArgs, {
-        cwd: workDir,
+        cwd: childCwd,
         stdio: [testCase.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       });
       let out = '';
