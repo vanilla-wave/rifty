@@ -956,7 +956,11 @@ export class OpfsFsSync implements FsSync {
         const orderedDirs = [...dirCreates].sort(
           (a, b) => segments(a).length - segments(b).length || a.localeCompare(b),
         );
-        for (const dir of orderedDirs) await this.persistDirectoryPath(dir, true);
+        for (const dir of orderedDirs) {
+          await this.persistDirectoryPath(dir, true);
+          this.persistFailures.delete(dir);
+          this.healAncestorPersistFailures(dir);
+        }
         if (surface) {
           for (const move of fileMoves) {
             const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
@@ -983,7 +987,10 @@ export class OpfsFsSync implements FsSync {
         // subtree no longer describes any divergence (same rule as
         // `persistRmAsync`). Without this, a pre-rename write failure on a
         // moved path would read as torn forever.
-        for (const move of fileMoves) this.persistFailures.delete(move.newPath);
+        for (const move of fileMoves) {
+          this.persistFailures.delete(move.newPath);
+          this.healAncestorPersistFailures(move.newPath);
+        }
         this.clearPersistFailuresUnder(srcRoot);
       } catch (err) {
         // Mismatch reconciles on the next refreshIndex (same posture as

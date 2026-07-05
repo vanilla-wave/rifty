@@ -1257,4 +1257,29 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect(healed.total).toBe(0); // dest durable + source already-gone = clean
     expect([...fs.readFileBytesSync('/b.txt')]).toEqual([1]);
   });
+
+  it('a successful rename into a previously-dirty destination dir heals that stale dir failure', async () => {
+    // /dst's mkdir persist FAILS, so the ledger says the directory is dirty.
+    // The later rename writes /dst/a.txt durably; that write proves /dst now
+    // exists on disk, so the stale dir entry must be cleared.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array([1])),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dst', { recursive: true }); // fake root cannot persist it
+    fs.mkdirSync('/src', { recursive: true }); // healed by the descendant write
+    fs.writeFileSync('/src/a.txt', new Uint8Array([1]));
+    const dirty = await fs.flush();
+    expect(dirty.total).toBe(1);
+    expect(dirty.failures).toEqual([{ path: '/dst', op: 'mkdir', message: 'NotFoundError' }]);
+
+    fs.renameSync('/src/a.txt', '/dst/a.txt');
+
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect([...fs.readFileBytesSync('/dst/a.txt')]).toEqual([1]);
+  });
 });

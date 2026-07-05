@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 20)
+
+- **Rename persistence heals destination ancestor failures.** A successful
+  rename write to `/dst/file` now clears stale mkdir failures for `/dst` and
+  its ancestors, so a durable moved tree is not misreported as torn.
+
 ### Fixed (PR #107 round 19)
 
 - **The persist-failure ledger heals ANCESTOR dirs on a descendant persist.** A
