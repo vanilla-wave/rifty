@@ -1182,6 +1182,39 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true); // stamped
   });
 
+  it('a tree failure BEYOND the sampled failures still gates the stamp — the FULL ledger, not the sample', async () => {
+    // Foreign failures fill the report sample; the node_modules failure sits
+    // beyond it and is only visible via `anyFailure` (the full ledger). Scanning
+    // `failures` alone would stamp a torn tree.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            { path: '/.rifty/eddy-learned-pins.json', op: 'write' as const, message: 'Quota' },
+          ],
+          total: 21,
+          anyFailure: (pred: (p: string) => boolean) =>
+            pred('/.rifty/eddy-learned-pins.json') ||
+            pred('/proj/node_modules/lodash/package.json'),
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0); // live tree works
+    expect(rec.stderr.join('')).toContain('NOT durable'); // …but stamp SKIPPED
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
   it('a THROWING flush skips the stamp and warns — a drain that cannot even report is not durable', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });

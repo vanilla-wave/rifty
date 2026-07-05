@@ -339,6 +339,29 @@ describe('S3BundleStore', () => {
     expect(await store.get(HASH)).toBeNull(); // duplicate reserved member → miss
   });
 
+  it('rejects an object with a DUPLICATE tarball member (same manifest file twice) — round 18', async () => {
+    // Both occurrences are manifest-NAMED, so the membership loop passes each;
+    // but `unpackEddyBundle`'s by-name map keeps ONE while the streaming client
+    // verifies whichever it reads FIRST. A good-bytes-then-bad-bytes pair (or
+    // vice-versa) verifies as a HIT here yet the strict client declines
+    // (integrity mismatch) — a permanent hit self-heal never clears. The store
+    // must reject a duplicate raw member outright, not just a duplicate name in
+    // the manifest array.
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const contents = unpackEddyBundle(bundleBytes);
+    const real = contents.tarballs[0];
+    if (!real) throw new Error('setup: expected ≥1 tarball');
+    // Pack order [manifest, lockfile, x(BAD), x(GOOD=real)]: `unpackEddyBundle`
+    // keeps the LAST (GOOD) bytes, so the store's integrity gate PASSES — only a
+    // member-uniqueness gate catches it. A positional streaming client reads the
+    // FIRST (BAD) occurrence and declines (integrity mismatch): the exploit.
+    contents.tarballs.unshift({ entry: { ...real.entry }, bytes: new Uint8Array([9, 9, 9]) });
+    fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+    expect(await store.get(HASH)).toBeNull(); // duplicate tarball member → miss
+  });
+
   it('a parseable object whose manifest is the WRONG SHAPE (missing asOf) reads as a MISS, never a store throw/500 — round 16', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);

@@ -1135,6 +1135,27 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect(healed.failures).toEqual([]);
   });
 
+  it('anyFailure scans the FULL ledger — a path BEYOND the report sample is still found (round 18)', async () => {
+    // A durability gate that scanned only `failures` (the sample) would MISS
+    // tree damage when foreign failures fill the first PERSIST_REPORT_SAMPLE;
+    // `anyFailure` asks the whole ledger. All paths sit under `/` so only writes
+    // fail (no mkdir noise); insertion order puts the tree file 21st.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.reject(new DomError('QuotaExceededError')),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    for (let i = 0; i < 20; i++) fs.writeFileSync(`/foreign-${i}.json`, new Uint8Array([1]));
+    fs.writeFileSync('/the-tree-file.js', new Uint8Array([1])); // 21st → beyond the sample
+    const report = await fs.flush();
+    expect(report.total).toBe(21);
+    expect(report.failures.length).toBe(20); // sampled
+    expect(report.failures.some((f) => f.path === '/the-tree-file.js')).toBe(false); // not sampled
+    expect(report.anyFailure?.((p) => p === '/the-tree-file.js')).toBe(true); // FULL ledger
+  });
+
   it('a recursive rm HEALS ledger entries under the removed subtree — a gone tree is not a torn tree (round 15)', async () => {
     // A failed write under /dir left a ledger entry; removing /dir durably
     // means disk and mirror AGREE the path is gone — the stale entry must not

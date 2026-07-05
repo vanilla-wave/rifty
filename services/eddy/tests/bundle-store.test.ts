@@ -195,18 +195,23 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
   });
 
   it('a THROWING store read on a fresh mutable link degrades to recompute — the POST never 500s while the registry is up', async () => {
-    // First resolve computes + links; then the store starts THROWING on reads
-    // (bucket down). The linked resolve must treat that as a miss and
-    // recompute (it has the dep-set), not propagate a 500 through server.ts.
+    // First resolve computes + links (get misses, put seeds); THEN the store
+    // starts THROWING on reads (bucket down). The linked resolve must treat that
+    // as a miss and recompute (it has the dep-set), not propagate a 500 through
+    // server.ts. (A get-throw during the FIRST settle would degrade WITHOUT
+    // linking — round 18 byte stability — so the link precondition needs a clean
+    // first read.)
     const { fetch } = makeLocalFetcher();
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       let reads = 0;
       let computes = 0;
+      let throwReads = false;
       const store: BundleStore = {
         get: async () => {
           reads++;
-          throw new Error('bucket down');
+          if (throwReads) throw new Error('bucket down');
+          return null; // clean miss on the first resolve → put + link
         },
         put: async () => {},
       };
@@ -220,6 +225,7 @@ describe('EddyCache ↔ BundleStore contract (ADR-0194 §5)', () => {
       });
       const first = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
       expect(first.kind).toBe('bundle');
+      throwReads = true; // bucket goes down AFTER the link is published
       const second = await cache.resolve({ dependencies: { debug: '^4.4.1' } }); // fresh link → throwing read
       expect(second.kind).toBe('bundle'); // degraded to recompute, never a throw
       expect(reads).toBeGreaterThan(0);

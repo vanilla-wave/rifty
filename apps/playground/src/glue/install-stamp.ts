@@ -19,7 +19,7 @@
  * DEFERRED check that revokes it on a dirty ledger (`project-deps.ts`).
  */
 // TODO(backlog: playground/install-stamp-invalidation)
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 
 export interface InstallStamp {
   readonly version: 1;
@@ -52,6 +52,20 @@ export function isStampedTreeDamage(path: string, root: string): boolean {
   if (path === installStampPath(root)) return false;
   const dir = installTreeDir(root);
   return path === dir || path.startsWith(`${dir}/`);
+}
+
+/** Ask a {@link PersistFailureReport} whether ANY unhealed path matches, over
+ * the FULL ledger when the backend can answer it (`anyFailure`), else the
+ * SAMPLE. A durability gate must use this, never scan `report.failures`
+ * directly: the sample truncates at PERSIST_REPORT_SAMPLE, so a torn-tree path
+ * beyond it would be missed and the stamp would trust a broken tree. */
+export function reportHasFailure(
+  report: PersistFailureReport,
+  predicate: (path: string) => boolean,
+): boolean {
+  return report.anyFailure
+    ? report.anyFailure(predicate)
+    : report.failures.some((f) => predicate(f.path));
 }
 
 function readStringMap(value: unknown): Record<string, string> {

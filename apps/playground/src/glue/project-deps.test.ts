@@ -315,6 +315,36 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(flushCalls).toBe(1); // no revoke → no second (proof) drain
   });
 
+  it('REVOKES on tree damage BEYOND the sampled failures — the FULL ledger gates, not the 20-entry sample', async () => {
+    // The report sample is all foreign (tree damage sits outside the first
+    // PERSIST_REPORT_SAMPLE); `anyFailure` scans the whole ledger and sees the
+    // node_modules failure. Scanning only `failures` would trust a torn tree.
+    const { vfs, fsSync, log, logFn } = project();
+    const treePath = `${ROOT}/node_modules/vite/package.json`;
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: async () => ({
+        failures: [
+          { path: '/.rifty/eddy-learned-pins.json', op: 'write' as const, message: 'Quota' },
+        ],
+        total: 21,
+        anyFailure: (pred: (p: string) => boolean) =>
+          pred('/.rifty/eddy-learned-pins.json') || pred(treePath),
+      }),
+    });
+    expect(result.source).toBe('snapshot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull(); // revoked
+    expect(log.join('')).toContain('install stamp revoked');
+  });
+
   it('ESCALATES when the revoke itself fails to persist — the deleted stamp must not silently remain trusted', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let flushCalls = 0;

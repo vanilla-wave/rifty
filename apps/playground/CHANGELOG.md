@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 18)
+
+- **Stamp durability gates on the FULL persist-failure ledger, not the sample.**
+  Both the `npm install` stamp gate and the deferred boot revoke now ask
+  `PersistFailureReport.anyFailure` (via `reportHasFailure`): round 17's
+  sample-scan could miss `node_modules` damage when ≥20 foreign failures filled
+  the report sample, wrongly trusting a torn tree. The message still names a
+  tree example from the sample when present.
+
 ### Fixed (PR #107 round 17)
 
 - **Stamp durability is scoped to `<root>/node_modules` and the revoke is

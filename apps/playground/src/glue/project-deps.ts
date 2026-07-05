@@ -35,6 +35,7 @@ import {
   installStampSatisfied,
   isStampedTreeDamage,
   readEffectiveDeps,
+  reportHasFailure,
   writeInstallStamp,
 } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
@@ -198,15 +199,13 @@ function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
   void (async () => {
     const report = await flush();
     if (!report || report.total === 0) return;
-    // `failures` is a SAMPLE, `total` the full count. A torn node_modules writes
-    // many files, so its damage surfaces in the sample; a sample with zero
-    // tree-damage entries ⇒ the failures are foreign — trust the stamp. (The
-    // dangerous "stamp uniquely persisted" case is a SMALL tear that fits the
-    // sample; a big meltdown fails the stamp write too → no durable stamp.)
-    const damaging = report.failures.filter((f) => isStampedTreeDamage(f.path, opts.root));
-    const first = damaging[0];
-    if (!first) return; // no tree damage in the sample → trust the stamp
-    const sample = ` (first: ${first.op} ${first.path}: ${first.message})`;
+    // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
+    // failures could fill the sample while `node_modules` damage sits beyond it,
+    // and trusting the stamp over a torn tree is exactly what this check exists
+    // to prevent. The example for the message comes from the sample when present.
+    if (!reportHasFailure(report, (p) => isStampedTreeDamage(p, opts.root))) return;
+    const example = report.failures.find((f) => isStampedTreeDamage(f.path, opts.root));
+    const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
     await opts.vfs.rm(stampPath, { force: true });
     opts.log(
       `[real-vite/worker] WARNING: node_modules failed to persist${sample} — install stamp revoked; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
@@ -216,7 +215,7 @@ function scheduleStampDurabilityCheck(opts: EnsureProjectDepsOptions): void {
     // still unhealed the revoke didn't persist — escalate LOUDLY (a deferred
     // best-effort can't self-heal, but it must never be silent).
     const after = await flush();
-    if (after?.failures.some((f) => f.path === stampPath)) {
+    if (after && reportHasFailure(after, (p) => p === stampPath)) {
       opts.log(
         '[real-vite/worker] CRITICAL: the stamp revoke did not reach disk — a later boot may still trust the torn tree; reinstall dependencies to heal it\n',
       );

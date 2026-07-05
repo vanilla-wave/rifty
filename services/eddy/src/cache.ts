@@ -113,6 +113,11 @@ export class EddyCache {
   private readonly packuments: TtlPackumentCache;
   private readonly tarballs: MemoryTarballCache;
   private readonly inflight = new Map<string, Promise<EddyResolveResult>>();
+  /** Per-closureHash FIFO tail: serializes the store settle (get→serve|put) so
+   *  concurrent computes of the SAME closure can't each PUT different-`resolvedAt`
+   *  bytes over one immutable key — the second sees the first's stored artifact
+   *  and serves it (byte stability, ADR-0194 §5). See {@link settleStore}. */
+  private readonly storeTail = new Map<string, Promise<unknown>>();
   /** Monotonic per-compute stamp: a later-STARTED compute (fresher reads) has a
    *  higher gen and wins the mutable-link publish (see {@link compute}). */
   private computeSeq = 0;
@@ -198,33 +203,72 @@ export class EddyCache {
     const result = await this.resolveFn(req, { ...this.resolver, packumentCache });
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
+    return this.settleStore(closureHash, result, key, gen);
+  }
+
+  /** Serialize the store settle PER closureHash: concurrent computes of the same
+   *  closure (e.g. two differently-spelled dep sets resolving identically) chain
+   *  FIFO, so the second's {@link doSettleStore} sees the first's stored artifact
+   *  and serves it instead of overwriting the key with different-`resolvedAt`
+   *  bytes (byte stability, ADR-0194 §5). Different hashes never contend. */
+  private settleStore(
+    closureHash: string,
+    result: EddyResolveResult & { kind: 'bundle' },
+    key: string,
+    gen: number,
+  ): Promise<EddyResolveResult> {
+    const prior = this.storeTail.get(closureHash);
+    const run = (): Promise<EddyResolveResult> => this.doSettleStore(closureHash, result, key, gen);
+    const mine = prior ? prior.then(run, run) : run();
+    const tail = mine.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.storeTail.set(closureHash, tail);
+    void tail.finally(() => {
+      if (this.storeTail.get(closureHash) === tail) this.storeTail.delete(closureHash);
+    });
+    return mine;
+  }
+
+  private async doSettleStore(
+    closureHash: string,
+    result: EddyResolveResult & { kind: 'bundle' },
+    key: string,
+    gen: number,
+  ): Promise<EddyResolveResult> {
     // Immutable-tier BYTE stability (round 15): the closure hash addresses the
     // LOCKFILE CLOSURE, not the tar bytes — a recompute of the same closure
     // packs different bytes (fresh `asOf.resolvedAt`), and overwriting the
-    // stored object would make the one-year-`immutable` GET URL serve
-    // different bytes depending on which cache layer answers (browser/CDN vs
-    // origin). The FIRST stored artifact wins: a verified store hit is served
-    // as-is — keeping the ORIGINAL as-of stamp, exactly this file's recorded
-    // contract (staleness visible, never silently refreshed) — and the fresh
-    // compute's bytes only seed a missing/poisoned key (get() reads a corrupt
-    // object as a miss, so self-heal is intact). A throwing store read
-    // degrades to the fresh bytes, same as a failed put.
-    const stored = await this.store.get(closureHash).catch((err) => {
+    // stored object would make the one-year-`immutable` GET URL serve different
+    // bytes depending on which cache layer answers (browser/CDN vs origin). The
+    // FIRST stored artifact wins: a verified store hit is served as-is —
+    // keeping the ORIGINAL as-of stamp, exactly this file's recorded contract
+    // (staleness visible, never silently refreshed).
+    let stored: CachedBundle | null;
+    try {
+      stored = await this.store.get(closureHash);
+    } catch (err) {
+      // A TRANSIENT read failure (bucket blip) must NOT read as a miss (round
+      // 18): an object may already exist and be VALID, and PUTting these
+      // fresh-`resolvedAt` bytes would overwrite it — breaking byte stability.
+      // Degrade: serve the fresh compute, but do NOT put or link (that would
+      // learn an unproven-durable hash); the next request re-reads + heals.
       console.error(
-        `eddy: bundle store read failed for recomputed ${closureHash}: ${err instanceof Error ? err.message : String(err)} — serving the fresh compute`,
+        `eddy: bundle store read failed for recomputed ${closureHash}: ${err instanceof Error ? err.message : String(err)} — serving the fresh compute WITHOUT overwriting a possibly-durable object`,
       );
-      return null;
-    });
+      return result;
+    }
     if (stored) {
       this.publishLink(key, closureHash, gen);
       return { kind: 'bundle', bytes: stored.bytes, manifest: stored.manifest };
     }
-    // Durable-BEFORE-link (ADR-0194 §5): the awaited put guarantees a linked
-    // hash is servable (GET-by-hash via CDN/bucket) before any client learns it.
-    // put is idempotent + self-healing — it re-seeds a missing OR corrupt/foreign
-    // object (a stale HEAD-exists check would wrongly skip the heal) and skips the
-    // upload only when the SAME bytes are already durable. So a recompute of an
-    // already-stored closure is a no-op upload, but a poisoned key gets fixed.
+    // A genuine MISS (absent OR poisoned — get() reads a corrupt object as null,
+    // so self-heal is intact). Durable-BEFORE-link (ADR-0194 §5): the awaited put
+    // guarantees a linked hash is servable (GET-by-hash via CDN/bucket) before any
+    // client learns it. put is idempotent + self-healing — it re-seeds a missing
+    // OR corrupt/foreign object and skips the upload only when the SAME bytes are
+    // already durable.
     try {
       await this.store.put(closureHash, { bytes: result.bytes, manifest: result.manifest });
     } catch (err) {

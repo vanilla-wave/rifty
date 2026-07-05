@@ -184,6 +184,7 @@ export class S3BundleStore implements BundleStore {
       );
       return null;
     }
+    const seenMembers = new Set<string>();
     for (const name of memberNames.slice(2)) {
       if (!files.has(name)) {
         console.error(
@@ -191,6 +192,18 @@ export class S3BundleStore implements BundleStore {
         );
         return null;
       }
+      // Reject a DUPLICATE tarball member (both occurrences manifest-named, so
+      // the loop above passes each): `unpackEddyBundle`'s by-name map keeps ONE
+      // occurrence while the streaming client verifies whichever it reads first —
+      // a good/bad pair could verify as a HIT here yet be DECLINED by strict
+      // clients (integrity mismatch), a permanent hit self-heal never clears.
+      if (seenMembers.has(name)) {
+        console.error(
+          `eddy: bundle store object at ${closureHash} names a DUPLICATE member ${name} — treating as a miss`,
+        );
+        return null;
+      }
+      seenMembers.add(name);
     }
     if (manifest.asOf.closureHash !== closureHash) {
       console.error(

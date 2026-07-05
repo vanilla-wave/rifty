@@ -104,6 +104,16 @@ export interface PersistFailure {
 export interface PersistFailureReport {
   readonly failures: ReadonlyArray<PersistFailure>;
   readonly total: number;
+  /**
+   * FULL-ledger predicate query. `failures` is a SAMPLE (first {@link
+   * PERSIST_REPORT_SAMPLE}), so a durability gate that scans it can MISS damage
+   * beyond the sample — e.g. 20 foreign failures fill the sample while a
+   * `node_modules` failure sits outside it. Callers that gate on "is any path
+   * matching X still unhealed?" MUST ask the whole ledger via this. Present on
+   * the OpfsFsSync backend; absent on report literals / the memory backend
+   * (there the sample IS the full set), where callers fall back to `failures`.
+   */
+  readonly anyFailure?: (predicate: (path: string) => boolean) => boolean;
 }
 
 /** Report-sample size: consumers read `failures[0]` + `total`; shipping the
@@ -595,7 +605,18 @@ export class OpfsFsSync implements FsSync {
       if (failures.length >= PERSIST_REPORT_SAMPLE) break;
       failures.push(failure);
     }
-    return { failures, total: this.persistFailures.size };
+    // `anyFailure` scans the WHOLE ledger (not the sample) so a durability gate
+    // never misses a torn-tree path beyond the first PERSIST_REPORT_SAMPLE.
+    return {
+      failures,
+      total: this.persistFailures.size,
+      anyFailure: (predicate) => {
+        for (const path of this.persistFailures.keys()) {
+          if (predicate(path)) return true;
+        }
+        return false;
+      },
+    };
   }
 
   /**

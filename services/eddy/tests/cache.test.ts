@@ -21,6 +21,21 @@ function bundleFor(closureHash: string): EddyResolveResult {
   };
 }
 
+/** Same closure hash, caller-chosen bytes — a recompute of one closure packs a
+ *  fresh `asOf.resolvedAt`, so two artifacts for one hash can differ byte-wise. */
+function bundleBytes(closureHash: string, bytes: number[]): EddyResolveResult & { kind: 'bundle' } {
+  return {
+    kind: 'bundle',
+    bytes: new Uint8Array(bytes),
+    manifest: {
+      format: 'EddyBundleV1',
+      npmClientVersion: '0.0.0',
+      asOf: { resolvedAt: `t-${bytes.join('')}`, registry: 'r', closureHash },
+      tarballs: [],
+    },
+  };
+}
+
 describe('EddyCache — two-tier (ADR-0182 §6)', () => {
   it('serves a repeat identical request from cache with zero upstream fetches', async () => {
     const { fetch, calls } = makeLocalFetcher();
@@ -224,6 +239,87 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     // …and the immutable tier itself never changed under the hash.
     const got = await cache.getBundle(first.manifest.asOf.closureHash);
     expect([...(got?.bytes ?? [])]).toEqual([...first.bytes]);
+  });
+
+  it('a TRANSIENT store read failure does NOT overwrite an existing object — byte stability (round 18)', async () => {
+    // The compute's store.get throws (bucket blip). An object may already exist
+    // and be VALID — treating the throw as a miss and PUTting these fresh bytes
+    // would overwrite it, so the one-year-immutable GET URL would flip bytes.
+    const { fetch } = makeLocalFetcher();
+    const inner = new MemoryBundleStore({ maxBytes: 1024 });
+    const original = bundleBytes('sha256-H', [1, 1, 1]);
+    await inner.put('sha256-H', { bytes: original.bytes, manifest: original.manifest });
+    let throwGet = false;
+    let putCalls = 0;
+    const flaky: BundleStore = {
+      get: async (h) => {
+        if (throwGet) throw new Error('bucket blip');
+        return inner.get(h);
+      },
+      put: async (h, b) => {
+        putCalls += 1;
+        await inner.put(h, b);
+      },
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: flaky,
+      resolveFn: async () => bundleBytes('sha256-H', [2, 2, 2]), // fresh bytes DIFFER
+    });
+    throwGet = true;
+    const r = await cache.resolve({ dependencies: { debug: '^4.4.1' } });
+    expect(r.kind === 'bundle' && [...r.bytes]).toEqual([2, 2, 2]); // served the fresh compute…
+    expect(putCalls).toBe(0); // …but NEVER overwrote the durable object
+    throwGet = false;
+    const stored = await cache.getBundle('sha256-H');
+    expect([...(stored?.bytes ?? [])]).toEqual([1, 1, 1]); // original bytes intact
+  });
+
+  it('concurrent computes of the SAME closure store ONE artifact — both serve identical bytes (round 18)', async () => {
+    // Two DIFFERENT dep sets resolve to the SAME closure with different bytes,
+    // concurrently. Without per-hash serialization both PUT (last wins) and the
+    // two callers see different bytes for one immutable hash.
+    const { fetch } = makeLocalFetcher();
+    const inner = new MemoryBundleStore({ maxBytes: 4096 });
+    let putCalls = 0;
+    const counting: BundleStore = {
+      get: (h) => inner.get(h),
+      put: async (h, b) => {
+        putCalls += 1;
+        await inner.put(h, b);
+      },
+    };
+    let releaseA = (): void => {};
+    let releaseB = (): void => {};
+    const gateA = new Promise<void>((r) => {
+      releaseA = r;
+    });
+    const gateB = new Promise<void>((r) => {
+      releaseB = r;
+    });
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store: counting,
+      resolveFn: async (req) => {
+        if ('a' in (req.dependencies ?? {})) {
+          await gateA;
+          return bundleBytes('sha256-SAME', [1, 1, 1]);
+        }
+        await gateB;
+        return bundleBytes('sha256-SAME', [2, 2, 2]);
+      },
+    });
+    const pA = cache.resolve({ dependencies: { a: '^1.0.0' } });
+    const pB = cache.resolve({ dependencies: { b: '^1.0.0' } });
+    releaseA(); // A reaches the store settle first → wins the single PUT
+    releaseB();
+    const [a, b] = await Promise.all([pA, pB]);
+    const aBytes = a.kind === 'bundle' ? [...a.bytes] : [];
+    const bBytes = b.kind === 'bundle' ? [...b.bytes] : [];
+    expect(bBytes).toEqual(aBytes); // both callers serve the SAME (first-stored) bytes
+    expect(putCalls).toBe(1); // exactly one artifact stored under the hash
+    const stored = await cache.getBundle('sha256-SAME');
+    expect([...(stored?.bytes ?? [])]).toEqual(aBytes); // the immutable key is byte-stable
   });
 
   it('getBundle returns the immutable-tier bundle by closure hash, null for unknown', async () => {

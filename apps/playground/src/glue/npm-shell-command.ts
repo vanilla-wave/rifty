@@ -37,7 +37,12 @@ import {
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
-import { installStampPath, isStampedTreeDamage, writeInstallStamp } from './install-stamp.ts';
+import {
+  installStampPath,
+  isStampedTreeDamage,
+  reportHasFailure,
+  writeInstallStamp,
+} from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -610,12 +615,15 @@ async function stampInstalledTree(
     // stamp file — which is about to be rewritten, healing it) gate the stamp.
     // A global/foreign path (`/.rifty/eddy-learned-pins.json`, another project)
     // failing to persist is not THIS tree torn and must not skip a good stamp
-    // (`isStampedTreeDamage`). The sample can't give an exact tree-scoped count,
-    // so report the FULL OPFS failure count with a tree example as the trigger:
-    // any tree-damage entry proves the stamp would lie.
-    const failures = treeReport.failures.filter((f) => isStampedTreeDamage(f.path, cwd));
-    if (failures.length > 0) {
-      notDurable(persistFailureLine({ failures, total: treeReport.total }));
+    // (`isStampedTreeDamage`). Ask the FULL ledger (`reportHasFailure`), not the
+    // 20-entry sample: foreign failures could fill the sample while tree damage
+    // sits beyond it. Report the full OPFS count with a tree example (from the
+    // sample when present) as the trigger.
+    if (reportHasFailure(treeReport, (p) => isStampedTreeDamage(p, cwd))) {
+      const example = treeReport.failures.find((f) => isStampedTreeDamage(f.path, cwd));
+      notDurable(
+        persistFailureLine({ failures: example ? [example] : [], total: treeReport.total }),
+      );
       return;
     }
   }

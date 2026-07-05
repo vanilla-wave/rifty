@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 18)
+
+- **Store rejects a DUPLICATE tarball member.** A poisoned object naming the same
+  tarball file twice (good bytes then bad) passed the round-16 sequence gate
+  (both occurrences are manifest-named): `unpackEddyBundle`'s by-name map verified
+  the good one as a HIT while the positional streaming client read the bad one and
+  declined — a permanent hit self-heal never cleared. The post-lockfile member
+  loop now enforces uniqueness.
+- **Immutable store write is byte-stable under transient reads + same-hash races.**
+  A transient store-read error is no longer treated as a miss (which would PUT
+  fresh-`resolvedAt` bytes over a possibly-valid object); the compute degrades
+  without overwriting. Concurrent computes of the SAME closure now serialize per
+  hash, so the second serves the first's stored artifact instead of racing a
+  second PUT (ADR-0194 §5).
+
 ### Fixed (PR #107 round 17)
 
 - **`EDDY_S3_ENDPOINT` requires HTTPS.** Signed SigV4 PUTs carry an

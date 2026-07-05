@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added (PR #107 round 18)
+
+- **`PersistFailureReport.anyFailure(predicate)`** — a FULL-ledger query
+  (OpfsFsSync backend). `failures` is only a SAMPLE, so a durability gate that
+  scans it can miss a torn-tree path when foreign failures fill the first
+  `PERSIST_REPORT_SAMPLE`; `anyFailure` asks the whole ledger.
+
 ### Fixed (PR #107 round 15)
 
 - **The persist-failure ledger heals on structural ops.** A durably-removed
