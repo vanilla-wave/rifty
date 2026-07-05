@@ -14,7 +14,7 @@ eddy's fast path needed 5 review rounds (#107 R5→R17) to bound every read — 
 
 ## Candidate boundaries (items carved at refine)
 
-- standard registry fetches (packument/tarball) — no progress bound; recorded on the #107 branch as `npm-client/registry-fetch-no-progress-bound` (lands with that PR; becomes a child here)
+- standard registry fetches (packument/tarball) — no progress bound; OWNED by the existing `npm-client/registry-fetch-no-progress-bound` (child of `cold-npm-install-speedup`) — not duplicated here, this epic covers the remaining boundaries only
 - tarball cache gaps not covered by #107 fault tests — tag into the fault tier, fill
 - learned pins (`/.rifty/eddy-learned-pins.json`): corrupt/oversized file, TTL/cap races
 
