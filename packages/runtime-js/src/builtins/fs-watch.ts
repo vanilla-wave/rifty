@@ -17,7 +17,10 @@ import { syncMirror } from './fs-sync-mirror.ts';
 export interface WatchOptions {
   /** poll interval in ms (default 250) */
   interval?: number;
-  /** if true, also report sub-paths for directory watches (default true) */
+  /**
+   * Watch the full subtree; events carry the path RELATIVE to the watch root
+   * (`src/components/Button.tsx`). Default false — Node parity.
+   */
   recursive?: boolean;
   /** abort signal */
   signal?: AbortSignal;
@@ -73,28 +76,47 @@ interface FileSnapshot {
   exists: boolean;
   size: number;
   mtime: number;
+  isFile: boolean;
+  isDirectory: boolean;
 }
 
 function snapshotFile(p: string): FileSnapshot {
   try {
     const s = syncMirror().statSync(p);
-    return { exists: true, size: s.size ?? 0, mtime: s.mtime ?? 0 };
+    return {
+      exists: true,
+      size: s.size ?? 0,
+      mtime: s.mtime ?? 0,
+      isFile: s.isFile,
+      isDirectory: s.isDirectory,
+    };
   } catch {
-    return { exists: false, size: 0, mtime: 0 };
+    return { exists: false, size: 0, mtime: 0, isFile: false, isDirectory: false };
   }
 }
 
-function snapshotDir(p: string): Map<string, FileSnapshot> {
+/**
+ * Snapshot of a directory's children keyed by the path RELATIVE to the watch
+ * root — one name deep without `recursive`, the whole subtree with it (the
+ * relative key is exactly the `filename` Node hands recursive listeners).
+ */
+function snapshotDir(root: string, recursive: boolean): Map<string, FileSnapshot> {
   const out = new Map<string, FileSnapshot>();
-  let entries: readonly { name: string }[];
-  try {
-    entries = syncMirror().readdirSync(p);
-  } catch {
-    return out;
-  }
-  for (const { name } of entries) {
-    out.set(name, snapshotFile(joinPath(p, name)));
-  }
+  const walk = (abs: string, rel: string): void => {
+    let entries: readonly { name: string; isDirectory: boolean }[];
+    try {
+      entries = syncMirror().readdirSync(abs);
+    } catch {
+      return;
+    }
+    for (const { name, isDirectory } of entries) {
+      const childAbs = joinPath(abs, name);
+      const childRel = rel === '' ? name : `${rel}/${name}`;
+      out.set(childRel, snapshotFile(childAbs));
+      if (recursive && isDirectory) walk(childAbs, childRel);
+    }
+  };
+  walk(root, '');
   return out;
 }
 
@@ -123,10 +145,11 @@ export function watch(
   }
 
   if (isDir) {
-    let prev = snapshotDir(target);
+    const recursive = opts.recursive ?? false;
+    let prev = snapshotDir(target, recursive);
     watcher._start(
       () => {
-        const next = snapshotDir(target);
+        const next = snapshotDir(target, recursive);
         // additions / deletions
         for (const name of next.keys()) {
           if (!prev.has(name)) {
@@ -198,10 +221,10 @@ function toStats(snap: FileSnapshot): StatsLike {
     size: snap.size,
     mtime: snap.mtime,
     isFile() {
-      return snap.exists;
+      return snap.isFile;
     },
     isDirectory() {
-      return false;
+      return snap.isDirectory;
     },
   };
 }
