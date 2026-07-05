@@ -2,7 +2,73 @@
 
 ## [Unreleased]
 
+### Fixed (PR #107 round 22)
+
+- **Pending boot stamps do not promote across package.json dep drift.** The
+  deferred promoter now trusts only the dep-set it stamped; if deps change while
+  the non-blocking drain is in flight, the pending stamp is discarded.
+- **Learned eddy pins reject invalid clocks.** Non-finite or future `savedAt`
+  values no longer pass TTL checks as fresh pins.
+
+### Fixed (PR #107 round 21)
+
+- **Boot/restore stamps now close the crash window.** Snapshot/boot restore
+  writes `durability:"pending"` first, and pending stamps never satisfy
+  `installStampSatisfied`. The deferred OPFS drain promotes the stamp only
+  after a clean tree+stamp report; tree damage discards it, and stamp-file
+  damage leaves it untrusted so the next boot re-runs dependency arrival.
+- **Stale boot-stamp promoters cannot trust a newer restore.** Pending stamps
+  carry a per-realm promotion id, and dependency arrival invalidates older
+  deferred promotion tasks before mutating `node_modules`.
+
+### Fixed (PR #107 round 20)
+
+- **Workspace-scoped OPFS flushes keep their durability report.** The scoped VFS
+  wrapper now returns the inner `PersistFailureReport` instead of hiding it, so
+  `npm install` stamp gates still see OPFS quota/permission failures under the
+  active workspace.
+- **Stamp-write warnings scan the full persist-failure ledger.** The post-stamp
+  drain now uses `reportHasFailure` for the stamp path instead of the sampled
+  `failures` list, so a failed stamp write cannot be hidden behind unrelated
+  sampled failures.
+
+### Fixed (PR #107 round 18)
+
+- **Stamp durability gates on the FULL persist-failure ledger, not the sample.**
+  Both the `npm install` stamp gate and the deferred boot revoke now ask
+  `PersistFailureReport.anyFailure` (via `reportHasFailure`): round 17's
+  sample-scan could miss `node_modules` damage when ≥20 foreign failures filled
+  the report sample, wrongly trusting a torn tree. The message still names a
+  tree example from the sample when present.
+
+### Fixed (PR #107 round 17)
+
+- **Stamp durability is scoped to `<root>/node_modules` and the revoke is
+  proven.** A persist failure on a foreign/global path
+  (`/.rifty/eddy-learned-pins.json`, another project's tree) no longer revokes —
+  or, on the `npm install` path, skips — a good install stamp; only the stamped
+  tree's own failures gate it (`isStampedTreeDamage`). After revoking a
+  torn-tree stamp, a re-drain confirms the deletion reached disk and escalates
+  LOUDLY when it did not (a stamp that failed to delete would be wrongly trusted
+  next boot).
+- **Owner-boot prefetch composition policy is unit-tested.** The
+  skip-stamped / dedupe-same-config / learned-pin-beats-env-pin decision moved
+  into a pure `decideInstallPrefetch` helper with coverage (was an untested boot
+  closure).
+
 ### Changed
+
+- **`npm install` gates the install stamp on a CLEAN persist drain (ADR-0187
+  Corrected).** The write-through drain is checked before stamping: a dirty
+  `PersistFailureReport` (OPFS quota/perm failure) skips the stamp with a loud
+  terminal warning — the install keeps working this session, the next boot
+  re-installs instead of trusting a stamped-but-torn tree. A leftover failure
+  on the stamp file itself doesn't gate (the rewrite heals it). Wall-cost ≈
+  the previous single post-stamp drain (FIFO: the second drain waits only for
+  the stamp's own write). The boot/restore stamp stays non-blocking with a
+  DEFERRED durability check: a fire-and-forget post-boot drain revokes the
+  stamp when the ledger shows tree persist failures, so a later boot re-runs
+  dependency arrival instead of trusting a torn tree.
 
 - **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
   net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
@@ -62,6 +128,44 @@
   providers now classify the broken-workspace-TypeScript reject by the ts-LS
   "has no resolvable compiler entry" message (compiler entry is resolved with
   Node semantics, no longer a `lib/typescript.js` probe).
+### Performance
+
+- **Learned eddy pins (ADR-0194).** After a successful eddy install the owner persists
+  `canonicalEddyRequestKey → closureHash` at `/.rifty/eddy-learned-pins.json` (TTL 1800s =
+  the server's mutable-tier DEFAULT — a custom `EDDY_TTL_SECONDS` is not tracked; an
+  outlived pin degrades to a verified 404 → POST; cap 64, corrupt = absent), so ANY repeat dep set — ad-hoc
+  `npm install` included, not just env-pinned templates — becomes a cacheable
+  `GET /bundle/<hash>` (browser HTTP cache / CDN edge) instead of an origin POST. A learned
+  pin — keyed on the EXACT post-merge dep set — WINS over the coarser template env pin
+  (`VITE_RIFTY_EDDY_PINS`), which stays the FALLBACK for the first install of a set: so a
+  repeat of a *modified* set (`npm install <pkg>`, then a reload) rides its learned GET
+  instead of re-POSTing behind a now-stale env pin. The owner-boot prefetch reads the learned
+  pin through the sync mirror (the prefetch gate stays sync by design). New seam:
+  `NpmShellCommandDeps.learnedPins`.
+
+- **Leaner install-stamp durability (ADR-0187, as later Corrected).** The write-through
+  FIFO lands the stamp after every tree write: the snapshot-restore stamp is now fully
+  non-blocking (the dev line starts ~0.5s earlier; `EnsureProjectDepsOptions.flush`
+  returned later as the never-awaited seam for the deferred durability check — see the
+  gating entry above), and the visible `npm install`
+  drains around the stamp — drain→check→stamp→drain per the ADR-0187 Correction (order
+  alone can't survive a swallowed per-op persist failure; see the gating entry above) —
+  npm parity, an immediate reload cannot lose the install (e2e-pinned by
+  `owner-snapshot-restore-exec`). Reload-critical drains (dev-ready, eval boundary)
+  unchanged. A stamp-write failure only costs the next boot's skip optimization — the
+  tree drain never hinges on the stamp.
+- **Owner-boot eddy prefetch + preset pins + preconnect (ADR-0195).** For the active
+  from-scratch preset the owner starts the bundle fetch at boot (`startInstallPrefetch`),
+  overlapping the resolver round-trip with git init/seeding/pty setup; `npm install` consumes
+  it only on a canonical dep-set match. `VITE_RIFTY_EDDY_PINS` (JSON `template-id →
+  closureHash`, env-config, default absent — keyed on the TEMPLATE id, which owns the
+  dep-set; the runtime slug is the root id, ADR-0165) turns the fetch into a cacheable
+  GET-by-hash.
+  The prefetch's pin follows the same learned-WINS priority as the install path (ADR-0194):
+  a learned exact-match pin beats the coarse template env pin, so `install` (which consumes
+  the prefetch before its own pin) never rides a stale env prefetch over the exact learned
+  one; the dedup key is a structured `JSON.stringify` (was a NUL-delimited literal).
+  Page boot preconnects the registry + resolver origins (env-config only, D-004).
 
 ### Added
 
@@ -75,6 +179,11 @@
 
 ### Fixed
 
+- **Eddy pin/prefetch getters are truly inert without `resolverUrl`.** The
+  `npm` command invoked `resolverClosureHash()` / `resolverPrefetch()`
+  unconditionally, so a throwing/warning pin store could break an
+  eddy-DISABLED install; the getters now only run when the resolver is
+  configured (regression-tested with throwing getters).
 - **Preset switch/restart no longer spins when a SECOND server is live.** The
   derived dev-server status is GLOBAL (any listening server keeps it `running` —
   generic lifecycle), but the switch stops ONE session: with a vite dev server

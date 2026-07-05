@@ -9,6 +9,7 @@ export { VfsError, NotImplementedError } from './errors.ts';
 export { MemoryVfs } from './memory.ts';
 export { OpfsVfs } from './opfs.ts';
 export { OpfsFsSync } from './opfs-sync.ts';
+export type { PersistFailure, PersistFailureReport } from './opfs-sync.ts';
 export {
   joinPath,
   normalizePath,

@@ -1006,3 +1006,272 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
     expect(() => fs.cpSync('/dir', '/dir/sub', { recursive: true })).toThrow(/EINVAL/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Write-through FIFO ordering (ADR-0187 Corrected): completion order == call
+// order even when a LATER write could finish faster. Load-bearing: the install
+// stamp is enqueued after the tree's writes, so it can never land BEFORE them
+// — order plus the persist-failure ledger (below) delivers "durable stamp
+// implies durable tree". Parallelizing this queue requires per-path ordering +
+// an explicit stamp barrier — this pin is the tripwire.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp durability)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('completes write-throughs in call order under inverted per-write latencies', async () => {
+    const completed: string[] = [];
+    const delays: Record<string, number> = { '/a': 30, '/b': 15, '/c': 0 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        completed.push(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a', new Uint8Array([1])); // slowest first…
+    fs.writeFileSync('/b', new Uint8Array([2]));
+    fs.writeFileSync('/c', new Uint8Array([3])); // …fastest last
+    await fs.flush();
+    expect(completed).toEqual(['/a', '/b', '/c']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Persist-failure ledger (ADR-0187 Corrected): FIFO order alone can't deliver
+// "durable stamp implies durable tree" when a per-op quota/perm failure is
+// swallowed — flush() must REPORT the divergence so a durability-gated caller
+// (the npm install stamp) can refuse to trust it. flush() still never rejects.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('flush() resolves (never rejects) and REPORTS a swallowed write-through failure; a later success HEALS it', async () => {
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/f.txt', new Uint8Array([1]));
+    const report = await fs.flush();
+    expect(report.total).toBe(1);
+    expect(report.failures).toEqual([
+      { path: '/f.txt', op: 'write', message: 'QuotaExceededError' },
+    ]);
+    // The sync view is untouched — the cache still serves this realm.
+    expect([...fs.readFileBytesSync('/f.txt')]).toEqual([1]);
+
+    // Heal-on-success: a re-write of the SAME path that persists (freed
+    // quota, re-install) clears the entry — the divergence is gone.
+    fail = false;
+    fs.writeFileSync('/f.txt', new Uint8Array([2]));
+    expect((await fs.flush()).total).toBe(0);
+  });
+
+  it('records a failed DIRECTORY persist — a missing tree dir is a durability gap too', async () => {
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    // The fake root rejects unknown dirs (its getDirectoryHandle ignores
+    // `create`) — the mkdir persist fails while the mirror mkdir succeeded.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/node_modules', { recursive: true });
+    expect(fs.existsSync('/node_modules')).toBe(true); // mirror has it
+    const report = await fs.flush();
+    expect(report.total).toBe(1);
+    expect(report.failures[0]).toMatchObject({ path: '/node_modules', op: 'mkdir' });
+  });
+
+  it('MORE failures than the report sample stay individually healable — total returns to 0 after a big quota event', async () => {
+    // Regression (round 11): a capped ledger counted over-cap failures in an
+    // opaque overflow with no path identity — they could never heal, so after
+    // a large quota event `total` stayed > 0 forever and the visible
+    // `npm install` permanently skipped install stamps. The ledger is now
+    // uncapped (bounded by distinct paths); only the REPORT is sampled.
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    // 120 > the old 100-entry ledger cap — the paths that used to land in the
+    // opaque overflow are exactly the ones that could never heal.
+    const paths = Array.from({ length: 120 }, (_, i) => `/f${i}.txt`);
+    for (const path of paths) fs.writeFileSync(path, new Uint8Array([1]));
+    const dirty = await fs.flush();
+    expect(dirty.total).toBe(120); // full count…
+    expect(dirty.failures.length).toBe(20); // …sampled report
+
+    // Quota freed: re-persist EVERY path — including the ones beyond the
+    // sample — and the report must come back fully clean.
+    fail = false;
+    for (const path of paths) fs.writeFileSync(path, new Uint8Array([2]));
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect(healed.failures).toEqual([]);
+  });
+
+  it('anyFailure scans the FULL ledger — a path BEYOND the report sample is still found (round 18)', async () => {
+    // A durability gate that scanned only `failures` (the sample) would MISS
+    // tree damage when foreign failures fill the first PERSIST_REPORT_SAMPLE;
+    // `anyFailure` asks the whole ledger. All paths sit under `/` so only writes
+    // fail (no mkdir noise); insertion order puts the tree file 21st.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.reject(new DomError('QuotaExceededError')),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    for (let i = 0; i < 20; i++) fs.writeFileSync(`/foreign-${i}.json`, new Uint8Array([1]));
+    fs.writeFileSync('/the-tree-file.js', new Uint8Array([1])); // 21st → beyond the sample
+    const report = await fs.flush();
+    expect(report.total).toBe(21);
+    expect(report.failures.length).toBe(20); // sampled
+    expect(report.failures.some((f) => f.path === '/the-tree-file.js')).toBe(false); // not sampled
+    expect(report.anyFailure?.((p) => p === '/the-tree-file.js')).toBe(true); // FULL ledger
+  });
+
+  it('a recursive rm HEALS ledger entries under the removed subtree — a gone tree is not a torn tree (round 15)', async () => {
+    // A failed write under /dir left a ledger entry; removing /dir durably
+    // means disk and mirror AGREE the path is gone — the stale entry must not
+    // keep making flush() report a divergence (it wrongly skipped/revoked
+    // install stamps).
+    let fail = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () =>
+        fail ? Promise.reject(new DomError('QuotaExceededError')) : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/dir']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dir', { recursive: true }); // persist succeeds — the fake root has /dir
+    fs.writeFileSync('/dir/a.txt', new Uint8Array([1]));
+    expect((await fs.flush()).total).toBe(1); // the write never persisted
+    fail = false;
+    fs.rmSync('/dir', { recursive: true }); // removeEntry succeeds in the fake
+    expect((await fs.flush()).total).toBe(0); // subtree gone → entries healed
+  });
+
+  it('a fully-persisted RENAME heals the moved paths — the destination write is the heal (round 15)', async () => {
+    // '/a.txt' failed to persist, then was renamed to '/b.txt': the rename's
+    // persist writes the CURRENT bytes at the destination and removes the
+    // source — no divergence remains on either path.
+    let failWrites = true;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.reject(new DomError('NotFoundError')),
+      writeFile: (path: string) =>
+        failWrites && path === '/a.txt'
+          ? Promise.reject(new DomError('QuotaExceededError'))
+          : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a.txt', new Uint8Array([1]));
+    expect((await fs.flush()).total).toBe(1); // '/a.txt' never persisted
+    failWrites = false;
+    fs.renameSync('/a.txt', '/b.txt'); // rename persist writes '/b.txt' + rms '/a.txt'
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect([...fs.readFileBytesSync('/b.txt')]).toEqual([1]); // mirror moved the bytes
+  });
+
+  it('an rm whose OPFS entry is ALREADY GONE reads as success (disk agrees), not a failure', async () => {
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    (root as { removeEntry: unknown }).removeEntry = () =>
+      Promise.reject(new DomError('NotFoundError'));
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/f.txt', new Uint8Array([1]));
+    fs.rmSync('/f.txt');
+    expect((await fs.flush()).total).toBe(0); // never-persisted entry: rm target absent = durable
+  });
+
+  it('a persisted DESCENDANT write heals a stale ANCESTOR mkdir failure — a proven-present dir is not a torn dir', async () => {
+    // /dir's mkdir persist FAILS (the fake root ignores `create`), leaving a
+    // mkdir ledger entry. A later write to /dir/a.txt that PERSISTS proves /dir
+    // now exists on disk (a real OPFS write walks getDirectoryHandle(create)
+    // for every ancestor). The old code cleared only the exact file path, so
+    // the stale ancestor entry lingered and a durable node_modules tree wrongly
+    // revoked its install stamp.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(), // the descendant write PERSISTS
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dir', { recursive: true }); // persist FAILS — fake root has no /dir
+    expect(fs.existsSync('/dir')).toBe(true); // mirror has it
+    expect((await fs.flush()).total).toBe(1); // stale /dir mkdir entry
+    fs.writeFileSync('/dir/a.txt', new Uint8Array([1])); // write-through persists
+    expect((await fs.flush()).total).toBe(0); // ancestor /dir healed by the descendant write
+  });
+
+  it('a rename whose SOURCE is already gone (NotFoundError) still heals — a durably-written destination is not torn', async () => {
+    // The destination write PERSISTS; only the source removal hits NotFoundError
+    // (source never reached disk / already gone = removal success, same rule as
+    // persistRmAsync). The old catch recorded EVERY destination as a 'rename'
+    // failure, so a durable move read as torn forever and revoked the stamp.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array([1])),
+      writeFile: () => Promise.resolve(), // destination persists
+      rm: () => Promise.reject(new DomError('NotFoundError')), // source already gone
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a.txt', new Uint8Array([1]));
+    await fs.flush(); // seed the source (persists)
+    fs.renameSync('/a.txt', '/b.txt'); // dest persists; source rm → NotFoundError
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0); // dest durable + source already-gone = clean
+    expect([...fs.readFileBytesSync('/b.txt')]).toEqual([1]);
+  });
+
+  it('a successful rename into a previously-dirty destination dir heals that stale dir failure', async () => {
+    // /dst's mkdir persist FAILS, so the ledger says the directory is dirty.
+    // The later rename writes /dst/a.txt durably; that write proves /dst now
+    // exists on disk, so the stale dir entry must be cleared.
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array([1])),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dst', { recursive: true }); // fake root cannot persist it
+    fs.mkdirSync('/src', { recursive: true }); // healed by the descendant write
+    fs.writeFileSync('/src/a.txt', new Uint8Array([1]));
+    const dirty = await fs.flush();
+    expect(dirty.total).toBe(1);
+    expect(dirty.failures).toEqual([{ path: '/dst', op: 'mkdir', message: 'NotFoundError' }]);
+
+    fs.renameSync('/src/a.txt', '/dst/a.txt');
+
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect([...fs.readFileBytesSync('/dst/a.txt')]).toEqual([1]);
+  });
+});

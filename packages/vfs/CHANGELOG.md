@@ -20,6 +20,59 @@
   carry the full target path instead of the parent — identical semantics in
   `MemoryBackend` and `OpfsFsSync` (guard: `fs-sync-strict-paths.test.ts`,
   Node truth: parity case `fs/error-shape-errno-syscall`).
+### Fixed (PR #107 round 20)
+
+- **Rename persistence heals destination ancestor failures.** A successful
+  rename write to `/dst/file` now clears stale mkdir failures for `/dst` and
+  its ancestors, so a durable moved tree is not misreported as torn.
+
+### Fixed (PR #107 round 19)
+
+- **The persist-failure ledger heals ANCESTOR dirs on a descendant persist.** A
+  successful write-through (or mkdir) now clears any stale ancestor mkdir
+  failure — a persisted descendant proves the whole parent chain exists on disk
+  (OPFS creates it), so the old entry no longer described a divergence yet still
+  made a durable tree look torn and wrongly skipped/revoked its install stamp.
+- **A rename whose SOURCE is already gone (`NotFoundError`) heals its
+  destinations.** The source removal now treats already-gone as a successful
+  removal (same rule as `rm`) instead of recording every durably-written
+  destination as a bogus `rename` failure.
+
+### Added (PR #107 round 18)
+
+- **`PersistFailureReport.anyFailure(predicate)`** — a FULL-ledger query
+  (OpfsFsSync backend). `failures` is only a SAMPLE, so a durability gate that
+  scans it can miss a torn-tree path when foreign failures fill the first
+  `PERSIST_REPORT_SAMPLE`; `anyFailure` asks the whole ledger.
+
+### Fixed (PR #107 round 15)
+
+- **The persist-failure ledger heals on structural ops.** A durably-removed
+  subtree (recursive `rm`, or the source side of a fully-persisted rename)
+  clears every ledger entry beneath it, and a rename's destination write heals
+  its path — disk and mirror agree, so the old entries no longer describe a
+  divergence. Stale entries used to make a durable tree look torn forever,
+  wrongly skipping/revoking install stamps.
+
+### Added
+
+- **Persist-failure ledger — `flush()` reports swallowed OPFS failures
+  (ADR-0187 Corrected).** `OpfsFsSync` records every failed write-through /
+  mkdir / rm / rename persist per path (a later successful persist of the same
+  path heals its entry; an `rm` hitting `NotFoundError` counts as success —
+  disk already agrees). `flush()` still never rejects but now returns a
+  `PersistFailureReport` — `failures` is a sampled view, `total` the full
+  count; the ledger itself is uncapped (keyed by path, so bounded by the
+  distinct paths written — the same order as the mirror's own index), keeping
+  every failure healable so `total` returns to 0 after a quota event. A caller
+  that promises durability (the playground install stamp) gates on
+  `total === 0` instead of trusting FIFO order across silently-failed ops.
+
+- **Write-through FIFO ordering pinned as a contract (ADR-0187).** `OpfsFsSync`'s
+  `enqueuePending` serialization is now load-bearing for the playground's non-blocking install
+  stamp ("durable stamp implies durable tree" via queue order, not a blocking flush): a
+  RED-on-parallelize test asserts completion order equals call order under inverted per-write
+  latencies, and the site carries the contract comment.
 
 ### Fixed
 

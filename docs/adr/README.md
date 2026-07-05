@@ -113,6 +113,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0176 | Cache headers for npm registry proxy |
 | 0182 | Eddy opt-in fast-install resolver |
 | 0188 | Install-time shadow internals shims with companion pins and substitution provenance |
+| 0194 | eddy v1.2 — stateless bundle store, shared resolve caches, learned pins |
+| 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 
 ### playground
 
@@ -143,6 +145,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0179 | Expose git status classifier from git facade |
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
+| 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 
 ### toolchain-build
 
@@ -253,6 +256,8 @@ superseded.
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 | 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
+| 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |
+| 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0137 backlog path / follow-up status | 0137 note 2026-06-23 | shell `.bin` execution backlog file retired after owner-worker child path + non-dev `npm run` routing landed; `execSync` node-entry residual remains separate |

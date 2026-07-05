@@ -387,6 +387,9 @@ importers:
       '@riftydev/shadow-registry':
         specifier: workspace:*
         version: link:../tools/shadow-registry
+      '@riftydev/shell':
+        specifier: workspace:*
+        version: link:../packages/shell
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../packages/vfs

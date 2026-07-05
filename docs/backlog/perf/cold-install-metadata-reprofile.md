@@ -21,5 +21,5 @@ FINDING (adversarial measurement 2026-06-28, faithful browser transport): BOTH t
 ## Open forks (resolve to reach ready)
 
 - Instrumentation: count distinct packument requests, sum metadata bytes transferred, and measure critical-path RTTs (graph depth) on express@^4 + eslint@^9 against the deployed `registry.rifty.dev` (D-004), corgi enabled.
-- Decision rule: bytes-dominant → favor `bundled-popular-subgraph-metadata` (or stop at corgi); RTT-dominant → favor `server-side-closure-resolver`; connection-dominant → `install-transport-tuning`.
+- Decision rule: bytes-dominant → favor `bundled-popular-subgraph-metadata` (or stop at corgi); RTT-dominant → favor `server-side-closure-resolver`; connection-dominant → the h3 lever in `perf/eddy-http3-cold-validation` (ex `install-transport-tuning`; its preconnect half shipped in ADR-0195).
 - REVERSIBLE — measurement + recorded decision (CHANGELOG line). No ADR.

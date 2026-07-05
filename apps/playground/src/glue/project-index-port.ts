@@ -148,7 +148,8 @@ export function serveProjectIndex(
   key: OwnerBridgeKey,
   fs: IndexFs,
   base: string,
-  flush?: () => Promise<void>,
+  // Ordering-only drain: the persist report (ADR-0187 Corrected) is ignored.
+  flush?: () => Promise<unknown>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
 ): () => void {

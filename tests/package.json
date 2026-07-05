@@ -9,6 +9,7 @@
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/shell": "workspace:*",
     "@riftydev/vfs": "workspace:*"
   }
 }
