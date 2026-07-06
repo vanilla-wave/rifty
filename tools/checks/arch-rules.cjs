@@ -112,10 +112,14 @@ const forbidden = [
     name: 'editor-stack-loads-lazily',
     severity: 'error',
     comment:
-      'lazy-Monaco split: App must reach the editor host + LS providers ONLY via dynamic import (solid lazy() / effect-time import()) — a static import drags monaco into the main chunk transitively',
-    from: { path: '(?:^|/)playground/src/App\\.tsx$' },
+      'lazy-Monaco split: the main chunk must reach the editor stack (host, core, env, LS providers — all monaco importers) ONLY via dynamic import (solid lazy() / effect-time import()) or type-only — a static value import from anywhere else re-drags monaco into the main chunk transitively',
+    from: {
+      path: '(?:^|/)playground/src/',
+      pathNot:
+        '(?:^|/)playground/src/(?:components/EditorHost\\.tsx|components/editor-host-core\\.ts|glue/monaco-env\\.ts|glue/ts-ls-monaco-providers\\.ts)$',
+    },
     to: {
-      path: '(?:^|/)playground/src/(?:components/EditorHost\\.tsx|glue/ts-ls-monaco-providers\\.ts)$',
+      path: '(?:^|/)playground/src/(?:components/EditorHost\\.tsx|components/editor-host-core\\.ts|glue/monaco-env\\.ts|glue/ts-ls-monaco-providers\\.ts)$',
       dependencyTypesNot: ['dynamic-import', 'type-only'],
     },
   },
