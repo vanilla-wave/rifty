@@ -14,6 +14,7 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
+import { Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -125,43 +126,6 @@ function checkedSliceBounds(buffer: Uint8Array, offset: number, length: number):
   assertNonNegativeInteger(length, 'length');
   if (offset + length > buffer.byteLength) {
     throw new RangeError('offset + length exceeds buffer length');
-  }
-}
-
-class Stats {
-  size: number;
-  mtimeMs: number;
-  private readonly _isFile: boolean;
-  private readonly _isDirectory: boolean;
-  constructor(vs: { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number }) {
-    this.size = vs.size ?? 0;
-    this.mtimeMs = vs.mtime ?? 0;
-    this._isFile = vs.isFile;
-    this._isDirectory = vs.isDirectory;
-  }
-  isFile(): boolean {
-    return this._isFile;
-  }
-  isDirectory(): boolean {
-    return this._isDirectory;
-  }
-  isSymbolicLink(): boolean {
-    return false;
-  }
-  isBlockDevice(): boolean {
-    return false;
-  }
-  isCharacterDevice(): boolean {
-    return false;
-  }
-  isFIFO(): boolean {
-    return false;
-  }
-  isSocket(): boolean {
-    return false;
-  }
-  get mtime(): Date {
-    return new Date(this.mtimeMs);
   }
 }
 
@@ -295,8 +259,22 @@ function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8
   return data;
 }
 
-function assertStatOptions(opts: StatOptions | undefined, feature: string): void {
-  if (opts?.bigint === true) throw new NotImplementedError(feature);
+/**
+ * One Stats-shaping boundary for every stat surface (statSync/lstatSync/
+ * fstatSync + the promises/callback twins). The BigIntStats gap fires HERE —
+ * AFTER the underlying stat succeeded — so Node-visible errors keep their
+ * priority over the rifty gap throw: `stat(missing, { bigint: true })` is
+ * ENOENT and `fstat(badFd, …)` is EBADF in Node, never a bigint error
+ * (gap throws only replace Node's SUCCESS path, not its error path).
+ * TODO(backlog: runtime-js/fs-watchfile-bigint-stats)
+ */
+function shapeStats(
+  vs: { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number },
+  options: StatOptions | undefined,
+  feature: string,
+): Stats {
+  if (options?.bigint === true) throw new NotImplementedError(feature);
+  return new Stats(vs);
 }
 
 function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
@@ -398,6 +376,7 @@ function getFd(fd: number, syscall: string): FdRecord {
  * handoff #2: four hand-rolled copies drifted — flagged directory reads fell
  * through to a read-shaped EISDIR, appendFile raised EISDIR where Node's
  * O_EXCL existence check wins with EEXIST). Check order matches Node:
+ * EINVAL (O_CREAT|O_DIRECTORY, before any target inspection) →
  * EEXIST (O_CREAT|O_EXCL) → ENOTDIR (O_DIRECTORY on non-dir) → EISDIR
  * (writable/truncating a directory) → ENOENT (miss without O_CREAT); applies
  * the create/truncate open side effects. All failures are open-shaped.
@@ -405,6 +384,10 @@ function getFd(fd: number, syscall: string): FdRecord {
 function openPreflight(p: PathLike, parsed: ParsedOpenFlags): { existed: boolean } {
   const np = resolvePath(p);
   const ps = pathToString(p);
+  // O_CREAT|O_DIRECTORY is an invalid COMBINATION: EINVAL before any target
+  // inspection — existing file, existing dir and missing target all EINVAL
+  // (node v24, linux AND darwin; parity: fs/open-flag-target-matrix).
+  if (parsed.create && parsed.directory) throw fsError('EINVAL', ps, 'open');
   const stat = withSyscall('open', p, () => statStrictOrNull(np));
   if (stat) {
     if (parsed.create && parsed.exclusive) throw fsError('EEXIST', ps, 'open');
@@ -642,11 +625,14 @@ export function mkdirSync(p: string, opts?: MkdirOptions): void {
  * form widens to `Stats | undefined`. Other errors (and a miss without the opt)
  * throw.
  */
-export function statSync(p: string): Stats;
-export function statSync(p: string, options: { throwIfNoEntry: false }): Stats | undefined;
-export function statSync(p: string, options?: { throwIfNoEntry?: boolean }): Stats | undefined {
+function statImpl(
+  p: string,
+  options: { throwIfNoEntry?: boolean; bigint?: boolean } | undefined,
+  feature: string,
+): Stats | undefined {
   try {
-    return withSyscall('stat', p, () => new Stats(syncMirror().statSync(resolvePath(p))));
+    const vs = withSyscall('stat', p, () => syncMirror().statSync(resolvePath(p)));
+    return shapeStats(vs, options, feature);
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) {
@@ -654,6 +640,18 @@ export function statSync(p: string, options?: { throwIfNoEntry?: boolean }): Sta
     }
     throw err;
   }
+}
+
+export function statSync(p: string): Stats;
+export function statSync(
+  p: string,
+  options: { throwIfNoEntry: false; bigint?: boolean },
+): Stats | undefined;
+export function statSync(
+  p: string,
+  options?: { throwIfNoEntry?: boolean; bigint?: boolean },
+): Stats | undefined {
+  return statImpl(p, options, 'fs.statSync.bigint');
 }
 
 export function existsSync(p: string): boolean {
@@ -732,8 +730,13 @@ export function renameSync(src: string, dst: string): void {
 // Ratified by ADR-0050 (reverses the prior `NotImplementedError`).
 // TODO(M12): when a symlink layer lands, revisit `lstatSync`/`realpathSync`/
 // `readlinkSync`/`Stats.isSymbolicLink()` together to resolve/inspect links.
-export function lstatSync(p: string): Stats {
-  return withSyscall('lstat', p, () => new Stats(syncMirror().statSync(resolvePath(p))));
+function lstatImpl(p: string, options: StatOptions | undefined, feature: string): Stats {
+  const vs = withSyscall('lstat', p, () => syncMirror().statSync(resolvePath(p)));
+  return shapeStats(vs, options, feature);
+}
+
+export function lstatSync(p: string, options?: StatOptions): Stats {
+  return lstatImpl(p, options, 'fs.lstatSync.bigint');
 }
 
 export function readlinkSync(p: string): string {
@@ -955,9 +958,11 @@ export function writeSync(
   return writeBytesAt(record, data.subarray(offset, offset + length), pos);
 }
 
-export function fstatSync(fd: number): Stats {
+export function fstatSync(fd: number, options?: StatOptions): Stats {
+  // EBADF first — Node reports the bad fd before any bigint shaping.
   const record = getFd(fd, 'fstat');
-  return withSyscall('fstat', record.path, () => new Stats(syncMirror().statSync(record.path)));
+  const vs = withSyscall('fstat', record.path, () => syncMirror().statSync(record.path));
+  return shapeStats(vs, options, 'fs.fstatSync.bigint');
 }
 
 export function ftruncateSync(fd: number, len = 0): void {
@@ -1117,12 +1122,10 @@ export const promises = {
     unlinkSync(p);
   },
   async stat(p: string, opts?: StatOptions): Promise<Stats> {
-    assertStatOptions(opts, 'fs.promises.stat.bigint');
-    return statSync(p);
+    return statImpl(p, opts, 'fs.promises.stat.bigint') as Stats;
   },
   async lstat(p: string, opts?: StatOptions): Promise<Stats> {
-    assertStatOptions(opts, 'fs.promises.lstat.bigint');
-    return lstatSync(p);
+    return lstatImpl(p, opts, 'fs.promises.lstat.bigint');
   },
   async readlink(p: string): Promise<string> {
     return readlinkSync(p);

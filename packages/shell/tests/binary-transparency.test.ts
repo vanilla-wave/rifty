@@ -67,9 +67,12 @@ describe('shell binary transparency (ADR-0198)', () => {
   });
 
   it('cat transform modes preserve non-UTF-8 bytes while inserting ASCII markers', async () => {
+    // payload lines: [0x80 \t A] / [] / [0xff B]. GNU -v notation: 0x80 →
+    // 'M-^@', 0xff → 'M-^?' — under -A (=-vET) the high bytes RENDER, they do
+    // not pass through raw (the old golden froze that unverified assumption;
+    // review 2026-07-06 finding #10). -E/-n/-b stay byte-transparent.
     const payload = new Uint8Array([0x80, 0x09, 0x41, 0x0a, 0x0a, 0xff, 0x42, 0x0a]);
     const line1 = new Uint8Array([0x80, 0x09, 0x41]);
-    const line1ShowTabs = new Uint8Array([0x80, 0x5e, 0x49, 0x41]);
     const line3 = new Uint8Array([0xff, 0x42]);
     const cases: ReadonlyArray<{
       readonly args: string;
@@ -84,7 +87,27 @@ describe('shell binary transparency (ADR-0198)', () => {
       {
         args: '-A',
         out: '/cat-A.dat',
-        expected: concat(line1ShowTabs, ascii('$\n'), ascii('$\n'), line3, ascii('$\n')),
+        expected: concat(ascii('M-^@^IA$\n'), ascii('$\n'), ascii('M-^?B$\n')),
+      },
+      {
+        args: '-v',
+        out: '/cat-v.dat',
+        expected: concat(ascii('M-^@'), new Uint8Array([0x09]), ascii('A\n\nM-^?B\n')),
+      },
+      {
+        args: '-e',
+        out: '/cat-e.dat',
+        expected: concat(ascii('M-^@'), new Uint8Array([0x09]), ascii('A$\n$\nM-^?B$\n')),
+      },
+      {
+        args: '-t',
+        out: '/cat-t.dat',
+        expected: concat(ascii('M-^@^IA\n\nM-^?B\n')),
+      },
+      {
+        args: '-T',
+        out: '/cat-T.dat',
+        expected: concat(new Uint8Array([0x80]), ascii('^IA\n\n'), line3, ascii('\n')),
       },
       {
         args: '-n',
@@ -111,6 +134,21 @@ describe('shell binary transparency (ADR-0198)', () => {
       expect(res.exitCode).toBe(0);
       expect(Array.from(syncMirror().readFileBytesSync(c.out))).toEqual(Array.from(c.expected));
     }
+  });
+
+  it('cat -v renders the control range like GNU (^X, ^?, M-)', async () => {
+    // 0x01 → ^A, 0x1f → ^_, 0x7f → ^?, 0x9b (128+27) → M-^[, 0xe9 → M-i;
+    // \t and \n stay raw under plain -v.
+    syncMirror().writeFileSync(
+      '/ctl.dat',
+      new Uint8Array([0x01, 0x1f, 0x7f, 0x9b, 0xe9, 0x09, 0x0a]),
+    );
+    const sh = new Shell();
+    const res = await sh.run('cat -v /ctl.dat > /ctl-v.dat');
+    expect(res.exitCode).toBe(0);
+    expect(Array.from(syncMirror().readFileBytesSync('/ctl-v.dat'))).toEqual(
+      Array.from(concat(ascii('^A^_^?M-^[M-i'), new Uint8Array([0x09, 0x0a]))),
+    );
   });
 
   it('pipe hand-off between two cats stays byte-identical', async () => {

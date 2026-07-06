@@ -4,8 +4,15 @@
 
 ### Fixed
 
-- **`cat` transform modes preserve binary bytes.** `cat -n/-b/-E/-A` now splits
-  on byte `0x0a` and inserts ASCII markers while preserving non-UTF-8 byte runs;
+- **`cat -A` now implies `-v` like GNU (review 2026-07-06 #10).** `-A`=`-vET`
+  renders non-printing bytes in GNU `^X`/`M-x` notation (`0x80`→`M-^@`,
+  `0xff`→`M-^?`, DEL→`^?`); `-v`, `-e` (=`-vE`), `-t` (=`-vT`) and plain `-T`
+  are accepted too. Before, `-A` silently enabled only ends+tabs and passed
+  high bytes raw. Goldens verified byte-for-byte against coreutils cat
+  (debian); guards: binary-transparency tests.
+- **`cat` transform modes preserve binary bytes.** `cat -n/-b/-E` now splits
+  on byte `0x0a` and inserts ASCII markers while preserving non-UTF-8 byte runs
+  (`-v`-family modes render those bytes as GNU marks by design);
   before, those modes decoded to a JS string and re-encoded `0x80..0xff` as
   U+FFFD bytes in pipes/redirects.
 - **Display decoding preserves a leading UTF-8 BOM.** Shell display strings

@@ -4,6 +4,17 @@
 
 ### Changed
 
+- **PR #115 root-cause round (2026-07-06): async `OpfsVfs` re-joined the
+  backend contract.** Non-recursive `mkdir` on an existing dir/file (and
+  `mkdir('/')`) is `EEXIST` — the final-segment `create:true` was masking it;
+  `stat` now OBSERVES the `utimes` side-table (files fall back to
+  `lastModified`, dirs to 0) instead of letting `utimes` succeed with no
+  observable effect, and `writeFile`/`rm` invalidate stamps so a rewrite or
+  recreate never resurrects an old mtime. Structural kill for the
+  sibling-drift axis: new `vfs-async-contract.test.ts` runs one contract
+  `describe.each` over MemoryVfs AND OpfsVfs (full fake-OPFS tree), mirroring
+  what `fs-sync-strict-paths` does for the sync backends.
+
 - **PR #115 final review path-shape fix (2026-07-06).** Async `OpfsVfs`
   directory-walk failures from `readdir`/`rm`/`stat` now name the requested
   target path, not the ancestor component that failed the OPFS handle walk.

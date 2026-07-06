@@ -62,6 +62,44 @@ interface WriteStreamOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Node's string-options overload + option-shape validation, ONE boundary for
+ * both factories (review 2026-07-06: `createReadStream(path, 'utf8')` was
+ * silently treated as no options — Buffers where Node emits strings;
+ * `createWriteStream(path, 'base64')` wrote utf8 where Node decodes base64).
+ * Node (probed v24): string → `{ encoding }`; null/undefined → defaults; any
+ * other non-object → ERR_INVALID_ARG_TYPE; an unknown encoding VALUE →
+ * ERR_INVALID_ARG_VALUE — all SYNCHRONOUS at create time.
+ */
+function normalizeStreamOptions<T extends ReadStreamOptions | WriteStreamOptions>(
+  opts: T | string | null | undefined,
+): T {
+  if (opts === undefined || opts === null) return {} as T;
+  if (typeof opts === 'string') {
+    assertKnownEncoding(opts);
+    return { encoding: opts } as T;
+  }
+  if (typeof opts !== 'object') {
+    throw Object.assign(
+      new TypeError(
+        `The "options" argument must be one of type string or object. Received ${receivedText(opts)}`,
+      ),
+      { code: 'ERR_INVALID_ARG_TYPE' },
+    );
+  }
+  if (opts.encoding !== undefined && opts.encoding !== null) assertKnownEncoding(opts.encoding);
+  return opts;
+}
+
+function assertKnownEncoding(encoding: string): void {
+  if (!Buffer.isEncoding(encoding)) {
+    throw Object.assign(
+      new TypeError(`The argument 'encoding' is invalid encoding. Received '${encoding}'`),
+      { code: 'ERR_INVALID_ARG_VALUE' },
+    );
+  }
+}
+
 /** Reject Node option fields this implementation cannot honor — loudly. */
 function assertSupportedStreamOptions(
   opts: ReadStreamOptions | WriteStreamOptions,
@@ -243,8 +281,9 @@ class FileReadStream extends EventEmitter {
   private closeAfterOpen = false;
   private closeEmitted = false;
 
-  constructor(path: string, opts: ReadStreamOptions = {}) {
+  constructor(path: string, optsOrEncoding: ReadStreamOptions | string | null = {}) {
     super();
+    const opts = normalizeStreamOptions<ReadStreamOptions>(optsOrEncoding);
     assertSupportedStreamOptions(opts, 'fs.createReadStream');
     if (opts.flags !== undefined && opts.flags !== 'r') {
       // Non-'r' read-stream flags change open side-effects we don't model.
@@ -495,6 +534,9 @@ class FileWriteStream extends EventEmitter {
   private readonly emitCloseOpt: boolean;
   private readonly flags: ParsedStreamFlags;
   private readonly highWaterMark: number;
+  private readonly defaultEncoding: string;
+  /** True while open() runs — Node's write-dispatch boundary (see destroy). */
+  private openTurn = false;
   /** Resolved-at-open path — Node binds the fd at open; a later chdir must not retarget the file. */
   private np: string | null = null;
   /** Full file image for positional writes; append streams re-read EOF at flush. */
@@ -523,13 +565,18 @@ class FileWriteStream extends EventEmitter {
   private readonly pendingWriteCallbacks: Array<(err?: unknown) => void> = [];
   private readonly finishCallbacks: Array<(err?: unknown) => void> = [];
 
-  constructor(path: string, opts: WriteStreamOptions = {}) {
+  constructor(path: string, optsOrEncoding: WriteStreamOptions | string | null = {}) {
     super();
+    const opts = normalizeStreamOptions<WriteStreamOptions>(optsOrEncoding);
     assertSupportedStreamOptions(opts, 'fs.createWriteStream', ['start', 'signal']);
     assertStreamRange('highWaterMark', opts.highWaterMark);
     this.flags = parseWriteFlags(opts.flags ?? 'w', 'fs.createWriteStream');
     this.emitCloseOpt = opts.emitClose ?? true;
     this.highWaterMark = opts.highWaterMark ?? 64 * 1024;
+    // Node: the stream-level encoding is the DEFAULT for string writes —
+    // `createWriteStream(p, 'base64')` decodes write('aGk=') as base64
+    // (per-write encoding still overrides; probed v24).
+    this.defaultEncoding = opts.encoding ?? 'utf8';
     this.path = path;
     keepaliveRef();
     setTimeout(() => {
@@ -557,6 +604,11 @@ class FileWriteStream extends EventEmitter {
     const np = resolvePath(this.path);
     this.np = np;
     let buffered: PendingWrite[] | null = null;
+    // Node's write-dispatch boundary: writes issued synchronously DURING the
+    // open-completion turn (e.g. inside the 'ready' handler) are not yet
+    // dispatched — a destroy() in that window discards them without an
+    // 'error' (probed v24; see destroy()).
+    this.openTurn = true;
     try {
       const stat = statStrictOrNull(np);
       const exists = stat !== null;
@@ -628,6 +680,8 @@ class FileWriteStream extends EventEmitter {
         this.emit('error', nodeErr);
         this.closeOnce();
       });
+    } finally {
+      this.openTurn = false;
     }
   }
 
@@ -711,7 +765,7 @@ class FileWriteStream extends EventEmitter {
     }
     const buf =
       typeof chunk === 'string'
-        ? Buffer.from(chunk, (encoding ?? 'utf8') as never)
+        ? Buffer.from(chunk, (encoding ?? this.defaultEncoding) as never)
         : chunkBytes(chunk);
     this.bufferedLength += buf.byteLength;
     const overHighWaterMark = this.bufferedLength >= this.highWaterMark;
@@ -906,19 +960,35 @@ class FileWriteStream extends EventEmitter {
     queueMicrotask(() => cb?.(err));
   }
 
-  /** Node semantics: destroy discards buffered-but-unflushed data, no 'finish'. */
+  /**
+   * Node's destroy() truth sits on the write-DISPATCH boundary (probed v24;
+   * parity fs/write-stream-destroy-events): writes buffered pre-open or
+   * synchronously during the open-completion turn are DISCARDED — callbacks
+   * get ERR_STREAM_DESTROYED, the file is untouched, NO 'error' event. A
+   * burst recorded after that turn is IN FLIGHT: its bytes LAND in the file,
+   * the callbacks still error, and the stream emits 'error'. An idle stream
+   * (everything flushed) closes silently. The old rule emitted 'error' for
+   * any post-open pending callback — `ws.write(data, cb); ws.destroy()`
+   * inside 'ready' CRASHED consumers via the no-listener 'error' throw, and
+   * `end(chunk); destroy()` after ready missed the 'error' Node does emit.
+   * No 'finish' in any branch.
+   */
   destroy(): void {
     if (this.destroyed) return;
     const err = STREAM_DESTROYED();
     const preOpen = !this.opened;
+    const preDispatch = preOpen || this.openTurn;
+    const inFlight = !preDispatch && this.flushScheduled;
+    // Let the in-flight burst land like Node's kernel write does. persist()
+    // failure surfaces ITS error itself — don't stack the destroyed one.
+    const persistErr = inFlight ? this.persist() : null;
     const buffered = this.preOpen ?? [];
-    const hadPendingWriteCallbacks = this.pendingWriteCallbacks.length > 0;
     this.preOpen = null;
     this.queueWriteCallbacks(buffered, err);
     this.queueCallbacks(this.pendingWriteCallbacks.splice(0), err);
     this.queueFinishCallbacks(err);
     this.destroyBeforeOpen = preOpen;
-    this.emitDestroyError = !preOpen && hadPendingWriteCallbacks;
+    this.emitDestroyError = inFlight && persistErr === null;
     this.destroyed = true;
     if (preOpen) return;
     queueMicrotask(() => {
@@ -928,12 +998,18 @@ class FileWriteStream extends EventEmitter {
   }
 }
 
-export function createReadStream(path: string, opts?: ReadStreamOptions): FileReadStream {
-  return new FileReadStream(path, opts);
+export function createReadStream(
+  path: string,
+  opts?: ReadStreamOptions | string | null,
+): FileReadStream {
+  return new FileReadStream(path, opts ?? {});
 }
 
-export function createWriteStream(path: string, opts?: WriteStreamOptions): FileWriteStream {
-  return new FileWriteStream(path, opts);
+export function createWriteStream(
+  path: string,
+  opts?: WriteStreamOptions | string | null,
+): FileWriteStream {
+  return new FileWriteStream(path, opts ?? {});
 }
 
 export { FileReadStream, FileWriteStream };

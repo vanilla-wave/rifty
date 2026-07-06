@@ -309,7 +309,11 @@ describe('fs streams', () => {
     expect(await fsp.readFile('/destroy-preopen.log', 'utf8')).toBe('');
   });
 
-  it('post-open destroy drains pending write callback and emits destroyed error', async () => {
+  it('post-open destroy of an IN-FLIGHT write lands the bytes, errors the cb, emits error', async () => {
+    // Node's dispatch boundary (probed v24; parity fs/write-stream-destroy-
+    // events): a burst written after the open turn is in flight — destroy()
+    // lets the bytes LAND (file shows the data), the write cb still gets
+    // ERR_STREAM_DESTROYED, and the stream emits 'error'.
     const events: string[] = [];
     const ws = createWriteStream('/destroy-postopen.log');
     ws.on('open', () => events.push('open'));
@@ -329,6 +333,36 @@ describe('fs streams', () => {
       'error:ERR_STREAM_DESTROYED',
       'close',
     ]);
+    expect(await fsp.readFile('/destroy-postopen.log', 'utf8')).toBe('a');
+  });
+
+  it('destroy synchronously inside the ready handler discards the write WITHOUT an error event', async () => {
+    // Same write+destroy pair, one microtask earlier: inside the open turn
+    // the write is not yet dispatched — Node discards it silently (file
+    // empty, cb errored, NO 'error'). The old rule emitted 'error' here,
+    // crashing the common `ws.write(data, cb); ws.destroy()` idiom via the
+    // no-listener 'error' throw (review 2026-07-06 blocker).
+    const events: string[] = [];
+    const ws = createWriteStream('/destroy-insideready.log');
+    ws.on('error', (err: unknown) => events.push(`error:${(err as { code?: string }).code}`));
+    const closed = new Promise<void>((resolve) =>
+      ws.on('close', () => {
+        events.push('close');
+        resolve();
+      }),
+    );
+    await new Promise<void>((resolve) =>
+      ws.on('ready', () => {
+        ws.write('a', (err?: unknown) =>
+          events.push(`writecb:${(err as { code?: string } | undefined)?.code}`),
+        );
+        ws.destroy();
+        resolve();
+      }),
+    );
+    await closed;
+    expect(events).toEqual(['writecb:ERR_STREAM_DESTROYED', 'close']);
+    expect(await fsp.readFile('/destroy-insideready.log', 'utf8')).toBe('');
   });
 
   it('post-open destroy drains pending end callback without an error event', async () => {

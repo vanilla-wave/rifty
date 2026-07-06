@@ -12,9 +12,11 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { basename, joinPath } from '@riftydev/vfs';
+import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { toNodeFsError } from './fs-errors.ts';
 import { resolvePath } from './fs-path.ts';
+import { Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface WatchOptions {
@@ -67,8 +69,35 @@ function invalidInterval(value: unknown): TypeError {
   );
 }
 
+function intervalOutOfRange(value: number, must: string): RangeError {
+  return Object.assign(
+    new RangeError(
+      `The value of "interval" is out of range. It must be ${must}. Received ${value}`,
+    ),
+    { code: 'ERR_OUT_OF_RANGE' },
+  );
+}
+
+/**
+ * Node's uint32 interval rule (probed v24): non-number → ERR_INVALID_ARG_TYPE;
+ * NaN/fractional/Infinity → ERR_OUT_OF_RANGE "must be an integer"; negative or
+ * > uint32-max → the range message; 0 is VALID. The old typeof-only check let
+ * setInterval silently coerce NaN/-1/Infinity. Parity: fs/watchfile-overloads.
+ */
 function assertInterval(value: unknown): asserts value is number | undefined {
-  if (value !== undefined && typeof value !== 'number') throw invalidInterval(value);
+  if (value === undefined) return;
+  if (typeof value !== 'number') throw invalidInterval(value);
+  if (!Number.isInteger(value)) throw intervalOutOfRange(value, 'an integer');
+  if (value < 0 || value > 4294967295) {
+    throw intervalOutOfRange(value, '>= 0 && <= 4294967295');
+  }
+}
+
+function invalidEncoding(value: string): TypeError {
+  return Object.assign(
+    new TypeError(`The argument 'encoding' is invalid encoding. Received '${value}'`),
+    { code: 'ERR_INVALID_ARG_VALUE' },
+  );
 }
 
 export class FSWatcher extends EventEmitter {
@@ -177,7 +206,7 @@ function snapshotDir(root: string, recursive: boolean): Map<string, FileSnapshot
 
 export function watch(
   path: string,
-  optionsOrListener?: WatchOptions | WatchListener | string,
+  optionsOrListener?: WatchOptions | WatchListener | string | null,
   listener?: WatchListener,
 ): FSWatcher {
   let opts: WatchOptions;
@@ -189,31 +218,28 @@ export function watch(
     opts = { encoding: optionsOrListener };
     cb = listener;
   } else {
-    if (
-      optionsOrListener !== undefined &&
-      (optionsOrListener === null || typeof optionsOrListener !== 'object')
-    ) {
-      throw invalidOptions(optionsOrListener);
+    // `null` means default options in Node (probed v24), same as undefined.
+    if (optionsOrListener !== undefined && optionsOrListener !== null) {
+      if (typeof optionsOrListener !== 'object') throw invalidOptions(optionsOrListener);
     }
     opts = optionsOrListener ?? {};
     cb = listener;
   }
   if (cb !== undefined && typeof cb !== 'function') throw invalidListener(cb);
 
-  if (opts.encoding !== undefined && opts.encoding !== 'utf8' && opts.encoding !== 'utf-8') {
-    // 'buffer' filenames (and exotic encodings) are unmodelled — loud gap,
-    // never a silently-still-utf8 string.
-    throw new NotImplementedError(`fs.watch.encoding:'${opts.encoding}'`);
+  // Node's observable order (probed v24, observable-order axis): an INVALID
+  // encoding value fails in option parsing — before target existence…
+  const enc = opts.encoding;
+  if (enc !== undefined && enc !== 'buffer' && !Buffer.isEncoding(enc)) {
+    throw invalidEncoding(enc);
   }
 
-  const interval = opts.interval ?? 250;
-  assertInterval(interval);
   const target = resolvePath(path);
   const watcher = new FSWatcher();
 
   if (cb) watcher.on('change', cb as (...args: unknown[]) => void);
 
-  // Determine mode (file vs directory) at start.
+  // …then a missing target is ENOENT/watch (valid-encoding requests included)…
   let isDir = false;
   try {
     const s = syncMirror().statSync(target);
@@ -221,6 +247,18 @@ export function watch(
   } catch (err) {
     throw toNodeFsError(err, 'watch', path);
   }
+
+  // …and only where Node itself would SUCCEED does the rifty gap fire:
+  // 'buffer' filenames (and other valid-but-unmodelled encodings) are loud,
+  // never a silently-still-utf8 string. Gap throws replace Node's success
+  // path, not its error path.
+  if (enc !== undefined && enc !== 'utf8' && enc !== 'utf-8') {
+    throw new NotImplementedError(`fs.watch.encoding:'${enc}'`);
+  }
+
+  // rifty extension (poll interval) — validated last, after every Node-visible check.
+  const interval = opts.interval ?? 250;
+  assertInterval(interval);
 
   if (isDir) {
     const recursive = opts.recursive ?? false;
@@ -289,14 +327,7 @@ export interface WatchFileOptions {
   persistent?: boolean;
 }
 
-export interface StatsLike {
-  size: number;
-  mtime: number;
-  isFile(): boolean;
-  isDirectory(): boolean;
-}
-
-type WatchFileListener = (curr: StatsLike, prev: StatsLike) => void;
+type WatchFileListener = (curr: Stats, prev: Stats) => void;
 
 function invalidWatchFileListener(value: unknown): TypeError {
   return Object.assign(
@@ -321,17 +352,19 @@ interface PollEntry {
   notifyMissingOnce: boolean;
 }
 
-function toStats(snap: FileSnapshot): StatsLike {
-  return {
+/**
+ * Node hands watchFile listeners real `fs.Stats` (missing target = all-zero
+ * Stats, `mtime` a Date at epoch 0 — probed v24). Reuse THE Stats class every
+ * stat surface returns — the previous bespoke `StatsLike` twin drifted
+ * (number `mtime`, no `mtimeMs`/`isSymbolicLink`; review 2026-07-06).
+ */
+function toStats(snap: FileSnapshot): Stats {
+  return new Stats({
+    isFile: snap.isFile,
+    isDirectory: snap.isDirectory,
     size: snap.size,
     mtime: snap.mtime,
-    isFile() {
-      return snap.isFile;
-    },
-    isDirectory() {
-      return snap.isDirectory;
-    },
-  };
+  });
 }
 
 const pollers = new Map<string, PollEntry>();

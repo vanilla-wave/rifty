@@ -16,7 +16,9 @@ Apply at any boundary — network, storage/OPFS, cache, worker/process, concurre
 | `false-fallback` | optional path failure breaks the flow instead of degrading to default | transient `store.get` throw treated as fatal instead of miss→recompute |
 | `concurrent-same-key` | racing writers on one key observed by a reader | two dep-sets → same closure: 2nd PUT races 1st reader |
 | `quota-perm-fail` | storage quota/permission failure mid-op swallowed | per-op OPFS persist fail eaten → tree looks durable, torn on reload |
-| `observable-order` | validation/check runs before the required protocol/syscall step, hiding its side effects or error priority | PR #115: `readFileSync({ flag:'wx' })` returned `EBADF/read` before open could report `EEXIST/open`; `writeFileSync({ flag:'r' })` skipped `ENOENT/open` |
+| `observable-order` | validation/check runs before the required protocol/syscall step, hiding its side effects or error priority | PR #115: `readFileSync({ flag:'wx' })` returned `EBADF/read` before open could report `EEXIST/open`; `writeFileSync({ flag:'r' })` skipped `ENOENT/open`; gap-throws (NotImplementedError) before Node-visible errors are the same axis — a gap replaces Node's SUCCESS path, never its error path |
+| `sibling-drift` | one semantic implemented twice (sync/async twin, second backend, bespoke shape) drifts apart | PR #115: `OpfsVfs.mkdir` let an existing dir pass while Memory/OpfsFsSync threw EEXIST; watchFile's bespoke `StatsLike` vs the real `Stats`; `statSync` silently ignored `bigint` while `promises.stat` threw. Kill = shared contract suite (`describe.each` over backends) / one shaping chokepoint |
+| `frozen-assumption` | unverified external behavior pinned by a self-referential test (conformance snapshot with no oracle) | PR #115: write-stream destroy 'error' sequence born wrong inside a green rifty-vs-rifty conformance test (`29828aff`); `cat -A` goldens froze raw high bytes GNU renders as `M-x`. Kill = parity case / real-tool golden, not a rewritten assert |
 
 ## Honest-outcome contract
 

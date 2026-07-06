@@ -73,22 +73,32 @@ const matrices = [
       [
         '`createReadStream` / `createWriteStream`',
         '✅',
-        'Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), pipe and `end` parity tests',
+        "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests",
       ],
       [
         'Stream unsupported options',
         '❌',
-        '`fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore',
+        '`fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore; invalid options/encoding args are Node-shaped `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_ARG_VALUE`',
       ],
       [
         '`fs.watch`',
         '⚠️',
-        'Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics',
+        'Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics; `null` options accepted, invalid encoding value rejected before target existence (Node order)',
+      ],
+      [
+        '`fs.watchFile` / `fs.unwatchFile`',
+        '✅',
+        'Poll-based; listener receives the same `Stats` class `statSync` returns (missing target = one zeroed call, Node ENOENT contract); uint32 `interval` validation (`ERR_OUT_OF_RANGE`, 0 valid)',
       ],
       [
         '`fs.watch` buffer/exotic filename encodings',
         '❌',
-        "`encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError`; UTF-8 string filenames are the claimed subset",
+        "`encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError` only where Node would succeed (missing target stays `ENOENT`); UTF-8 string filenames are the claimed subset",
+      ],
+      [
+        '`{ bigint: true }` stats (`statSync`/`lstatSync`/`fstatSync`/promises/`watchFile`)',
+        '❌',
+        "Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request",
       ],
       [
         'Durable `fsync` / inode-like open-unlink semantics',

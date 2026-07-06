@@ -23,11 +23,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO |
 | `truncate` / zero fill | ✅ | Sync and promises paths |
 | `mkdtemp` / `opendir` | ✅ | Sync and promises; async directory iteration |
-| `createReadStream` / `createWriteStream` | ✅ | Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, pipe and `end` parity tests |
-| Stream unsupported options | ❌ | `fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore |
-| `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics |
-| `fs.watch` buffer/exotic filename encodings | ❌ | `encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError`; UTF-8 string filenames are the claimed subset |
-| `fs.watchFile({ bigint: true })` | ❌ | Throws `NotImplementedError('fs.watchFile.bigint')`; number-shaped `Stats` are not returned for a BigIntStats request |
+| `createReadStream` / `createWriteStream` | ✅ | Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests |
+| Stream unsupported options | ❌ | `fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore; invalid options/encoding args are Node-shaped `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_ARG_VALUE` |
+| `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics; `null` options accepted, invalid encoding value rejected before target existence (Node order) |
+| `fs.watchFile` / `fs.unwatchFile` | ✅ | Poll-based; listener receives the same `Stats` class `statSync` returns (missing target = one zeroed call, Node ENOENT contract); uint32 `interval` validation (`ERR_OUT_OF_RANGE`, 0 valid) |
+| `fs.watch` buffer/exotic filename encodings | ❌ | `encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError` only where Node would succeed (missing target stays `ENOENT`); UTF-8 string filenames are the claimed subset |
+| `{ bigint: true }` stats (`statSync`/`lstatSync`/`fstatSync`/promises/`watchFile`) | ❌ | Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request |
 | Durable `fsync` / inode-like open-unlink semantics | ❌ | Tracked as VFS fd durability residual |
 | Full `FileHandle` object API | ❌ | Tracked separately; high-frequency fd wall covered first |
 

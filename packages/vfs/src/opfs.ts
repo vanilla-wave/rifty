@@ -31,7 +31,10 @@ export class OpfsVfs implements Vfs {
   /**
    * Side-table for `utimes` — OPFS exposes no mtime mutation on
    * `FileSystemFileHandle` or `FileSystemSyncAccessHandle` (ADR-0029, ADR-0041).
-   * Each surface keeps its own table; pairing them is out of scope until needed.
+   * `stat` OBSERVES it (files fall back to lastModified, dirs to 0) and
+   * `writeFile`/`rm` invalidate stamps — an unpaired table made utimes a
+   * silent no-op (vfs-async-contract). In-memory per instance, like the
+   * OpfsFsSync twin's table: stamps do not survive a reload.
    */
   private readonly times = new Map<string, { atime: number; mtime: number }>();
 
@@ -112,6 +115,9 @@ export class OpfsVfs implements Vfs {
     } catch (err) {
       throw mapOpfsError(err, np, 'file');
     }
+    // A write refreshes mtime in Node — drop any utimes stamp so stat falls
+    // back to the fresh lastModified (vfs-async-contract).
+    this.times.delete(np);
   }
 
   async readdir(path: string): Promise<readonly VfsDirent[]> {
@@ -142,15 +148,37 @@ export class OpfsVfs implements Vfs {
     await this.init();
     let dir = this.root as FileSystemDirectoryHandle;
     const parts = segments(np);
+    if (parts.length === 0) {
+      // mkdir('/'): root always exists — EEXIST unless recursive (backend
+      // contract, same as MemoryVfs/OpfsFsSync; vfs-async-contract).
+      if (!recursive) throw new VfsError('EEXIST', np);
+      return;
+    }
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i] as string;
+      const last = i === parts.length - 1;
+      if (last && !recursive) {
+        // Non-recursive mkdir must FAIL on an existing target: probe without
+        // create first — the old unconditional `create: true` returned the
+        // existing dir's handle and masked EEXIST (vfs-async-contract).
+        try {
+          await dir.getDirectoryHandle(part, { create: false });
+          throw new VfsError('EEXIST', np);
+        } catch (err) {
+          if (err instanceof VfsError) throw err;
+          const mapped = mapOpfsError(err, np, 'dir');
+          // Exists as a FILE (TypeMismatch → ENOTDIR at the final segment).
+          if (mapped.code === 'ENOTDIR') throw new VfsError('EEXIST', np);
+          if (mapped.code !== 'ENOENT') throw mapped;
+        }
+      }
       try {
-        dir = await dir.getDirectoryHandle(part, { create: recursive || i === parts.length - 1 });
+        dir = await dir.getDirectoryHandle(part, { create: recursive || last });
       } catch (err) {
         // Component-level failure (missing parent, through-file) still names
         // the TARGET — the backend error contract (fs-sync-strict-paths).
         const mapped = mapOpfsError(err, np, 'dir');
-        if (i === parts.length - 1 && mapped.code === 'ENOTDIR') {
+        if (last && mapped.code === 'ENOTDIR') {
           throw new VfsError('EEXIST', np);
         }
         throw mapped;
@@ -177,6 +205,12 @@ export class OpfsVfs implements Vfs {
       }
       throw mapOpfsError(err, np, 'file');
     }
+    // Removed paths must not resurrect an old utimes stamp on recreation —
+    // drop the target's stamp and every descendant's (vfs-async-contract).
+    this.times.delete(np);
+    for (const key of [...this.times.keys()]) {
+      if (key.startsWith(`${np}/`)) this.times.delete(key);
+    }
   }
 
   async stat(path: string): Promise<VfsStat> {
@@ -186,9 +220,14 @@ export class OpfsVfs implements Vfs {
     // propagate instead of being masked as "must be a directory then".
     const parent = await this.getDirectory(dirname(np), false, np);
     const name = basename(np);
+    // `utimes` writes into the side-table; stat must OBSERVE it or utimes is
+    // a silent-success lie (OpfsFsSync pairs its tables the same way;
+    // vfs-async-contract). Files fall back to the real lastModified, dirs to
+    // 0 (OPFS exposes no dir mtime).
+    const stamped = this.times.get(np)?.mtime;
     if (name === '') {
       // root dir; OPFS does not track mtime.
-      return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
+      return { isFile: false, isDirectory: true, size: 0, mtime: stamped ?? 0 };
     }
     let fileHandle: FileSystemFileHandle | null = null;
     let fileErr: unknown = null;
@@ -200,7 +239,12 @@ export class OpfsVfs implements Vfs {
     if (fileHandle) {
       try {
         const file = await fileHandle.getFile();
-        return { isFile: true, isDirectory: false, size: file.size, mtime: file.lastModified };
+        return {
+          isFile: true,
+          isDirectory: false,
+          size: file.size,
+          mtime: stamped ?? file.lastModified,
+        };
       } catch (err) {
         throw mapOpfsError(err, np, 'file');
       }
@@ -211,14 +255,13 @@ export class OpfsVfs implements Vfs {
       typeof fileErr === 'object' &&
       (fileErr as { name?: string }).name === 'TypeMismatchError';
     if (isDirByTypeMismatch) {
-      // OPFS exposes no dir mtime — synthesise as 0.
-      return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
+      return { isFile: false, isDirectory: true, size: 0, mtime: stamped ?? 0 };
     }
     // Try as a directory; on throw, propagate the mapped code
     // (NotFoundError → ENOENT, NotAllowedError → EACCES, etc.).
     try {
       await parent.getDirectoryHandle(name, { create: false });
-      return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
+      return { isFile: false, isDirectory: true, size: 0, mtime: stamped ?? 0 };
     } catch (err) {
       throw mapOpfsError(err, np, 'dir');
     }

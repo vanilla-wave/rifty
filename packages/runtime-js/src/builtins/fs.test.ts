@@ -112,6 +112,45 @@ describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () 
   });
 });
 
+describe('stat-family { bigint: true } is a loud gap AFTER Node-visible errors', () => {
+  // Sync twins silently ignored `bigint` while `fs.promises` threw (review
+  // 2026-07-06) — one shapeStats boundary now gates every surface. The gap
+  // throw fires only where Node would SUCCEED: a missing target stays ENOENT
+  // and a bad fd stays EBADF (node v24 probes), never a NotImplementedError.
+  it('statSync/lstatSync/fstatSync on an existing target throw NotImplementedError', () => {
+    writeFileSync('/big.txt', 'data');
+    expect(() => statSync('/big.txt', { bigint: true } as never)).toThrow(NotImplementedError);
+    expect(() => lstatSync('/big.txt', { bigint: true })).toThrow(NotImplementedError);
+    const fd = openSync('/big.txt', 'r');
+    expect(() => fstatSync(fd, { bigint: true })).toThrow(NotImplementedError);
+    closeSync(fd);
+  });
+
+  it('Node-visible errors keep priority over the bigint gap', () => {
+    expect(codeOf(() => statSync('/missing-big.txt', { bigint: true } as never))).toBe('ENOENT');
+    expect(codeOf(() => lstatSync('/missing-big.txt', { bigint: true }))).toBe('ENOENT');
+    expect(codeOf(() => fstatSync(9999, { bigint: true }))).toBe('EBADF');
+  });
+
+  it('promises.stat orders ENOENT before the bigint gap too', async () => {
+    writeFileSync('/big.txt', 'data');
+    await expect(fs.promises.stat('/big.txt', { bigint: true })).rejects.toThrow(
+      NotImplementedError,
+    );
+    await expect(fs.promises.stat('/missing-big.txt', { bigint: true })).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(fs.promises.lstat('/missing-big.txt', { bigint: true })).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('statSync({ throwIfNoEntry: false, bigint: true }) on missing returns undefined', () => {
+    // Node: no stats are shaped, so no bigint error — undefined wins.
+    expect(statSync('/missing-big.txt', { throwIfNoEntry: false, bigint: true })).toBeUndefined();
+  });
+});
+
 describe('resolvePath relative branch against a non-root cwd (#6)', () => {
   // Guards #6: dropping the outer `normalizePath` in resolvePath's relative
   // branch (joinPath already normalizes) keeps relative + dot-segment
@@ -383,11 +422,13 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
 
   it('writeFileSync honors numeric O_DIRECTORY before writing', () => {
     writeFileSync('/numeric-dir-flag.txt', 'old');
+    // O_CREAT|O_DIRECTORY is EINVAL before target inspection (node v24 linux
+    // + darwin; parity: fs/open-flag-target-matrix) — was pinned ENOTDIR here.
     const writeDirFlag =
       constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_DIRECTORY;
     expect(
       codeOf(() => writeFileSync('/numeric-dir-flag.txt', 'new', { flag: writeDirFlag } as never)),
-    ).toBe('ENOTDIR');
+    ).toBe('EINVAL');
     expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
 
     const appendDirFlag =
@@ -395,6 +436,15 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     expect(
       codeOf(() =>
         fs.appendFileSync('/numeric-dir-flag.txt', 'new', { flag: appendDirFlag } as never),
+      ),
+    ).toBe('EINVAL');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
+
+    // Without O_CREAT the target decides: a non-dir behind O_DIRECTORY is ENOTDIR.
+    const writeNoCreateDirFlag = constants.O_WRONLY | constants.O_TRUNC | constants.O_DIRECTORY;
+    expect(
+      codeOf(() =>
+        writeFileSync('/numeric-dir-flag.txt', 'new', { flag: writeNoCreateDirFlag } as never),
       ),
     ).toBe('ENOTDIR');
     expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');

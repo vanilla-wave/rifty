@@ -4,6 +4,37 @@
 
 ### Fixed
 
+- **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
+  - `open(2)` flag×target error lattice pinned WHOLE against real Node
+    (parity `fs/open-flag-target-matrix`): `O_CREAT|O_DIRECTORY` is `EINVAL`
+    before any target inspection (was ENOTDIR/EEXIST/ENOENT/OK per target;
+    verified node v24 linux AND darwin).
+  - Gap-throw ordering rule (observable-order axis): `NotImplementedError`
+    fires only where Node would SUCCEED. `fs.watch` on a missing target is
+    `ENOENT/watch` even with `encoding:'buffer'`; an invalid encoding VALUE is
+    `ERR_INVALID_ARG_VALUE` before existence; the stat-family `bigint` gap
+    (`statSync`/`lstatSync`/`fstatSync` previously ignored it SILENTLY while
+    promises threw — sibling-drift) now fires at the one `shapeStats`
+    boundary, after ENOENT/EBADF.
+  - `fs.watch(path, null, listener)` accepted (Node default options);
+    `watchFile` interval validated by Node's uint32 rule
+    (`ERR_OUT_OF_RANGE` for NaN/fractional/Infinity/negative, 0 valid).
+  - `fs.watchFile` listeners receive the SAME `Stats` class `statSync`
+    returns (extracted to `fs-stats.ts`) — the bespoke `StatsLike` twin
+    (number `mtime`, no `mtimeMs`/`isSymbolicLink`) is gone.
+  - Stream string-options overload honored end-to-end
+    (`createReadStream(p,'utf8')` emits strings, `createWriteStream(p,
+    'base64')` decodes string writes, per-write encoding overrides, `end`
+    inherits the default); invalid options/encodings rejected synchronously
+    Node-shaped. Parity `fs/stream-string-options-encoding`.
+  - Write-stream `destroy()` reworked onto Node's write-DISPATCH boundary
+    (parity `fs/write-stream-destroy-events`, all micro-timings + file
+    contents): pre-open/inside-open-turn writes are discarded silently (no
+    bogus `'error'` that crashed `ws.write(data, cb); ws.destroy()` via the
+    no-listener throw), an in-flight burst LANDS its bytes and emits
+    `'error'`, a flushed stream closes clean. The prior sequence was a
+    frozen-assumption conformance test born with the code.
+
 - **`writeFileSync` numeric `O_DIRECTORY` flags no longer bypass open
   preflight.** The w-family fast path now rejects a regular file before writing
   when `O_DIRECTORY` is present, preserving the old contents instead of silently

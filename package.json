@@ -37,6 +37,7 @@
     "test:all": "pnpm test:run && pnpm test:parity && pnpm test:e2e",
     "bench": "node tools/perf/bench.mjs",
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
+    "check:compat-drift": "node tools/compat-matrix-generator/cli.js && git diff --exit-code -- docs/public/compat",
     "adr:new": "node tools/adr/new.mjs",
     "backlog:check": "node tools/backlog/check.mjs",
     "refs:check": "node tools/refs/check.mjs",
