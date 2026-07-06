@@ -99,7 +99,7 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
     status: r.status,
     statusText: r.statusText,
     headers: r.headers,
-    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes }),
+    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes, label: 'eddy prefetch' }),
   }));
   // An untaken failed prefetch must never surface as an unhandled rejection;
   // the ORIGINAL rejection still reaches whoever takes the handle.

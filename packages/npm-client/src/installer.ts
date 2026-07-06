@@ -794,8 +794,8 @@ async function consumeEddyResponse(
       const bytes = await drainBodyBounded(
         response,
         opts.resolverStallTimeoutMs === undefined
-          ? {}
-          : { stallTimeoutMs: opts.resolverStallTimeoutMs },
+          ? { label: 'eddy decline body' }
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs, label: 'eddy decline body' },
       );
       declineText = eddyDecoder.decode(bytes);
     } catch {

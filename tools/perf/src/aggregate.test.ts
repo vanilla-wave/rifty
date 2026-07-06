@@ -341,3 +341,15 @@ describe('buildArtifact — transport evidence', () => {
     expect(m.transport.mode).toBe('h3');
   });
 });
+
+describe('verifyTransportPin — vacuous-proof guard', () => {
+  it('refuses a pinned pass whose runs never hit any measured origin (no request proof at all)', () => {
+    const zero = {
+      'https://eddy.example': { protocol: 'h2', requests: 0 },
+      'https://registry.example': { protocol: 'h2', requests: 0 },
+    };
+    const v = verifyTransportPin('h2', [zero, zero]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/no measured-window request/);
+  });
+});

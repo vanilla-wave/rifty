@@ -25,16 +25,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   evidenced `h2`; h3 pass refused loudly (`unreachable` — UDP 443 blocked at
   the SG, the documented deploy gap).
 
-### Fixed
-
-- **Bench install metric un-parked from a retired terminal marker.** The
-  `[vite] dev server ready on port` line the install leg awaited was retired
-  (readiness went out-of-band with the generic dev-server lifecycle), so every
-  install pass timed out at 180s — unnoticed because CI's bench smoke runs the
-  cold-start leg only. The leg now waits for the preview pill going LIVE with
-  the same verified-document guard as the preset phase (an SW 503 error page
-  cannot count as ready).
-
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new
   `expect(source).toContain`-style tests in apps/playground and forces the
@@ -57,6 +47,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Bench install metric un-parked from a retired terminal marker.** The
+  `[vite] dev server ready on port` line the install leg awaited was retired
+  (readiness went out-of-band with the generic dev-server lifecycle), so every
+  install pass timed out at 180s — unnoticed because CI's bench smoke runs the
+  cold-start leg only. The leg now waits for the preview pill going LIVE with
+  the same verified-document guard as the preset phase (an SW 503 error page
+  cannot count as ready).
 - **browser-unit: the restore-gate spec no longer races the 250ms slow-progress
   threshold.** The stamp rework (PR #107, ADR-0187 Corrected) removed the awaited
   OPFS drains from the instant restore path, so a fast host could finish the

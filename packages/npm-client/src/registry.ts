@@ -141,10 +141,11 @@ export class RegistryClient {
    * bounded-fetch chokepoint — no phase is ever awaited unbounded), retried on
    * TRANSIENT failures only — 429, 5xx, a thrown network error, or a
    * stall/byte-cap breach — with `Retry-After`/exponential backoff. A non-ok
-   * response that survives every retry is RETURNED (body unread) so the caller
-   * throws the existing status-shaped error; a persistent network error/stall
-   * is rethrown loudly (its message names the operation, phase, and bound). A
-   * permanent 4xx (e.g. 404) never retries.
+   * response that survives every retry is RETURNED (body cancelled — callers
+   * read only the status) so the caller throws the existing status-shaped
+   * error; a persistent network error/stall is rethrown loudly (its message
+   * names the operation, phase, and bound). A permanent 4xx (e.g. 404) never
+   * retries.
    */
   private async fetchBytesWithRetry(
     url: string,
@@ -165,6 +166,12 @@ export class RegistryClient {
             stallTimeoutMs: this.stallTimeoutMs,
             label,
           });
+        } else {
+          // A non-OK body is never consumed (callers read only the status) —
+          // cancel it NOW: an unread body holds its h2 stream open, and the
+          // retry ladder would pile such streams onto the one coalesced
+          // connection (the measured stalled-stream class).
+          void response.body?.cancel().catch(() => {});
         }
         lastNetworkError = undefined;
       } catch (err) {

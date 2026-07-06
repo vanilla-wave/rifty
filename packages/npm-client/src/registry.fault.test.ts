@@ -143,3 +143,48 @@ describe('RegistryClient — unbounded-read fault tier (no-progress bounds)', ()
     expect(delays).toEqual([300]);
   });
 });
+
+describe('RegistryClient — non-consumed response bodies are cancelled (h2 stream hygiene)', () => {
+  function bodyWithCancelSpy(status: number): { response: Response; cancelled: () => boolean } {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"retry":"later"}'));
+        // never closes — an unread body would hold its h2 stream open
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    return { response: new Response(stream, { status }), cancelled: () => cancelled };
+  }
+
+  it('cancels the body of a retried 429 (streams must not pile up across the retry ladder)', async () => {
+    const first = bodyWithCancelSpy(429);
+    let calls = 0;
+    const fetch = (async () => {
+      calls += 1;
+      if (calls === 1) return first.response;
+      return new Response(PACKUMENT_JSON, { status: 200 });
+    }) as typeof globalThis.fetch;
+    const client = new RegistryClient({
+      baseUrl: 'https://r',
+      fetch,
+      stallTimeoutMs: 1000,
+      sleep: async () => {},
+    });
+    const pack = await client.getPackument('x');
+    expect(pack.name).toBe('x');
+    expect(first.cancelled()).toBe(true);
+  });
+
+  it('cancels the body of a final non-OK response (callers read only the status)', async () => {
+    const only = bodyWithCancelSpy(404);
+    const fetch = (async () => only.response) as typeof globalThis.fetch;
+    const client = new RegistryClient({ baseUrl: 'https://r', fetch, stallTimeoutMs: 1000 });
+    await expect(client.getPackument('nope')).rejects.toThrow(
+      'Failed to fetch packument nope: 404',
+    );
+    expect(only.cancelled()).toBe(true);
+  });
+});

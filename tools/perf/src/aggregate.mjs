@@ -140,13 +140,21 @@ export function verifyTransportPin(mode, runProtocols) {
   }
   const positive = mode === 'h3' ? ['h3'] : ['h2', 'http/1.1'];
   const violations = [];
+  let usedOrigins = 0;
   for (const run of runProtocols) {
     for (const [origin, evidence] of Object.entries(run)) {
       if (evidence.requests === 0) continue;
+      usedOrigins += 1;
       if (!positive.includes(evidence.protocol)) {
         violations.push(`${origin} observed ${evidence.protocol}`);
       }
     }
+  }
+  if (violations.length === 0 && usedOrigins === 0) {
+    return {
+      ok: false,
+      note: `transport pinned to ${mode} but no measured-window request ever hit a measured origin — the pin would verify vacuously (probe-only), refusing the pass`,
+    };
   }
   if (violations.length === 0) return { ok: true };
   return {
