@@ -26,7 +26,7 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: 'list',
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report/browser-unit', open: 'never' }]],
   timeout: 120_000,
   use: {
     ...devices['Desktop Chrome'],

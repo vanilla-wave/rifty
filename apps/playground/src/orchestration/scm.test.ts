@@ -249,6 +249,19 @@ describe('git-original read (editor working diff)', () => {
     );
   });
 
+  it('an owner object respawn with the same root and port still fails loud', async () => {
+    const h = new Harness();
+    h.git.blobs.set('HEAD:src/a.ts', enc.encode('original'));
+    const origShow = h.git.show.bind(h.git);
+    h.git.show = async (rev) => {
+      h.owner = new FakeOwner('/scratch');
+      return origShow(rev);
+    };
+    await expect(scmReadOriginal(h, '/scratch/src/a.ts')).rejects.toThrow(
+      'workspace owner changed while reading HEAD:src/a.ts',
+    );
+  });
+
   it('a binary blob refuses a text diff loud', async () => {
     const h = new Harness();
     h.git.blobs.set('HEAD:src/a.ts', new Uint8Array([0, 1, 2]));
@@ -300,6 +313,25 @@ describe('side-aware SCM row diffs (scm-diff-plan driven)', () => {
     expect(h.errors[0]).toContain('Open changes failed:');
   });
 
+  it('an owner respawn during blob reads fails loud before opening a stale diff', async () => {
+    const h = new Harness();
+    h.git.blobs.set('HEAD:src/a.ts', enc.encode('old'));
+    h.git.blobs.set(':src/a.ts', enc.encode('staged'));
+    const show = h.git.show.bind(h.git);
+    h.git.show = async (rev) => {
+      const result = await show(rev);
+      if (rev === ':src/a.ts') h.owner = new FakeOwner('/scratch', 2);
+      return result;
+    };
+
+    await h.scm().openScmResourceDiff(row({ side: 'index', code: 'M ' }));
+
+    expect(h.textDiffs).toEqual([]);
+    expect(h.errors).toEqual([
+      'Open changes failed: workspace owner changed while opening src/a.ts',
+    ]);
+  });
+
   it('a path outside the owner root refuses', async () => {
     const h = new Harness();
     await h.scm().openScmResourceDiff(row({ path: '/elsewhere/a.ts' }));
@@ -319,6 +351,21 @@ describe('explorer compares', () => {
     expect(h.textDiffs[0]?.title).toBe('a.ts ↔ b.ts');
   });
 
+  it('working file compare fails loud when the owner respawns mid-read', async () => {
+    const h = new Harness();
+    h.owner.files.set('/scratch/a.ts', enc.encode('left'));
+    h.owner.files.set('/scratch/b.ts', enc.encode('right'));
+    const readOrig = h.owner.readFileBytes.bind(h.owner);
+    h.owner.readFileBytes = async (p: string) => {
+      const bytes = await readOrig(p);
+      h.owner = new FakeOwner('/scratch', 2); // respawned owner mid-read
+      return bytes;
+    };
+    await h.scm().openWorkingFileCompare('/scratch/a.ts', '/scratch/b.ts');
+    expect(h.textDiffs).toEqual([]);
+    expect(h.errors[0]).toContain('Compare failed: workspace owner changed while');
+  });
+
   it('compare-with-HEAD: working bytes + head-blob presence from the porcelain status', async () => {
     const h = new Harness();
     h.owner.files.set('/scratch/src/a.ts', enc.encode('work'));
@@ -335,6 +382,24 @@ describe('explorer compares', () => {
     await h.scm().openWorkingHeadCompare('/scratch/src/a.ts');
     expect(h.workingDiffs).toEqual([]);
     expect(h.errors[0]).toContain('is binary; text diff is unavailable');
+  });
+
+  it('compare-with-HEAD fails loud when the owner respawns before opening the diff', async () => {
+    const h = new Harness();
+    h.owner.files.set('/scratch/src/a.ts', enc.encode('work'));
+    h.git.statusEntries = [{ filepath: 'src/a.ts', status: ['src/a.ts', 1, 2, 1] }];
+    const dispose = h.git.dispose.bind(h.git);
+    h.git.dispose = () => {
+      dispose();
+      h.owner = new FakeOwner('/scratch', 2);
+    };
+
+    await h.scm().openWorkingHeadCompare('/scratch/src/a.ts');
+
+    expect(h.workingDiffs).toEqual([]);
+    expect(h.errors).toEqual([
+      'Compare failed: workspace owner changed while comparing src/a.ts with HEAD',
+    ]);
   });
 });
 

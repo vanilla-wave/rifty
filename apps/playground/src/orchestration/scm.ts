@@ -133,6 +133,16 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
 
   let detach: (() => void) | null = null;
 
+  // The ONE owner-currency gate for the SCM core (delegates to the reader's
+  // chokepoint predicate). `readBytes` self-guards its own reads; this asserts
+  // after an unguarded git RPC (show/status) and as the final check before a
+  // diff is exposed — never open a diff computed against a dead/respawned owner.
+  function assertOwnerCurrent(owner: O, changedMessage: string): void {
+    const fault = reader.currencyFault(owner);
+    if (fault === 'unavailable') throw new Error('workspace owner is unavailable');
+    if (fault === 'changed') throw new Error(changedMessage);
+  }
+
   function attachOwner(owner: O): void {
     // untrack: a caller's effect must key on the OWNER signal alone (the
     // attachOwner resubscribe-storm trap; reads activeRoot/status signals here).
@@ -192,7 +202,6 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
   }): Promise<string> {
     const owner = deps.currentOwner();
     const root = owner.root;
-    const snapshotPort = owner.snapshotPort;
     const relative = input.path.startsWith(`${root}/`) ? input.path.slice(root.length + 1) : '';
     if (!relative) throw new Error(`Cannot read git original outside ${root}`);
     if (deps.ownerUnavailable(owner)) {
@@ -202,10 +211,7 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
     const git = deps.bridgeGit(owner);
     try {
       const original = await git.show(`${input.ref}:${relative}`);
-      const currentOwner = deps.currentOwner();
-      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
-        throw new Error(`workspace owner changed while reading ${input.ref}:${relative}`);
-      }
+      assertOwnerCurrent(owner, `workspace owner changed while reading ${input.ref}:${relative}`);
       if (original.type !== 'blob') throw new Error(`${input.ref}:${relative} is not a blob`);
       return decodeTextBlob(`${input.ref}:${relative}`, original.content);
     } finally {
@@ -221,6 +227,10 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
         reader.readBytes(owner, leftPath, 'compare'),
         reader.readBytes(owner, rightPath, 'compare'),
       ]);
+      assertOwnerCurrent(
+        owner,
+        `workspace owner changed while comparing ${basename(leftPath)} and ${basename(rightPath)}`,
+      );
       deps.editor.openTextDiff({
         id: compareDiffId('working', leftPath, rightPath),
         path: rightPath,
@@ -244,7 +254,7 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
     const git = deps.bridgeGit(owner);
     try {
       const status = await git.status();
-      reader.assertOwnerAlive(owner, path, 'compare');
+      assertOwnerCurrent(owner, `workspace owner changed while comparing ${relative} with HEAD`);
       const entry = status.find((candidate) => candidate.filepath === relative);
       return statusCodeHasHeadBlob(entry ? (porcelainXY(entry.status) ?? undefined) : undefined);
     } finally {
@@ -268,10 +278,13 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
       }
       reader.assertOwnerAlive(owner, path, 'compare');
       const working = await reader.readBytes(owner, path, 'compare');
+      assertOwnerCurrent(owner, `workspace owner changed while comparing ${relative} with HEAD`);
+      const hasOriginal = await headBlobExistsForCurrentStatus(owner, path, relative);
+      assertOwnerCurrent(owner, `workspace owner changed while comparing ${relative} with HEAD`);
       deps.editor.openWorkingDiff({
         path,
         ref: 'HEAD',
-        hasOriginal: await headBlobExistsForCurrentStatus(owner, path, relative),
+        hasOriginal,
         modified: decodeTextBlob(relative, working),
       });
     } catch (err) {
@@ -296,7 +309,6 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
     const path = row.path;
     const owner = deps.currentOwner();
     const root = owner.root;
-    const snapshotPort = owner.snapshotPort;
     const relative = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : '';
     if (!relative) {
       deps.showError(`Cannot open git diff outside ${root}`);
@@ -309,10 +321,6 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
     reader.assertOwnerAlive(owner, path, 'open Git changes');
     const git = deps.bridgeGit(owner);
     try {
-      const currentOwner = deps.currentOwner();
-      if (currentOwner.snapshotPort !== snapshotPort || currentOwner.root !== root) {
-        throw new Error(`workspace owner changed while opening ${relative}`);
-      }
       // Blob selection is delegated to the tested scm-diff-plan planner, not
       // re-derived inline (covered behaviorally by scm-diff-plan.test.ts).
       const plan = scmDiffPlan(row);
@@ -328,6 +336,7 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
           : plan.modified === 'working'
             ? decodeTextBlob(relative, await reader.readBytes(owner, path, 'open Git changes'))
             : '';
+      assertOwnerCurrent(owner, `workspace owner changed while opening ${relative}`);
       const idScope = row.side === 'index' ? `scm-index-${row.code}` : `scm-worktree-${row.code}`;
       deps.editor.openTextDiff({
         id: compareDiffId(idScope, row.side === 'index' ? 'HEAD' : row.relativePath, path),
@@ -346,17 +355,7 @@ export function createScm<O extends FileReadOwnerLike>(deps: ScmDeps<O>): Scm<O>
   }
 
   function assertScmOwner(owner: O): void {
-    const current = deps.currentOwner();
-    if (deps.ownerUnavailable(owner) || !owner.isAlive()) {
-      throw new Error('workspace owner is unavailable');
-    }
-    if (
-      current !== owner ||
-      current.root !== owner.root ||
-      current.snapshotPort !== owner.snapshotPort
-    ) {
-      throw new Error('workspace owner changed while applying Git action');
-    }
+    assertOwnerCurrent(owner, 'workspace owner changed while applying Git action');
   }
 
   async function runScmOwnerAction(
