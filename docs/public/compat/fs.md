@@ -27,6 +27,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Stream unsupported options | ❌ | `fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore |
 | `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics |
 | `fs.watch` buffer/exotic filename encodings | ❌ | `encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError`; UTF-8 string filenames are the claimed subset |
+| `fs.watchFile({ bigint: true })` | ❌ | Throws `NotImplementedError('fs.watchFile.bigint')`; number-shaped `Stats` are not returned for a BigIntStats request |
 | Durable `fsync` / inode-like open-unlink semantics | ❌ | Tracked as VFS fd durability residual |
 | Full `FileHandle` object API | ❌ | Tracked separately; high-frequency fd wall covered first |
 

@@ -140,6 +140,17 @@ const c: ParityCase = {
       await new Promise((res) => ws4b.on('close', res));
       console.log('queued-success-order:', queuedSuccessEvents.join('|'));
 
+      const queuedVisibilityEvents = [];
+      const ws4c = fs.createWriteStream('queued-visible.txt');
+      ws4c.write('queued');
+      ws4c.on('open', () =>
+        queuedVisibilityEvents.push('open:' + JSON.stringify(fs.readFileSync('queued-visible.txt', 'utf8'))));
+      ws4c.on('ready', () =>
+        queuedVisibilityEvents.push('ready:' + JSON.stringify(fs.readFileSync('queued-visible.txt', 'utf8'))));
+      await new Promise((res) => ws4c.end(res));
+      console.log('queued-open-visibility:', queuedVisibilityEvents.join('|'),
+        JSON.stringify(fs.readFileSync('queued-visible.txt', 'utf8')));
+
       const ws5 = fs.createWriteStream('after-end.txt');
       await new Promise((res, rej) => {
         ws5.on('ready', res);

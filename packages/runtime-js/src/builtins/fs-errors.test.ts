@@ -6,7 +6,7 @@
  */
 import { VfsError, type VfsErrorCode } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
-import { FS_ERRNO, toNodeFsError } from './fs-errors.ts';
+import { FS_ERRNO, fsError, toNodeFsError } from './fs-errors.ts';
 
 const ALL_VFS_CODES: Record<VfsErrorCode, true> = {
   ENOENT: true,
@@ -41,5 +41,11 @@ describe('fs-errors errno table', () => {
       expect(err.syscall).toBe('open');
       expect(err.message).toBe(message);
     }
+  });
+
+  it('pathless syscalls omit the path property entirely', () => {
+    const err = fsError('EBADF', '/fd-backed', 'read');
+    expect(err).toMatchObject({ code: 'EBADF', errno: -9, syscall: 'read' });
+    expect('path' in (err as object)).toBe(false);
   });
 });

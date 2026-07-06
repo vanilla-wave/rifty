@@ -61,7 +61,7 @@ export function fsError(
   const err = new Error(message) as NodeJS.ErrnoException & { dest?: string };
   err.code = code;
   if (info) err.errno = info.errno;
-  err.path = path;
+  if (path !== undefined) err.path = path;
   err.syscall = syscall;
   if (dest !== undefined) err.dest = dest;
   return err;

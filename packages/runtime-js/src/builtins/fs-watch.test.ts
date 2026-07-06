@@ -63,6 +63,25 @@ describe('fs.watch options honesty (review 2026-07-05)', () => {
     expect(() => watch('/w', { encoding: 'buffer' }, () => {})).toThrow(/Not implemented/);
     expect(() => watch('/w', 'buffer', () => {})).toThrow(/Not implemented/);
   });
+
+  it('rejects invalid watch overloads synchronously like Node', () => {
+    syncMirror().mkdirSync('/w', { recursive: true });
+    expect(() => watch('/w', 123 as never)).toThrow(/options.*string or object/);
+    expect(() => watch('/w', {}, 'not-a-listener' as never)).toThrow(/listener.*function/);
+    expect(() => watch('/w', 'utf8', 'not-a-listener' as never)).toThrow(/listener.*function/);
+  });
+
+  it('pre-aborted signal still lets callers observe close after construction', async () => {
+    syncMirror().writeFileSync('/aborted.txt', new TextEncoder().encode('x'));
+    const controller = new AbortController();
+    controller.abort();
+    const watcher = watch('/aborted.txt', { signal: controller.signal });
+    const events: string[] = [];
+    watcher.on('close', () => events.push('close'));
+    expect(events).toEqual([]);
+    await Promise.resolve();
+    expect(events).toEqual(['close']);
+  });
 });
 
 describe('fs.watch recursive semantics (review 2026-07-05)', () => {
@@ -154,6 +173,18 @@ describe('fs.watchFile Stats truthfulness (review 2026-07-05)', () => {
     const fs = syncMirror();
     fs.writeFileSync('/undef.txt', new TextEncoder().encode('one'));
     expect(() => watchFile('/undef.txt', undefined, () => {})).toThrow(/listener.*function/);
+  });
+
+  it('rejects unsupported bigint stats instead of returning number stats', () => {
+    expect(() => watchFile('/some-dir', { interval: 50, bigint: true }, () => {})).toThrow(
+      /Not implemented: fs\.watchFile\.bigint/,
+    );
+  });
+
+  it('rejects non-number interval instead of letting setInterval coerce it', () => {
+    expect(() => watchFile('/some-dir', { interval: '1' as never }, () => {})).toThrow(
+      /interval.*number/,
+    );
   });
 });
 

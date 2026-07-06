@@ -682,9 +682,16 @@ export function rmSync(p: string, opts?: RmOptions): void {
   }
   // Node's rm stats the target before removing — a missing path (without
   // `force`) reports syscall 'lstat', not 'unlink'.
-  withSyscall('lstat', p, () =>
-    syncMirror().rmSync(np, { recursive: opts?.recursive, force: opts?.force }),
-  );
+  try {
+    withSyscall('lstat', p, () =>
+      syncMirror().rmSync(np, { recursive: opts?.recursive, force: opts?.force }),
+    );
+  } catch (err) {
+    if (opts?.recursive && opts?.force && (err as { code?: string } | null)?.code === 'ENOTDIR') {
+      return;
+    }
+    throw err;
+  }
 }
 
 export function rmdirSync(p: string, opts?: { recursive?: boolean }): void {

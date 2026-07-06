@@ -36,6 +36,41 @@ export interface WatchOptions {
 type WatchEvent = 'rename' | 'change';
 type WatchListener = (event: WatchEvent, filename: string | null) => void;
 
+function receivedType(value: unknown): string {
+  return value === null ? 'null' : typeof value;
+}
+
+function invalidOptions(value: unknown): TypeError {
+  return Object.assign(
+    new TypeError(
+      `The "options" argument must be of type string or object. Received ${receivedType(value)}`,
+    ),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
+function invalidListener(value: unknown): TypeError {
+  return Object.assign(
+    new TypeError(
+      `The "listener" argument must be of type function. Received ${receivedType(value)}`,
+    ),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
+function invalidInterval(value: unknown): TypeError {
+  return Object.assign(
+    new TypeError(
+      `The "interval" argument must be of type number. Received ${receivedType(value)}`,
+    ),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
+function assertInterval(value: unknown): asserts value is number | undefined {
+  if (value !== undefined && typeof value !== 'number') throw invalidInterval(value);
+}
+
 export class FSWatcher extends EventEmitter {
   private timer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
@@ -56,7 +91,7 @@ export class FSWatcher extends EventEmitter {
       clearInterval(this.timer);
       this.timer = null;
     }
-    this.emit('close');
+    queueMicrotask(() => this.emit('close'));
   }
 
   // Delegate to the poll timer's handle: after installTimerGlobals the poll
@@ -145,13 +180,25 @@ export function watch(
   optionsOrListener?: WatchOptions | WatchListener | string,
   listener?: WatchListener,
 ): FSWatcher {
-  const opts: WatchOptions =
-    typeof optionsOrListener === 'function'
-      ? {}
-      : typeof optionsOrListener === 'string'
-        ? { encoding: optionsOrListener }
-        : (optionsOrListener ?? {});
-  const cb = typeof optionsOrListener === 'function' ? optionsOrListener : listener;
+  let opts: WatchOptions;
+  let cb: WatchListener | undefined;
+  if (typeof optionsOrListener === 'function') {
+    opts = {};
+    cb = optionsOrListener;
+  } else if (typeof optionsOrListener === 'string') {
+    opts = { encoding: optionsOrListener };
+    cb = listener;
+  } else {
+    if (
+      optionsOrListener !== undefined &&
+      (optionsOrListener === null || typeof optionsOrListener !== 'object')
+    ) {
+      throw invalidOptions(optionsOrListener);
+    }
+    opts = optionsOrListener ?? {};
+    cb = listener;
+  }
+  if (cb !== undefined && typeof cb !== 'function') throw invalidListener(cb);
 
   if (opts.encoding !== undefined && opts.encoding !== 'utf8' && opts.encoding !== 'utf-8') {
     // 'buffer' filenames (and exotic encodings) are unmodelled — loud gap,
@@ -160,6 +207,7 @@ export function watch(
   }
 
   const interval = opts.interval ?? 250;
+  assertInterval(interval);
   const target = resolvePath(path);
   const watcher = new FSWatcher();
 
@@ -235,6 +283,8 @@ export function watch(
 
 export interface WatchFileOptions {
   interval?: number;
+  /** BigIntStats are not implemented yet; loud gap beats number-shaped lies. */
+  bigint?: boolean;
   /** `false` unrefs the poll timer (Node parity) — an ignored field would lie. */
   persistent?: boolean;
 }
@@ -249,11 +299,18 @@ export interface StatsLike {
 type WatchFileListener = (curr: StatsLike, prev: StatsLike) => void;
 
 function invalidWatchFileListener(value: unknown): TypeError {
-  const received = value === null ? 'null' : typeof value;
   return Object.assign(
-    new TypeError(`The "listener" argument must be of type function. Received ${received}`),
+    new TypeError(
+      `The "listener" argument must be of type function. Received ${receivedType(value)}`,
+    ),
     { code: 'ERR_INVALID_ARG_TYPE' },
   );
+}
+
+function assertWatchFileOptions(opts: WatchFileOptions): void {
+  assertInterval(opts.interval);
+  // TODO(backlog: runtime-js/fs-watchfile-bigint-stats)
+  if (opts.bigint === true) throw new NotImplementedError('fs.watchFile.bigint');
 }
 
 interface PollEntry {
@@ -297,6 +354,7 @@ export function watchFile(
     opts = optionsOrListener;
     cb = listener;
   }
+  assertWatchFileOptions(opts);
   const target = resolvePath(path);
   const interval = opts.interval ?? 5007;
   const existing = pollers.get(target);

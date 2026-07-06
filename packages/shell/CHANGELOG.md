@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Display decoding preserves a leading UTF-8 BOM.** Shell display strings
+  (`RunResult.stdout` and live `onChunk`) now use TextDecoder's `ignoreBOM:true`,
+  matching Node `Buffer.toString('utf8')` for byte streams that begin with
+  `EF BB BF` while leaving the byte-transparent data plane unchanged.
 - **Redirected stdout no longer streams to `onChunk`.** `cmd > file` and
   redirect-write failures still capture byte-exact stdout for the file path, but
   the terminal/display callback stays silent for stdout, matching shell

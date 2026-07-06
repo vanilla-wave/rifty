@@ -12,6 +12,7 @@ import {
   appendFileSync,
   promises as fsp,
   mkdirSync,
+  readFileSync,
   writeFileSync,
 } from '../../../packages/runtime-js/src/builtins/fs.ts';
 
@@ -99,6 +100,21 @@ describe('fs streams', () => {
     // Stream still open, nothing written — Node already truncated the file.
     expect(await fsp.readFile('/trunc.txt', 'utf8')).toBe('');
     ws.destroy();
+  });
+
+  it('pre-open queued writes are not visible until after open/ready fire', async () => {
+    const ws = createWriteStream('/queued-open-visibility.log');
+    ws.write('queued');
+    const snapshots: string[] = [];
+    ws.on('open', () => {
+      snapshots.push(`open:${readFileSync('/queued-open-visibility.log', 'utf8')}`);
+    });
+    ws.on('ready', () => {
+      snapshots.push(`ready:${readFileSync('/queued-open-visibility.log', 'utf8')}`);
+    });
+    await new Promise<void>((resolve) => ws.end(() => resolve()));
+    expect(snapshots).toEqual(['open:', 'ready:']);
+    expect(await fsp.readFile('/queued-open-visibility.log', 'utf8')).toBe('queued');
   });
 
   it('end(cb) fires the callback and writes NO stray bytes (was: NUL byte + swallowed cb)', async () => {

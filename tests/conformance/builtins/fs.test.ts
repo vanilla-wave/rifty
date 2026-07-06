@@ -365,4 +365,13 @@ describe('unlinkSync / rmSync directory targets', () => {
     rmSync('/keepdir', { recursive: true });
     expect(existsSync('/keepdir')).toBe(false);
   });
+
+  it('rmSync recursive+force suppresses ENOTDIR through a file like Node', () => {
+    writeFileSync('/plain-file', 'x');
+    expect(() => rmSync('/plain-file/child', { recursive: true, force: true })).not.toThrow();
+    expect(existsSync('/plain-file')).toBe(true);
+    expect(() => rmSync('/plain-file/child', { recursive: true })).toThrow(
+      expect.objectContaining({ code: 'ENOTDIR', syscall: 'lstat' }),
+    );
+  });
 });

@@ -12,6 +12,14 @@ const c: ParityCase = {
     } catch (err) {
       console.log('watchfile-undefined-options:', err.code ?? err.name);
     }
+
+    try {
+      fs.watchFile('watched.txt', { interval: '1' }, () => {});
+      fs.unwatchFile('watched.txt');
+      console.log('watchfile-invalid-interval-string: ok');
+    } catch (err) {
+      console.log('watchfile-invalid-interval-string:', err.code ?? err.name);
+    }
   `,
 };
 

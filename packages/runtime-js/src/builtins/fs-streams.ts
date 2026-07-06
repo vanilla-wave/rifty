@@ -581,18 +581,15 @@ class FileWriteStream extends EventEmitter {
       // Node open side-effects: 'w' truncates immediately, missing writable
       // targets are created immediately, but append/r+ on an existing file do
       // not rewrite the file before the first write.
-      if (this.flags.truncate || !exists || (!this.flags.append && this.dirty)) {
-        syncMirror().writeFileSync(np, this.bytes);
-        this.dirty = false;
+      if (this.flags.truncate || !exists) {
+        syncMirror().writeFileSync(np, new Uint8Array());
       }
-      if (this.flags.append && buffered.length > 0) this.flushAppendChunks(np);
       this.bufferedLength = 0;
       this.emit('open', 0);
       this.emit('ready');
       const destroyErr = this.destroyBeforeOpen ? STREAM_DESTROYED() : undefined;
-      this.queueWriteCallbacks(buffered, destroyErr);
-      this.emitDrainIfNeeded();
       if (this.destroyBeforeOpen) {
+        this.queueWriteCallbacks(buffered, destroyErr);
         this.queueFinishCallbacks(destroyErr);
         queueMicrotask(() => this.closeOnce());
         return;
@@ -606,6 +603,13 @@ class FileWriteStream extends EventEmitter {
         });
         return;
       }
+      const bufferedErr = buffered.length > 0 ? this.persist() : null;
+      this.queueWriteCallbacks(buffered, bufferedErr ?? undefined);
+      if (bufferedErr !== null) {
+        this.queueFinishCallbacks(bufferedErr);
+        return;
+      }
+      this.emitDrainIfNeeded();
       if (this.finished) queueMicrotask(() => this.finishIfReady());
     } catch (err) {
       if (this.pendingErrorAfterOpen) {

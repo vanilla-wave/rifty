@@ -183,6 +183,22 @@ describe('OpfsVfs error mapping', () => {
     });
   });
 
+  it('directory-walk failures name the requested target path', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.readdir('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+    await expect(vfs.stat('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+    await expect(vfs.rm('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+  });
+
   it('mkdir with a missing parent names the TARGET path, not the failing component', async () => {
     const vfs = fakeVfs({ dirError: 'NotFoundError' });
     await expect(vfs.mkdir('/no/such/deep')).rejects.toMatchObject({

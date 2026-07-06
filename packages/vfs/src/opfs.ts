@@ -116,7 +116,7 @@ export class OpfsVfs implements Vfs {
 
   async readdir(path: string): Promise<readonly VfsDirent[]> {
     const np = normalizeAbsolute(path);
-    const dir = await this.getDirectory(np);
+    const dir = await this.getDirectory(np, false, np);
     const out: VfsDirent[] = [];
     try {
       // FileSystemDirectoryHandle is async-iterable (not in the TS lib types).
@@ -162,7 +162,7 @@ export class OpfsVfs implements Vfs {
     const np = normalizeAbsolute(path);
     let parent: FileSystemDirectoryHandle;
     try {
-      parent = await this.getDirectory(dirname(np));
+      parent = await this.getDirectory(dirname(np), false, np);
     } catch (err) {
       if (options?.force && err instanceof VfsError && err.code === 'ENOENT') return;
       throw err;
@@ -184,7 +184,7 @@ export class OpfsVfs implements Vfs {
     // Probe the parent handle for the entry kind rather than catching opaque
     // `getFileHandle` errors, so `NotAllowedError`/`QuotaExceededError`
     // propagate instead of being masked as "must be a directory then".
-    const parent = await this.getDirectory(dirname(np));
+    const parent = await this.getDirectory(dirname(np), false, np);
     const name = basename(np);
     if (name === '') {
       // root dir; OPFS does not track mtime.

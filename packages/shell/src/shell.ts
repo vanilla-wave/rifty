@@ -98,7 +98,7 @@ interface BackgroundJob {
 }
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder('utf-8');
+const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /**
  * Segment-internal result: `stdoutBytes` is the byte-exact data plane
@@ -664,8 +664,8 @@ export class Shell {
     let stderr = '';
     // Streaming decoders for the display plane: byte chunks split mid-multibyte
     // must not mint U+FFFD in onChunk output.
-    const stdoutTap = new TextDecoder('utf-8');
-    const stderrTap = new TextDecoder('utf-8');
+    const stdoutTap = new TextDecoder('utf-8', { ignoreBOM: true });
+    const stderrTap = new TextDecoder('utf-8', { ignoreBOM: true });
     const emit = (chunk: string | Uint8Array, stream: ChunkStream): void => {
       // onChunk first so the terminal sees the chunk before it lands in the blob.
       // Redirected stdout and non-final pipe stages capture stdout SILENTLY —

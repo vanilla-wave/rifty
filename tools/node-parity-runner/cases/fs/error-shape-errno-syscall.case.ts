@@ -31,6 +31,14 @@ const c: ParityCase = {
         console.log(label + ' | ' + parts.join(' '));
       }
     };
+    const probeOwn = (label, fn) => {
+      try {
+        fn();
+        console.log(label + ' | NO-THROW');
+      } catch (e) {
+        console.log(label + ' | hasPath=' + Object.prototype.hasOwnProperty.call(e, 'path'));
+      }
+    };
     const FULL = ['code', 'errno', 'syscall', 'path', 'message'];
     const DUAL = ['code', 'errno', 'syscall', 'path', 'dest', 'message'];
 
@@ -96,6 +104,8 @@ const c: ParityCase = {
     probe('rm-emptydir-force', SYS, () => fs.rmSync('emptydir', { force: true }));
     probe('rm-dir-nonempty', SYS, () => fs.rmSync('dir'));
     probe('rm-through-file', FULL, () => fs.rmSync('plain.txt/deep'));
+    probe('rm-through-file-recursive-force', FULL, () =>
+      fs.rmSync('plain.txt/deep', { recursive: true, force: true }));
     console.log('rm-emptydir-survives:', fs.existsSync('emptydir'), fs.existsSync('dir'));
 
     // fd-level failures are PATHLESS in Node and carry the op's syscall name;
@@ -113,6 +123,8 @@ const c: ParityCase = {
     probe('ftruncate-badfd', FULL, () => fs.ftruncateSync(9999));
     probe('fstat-badfd', FULL, () => fs.fstatSync(9999));
     probe('close-badfd', FULL, () => fs.closeSync(9999));
+    probeOwn('readSync-badfd-has-path', () => fs.readSync(9999, Buffer.alloc(4), 0, 4, 0));
+    probeOwn('opendir-missing-has-path', () => fs.opendirSync('missing-dir'));
     fs.closeSync(wfd);
     fs.closeSync(rfd);
     fs.closeSync(dirfd);

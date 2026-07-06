@@ -4,6 +4,9 @@
 
 ### Changed
 
+- **PR #115 final review path-shape fix (2026-07-06).** Async `OpfsVfs`
+  directory-walk failures from `readdir`/`rm`/`stat` now name the requested
+  target path, not the ancestor component that failed the OPFS handle walk.
 - **PR #115 final review fixes (2026-07-06).** OPFS sync writes now bump
   `mtime` monotonically and `statSync` trusts the sync mirror's cached size
   even when a stale sync access handle is open; `mkdirSync('/existing-file')`

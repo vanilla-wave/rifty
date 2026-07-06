@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **PR #115 final review sweep (2026-07-06):** pathless fd/opendir syscalls now
+  omit the `path` property entirely; `rmSync(path, { recursive:true,
+  force:true })` suppresses ENOTDIR-through-file like Node; `createWriteStream`
+  no longer persists pre-open queued writes before `open`/`ready`; and watcher
+  overloads validate `options`/`listener`/`interval` synchronously. Pre-aborted
+  `fs.watch({ signal })` now queues `close` after construction, and
+  `watchFile({ bigint:true })` loudly throws `NotImplementedError` instead of
+  returning number-shaped Stats.
 - **PR #115 final review fix (2026-07-06):** `createReadStream(directory)` now
   matches Node's open-success/read-failure order: `open`/`ready` fire, then a
   pathless `EISDIR` error with syscall `read`, followed by `close`.

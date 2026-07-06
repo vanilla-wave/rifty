@@ -73,6 +73,20 @@ describe('shell binary transparency (ADR-0198)', () => {
     expect(out).toBe('hi�');
   });
 
+  it('display decoding preserves a leading UTF-8 BOM like Node Buffer.toString', async () => {
+    syncMirror().writeFileSync('/bom.bin', new Uint8Array([0xef, 0xbb, 0xbf, 0x78]));
+    const sh = new Shell();
+    let streamed = '';
+    const res = await sh.run('cat /bom.bin', {
+      onChunk: (c, s) => {
+        if (s === 'stdout') streamed += c;
+      },
+    });
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toBe('\uFEFFx');
+    expect(streamed).toBe('\uFEFFx');
+  });
+
   it('captures a byte chunk snapshot even if the command reuses its buffer', async () => {
     const sh = new Shell();
     sh.registerCommand('mutate', async (_args, ctx) => {
