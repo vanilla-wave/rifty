@@ -1,41 +1,47 @@
 # ADR 0200: Persistent ESM transform cache across dev-server child boots
 
-Status: Accepted
+Status: Rejected — refuted by measurement (2026-07-07)
 Date: 2026-07
 
-> TL;DR: `createModuleLoader` accepts an injected `persistentEsmTransformCache` (sync get/put of `{source, result}` per module id); the playground backs it with one OPFS JSON store per format version, hydrated before the dev-server child's first import — the loader validates every hit by EXACT source equality, so the store can degrade or vanish but never lie.
+> TL;DR: an OPFS-backed cross-boot `transformEsm` cache was built, wired into every loader realm, PROVEN to hit (15/16 entries on a reload boot) — and produced ZERO end-to-end win (interleaved A/B, 8+8 reload boots: warm median 2705 ms vs cold 2712 ms). Do not re-propose without new evidence; closes Q-2026-05-30-202 as won't-do.
 
 ## Context
 
-`esmAstCache` (acorn parse+rewrite — the heaviest per-module CPU step) lives per
-loader instance; the dev-server child creates a fresh loader per boot, so every
-preset pick / dev restart / reload re-parses the whole vite dist. Measured on
-real vite dist bytes (node V8): 2.8 MB → 263 ms cold, ~0 ms cached; the
-in-browser vite 7 dist is larger → ~0.5–1 s repaid per boot. Resolves
-Q-2026-05-30-202 (transformEsm result cache + hook on loader deps).
+`esmAstCache` (acorn parse+rewrite) is per loader instance; a fresh loader per
+dev-server child boot re-parses the vite dist. Unit-level cost is real: 2.8 MB
+of vite dist = 263 ms of `transformEsm` in node V8, ~0 ms cached. The
+hypothesis (Q-2026-05-30-202, backlog runtime-js/persistent-esm-transform-cache)
+was that a persistent content-validated store repays 0.5–1.5 s per boot.
 
-## Decision
+## What was built (and reverted)
 
-- **Hook (public, `@riftydev/runtime-js/loader`):** `ModuleLoaderOptions.persistentEsmTransformCache?: PersistentEsmTransformCache` with sync `get(id) → {source, result} | undefined` / `put(id, {source, result})`. Sync because `transformEsm` sits on the synchronous load path.
-- **One validation boundary:** the LOADER compares `stored.source === source` before using a hit (same contract as the in-memory cache). A store cannot poison execution — worst case it wastes a lookup. `put` happens only on recompute, so store content is always loader-produced.
-- **Key = module id** (absolute path), NOT content hash: identical to the in-memory cache contract; a changed file under the same id self-heals on the source compare (recompute + overwrite). `loader.invalidate()` does not touch the persistent store — the source compare already guards staleness.
-- **Format bust = `ESM_TRANSFORM_FORMAT` constant** colocated with `transformEsm` in `esm-ast.ts` and baked into the store filename. Changing the transform/`TransformResult` shape REQUIRES bumping it (loud comment at both sites); workspace package versions never bump in dev, so a manual colocated constant is the only honest key.
-- **Playground store (OPFS, worker realm):** `createOpfsEsmTransformCache()` in the dev-server child; single JSON file `esm-transform-cache/v<format>.json` at the OPFS root (outside all project VFS mounts). Hydrated (read+parse) inside `bootDevServer` before `createModuleLoader` — an absent file costs nothing; a present one costs one read against a ~0.5–1 s parse win.
-- **Write-behind:** `put` filters to `/node_modules/` ids (user files churn — out of scope per the backlog item), queues, and flushes the whole file debounced; a flush failure warns once and disables further writes (degraded, visible).
-- **Scope:** wired in the dev-server child only (the measured pain). The hook is generic; other realms (node-entry, ts-lsp) can adopt with their own measurements.
+Loader hook `persistentEsmTransformCache` (sync get/put, loader-side exact
+source-equality validation), lazy-fill OPFS JSON store (format-versioned,
+corrupt/oversized/torn → discard + one warn; write-fail → disable + warn),
+wired in the dev-server child, node-entry child, owner bin executor; fault
+tests for every axis. Mechanically CORRECT: the store round-tripped (v1.json,
+4.1 MB, 15 vite-dist entries) and a reload boot HIT 15/16 entries.
 
-## Fault matrix
+## Why rejected
 
-- poisoned-cache (file changed under same id) → source-compare miss → recompute + overwrite (transparent).
-- poisoned-cache (transform code changed, same source) → format-constant filename bust (cold start); manual-bump risk recorded above.
-- corrupt-input (truncated/malformed/foreign JSON, wrong format/shape) → discard store + delete file + one console.warn; boot proceeds cold.
-- unbounded-read (hydrate) → refuse files > 64 MB (discard + warn).
-- torn-state (crash mid-flush) → next hydrate hits corrupt-input path; whole-file JSON is the integrity unit.
-- concurrent-same-key (two children flushing) → whole-file last-wins; each file internally consistent; lost entries are re-learned next boot.
-- false-fallback (no OPFS / quota / open error) → loader runs uncached, one warn — never a boot failure.
+- **Interleaved A/B on the real path** (typescript-ls preset, warm profile,
+  8 warm-store vs 8 wiped-store reload boots, same context): warm median
+  2705 ms / mean 2715 vs cold median 2712 / mean 2705 — Δ ≈ 0. The acorn
+  parse of vite 7's dist (15 LARGE bundled chunks) is not a material serial
+  cost of an in-browser boot.
+- **The other dependency graphs don't qualify:** express/koa/hono-class server
+  deps are CJS — `transformEsm` never runs for them (a full express-sqlite
+  boot produced zero cacheable entries).
+- Cost side was fine (lazy-fill ≈ 0 added latency) — but a cache with a
+  measured zero win is speculative complexity, against Fidelity.
 
 ## Consequences
 
-- Vite import phase stops re-paying acorn on every dev-server boot; bench `presetBootToPreviewLiveMs` is the regression gate.
-- +1 OPFS artifact outside project trees (cleared by browser-sandbox reset like everything origin-scoped).
-- The manual `ESM_TRANSFORM_FORMAT` bump is a recorded drift risk (colocated constant + comments mitigate).
+- Backlog item runtime-js/persistent-esm-transform-cache deleted (closed by
+  refutation); Q-2026-05-30-202 resolved as won't-do.
+- Re-proposal bar: demonstrate an ESM dependency graph whose `transformEsm`
+  time is a measured serial component of a user-visible boot (e.g. a future
+  many-small-ESM-module preset), not a unit-level parse number.
+- Kept from this investigation: the bench `viteReadyMs` stage marker fix
+  (rifty-authored ready line died in PR #109; the marker is now real vite's
+  own ready banner).

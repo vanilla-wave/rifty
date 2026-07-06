@@ -2,17 +2,6 @@
 
 ## [Unreleased]
 
-### Added
-
-- Dev-server child hydrates an OPFS-backed persistent ESM transform cache
-  (ADR-0200) before its loader's first import: unchanged `/node_modules/`
-  transform results replay across preset picks / dev restarts / reloads instead
-  of re-paying the acorn parse of the vite dist (~0.5-1 s per boot). Store is
-  best-effort and self-healing: corrupt / wrong-format / oversized file →
-  discard + one warn; write failure → writes disabled, one warn; a stale entry
-  can never execute (loader validates by exact source). Fault tests:
-  `opfs-esm-transform-cache.fault.test.ts`.
-
 ### Changed
 
 - Monaco editor stack (monaco-editor, EditorHost, editor-host-core, monaco-env,

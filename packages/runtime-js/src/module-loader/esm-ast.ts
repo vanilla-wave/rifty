@@ -535,15 +535,6 @@ export interface TransformResult {
   readonly helpers: TransformHelperNames;
 }
 
-/**
- * Persistent-cache format key (ADR-0200): baked into the OPFS store filename.
- * BUMP on ANY observable change to `transformEsm` output or the
- * {@link TransformResult} shape — persisted results replay VERBATIM across
- * boots, so an unbumped change executes yesterday's rewrite against today's
- * runtime (the source-equality check cannot catch a transform-code change).
- */
-export const ESM_TRANSFORM_FORMAT = 1;
-
 function uniqueHelperName(source: string, used: Set<string>, base: string): string {
   let candidate = base;
   let suffix = 0;

@@ -72,7 +72,10 @@ const PRESET_BOOT_TIMEOUT = 120_000;
 // terminal. Only PAGE-observable markers qualify — the dev-server child's
 // other log lines ("importing vite…", "listening on internal port") never
 // reach the page terminal buffer. A missing marker records null, never a guess.
-const PRESET_STAGE_MARKERS = [['viteReadyMs', /\[vite\] dev server ready on port/]];
+// The rifty-authored `[vite] dev server ready on port` line died with the
+// generic dev-server lifecycle (PR #109); the marker is now REAL vite's own
+// ready banner — strictly more faithful (it is what Node prints too).
+const PRESET_STAGE_MARKERS = [['viteReadyMs', /VITE v[\d.]+\s+ready in \d+ ms/]];
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
