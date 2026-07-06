@@ -30,9 +30,11 @@
  *
  * Transport matrix (docs/backlog/perf/eddy-http3-cold-validation): `--transport`
  * PINS Chromium's transport to the measured remote origins (h2 = --disable-quic;
- * h3 = --origin-to-force-quic-on) and VERIFIES the pin with per-run protocol
- * evidence (CDP probe); a pass whose evidence contradicts its pin is refused —
- * never a lying median. `auto` (default) records evidence without pinning.
+ * h3 = --origin-to-force-quic-on, no TCP fallback) and VERIFIES the pin with
+ * per-run evidence: measured-window request counts per origin + a post-window
+ * CDP protocol probe. A pass whose USED origins lack positive pinned-protocol
+ * proof is refused — never a lying median. `auto` (default) records evidence
+ * without pinning.
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -267,13 +269,19 @@ function stopDevServer(child) {
 }
 
 /**
- * Per-run protocol evidence for the measured origins: a page-context probe
+ * Post-window protocol probe for the measured origins: a page-context probe
  * fetch per origin, protocol read via CDP `Network.responseReceived`
  * (resource-timing's `nextHopProtocol` is TAO-gated cross-origin — useless
- * here). The page shares the context's socket pools with the install worker
- * and the pin flags are process-global, so the probed ALPN is the connection
- * class the install rode. `unreachable` = the probe could not connect at all
- * (e.g. QUIC forced but UDP 443 blocked end-to-end).
+ * here). Combined with the measured-window per-origin REQUEST COUNTS this is
+ * per-request-grade evidence under a pin: `--origin-to-force-quic-on` admits
+ * no TCP and `--disable-quic` admits no QUIC (browser-global), so requests
+ * that succeeded during the window rode the pinned class, and the probe
+ * supplies the POSITIVE protocol proof (the page shares the context's socket
+ * pools with the install worker). It runs AFTER the sample window — it never
+ * primes connections the install would reuse, and never inflates the number.
+ * `unreachable` = the probe could not connect at all (e.g. QUIC forced but
+ * UDP 443 blocked end-to-end). Under `auto` the probe is end-of-run
+ * connection-class evidence only (no per-request claim — recorded as such).
  */
 async function probeOriginProtocols(page) {
   const origins = measuredOrigins();
@@ -315,6 +323,26 @@ async function runOnce(browser, measureInstall) {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
+    // Measured-window request counts per measured origin (worker fetches are
+    // visible on page request events): which origins the sample actually rode
+    // — the enforcement scope for the transport pin. Counting stops when the
+    // sample window closes so the post-window probe never counts itself.
+    const origins = measuredOrigins();
+    const requestCounts = new Map();
+    let windowOpen = true;
+    if (measureInstall && origins.length > 0) {
+      page.on('request', (req) => {
+        if (!windowOpen) return;
+        try {
+          const origin = new URL(req.url()).origin;
+          if (origins.includes(origin)) {
+            requestCounts.set(origin, (requestCounts.get(origin) ?? 0) + 1);
+          }
+        } catch {
+          /* data:/blob: URLs */
+        }
+      });
+    }
     const t0 = Date.now();
     await page.goto(DEEP_LINK, { waitUntil: 'commit' });
     await page.waitForFunction(interactivePredicate, null, { timeout: INTERACTIVE_TIMEOUT });
@@ -322,7 +350,7 @@ async function runOnce(browser, measureInstall) {
 
     let installMs = null;
     let installError = null;
-    let protocols = null;
+    let transportEvidence = null;
     if (measureInstall) {
       // Install starts when the autorun types `npm install`; "first Vite
       // response" is the preview pill going LIVE (verified document — see
@@ -336,12 +364,21 @@ async function runOnce(browser, measureInstall) {
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       }
-      // Evidence runs AFTER the sample window — it never inflates the number.
-      protocols = await probeOriginProtocols(page).catch(() =>
-        Object.fromEntries(measuredOrigins().map((o) => [o, 'unreachable'])),
+      windowOpen = false;
+      // Probe runs AFTER the sample window — it never inflates the number.
+      const protocols = await probeOriginProtocols(page).catch(() =>
+        Object.fromEntries(origins.map((o) => [o, 'unreachable'])),
       );
+      if (protocols) {
+        transportEvidence = Object.fromEntries(
+          origins.map((o) => [
+            o,
+            { protocol: protocols[o] ?? 'unreachable', requests: requestCounts.get(o) ?? 0 },
+          ]),
+        );
+      }
     }
-    return { coldMs, installMs, installError, protocols };
+    return { coldMs, installMs, installError, transportEvidence };
   } finally {
     await context.close();
   }
@@ -384,9 +421,9 @@ async function runPhase(browser, label, withResolver, measureInstall) {
       cold.push(r.coldMs);
       if (r.installMs != null) install.push(r.installMs);
       else if (r.installError) installError = r.installError;
-      if (r.protocols) transportRuns.push(r.protocols);
+      if (r.transportEvidence) transportRuns.push(r.transportEvidence);
       console.log(
-        `  [${label}] run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}${r.protocols ? ` protocols=${JSON.stringify(r.protocols)}` : ''}`,
+        `  [${label}] run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}${r.transportEvidence ? ` transport=${JSON.stringify(r.transportEvidence)}` : ''}`,
       );
     }
   } finally {
@@ -535,19 +572,21 @@ async function runPresetBootPhase(browser) {
   return out;
 }
 
-/** Merge per-run protocol evidence across passes into the artifact's transport
- * record (`{ mode, originProtocols: { origin: [protocols…] } }`) + the raw
- * per-run list `verifyTransportPin` consumes. No evidence (local-only run) →
- * an empty spread (no transport key on the metric). */
+/** Merge per-run transport evidence across passes into the artifact's
+ * transport record: `originProtocols` (unique probed protocols per origin —
+ * the summary) + `runs` (the verbatim per-run `{ origin: { protocol,
+ * requests } }` audit list — which transport each sample actually rode) + the
+ * raw list `verifyTransportPin` consumes. No evidence (local-only run) → an
+ * empty spread (no transport key on the metric). */
 function summarizeTransport(...phases) {
   const runsEvidence = phases.flatMap((p) => p.transportRuns);
   if (runsEvidence.length === 0) return { transport: {}, runsEvidence };
   const perOrigin = {};
   for (const rec of runsEvidence) {
-    for (const [origin, protocol] of Object.entries(rec)) {
+    for (const [origin, evidence] of Object.entries(rec)) {
       const seen = perOrigin[origin] ?? new Set();
       perOrigin[origin] = seen;
-      seen.add(protocol);
+      seen.add(evidence.protocol);
     }
   }
   const record = {
@@ -555,6 +594,7 @@ function summarizeTransport(...phases) {
     originProtocols: Object.fromEntries(
       Object.entries(perOrigin).map(([o, s]) => [o, [...s].sort()]),
     ),
+    runs: runsEvidence,
   };
   return { transport: { transport: record }, runsEvidence };
 }

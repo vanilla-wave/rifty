@@ -11,10 +11,10 @@
   then fails loudly naming the operation, phase, and bound — a hung registry
   can no longer park `npm install` forever. New
   `RegistryClientOptions.stallTimeoutMs` mirrors
-  `InstallOptions.resolverStallTimeoutMs`. Decision (vs npm's 300s total
-  `fetch-timeout`): a no-progress window never aborts a slow-but-progressing
-  body. The eddy header-bound twins (`installer.ts`, `eddy-prefetch.ts`) melted
-  into the same chokepoint (`unbounded-read` class-kill).
+  `InstallOptions.resolverStallTimeoutMs`. Decision record (public API + the
+  no-progress-vs-npm's-300s-total delta): ADR-0201. The eddy header-bound
+  twins (`installer.ts`, `eddy-prefetch.ts`) melted into the same chokepoint
+  (`unbounded-read` class-kill).
 
 ### Fixed (PR #107 round 22)
 

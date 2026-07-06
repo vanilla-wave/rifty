@@ -12,11 +12,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
   the measured remote origins (h2 = `--disable-quic`; h3 =
   `--origin-to-force-quic-on` on the registry + eddy + optional bundle hosts —
-  no TCP fallback) and VERIFIES the pin with per-run protocol evidence (CDP
-  `Network.responseReceived`, page-context probe sharing the context's socket
-  pools); a pass whose evidence contradicts its pin is refused (`unmeasured` +
-  note, evidence still recorded under `transport.originProtocols`) — never a
-  lying median. `auto` records evidence without pinning.
+  no TCP fallback) and VERIFIES the pin with per-run evidence tied to the
+  measured requests: measured-window request counts per origin + a post-window
+  CDP protocol probe (`Network.responseReceived`; page-context probe shares the
+  context's socket pools; runs after the sample so it never primes the
+  measured connections). A USED origin lacking positive pinned-protocol proof
+  (wrong protocol / `unreachable` / `unknown`) refuses the pass (`unmeasured` +
+  note; evidence still recorded — merged `transport.originProtocols` + the
+  verbatim per-run `transport.runs` audit list) — never a lying median. `auto`
+  records evidence without pinning (end-of-run connection class, no
+  per-request claim). Smoke-proven live: h2 pass measured with both origins
+  evidenced `h2`; h3 pass refused loudly (`unreachable` — UDP 443 blocked at
+  the SG, the documented deploy gap).
 
 ### Fixed
 

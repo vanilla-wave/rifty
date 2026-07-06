@@ -237,54 +237,72 @@ describe('bench aggregate core', () => {
 });
 
 // Transport pin verification (docs/backlog/perf/eddy-http3-cold-validation):
-// a pass whose observed per-origin protocols contradict the pinned transport
-// must be REFUSED (no median) — a silently-fallen-back h3 pass would quote an
-// h2 number as h3.
+// a pass whose observed evidence contradicts its pinned transport must be
+// REFUSED (no median) — a silently-fallen-back h3 pass would quote an h2
+// number as h3. Per-run evidence = per-origin { protocol (post-window CDP
+// probe), requests (measured-window request count) }. A pin demands POSITIVE
+// protocol proof for every origin the run actually used (requests > 0);
+// unused origins are recorded, never enforced.
 describe('verifyTransportPin', () => {
-  const R = (p) => ({ 'https://eddy.example': p, 'https://registry.example': p });
+  const run = (eddy, registry) => ({
+    'https://eddy.example': eddy,
+    'https://registry.example': registry,
+  });
+  const used = (protocol) => ({ protocol, requests: 3 });
+  const unused = (protocol) => ({ protocol, requests: 0 });
 
   it('auto: always ok — evidence recorded, nothing pinned', () => {
-    expect(verifyTransportPin('auto', [R('h2'), R('h3')]).ok).toBe(true);
+    expect(verifyTransportPin('auto', [run(used('h2'), used('h3'))]).ok).toBe(true);
   });
 
-  it('h3 pin: ok only when EVERY origin in EVERY run negotiated h3', () => {
-    expect(verifyTransportPin('h3', [R('h3'), R('h3')]).ok).toBe(true);
+  it('h3 pin: ok when every USED origin in every run positively probed h3', () => {
+    expect(
+      verifyTransportPin('h3', [run(used('h3'), used('h3')), run(used('h3'), used('h3'))]).ok,
+    ).toBe(true);
   });
 
-  it('h3 pin: a single h2 response refuses the pass, naming origin + protocol', () => {
-    const v = verifyTransportPin('h3', [R('h3'), { ...R('h3'), 'https://eddy.example': 'h2' }]);
+  it('h3 pin: a used origin probing h2 refuses the pass, naming origin + protocol', () => {
+    const v = verifyTransportPin('h3', [run(used('h3'), used('h3')), run(used('h2'), used('h3'))]);
     expect(v.ok).toBe(false);
     expect(v.note).toMatch(/https:\/\/eddy\.example/);
     expect(v.note).toMatch(/h2/);
   });
 
-  it('h3 pin: an unreachable origin (QUIC blocked) refuses the pass loudly', () => {
-    const v = verifyTransportPin('h3', [{ ...R('h3'), 'https://eddy.example': 'unreachable' }]);
+  it('h3 pin: a used origin probing unreachable (QUIC blocked) refuses loudly', () => {
+    const v = verifyTransportPin('h3', [run(used('unreachable'), used('h3'))]);
     expect(v.ok).toBe(false);
     expect(v.note).toMatch(/unreachable/);
   });
 
-  it('h2 pin: refuses when any origin negotiated h3 (QUIC leaked past --disable-quic)', () => {
-    const v = verifyTransportPin('h2', [{ ...R('h2'), 'https://registry.example': 'h3' }]);
+  it('h3 pin: an UNUSED origin with no proof is recorded, not enforced', () => {
+    expect(verifyTransportPin('h3', [run(unused('unreachable'), used('h3'))]).ok).toBe(true);
+  });
+
+  it('h2 pin: refuses when a used origin negotiated h3 (QUIC leaked past --disable-quic)', () => {
+    const v = verifyTransportPin('h2', [run(used('h2'), used('h3'))]);
     expect(v.ok).toBe(false);
     expect(v.note).toMatch(/registry\.example/);
   });
 
-  it('h2 pin: h1/h2 mixes are ok (the pin only forbids QUIC)', () => {
-    expect(
-      verifyTransportPin('h2', [
-        { 'https://eddy.example': 'h2', 'https://registry.example': 'http/1.1' },
-      ]).ok,
-    ).toBe(true);
+  it('h2 pin: refuses a used origin with NO positive proof (unreachable/unknown)', () => {
+    const v = verifyTransportPin('h2', [run(used('unreachable'), used('h2'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/unreachable/);
+    const u = verifyTransportPin('h2', [run(used('unknown'), used('h2'))]);
+    expect(u.ok).toBe(false);
   });
 
-  it('a pin with no evidence at all is refused (no measured request ever probed)', () => {
+  it('h2 pin: positive h1/h2 mixes are ok (the pin only forbids QUIC)', () => {
+    expect(verifyTransportPin('h2', [run(used('h2'), used('http/1.1'))]).ok).toBe(true);
+  });
+
+  it('a pin with no evidence at all is refused (no run ever probed)', () => {
     expect(verifyTransportPin('h3', []).ok).toBe(false);
   });
 });
 
 describe('buildArtifact — transport evidence', () => {
-  it('a measured install carries the transport record verbatim', () => {
+  it('a measured install carries the transport record verbatim (incl. per-run audit list)', () => {
     const art = buildArtifact({
       generatedAt: '2026-07-01T00:00:00.000Z',
       runs: 1,
@@ -293,13 +311,18 @@ describe('buildArtifact — transport evidence', () => {
         status: 'measured',
         samples: [2500],
         registryUrl: 'https://registry.example/npm-registry',
-        transport: { mode: 'h2', originProtocols: { 'https://registry.example': ['h2'] } },
+        transport: {
+          mode: 'h2',
+          originProtocols: { 'https://registry.example': ['h2'] },
+          runs: [{ 'https://registry.example': { protocol: 'h2', requests: 41 } }],
+        },
       },
     });
     const m = art.metrics.npmInstallToFirstViteResponseMs;
     expect(m.status).toBe('measured');
     expect(m.transport.mode).toBe('h2');
     expect(m.transport.originProtocols['https://registry.example']).toEqual(['h2']);
+    expect(m.transport.runs[0]['https://registry.example'].requests).toBe(41);
   });
 
   it('a refused (unmeasured) install still records the transport evidence', () => {
@@ -310,7 +333,7 @@ describe('buildArtifact — transport evidence', () => {
       install: {
         status: 'unmeasured',
         note: 'transport pin violated',
-        transport: { mode: 'h3', originProtocols: { 'https://eddy.example': ['h2'] } },
+        transport: { mode: 'h3', originProtocols: { 'https://eddy.example': ['h2'] }, runs: [] },
       },
     });
     const m = art.metrics.npmInstallToFirstViteResponseMs;

@@ -115,15 +115,20 @@ function medianStages(stageRuns) {
 }
 
 /**
- * Verify observed per-origin protocols against the pinned transport
- * (docs/backlog/perf/eddy-http3-cold-validation). `runProtocols` = one
- * `{ origin: protocol }` record per run ('h2' | 'h3' | 'http/1.1' |
- * 'unreachable'). A pass whose evidence contradicts its pin is REFUSED —
- * a silently-fallen-back h3 pass would quote an h2 number as h3:
+ * Verify per-run transport evidence against the pinned transport
+ * (docs/backlog/perf/eddy-http3-cold-validation). One record per run:
+ * `{ origin: { protocol, requests } }` — `protocol` from the post-window CDP
+ * probe ('h2' | 'h3' | 'http/1.1' | 'unreachable' | 'unknown'), `requests` =
+ * how many measured-window requests actually hit that origin. A pass whose
+ * evidence contradicts its pin is REFUSED — a silently-fallen-back h3 pass
+ * would quote an h2 number as h3:
  *   'auto' → always ok (evidence recorded, nothing pinned);
- *   'h3'   → EVERY origin in EVERY run must be 'h3';
- *   'h2'   → NO origin in any run may be 'h3' (h1/h2 mixes ok).
- * A pin with no evidence at all is refused (nothing was ever probed).
+ *   'h3'   → every USED origin (requests > 0) must positively probe 'h3';
+ *   'h2'   → every USED origin must positively probe non-QUIC ('h2'/'http/1.1')
+ *            — 'unreachable'/'unknown' is NOT proof and refuses.
+ * Unused origins (requests 0 — e.g. the eddy host during the standard
+ * baseline) are recorded, never enforced. A pin with no evidence at all is
+ * refused (nothing was ever probed).
  */
 export function verifyTransportPin(mode, runProtocols) {
   if (mode === 'auto') return { ok: true };
@@ -133,11 +138,14 @@ export function verifyTransportPin(mode, runProtocols) {
       note: `transport pinned to ${mode} but no protocol evidence was collected`,
     };
   }
+  const positive = mode === 'h3' ? ['h3'] : ['h2', 'http/1.1'];
   const violations = [];
   for (const run of runProtocols) {
-    for (const [origin, protocol] of Object.entries(run)) {
-      const bad = mode === 'h3' ? protocol !== 'h3' : protocol === 'h3';
-      if (bad) violations.push(`${origin} observed ${protocol}`);
+    for (const [origin, evidence] of Object.entries(run)) {
+      if (evidence.requests === 0) continue;
+      if (!positive.includes(evidence.protocol)) {
+        violations.push(`${origin} observed ${evidence.protocol}`);
+      }
     }
   }
   if (violations.length === 0) return { ok: true };

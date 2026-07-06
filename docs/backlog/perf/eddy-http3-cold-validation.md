@@ -48,11 +48,17 @@ after the 1.70x measurement.
   (both origins: the standard baseline's tarball phase is exactly the leg h3
   could lift); h2 pass: `--disable-quic`; plus the default `auto` pass (what a
   real user gets).
-- Pin is VERIFIED, not trusted: the harness records the negotiated protocol
-  per measured request (CDP `Network.responseReceived` → `response.protocol`,
-  `h2`/`h3`) into the artifact; a pass whose observed protocol contradicts its
-  pin (or mixes) is REFUSED loudly (a `note`, no median) — never a
-  lying number.
+- Pin is VERIFIED, not trusted — per-run evidence of the requests that
+  produced the sample: measured-window REQUEST COUNTS per origin (which
+  origins the sample actually rode) + a post-window CDP-probed negotiated
+  protocol (`Network.responseReceived` → `response.protocol`). Under a pin the
+  flags are hard guarantees (`--origin-to-force-quic-on` admits no TCP,
+  `--disable-quic` no QUIC), so used-origin requests rode the pinned class and
+  the probe supplies the POSITIVE protocol proof; a used origin lacking that
+  proof (wrong protocol, `unreachable`, `unknown`) REFUSES the pass loudly (a
+  `note`, no median). Under `auto` the probe is recorded as end-of-run
+  connection-class evidence, no per-request claim. Artifact carries the merged
+  `originProtocols` + the verbatim per-run audit list.
 - With UDP 443 live end-to-end: `perf/benchmarks.json` carries
   {h2, h3, auto} × {standard, eddy} medians + protocol evidence; the headline
   is re-derived from the AUTO pass (the transport real users actually get).
