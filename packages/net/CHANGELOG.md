@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`net.isIP` / `net.isIPv4` / `net.isIPv6`** — regexes ported verbatim from Node
+  `lib/internal/net.js` (zone-id suffix accepted, non-string input coerced), parity
+  case `cases/net/is-ip.case.ts`. Root cause of the vite `allowedHosts` hang: vite's
+  host check calls `net.isIP` before its unconditional localhost allow; the missing
+  export threw inside an async connect middleware, the rejection was swallowed and
+  the request hung with no response (preview-bridge 30 s timeout, not a 403).
+
 - **Generic preview WebSocket bridge (ADR-0189, backlog net/preview-websocket-bridge, partial).**
   `serveCrossRealmPreview` now injects the `window.WebSocket` bridge script into every
   `text/html` response (marker `data-rifty-ws-bridge`, head-prepend, buffered v1 —

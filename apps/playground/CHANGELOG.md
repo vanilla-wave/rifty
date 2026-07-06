@@ -160,6 +160,18 @@
   net/preview-websocket-bridge, acceptance 4 partial).** With the preview path now
   stamping `Host: localhost:<port>` (`@riftydev/io`, ADR-0189 D3), the live
   shell/.bin dev config wrapper no longer forces
+- **`server.allowedHosts` force retired — dev wrapper AND vite-preview CLI patch
+  (backlog net/preview-websocket-bridge, acceptance 4).** The 2026-07-02 "hang, not
+  403" is traced: rifty `node:net` lacked `isIP`, vite's host validation threw inside
+  an async connect middleware and the rejection was swallowed (real `isIP` landed in
+  `@riftydev/net` with a parity case). Causal e2e proof one-variable-at-a-time:
+  force removed + isIP reverted → preview fetch 502 (bridge timeout); force removed +
+  isIP present → 200. Zero-config `manual-vite`, HMR, preview, ws-bridge, generic
+  dev-server e2e green. ONE wrapper force remains: `optimizeDeps.noDiscovery`.
+
+- **Vite wrapper forces retired to two (backlog net/preview-websocket-bridge,
+  acceptance 4 partial).** With the preview path now stamping `Host: localhost:<port>`
+  (`@riftydev/io`, ADR-0189 D3), the dev config wrapper no longer forces
   `base './'` (the SW routes root-relative requests by port context, ADR-0097),
   `appType` (vite's own default), `server.strictPort` (the port-derived lifecycle
   follows any port), or `server.host`; the vite-template auto-boot line now keeps
