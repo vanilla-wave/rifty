@@ -32,6 +32,7 @@ function ctxWithStdin(s: string | null): {
   out: () => string;
   err: () => string;
 } {
+  const dec = new TextDecoder('utf-8');
   let outBuf = '';
   let errBuf = '';
   const ctx: CommandContext = {
@@ -39,12 +40,12 @@ function ctxWithStdin(s: string | null): {
     env: {},
     stdout: {
       write: (c) => {
-        outBuf += c;
+        outBuf += typeof c === 'string' ? c : dec.decode(c);
       },
     },
     stderr: {
       write: (c) => {
-        errBuf += c;
+        errBuf += typeof c === 'string' ? c : dec.decode(c);
       },
     },
     ...(s === null ? {} : { stdin: stdinOf(s) }),

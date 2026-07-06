@@ -19,14 +19,16 @@ interface CapturingCtx extends CommandContext {
   readonly _err: string[];
 }
 
+const dec = new TextDecoder('utf-8');
+
 function ctx(over: Partial<CommandContext> = {}): CapturingCtx {
   const out: string[] = [];
   const err: string[] = [];
   return {
     cwd: '/proj',
     env: {},
-    stdout: { write: (c) => void out.push(c) },
-    stderr: { write: (c) => void err.push(c) },
+    stdout: { write: (c) => void out.push(typeof c === 'string' ? c : dec.decode(c)) },
+    stderr: { write: (c) => void err.push(typeof c === 'string' ? c : dec.decode(c)) },
     isTTY: true,
     ...over,
     _out: out,

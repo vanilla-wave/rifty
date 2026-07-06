@@ -65,6 +65,11 @@ const TASKS = [
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',
+  // Generated compat matrices must match their generator inventory — a
+  // hand-edited docs/public/compat file silently reverts on the next
+  // `compat:generate` (PR #115 finding #1). Regeneration is idempotent, so
+  // running it inside the gate only mutates the tree when there IS drift.
+  'check:compat-drift',
   'check:source-grep',
   'backlog:check',
   'refs:check',

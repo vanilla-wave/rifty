@@ -5,8 +5,25 @@
  * compares stdouts. Any divergence is a bug.
  */
 export interface ParityCase {
-  /** Files preloaded into the runtime's in-memory VFS, relative to /work/. */
+  /**
+   * Files preloaded from the case fs root. With `cwd: '/app'`, `app/data.txt`
+   * is read by fs APIs as relative `data.txt`; a copy also sits beside
+   * `/work/main.*` for relative module imports from the case entry.
+   */
   readonly setup?: { readonly files?: Readonly<Record<string, string>> };
+  /**
+   * Relative-path ANCHOR for both runtimes, as an absolute POSIX path from the
+   * case's fs root (default `'/'`). Rifty: `setProcessCwd(cwd)`; Node child:
+   * `<workDir>/<cwd>` (created if absent). Setup files keep their root-relative
+   * anchors — a case with `files: {'app/data.txt': …}, cwd: '/app'` reads it as
+   * `data.txt`. This is what makes relative-path resolution bugs parity-visible:
+   * at the historical pinned cwd `/`, an fs surface that DROPS cwd resolution
+   * (treating `data.txt` as `/data.txt`) still resolved identically by accident.
+   * The `process.cwd()` VALUES differ (Node: the absolute temp `<workDir>/<cwd>`;
+   * rifty: `<cwd>`) — a case must never PRINT cwd or resolved-absolute paths,
+   * only rely on the anchoring.
+   */
+  readonly cwd?: string;
   /** Optional stdin chunks written to both runtimes after the entry attaches listeners. */
   readonly stdin?: readonly Uint8Array[];
   /** Source to evaluate as CJS in /work/main.js (or ESM in /work/main.mjs). */
@@ -65,6 +82,19 @@ export interface ParityCase {
    *   HEX channel (`out.toString('hex')`) to survive the harness's UTF-8 capture.
    */
   readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite' | 'exec-sync';
+}
+
+/**
+ * Validated case cwd: absolute, no `.`/`..` segments, default `'/'`. Shared by
+ * both runners so a malformed cwd fails loudly and identically on each side.
+ */
+export function caseCwd(testCase: ParityCase): string {
+  const cwd = testCase.cwd ?? '/';
+  const segments = cwd.split('/').filter((s) => s !== '');
+  if (!cwd.startsWith('/') || segments.some((s) => s === '.' || s === '..')) {
+    throw new Error(`ParityCase.cwd must be an absolute POSIX path without dot segments: ${cwd}`);
+  }
+  return segments.length === 0 ? '/' : `/${segments.join('/')}`;
 }
 
 export interface CaseRun {

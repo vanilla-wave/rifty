@@ -2,6 +2,181 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
+  - `open(2)` flag×target error lattice pinned WHOLE against real Node
+    (parity `fs/open-flag-target-matrix`): `O_CREAT|O_DIRECTORY` is `EINVAL`
+    before any target inspection (was ENOTDIR/EEXIST/ENOENT/OK per target;
+    verified node v24 linux AND darwin).
+  - Gap-throw ordering rule (observable-order axis): `NotImplementedError`
+    fires only where Node would SUCCEED. `fs.watch` on a missing target is
+    `ENOENT/watch` even with `encoding:'buffer'`; an invalid encoding VALUE is
+    `ERR_INVALID_ARG_VALUE` before existence; the stat-family `bigint` gap
+    (`statSync`/`lstatSync`/`fstatSync` previously ignored it SILENTLY while
+    promises threw — sibling-drift) now fires at the one `shapeStats`
+    boundary, after ENOENT/EBADF.
+  - `fs.watch(path, null, listener)` accepted (Node default options);
+    `watchFile` interval validated by Node's uint32 rule
+    (`ERR_OUT_OF_RANGE` for NaN/fractional/Infinity/negative, 0 valid).
+  - `fs.watchFile` listeners receive the SAME `Stats` class `statSync`
+    returns (extracted to `fs-stats.ts`) — the bespoke `StatsLike` twin
+    (number `mtime`, no `mtimeMs`/`isSymbolicLink`) is gone.
+  - Stream string-options overload honored end-to-end
+    (`createReadStream(p,'utf8')` emits strings, `createWriteStream(p,
+    'base64')` decodes string writes, per-write encoding overrides, `end`
+    inherits the default); invalid options/encodings rejected synchronously
+    Node-shaped. Parity `fs/stream-string-options-encoding`.
+  - Write-stream `destroy()` reworked onto Node's write-DISPATCH boundary
+    (parity `fs/write-stream-destroy-events`, all micro-timings + file
+    contents): pre-open/inside-open-turn writes are discarded silently (no
+    bogus `'error'` that crashed `ws.write(data, cb); ws.destroy()` via the
+    no-listener throw), an in-flight burst LANDS its bytes and emits
+    `'error'`, a flushed stream closes clean. The prior sequence was a
+    frozen-assumption conformance test born with the code.
+
+- **`writeFileSync` numeric `O_DIRECTORY` flags no longer bypass open
+  preflight.** The w-family fast path now rejects a regular file before writing
+  when `O_DIRECTORY` is present, preserving the old contents instead of silently
+  overwriting.
+- **PR #115 final review sweep (2026-07-06):** pathless fd/opendir syscalls now
+  omit the `path` property entirely; `rmSync(path, { recursive:true,
+  force:true })` suppresses ENOTDIR-through-file like Node; `createWriteStream`
+  no longer persists pre-open queued writes before `open`/`ready`; and watcher
+  overloads validate `options`/`listener`/`interval` synchronously. Pre-aborted
+  `fs.watch({ signal })` now queues `close` after construction, and
+  `watchFile({ bigint:true })` loudly throws `NotImplementedError` instead of
+  returning number-shaped Stats.
+- **PR #115 review blocker (2026-07-06):** flagged `readFileSync` /
+  `writeFileSync` now preserve Node's open-before-access-error ordering:
+  exclusive read flags report `EEXIST/open`, write-only read flags still create
+  or truncate before `EBADF/read`, and read-only write flags report missing /
+  path-through-file failures at `open` before `EBADF/write`.
+- **PR #115 final review fix (2026-07-06):** `createReadStream(directory)` now
+  matches Node's open-success/read-failure order: `open`/`ready` fire, then a
+  pathless `EISDIR` error with syscall `read`, followed by `close`.
+- **PR #115 handoff round 3 (2026-07-06):** remove-family kind gates at the fs
+  layer (the generic VFS `rmSync` removes any empty-or-file path; sibling of
+  the `rmdirSync` ENOTDIR gate) — `unlinkSync(dir)` is `EISDIR, unlink '<dir>'`
+  (Linux-ABI errno persona, matching FS_ERRNO + WASI `E_ISDIR`; darwin Node
+  says EPERM — conformance-pinned; was: silently DELETED an empty directory),
+  and plain `rmSync(dir)` is Node's `ERR_FS_EISDIR` SystemError (positive
+  errno 21, `force` does not suppress, a non-empty dir is the SAME error — was:
+  ENOTEMPTY, or silent delete when empty). Shell `rm` and WASI
+  `path_unlink_file`/`path_remove_directory` were already gated (sweep).
+- **PR #115 second-handoff fix round (2026-07-05, Node-probed + parity-pinned):**
+  - ONE shared open(2) preflight backs `openSync` + flagged
+    `readFileSync`/`writeFileSync`/`appendFileSync` (four hand-rolled copies had
+    drifted): flagged directory reads are `EISDIR, open '<dir>'` (were
+    read-shaped pathless), `appendFileSync(dir, {flag:'ax'})` is `EEXIST`
+    (O_EXCL existence check wins), and `writeFileSync(..., {flag:'r+'})`
+    preserves the tail beyond the written data (was: truncated the file).
+    `writeFileSync`/`appendFileSync` = one impl, default flag apart.
+  - fd-level errors are PATHLESS like Node — enforced inside `fsError` itself
+    so no call site can regress; bad-fd `EBADF` carries the failing op's
+    syscall (was synthetic `'fd'`); `ftruncateSync` on a non-writable fd is
+    `EINVAL` (was pathful `EBADF`). Parity: `fs/error-shape-errno-syscall`
+    (+16 probes).
+  - `createReadStream` abort/destroy order: a pre-aborted `signal` emits
+    `error|close` then still `open|ready` (Node completes the open; a missing
+    target's ENOENT is swallowed — abort error only); abort after `end` is a
+    no-op; pre-open `destroy()` emits `open|ready|close`. Parity:
+    `fs/read-stream-abort-destroy`.
+  - `WriteStream` accepts any TypedArray/DataView chunk (raw bytes) and renders
+    Node's `ERR_INVALID_ARG_TYPE` text for invalid ones; second `end(chunk, cb)`
+    errors BOTH end-callbacks + the stream (pre-open discards buffered data —
+    the file stays empty; post-open the in-flight first chunk still lands);
+    chunkless `end(cb)` after 'finish' is `ERR_STREAM_ALREADY_FINISHED`.
+    Parity: `fs/write-stream-chunk-kinds-end-semantics`.
+  - `watchFile`/`watch` compare existence+kind, not only size/mtime (OPFS
+    zero-size/zero-mtime entries made missing↔existing and file↔dir
+    transitions invisible); a missing-at-start target gets Node's single
+    zeroed listener call; a file↔dir swap is a `rename` event. Parity:
+    `fs/watchfile-transitions`.
+- **PR #115 post-push review follow-up:** append-mode `createWriteStream`
+  flushes now append to the current EOF instead of rewriting a stale whole-file
+  snapshot, preserving interleaved external writers like real Node. Append
+  streams also reject existing directory targets on open even when no chunks are
+  written. `fs.watchFile(path, undefined, listener)` now rejects with Node's
+  `ERR_INVALID_ARG_TYPE` instead of leaking an accidental TypeError.
+- **PR #115 review follow-up:** `createWriteStream` now rejects same-tick
+  write-after-`end()` before bytes can mutate; `r+` stream open through a file
+  reports `ENOTDIR`; `fs.watch` throws Node-shaped `ENOENT` for a missing target;
+  `readlinkSync`/`realpathSync` keep `ENOTDIR` through-file fidelity; fd-backed
+  read/write/stat/truncate/time ops route backend failures through the fs error
+  boundary; `fs.watch(path, 'buffer', cb)` now hits the same loud unsupported
+  encoding guard as the object-form overload; `statSync(path,
+  { throwIfNoEntry:false })` suppresses path-through-file `ENOTDIR` probes like
+  Node; read streams with `highWaterMark: 0` still open/stat the target before
+  ending; and pre-open write/end callbacks now receive open failures instead of
+  false success. Additional local review pass: `appendFileSync(...,
+  { flag:'r+' })` now requires an existing target and writes from offset 0
+  instead of silently creating/appending; write streams no longer silently accept
+  unsupported `signal`; pre-open write-after-`end()` callbacks now beat the
+  later `open`/`ready` events like Node; `copyFileSync(COPYFILE_EXCL)` reports a
+  missing source before an existing destination; and `cpSync` fast/edge paths
+  keep destination traversal errors Node-shaped instead of leaking raw VFS
+  errors or misattributing them to the source. Queued `createWriteStream`
+  `write`/`end` callbacks now fire before `finish` or open-failure `error` /
+  `close`, matching Node's observable callback fences.
+- **Node-shaped fs errors everywhere (review 2026-07-05).** A single
+  VfsError→Node translation boundary (`fs-errors.ts` `withSyscall`) wraps every
+  `node:fs` entry point: errors now carry `errno`, `syscall`, `dest` (two-path
+  ops) and Node's exact message rendering, with `err.path` reported AS PASSED
+  (relative stays relative). Previously the most common path
+  (`readFileSync` ENOENT) leaked a raw `VfsError` with no errno/syscall —
+  libraries switching on `err.errno` misbehaved. Contract: parity case
+  `fs/error-shape-errno-syscall` (28 probes vs real Node).
+- **`rmdirSync` on a file no longer silently DELETES it** — Node parity ENOTDIR.
+- **`createReadStream`/`createWriteStream` resolve relative paths against
+  `process.cwd()`.** They previously hit `/<path>` — a program at
+  `/workspace` streaming `./data.csv` read or wrote the wrong file.
+- **`createWriteStream` honors `flags`.** `{flags:'a'}` silently OVERWROTE the
+  file (logger data loss); now 'a'/'ax'/'wx'/'r+' behave like Node incl.
+  truncate-at-open for 'w', EEXIST error events for exclusive flags, and
+  write-through per burst so a long-lived logger's file is readable before
+  `end()`. Unsupported options (`fd`, `fs`, `start`, `autoClose:false`) are
+  loud `NotImplementedError`s, never silently accepted. Contract: parity case
+  `fs/streams-flags-relative-cwd`.
+- **`fs.watch` `recursive:true` actually watches the subtree** (was silently
+  non-recursive → vite-style watchers missed every nested change); events carry
+  the relative subpath; default is `false` (Node parity). `persistent:false`
+  unrefs the poll timer; `encoding:'buffer'` is a loud gap.
+- **`fs.watchFile` Stats report the real `isFile()`/`isDirectory()`** (was
+  hardcoded file=exists, directory=false).
+- **Review fix round 2026-07-05 (PR #115 review + handoff):**
+  - `createWriteStream` `write`/`end` accept Node's callback overloads
+    (`write(chunk, cb)`, `end(cb)`, `end(chunk, cb)`). Previously a function in
+    the chunk slot was overlaid as an array-like — `end(cb)` wrote a NUL byte
+    into the file and silently dropped the callback; `write(chunk, cb)` threw
+    "Unsupported encoding". Same-tick write-after-`end()` before finish errors
+    the callback and emits `'error'` (`ERR_STREAM_WRITE_AFTER_END`);
+    post-finish writes error the callback only; post-destroy writes error the
+    callback only (`ERR_STREAM_DESTROYED`); invalid chunk types throw synchronously
+    (`ERR_INVALID_ARG_TYPE`) — all verified against real Node. Parity probes
+    added to `fs/streams-flags-relative-cwd`.
+  - `createWriteStream` participates in Node-style backpressure from
+    `highWaterMark`, including writes queued before the async open.
+  - Write streams bind their resolved target at open (Node binds the fd): a
+    `process.chdir` mid-stream no longer retargets a relative-path stream.
+  - `createReadStream` honors `emitClose:false` (was a silently-ignored option)
+    and emits `'close'` after `'error'`/`destroy()` by default (Node order);
+    `highWaterMark: 0` is accepted like Node (empty stream + immediate 'end')
+    instead of a Node-divergent throw.
+  - Read-stream `encoding` decodes incrementally (utf8 streaming decoder;
+    utf16le/base64 remainder carry) — a multibyte char split across chunk
+    boundaries no longer minted U+FFFD.
+  - Open-preflight paths (`openSync`, flagged `readFileSync`/`writeFileSync`,
+    `fs.promises.access`) report `ENOTDIR` when traversing through a file
+    instead of collapsing to `ENOENT` (strict probe; the non-throwing
+    `statSyncOrNull` keeps its ADR-0083 resolver contract). Parity probes in
+    `fs/error-shape-errno-syscall`.
+  - `FS_ERRNO` covers the full `VfsErrorCode` set (added `EPERM`/`EIO`/
+    `EDQUOT`) so no VFS error crosses the boundary without `errno`; compile-time
+    exhaustiveness guard in `fs-errors.test.ts`.
+  - `fs.watch`/`fs.watchFile` resolve relative paths via the shared fs-path kit
+    (was a private `globalThis.process.cwd()` re-implementation).
+
 ### Added
 
 - **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —

@@ -48,7 +48,7 @@ import {
   basenameNormalized,
   dirname,
   dirnameNormalized,
-  normalizePath,
+  normalizeAbsolute,
   segments,
 } from './path.ts';
 import type { VfsDirent } from './types.ts';
@@ -330,11 +330,11 @@ export class OpfsFsSync implements FsSync {
    * async surface — the intended bootstrap path.
    */
   private async ensureHandle(path: string, create: boolean): Promise<FileSystemSyncAccessHandle> {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const existing = this.handles.get(normalized);
     if (existing) return existing;
     const parent = await this.resolveParent(normalized);
-    // `normalized` = normalizePath(path) (#10) — basenameNormalized skips the
+    // `normalized` = normalizeAbsolute(path) (#10) — basenameNormalized skips the
     // redundant normalize pass.
     const file = await parent.getFileHandle(basenameNormalized(normalized), { create });
     const handle = await file.createSyncAccessHandle();
@@ -432,8 +432,8 @@ export class OpfsFsSync implements FsSync {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.persistFailures.delete(path);
-        // A persisted dir proves its ancestors exist on disk too (same rule as
-        // the write-through) — heal any stale ancestor mkdir failure.
+        // A persisted dir proves its ancestors exist on disk too — heal any
+        // stale ancestor mkdir failure.
         this.healAncestorPersistFailures(path);
       } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
@@ -482,10 +482,11 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  /** A persisted write/dir at `path` proves each ANCESTOR directory now exists
-   * on disk (OPFS creates the parent chain), so a stale ancestor mkdir failure
-   * no longer describes a divergence — clear it. Guarded on a non-empty ledger
-   * so the common (nothing-failed) path stays O(1). */
+  /** A persisted write/dir at `path` proves each ANCESTOR directory exists on
+   * disk: mkdir creates the chain, and writeFile can now only succeed when the
+   * chain is already present. A stale ancestor mkdir failure no longer
+   * describes a divergence — clear it. Guarded on a non-empty ledger so the
+   * common (nothing-failed) path stays O(1). */
   private healAncestorPersistFailures(path: string): void {
     if (this.persistFailures.size === 0) return;
     let parent = dirnameNormalized(path);
@@ -498,13 +499,35 @@ export class OpfsFsSync implements FsSync {
   }
 
   existsSync(path: string): boolean {
-    return this.index.has(normalizePath(path));
+    return this.index.has(normalizeAbsolute(path));
+  }
+
+  /**
+   * Strict-walk guard (Node parity; mirrors `MemoryBackend.resolveStrict`):
+   * when the nearest EXISTING ancestor of `normalized` is a file, the lookup
+   * traversed through a file → `ENOTDIR` named after `reportPath`, never a
+   * silent miss→ENOENT. A missing ancestor stays a miss (caller picks
+   * ENOENT vs `force`). Parity case: fs/error-shape-errno-syscall.
+   */
+  private assertNoFileAncestor(normalized: string, reportPath: string): void {
+    let p = normalized;
+    while (p !== '/') {
+      p = dirnameNormalized(p);
+      const e = this.index.get(p);
+      if (e) {
+        if (e.kind !== 'dir') throw new VfsError('ENOTDIR', reportPath);
+        return;
+      }
+    }
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
     // Content cache (ADR-0072) is authoritative for sync reads. The
     // `?? new Uint8Array()` covers a file the boot preload couldn't read
@@ -514,13 +537,18 @@ export class OpfsFsSync implements FsSync {
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     // `normalized` (#10) — skip dirname's redundant normalize.
     const parent = dirnameNormalized(normalized);
     const parentEntry = this.index.get(parent);
-    if (!parentEntry || parentEntry.kind !== 'dir') {
-      throw new VfsError('ENOENT', parent);
+    // Errors name the TARGET path (Node parity); a file on the parent chain
+    // is ENOTDIR, a missing chain is ENOENT.
+    if (!parentEntry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
     }
+    if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+    if (this.index.get(normalized)?.kind === 'dir') throw new VfsError('EISDIR', path);
     // In-cache write (ADR-0072): ONE defensive slice shared by the content
     // cache and the async write-through (#3, perf audit 2026-06-05: 2N->N
     // copies/write). This single entry-point slice is the SOLE barrier
@@ -534,13 +562,17 @@ export class OpfsFsSync implements FsSync {
     const copy = data.slice();
     this.content.set(normalized, copy);
     const wasKnown = this.index.has(normalized);
+    const previousTimes = this.times.get(normalized);
+    const now = Date.now();
+    const previousMtime = previousTimes?.mtime ?? 0;
+    const mtime = now <= previousMtime ? previousMtime + 1 : now;
+    this.times.set(normalized, { atime: previousTimes?.atime ?? now, mtime });
     this.index.set(normalized, { kind: 'file', size: data.byteLength });
     if (!wasKnown) {
       this.attachChild(normalized); // attachChild invalidates the parent cache
     } else {
-      // Already a known child: attachChild is skipped, but the child's kind can
-      // flip (e.g. dir->file) so the parent's dirent cache must still drop
-      // (perf audit 2026-06-05; kind-flip hazard).
+      // Already a known child: attachChild is skipped, but a parent cache may
+      // exist, so drop it conservatively on every overwrite.
       const parentEntry = this.index.get(parent);
       if (parentEntry?.kind === 'dir') parentEntry.sortedDirents = null;
     }
@@ -559,10 +591,10 @@ export class OpfsFsSync implements FsSync {
       try {
         await surface.writeFile(normalized, data);
         this.persistFailures.delete(normalized);
-        // A persisted write proves every ANCESTOR directory now exists on disk
-        // (a real OPFS write walks getDirectoryHandle(create) for each parent),
-        // so a stale ancestor mkdir failure no longer describes a divergence —
-        // heal it, else a durable node_modules tree wrongly revokes its stamp.
+        // A persisted write proves every ANCESTOR directory exists on disk:
+        // OpfsVfs.writeFile no longer creates parents, so success itself is the
+        // proof. Heal stale ancestor mkdir failures, else a durable tree can
+        // wrongly revoke its install stamp.
         this.healAncestorPersistFailures(normalized);
       } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
@@ -651,7 +683,7 @@ export class OpfsFsSync implements FsSync {
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {
-      const normalized = normalizePath(path);
+      const normalized = normalizeAbsolute(path);
       const dir = dirnameNormalized(normalized);
       if (dir !== '/' && !this.index.has(dir)) {
         this.mkdirSync(dir, { recursive: true });
@@ -661,20 +693,21 @@ export class OpfsFsSync implements FsSync {
   }
 
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     // mtime: prefer `utimes` side-table; fall back to 0 — OPFS exposes no
     // native mtime to the sync surface (ADR-0029).
     const mtime = this.times.get(normalized)?.mtime ?? 0;
     if (entry.kind === 'dir') {
       return { isFile: false, isDirectory: true, size: 0, mtime };
     }
-    // Prefer live size from an open sync access handle; else cached size
-    // from the last walk/write.
-    const handle = this.handles.get(normalized);
-    const size = handle ? handle.getSize() : entry.size;
-    return { isFile: true, isDirectory: false, size, mtime };
+    // Content/index cache is the authoritative sync mirror (ADR-0072). An
+    // open sync access handle can lag a write-through queued from writeFileSync.
+    return { isFile: true, isDirectory: false, size: entry.size, mtime };
   }
 
   statSyncOrNull(
@@ -684,14 +717,17 @@ export class OpfsFsSync implements FsSync {
     // the same statSync path (live-handle size + utimes-side-table mtime).
     // One normalize; statSync re-normalizes the already-normalized arg cheaply
     // via the #10 fast-path.
-    const norm = normalizePath(path);
+    const norm = normalizeAbsolute(path);
     if (!this.index.has(norm)) return null;
     return this.statSync(norm);
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    const normalized = normalizePath(path);
-    if (!this.index.has(normalized)) throw new VfsError('ENOENT', path);
+    const normalized = normalizeAbsolute(path);
+    if (!this.index.has(normalized)) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     this.times.set(normalized, { atime: atimeMs, mtime: mtimeMs });
   }
 
@@ -702,9 +738,12 @@ export class OpfsFsSync implements FsSync {
    * `MemoryBackend.readdir`).
    */
   readdirSync(path: string): readonly VfsDirent[] {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     if (!entry.children) return [];
     if (entry.sortedDirents != null) return entry.sortedDirents;
@@ -734,11 +773,11 @@ export class OpfsFsSync implements FsSync {
    * `VfsError('ENOENT')`. If the target already exists as a directory,
    * non-recursive callers get `VfsError('EEXIST')`; recursive callers
    * are tolerated. If the target exists as a file, throws
-   * `VfsError('ENOTDIR')`.
+   * `VfsError('EEXIST')`; traversal through a file remains `ENOTDIR`.
    */
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const parts = segments(normalized);
     if (parts.length === 0) {
       // mkdir('/'): root always exists.
@@ -750,14 +789,18 @@ export class OpfsFsSync implements FsSync {
       cumulative = `${cumulative}/${parts[i]}`;
       const existing = this.index.get(cumulative);
       if (existing) {
-        if (existing.kind !== 'dir') throw new VfsError('ENOTDIR', cumulative);
+        // Full target path in the error (Node parity: `mkdir 'plain.txt/sub'`).
+        if (existing.kind !== 'dir') {
+          throw new VfsError(i === parts.length - 1 ? 'EEXIST' : 'ENOTDIR', path);
+        }
         if (i === parts.length - 1 && !recursive) {
           throw new VfsError('EEXIST', path);
         }
         continue;
       }
       if (!recursive && i < parts.length - 1) {
-        throw new VfsError('ENOENT', cumulative);
+        // Missing parent still names the TARGET (same rule as ENOTDIR above).
+        throw new VfsError('ENOENT', path);
       }
       this.index.set(cumulative, { kind: 'dir', size: 0, children: new Set() });
       this.attachChild(cumulative);
@@ -779,7 +822,7 @@ export class OpfsFsSync implements FsSync {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
     const force = options.force ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     if (normalized === '/') {
       if (recursive) {
         // Clear root's children, keep the root entry. Persist per-child:
@@ -802,6 +845,9 @@ export class OpfsFsSync implements FsSync {
     }
     const entry = this.index.get(normalized);
     if (!entry) {
+      // ENOTDIR (path through a file) throws even under `force` — Node's
+      // force suppresses only ENOENT (verified against real Node, 2026-07-05).
+      this.assertNoFileAncestor(normalized, path);
       if (force) return;
       throw new VfsError('ENOENT', path);
     }
@@ -815,16 +861,23 @@ export class OpfsFsSync implements FsSync {
   }
 
   copyFileSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'dir') throw new VfsError('EISDIR', src);
     const dstEntry = this.index.get(d);
     if (dstEntry && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
     const parent = dirname(d);
     const parentEntry = this.index.get(parent);
-    if (!parentEntry || parentEntry.kind !== 'dir') throw new VfsError('ENOENT', parent);
+    if (!parentEntry) {
+      this.assertNoFileAncestor(d, dst);
+      throw new VfsError('ENOENT', dst);
+    }
+    if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
     const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
     // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
     this.writeFileSync(d, bytes);
@@ -835,10 +888,13 @@ export class OpfsFsSync implements FsSync {
 
   cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'file') {
       this.copyFileSync(s, d);
       return;
@@ -856,16 +912,23 @@ export class OpfsFsSync implements FsSync {
   }
 
   renameSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     if (s === d) return;
     if (s === '/') throw new VfsError('EINVAL', src);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
     const dstParent = dirname(d);
     const dstParentEntry = this.index.get(dstParent);
-    if (!dstParentEntry || dstParentEntry.kind !== 'dir') throw new VfsError('ENOENT', dstParent);
+    if (!dstParentEntry) {
+      this.assertNoFileAncestor(d, dst);
+      throw new VfsError('ENOENT', dst);
+    }
+    if (dstParentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
     const dstEntry = this.index.get(d);
     if (dstEntry) {
       if (srcEntry.kind === 'file' && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);

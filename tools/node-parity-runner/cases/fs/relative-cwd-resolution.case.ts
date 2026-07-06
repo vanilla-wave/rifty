@@ -7,14 +7,9 @@ import type { ParityCase } from '../../src/types.ts';
  * Node-equal: bare relative, `./`, `../`-back-into-self, and nested `../`
  * collapse, plus `readdirSync` on relative dirs.
  *
- * Harness note: the parity runner can't drive `process.chdir` on the rifty side
- * (rifty's in-process run uses the real harness `process`, decoupled from the
- * rifty fs cwd cell, which the runner pins via `setProcessCwd('/')`). So this
- * case exercises the relative branch at the pinned cwd — rifty resolves
- * against `/`, the Node child against its tmpdir cwd — which is exactly the
- * `joinPath(getProcessCwd(), str)` path #6 touches. The non-root-cwd case is
- * covered by the `packages/runtime-js/src/builtins/fs.test.ts` unit (canonical
- * for #6's cwd handling).
+ * Harness note: this case runs at the default cwd `/`; the non-root-cwd branch
+ * is parity-covered by `relative-cwd-nonroot.case.ts` (via `ParityCase.cwd`)
+ * and unit-covered by `packages/runtime-js/src/builtins/fs.test.ts`.
  */
 const c: ParityCase = {
   expected: ['hi', 'deep', 'hi', 'hi', 'data.txt,sub', 'n.txt'].join('\n'),

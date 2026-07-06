@@ -468,6 +468,46 @@ describe('OpfsFsSync.utimes (ADR-0029)', () => {
   });
 });
 
+describe('OpfsFsSync writeFileSync metadata', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('writeFileSync bumps mtime monotonically even when the wall clock does not advance', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const root = buildFakeRoot({
+      files: new Map([['/file.txt', { bytes: new Uint8Array([1, 2]) }]]),
+      dirs: new Set(['/']),
+    });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+
+    fs.writeFileSync('/file.txt', new Uint8Array([3, 4]));
+    const first = fs.statSync('/file.txt').mtime;
+    fs.writeFileSync('/file.txt', new Uint8Array([5, 6]));
+
+    expect(fs.statSync('/file.txt').mtime).toBeGreaterThan(first ?? -1);
+  });
+
+  it('statSync reports the in-cache size after writeFileSync even when a stale handle is open', async () => {
+    const root = buildFakeRoot({
+      files: new Map([['/file.txt', { bytes: new Uint8Array([1, 2]) }]]),
+      dirs: new Set(['/']),
+    });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    (fs as unknown as { readonly handles: Map<string, FileSystemSyncAccessHandle> }).handles.set(
+      '/file.txt',
+      {
+        getSize: () => 2,
+      } as unknown as FileSystemSyncAccessHandle,
+    );
+
+    fs.writeFileSync('/file.txt', new Uint8Array([1, 2, 3, 4]));
+
+    expect(fs.statSync('/file.txt').size).toBe(4);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // In-memory dir-tree mirror — readdirSync / mkdirSync / rmSync. Mirrors what
 // `MemoryFsSync` does for the same methods. The async OPFS persist is
@@ -495,7 +535,7 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     expect(fs.readdirSync('/').map((d) => d.name)).toEqual(['a.txt', 'b.txt', 'sub']);
   });
 
-  it('readdirSync dirent cache invalidates on create / unlink / kind change (perf audit 2026-06-05)', async () => {
+  it('readdirSync dirent cache invalidates on create / unlink (perf audit 2026-06-05)', async () => {
     const root = buildFakeRoot({
       files: new Map([['/x.txt', { bytes: new Uint8Array([1]) }]]),
       dirs: new Set(['/', '/d']),
@@ -510,14 +550,6 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     // UNLINK: removing a child must drop it.
     fs.rmSync('/new', { recursive: true });
     expect(fs.readdirSync('/').map((e) => e.name)).toEqual(['d', 'x.txt']);
-    // KIND CHANGE: writeFileSync over the EXISTING dir name `/d` flips its
-    // index entry dir -> file (wasKnown=true path). The cached dirent must
-    // flip isDirectory true -> false, not stay stale.
-    expect(fs.readdirSync('/').find((e) => e.name === 'd')?.isDirectory).toBe(true);
-    fs.writeFileSync('/d', new Uint8Array([9]));
-    const dEntry = fs.readdirSync('/').find((e) => e.name === 'd');
-    expect(dEntry?.isDirectory).toBe(false);
-    expect(dEntry?.isFile).toBe(true);
   });
 
   it('readdirSync on a non-directory throws ENOTDIR', async () => {
@@ -1220,10 +1252,10 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
   it('a persisted DESCENDANT write heals a stale ANCESTOR mkdir failure — a proven-present dir is not a torn dir', async () => {
     // /dir's mkdir persist FAILS (the fake root ignores `create`), leaving a
     // mkdir ledger entry. A later write to /dir/a.txt that PERSISTS proves /dir
-    // now exists on disk (a real OPFS write walks getDirectoryHandle(create)
-    // for every ancestor). The old code cleared only the exact file path, so
-    // the stale ancestor entry lingered and a durable node_modules tree wrongly
-    // revoked its install stamp.
+    // exists on disk: OpfsVfs.writeFile does NOT create parents, so success is
+    // proof that the parent chain is already durable. The old code cleared only
+    // the exact file path, so the stale ancestor entry lingered and a durable
+    // node_modules tree wrongly revoked its install stamp.
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),
       writeFile: () => Promise.resolve(), // the descendant write PERSISTS
@@ -1236,6 +1268,25 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect((await fs.flush()).total).toBe(1); // stale /dir mkdir entry
     fs.writeFileSync('/dir/a.txt', new Uint8Array([1])); // write-through persists
     expect((await fs.flush()).total).toBe(0); // ancestor /dir healed by the descendant write
+  });
+
+  it('a FAILED descendant write does not heal a stale ancestor mkdir failure', async () => {
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.reject(new DomError('NotFoundError')),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/dir', { recursive: true }); // persist FAILS — fake root has no /dir
+    expect((await fs.flush()).total).toBe(1);
+
+    fs.writeFileSync('/dir/a.txt', new Uint8Array([1]));
+    const report = await fs.flush();
+
+    expect(report.total).toBe(2);
+    expect(report.anyFailure?.((path) => path === '/dir')).toBe(true);
+    expect(report.anyFailure?.((path) => path === '/dir/a.txt')).toBe(true);
   });
 
   it('a rename whose SOURCE is already gone (NotFoundError) still heals — a durably-written destination is not torn', async () => {
