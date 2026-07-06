@@ -426,7 +426,7 @@ describe('install — package.json defaults', () => {
     // the shadow-registry alias shim (was a playground boot-overlay concern).
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.js')).toContain(
-      '__riftyEsbuildTransform',
+      'globalThis.__riftyEsbuild',
     );
   });
 

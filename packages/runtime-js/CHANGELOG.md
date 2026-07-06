@@ -179,6 +179,12 @@
 
 ### Added
 
+- **Loader: ONE ESM namespace per non-ESM module id (Node parity, ported from
+  the ai-mode branch).** Wrapping per call leaked the RAW CJS exports on cache
+  hits (`default` === undefined for the second importer; broke vite7's
+  tinyglobby→picomatch after fdir require()d it). Memoized namespaces drop in
+  lockstep with `invalidate`; in-cycle partial exports wrap without memoizing.
+
 - **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —
   `require('node:stream').compose(a, b)`, `Duplex.from(src)`, and
   `readable.wrap(legacyStream)` (Node v16, owned by `@riftydev/io`) now resolve.

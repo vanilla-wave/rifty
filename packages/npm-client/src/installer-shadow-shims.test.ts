@@ -262,7 +262,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     );
 
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.js');
-    expect(aliasMain).toContain('__riftyEsbuildTransform');
+    expect(aliasMain).toContain('globalThis.__riftyEsbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
     expect(fresh).toContain(REDIRECT_LINE);
     expect(fresh).toContain(PATCH_LINE);

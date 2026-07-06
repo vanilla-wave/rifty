@@ -34,6 +34,9 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
   server: {
     appType: 'spa',
     strictPort: true,
+    // Vite 8 dep pre-bundling drives Rolldown's WASI bundler, upstream-blocked
+    // for this path (ADR-0173) — stays off regardless of the real esbuild
+    // bridge (ADR-0192 covers esbuild, not Rolldown).
     optimizeDepsDisabled: true,
     host: true,
     allowedHosts: true,

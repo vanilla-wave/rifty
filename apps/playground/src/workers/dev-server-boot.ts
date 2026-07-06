@@ -22,7 +22,7 @@ import type {
   ProjectSpec,
 } from '../templates/project-spec.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
@@ -246,7 +246,7 @@ export async function bootDevServer(opts: {
 
   if (cfg.runtime === 'vite') {
     assertNoUserViteConfig(root);
-    installEsbuildTransformBridge(root);
+    installEsbuildBridge();
     log(`importing ${cfg.runtimeSpecifier}…\n`);
     const viteNs = (await loader.import(
       cfg.runtimeSpecifier,

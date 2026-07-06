@@ -206,6 +206,8 @@ describe('runtime dispatch + seeding (behavioral)', () => {
     const root = '/bu-devboot/vite-missing-deps';
     const cfg = resolveBootstrapConfig(HIDDEN_EMPTY_TEMPLATE, 5176, root);
     const sinks = makeSinks();
+    const g = globalThis as { __riftyEsbuild?: unknown };
+    g.__riftyEsbuild = undefined;
 
     await expect(
       bootDevServer({
@@ -219,6 +221,12 @@ describe('runtime dispatch + seeding (behavioral)', () => {
         log: sinks.log,
       }),
     ).rejects.toThrow(/vite/);
+    // The host esbuild-wasm bridge (ADR-0192) installs BEFORE the vite import
+    // attempt — vite pulls esbuild at module load, so a later install is a
+    // broken optimizer. The reject above happened AT import; the bridge must
+    // already be there.
+    expect(g.__riftyEsbuild).toBeDefined();
+    g.__riftyEsbuild = undefined;
   });
 });
 

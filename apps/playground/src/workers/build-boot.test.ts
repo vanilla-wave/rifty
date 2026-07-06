@@ -21,13 +21,13 @@ interface ViteProbe {
 
 interface TestGlobals {
   __riftyTestViteProbe?: ViteProbe;
-  __riftyEsbuildTransform?: unknown;
+  __riftyEsbuild?: unknown;
 }
 const g = globalThis as TestGlobals;
 
 const PROBE_VITE_PACKAGE = [
   'const probe = globalThis.__riftyTestViteProbe;',
-  'probe.bridgeAtViteImport = typeof globalThis.__riftyEsbuildTransform;',
+  'probe.bridgeAtViteImport = typeof globalThis.__riftyEsbuild;',
   'export async function build(config) {',
   "  probe.calls.push({ kind: 'build', config });",
   '}',
@@ -82,7 +82,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   g.__riftyTestViteProbe = undefined;
-  g.__riftyEsbuildTransform = undefined;
+  g.__riftyEsbuild = undefined;
   // (`= undefined` would store the string "undefined" in a real node env)
   if (savedPwd === undefined) Reflect.deleteProperty(process.env, 'PWD');
   else process.env.PWD = savedPwd;
@@ -114,11 +114,11 @@ describe('bootBuild — curated production build', () => {
     ]);
   });
 
-  it('installs the shared esbuild WASI transform bridge BEFORE vite is imported', async () => {
+  it('installs the host esbuild-wasm bridge (ADR-0192) BEFORE vite is imported', async () => {
     bootFixture();
     await bootBuild({ root: '/app', log: () => {} });
     // Captured by the probe package's MODULE BODY — i.e. at vite import time.
-    expect(probe().bridgeAtViteImport).toBe('function');
+    expect(probe().bridgeAtViteImport).toBe('object');
   });
 
   it('loud-rejects a user vite.config before importing or running vite', async () => {

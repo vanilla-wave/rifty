@@ -45,22 +45,24 @@ export const bakedOverrides: OverrideMap = {
   lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
-// MUST equal the bakedOverrides trigger pin: the alias package.json + the
-// shim's `version` export claim this — a drifted static value would lie to
-// version-sniffing consumers. The exact-pin `range` below enforces the couple
-// (a bumped override outside it loud-throws at install until this moves too).
+// MUST equal BOTH couplings: the bakedOverrides trigger pin (alias package.json
+// + the shim's `version` export claim it; the exact-pin `range` below refuses a
+// drifted trigger at install) AND apps/playground's exact `esbuild-wasm`
+// devDependency (the host instance actually answering the API — a skew would
+// lie to version-sniffing consumers like vite's optimizer; pinned by
+// esbuild-host.test.ts).
 const SHIM_ESBUILD_VERSION = '0.28.0';
 
-// ONE mode-independent esbuild entry (ADR-0188): the real async WASI transform
-// bridge (dev module serving AND `vite build`) and `build({ write:false })` for
-// SINGLE-MODULE config bundling. Everything the bridge cannot do for real
-// loud-throws: multi-module bundling (local imports in the entry), a context()
-// with entry points (only the EMPTY dep-optimizer context under
-// `optimizeDeps.noDiscovery` constructs — its empty rebuild IS real esbuild's
-// zero-entry result), non-empty analyzeMetafile. One body, two entries: ESM
-// footer for import, CJS footer for require (real Node `require('esbuild')`
-// works — the rifty loader loud-fails sync require of ESM).
-const SHIM_ESBUILD_BODY = `// rifty: esbuild shim — WASI transform bridge (shadow registry, install-time)
+// ONE mode-independent esbuild entry (ADR-0188): the REAL esbuild JS API,
+// delegated to the host-realm esbuild-wasm instance (ADR-0192). Guest and host
+// share the worker realm, so options, results, and JS plugin callbacks (vite's
+// externalize-deps, esbuildDepPlugin) cross the bridge untouched — transform,
+// build, context (rebuild/watch/dispose) all real. Only the APIs esbuild-wasm
+// itself does not provide in a browser realm (the *Sync family) loud-throw.
+// One body, two entries: ESM footer for import, CJS footer for require (real
+// Node `require('esbuild')` works — the rifty loader loud-fails sync require
+// of ESM).
+const SHIM_ESBUILD_BODY = `// rifty: esbuild shim — real esbuild JS API via the host esbuild-wasm bridge (shadow registry, install-time)
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
     super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
@@ -71,178 +73,73 @@ const NotImplementedError = class extends Error {
 
 const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
 
-async function initialize(_opts) {
-  return undefined;
-}
-
-function decodeInput(input) {
-  return typeof input === 'string' ? input : new TextDecoder().decode(input);
-}
-
-function transformBridge() {
-  const bridge = globalThis.__riftyEsbuildTransform;
-  if (typeof bridge !== 'function') {
-    throw new NotImplementedError('esbuild.transform', 'rifty runtime did not install the WASI transform bridge');
-  }
-  return bridge;
-}
-
-async function transform(input, options = {}) {
-  const result = await transformBridge()(decodeInput(input), options);
-  return {
-    code: result.code,
-    map: result.map,
-    warnings: result.warnings || [],
-    legalComments: '',
-    mangleCache: undefined,
-  };
-}
-
-function transformSync(_input, _options = {}) {
-  throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
-}
-
-function loaderForPath(path) {
-  if (/\\.tsx$/i.test(path)) return 'tsx';
-  if (/\\.ts$/i.test(path)) return 'ts';
-  if (/\\.jsx$/i.test(path)) return 'jsx';
-  return 'js';
-}
-
-function firstEntryPoint(opts) {
-  if (!Array.isArray(opts.entryPoints) || opts.entryPoints.length !== 1 || typeof opts.entryPoints[0] !== 'string') {
-    throw new NotImplementedError('esbuild.build.entryPoints', 'rifty config bundling supports one string entry point');
-  }
-  return opts.entryPoints[0];
-}
-
-async function loadEntryThroughPlugins(opts, entry) {
-  const onLoad = [];
-  const api = {
-    onResolve() {
-      // The minimal config bridge does not traverse imports. Vite's own
-      // externalize plugin may register resolvers; they are relevant only if a
-      // config imports extra modules — assertSingleModuleOutput keeps that loud.
-    },
-    onLoad(options, callback) {
-      onLoad.push({ filter: options && options.filter, callback });
-    },
-  };
-  for (const plugin of opts.plugins || []) {
-    if (plugin && typeof plugin.setup === 'function') plugin.setup(api);
-  }
-  for (const hook of onLoad) {
-    if (hook.filter && !hook.filter.test(entry)) continue;
-    const loaded = await hook.callback({ path: entry, namespace: 'file', pluginData: undefined });
-    if (loaded) {
-      return {
-        contents: typeof loaded.contents === 'string' ? loaded.contents : decodeInput(loaded.contents || ''),
-        loader: loaded.loader || loaderForPath(entry),
-      };
-    }
-  }
-  throw new NotImplementedError('esbuild.build.onLoad', 'rifty config bundling needs an onLoad result for the entry');
-}
-
-function assertSingleModuleOutput(code, entry) {
-  // Real esbuild build() BUNDLES local imports; this bridge transforms ONE
-  // module. Succeeding while the output still imports './x' would hand the
-  // caller a half-loaded config as "bundled" — a silent wrong answer. Bare
-  // specifiers stay (vite's externalize plugin marks them external; real
-  // esbuild leaves externals untouched); only relative/absolute file imports
-  // are the lie, so they refuse loud.
-  const local = /(?:\\bfrom\\s*["']|\\bimport\\s*\\(\\s*["']|\\bimport\\s*["']|\\brequire\\s*\\(\\s*["'])(\\.{1,2}\\/|\\/)/.exec(code);
-  if (local) {
-    throw new NotImplementedError(
-      'esbuild.build.bundle',
-      'rifty config bundling transforms the single entry module (' + entry + '); local file imports are not traversed — inline them or import a package',
+function hostEsbuild() {
+  const host = globalThis.__riftyEsbuild;
+  if (!host) {
+    throw new Error(
+      'rifty: esbuild host bridge missing — installEsbuildBridge() must run before the esbuild API is called (prepareViteCli/bootDevServer/bootBuild wiring)',
     );
   }
+  return host;
 }
 
-async function build(opts = {}) {
-  if (opts.write !== false) {
-    throw new NotImplementedError('esbuild.build.write', 'rifty config bundling supports write:false only');
+let initializeCalled = false;
+async function initialize(options = {}) {
+  // Node esbuild parity: browser-only options are rejected and a second call
+  // throws; the actual service start is owned by the host bridge.
+  if (options.wasmURL || options.wasmModule || options.worker !== undefined) {
+    throw new Error('The "wasmURL", "wasmModule" and "worker" options only work in esbuild-wasm');
   }
-  const entry = firstEntryPoint(opts);
-  const loaded = await loadEntryThroughPlugins(opts, entry);
-  const result = await transformBridge()(loaded.contents, {
-    loader: loaded.loader,
-    format: opts.format || 'esm',
-    target: Array.isArray(opts.target) ? opts.target.join(',') : opts.target,
-    sourcemap: opts.sourcemap,
-  });
-  const text = result.code;
-  assertSingleModuleOutput(text, entry);
-  return {
-    errors: [],
-    warnings: result.warnings || [],
-    outputFiles: [
-      {
-        path: opts.outfile || '<stdout>',
-        contents: new TextEncoder().encode(text),
-        text,
-      },
-    ],
-    metafile: opts.metafile ? { inputs: { [entry]: {} }, outputs: {} } : undefined,
-    mangleCache: undefined,
-  };
-}
-
-function buildSync(_opts) {
-  throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
-}
-
-async function context(opts = {}) {
-  // Only the EMPTY dep-optimizer context constructs (dev dep-pre-bundling under
-  // optimizeDeps.noDiscovery finds no entries; production build never gets
-  // here). Its empty rebuild() result IS what real esbuild returns for zero
-  // entry points — honest, not a stub. Entry points would need real
-  // rebuild/watch, which the bridge cannot do: refuse loud at construction.
-  const entryPoints = opts.entryPoints;
-  const empty =
-    entryPoints === undefined ||
-    (Array.isArray(entryPoints) ? entryPoints.length === 0 : Object.keys(entryPoints).length === 0);
-  if (!empty || opts.stdin) {
-    throw new NotImplementedError(
-      'esbuild.context',
-      'rifty esbuild bridge cannot rebuild/watch entry points; only the empty dep-optimizer context (optimizeDeps.noDiscovery) is supported',
-    );
+  if (initializeCalled) {
+    throw new Error('Cannot call "initialize" more than once');
   }
-  return {
-    rebuild: async () => ({ errors: [], warnings: [], outputFiles: [], metafile: { inputs: {}, outputs: {} } }),
-    watch: async () => undefined,
-    serve: async () => {
-      throw new NotImplementedError('esbuild.context.serve', 'esbuild serve has no rifty bridge');
-    },
-    cancel: async () => undefined,
-    dispose: async () => undefined,
-  };
+  initializeCalled = true;
+  await hostEsbuild().initialize();
 }
 
-function analyzeMetafileSync(metafile, _opts) {
-  const meta = (typeof metafile === 'string' ? JSON.parse(metafile) : metafile) || {};
-  const hasWork = Object.keys(meta.inputs || {}).length > 0 || Object.keys(meta.outputs || {}).length > 0;
-  if (hasWork) {
-    throw new NotImplementedError('esbuild.analyzeMetafile', 'rifty esbuild bridge does not produce bundle analysis');
-  }
-  return '';
+function transform(input, options) {
+  return hostEsbuild().transform(input, options);
 }
 
-async function analyzeMetafile(metafile, opts) {
-  return analyzeMetafileSync(metafile, opts);
+function build(options) {
+  return hostEsbuild().build(options);
 }
 
-async function formatMessages(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
+function context(options) {
+  return hostEsbuild().context(options);
 }
 
-function formatMessagesSync(messages, _opts) {
-  return messages.map((m) => (m && m.text) || '');
+function formatMessages(messages, options) {
+  return hostEsbuild().formatMessages(messages, options);
+}
+
+function analyzeMetafile(metafile, options) {
+  return hostEsbuild().analyzeMetafile(metafile, options);
+}
+
+function stop() {
+  return hostEsbuild().stop();
+}
+
+function transformSync(_input, _options) {
+  throw new NotImplementedError('esbuild.transformSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+function buildSync(_options) {
+  throw new NotImplementedError('esbuild.buildSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+function formatMessagesSync(_messages, _options) {
+  throw new NotImplementedError('esbuild.formatMessagesSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
+}
+
+function analyzeMetafileSync(_metafile, _options) {
+  throw new NotImplementedError('esbuild.analyzeMetafileSync', 'esbuild-wasm exposes no synchronous API in a browser realm');
 }
 
 const api = {
   version,
+  initialize,
   transform,
   transformSync,
   build,
@@ -252,7 +149,7 @@ const api = {
   analyzeMetafileSync,
   formatMessages,
   formatMessagesSync,
-  initialize,
+  stop,
 };
 `;
 
@@ -269,6 +166,7 @@ export {
   analyzeMetafileSync,
   formatMessages,
   formatMessagesSync,
+  stop,
 };
 export default api;
 `;

@@ -160,6 +160,20 @@
   net/preview-websocket-bridge, acceptance 4 partial).** With the preview path now
   stamping `Host: localhost:<port>` (`@riftydev/io`, ADR-0189 D3), the live
   shell/.bin dev config wrapper no longer forces
+- **Real esbuild JS API via host esbuild-wasm@0.28.0 (ADR-0192, ported from the
+  ai-mode branch and re-pinned 0.27.7→0.28.0 to kill the CLI/API version skew).**
+  `esbuild-host.ts` initializes ONE lazy esbuild-wasm instance per worker realm
+  (`globalThis.__riftyEsbuild`, Node-style fs facade over the sync mirror,
+  write-emulation for browser `write:true`); the WASI transform bridge
+  (`esbuild-wasi-transform.ts`, `__riftyEsbuildTransform`) is deleted. The
+  wrapper's `optimizeDeps.noDiscovery` BLANKET force is retired — zero-config
+  projects run vite's REAL dep optimizer (manual-vite e2e green with discovery);
+  a template-declared opt-out remains (`RIFTY_VITE_CLI_NO_DEP_DISCOVERY`:
+  zero-dep instant presets keep the 13.5 MB wasm off their boot path, vite8 pins
+  off for Rolldown). Cost honestly measured: vite7-build-preview e2e 7.9→37 s
+  (cold service init in the build child; backlog
+  perf/esbuild-wasm-build-path-latency); instant-preset boot unchanged (m1 4.8 s).
+
 - **`server.allowedHosts` force retired — dev wrapper AND vite-preview CLI patch
   (backlog net/preview-websocket-bridge, acceptance 4).** The 2026-07-02 "hang, not
   403" is traced: rifty `node:net` lacked `isIP`, vite's host validation threw inside

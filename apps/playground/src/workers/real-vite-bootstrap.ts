@@ -675,7 +675,9 @@ async function bootShellOwner(opts: {
       binPath,
       args,
       ctx,
-      devCfg.runtime === 'vite' && !devCfg.hmrEnabled ? { hmrOff: true } : undefined,
+      devCfg.runtime === 'vite'
+        ? { hmrOff: !devCfg.hmrEnabled, noDepDiscovery: devCfg.server.optimizeDepsDisabled }
+        : undefined,
     );
     return childBinExecutor(binPath, viteArgs, withPreviewScope(viteCtx));
   };

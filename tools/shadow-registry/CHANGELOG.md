@@ -4,6 +4,16 @@
 
 ### Changed
 
+- **esbuild shim delegates the REAL esbuild JS API to the host esbuild-wasm
+  instance (ADR-0192).** `transform`/`build`/`context` (rebuild/watch/dispose)/
+  `formatMessages`/`analyzeMetafile`/`stop` all pass through to
+  `globalThis.__riftyEsbuild`; only the browser-impossible `*Sync` family keeps
+  loud `NotImplementedError`. The partial emulations died: transform-only
+  `build()`, empty-only `context()`. Dual ESM/CJS entries and the static
+  `version` claim stay; the pin triple (trigger `@esbuild/wasi-preview1@0.28.0`,
+  shim claim, playground `esbuild-wasm` devDep) moves in lockstep, coupling
+  pinned by `esbuild-host.test.ts`.
+
 - **Shim data restructured for install-time application (ADR-0188).** New `internalsShims`
   table keyed by the INSTALLED trigger package with package-relative file paths, a proven
   `range`, alias `into` (esbuild/lightningcss import names), and `companions` (rollup →

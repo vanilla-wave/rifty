@@ -2,7 +2,7 @@ import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
 const dec = new TextDecoder();
@@ -79,7 +79,7 @@ export async function bootBuild(opts: {
 }): Promise<void> {
   const { root, log } = opts;
   assertNoUserViteConfig(root);
-  installEsbuildTransformBridge(root);
+  installEsbuildBridge();
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
 

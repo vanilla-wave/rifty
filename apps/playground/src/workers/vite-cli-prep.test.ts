@@ -15,14 +15,18 @@ describe('prepareViteCli', () => {
     expect(source).toContain('__riftyTrackCliPromise(__riftyAction)');
   });
 
-  it('installs a Vite dev CLI config wrapper for the LAST forced option + the server handle (stock HMR, ADR-0189)', () => {
+  it('installs a Vite dev CLI config wrapper: server handle + TEMPLATE-GATED dep-discovery opt-out only (ADR-0192)', () => {
     expect(source).toContain('writeViteCliConfigWrapper');
     expect(source).toContain("if (mode === 'dev') writeViteCliConfigWrapper(root, opts)");
-    expect(source).toContain('installEsbuildTransformBridge(root)');
+    expect(source).toContain('installEsbuildBridge()');
     expect(source).toContain('__riftyActiveViteServer');
     expect(source).toContain('configureServer(server)');
-    expect(source).toContain('optimizeDeps');
+    // noDiscovery survives ONLY behind the template gate; the blanket force is
+    // gone — zero-config projects run vite's real optimizer (esbuild-wasm).
+    expect(source).toContain('opts.noDepDiscovery');
+    expect(source).toContain('RIFTY_VITE_CLI_NO_DEP_DISCOVERY');
     expect(source).toContain('noDiscovery: true');
+    expect(source).not.toContain('Array.isArray(userOptimizeDeps.include)');
     // The HMR endpoint rewrite + client-script injection died with ADR-0189:
     // stock `server.hmr` flows through the generic preview bridge; only
     // ADR-0161 (Vite 8) still forces hmr:false via `hmrOff`.

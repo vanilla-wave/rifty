@@ -1,7 +1,7 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import type { CommandContext } from '@riftydev/shell';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
@@ -44,6 +44,15 @@ export interface ViteCliPrepareOptions {
   /** Force `server.hmr: false` — Vite 8 keeps HMR off pending Rolldown socket parity (ADR-0161). */
   readonly hmrOff?: boolean;
   readonly userConfigPath?: string;
+  /**
+   * Template-declared dep-discovery opt-out (`server.optimizeDepsDisabled`,
+   * threaded via `RIFTY_VITE_CLI_NO_DEP_DISCOVERY`). Zero-dep instant presets
+   * keep the 13.5 MB esbuild-wasm off their boot path (discovery would load it
+   * for an empty result); vite8 pins it off (Rolldown WASI bundler, ADR-0161
+   * territory). Never a blanket default — zero-config user projects run
+   * vite's REAL optimizer on the host esbuild-wasm (ADR-0192).
+   */
+  readonly noDepDiscovery?: boolean;
 }
 
 declare global {
@@ -127,6 +136,7 @@ function wrapperSource(opts: {
   readonly userConfigPath: string | null;
   readonly wrapperDir: string;
   readonly hmrOff: boolean;
+  readonly noDepDiscovery: boolean;
 }): string {
   const userImport =
     opts.userConfigPath === null
@@ -138,6 +148,13 @@ function wrapperSource(opts: {
   // the generic preview WS bridge carries vite's own server.ws. ADR-0161 pins
   // Vite 8 hmr:false until Rolldown socket parity is re-proven.
   const forcedHmr = opts.hmrOff ? 'hmr: false,' : '';
+  // Template-gated dep-discovery opt-out (ViteCliPrepareOptions.noDepDiscovery);
+  // by default optimizeDeps passes through untouched and vite's REAL optimizer
+  // runs on the host esbuild-wasm bridge (ADR-0192).
+  const optimizeDepsOverride = opts.noDepDiscovery
+    ? `
+    optimizeDeps: { ...objectOrEmpty(user.optimizeDeps), noDiscovery: true, include: [] },`
+    : '';
   return `${userImport}
 
 function riftyViteServerHandlePlugin() {
@@ -163,7 +180,6 @@ function pluginArray(value) {
 function mergeRiftyConfig(userConfig) {
   const user = objectOrEmpty(userConfig);
   const userServer = objectOrEmpty(user.server);
-  const userOptimizeDeps = objectOrEmpty(user.optimizeDeps);
   // Retired forces (each with its e2e proof, backlog net/preview-websocket-bridge):
   // base './' (SW port-context routes root-relative requests, ADR-0097),
   // appType 'spa' (vite's own default), server.strictPort (port-derived
@@ -173,20 +189,13 @@ function mergeRiftyConfig(userConfig) {
   // not 403" was rifty node:net missing isIP: vite's host check calls
   // net.isIP BEFORE its unconditional localhost allow, the TypeError rejects
   // the async connect middleware and no response is ever written; real
-  // isIP/isIPv4/isIPv6 now live in @riftydev/net, parity cases/net/is-ip).
-  // ONE force remains:
-  // - optimizeDeps.noDiscovery — dep discovery/prebundle needs a real bundling
-  //   esbuild; re-tested 2026-07-02 with the force dropped: zero-config
-  //   "npm i vite && npm run dev" lights LIVE but the optimizer breaks page
-  //   serving (the WASI bridge shim loud-refuses entry-point contexts). Retire
-  //   when real esbuild-wasm replaces the shim.
+  // isIP/isIPv4/isIPv6 now live in @riftydev/net, parity cases/net/is-ip),
+  // optimizeDeps.noDiscovery as a BLANKET force (ADR-0192: the host
+  // esbuild-wasm runs vite's REAL dep optimizer; zero-config projects
+  // discover/prebundle as on Node). What remains is a template-declared
+  // opt-out only — see optimizeDepsOverride in wrapperSource.
   return {
-    ...user,
-    optimizeDeps: {
-      ...userOptimizeDeps,
-      noDiscovery: true,
-      include: Array.isArray(userOptimizeDeps.include) ? userOptimizeDeps.include : [],
-    },
+    ...user,${optimizeDepsOverride}
     server: {
       ...userServer,
       ${forcedHmr}
@@ -219,6 +228,7 @@ function writeViteCliConfigWrapper(root: string, opts: ViteCliPrepareOptions): v
         userConfigPath,
         wrapperDir: dirname(wrapperPath),
         hmrOff: opts.hmrOff === true,
+        noDepDiscovery: opts.noDepDiscovery === true,
       }),
     ),
   );
@@ -232,7 +242,7 @@ export async function prepareViteCli(
   if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
   installCliActionPatches(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
-  if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
+  if (mode === 'build' || mode === 'dev') installEsbuildBridge();
 }
 
 // ——— vite CLI arg/env preparation (relocated from real-vite-bootstrap so the

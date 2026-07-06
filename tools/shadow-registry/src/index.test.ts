@@ -50,17 +50,36 @@ describe('shadow-registry', () => {
     expect(internalsShims.rollup?.companions).toEqual(['@rollup/wasm-node']);
   });
 
-  it('esbuild alias shim materializes the original import name with the bridge-backed entry', () => {
+  it('esbuild alias shim delegates the REAL esbuild JS API to the host bridge (ADR-0192)', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     expect(shim?.into).toBe('esbuild');
     expect(shim?.files['package.json']).toContain('"esbuild"');
     const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain('__riftyEsbuildTransform');
-    expect(main).toContain("NotImplementedError('esbuild.transform'");
-    // Unified content: real bridge transform + write:false config build.
-    expect(main).toContain('loadEntryThroughPlugins');
-    expect(main).toContain('opts.write !== false');
-    expect(main).not.toContain('Pass-through');
+    expect(main).toContain('globalThis.__riftyEsbuild');
+    for (const member of [
+      'transform',
+      'build',
+      'context',
+      'formatMessages',
+      'analyzeMetafile',
+      'stop',
+    ]) {
+      expect(main).toContain(`hostEsbuild().${member}(`);
+    }
+    // esbuild-wasm has no synchronous API in a browser realm — loud throws.
+    for (const feature of [
+      'esbuild.transformSync',
+      'esbuild.buildSync',
+      'esbuild.formatMessagesSync',
+      'esbuild.analyzeMetafileSync',
+    ]) {
+      expect(main).toContain(`NotImplementedError('${feature}'`);
+    }
+    // The partial emulations are gone: no transform-only build(), no
+    // empty-only context stub, no WASI transform bridge global.
+    expect(main).not.toContain('loadEntryThroughPlugins');
+    expect(main).not.toContain('__riftyEsbuildTransform');
+    expect(main).not.toContain('rebuild: async () => ({');
   });
 
   it('esbuild alias version matches the bakedOverrides trigger pin exactly (no lying metadata)', () => {
@@ -94,21 +113,8 @@ describe('shadow-registry', () => {
     expect(cjs).toContain('module.exports');
     expect(cjs).not.toContain('export default');
     // Same single body in both — no per-format drift.
-    expect(cjs).toContain('loadEntryThroughPlugins');
-    expect(cjs).toContain('__riftyEsbuildTransform');
-  });
-
-  it('esbuild build() loud-throws when the transformed entry imports local files (no silent single-module "bundle")', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain("'esbuild.build.bundle'");
-  });
-
-  it('esbuild context()/analyzeMetafile() are honest: empty inputs only, loud otherwise', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain("'esbuild.context'");
-    expect(main).toContain("'esbuild.analyzeMetafile'");
+    expect(cjs).toContain('globalThis.__riftyEsbuild');
+    expect(esm).toContain('globalThis.__riftyEsbuild');
   });
 
   it('lightningcss alias shim delegates both entrypoints to lightningcss-wasm', () => {
@@ -123,22 +129,14 @@ describe('shadow-registry', () => {
 describe('esbuild shim behavior (CJS body executed)', () => {
   interface EsbuildShimApi {
     readonly version: string;
+    readonly initialize: (options?: object) => Promise<void>;
     readonly transform: (input: string, options?: object) => Promise<{ code: string }>;
-    readonly build: (
-      opts: object,
-    ) => Promise<{ errors: unknown[]; outputFiles: { text: string }[] }>;
-    readonly context: (
-      opts: object,
-    ) => Promise<{ rebuild: () => Promise<{ errors: unknown[]; outputFiles: unknown[] }> }>;
-    readonly analyzeMetafile: (metafile: object) => Promise<string>;
+    readonly build: (opts: object) => Promise<unknown>;
+    readonly context: (opts: object) => Promise<unknown>;
+    readonly transformSync: (input: string, options?: object) => unknown;
+    readonly buildSync: (opts: object) => unknown;
+    readonly stop: () => Promise<void>;
   }
-  type PluginApi = {
-    onResolve: (options: object, cb: unknown) => void;
-    onLoad: (
-      options: { filter: RegExp },
-      cb: (args: object) => { contents: string; loader: string },
-    ) => void;
-  };
 
   function loadCjsShim(): EsbuildShimApi {
     const cjs = internalsShims['@esbuild/wasi-preview1']?.files['lib/main.cjs'] ?? '';
@@ -147,65 +145,69 @@ describe('esbuild shim behavior (CJS body executed)', () => {
     return module.exports as EsbuildShimApi;
   }
 
-  function entryPlugin(contents: string): object {
-    return {
-      name: 'test-loader',
-      setup(api: PluginApi): void {
-        api.onLoad({ filter: /.*/ }, () => ({ contents, loader: 'ts' }));
-      },
-    };
-  }
-
-  const withBridge = async (run: (esbuild: EsbuildShimApi) => Promise<void>): Promise<void> => {
-    const g = globalThis as { __riftyEsbuildTransform?: unknown };
-    g.__riftyEsbuildTransform = async (code: string) => ({ code, map: '', warnings: [] });
+  const withHost = async (
+    host: object,
+    run: (esbuild: EsbuildShimApi) => Promise<void>,
+  ): Promise<void> => {
+    const g = globalThis as { __riftyEsbuild?: unknown };
+    g.__riftyEsbuild = host;
     try {
       await run(loadCjsShim());
     } finally {
-      g.__riftyEsbuildTransform = undefined;
+      g.__riftyEsbuild = undefined;
     }
   };
 
-  it('build() succeeds for a single-module config with only bare (external) imports', async () => {
-    await withBridge(async (esbuild) => {
-      const result = await esbuild.build({
-        write: false,
-        entryPoints: ['/proj/vite.config.ts'],
-        plugins: [
-          entryPlugin("import { defineConfig } from 'vite';\nexport default defineConfig({});"),
-        ],
-      });
-      expect(result.errors).toEqual([]);
-      expect(result.outputFiles[0]?.text).toContain('defineConfig');
-    });
-  });
-
-  it('build() loud-throws when the entry imports a LOCAL file (real esbuild would bundle it)', async () => {
-    await withBridge(async (esbuild) => {
-      await expect(
-        esbuild.build({
-          write: false,
-          entryPoints: ['/proj/vite.config.ts'],
-          plugins: [
-            entryPlugin("import { helper } from './config-helper.js';\nexport default helper();"),
-          ],
-        }),
-      ).rejects.toThrow(/esbuild\.build\.bundle/);
-    });
-  });
-
-  it('context() with entry points loud-throws; the EMPTY dep-optimizer context rebuilds empty (real zero-entry result)', async () => {
-    const esbuild = loadCjsShim();
-    await expect(esbuild.context({ entryPoints: ['a.ts'] })).rejects.toThrow(/esbuild\.context/);
-    const ctx = await esbuild.context({ entryPoints: [] });
-    await expect(ctx.rebuild()).resolves.toMatchObject({ errors: [], outputFiles: [] });
-  });
-
-  it('analyzeMetafile is loud for a non-empty metafile, honest-empty otherwise', async () => {
-    const esbuild = loadCjsShim();
-    await expect(esbuild.analyzeMetafile({ inputs: { 'a.ts': {} }, outputs: {} })).rejects.toThrow(
-      /esbuild\.analyzeMetafile/,
+  it('delegates transform/build/context untouched to the host instance', async () => {
+    const calls: Array<{ member: string; args: unknown[] }> = [];
+    const record =
+      (member: string) =>
+      (...args: unknown[]) => {
+        calls.push({ member, args });
+        return Promise.resolve({ member });
+      };
+    await withHost(
+      { transform: record('transform'), build: record('build'), context: record('context') },
+      async (esbuild) => {
+        const options = { entryPoints: ['a.ts'], bundle: true, plugins: [{ name: 'p' }] };
+        await esbuild.transform('const x = 1', { loader: 'ts' });
+        await esbuild.build(options);
+        await esbuild.context(options);
+        expect(calls.map((c) => c.member)).toEqual(['transform', 'build', 'context']);
+        // Same object references cross the bridge — JS plugins stay callable.
+        expect(calls[1]?.args[0]).toBe(options);
+        expect(calls[2]?.args[0]).toBe(options);
+      },
     );
-    await expect(esbuild.analyzeMetafile({ inputs: {}, outputs: {} })).resolves.toBe('');
+  });
+
+  it('API calls without the installed host bridge fail loud (sync, fail-fast) with the wiring hint', () => {
+    const esbuild = loadCjsShim();
+    expect(() => esbuild.transform('x')).toThrow(/installEsbuildBridge/);
+    expect(() => esbuild.build({})).toThrow(/installEsbuildBridge/);
+  });
+
+  it('initialize rejects browser-only options and a second call (Node esbuild parity)', async () => {
+    let hostInits = 0;
+    await withHost(
+      {
+        initialize: () => {
+          hostInits += 1;
+          return Promise.resolve();
+        },
+      },
+      async (esbuild) => {
+        await expect(esbuild.initialize({ wasmURL: 'x.wasm' })).rejects.toThrow(/esbuild-wasm/);
+        await esbuild.initialize();
+        expect(hostInits).toBe(1);
+        await expect(esbuild.initialize()).rejects.toThrow(/more than once/);
+      },
+    );
+  });
+
+  it('sync APIs loud-throw (esbuild-wasm has no synchronous API in a browser realm)', () => {
+    const esbuild = loadCjsShim();
+    expect(() => esbuild.transformSync('x')).toThrow(/esbuild\.transformSync/);
+    expect(() => esbuild.buildSync({})).toThrow(/esbuild\.buildSync/);
   });
 });
