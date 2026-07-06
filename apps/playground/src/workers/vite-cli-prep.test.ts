@@ -9,7 +9,7 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareViteCli } from './vite-cli-prep.ts';
+import { prepareViteCli, withViteCliArgs, withViteCliEnv } from './vite-cli-prep.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): every test drives the REAL prepareViteCli against
@@ -422,5 +422,45 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
     await prepareViteCli('/app', 'dev');
     const after = walkTree(fsSync, '/').sort();
     expect(after).toEqual([...before, '/app/.rifty', WRAPPER_PATH].sort());
+  });
+});
+
+describe('withViteCliArgs — retired preview forces stay retired (behavioral, PR #112)', () => {
+  const ctx = {
+    cwd: '/proj',
+    env: {},
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  } as unknown as Parameters<typeof withViteCliArgs>[2];
+
+  it('preview mode passes args through UNTOUCHED — no --host/--strictPort injection (ADR-0189 D3)', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['preview'], ctx)).toEqual(['preview']);
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['preview', '--port', '4173'], ctx),
+    ).toEqual(['preview', '--port', '4173']);
+  });
+
+  it('dev mode injects ONLY the wrapper --config (user config re-routed via env, not args)', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx)).toEqual([
+      '--port',
+      '5174',
+      '--config',
+      '/proj/.rifty/vite-cli.config.mjs',
+    ]);
+  });
+
+  it('non-vite bins pass through untouched', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/webpack', ['serve'], ctx)).toEqual(['serve']);
+  });
+
+  it('withViteCliEnv threads mode + hmr-off pin, nothing else for stock HMR', () => {
+    const enved = withViteCliEnv('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx, {
+      hmrOff: true,
+    });
+    expect(enved.env.RIFTY_VITE_CLI_MODE).toBe('dev');
+    expect(enved.env.RIFTY_VITE_CLI_HMR_OFF).toBe('1');
+    const stock = withViteCliEnv('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx);
+    expect(stock.env.RIFTY_VITE_CLI_HMR_OFF).toBeUndefined();
+    expect(stock.env.RIFTY_VITE_CLI_PORT).toBeUndefined();
   });
 });

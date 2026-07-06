@@ -1,4 +1,5 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
+import type { CommandContext } from '@riftydev/shell';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
@@ -235,4 +236,107 @@ export async function prepareViteCli(
   installCliActionPatches(root, mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
   if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
+}
+
+// ——— vite CLI arg/env preparation (relocated from real-vite-bootstrap so the
+// behavioral tests can import it in node vitest — the bootstrap module drags
+// worker-only deps). Dies with the wrapper (backlog:
+// net/preview-websocket-bridge acceptance 4).
+
+export function binNameOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
+export function viteCliMode(args: readonly string[]): ViteCliMode {
+  if (args.some((arg) => arg === '--help' || arg === '-h' || arg === '--version' || arg === '-v')) {
+    return 'run';
+  }
+  const sub = args.find((arg) => !arg.startsWith('-'));
+  if (sub === 'build') return 'build';
+  if (sub === 'preview') return 'preview';
+  if (sub === 'optimize') return 'run';
+  return 'dev';
+}
+
+export function createPreviewScope(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
+}
+
+function viteConfigArg(args: readonly string[]): string | null {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--config' || arg === '-c') return args[i + 1] ?? null;
+    if (arg.startsWith('--config=')) return arg.slice('--config='.length);
+  }
+  return null;
+}
+
+function withoutViteConfigArgs(args: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--config' || arg === '-c') {
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--config=')) continue;
+    out.push(arg);
+  }
+  return out;
+}
+
+function resolveCliPath(cwd: string, path: string): string {
+  return normalizePath(path.startsWith('/') ? path : `${cwd}/${path}`);
+}
+
+export function withViteCliArgs(
+  binPath: string,
+  args: readonly string[],
+  ctx: CommandContext,
+): string[] {
+  if (binNameOf(binPath) !== 'vite') return [...args];
+  const mode = viteCliMode(args);
+  // No preview-mode '--host': the SW preview path stamps Host localhost:<port>
+  // (ADR-0189 D3), which vite's default allowedHosts accepts.
+  if (mode !== 'dev') return [...args];
+  return [
+    ...withoutViteConfigArgs(args),
+    '--config',
+    normalizePath(`${ctx.cwd}/${VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH}`),
+  ];
+}
+
+export function withViteCliEnv(
+  binPath: string,
+  args: readonly string[],
+  ctx: CommandContext,
+  opts?: {
+    /** ADR-0161: the active template pins Vite 8 server.hmr:false. */
+    readonly hmrOff: boolean;
+  },
+): CommandContext {
+  if (binNameOf(binPath) !== 'vite') return ctx;
+  const mode = viteCliMode(args);
+  const userConfigPath = viteConfigArg(args);
+  const previewMode = mode === 'dev' || mode === 'preview';
+  const userConfigEnv: Record<string, string> = {};
+  if (userConfigPath !== null) {
+    userConfigEnv.RIFTY_VITE_CLI_USER_CONFIG = resolveCliPath(ctx.cwd, userConfigPath);
+  }
+  return {
+    ...ctx,
+    env: {
+      ...ctx.env,
+      RIFTY_VITE_CLI_MODE: mode,
+      ...(previewMode
+        ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
+        : {}),
+      // Stock HMR needs no env (ADR-0189 — the generic preview bridge carries
+      // vite's own server.ws); only the ADR-0161 hmr-off pin is threaded.
+      ...(mode === 'dev' && opts?.hmrOff ? { RIFTY_VITE_CLI_HMR_OFF: '1' } : {}),
+      ...(previewMode ? userConfigEnv : {}),
+    },
+  };
 }
