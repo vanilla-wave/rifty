@@ -120,8 +120,8 @@ export { createAppProjectStore } from './glue/app-project-store.ts';
 // monaco-env workers wiring) loads as its own chunk at first editor mount — it
 // renders only after a project pick, so its ~3 MB of never-yet-needed code must
 // not sit on the cold-start critical path. The TS-LS provider suite splits the
-// same way (dynamic import in the LS wiring effect below); App.test.ts pins
-// both seams.
+// same way (dynamic import in the LS wiring effect below); check:arch pins
+// both seams (monaco-only-in-lazy-editor-stack, editor-stack-loads-lazily).
 const EditorHost = lazy(() =>
   import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
 );
@@ -1013,7 +1013,7 @@ export function App(props: AppProps) {
     // OFF in EditorHost). The provider module drags monaco-editor, so it loads
     // with the LAZY editor chunk — never in the cold-start main chunk; the
     // api's presence proves monaco is already loaded, so registration lands
-    // one microtask-or-fetch later (App.test.ts pins the seam). Same
+    // one microtask-or-fetch later (check:arch pins the seam). Same
     // lifetime as the client — disposed on cleanup; a cleanup racing the load
     // skips registration entirely.
     let providers: TsLanguageServiceProvidersHandle | undefined;

@@ -76,7 +76,7 @@ export interface EditorApi {
    * The live monaco namespace. The App's LS/e2e glue builds models, positions
    * and ranges through this instead of an eager `monaco-editor` import — the
    * editor stack loads as a lazy chunk and this api existing proves monaco is
-   * loaded (App.test.ts pins the seam).
+   * loaded (check:arch pins the seam).
    */
   readonly monaco: typeof monaco;
   openFile(path: string, options?: EditorOpenFileOptions): void;

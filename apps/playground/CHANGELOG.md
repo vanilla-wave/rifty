@@ -9,7 +9,9 @@
   the cold-start main chunk: main bundle 4221→877 kB raw / 1103→247 kB gz.
   monaco reaches App glue via `api.monaco` (typeof import type); provider
   registration lands when the chunk does (e2e `__riftyTs*` hooks stay
-  wait-guarded). Import seams pinned by App.test.ts.
+  wait-guarded). Import seams enforced by check:arch rules
+  (`monaco-only-in-lazy-editor-stack`, `editor-stack-loads-lazily`) with
+  arch-boundary fixture coverage.
 - Owner boot overlaps the starter initial commit with the instant-deps snapshot
   restore (was: commit serialized ahead of the 9.6-16 MB download); the
   baseline amend stays before the first publish so SCM never flashes a phantom
