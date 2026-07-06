@@ -1,4 +1,4 @@
-# ADR 0197: VFS path contract: absolute-only, loud rejection of relative inputs
+# ADR 0199: VFS path contract: absolute-only, loud rejection of relative inputs
 
 Status: Accepted
 Date: 2026-07

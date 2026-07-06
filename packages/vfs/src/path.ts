@@ -124,7 +124,7 @@ export function segments(p: string): string[] {
 
 /**
  * Normalise an ABSOLUTE POSIX path (dot-segments collapse, trailing slashes
- * strip). Relative inputs THROW (ADR-0197): the VFS layer never guesses an
+ * strip). Relative inputs THROW (ADR-0199): the VFS layer never guesses an
  * anchor — silently rooting `'foo'` as `'/foo'` used to mask missing cwd
  * resolution in callers (the fs-streams wrong-file bug, review 2026-07-05).
  * cwd anchoring belongs to the layers above (runtime-js fs-path kit, shell
@@ -136,7 +136,7 @@ export function segments(p: string): string[] {
  */
 export function normalizeAbsolute(p: string): string {
   if (!p.startsWith('/')) {
-    throw new Error(`VFS path must be absolute (ADR-0197); got: '${p}'`);
+    throw new Error(`VFS path must be absolute (ADR-0199); got: '${p}'`);
   }
   return normalizePath(p);
 }

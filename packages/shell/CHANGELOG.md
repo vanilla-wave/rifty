@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Redirected stdout no longer streams to `onChunk`.** `cmd > file` and
+  redirect-write failures still capture byte-exact stdout for the file path, but
+  the terminal/display callback stays silent for stdout, matching shell
+  redirect UX and avoiding binary replacement-char spew from `cat bin > out`.
 - **Byte snapshot copies Buffer chunks (handoff r3).** `Writer.write` snapshots
   via `new Uint8Array(chunk)` — Node `Buffer#slice()` ALIASES memory, so the
   old `.slice()` let a command mutate its buffer after write and corrupt the

@@ -654,6 +654,7 @@ export class Shell {
     // walk-up `node_modules/.bin/<name>` → miss.
     let handler = this.commands.get(cmd);
 
+    const streamDisplayStdout = streamStdout && redirectTo === null;
     // Data plane = BYTES (ADR-0198): stdout captures Uint8Array chunks (strings
     // encode once here); pipes/redirects consume the bytes; the display string
     // decodes from the full buffer at return. stderr stays string-typed — this
@@ -666,10 +667,9 @@ export class Shell {
     const stderrTap = new TextDecoder('utf-8');
     const emit = (chunk: string | Uint8Array, stream: ChunkStream): void => {
       // onChunk first so the terminal sees the chunk before it lands in the blob.
-      // Fires even for redirected-stdout writes (diverted to a file later) — by
-      // design, so semantics stay composable. A non-final pipe stage
-      // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
-      // not the terminal; stderr always streams (bash never pipes stderr).
+      // Redirected stdout and non-final pipe stages capture stdout SILENTLY —
+      // they feed a file or the next stage, not the terminal. stderr always
+      // streams (bash never pipes stderr).
       // new Uint8Array(view) is a guaranteed COPY — `.slice()` is not: Node
       // Buffer (a Uint8Array subclass real programs write) overrides slice()
       // with an ALIASING view, letting post-write mutation corrupt the
@@ -677,7 +677,7 @@ export class Shell {
       const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : new Uint8Array(chunk);
       if (stream === 'stdout') {
         const text = stdoutTap.decode(bytes, { stream: true });
-        if (streamStdout) options.onChunk?.(text, 'stdout');
+        if (streamDisplayStdout) options.onChunk?.(text, 'stdout');
         stdoutChunks.push(bytes);
       } else {
         const text = stderrTap.decode(bytes, { stream: true });
@@ -690,7 +690,7 @@ export class Shell {
       // sequence held by a tap must land (as U+FFFD) in onChunk / stderr
       // instead of silently vanishing (review 2026-07-05).
       const stdoutTail = stdoutTap.decode();
-      if (stdoutTail && streamStdout) options.onChunk?.(stdoutTail, 'stdout');
+      if (stdoutTail && streamDisplayStdout) options.onChunk?.(stdoutTail, 'stdout');
       const stderrTail = stderrTap.decode();
       if (stderrTail) {
         options.onChunk?.(stderrTail, 'stderr');

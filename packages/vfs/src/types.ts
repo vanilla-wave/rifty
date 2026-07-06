@@ -32,7 +32,7 @@ export interface VfsDirent {
  *
  * **Path invariant** — every public method asserts an absolute POSIX path on
  * entry, then normalises it: trailing slashes are stripped and `.`/`..`
- * segments are collapsed. Relative inputs throw (ADR-0197); cwd anchoring
+ * segments are collapsed. Relative inputs throw (ADR-0199); cwd anchoring
  * belongs to callers above VFS.
  */
 export interface Vfs {

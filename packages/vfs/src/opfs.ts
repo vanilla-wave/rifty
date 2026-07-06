@@ -78,7 +78,7 @@ export class OpfsVfs implements Vfs {
   async readFile(path: string): Promise<Uint8Array>;
   async readFile(path: string, encoding: ReadFileEncoding): Promise<string>;
   async readFile(path: string, encoding?: ReadFileEncoding): Promise<Uint8Array | string> {
-    // ADR-0197: every public entry asserts an absolute path BEFORE any handle
+    // ADR-0199: every public entry asserts an absolute path BEFORE any handle
     // walk — `segments`/`dirname` on a raw relative input silently rooted it.
     const np = normalizeAbsolute(path);
     const handle = await this.getFileHandle(np);

@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Absolute-only path contract (ADR-0197).** `normalizeAbsolute` (and thus every
+- **Absolute-only path contract (ADR-0199).** `normalizeAbsolute` (and thus every
   `Vfs`/`FsSync` entry point) throws on a relative path instead of silently
   anchoring it at `/` — the silent coercion masked missing cwd resolution in
   callers (the fs-streams wrong-file bug). cwd anchoring lives strictly above
@@ -141,7 +141,7 @@
 - Path utilities scoped to VFS (POSIX-style joins/resolves; no Node `path` dependency).
 - **ADR-0029:** `FsSync.utimes(path, atimeMs, mtimeMs)` on the interface. `MemoryFsSync` writes through to `MemoryBackend.utimes`; `OpfsFsSync` uses an in-memory atime/mtime side-table (no native `FileSystemSyncAccessHandle` mtime mutation). Throws `VfsError('ENOENT')` for unknown paths.
 - **ADR-0041:** `Vfs.utimes(path, atimeMs, mtimeMs): Promise<void>` symmetric with the sync side. `MemoryVfs` delegates to `MemoryBackend.utimes`; `OpfsVfs` keeps its own in-memory side-table (no native mtime mutation through `FileSystemFileHandle`).
-- `normalizeAbsolute(p)` path helper — normalises absolute inputs and rejects relative inputs loudly (ADR-0197). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
+- `normalizeAbsolute(p)` path helper — normalises absolute inputs and rejects relative inputs loudly (ADR-0199). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
 
 ### Changed
 

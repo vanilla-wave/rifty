@@ -12,7 +12,7 @@ import type { VfsDirent } from './types.ts';
  *
  * **Path invariant** — every method asserts an absolute POSIX path on entry,
  * then normalises it: trailing slashes stripped, `.`/`..` collapsed. Relative
- * inputs throw (ADR-0197); cwd anchoring belongs to callers above VFS.
+ * inputs throw (ADR-0199); cwd anchoring belongs to callers above VFS.
  */
 export interface FsSync {
   existsSync(path: string): boolean;

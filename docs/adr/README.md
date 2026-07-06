@@ -15,7 +15,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry |
 | 0072 | OPFS sync content cache + async write-through |
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
-| 0197 | VFS path contract: absolute-only, loud rejection of relative inputs |
+| 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 
 ### kernel
 

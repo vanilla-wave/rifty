@@ -152,7 +152,7 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
     expect(fs.statSyncOrNull('/missing')).toBeNull();
   });
 
-  it('rejects relative paths on every entry point (ADR-0197)', () => {
+  it('rejects relative paths on every entry point (ADR-0199)', () => {
     const fs = seed();
     for (const fn of [
       () => fs.readFileBytesSync('plain.txt'),
@@ -175,7 +175,7 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
   });
 });
 
-describe('OpfsVfs async surface rejects relative paths before touching OPFS (ADR-0197)', () => {
+describe('OpfsVfs async surface rejects relative paths before touching OPFS (ADR-0199)', () => {
   // No OPFS in Node: the relative-path throw must fire BEFORE init()/handle
   // access, so these reject with the contract error, not EPERM.
   it.each([
