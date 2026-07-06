@@ -9,8 +9,8 @@ import {
 import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { joinPath } from '@riftydev/vfs';
-import * as monaco from 'monaco-editor';
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import type * as monaco from 'monaco-editor';
+import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import {
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
@@ -23,7 +23,7 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
-import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
+import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { FileExplorer, type FileExplorerMutations } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -84,7 +84,7 @@ import {
   shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
-import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
+import type { TsLanguageServiceProvidersHandle } from './glue/ts-ls-monaco-providers.ts';
 import {
   type VfsSnapshotEntry,
   requestVfsSnapshot,
@@ -115,6 +115,16 @@ import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts'
 // the node vitest env can unit-test it without importing this browser-only module
 // (xterm → `self is not defined`); App.tsx exposes it under its public name too.
 export { createAppProjectStore } from './glue/app-project-store.ts';
+
+// The Monaco editor stack (monaco-editor + EditorHost + editor-host-core +
+// monaco-env workers wiring) loads as its own chunk at first editor mount — it
+// renders only after a project pick, so its ~3 MB of never-yet-needed code must
+// not sit on the cold-start critical path. The TS-LS provider suite splits the
+// same way (dynamic import in the LS wiring effect below); App.test.ts pins
+// both seams.
+const EditorHost = lazy(() =>
+  import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
+);
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
 const UNAVAILABLE_OWNER_PORT = -1;
@@ -990,11 +1000,21 @@ export function App(props: AppProps) {
       await ready;
     };
     // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
-    // type-def / completions now come from the REAL service over the relay, not
+    // type-def / completions come from the REAL service over the relay, not
     // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
-    // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
-    const providers = registerTsLanguageServiceProviders(client, api, {
-      beforeRequest: waitForTsReady,
+    // OFF in EditorHost). The provider module drags monaco-editor, so it loads
+    // with the LAZY editor chunk — never in the cold-start main chunk; the
+    // api's presence proves monaco is already loaded, so registration lands
+    // one microtask-or-fetch later (App.test.ts pins the seam). Same
+    // lifetime as the client — disposed on cleanup; a cleanup racing the load
+    // skips registration entirely.
+    let providers: TsLanguageServiceProvidersHandle | undefined;
+    void import('./glue/ts-ls-monaco-providers.ts').then((mod) => {
+      if (disposed) return;
+      providers = mod.registerTsLanguageServiceProviders(client, api, {
+        beforeRequest: waitForTsReady,
+      });
+      installDevTsHooks(providers);
     });
 
     async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
@@ -1035,17 +1055,21 @@ export function App(props: AppProps) {
     // a Monaco model+position from a VFS path + 1-based coords and calls the
     // registered provider function, then serializes the result for assertions.
     // Returns null when no model is open for the path (provider can't run yet).
-    if (import.meta.env.DEV) {
+    // Installed by the provider-chunk .then above (hooks are undefined until the
+    // lazy chunk lands — e2e already waits for them / null-guards).
+    const installDevTsHooks = (providers: TsLanguageServiceProvidersHandle): void => {
+      if (!import.meta.env.DEV) return;
+      const mon = api.monaco;
       const NEVER_CANCEL: monaco.CancellationToken = {
         isCancellationRequested: false,
         onCancellationRequested: () => ({ dispose() {} }),
       };
       const modelFor = (path: string): monaco.editor.ITextModel | null => {
         const uri = api.ensureModel(path);
-        return uri ? monaco.editor.getModel(uri) : null;
+        return uri ? mon.editor.getModel(uri) : null;
       };
       const pos = (line: number, column: number): monaco.Position =>
-        new monaco.Position(line, column);
+        new mon.Position(line, column);
       const g = globalThis as unknown as {
         __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
         __riftyTsDefinition?: (
@@ -1160,7 +1184,7 @@ export function App(props: AppProps) {
           // Round-trip the target uri back to its VFS path (proves the full
           // Location.uri → model → path resolution, incl. an opened node_modules
           // `.d.ts`). Falls back to the raw uri string if the model is foreign.
-          const target = monaco.editor.getModel(d.uri);
+          const target = mon.editor.getModel(d.uri);
           const targetPath = target ? api.pathForModel(target) : undefined;
           return {
             uri: targetPath ?? d.uri.toString(),
@@ -1223,7 +1247,7 @@ export function App(props: AppProps) {
       // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
       // falls back to the raw uri string for a foreign model.
       const pathForUri = (uri: monaco.Uri): string => {
-        const target = monaco.editor.getModel(uri);
+        const target = mon.editor.getModel(uri);
         const targetPath = target ? api.pathForModel(target) : undefined;
         return targetPath ?? uri.toString();
       };
@@ -1288,7 +1312,7 @@ export function App(props: AppProps) {
           pos(line, col),
           NEVER_CANCEL,
           {
-            triggerKind: monaco.languages.SignatureHelpTriggerKind.Invoke,
+            triggerKind: mon.languages.SignatureHelpTriggerKind.Invoke,
             isRetrigger: false,
           },
         );
@@ -1326,11 +1350,11 @@ export function App(props: AppProps) {
       g.__riftyTsCodeFixes = async (path, startLine, startCol, endLine, endCol) => {
         const model = modelFor(path);
         if (!model) return [];
-        const range = new monaco.Range(startLine, startCol, endLine, endCol);
+        const range = new mon.Range(startLine, startCol, endLine, endCol);
         const list = await providers.providers.codeAction.provideCodeActions(
           model,
           range,
-          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          { markers: [], trigger: mon.languages.CodeActionTriggerType.Invoke },
           NEVER_CANCEL,
         );
         if (!list) return [];
@@ -1355,7 +1379,7 @@ export function App(props: AppProps) {
         const list = await providers.providers.codeAction.provideCodeActions(
           model,
           model.getFullModelRange(),
-          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          { markers: [], trigger: mon.languages.CodeActionTriggerType.Invoke },
           NEVER_CANCEL,
         );
         if (!list) return null;
@@ -1385,7 +1409,7 @@ export function App(props: AppProps) {
           NEVER_CANCEL,
         );
         if (!edits) return null;
-        const scratch = monaco.editor.createModel(model.getValue(), model.getLanguageId());
+        const scratch = mon.editor.createModel(model.getValue(), model.getLanguageId());
         try {
           scratch.applyEdits(edits.map((e) => ({ range: e.range, text: e.text })));
           return { editCount: edits.length, applied: scratch.getValue() };
@@ -1399,12 +1423,12 @@ export function App(props: AppProps) {
         const result =
           await providers.providers.rangeSemanticTokens.provideDocumentRangeSemanticTokens(
             model,
-            new monaco.Range(startLine, startCol, endLine, endCol),
+            new mon.Range(startLine, startCol, endLine, endCol),
             NEVER_CANCEL,
           );
         return result ? result.data.length : null;
       };
-    }
+    };
 
     const diagnosticSync = createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>({
       client,
@@ -1433,7 +1457,7 @@ export function App(props: AppProps) {
       disposed = true;
       diagnosticSync.dispose();
       unsubscribe();
-      providers.dispose();
+      providers?.dispose();
       client.dispose();
       if (import.meta.env.DEV) {
         const g = globalThis as unknown as Record<string, unknown>;
