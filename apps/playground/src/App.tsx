@@ -125,6 +125,14 @@ export { createAppProjectStore } from './glue/app-project-store.ts';
 const EditorHost = lazy(() =>
   import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
 );
+// Warm both lazy chunks from the first moment: a pick right after the chooser
+// paints must not wait out a full chunk load (m0 pins pick→editor-source
+// ≤1 s). import() loads AND evaluates, but off the boot's critical path —
+// measured cold-start-to-interactive stays ~170 ms (was 693 ms eager; the win
+// came from unblocking the synchronous main-chunk parse, which stays split).
+// The module registry dedupes these against the lazy()/effect imports.
+void import('./components/EditorHost.tsx');
+void import('./glue/ts-ls-monaco-providers.ts');
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
 const UNAVAILABLE_OWNER_PORT = -1;
