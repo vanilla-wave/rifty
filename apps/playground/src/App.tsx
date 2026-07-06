@@ -121,7 +121,6 @@ const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
-const fatalDec = new TextDecoder('utf-8', { fatal: true });
 const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {

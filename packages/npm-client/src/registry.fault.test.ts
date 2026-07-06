@@ -1,10 +1,10 @@
 /**
- * Fault tier: `unbounded-read` at the STANDARD registry-fetch boundary
- * (docs/backlog/npm-client/registry-fetch-no-progress-bound.md). A registry/
- * proxy that hangs before headers, mid-packument, or mid-tarball must fail
- * LOUDLY within the stall bound (and ride the existing transient-retry
- * ladder) — never park `npm install` forever. Mirrors the eddy-path bounds
- * (PR #107 r5–r6) through the shared bounded-fetch chokepoint.
+ * Fault tier: `unbounded-read` (docs/process/fault-classes.md) at the STANDARD
+ * registry-fetch boundary. A registry/proxy that hangs before headers,
+ * mid-packument, or mid-tarball must fail LOUDLY within the stall bound (and
+ * ride the existing transient-retry ladder) — never park `npm install`
+ * forever. Mirrors the eddy-path bounds (PR #107 r5–r6) through the shared
+ * bounded-fetch chokepoint.
  */
 import { describe, expect, it } from 'vitest';
 import { RegistryClient } from './registry.ts';

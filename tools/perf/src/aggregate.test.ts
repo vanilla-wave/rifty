@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 // The pure core is `.mjs` so `../bench.mjs` (a zero-dep node runner) imports it
 // directly; the unit suite drives it here.
-import { SCHEMA_VERSION, buildArtifact, median, roundUpMs, summarize } from './aggregate.mjs';
+import {
+  SCHEMA_VERSION,
+  buildArtifact,
+  median,
+  roundUpMs,
+  summarize,
+  verifyTransportPin,
+} from './aggregate.mjs';
 
 describe('bench aggregate core', () => {
   describe('median', () => {
@@ -226,5 +233,88 @@ describe('bench aggregate core', () => {
     it('bumps the schema version for the new metric', () => {
       expect(SCHEMA_VERSION).toBe(2);
     });
+  });
+});
+
+// Transport pin verification (docs/backlog/perf/eddy-http3-cold-validation):
+// a pass whose observed per-origin protocols contradict the pinned transport
+// must be REFUSED (no median) — a silently-fallen-back h3 pass would quote an
+// h2 number as h3.
+describe('verifyTransportPin', () => {
+  const R = (p) => ({ 'https://eddy.example': p, 'https://registry.example': p });
+
+  it('auto: always ok — evidence recorded, nothing pinned', () => {
+    expect(verifyTransportPin('auto', [R('h2'), R('h3')]).ok).toBe(true);
+  });
+
+  it('h3 pin: ok only when EVERY origin in EVERY run negotiated h3', () => {
+    expect(verifyTransportPin('h3', [R('h3'), R('h3')]).ok).toBe(true);
+  });
+
+  it('h3 pin: a single h2 response refuses the pass, naming origin + protocol', () => {
+    const v = verifyTransportPin('h3', [R('h3'), { ...R('h3'), 'https://eddy.example': 'h2' }]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/https:\/\/eddy\.example/);
+    expect(v.note).toMatch(/h2/);
+  });
+
+  it('h3 pin: an unreachable origin (QUIC blocked) refuses the pass loudly', () => {
+    const v = verifyTransportPin('h3', [{ ...R('h3'), 'https://eddy.example': 'unreachable' }]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/unreachable/);
+  });
+
+  it('h2 pin: refuses when any origin negotiated h3 (QUIC leaked past --disable-quic)', () => {
+    const v = verifyTransportPin('h2', [{ ...R('h2'), 'https://registry.example': 'h3' }]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/registry\.example/);
+  });
+
+  it('h2 pin: h1/h2 mixes are ok (the pin only forbids QUIC)', () => {
+    expect(
+      verifyTransportPin('h2', [
+        { 'https://eddy.example': 'h2', 'https://registry.example': 'http/1.1' },
+      ]).ok,
+    ).toBe(true);
+  });
+
+  it('a pin with no evidence at all is refused (no measured request ever probed)', () => {
+    expect(verifyTransportPin('h3', []).ok).toBe(false);
+  });
+});
+
+describe('buildArtifact — transport evidence', () => {
+  it('a measured install carries the transport record verbatim', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        registryUrl: 'https://registry.example/npm-registry',
+        transport: { mode: 'h2', originProtocols: { 'https://registry.example': ['h2'] } },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.status).toBe('measured');
+    expect(m.transport.mode).toBe('h2');
+    expect(m.transport.originProtocols['https://registry.example']).toEqual(['h2']);
+  });
+
+  it('a refused (unmeasured) install still records the transport evidence', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'unmeasured',
+        note: 'transport pin violated',
+        transport: { mode: 'h3', originProtocols: { 'https://eddy.example': ['h2'] } },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.status).toBe('unmeasured');
+    expect(m.transport.mode).toBe('h3');
   });
 });

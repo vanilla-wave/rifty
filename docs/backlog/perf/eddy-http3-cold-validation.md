@@ -23,12 +23,16 @@ tarball ceiling and narrow eddy's gap — or not. This item closes the epic's
 "Done when" (a real-browser measurement over the actual transport confirms
 the headline).
 
-Two former blockers, both resolved by decision here: (a) "Playwright can't
-pin the transport" — Chromium CAN be pinned per-origin via launch args (see
-Decisions); (b) h3 was unreachable on the live deploy — compose already
-publishes `443/udp`; only the reused `rifty-registry-proxy` security group
-lacks a `443/udp` ingress rule (operator, confirm-first,
-`hosting-eddy.md` §Deploy step 3).
+Two former blockers, both resolved: (a) "Playwright can't pin the transport"
+— Chromium CAN be pinned per-origin via launch args (see Decisions); the
+transport matrix below is DELIVERED (2026-07-07): `pnpm bench --transport
+auto|h2|h3` pins + verifies via CDP evidence, smoke-proven live (h2 pass:
+both origins evidenced `h2`, measured; h3 pass refused loudly pre-SG-rule).
+(b) h3 was unreachable on the live deploy — compose already publishes
+`443/udp`; only the reused `rifty-registry-proxy` security group lacks a
+`443/udp` ingress rule (operator, confirm-first, `hosting-eddy.md` §Deploy
+step 3). Remaining work = the SG rule + the measurement runs + the recorded
+decision.
 
 Folded (2026-07-01, ex `perf/install-transport-tuning`): fetch-semaphore
 raise DROPPED (inert — one coalesced connection per origin); preconnect

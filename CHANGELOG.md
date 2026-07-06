@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Bench transport matrix (`pnpm bench --transport auto|h2|h3`,
+  perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
+  the measured remote origins (h2 = `--disable-quic`; h3 =
+  `--origin-to-force-quic-on` on the registry + eddy + optional bundle hosts —
+  no TCP fallback) and VERIFIES the pin with per-run protocol evidence (CDP
+  `Network.responseReceived`, page-context probe sharing the context's socket
+  pools); a pass whose evidence contradicts its pin is refused (`unmeasured` +
+  note, evidence still recorded under `transport.originProtocols`) — never a
+  lying median. `auto` records evidence without pinning.
+
+### Fixed
+
+- **Bench install metric un-parked from a retired terminal marker.** The
+  `[vite] dev server ready on port` line the install leg awaited was retired
+  (readiness went out-of-band with the generic dev-server lifecycle), so every
+  install pass timed out at 180s — unnoticed because CI's bench smoke runs the
+  cold-start leg only. The leg now waits for the preview pill going LIVE with
+  the same verified-document guard as the preset phase (an SW 503 error page
+  cannot count as ready).
+
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new
   `expect(source).toContain`-style tests in apps/playground and forces the

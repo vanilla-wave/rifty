@@ -114,6 +114,39 @@ function medianStages(stageRuns) {
   return out;
 }
 
+/**
+ * Verify observed per-origin protocols against the pinned transport
+ * (docs/backlog/perf/eddy-http3-cold-validation). `runProtocols` = one
+ * `{ origin: protocol }` record per run ('h2' | 'h3' | 'http/1.1' |
+ * 'unreachable'). A pass whose evidence contradicts its pin is REFUSED —
+ * a silently-fallen-back h3 pass would quote an h2 number as h3:
+ *   'auto' → always ok (evidence recorded, nothing pinned);
+ *   'h3'   → EVERY origin in EVERY run must be 'h3';
+ *   'h2'   → NO origin in any run may be 'h3' (h1/h2 mixes ok).
+ * A pin with no evidence at all is refused (nothing was ever probed).
+ */
+export function verifyTransportPin(mode, runProtocols) {
+  if (mode === 'auto') return { ok: true };
+  if (runProtocols.length === 0) {
+    return {
+      ok: false,
+      note: `transport pinned to ${mode} but no protocol evidence was collected`,
+    };
+  }
+  const violations = [];
+  for (const run of runProtocols) {
+    for (const [origin, protocol] of Object.entries(run)) {
+      const bad = mode === 'h3' ? protocol !== 'h3' : protocol === 'h3';
+      if (bad) violations.push(`${origin} observed ${protocol}`);
+    }
+  }
+  if (violations.length === 0) return { ok: true };
+  return {
+    ok: false,
+    note: `transport pinned to ${mode} but ${[...new Set(violations)].join('; ')} — refusing the pass`,
+  };
+}
+
 function buildInstallMetric(install, stepMs) {
   if (!install || install.status !== 'measured') {
     // Non-measured is still RECORDED (never silently skipped): `requires proxy`
@@ -121,11 +154,13 @@ function buildInstallMetric(install, stepMs) {
     // set but install didn't reach first Vite response.
     const record = { status: install?.status ?? 'requires proxy' };
     if (install?.note) record.note = install.note;
+    if (install?.transport) record.transport = install.transport;
     return record;
   }
   const summary = summarize(install.samples, stepMs);
   if (install.registryUrl) summary.registryUrl = install.registryUrl;
   if (install.resolverUrl) summary.resolverUrl = install.resolverUrl;
+  if (install.transport) summary.transport = install.transport;
   // An eddy pass with a standard baseline: nest the baseline + the measured
   // speedup (baseline median ÷ eddy median, 2 d.p.). No baseline → standard-only
   // run, top-level samples ARE the standard number.
