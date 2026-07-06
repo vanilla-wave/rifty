@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Owner boot overlaps the starter initial commit with the instant-deps snapshot
+  restore (was: commit serialized ahead of the 9.6-16 MB download); the
+  baseline amend stays before the first publish so SCM never flashes a phantom
+  package-lock.json change. Race pinned by `starter.fault.test.ts` (lockfile
+  landing mid-walk is folded by the amend; ignored node_modules never staged).
+
 ### Fixed
 
 - Preview warm-up distinguishes `unreachable` (route never answered ok — dev
