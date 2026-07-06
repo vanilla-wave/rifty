@@ -43,7 +43,12 @@ function validEntry(e: unknown): e is PersistentEsmTransformCacheEntry {
   if (typeof e !== 'object' || e === null) return false;
   const { source, result } = e as { source?: unknown; result?: unknown };
   if (typeof source !== 'string' || typeof result !== 'object' || result === null) return false;
-  const r = result as { body?: unknown; lineMap?: unknown; staticImports?: unknown; helpers?: unknown };
+  const r = result as {
+    body?: unknown;
+    lineMap?: unknown;
+    staticImports?: unknown;
+    helpers?: unknown;
+  };
   return (
     typeof r.body === 'string' &&
     Array.isArray(r.lineMap) &&
@@ -111,7 +116,10 @@ export async function hydrateEsmTransformCache(
     }
     flushing = true;
     dirty = false;
-    const shape: StoreShape = { format: ESM_TRANSFORM_FORMAT, entries: Object.fromEntries(entries) };
+    const shape: StoreShape = {
+      format: ESM_TRANSFORM_FORMAT,
+      entries: Object.fromEntries(entries),
+    };
     void storage
       .write(JSON.stringify(shape))
       .catch((err: unknown) => {

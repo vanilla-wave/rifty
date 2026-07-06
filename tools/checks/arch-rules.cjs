@@ -96,6 +96,29 @@ const forbidden = [
       path: '(?:^|/)@xterm/|(?:^|/)monaco-editor(?:/|$)|(?:^|/)playground/src/(?:components|adapters)/|(?:^|/)playground/src/App\\.tsx$',
     },
   },
+  {
+    name: 'monaco-only-in-lazy-editor-stack',
+    severity: 'error',
+    comment:
+      'lazy-Monaco split: monaco-editor imports live only in the lazily-loaded editor stack; an eager import elsewhere re-glues ~800 kB gz onto the cold-start main chunk (App reaches monaco via api.monaco)',
+    from: {
+      path: '(?:^|/)playground/src/',
+      pathNot:
+        '(?:^|/)playground/src/(?:components/EditorHost\\.tsx|components/editor-host-core\\.ts|glue/monaco-env\\.ts|glue/ts-ls-monaco-providers\\.ts)$',
+    },
+    to: { path: '(?:^|/)monaco-editor(?:/|$)', dependencyTypesNot: ['type-only'] },
+  },
+  {
+    name: 'editor-stack-loads-lazily',
+    severity: 'error',
+    comment:
+      'lazy-Monaco split: App must reach the editor host + LS providers ONLY via dynamic import (solid lazy() / effect-time import()) — a static import drags monaco into the main chunk transitively',
+    from: { path: '(?:^|/)playground/src/App\\.tsx$' },
+    to: {
+      path: '(?:^|/)playground/src/(?:components/EditorHost\\.tsx|glue/ts-ls-monaco-providers\\.ts)$',
+      dependencyTypesNot: ['dynamic-import', 'type-only'],
+    },
+  },
 ];
 
 module.exports = { TIERS, seg, options, forbidden };

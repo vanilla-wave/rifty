@@ -6,7 +6,10 @@
  */
 import { ESM_TRANSFORM_FORMAT } from '@riftydev/runtime-js/loader';
 import { describe, expect, it, vi } from 'vitest';
-import { type EsmTransformCacheStorage, hydrateEsmTransformCache } from './opfs-esm-transform-cache.ts';
+import {
+  type EsmTransformCacheStorage,
+  hydrateEsmTransformCache,
+} from './opfs-esm-transform-cache.ts';
 
 const ENTRY = {
   source: 'export const a = 1;\n',
@@ -61,7 +64,10 @@ describe('esm transform cache store faults (ADR-0200)', () => {
 
   it('wrong format version → discard (yesterday’s transform never replays)', async () => {
     const { storage } = memStorage(
-      JSON.stringify({ format: ESM_TRANSFORM_FORMAT + 1, entries: { '/p/node_modules/a.js': ENTRY } }),
+      JSON.stringify({
+        format: ESM_TRANSFORM_FORMAT + 1,
+        entries: { '/p/node_modules/a.js': ENTRY },
+      }),
     );
     const warn = vi.fn();
     const cache = await hydrateEsmTransformCache(storage, { warn, flushDelayMs: 0 });

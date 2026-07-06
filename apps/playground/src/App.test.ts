@@ -144,17 +144,6 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('beforeRequest: waitForTsRequestGate');
   });
 
-  it('keeps the Monaco editor stack out of the cold-start main chunk', () => {
-    // monaco-editor reaches App only as a type + via api.monaco; the editor
-    // host and the LS provider suite load as lazy chunks. An eager value
-    // import here re-glues ~800 kB gz onto cold-start boot.
-    expect(source).toContain("import type * as monaco from 'monaco-editor';");
-    expect(source).not.toMatch(/^import \* as monaco from 'monaco-editor';/m);
-    expect(source).toContain("lazy(() =>\n  import('./components/EditorHost.tsx')");
-    expect(source).toContain("void import('./glue/ts-ls-monaco-providers.ts').then((mod) => {");
-    expect(source).not.toMatch(/^import \{[^}]*registerTsLanguageServiceProviders/m);
-  });
-
   it('gates TS requests on the owner AND the preset transition', () => {
     // The gate composition is App glue with no behavioral heir.
     expect(source).toContain('await owner.ready;');

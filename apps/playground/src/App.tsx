@@ -23,7 +23,6 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
-import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { FileExplorer, type FileExplorerMutations } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -34,6 +33,7 @@ import { ScmPanel } from './components/ScmPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
+import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
@@ -1068,8 +1068,7 @@ export function App(props: AppProps) {
         const uri = api.ensureModel(path);
         return uri ? mon.editor.getModel(uri) : null;
       };
-      const pos = (line: number, column: number): monaco.Position =>
-        new mon.Position(line, column);
+      const pos = (line: number, column: number): monaco.Position => new mon.Position(line, column);
       const g = globalThis as unknown as {
         __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
         __riftyTsDefinition?: (
