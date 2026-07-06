@@ -293,9 +293,9 @@ class FileReadStream extends EventEmitter {
   }
 
   /** Node default: an errored stream still emits 'close' after 'error'. */
-  private emitError(err: unknown): void {
+  private emitError(err: unknown, syscall: 'open' | 'read' = 'open'): void {
     this.destroyed = true; // terminal — a later signal abort must not double-error
-    this.emit('error', toNodeFsError(err, 'open', this.path));
+    this.emit('error', toNodeFsError(err, syscall, this.path));
     this.closeOnce();
   }
 
@@ -365,6 +365,19 @@ class FileReadStream extends EventEmitter {
     // `Vfs.openReadable` / sync-slice surfaces are exclusive — convert here so the
     // last byte is delivered (parity: {start,end} reads end-start+1 bytes).
     const exclusiveEnd = this.opts.end !== undefined ? this.opts.end + 1 : undefined;
+    let openedStat: { isDirectory: boolean };
+    try {
+      openedStat = syncMirror().statSync(np);
+    } catch (err) {
+      this.emitError(err);
+      return;
+    }
+    if (openedStat.isDirectory) {
+      this.emitOpenReady();
+      if (this.destroyed) return;
+      this.emitError(new VfsError('EISDIR', np), 'read');
+      return;
+    }
 
     // Whole-file emit from a byte buffer, chunked across microtasks so the event
     // loop is not starved. Applies the `start`/`end` window.
@@ -384,7 +397,6 @@ class FileReadStream extends EventEmitter {
         this.emitData(slice);
         queueMicrotask(emitChunk);
       };
-      this.emitOpenReady();
       emitChunk();
     };
 
@@ -423,7 +435,7 @@ class FileReadStream extends EventEmitter {
               this.closeOnce();
               return;
             }
-            this.emitError(err);
+            this.emitError(err, 'read');
           }
         })
         .catch((err) => {
@@ -441,9 +453,11 @@ class FileReadStream extends EventEmitter {
     // No async surface: serve from the sync mirror, still chunked over
     // microtasks to preserve stream event order.
     try {
+      this.emitOpenReady();
+      if (this.destroyed) return;
       emitFromBytes(syncMirror().readFileBytesSync(np));
     } catch (err) {
-      this.emitError(err);
+      this.emitError(err, 'read');
     }
   }
 

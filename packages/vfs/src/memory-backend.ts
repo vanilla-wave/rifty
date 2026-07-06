@@ -173,8 +173,10 @@ export class MemoryBackend {
         continue;
       }
       if (i === parts.length - 1) {
-        if (next.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+        if (next.kind !== 'dir') throw new VfsError('EEXIST', path);
         if (!recursive) throw new VfsError('EEXIST', path);
+      } else if (next.kind !== 'dir') {
+        throw new VfsError('ENOTDIR', path);
       }
       node = next;
     }

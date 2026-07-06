@@ -5,11 +5,11 @@
  * literal — the tokenizer only emits joiners outside quotes), and runs segments
  * per POSIX short-circuit semantics; final exit is the LAST executed segment.
  *
- * Streaming: when `options.onChunk` is supplied, every `ctx.stdout.write` /
- * `ctx.stderr.write` invokes the callback synchronously _before_ the captured
- * run-blob is appended, so the terminal sees `npm install` / `vite dev` output
- * live instead of after `await`. `RunResult` still keeps the full blob for
- * callers that read it.
+ * Streaming: when `options.onChunk` is supplied, terminal-visible stdout and
+ * all stderr invoke the callback synchronously _before_ capture, so the
+ * terminal sees `npm install` / `vite dev` output live instead of after
+ * `await`. Redirected stdout and non-final pipe stdout are captured/routed but
+ * stay silent. `RunResult` still keeps the full blob for callers that read it.
  *
  * `cwd`/`env` are mutable; only built-in `cd` can mutate cwd (via closure).
  * Custom commands see only a snapshot via the context.
@@ -56,9 +56,10 @@ export type ChunkStream = 'stdout' | 'stderr';
 /**
  * Per-call options for {@link Shell.run}.
  *
- * `onChunk` fires synchronously on each stdout/stderr write, BEFORE the chunk is
- * appended to the captured `RunResult` blob (order: callback -> capture). Keep it
- * fast. Optional and additive — omitting it preserves the blob-at-the-end contract.
+ * `onChunk` fires synchronously before capture for stderr and terminal-visible
+ * stdout. Redirected stdout and non-final pipe stdout are captured/routed but
+ * not displayed. Keep it fast. Optional and additive — omitting it preserves
+ * the blob-at-the-end contract.
  */
 export interface RunOptions {
   readonly onChunk?: (chunk: string, stream: ChunkStream) => void;

@@ -51,7 +51,11 @@ export class OpfsVfs implements Vfs {
     this.root = dir;
   }
 
-  private async getDirectory(path: string, create = false): Promise<FileSystemDirectoryHandle> {
+  private async getDirectory(
+    path: string,
+    create = false,
+    errorPath?: string,
+  ): Promise<FileSystemDirectoryHandle> {
     await this.init();
     let dir = this.root as FileSystemDirectoryHandle;
     const parts = segments(path);
@@ -60,14 +64,14 @@ export class OpfsVfs implements Vfs {
       try {
         dir = await dir.getDirectoryHandle(part, { create });
       } catch (err) {
-        throw mapOpfsError(err, `/${parts.slice(0, i + 1).join('/')}`, 'dir');
+        throw mapOpfsError(err, errorPath ?? `/${parts.slice(0, i + 1).join('/')}`, 'dir');
       }
     }
     return dir;
   }
 
   private async getFileHandle(path: string, create = false): Promise<FileSystemFileHandle> {
-    const parent = await this.getDirectory(dirname(path), create);
+    const parent = await this.getDirectory(dirname(path), false, path);
     try {
       return await parent.getFileHandle(basename(path), { create });
     } catch (err) {
@@ -145,7 +149,11 @@ export class OpfsVfs implements Vfs {
       } catch (err) {
         // Component-level failure (missing parent, through-file) still names
         // the TARGET — the backend error contract (fs-sync-strict-paths).
-        throw mapOpfsError(err, np, 'dir');
+        const mapped = mapOpfsError(err, np, 'dir');
+        if (i === parts.length - 1 && mapped.code === 'ENOTDIR') {
+          throw new VfsError('EEXIST', np);
+        }
+        throw mapped;
       }
     }
   }

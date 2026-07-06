@@ -5,7 +5,11 @@
  * compares stdouts. Any divergence is a bug.
  */
 export interface ParityCase {
-  /** Files preloaded into the runtime's in-memory VFS, relative to /work/. */
+  /**
+   * Files preloaded from the case fs root. With `cwd: '/app'`, `app/data.txt`
+   * is read by fs APIs as relative `data.txt`; a copy also sits beside
+   * `/work/main.*` for relative module imports from the case entry.
+   */
   readonly setup?: { readonly files?: Readonly<Record<string, string>> };
   /**
    * Relative-path ANCHOR for both runtimes, as an absolute POSIX path from the

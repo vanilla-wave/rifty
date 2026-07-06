@@ -101,6 +101,20 @@ const c: ParityCase = {
       const e2 = await errored(rs2);
       console.log('read-missing:', e2.code, e2.errno, e2.syscall, JSON.stringify(e2.path));
 
+      // (3b) directory read-stream opens successfully, then fails while reading.
+      // Node shape: EISDIR on syscall "read" and no path.
+      fs.mkdirSync('read-dir-target');
+      const readDirEvents = [];
+      const rsDir = fs.createReadStream('read-dir-target');
+      rsDir.on('open', () => readDirEvents.push('open'));
+      rsDir.on('ready', () => readDirEvents.push('ready'));
+      rsDir.on('data', () => readDirEvents.push('data'));
+      rsDir.on('error', (e) =>
+        readDirEvents.push('error:' + e.code + ':' + e.errno + ':' + e.syscall + ':' + String(e.path)));
+      rsDir.on('close', () => readDirEvents.push('close'));
+      await new Promise((res) => rsDir.on('close', res));
+      console.log('read-dir:', readDirEvents.join('|'));
+
       // (4) callback overloads (review 2026-07-05 fix round): end(cb) fires the
       // callback and writes NO stray bytes (a function in the chunk slot used
       // to overlay as array-like -> NUL byte); write(chunk, cb) takes cb, not

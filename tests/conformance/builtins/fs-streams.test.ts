@@ -393,6 +393,26 @@ describe('fs streams', () => {
     expect(events).toEqual(['error', 'close']);
   });
 
+  it('read stream on a directory emits open/ready, then pathless EISDIR read error', async () => {
+    mkdirSync('/read-dir', { recursive: true });
+    const events: string[] = [];
+    await new Promise<void>((resolve) => {
+      const rs = createReadStream('/read-dir');
+      rs.on('open', () => events.push('open'));
+      rs.on('ready', () => events.push('ready'));
+      rs.on('data', () => events.push('data'));
+      rs.on('error', (err: unknown) => {
+        const e = err as { code?: string; syscall?: string; path?: unknown };
+        events.push(`error:${e.code}:${e.syscall}:${String(e.path)}`);
+      });
+      rs.on('close', () => {
+        events.push('close');
+        resolve();
+      });
+    });
+    expect(events).toEqual(['open', 'ready', 'error:EISDIR:read:undefined', 'close']);
+  });
+
   it('highWaterMark: 0 is accepted and yields an empty stream + immediate end (Node parity)', async () => {
     await fsp.writeFile('/h.txt', 'content');
     const events: string[] = [];

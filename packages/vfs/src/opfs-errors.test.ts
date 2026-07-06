@@ -190,6 +190,59 @@ describe('OpfsVfs error mapping', () => {
       path: '/no/such/deep',
     });
   });
+
+  it('mkdir targeting an existing file is EEXIST; mkdir through a file remains ENOTDIR', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.mkdir('/plain.txt')).rejects.toMatchObject({
+      code: 'EEXIST',
+      path: '/plain.txt',
+    });
+    await expect(vfs.mkdir('/plain.txt/sub')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain.txt/sub',
+    });
+  });
+
+  it('writeFile rejects a missing parent instead of creating parent directories', async () => {
+    const createdDirs: string[] = [];
+    const writable = {
+      write: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
+    const fileHandle = {
+      kind: 'file' as const,
+      createWritable: () => Promise.resolve(writable),
+    };
+    const createdDir = {
+      kind: 'directory' as const,
+      getFileHandle: (_name: string, options?: { create?: boolean }) => {
+        if (options?.create) {
+          return Promise.resolve(fileHandle as unknown as FileSystemFileHandle);
+        }
+        return Promise.reject(new FakeDomException('NotFoundError'));
+      },
+      getDirectoryHandle: () => Promise.reject(new FakeDomException('NotFoundError')),
+    };
+    const root = {
+      kind: 'directory' as const,
+      getDirectoryHandle: (name: string, options?: { create?: boolean }) => {
+        if (options?.create) {
+          createdDirs.push(name);
+          return Promise.resolve(createdDir as unknown as FileSystemDirectoryHandle);
+        }
+        return Promise.reject(new FakeDomException('NotFoundError'));
+      },
+      getFileHandle: () => Promise.reject(new FakeDomException('NotFoundError')),
+    };
+    const vfs = new OpfsVfs();
+    (vfs as unknown as { root: unknown }).root = root;
+
+    await expect(vfs.writeFile('/missing/file.txt', 'x')).rejects.toMatchObject({
+      code: 'ENOENT',
+      path: '/missing/file.txt',
+    });
+    expect(createdDirs).toEqual([]);
+  });
 });
 
 // --- Item #4: readFile honours encoding -----------------------------------

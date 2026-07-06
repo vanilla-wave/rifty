@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **PR #115 final review fixes (2026-07-06).** OPFS sync writes now bump
+  `mtime` monotonically and `statSync` trusts the sync mirror's cached size
+  even when a stale sync access handle is open; `mkdirSync('/existing-file')`
+  reports Node's `EEXIST` on both Memory and OPFS sync backends while traversal
+  through a file stays `ENOTDIR`; async `OpfsVfs.writeFile` no longer creates
+  missing parent directories.
 - **Absolute-only path contract (ADR-0199).** `normalizeAbsolute` (and thus every
   `Vfs`/`FsSync` entry point) throws on a relative path instead of silently
   anchoring it at `/` — the silent coercion masked missing cwd resolution in
@@ -30,9 +36,11 @@
 
 - **The persist-failure ledger heals ANCESTOR dirs on a descendant persist.** A
   successful write-through (or mkdir) now clears any stale ancestor mkdir
-  failure — a persisted descendant proves the whole parent chain exists on disk
-  (OPFS creates it), so the old entry no longer described a divergence yet still
-  made a durable tree look torn and wrongly skipped/revoked its install stamp.
+  failure — a persisted descendant proves the whole parent chain exists on disk:
+  `OpfsVfs.writeFile` can only succeed once that chain is present, and mkdir
+  creates it explicitly. The old entry no longer described a divergence yet
+  still made a durable tree look torn and wrongly skipped/revoked its install
+  stamp.
 - **A rename whose SOURCE is already gone (`NotFoundError`) heals its
   destinations.** The source removal now treats already-gone as a successful
   removal (same rule as `rm`) instead of recording every durably-written

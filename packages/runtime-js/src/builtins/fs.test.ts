@@ -10,6 +10,7 @@
  * consumer (chokidar/readdirp call these on the happy path).
  */
 import { NotImplementedError } from '@riftydev/io';
+import { VfsError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import fs, {
@@ -180,6 +181,34 @@ describe('createReadStream true async streaming path', () => {
     });
     expect(errored).toBeUndefined();
     expect(chunks.join('')).toBe('async-stream');
+  });
+
+  it('reports async openReadable rejection as an open-shaped stream error', async () => {
+    const { MemoryFsSync, setSyncMirror } = await import('./fs-sync-mirror.ts');
+    const mirror = new MemoryFsSync();
+    const asyncSurface = {
+      openReadable: () => Promise.reject(new VfsError('EACCES', '/static.html')),
+    } as unknown as import('@riftydev/vfs').Vfs;
+    setSyncMirror(mirror, { async: asyncSurface });
+    writeFileSync('/static.html', 'sync-cache');
+
+    const events: string[] = [];
+    await new Promise<void>((resolve) => {
+      const stream = fs.createReadStream('/static.html') as {
+        on(ev: string, cb: (arg?: unknown) => void): void;
+      };
+      stream.on('open', () => events.push('open'));
+      stream.on('ready', () => events.push('ready'));
+      stream.on('error', (err) => {
+        const e = err as { code?: string; syscall?: string; path?: unknown };
+        events.push(`error:${e.code}:${e.syscall}:${String(e.path)}`);
+      });
+      stream.on('close', () => {
+        events.push('close');
+        resolve();
+      });
+    });
+    expect(events).toEqual(['error:EACCES:open:/static.html', 'close']);
   });
 });
 

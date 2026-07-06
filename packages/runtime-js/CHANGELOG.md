@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **PR #115 final review fix (2026-07-06):** `createReadStream(directory)` now
+  matches Node's open-success/read-failure order: `open`/`ready` fire, then a
+  pathless `EISDIR` error with syscall `read`, followed by `close`.
 - **PR #115 handoff round 3 (2026-07-06):** remove-family kind gates at the fs
   layer (the generic VFS `rmSync` removes any empty-or-file path; sibling of
   the `rmdirSync` ENOTDIR gate) — `unlinkSync(dir)` is `EISDIR, unlink '<dir>'`

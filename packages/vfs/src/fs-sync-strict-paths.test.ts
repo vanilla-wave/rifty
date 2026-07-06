@@ -110,6 +110,15 @@ describe.each(backends)('%s strict path semantics', (_name, make) => {
     expect(err.path).toBe('/plain.txt/sub');
   });
 
+  it('mkdir targeting an existing file → EEXIST like Node, recursive or not', () => {
+    const fs = seed();
+    for (const options of [{}, { recursive: true }]) {
+      const err = thrown(() => fs.mkdirSync('/plain.txt', options));
+      expect(err.code).toBe('EEXIST');
+      expect(err.path).toBe('/plain.txt');
+    }
+  });
+
   it('mkdir with a missing parent → ENOENT naming the TARGET, not the missing component', () => {
     const fs = seed();
     const err = thrown(() => fs.mkdirSync('/no/such/deep', {}));

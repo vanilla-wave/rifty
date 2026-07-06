@@ -432,8 +432,8 @@ export class OpfsFsSync implements FsSync {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.persistFailures.delete(path);
-        // A persisted dir proves its ancestors exist on disk too (same rule as
-        // the write-through) — heal any stale ancestor mkdir failure.
+        // A persisted dir proves its ancestors exist on disk too — heal any
+        // stale ancestor mkdir failure.
         this.healAncestorPersistFailures(path);
       } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
@@ -482,10 +482,11 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  /** A persisted write/dir at `path` proves each ANCESTOR directory now exists
-   * on disk (OPFS creates the parent chain), so a stale ancestor mkdir failure
-   * no longer describes a divergence — clear it. Guarded on a non-empty ledger
-   * so the common (nothing-failed) path stays O(1). */
+  /** A persisted write/dir at `path` proves each ANCESTOR directory exists on
+   * disk: mkdir creates the chain, and writeFile can now only succeed when the
+   * chain is already present. A stale ancestor mkdir failure no longer
+   * describes a divergence — clear it. Guarded on a non-empty ledger so the
+   * common (nothing-failed) path stays O(1). */
   private healAncestorPersistFailures(path: string): void {
     if (this.persistFailures.size === 0) return;
     let parent = dirnameNormalized(path);
@@ -561,6 +562,11 @@ export class OpfsFsSync implements FsSync {
     const copy = data.slice();
     this.content.set(normalized, copy);
     const wasKnown = this.index.has(normalized);
+    const previousTimes = this.times.get(normalized);
+    const now = Date.now();
+    const previousMtime = previousTimes?.mtime ?? 0;
+    const mtime = now <= previousMtime ? previousMtime + 1 : now;
+    this.times.set(normalized, { atime: previousTimes?.atime ?? now, mtime });
     this.index.set(normalized, { kind: 'file', size: data.byteLength });
     if (!wasKnown) {
       this.attachChild(normalized); // attachChild invalidates the parent cache
@@ -585,10 +591,10 @@ export class OpfsFsSync implements FsSync {
       try {
         await surface.writeFile(normalized, data);
         this.persistFailures.delete(normalized);
-        // A persisted write proves every ANCESTOR directory now exists on disk
-        // (a real OPFS write walks getDirectoryHandle(create) for each parent),
-        // so a stale ancestor mkdir failure no longer describes a divergence —
-        // heal it, else a durable node_modules tree wrongly revokes its stamp.
+        // A persisted write proves every ANCESTOR directory exists on disk:
+        // OpfsVfs.writeFile no longer creates parents, so success itself is the
+        // proof. Heal stale ancestor mkdir failures, else a durable tree can
+        // wrongly revoke its install stamp.
         this.healAncestorPersistFailures(normalized);
       } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
@@ -699,11 +705,9 @@ export class OpfsFsSync implements FsSync {
     if (entry.kind === 'dir') {
       return { isFile: false, isDirectory: true, size: 0, mtime };
     }
-    // Prefer live size from an open sync access handle; else cached size
-    // from the last walk/write.
-    const handle = this.handles.get(normalized);
-    const size = handle ? handle.getSize() : entry.size;
-    return { isFile: true, isDirectory: false, size, mtime };
+    // Content/index cache is the authoritative sync mirror (ADR-0072). An
+    // open sync access handle can lag a write-through queued from writeFileSync.
+    return { isFile: true, isDirectory: false, size: entry.size, mtime };
   }
 
   statSyncOrNull(
@@ -769,7 +773,7 @@ export class OpfsFsSync implements FsSync {
    * `VfsError('ENOENT')`. If the target already exists as a directory,
    * non-recursive callers get `VfsError('EEXIST')`; recursive callers
    * are tolerated. If the target exists as a file, throws
-   * `VfsError('ENOTDIR')`.
+   * `VfsError('EEXIST')`; traversal through a file remains `ENOTDIR`.
    */
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
@@ -786,7 +790,9 @@ export class OpfsFsSync implements FsSync {
       const existing = this.index.get(cumulative);
       if (existing) {
         // Full target path in the error (Node parity: `mkdir 'plain.txt/sub'`).
-        if (existing.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+        if (existing.kind !== 'dir') {
+          throw new VfsError(i === parts.length - 1 ? 'EEXIST' : 'ENOTDIR', path);
+        }
         if (i === parts.length - 1 && !recursive) {
           throw new VfsError('EEXIST', path);
         }
