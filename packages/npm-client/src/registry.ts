@@ -5,6 +5,8 @@
  * {@link getRegistryBaseUrl} is the single factory every consumer goes through.
  */
 
+import { DEFAULT_FETCH_STALL_MS, drainBodyBounded, fetchHeadersBounded } from './bounded-fetch.ts';
+
 export interface Packument {
   name: string;
   'dist-tags'?: Record<string, string>;
@@ -96,6 +98,13 @@ export interface RegistryClientOptions {
   maxRetries?: number;
   /** Delay between retries — injectable so tests run without real timers. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * No-progress bound (ms) on the header wait AND each body chunk (the shared
+   * bounded-fetch chokepoint; mirrors `InstallOptions.resolverStallTimeoutMs`).
+   * A breach counts as TRANSIENT — it rides the retry ladder above, then fails
+   * loudly. Default {@link DEFAULT_FETCH_STALL_MS}.
+   */
+  stallTimeoutMs?: number;
 }
 
 /** Backoff for retry `attempt` (0-based): honor `Retry-After`, else exponential. */
@@ -110,64 +119,81 @@ function retryDelayMs(attempt: number, response: Response | undefined): number {
   return Math.min(BASE_RETRY_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
 }
 
+const packumentDecoder = new TextDecoder('utf-8');
+
 export class RegistryClient {
   readonly baseUrl: string;
   private readonly fetch: Fetcher;
   private readonly maxRetries: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly stallTimeoutMs: number;
 
   constructor(opts: RegistryClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? getRegistryBaseUrl()).replace(/\/$/, '');
     this.fetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
     this.maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.sleep = opts.sleep ?? defaultSleep;
+    this.stallTimeoutMs = opts.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;
   }
 
   /**
-   * Fetch with bounded retry on TRANSIENT failures only — 429, 5xx, or a thrown
-   * network error — with `Retry-After`/exponential backoff. A non-ok response that
-   * survives every retry is RETURNED so the caller throws the existing
-   * status-shaped error; a persistent network error is rethrown. A permanent 4xx
-   * (e.g. 404) never retries.
+   * One BOUNDED attempt = header wait + full body drain (the shared
+   * bounded-fetch chokepoint — no phase is ever awaited unbounded), retried on
+   * TRANSIENT failures only — 429, 5xx, a thrown network error, or a
+   * stall/byte-cap breach — with `Retry-After`/exponential backoff. A non-ok
+   * response that survives every retry is RETURNED (body unread) so the caller
+   * throws the existing status-shaped error; a persistent network error/stall
+   * is rethrown loudly (its message names the operation, phase, and bound). A
+   * permanent 4xx (e.g. 404) never retries.
    */
-  private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  private async fetchBytesWithRetry(
+    url: string,
+    label: string,
+  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; response: Response }> {
     let lastNetworkError: unknown;
     for (let attempt = 0; ; attempt += 1) {
       let response: Response | undefined;
+      let bytes: Uint8Array | undefined;
       try {
-        response = await this.fetch(url, init);
+        response = await fetchHeadersBounded(
+          (signal) => this.fetch(url, { signal }),
+          this.stallTimeoutMs,
+          label,
+        );
+        if (response.ok) {
+          bytes = await drainBodyBounded(response, {
+            stallTimeoutMs: this.stallTimeoutMs,
+            label,
+          });
+        }
         lastNetworkError = undefined;
       } catch (err) {
         response = undefined;
         lastNetworkError = err;
       }
-      if (response?.ok) return response;
+      if (response?.ok && bytes !== undefined) return { ok: true, bytes };
       const transient =
         lastNetworkError !== undefined ||
         response?.status === 429 ||
         (response !== undefined && response.status >= 500);
       if (!transient || attempt >= this.maxRetries) {
-        if (response !== undefined) return response;
+        if (response !== undefined) return { ok: false, response };
         throw lastNetworkError;
       }
       await this.sleep(retryDelayMs(attempt, response));
     }
   }
 
-  // Standard-path body reads are UNBOUNDED (no stall/byte cap — unlike the
-  // eddy bundle stream); a stalled registry parks the install.
-  // TODO(backlog: npm-client/registry-fetch-no-progress-bound)
   async getPackument(name: string): Promise<Packument> {
     const url = `${this.baseUrl}/${encodeURIComponent(name).replace('%40', '@')}`;
-    const response = await this.fetchWithRetry(url);
-    if (!response.ok) throw new Error(`Failed to fetch packument ${name}: ${response.status}`);
-    return (await response.json()) as Packument;
+    const result = await this.fetchBytesWithRetry(url, `packument ${url}`);
+    if (!result.ok) throw new Error(`Failed to fetch packument ${name}: ${result.response.status}`);
+    return JSON.parse(packumentDecoder.decode(result.bytes)) as Packument;
   }
 
-  // TODO(backlog: npm-client/registry-fetch-no-progress-bound) — same class.
   async getTarball(tarballUrl: string): Promise<Uint8Array> {
-    const response = await this.fetchWithRetry(tarballUrl);
-    if (!response.ok) throw new Error(`Failed to fetch tarball: ${response.status}`);
-    return new Uint8Array(await response.arrayBuffer());
+    const result = await this.fetchBytesWithRetry(tarballUrl, `tarball ${tarballUrl}`);
+    if (!result.ok) throw new Error(`Failed to fetch tarball: ${result.response.status}`);
+    return result.bytes;
   }
 }

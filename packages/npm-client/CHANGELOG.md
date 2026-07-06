@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Standard-path registry fetches are stall-bounded.** `RegistryClient`
+  packument/tarball fetches now bound BOTH phases (headers + body) through the
+  shared `bounded-fetch` chokepoint (no-progress window, default 10s + 128MiB
+  byte cap); a breach counts as transient (rides the existing retry ladder)
+  then fails loudly naming the operation, phase, and bound — a hung registry
+  can no longer park `npm install` forever. New
+  `RegistryClientOptions.stallTimeoutMs` mirrors
+  `InstallOptions.resolverStallTimeoutMs`. Decision (vs npm's 300s total
+  `fetch-timeout`): a no-progress window never aborts a slow-but-progressing
+  body. The eddy header-bound twins (`installer.ts`, `eddy-prefetch.ts`) melted
+  into the same chokepoint (`unbounded-read` class-kill).
+
 ### Fixed (PR #107 round 22)
 
 - **`InstallResult.closureHash` no longer leaks unproven POST hashes.** Eddy
