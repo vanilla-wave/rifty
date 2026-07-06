@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **`cat` transform modes preserve binary bytes.** `cat -n/-b/-E/-A` now splits
+  on byte `0x0a` and inserts ASCII markers while preserving non-UTF-8 byte runs;
+  before, those modes decoded to a JS string and re-encoded `0x80..0xff` as
+  U+FFFD bytes in pipes/redirects.
 - **Display decoding preserves a leading UTF-8 BOM.** Shell display strings
   (`RunResult.stdout` and live `onChunk`) now use TextDecoder's `ignoreBOM:true`,
   matching Node `Buffer.toString('utf8')` for byte streams that begin with

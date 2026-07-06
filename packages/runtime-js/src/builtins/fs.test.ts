@@ -346,6 +346,25 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     );
   });
 
+  it('writeFileSync honors numeric O_DIRECTORY before writing', () => {
+    writeFileSync('/numeric-dir-flag.txt', 'old');
+    const writeDirFlag =
+      constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_DIRECTORY;
+    expect(
+      codeOf(() => writeFileSync('/numeric-dir-flag.txt', 'new', { flag: writeDirFlag } as never)),
+    ).toBe('ENOTDIR');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
+
+    const appendDirFlag =
+      constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_DIRECTORY;
+    expect(
+      codeOf(() =>
+        fs.appendFileSync('/numeric-dir-flag.txt', 'new', { flag: appendDirFlag } as never),
+      ),
+    ).toBe('ENOTDIR');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
+  });
+
   it('throws loudly for unsupported numeric open flag bits', () => {
     expect(codeOf(() => openSync('/x', constants.O_WRONLY | 0x20000000))).toBe('EINVAL');
   });

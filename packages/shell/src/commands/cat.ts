@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, readAllStdin, resolve, strerror } from './_shared.ts';
+import { enc, readAllStdin, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   numberAll: boolean; // -n
@@ -10,32 +10,67 @@ interface Opts {
   showTabs: boolean; // -A: tab -> ^I
 }
 
+const LF = new Uint8Array([0x0a]);
+const DOLLAR = enc.encode('$');
+const CARET_I = enc.encode('^I');
+
+function concat(chunks: readonly Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((n, chunk) => n + chunk.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+function renderTabs(line: Uint8Array): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let start = 0;
+  for (let i = 0; i < line.byteLength; i++) {
+    if (line[i] !== 0x09) continue;
+    if (i > start) chunks.push(line.subarray(start, i));
+    chunks.push(CARET_I);
+    start = i + 1;
+  }
+  if (chunks.length === 0) return line;
+  if (start < line.byteLength) chunks.push(line.subarray(start));
+  return concat(chunks);
+}
+
 /**
- * Apply -n/-b/-E/-A transforms to one file's text. Lines are split on '\n';
- * a trailing newline yields a final empty segment we must not re-number/-emit.
+ * Apply -n/-b/-E/-A transforms to one file's byte stream. Lines are split on
+ * byte 0x0a; invalid UTF-8 bytes stay untouched. Markers/prefixes are ASCII.
  */
-function render(text: string, o: Opts, startNo: number): { text: string; nextNo: number } {
+function render(
+  bytes: Uint8Array,
+  o: Opts,
+  startNo: number,
+): { bytes: Uint8Array; nextNo: number } {
   if (!o.numberAll && !o.numberNonBlank && !o.showEnds && !o.showTabs) {
-    return { text, nextNo: startNo };
+    return { bytes, nextNo: startNo };
   }
-  const trailingNewline = text.endsWith('\n');
-  const lines = text.split('\n');
-  if (trailingNewline) lines.pop(); // drop empty segment after final '\n'
   let n = startNo;
-  const out: string[] = [];
-  for (const raw of lines) {
-    const body = o.showTabs ? raw.replaceAll('\t', '^I') : raw;
-    const end = o.showEnds ? '$' : '';
+  const out: Uint8Array[] = [];
+  let lineStart = 0;
+  while (lineStart < bytes.byteLength) {
+    const newline = bytes.indexOf(0x0a, lineStart);
+    const hasNewline = newline !== -1;
+    const lineEnd = hasNewline ? newline : bytes.byteLength;
+    const raw = bytes.subarray(lineStart, lineEnd);
+    const body = o.showTabs ? renderTabs(raw) : raw;
     if (o.numberNonBlank) {
-      out.push(raw === '' ? `${body}${end}` : `${pad(n++)}\t${body}${end}`);
+      if (raw.byteLength !== 0) out.push(enc.encode(`${pad(n++)}\t`));
     } else if (o.numberAll) {
-      out.push(`${pad(n++)}\t${body}${end}`);
-    } else {
-      out.push(`${body}${end}`);
+      out.push(enc.encode(`${pad(n++)}\t`));
     }
+    out.push(body);
+    if (o.showEnds) out.push(DOLLAR);
+    if (hasNewline) out.push(LF);
+    lineStart = hasNewline ? lineEnd + 1 : bytes.byteLength;
   }
-  // Rejoin with '\n'; restore the trailing newline iff the source had one.
-  return { text: out.join('\n') + (trailingNewline ? '\n' : ''), nextNo: n };
+  return { bytes: concat(out), nextNo: n };
 }
 
 /** GNU line-number field: count right-justified in a 6-wide column. */
@@ -119,10 +154,9 @@ export const cat: ShellCommand = async (args, ctx) => {
         // pipeline — decoding here corrupted every non-UTF-8 payload.
         ctx.stdout.write(bytes);
       } else {
-        // -n/-b/-E/-A are line/text semantics; decoding is the contract.
-        const { text, nextNo } = render(dec.decode(bytes), opts, lineNo);
+        const { bytes: rendered, nextNo } = render(bytes, opts, lineNo);
         lineNo = nextNo;
-        ctx.stdout.write(text);
+        ctx.stdout.write(rendered);
       }
     } catch (e) {
       if (e instanceof VfsError) {

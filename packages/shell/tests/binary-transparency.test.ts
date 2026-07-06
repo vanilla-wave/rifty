@@ -18,6 +18,23 @@ function allBytes(): Uint8Array {
   return b;
 }
 
+const enc = new TextEncoder();
+
+function ascii(text: string): Uint8Array {
+  return enc.encode(text);
+}
+
+function concat(...chunks: readonly Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((n, chunk) => n + chunk.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 describe('shell binary transparency (ADR-0198)', () => {
   beforeEach(() => {
     setSyncMirror(new MemoryFsSync());
@@ -47,6 +64,53 @@ describe('shell binary transparency (ADR-0198)', () => {
     const res = await sh.run('cat /bin.dat | wc -c');
     expect(res.exitCode).toBe(0);
     expect(res.stdout.trim()).toBe('256');
+  });
+
+  it('cat transform modes preserve non-UTF-8 bytes while inserting ASCII markers', async () => {
+    const payload = new Uint8Array([0x80, 0x09, 0x41, 0x0a, 0x0a, 0xff, 0x42, 0x0a]);
+    const line1 = new Uint8Array([0x80, 0x09, 0x41]);
+    const line1ShowTabs = new Uint8Array([0x80, 0x5e, 0x49, 0x41]);
+    const line3 = new Uint8Array([0xff, 0x42]);
+    const cases: ReadonlyArray<{
+      readonly args: string;
+      readonly out: string;
+      readonly expected: Uint8Array;
+    }> = [
+      {
+        args: '-E',
+        out: '/cat-E.dat',
+        expected: concat(line1, ascii('$\n'), ascii('$\n'), line3, ascii('$\n')),
+      },
+      {
+        args: '-A',
+        out: '/cat-A.dat',
+        expected: concat(line1ShowTabs, ascii('$\n'), ascii('$\n'), line3, ascii('$\n')),
+      },
+      {
+        args: '-n',
+        out: '/cat-n.dat',
+        expected: concat(
+          ascii('     1\t'),
+          line1,
+          ascii('\n     2\t\n     3\t'),
+          line3,
+          ascii('\n'),
+        ),
+      },
+      {
+        args: '-b',
+        out: '/cat-b.dat',
+        expected: concat(ascii('     1\t'), line1, ascii('\n\n     2\t'), line3, ascii('\n')),
+      },
+    ];
+
+    const sh = new Shell();
+    for (const c of cases) {
+      syncMirror().writeFileSync('/bin.dat', payload);
+      const res = await sh.run(`cat ${c.args} /bin.dat > ${c.out}`);
+      expect(res.exitCode).toBe(0);
+      expect(Array.from(syncMirror().readFileBytesSync(c.out))).toEqual(Array.from(c.expected));
+    }
   });
 
   it('pipe hand-off between two cats stays byte-identical', async () => {

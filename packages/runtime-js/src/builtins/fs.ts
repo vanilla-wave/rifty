@@ -526,7 +526,16 @@ function writeFileImpl(
   if (!parsed.writable) throw fsError('EBADF', ps, 'write');
   const next = encodeData(data, enc);
   // 'w'/'w+' fast path: plain overwrite, one mirror call (errors open-shaped).
-  if (parsed.truncate && parsed.create && !parsed.exclusive && !parsed.append) {
+  // Keep behavioral gates here in sync with openPreflight: numeric flags can
+  // smuggle O_DIRECTORY alongside the w-family bits, and that must be checked
+  // before any write happens.
+  if (
+    parsed.truncate &&
+    parsed.create &&
+    !parsed.exclusive &&
+    !parsed.append &&
+    !parsed.directory
+  ) {
     withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
     return;
   }

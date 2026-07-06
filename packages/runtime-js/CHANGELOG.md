@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **`writeFileSync` numeric `O_DIRECTORY` flags no longer bypass open
+  preflight.** The w-family fast path now rejects a regular file before writing
+  when `O_DIRECTORY` is present, preserving the old contents instead of silently
+  overwriting.
 - **PR #115 final review sweep (2026-07-06):** pathless fd/opendir syscalls now
   omit the `path` property entirely; `rmSync(path, { recursive:true,
   force:true })` suppresses ENOTDIR-through-file like Node; `createWriteStream`

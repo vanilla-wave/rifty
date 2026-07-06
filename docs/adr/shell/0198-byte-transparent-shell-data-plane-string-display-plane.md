@@ -23,8 +23,9 @@ a text-only shell plumbing.
   captured buffer once; `onChunk` decodes byte chunks through a per-stream
   streaming `TextDecoder` (multibyte sequences split across chunks stay
   intact). Public `RunResult` shape is unchanged.
-- `cat` writes raw bytes on its plain path (no `-n`/`-b`/`-E`/`-A`); the
-  transform flags stay text-typed — GNU cat's numbering is line/text semantics.
+- `cat` writes raw bytes on its plain path. Its `-n`/`-b`/`-E`/`-A`
+  transforms are byte-line transforms: split on `0x0a`, preserve original byte
+  runs, insert ASCII numbering/end/tab markers.
 - stderr has NO byte data plane: this shell never pipes or redirects stderr
   (bash parity). `Writer.write` still accepts `Uint8Array` on stderr — those
   bytes go straight to the display decode (`RunResult.stderr`, `onChunk`), they
