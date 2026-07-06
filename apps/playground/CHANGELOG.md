@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Preview warm-up distinguishes `unreachable` (route never answered ok — dev
+  server down) from `error` (route ok, frame didn't commit); the OFF overlay no
+  longer claims "the dev server is running (the route responds)" it never
+  observed — it says the server didn't come up and points at the terminal.
+
 ### Fixed (PR #113 follow-up)
 
 - **SCM owner-currency check consolidated to one chokepoint; closes the
