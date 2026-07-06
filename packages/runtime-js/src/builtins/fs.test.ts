@@ -50,6 +50,15 @@ function codeOf(fn: () => void): string | undefined {
   return undefined;
 }
 
+function errorOf(fn: () => void): NodeJS.ErrnoException {
+  try {
+    fn();
+  } catch (err) {
+    return err as NodeJS.ErrnoException;
+  }
+  throw new Error('expected throw');
+}
+
 describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
   it('cpSync({ dereference: true }) throws NotImplementedError (Node supports it)', () => {
     writeFileSync('/d_src.txt', 'x');
@@ -288,6 +297,32 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     expect(codeOf(() => readFileSync('/missing-r.txt', { flag: 'r' }))).toBe('ENOENT');
     expect(readFileSync('/missing-aplus.txt', { encoding: 'utf8', flag: 'a+' })).toBe('');
     expect(statSync('/missing-aplus.txt').isFile()).toBe(true);
+  });
+
+  it('runs open preflight before access-mode errors for readFile/writeFile flags', () => {
+    writeFileSync('/exists.txt', 'seed');
+    const readWx = errorOf(() => readFileSync('/exists.txt', { flag: 'wx' }));
+    expect(readWx).toMatchObject({ code: 'EEXIST', syscall: 'open', path: '/exists.txt' });
+    expect(readFileSync('/exists.txt', 'utf8')).toBe('seed');
+
+    const readW = errorOf(() => readFileSync('/created-by-read-w.txt', { flag: 'w' }));
+    expect(readW).toMatchObject({ code: 'EBADF', syscall: 'read' });
+    expect(readFileSync('/created-by-read-w.txt', 'utf8')).toBe('');
+
+    const writeR = errorOf(() => writeFileSync('/missing-write-r.txt', 'x', { flag: 'r' }));
+    expect(writeR).toMatchObject({
+      code: 'ENOENT',
+      syscall: 'open',
+      path: '/missing-write-r.txt',
+    });
+
+    writeFileSync('/plain.txt', 'x');
+    const writeRNotDir = errorOf(() => writeFileSync('/plain.txt/deep.txt', 'x', { flag: 'r' }));
+    expect(writeRNotDir).toMatchObject({
+      code: 'ENOTDIR',
+      syscall: 'open',
+      path: '/plain.txt/deep.txt',
+    });
   });
 
   it('ftruncateSync shrinks and zero-extends through an open fd', () => {

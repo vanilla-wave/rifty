@@ -16,6 +16,7 @@ Apply at any boundary — network, storage/OPFS, cache, worker/process, concurre
 | `false-fallback` | optional path failure breaks the flow instead of degrading to default | transient `store.get` throw treated as fatal instead of miss→recompute |
 | `concurrent-same-key` | racing writers on one key observed by a reader | two dep-sets → same closure: 2nd PUT races 1st reader |
 | `quota-perm-fail` | storage quota/permission failure mid-op swallowed | per-op OPFS persist fail eaten → tree looks durable, torn on reload |
+| `observable-order` | validation/check runs before the required protocol/syscall step, hiding its side effects or error priority | PR #115: `readFileSync({ flag:'wx' })` returned `EBADF/read` before open could report `EEXIST/open`; `writeFileSync({ flag:'r' })` skipped `ENOENT/open` |
 
 ## Honest-outcome contract
 

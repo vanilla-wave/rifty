@@ -478,8 +478,8 @@ export function readFileSync(
   // writable flag on a directory is EISDIR at OPEN (handoff #2), etc.
   if (flag !== undefined && flag !== 'r') {
     const parsed = parseOpenFlags(flag);
-    if (!parsed.readable) throw fsError('EBADF', ps, 'read');
     openPreflight(p, parsed);
+    if (!parsed.readable) throw fsError('EBADF', ps, 'read');
   }
   const bytes = withSyscall({ default: 'open', EISDIR: 'read' }, p, () =>
     syncMirror().readFileBytesSync(np),
@@ -523,7 +523,6 @@ function writeFileImpl(
   const ps = pathToString(p);
   const flag = flagOf(opts) ?? defaultFlag;
   const parsed = parseOpenFlags(flag);
-  if (!parsed.writable) throw fsError('EBADF', ps, 'write');
   const next = encodeData(data, enc);
   // 'w'/'w+' fast path: plain overwrite, one mirror call (errors open-shaped).
   // Keep behavioral gates here in sync with openPreflight: numeric flags can
@@ -540,6 +539,7 @@ function writeFileImpl(
     return;
   }
   const { existed } = openPreflight(p, parsed);
+  if (!parsed.writable) throw fsError('EBADF', ps, 'write');
   if (parsed.append) {
     withSyscall('open', p, () => {
       const existing = existed ? syncMirror().readFileBytesSync(np) : new Uint8Array();

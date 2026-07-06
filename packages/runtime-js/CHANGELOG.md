@@ -16,6 +16,11 @@
   `fs.watch({ signal })` now queues `close` after construction, and
   `watchFile({ bigint:true })` loudly throws `NotImplementedError` instead of
   returning number-shaped Stats.
+- **PR #115 review blocker (2026-07-06):** flagged `readFileSync` /
+  `writeFileSync` now preserve Node's open-before-access-error ordering:
+  exclusive read flags report `EEXIST/open`, write-only read flags still create
+  or truncate before `EBADF/read`, and read-only write flags report missing /
+  path-through-file failures at `open` before `EBADF/write`.
 - **PR #115 final review fix (2026-07-06):** `createReadStream(directory)` now
   matches Node's open-success/read-failure order: `open`/`ready` fire, then a
   pathless `EISDIR` error with syscall `read`, followed by `close`.
