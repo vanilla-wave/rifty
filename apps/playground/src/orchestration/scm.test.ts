@@ -351,6 +351,21 @@ describe('explorer compares', () => {
     expect(h.textDiffs[0]?.title).toBe('a.ts ↔ b.ts');
   });
 
+  it('working file compare fails loud when the owner respawns mid-read', async () => {
+    const h = new Harness();
+    h.owner.files.set('/scratch/a.ts', enc.encode('left'));
+    h.owner.files.set('/scratch/b.ts', enc.encode('right'));
+    const readOrig = h.owner.readFileBytes.bind(h.owner);
+    h.owner.readFileBytes = async (p: string) => {
+      const bytes = await readOrig(p);
+      h.owner = new FakeOwner('/scratch', 2); // respawned owner mid-read
+      return bytes;
+    };
+    await h.scm().openWorkingFileCompare('/scratch/a.ts', '/scratch/b.ts');
+    expect(h.textDiffs).toEqual([]);
+    expect(h.errors[0]).toContain('Compare failed: workspace owner changed while');
+  });
+
   it('compare-with-HEAD: working bytes + head-blob presence from the porcelain status', async () => {
     const h = new Harness();
     h.owner.files.set('/scratch/src/a.ts', enc.encode('work'));

@@ -20,7 +20,17 @@ export interface OwnerFileReaderDeps<O extends FileReadOwnerLike> {
   ownerUnavailable(owner: O): boolean;
 }
 
+/**
+ * Owner-currency verdict vs the LIVE owner. The single owner-currency predicate
+ * (`null` = still current) — the one validation boundary the reader's own
+ * guards AND the SCM diff/action guards route through (AGENTS.md §Fidelity "one
+ * chokepoint"): it was 3 copies + a drifted identity-less inline before this.
+ */
+export type OwnerCurrencyFault = 'unavailable' | 'changed' | null;
+
 export interface OwnerFileReader<O extends FileReadOwnerLike> {
+  /** The one owner-currency predicate; callers format their own throw message. */
+  currencyFault(owner: O): OwnerCurrencyFault;
   /** Throws when the owner is unavailable/dead or is no longer the live owner. */
   assertOwnerAlive(owner: O, path: string, action: string): void;
   /** Guarded read: asserts before AND after (owner change mid-read fails loud). */
@@ -30,16 +40,25 @@ export interface OwnerFileReader<O extends FileReadOwnerLike> {
 export function createOwnerFileReader<O extends FileReadOwnerLike>(
   deps: OwnerFileReaderDeps<O>,
 ): OwnerFileReader<O> {
-  function assertOwnerAlive(owner: O, path: string, action: string): void {
+  function currencyFault(owner: O): OwnerCurrencyFault {
+    if (deps.ownerUnavailable(owner) || !owner.isAlive()) return 'unavailable';
     const current = deps.currentOwner();
-    if (deps.ownerUnavailable(owner) || !owner.isAlive()) {
-      throw new Error(`workspace owner is unavailable — cannot ${action} ${basename(path)}`);
-    }
     if (
       current !== owner ||
       current.root !== owner.root ||
       current.snapshotPort !== owner.snapshotPort
     ) {
+      return 'changed';
+    }
+    return null;
+  }
+
+  function assertOwnerAlive(owner: O, path: string, action: string): void {
+    const fault = currencyFault(owner);
+    if (fault === 'unavailable') {
+      throw new Error(`workspace owner is unavailable — cannot ${action} ${basename(path)}`);
+    }
+    if (fault === 'changed') {
       throw new Error(`workspace owner changed while ${action}ing ${basename(path)}`);
     }
   }
@@ -51,5 +70,5 @@ export function createOwnerFileReader<O extends FileReadOwnerLike>(
     return bytes;
   }
 
-  return { assertOwnerAlive, readBytes };
+  return { currencyFault, assertOwnerAlive, readBytes };
 }

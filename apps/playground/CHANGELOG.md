@@ -4,13 +4,25 @@
 
 ### Fixed (PR #113 follow-up)
 
-- **SCM diffs re-check the same owner snapshot before opening stale text
-  diffs.** Git-original reads, side-aware SCM rows, working-file compares, and
-  compare-with-HEAD now fail loud if the workspace owner respawns mid-read.
+- **SCM owner-currency check consolidated to one chokepoint; closes the
+  same-root/same-port respawn hole.** The "is `owner` still the live owner"
+  predicate (identity + root + port + alive) had 3 copies plus a drifted
+  identity-less inline; now one `reader.currencyFault` that `readBytes`, the SCM
+  diff guards, and GIT actions all route through. Git-original reads,
+  side-aware SCM rows, working-file compares and compare-with-HEAD fail loud
+  (never a stale diff) when the owner respawns mid-read; the identity check
+  catches a same-root/same-port owner swap the old `(port,root)`-only check
+  missed. Working-file-compare respawn is now regression-tested (RED-checked:
+  neutering the chokepoint fails all six owner-currency guards).
 - **Browser-unit HTML reports land under CI's uploaded artifact path.** The
-  browser-unit Playwright config writes HTML to
-  `playwright-report/browser-unit`, with a regression check pinning the config
-  to the workflow upload path.
+  browser-unit Playwright config writes HTML to `playwright-report/browser-unit`;
+  the regression test now pins the browser-unit JOB's upload (a bare
+  `path: playwright-report` check passed on the unrelated e2e lane).
+- **Multi-tab gap kept explicit, not silently dropped.** The premature empty
+  `multi-tab-story` epic is replaced by a discovery item
+  (`docs/backlog/playground/multi-tab-undefined-behavior.md`): the
+  two-tab / two-owner-over-one-OPFS silent-corruption risk stays a tracked,
+  loud gap (two live backlog items defer to it) instead of a bare deletion.
 
 ### Added (PR #113 review round 3)
 
