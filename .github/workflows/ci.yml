@@ -29,6 +29,7 @@ jobs:
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
+      - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
       - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
 
@@ -142,4 +143,39 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.lane }}
+          path: playwright-report
+
+  browser-unit-chromium:
+    # Browser-unit lane (ADR-0196): worker-side playground modules behaviorally
+    # tested against the REAL owner worker under COI — thin harness page, no App
+    # boot. Own job (not an e2e matrix lane): different tier, different config.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      # Serial by config (workers:1) — concurrent owner boots starve the owner
+      # worker on shared runners (same reason chromium-light is serialized).
+      - run: pnpm test:browser-unit
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-browser-unit
           path: playwright-report

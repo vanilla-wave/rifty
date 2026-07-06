@@ -90,6 +90,8 @@ import {
 import {
   type VfsWriteIpcMessage,
   applyVfsWriteFrame,
+  handleVfsFlushRequest,
+  isVfsFlushIpcMessage,
   serveVfsWrites,
 } from '../glue/vfs-write-port.ts';
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
@@ -1118,6 +1120,16 @@ async function bootShellOwner(opts: {
           error: { name: error.name, message: error.message },
         });
       }
+      return;
+    }
+    // Durability barrier (ADR-0187): drain this realm's OPFS write-through and
+    // ack only a clean ledger — the page's flushDurable() awaits this.
+    if (isVfsFlushIpcMessage(message)) {
+      void handleVfsFlushRequest({
+        opId: message.opId,
+        flush: flushSyncMirror,
+        send: (ack) => kernelIpc.send?.(ack),
+      });
       return;
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy

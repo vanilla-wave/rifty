@@ -9,6 +9,11 @@ const source = readFileSync(
 
 describe('kernel worker entry bundle wrapper', () => {
   it('uses explicit installer bindings so Vite cannot erase the worker setup chunk', () => {
+    // residual source pin: the contract is EMITTED-BUNDLE shape — explicit
+    // binding imports + calls keep the setup chunk when a package marks itself
+    // side-effect-free. Node cannot observe bundler output, and importing the
+    // entry executes installWorkerEntry's worker-realm wiring. Behavioral heir
+    // would assert on the BUILT worker chunk (browser-unit/prod lane).
     expect(source).toContain(
       "import { installNodeRuntime } from '@riftydev/runtime-js/install-process'",
     );

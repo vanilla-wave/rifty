@@ -1,120 +1,237 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { listPorts } from '@riftydev/net';
+import { registerNetBuiltins } from '@riftydev/net/register-builtins';
+import { syncMirror } from '@riftydev/vfs';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { CLI_REPORT_TEMPLATE } from '../templates/cli-report.ts';
+import { HIDDEN_EMPTY_TEMPLATE } from '../templates/hidden-empty.ts';
+import { type NodeServerProjectSpec, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import { bootDevServer } from './dev-server-boot.ts';
 
-// Co-resident dev-server boot core extracted from real-vite-bootstrap (P6b prep).
-// These guarantees moved here verbatim with the code they pin (bootDevServer +
-// the node-server/vite tails); the behavior is unchanged (pure move).
-const source = readFileSync(
-  fileURLToPath(new URL('./dev-server-boot.ts', import.meta.url)),
-  'utf8',
-);
+/**
+ * Behavioral node tests for the co-resident dev-server boot core. The module is
+ * realm-portable by construction (no top-level side effects; builtins register
+ * in ENTRY modules) — this file IS the entry realm: it registers the net
+ * builtins and drives `bootDevServer` against the in-memory `syncMirror()`.
+ *
+ * Contracts that need the REAL vite binary/dev server stay e2e:
+ *   - relative `base: './'`, synthetic HMR invalidation, watcher no-feedback,
+ *     stock server.ws over the generic bridge, child-owned cross-realm preview
+ *     route → m7-preview-sw.spec.ts (preview GET + editor-edit→iframe-update)
+ *     and generic-dev-server-lifecycle.spec.ts;
+ *   - install-time shims (ADR-0188, no boot-time overlay) → vite preset boots
+ *     (m7/vite-command-honesty) + manual-vite-install.spec.ts (opt-in);
+ *   - lazy node:sqlite at first require → fullstack-demo.spec.ts;
+ *   - no bespoke preview WS bridge (ADR-0189) → preview-websocket-bridge.spec.ts.
+ */
 
-describe('dev-server boot preview routing', () => {
-  it('uses a relative Vite base so transformed imports stay under the preview route', () => {
-    expect(source).toContain("base: './'");
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+interface BootAttempt {
+  readonly logs: string[];
+  readonly log: (chunk: string) => void;
+  readonly publishSnapshot: () => void;
+  readonly publishes: () => number;
+}
+
+function makeSinks(): BootAttempt {
+  const logs: string[] = [];
+  let published = 0;
+  return {
+    logs,
+    log: (chunk) => logs.push(chunk),
+    publishSnapshot: () => {
+      published += 1;
+    },
+    publishes: () => published,
+  };
+}
+
+const NODE_SERVER_SPEC: NodeServerProjectSpec = {
+  id: 'bu-node-server',
+  displayName: 'browser-unit node server',
+  runtime: 'node-server',
+  install: {},
+  entry: {
+    relativePath: '/src/server.js',
+    content: [
+      "import { createServer } from 'node:http';",
+      "console.log('bu-entry-console-routed');",
+      "const server = createServer((req, res) => { res.end('ok'); });",
+      'server.listen(Number(process.env.PORT));',
+      '',
+    ].join('\n'),
+  },
+  defaultPort: 4471,
+  estimatedBootSeconds: 0,
+  extraFiles: {},
+};
+
+const NEVER_LISTENS_SPEC: NodeServerProjectSpec = {
+  ...NODE_SERVER_SPEC,
+  id: 'bu-node-server-silent',
+  entry: { relativePath: '/src/server.js', content: 'export const neverListens = true;\n' },
+  defaultPort: 4472,
+};
+
+const realConsole = globalThis.console;
+const realPortEnv = process.env.PORT;
+
+beforeAll(() => {
+  // Entry-realm contract: dev-server-boot deliberately carries no registrar
+  // side effects; the spawning entry registers the net builtins. This test file
+  // plays that role for the in-process loader.
+  registerNetBuiltins();
+});
+
+afterEach(() => {
+  // bootNodeServer routes the global console into the run log (Node parity:
+  // console.log IS stdout) — restore the test runner's console + PORT.
+  globalThis.console = realConsole;
+  // Reflect (not `delete`, noDelete; not `= undefined` — env coerces it to 'undefined').
+  if (realPortEnv === undefined) Reflect.deleteProperty(process.env, 'PORT');
+  else process.env.PORT = realPortEnv;
+  vi.useRealTimers();
+});
+
+describe('node-server runtime branch (behavioral)', () => {
+  it('runs the entry as the server program: console routed to the run log, listen gate passes', async () => {
+    const root = '/bu-devboot/server';
+    const cfg = resolveBootstrapConfig(NODE_SERVER_SPEC, NODE_SERVER_SPEC.defaultPort, root);
+    const sinks = makeSinks();
+
+    const handle = await bootDevServer({
+      cfg,
+      port: cfg.port,
+      root,
+      spec: NODE_SERVER_SPEC,
+      slug: 'bu',
+      fromScratch: true,
+      publishSnapshot: sinks.publishSnapshot,
+      log: sinks.log,
+    });
+    try {
+      const logText = sinks.logs.join('');
+      // Entry ran as the program and its console.log landed in the run log.
+      expect(logText).toContain('bu-entry-console-routed');
+      // The listen gate observed the routed port (never a silent non-listening boot).
+      expect(logText).toContain(`server is listening on internal port ${cfg.port}`);
+      expect(listPorts()).toContain(cfg.port);
+      // Cross-realm preview route registered by THIS realm (the child owns it).
+      expect(logText).toContain('preview bridge ready');
+      expect(handle.port).toBe(cfg.port);
+      expect(sinks.publishes()).toBeGreaterThanOrEqual(1);
+    } finally {
+      await handle.stop();
+    }
   });
 
-  it('routes owner VFS writes through Vite native HMR', () => {
-    // ADR-0148/0150 P6b (dev server runs in the supervised child): the running
-    // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
-    expect(source).toContain('function handleViteFileChange(path: string): void');
-    expect(source).toContain('const syntheticWatcherChanges = new Set<string>();');
-    expect(source).toContain('syntheticWatcherChanges.add(modulePath)');
-    expect(source).toContain('if (syntheticWatcherChanges.has(modulePath))');
-    expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
-    expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
-    expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');
-    // Stock vite HMR (ADR-0189): the generic preview-path bridge carries vite's
-    // own server.ws — no rifty token/plugin/endpoint rewrite. `hmr: false`
-    // stays only for templates pinned off (Vite 8, ADR-0161).
-    expect(source).toContain('hmr: cfg.hmrEnabled ? undefined : false');
-    expect(source).not.toContain('createHmrBridgeToken');
-    expect(source).not.toContain('createHmrBridgeVitePlugin');
-    expect(source).not.toContain('__hmr/');
-    expect(source).not.toContain('channels:');
-    expect(source).not.toContain('ws: false');
-  });
+  it('fails loudly when the entry never starts listening on the routed port', async () => {
+    const root = '/bu-devboot/silent';
+    const cfg = resolveBootstrapConfig(NEVER_LISTENS_SPEC, NEVER_LISTENS_SPEC.defaultPort, root);
+    const sinks = makeSinks();
 
-  it('does not feed Vite watcher change events back into synthetic invalidation', () => {
-    const watcherBlock = source.slice(source.indexOf("server.watcher?.on('change'"));
-    expect(watcherBlock).toContain('publishSnapshot();');
-    expect(watcherBlock).not.toContain('handleViteFileChange(file)');
-  });
-
-  it('does not pin Vite to the old server.hmr.channels seam', () => {
-    expect(source).not.toContain('readResolvedPackageVersion(');
-    expect(source).not.toContain('assertSupportedViteHmrVersion');
-    expect(source).not.toContain('createViteHmrBridgeChannel');
-    expect(source).not.toContain('server.hmr.channels');
-  });
-
-  it('serves the cross-realm preview route from the child, not an in-worker SW bridge', () => {
-    // ADR-0150 P6b corrected: the child owns listen() + serveCrossRealmPreview;
-    // setupPreviewBridge no-ops in any worker realm so it is NOT called here (the
-    // SW-direct route is page-anchored via mountPlaygroundPreviewBridge).
-    expect(source).toContain('serveCrossRealmPreview(');
-    expect(source).toContain('opts.previewScope === undefined ? {} : { scope: opts.previewScope }');
-    expect(source).not.toContain('setupPreviewBridge(');
-  });
-
-  it('carries zero shim glue — internals shims are applied at install time (ADR-0188)', () => {
-    // The esbuild/rollup/lightningcss shims are written by the npm-client
-    // installer into the actual installed dirs; a boot-time overlay would
-    // mask a broken install path (backlog npm-client/install-time-shadow-shims).
-    expect(source).not.toContain('overlayShims');
-    expect(source).not.toContain('reRootShimPath');
-    expect(source).not.toContain('ShimFiles');
-  });
-
-  it('installs the real esbuild WASI transform bridge before Vite imports esbuild', () => {
-    expect(source).toContain('installEsbuildTransformBridge(root)');
-    expect(source.indexOf('installEsbuildTransformBridge(root)')).toBeLessThan(
-      source.indexOf('loader.import(\n      cfg.runtimeSpecifier'),
-    );
-  });
-
-  it('loud-rejects user vite.config files before curated dev boot can ignore them', () => {
-    expect(source).toContain("import { assertNoUserViteConfig } from './vite-config-guard.ts'");
-    expect(source).toContain('assertNoUserViteConfig(root)');
+    vi.useFakeTimers();
+    const boot = bootDevServer({
+      cfg,
+      port: cfg.port,
+      root,
+      spec: NEVER_LISTENS_SPEC,
+      slug: 'bu',
+      fromScratch: true,
+      publishSnapshot: sinks.publishSnapshot,
+      log: sinks.log,
+    });
+    boot.catch(() => {}); // rejection asserted below; avoid an unhandled warning
+    await vi.advanceTimersByTimeAsync(11_000);
+    await expect(boot).rejects.toThrow(/never started listening/);
   });
 });
 
-describe('node-server runtime branch', () => {
-  it('dispatches on the bootstrap config runtime discriminant', () => {
-    expect(source).toContain("cfg.runtime === 'node-server'");
-    expect(source).toContain("cfg.runtime === 'vite'");
-    expect(source).toContain("cfg.runtime === 'node-cli'");
-    expect(source).toContain('node-cli templates run through the owner node executor');
+describe('runtime dispatch + seeding (behavioral)', () => {
+  it('node-cli rejects loudly (owner node executor owns that lifecycle) AFTER seeding if-absent', async () => {
+    const root = '/bu-devboot/cli';
+    const cfg = resolveBootstrapConfig(CLI_REPORT_TEMPLATE, 0, root);
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    // A user-owned package.json must survive the seed (seed-if-absent, never overwrite).
+    const userPackageJson = '{ "name": "user-kept", "version": "9.9.9" }\n';
+    fs.writeFileSync(`${root}/package.json`, enc.encode(userPackageJson));
+    const sinks = makeSinks();
+
+    await expect(
+      bootDevServer({
+        cfg,
+        port: 0,
+        root,
+        spec: CLI_REPORT_TEMPLATE,
+        slug: 'bu',
+        fromScratch: true,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    ).rejects.toThrow(/node-cli templates run through the owner node executor/);
+
+    // Seeding happened before the dispatch throw and honored the user file.
+    expect(dec.decode(fs.readFileBytesSync(`${root}/package.json`))).toBe(userPackageJson);
+    expect(fs.existsSync(`${root}/src/cli.js`)).toBe(true);
+    expect(fs.existsSync(`${root}/data/packages.yml`)).toBe(true);
   });
 
-  it('carries no eager node:sqlite bring-up — the builtin self-initializes at first require', () => {
-    // the lazy node:sqlite engine — the realm installs a sync wasm provider
-    // (glue/sqlite-wasm-provider.ts); no preset flag, no boot-time engine cost.
-    expect(source).not.toContain('initSqliteEngine');
-    expect(source).not.toContain('cfg.sqlite');
-    expect(source).not.toContain('sql.js/dist/sql-wasm.wasm');
+  it('loud-rejects a user vite.config before curated dev boot could ignore it', async () => {
+    const root = '/bu-devboot/vite-config';
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(`${root}/vite.config.ts`, enc.encode('export default {};\n'));
+    const cfg = resolveBootstrapConfig(HIDDEN_EMPTY_TEMPLATE, 5175, root);
+    const sinks = makeSinks();
+
+    await expect(
+      bootDevServer({
+        cfg,
+        port: 5175,
+        root,
+        spec: HIDDEN_EMPTY_TEMPLATE,
+        slug: 'bu',
+        fromScratch: true,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    ).rejects.toThrow(/vite\.config/);
   });
 
-  it('runs the entry as the server program', () => {
-    expect(source).toContain('await loader.import(cfg.entryPath');
-  });
+  it('vite deps are a PRECONDITION: no node_modules → loud resolve failure, never a silent install', async () => {
+    const root = '/bu-devboot/vite-missing-deps';
+    const cfg = resolveBootstrapConfig(HIDDEN_EMPTY_TEMPLATE, 5176, root);
+    const sinks = makeSinks();
 
-  it('routes the server program console into kernel stdio (Node parity: console.log IS stdout)', () => {
-    // Without this, server console.log lands in worker devtools, not the
-    // playground terminal — the demo's request/db logs would be invisible.
-    expect(source).toContain('console = new Console(');
+    await expect(
+      bootDevServer({
+        cfg,
+        port: 5176,
+        root,
+        spec: HIDDEN_EMPTY_TEMPLATE,
+        slug: 'bu',
+        fromScratch: true,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    ).rejects.toThrow(/vite/);
   });
+});
 
-  it('fails loudly when the entry never starts listening on the routed port', () => {
-    expect(source).toContain('listPorts()');
-    expect(source).toContain('never started listening');
-    // the guard must actually gate the boot path, not just exist as a helper
-    expect(source).toContain('await waitForListeningPort(cfg.port');
-  });
+describe('residual source pins', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./dev-server-boot.ts', import.meta.url)),
+    'utf8',
+  );
 
-  it('carries no bespoke WS bridge — preview HTML injection is generic (ADR-0189)', () => {
-    expect(source).not.toContain('setupHmrBridge(');
-    expect(source).not.toContain('webSocketBridgeClientScript');
+  it('pins the ADR-0161 hmr-off knob for templates pinned off (Vite 8)', () => {
+    // residual source pin: `hmr: false` matters only for the opt-in vite8
+    // template — no default-on e2e boots Vite 8 (upstream-broken build path),
+    // and the node harness cannot boot the real vite dev server to observe it.
+    expect(source).toContain('hmr: cfg.hmrEnabled ? undefined : false');
   });
 });

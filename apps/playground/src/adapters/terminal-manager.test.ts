@@ -101,6 +101,10 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     writeFrameAcked(): Promise<void> {
       return Promise.resolve();
     },
+    // In-memory fake: no durability tier behind it (memory-backend contract).
+    flushDurable(): Promise<void> {
+      return Promise.resolve();
+    },
     exportArchive(): Promise<string> {
       return Promise.resolve('{"version":1,"root":"/workspace","files":[]}');
     },

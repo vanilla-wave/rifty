@@ -15,11 +15,9 @@
  * controlling window owning the port, so the route commits in-frame. The
  * two-step check is kept as an honest safety net for a genuinely-down server.
  *
- * Warm-up budget (ADR-0077): Real Vite installs from npm before serving, so the
- * route can stay unreachable ~20–30 s. Each probe uses a short per-fetch
- * `AbortController` timeout (so a 30 s cross-realm bridge-timeout while the
- * worker isn't serving can't eat the whole budget); the overall deadline spans
- * an npm install, else the panel showed a false `unavailable` before Vite came up.
+ * Warm-up budget + hook assembly live in preview-panel-core.ts (ADR-0077: the
+ * probe deadline spans a Real Vite npm install; per-probe abort caps a hung
+ * cross-realm bridge fetch).
  *
  * Manual Reload reuses the warm-up/remount path. When HMR is enabled (ADR-0126)
  * file edits are refreshed by the iframe HMR client itself, not by parent
@@ -39,19 +37,9 @@ import {
 import { copyToClipboard } from '../glue/clipboard.ts';
 import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
-import { runPreviewWarmup } from './preview-warmup.ts';
+import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-panel-core.ts';
 
 type Phase = 'starting' | 'live' | 'error';
-
-// Spans a Real Vite npm install + boot (ADR-0076); a down dev server resolves
-// to `unavailable`, just later.
-const WARMUP_TIMEOUT_MS = 90_000;
-const WARMUP_INTERVAL_MS = 400;
-// Cap a single probe so a 30 s cross-realm preview-bridge timeout (worker not
-// serving yet) doesn't block the poll loop — abort and re-probe instead.
-const WARMUP_FETCH_TIMEOUT_MS = 4_000;
-const COMMIT_TIMEOUT_MS = 4_000;
-const COMMIT_INTERVAL_MS = 200;
 
 // Which port the switcher should show given the live set + current selection
 // (ADR-0155). Empty set → keep current (manual-input fallback owns it). A port
@@ -85,7 +73,7 @@ export function PreviewPanel(props: {
   const [frameEpoch, setFrameEpoch] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
-  const previewUrl = (): string => `/preview/${port()}/`;
+  const previewUrl = (): string => previewUrlFor(port());
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
   const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
@@ -103,11 +91,9 @@ export function PreviewPanel(props: {
   });
 
   function openTab(): void {
-    if (props.onOpenTab) {
-      props.onOpenTab(port());
-      return;
-    }
-    globalThis.window?.open(previewUrl(), '_blank');
+    openPreviewTab(port(), props.onOpenTab, (url, target) => {
+      globalThis.window?.open(url, target);
+    });
   }
 
   function reload(): void {
@@ -153,52 +139,25 @@ export function PreviewPanel(props: {
   });
 
   // (Re)run warm-up on port change or Reload retry. `alive` guards against a
-  // stale loop writing state after unmount / a later run.
+  // stale loop writing state after unmount / a later run. Probe/navigate hook
+  // semantics live in preview-panel-core.ts; this effect only binds them.
   createEffect(() => {
     const url = previewUrl();
     retry();
     let alive = true;
     setPhase('starting');
-    void runPreviewWarmup(
-      {
-        probe: async (signal) => {
-          try {
-            const res = await fetch(url, { method: 'GET', cache: 'no-store', signal });
-            await res.body?.cancel().catch(() => {});
-            return res.ok;
-          } catch {
-            return false; // server/SW not ready, or probe aborted — keep polling
-          }
-        },
-        // Route reachable — load into the frame; the frame's load event wakes
-        // the commit check (cross-browser: fast where the nav commits, falls
-        // through to `error` where the sub-frame nav aborts).
-        navigate: async () => {
-          if (!frame) return;
-          remountFrame();
-          await new Promise((r) => setTimeout(r, 0));
-          const nextFrame = frame;
-          if (!alive || !nextFrame) return;
-          nextFrame.addEventListener('load', () => wakeWarmup?.(), { once: true });
-          nextFrame.src = url;
-        },
-        committed,
-        wake: () =>
-          new Promise<void>((resolve) => {
-            wakeWarmup = resolve;
-          }),
-        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-        now: Date.now,
-      },
-      {
-        warmupTimeoutMs: WARMUP_TIMEOUT_MS,
-        warmupIntervalMs: WARMUP_INTERVAL_MS,
-        probeTimeoutMs: WARMUP_FETCH_TIMEOUT_MS,
-        commitTimeoutMs: COMMIT_TIMEOUT_MS,
-        commitIntervalMs: COMMIT_INTERVAL_MS,
-      },
-      () => alive,
-    ).then((result) => {
+    void runPreviewFrameWarmup(url, {
+      fetchImpl: (input, init) => fetch(input, init),
+      currentFrame: () => frame,
+      remountFrame,
+      committed,
+      armWake: () =>
+        new Promise<void>((resolve) => {
+          wakeWarmup = resolve;
+        }),
+      fireWake: () => wakeWarmup?.(),
+      isAlive: () => alive,
+    }).then((result) => {
       if (result !== 'cancelled') setPhase(result);
     });
     onCleanup(() => {

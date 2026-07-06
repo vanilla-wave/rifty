@@ -1,11 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderToString } from 'solid-js/web';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { PreviewPanel, reconcileSelectedPort } from './PreviewPanel.tsx';
 
-const source = readFileSync(fileURLToPath(new URL('./PreviewPanel.tsx', import.meta.url)), 'utf8');
+// Read ONLY for the two residual client-only pins below (keyed remount +
+// no-location.reload) — everything else is behavioral or tsc-gated.
+const panelSource = readFileSync(
+  fileURLToPath(new URL('./PreviewPanel.tsx', import.meta.url)),
+  'utf8',
+);
 
 const TWO_PORTS: PreviewPortEntry[] = [
   {
@@ -31,26 +36,36 @@ const WITH_PROD_PREVIEW: PreviewPortEntry[] = [
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
     // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
-    expect(source).not.toContain('refreshKey?: number');
-    expect(source).not.toContain('props.refreshKey;');
-    expect(source).not.toContain('?rf=');
+    // tsc-gated (playground tsconfig covers tests); the `?rf=` cache-buster
+    // shape is killed by previewUrlFor's exact-equality test (preview-panel-core).
+    expectTypeOf(PreviewPanel).parameter(0).not.toHaveProperty('refreshKey');
   });
 
   it('passes the manually selected preview port to the open-tab callback', () => {
-    expect(source).toContain('onOpenTab?: (port: number) => void');
-    expect(source).toContain('props.onOpenTab(port());');
+    // tsc-gated prop signature; call routing (callback gets the port, window
+    // fallback otherwise) is behavioral in preview-panel-core.test.ts.
+    expectTypeOf(PreviewPanel)
+      .parameter(0)
+      .toMatchObjectType<{ onOpenTab?: (port: number) => void }>();
   });
 
   it('recreates the iframe before preview navigation so the SW controls the document', () => {
-    expect(source).toContain('frameEpoch');
-    expect(source).toContain('setFrameEpoch((n) => n + 1)');
-    expect(source).toContain('keyed');
+    // Behavioral half (preview-panel-core.test.ts): warm-up navigation remounts
+    // FIRST and writes src only into the fresh frame.
+    // residual source pin: keyed <Show> reconciliation is client-only — node
+    // vitest runs the solid SERVER runtime (renders once, effects no-op), so
+    // "epoch bump recreates the iframe element" is unobservable here. A
+    // non-keyed <Show> would keep the stale pre-SW frame and never re-ref it.
+    expect(panelSource).toMatch(/<Show keyed when=\{frameKey\(\)\}>/);
   });
 
   it('routes manual reload through the warm-up remount path', () => {
-    expect(source).toContain('function reload(): void');
-    expect(source).toContain('setRetry((n) => n + 1)');
-    expect(source).not.toContain('contentWindow?.location.reload');
+    // Behavioral half (preview-panel-core.test.ts): every warm-up run navigates
+    // via a remounted frame — there is no other reload mechanism in the core.
+    // residual source pin: Reload = retry-signal bump re-running the warm-up
+    // createEffect — client-only wiring (server runtime effects no-op). A
+    // direct iframe location.reload() would bypass the SW-controlled remount.
+    expect(panelSource).not.toContain('location.reload');
   });
 });
 
