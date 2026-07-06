@@ -23,6 +23,7 @@ import type {
 } from '../templates/project-spec.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { createOpfsEsmTransformCache } from './opfs-esm-transform-cache.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
@@ -194,7 +195,11 @@ export async function bootDevServer(opts: {
   // → vite/node fails loudly with a real "Cannot find module" (the honest gap).
   publishSnapshot();
 
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
+  // ADR-0200: replay unchanged-dependency transformEsm results across child
+  // boots (a fresh loader per boot re-paid ~0.5-1 s of acorn on the vite dist).
+  // Best-effort: any cache failure degrades to an uncached loader, one warn.
+  const persistentEsmTransformCache = await createOpfsEsmTransformCache();
+  const loader = createModuleLoader(syncMirror(), { cwd: root, persistentEsmTransformCache });
   __setCreateRequireImpl((from: string) => {
     const fromPath = from.startsWith('file://')
       ? decodeURIComponent(from.slice('file://'.length))

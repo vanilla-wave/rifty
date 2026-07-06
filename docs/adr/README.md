@@ -56,6 +56,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
+| 0200 | Persistent ESM transform cache across dev-server child boots |
 
 ### runtime-wasi
 

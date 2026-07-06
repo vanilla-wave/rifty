@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Persistent ESM transform cache hook (ADR-0200, resolves Q-2026-05-30-202).**
+  `ModuleLoaderOptions.persistentEsmTransformCache` — a sync cross-boot store
+  for `transformEsm` results, consulted on an in-memory miss. The loader
+  validates every hit by EXACT source equality at its own boundary (a store
+  can degrade or vanish, never poison execution); `put` fires only on
+  recompute. `ESM_TRANSFORM_FORMAT` (colocated with `transformEsm`) keys the
+  persisted format — bump on any transform/`TransformResult` change. Measured:
+  2.8 MB vite dist = 263 ms of acorn repaid per fresh-loader boot without it.
+
 ### Fixed
 
 - **PR #115 root-cause round (2026-07-06), class kills over point fixes:**

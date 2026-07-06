@@ -16,6 +16,23 @@ import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
 export type { TransformSourceHook } from './esm.ts';
 export type { PathAliases } from './resolver.ts';
 
+export interface PersistentEsmTransformCacheEntry {
+  readonly source: string;
+  readonly result: TransformResult;
+}
+
+/**
+ * Cross-boot store for `transformEsm` results (ADR-0200, Q-2026-05-30-202).
+ * Sync — it sits on the synchronous load path. The LOADER validates every hit
+ * by exact source equality at its own boundary, so an implementation can
+ * degrade, lose entries, or vanish, but never poison execution; `put` fires
+ * only on recompute, so store content is always loader-produced.
+ */
+export interface PersistentEsmTransformCache {
+  get(id: string): PersistentEsmTransformCacheEntry | undefined;
+  put(id: string, entry: PersistentEsmTransformCacheEntry): void;
+}
+
 export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
   readonly cwd?: string;
@@ -45,6 +62,12 @@ export interface ModuleLoaderOptions {
    * so vanilla Node-style resolution stays byte-stable.
    */
   readonly autoDiscoverTsconfigPaths?: boolean;
+  /**
+   * Cross-boot `transformEsm` result store (ADR-0200): a fresh loader per
+   * dev-server child boot re-parses an unchanged vite dist otherwise. Consulted
+   * on an in-memory miss; hits are source-validated by the loader itself.
+   */
+  readonly persistentEsmTransformCache?: PersistentEsmTransformCache;
 }
 
 export interface ModuleLoader {
@@ -135,11 +158,21 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     string,
     { readonly source: string; readonly result: TransformResult }
   >();
+  const persistent = opts.persistentEsmTransformCache;
   const cachedTransformEsm = (source: string, id: string): TransformResult => {
     const hit = esmAstCache.get(id);
     if (hit?.source === source) return hit.result;
+    // Persistent fallback (ADR-0200): exact source match HERE — the one
+    // validation boundary; a stale entry (file changed under the same id)
+    // recomputes below and overwrites, so the store self-heals.
+    const stored = persistent?.get(id);
+    if (stored && stored.source === source) {
+      esmAstCache.set(id, stored);
+      return stored.result;
+    }
     const out = transformEsm(source, id);
     esmAstCache.set(id, { source, result: out });
+    persistent?.put(id, { source, result: out });
     return out;
   };
 
