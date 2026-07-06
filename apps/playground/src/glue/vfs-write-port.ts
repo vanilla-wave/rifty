@@ -26,7 +26,13 @@
  */
 
 import { channelNameFor } from '@riftydev/net';
-import { dirname, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  type PersistFailureReport,
+  dirname,
+  joinPath,
+  normalizePath,
+  syncMirror,
+} from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /**
@@ -119,6 +125,93 @@ export function isVfsWriteAckMessage(message: unknown): message is VfsWriteAckMe
     typeof candidate.opId === 'string' &&
     typeof candidate.ok === 'boolean'
   );
+}
+
+/**
+ * Page → owner durability-barrier request (ADR-0187 Corrected). A
+ * `rifty:vfs-write-ack` means "applied to the owner's in-memory mirror" —
+ * OPFS write-through drains asynchronously behind it. This acked flush is the
+ * deterministic barrier: the owner drains the queue and acks ok only when the
+ * durable tier is clean, so "durable" is provable without wall-clock sleeps.
+ */
+export interface VfsFlushIpcMessage {
+  readonly type: 'rifty:vfs-flush';
+  readonly opId: string;
+}
+
+export type VfsFlushAckMessage =
+  | { readonly type: 'rifty:vfs-flush-ack'; readonly opId: string; readonly ok: true }
+  | {
+      readonly type: 'rifty:vfs-flush-ack';
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: { readonly name: string; readonly message: string };
+    };
+
+export function isVfsFlushIpcMessage(message: unknown): message is VfsFlushIpcMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as { readonly type?: unknown; readonly opId?: unknown };
+  return candidate.type === 'rifty:vfs-flush' && typeof candidate.opId === 'string';
+}
+
+export function isVfsFlushAckMessage(message: unknown): message is VfsFlushAckMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as {
+    readonly type?: unknown;
+    readonly opId?: unknown;
+    readonly ok?: unknown;
+  };
+  return (
+    candidate.type === 'rifty:vfs-flush-ack' &&
+    typeof candidate.opId === 'string' &&
+    typeof candidate.ok === 'boolean'
+  );
+}
+
+export interface VfsFlushHandlerOptions {
+  readonly opId: string;
+  /** Realm-local durability drain (the owner wires `flushSyncMirror`). */
+  readonly flush: () => Promise<PersistFailureReport | undefined>;
+  readonly send: (message: VfsFlushAckMessage) => void;
+}
+
+/**
+ * Owner side of the acked flush. Durable-or-throw: acks ok only when the
+ * drained ledger is clean (`total === 0` ⇔ disk caught up with the mirror);
+ * still-unhealed persist failures nack with a sample so the page's
+ * `flushDurable()` rejects loudly instead of resolving a durability lie.
+ * The memory backend has no durability tier (`flush` → undefined) — ok.
+ */
+export async function handleVfsFlushRequest(opts: VfsFlushHandlerOptions): Promise<void> {
+  try {
+    const report = await opts.flush();
+    const total = report?.total ?? 0;
+    if (total > 0) {
+      const sample = (report?.failures ?? [])
+        .slice(0, 3)
+        .map((f) => `${f.op} ${f.path}: ${f.message}`)
+        .join('; ');
+      opts.send({
+        type: 'rifty:vfs-flush-ack',
+        opId: opts.opId,
+        ok: false,
+        error: {
+          name: 'PersistFailureError',
+          message: `OPFS write-through drained with ${total} unhealed persist failure(s): ${sample}`,
+        },
+      });
+      return;
+    }
+    opts.send({ type: 'rifty:vfs-flush-ack', opId: opts.opId, ok: true });
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    opts.send({
+      type: 'rifty:vfs-flush-ack',
+      opId: opts.opId,
+      ok: false,
+      error: { name: error.name, message: error.message },
+    });
+  }
 }
 
 export interface GuardedVfsWriteOptions {

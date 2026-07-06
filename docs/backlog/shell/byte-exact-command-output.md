@@ -1,39 +1,32 @@
 ---
 area: shell
 status: draft
-title: Byte-exact shell command output and redirects
+title: Byte-exact text filters (head -c / tail -c / stdin filters) over the ADR-0198 byte plane
 created: 2026-06-25
-why: Shell command output is string-shaped today, which can decode/re-encode bytes and lose fidelity for byte-oriented coreutils, redirects, future pipes, and parity fixtures.
-user_story: As a developer running byte-oriented commands such as `head -c`, `tail -c`, or redirects in rifty, I want stdout/stderr bytes to survive unchanged, but today the shell writer API forces command output through strings.
-sources: [Q-2026-06-25-shell-research, ADR-0093, docs/backlog/terminal/byte-pty-mode-umbrella.md]
-code: [packages/shell/src/types.ts, packages/shell/src/shell.ts, packages/shell/src/commands/head.ts, packages/shell/src/commands/tail.ts, packages/shell/src/commands/cat.ts]
+why: The pipeline data plane is byte-transparent since ADR-0198 (Writer accepts bytes; capture/pipes/redirects byte-exact; cat is a byte pump), but text FILTERS still decode stdin to strings — `head -c 10 < img.png` re-encodes and corrupts.
+user_story: As a developer running byte-counting commands such as `head -c` or `tail -c` over binary files in rifty, I want the emitted bytes to be exactly the input slice, but today these filters decode to a string first, so invalid-UTF-8 bytes become U+FFFD.
+sources: [ADR-0198, Q-2026-06-25-shell-research, ADR-0093, docs/backlog/terminal/byte-pty-mode-umbrella.md]
+code: [packages/shell/src/commands/head.ts, packages/shell/src/commands/tail.ts, packages/shell/src/commands/grep.ts, packages/shell/src/commands/_shared.ts]
 ---
 
 ## Context
 
-This is the shell-internal byte fidelity layer, not a replacement for the
-terminal byte/PTY umbrella. The umbrella covers terminal/child foreground byte
-mode; this item covers command stdout/stderr capture, redirects, fixture
-assertions, and the future shell pipe path.
-
-The public `Writer` interface currently accepts `string`. Several commands read
-bytes from VFS, then decode into text before writing. Redirects capture text and
-encode again when writing the target file. That is not faithful for byte-counting
-commands and binary-ish files.
+ADR-0198 (2026-07-05) delivered the plumbing: `Writer.write(string | Uint8Array)`,
+byte-exact capture → pipe hand-off → `>`/`>>` flush, `cat` emitting raw bytes
+(guard: packages/shell/tests/binary-transparency.test.ts). What remains is the
+COMMAND layer: filters read stdin/files as decoded strings, so byte-slicing
+modes (`-c`) and pass-through portions of line filters are still lossy for
+non-UTF-8 input. GNU coreutils are byte-oriented even in line mode (lines are
+byte runs split on 0x0A, not decoded text).
 
 ## Options or Next
 
-1. Add an internal byte-capable writer interface for command stdout/stderr.
-2. Keep public `Shell.run()` text output for current callers by adapting captured
-   bytes at the outer boundary.
-3. Make redirects write captured bytes directly.
-4. Update `head -c`, `tail -c`, `cat`, and related tests so byte cases prove
-   there is no decode/re-encode roundtrip.
-5. Coordinate with `pipes`, `input-redirect`, and stdin-filter backlog items so
-   they share the same byte stream contract.
+1. `head -c` / `tail -c`: slice the raw bytes, write bytes — never decode.
+2. Line modes (`head -n`, `tail -n`, `grep`): split on 0x0A at the byte level,
+   decode per line ONLY for regex matching; emit the original byte runs.
+3. Extend binary-transparency.test.ts with per-filter byte fixtures.
+4. Coordinate with stdin-filter-modes-for-builtins (shared byte readAllStdin).
 
 ## Reversibility
 
-REVERSIBLE if introduced behind internal command context adapters. Any public
-API change to `Writer`/`CommandContext` needs decision-workflow review because
-`packages/shell/src/index.ts` exports these types.
+REVERSIBLE — command-internal changes over the already-landed ADR-0198 contract.

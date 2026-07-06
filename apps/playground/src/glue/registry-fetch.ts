@@ -31,6 +31,12 @@ function registryProxyPrefix(override: string | undefined): string {
   return (override ?? viteRegistryBaseUrl() ?? getRegistryBaseUrl()).replace(/\/$/, '');
 }
 
+/** The registry base the playground actually fetches from (env override or the
+ * npm-client default) — the boot preconnect target (ADR-0195). */
+export function getRegistryProxyPrefix(): string {
+  return registryProxyPrefix(undefined);
+}
+
 export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions = {}): Fetcher {
   const proxyPrefix = registryProxyPrefix(options.proxyPrefix);
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);

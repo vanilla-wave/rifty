@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -17,6 +19,23 @@ function seed(files: Record<string, string>): void {
   setSyncMirror(fs);
 }
 
+function allBytes(): Uint8Array {
+  const bytes = new Uint8Array(256);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i;
+  return bytes;
+}
+
+function fixtureBody(name: string): string {
+  const path = fileURLToPath(new URL(`../fixtures/cat/${name}`, import.meta.url));
+  const raw = readFileSync(path, 'utf8');
+  const nl = raw.indexOf('\n');
+  return raw.slice(nl + 1).trim();
+}
+
+function hex(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 beforeEach(() => resetSyncMirror());
 afterEach(() => resetSyncMirror());
 
@@ -27,6 +46,35 @@ it('concatenates file contents verbatim to stdout, exit 0', async () => {
   expect(code).toBe(0);
   expect(out()).toBe('hello\nworld\n');
   expect(err()).toBe('');
+});
+
+it('plain cat emits binary bytes byte-for-byte against frozen GNU coreutils 9.7 fixture', async () => {
+  const fs = new MemoryFsSync();
+  fs.writeFileSync('/bin.dat', allBytes());
+  setSyncMirror(fs);
+  const chunks: Uint8Array[] = [];
+  const ctx = {
+    cwd: '/',
+    env: {},
+    stdout: {
+      write(chunk: string | Uint8Array): void {
+        chunks.push(typeof chunk === 'string' ? enc.encode(chunk) : chunk);
+      },
+    },
+    stderr: {
+      write(): void {},
+    },
+  };
+  const code = await cat(['/bin.dat'], ctx);
+  expect(code).toBe(0);
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, off);
+    off += chunk.byteLength;
+  }
+  expect(hex(out)).toBe(fixtureBody('binary-all-bytes.hex'));
 });
 
 it('-n numbers ALL lines, GNU 6-wide right-justified number + tab', async () => {

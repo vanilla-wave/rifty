@@ -41,11 +41,18 @@ import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
+import {
+  learnedPinForPackageJsonSync,
+  readLearnedPin,
+  writeLearnedPin,
+} from '../glue/eddy-learned-pins.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
+import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
 import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
+  installStampSatisfiedForPackageJsonSync,
 } from '../glue/install-stamp.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
@@ -62,7 +69,7 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { getResolverUrl } from '../glue/resolver-config.ts';
+import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -82,6 +89,8 @@ import {
 import {
   type VfsWriteIpcMessage,
   applyVfsWriteFrame,
+  handleVfsFlushRequest,
+  isVfsFlushIpcMessage,
   serveVfsWrites,
 } from '../glue/vfs-write-port.ts';
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
@@ -233,8 +242,11 @@ async function restoreInstantDeps(
     slug,
     snapshotUrl: cfg.bakedNodeModulesUrl,
     // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
-    flush: flushSyncMirror,
     log: (line) => console.log(line.trimEnd()),
+    // Deferred stamp-durability check (never awaited on the boot path):
+    // pending stamp promotes only after a clean report; dirty reports leave
+    // the next boot to re-run arrival instead of trusting a torn tree.
+    flush: flushSyncMirror,
   });
   if (result.source === 'none') {
     console.warn(
@@ -423,6 +435,75 @@ async function bootShellOwner(opts: {
     hiddenEmptyBoot,
     fromScratch,
   } = opts;
+
+  // The persistent owner is spawned once with the deep-link/default template; a
+  // preset switch updates which template/runtime the NEXT co-resident dev server
+  // boots (ADR-0148 — the page sends `pty:dev-config` before the dev line).
+  let devSpec = spec;
+  let devCfg = cfg;
+  let devSlug = slug;
+  let devFromScratch = fromScratch;
+  let lastDevTemplateId: string | null = null;
+  let lastDevRoot: string | null = null;
+  let devConfigReady: Promise<void> = Promise.resolve();
+
+  // Owner-boot eddy prefetch (ADR-0195), FIRST thing in the boot — before the
+  // seed/git work blocks the realm — so the bundle download runs concurrently
+  // with the rest of owner boot and the boot line's `npm install` consumes the
+  // buffered bytes (canonically keyed — a drifted package.json makes install()
+  // ignore it). Skipped when a stamp will suppress the install (reload of an
+  // installed tree). SYNC by design: an async stamp gate starves behind the
+  // busy boot loop and the prefetch fired AFTER the install it was meant to
+  // feed (measured 2026-07-02: two POSTs, 40ms apart, zero overlap).
+  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
+  let installPrefetchConfig: string | undefined;
+  function primeInstallPrefetch(): void {
+    const resolverUrl = getResolverUrl();
+    // Config = the boot identity that must invalidate an in-flight prefetch.
+    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
+    // The policy lives in a pure, unit-tested helper (`decideInstallPrefetch`);
+    // the thunks keep the deliberate ordering — stamp/pin reads (sync,
+    // `syncMirror`) run only when the cheap clear/keep gates fall through. Read
+    // SYNC: an async gate starves behind the busy boot loop and fires the
+    // prefetch AFTER the install it feeds (measured 2026-07-02: two POSTs, no
+    // overlap). Learned pin beats the coarse env pin (ADR-0194).
+    const decision = decideInstallPrefetch({
+      devFromScratch,
+      resolverUrl,
+      config,
+      hasHandle: installPrefetch !== undefined,
+      prevConfig: installPrefetchConfig,
+      isStamped: () =>
+        installStampSatisfiedForPackageJsonSync(
+          syncMirror(),
+          devCfg.root,
+          devSlug,
+          devCfg.packageJson,
+        ) !== null,
+      pinFor: () =>
+        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
+    });
+    if (decision.kind === 'keep') return;
+    if (decision.kind === 'clear') {
+      installPrefetch = undefined;
+      installPrefetchConfig = undefined;
+      return;
+    }
+    installPrefetchConfig = decision.config;
+    installPrefetch =
+      decision.kind === 'start'
+        ? startInstallPrefetch({
+            packageJsonText: devCfg.packageJson,
+            resolverUrl: resolverUrl as string,
+            closureHash: decision.closureHash,
+            bundleBaseUrl: getEddyBundleBaseUrl(),
+          })
+        : undefined;
+  }
+  // A hidden empty boot has no chosen starter — nothing installs until the
+  // page's `pty:dev-config` picks one (its handler re-primes with that config).
+  if (!hiddenEmptyBoot) primeInstallPrefetch();
+
   const pendingStarterGeneratedBaseline = new Set<string>();
   const markStarterGeneratedBaselinePending = (root: string): void => {
     pendingStarterGeneratedBaseline.add(root);
@@ -487,17 +568,6 @@ async function bootShellOwner(opts: {
   // server (vite, webpack-dev-server, bare node:http) flips it; no bin-name
   // keying.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
-
-  // The persistent owner is spawned once with the default template; a preset
-  // switch updates which template/runtime the NEXT co-resident dev server boots
-  // (ADR-0148 — the page sends `pty:dev-config` before re-running the dev line).
-  let devSpec = spec;
-  let devCfg = cfg;
-  let devSlug = slug;
-  let devFromScratch = fromScratch;
-  let lastDevTemplateId: string | null = null;
-  let lastDevRoot: string | null = null;
-  let devConfigReady: Promise<void> = Promise.resolve();
 
   function devConfigRequestsWorkspaceTypeScript(): boolean {
     return effectiveDepsFromPackageJsonText(devCfg.packageJson)?.typescript !== undefined;
@@ -802,6 +872,9 @@ async function bootShellOwner(opts: {
     const npmCommand = createNpmShellCommand({
       vfs,
       registry,
+      // Durable-on-exit (npm parity): checked drains around the stamp
+      // (ADR-0187 Corrected) — a dirty persist report skips the stamp so a
+      // reload never trusts a torn tree (owner-snapshot-restore-exec).
       flush: flushSyncMirror,
       // Stamp the install for the CURRENT project slug (same key the dev-server
       // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
@@ -813,6 +886,17 @@ async function bootShellOwner(opts: {
       // resolver URL is configured the visible `npm install` uses eddy's bundle
       // + auto-fallback; inert (byte-identical) when unset.
       resolverUrl: getResolverUrl(),
+      // ADR-0195: the ACTIVE template's pinned closure hash (cacheable GET) and
+      // the owner-boot prefetch — getters, the active preset can change. Keyed
+      // on the TEMPLATE id, not the slug (the template owns the dep-set).
+      resolverClosureHash: () => getEddyPin(devSpec.id),
+      resolverBundleBaseUrl: getEddyBundleBaseUrl(),
+      resolverPrefetch: () => installPrefetch,
+      // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
+      learnedPins: {
+        get: (key) => readLearnedPin(vfs, key),
+        set: (key, hash) => writeLearnedPin(vfs, key, hash),
+      },
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
@@ -938,6 +1022,9 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
+      // Re-prime the eddy prefetch for the NEW preset (ADR-0195) — the boot
+      // line's `npm install` follows this config change.
+      primeInstallPrefetch();
       devConfigReady = prepareActiveDevConfigDeps();
     },
     // Deps gate per run: every pty command waits for the active preset's deps
@@ -1031,6 +1118,16 @@ async function bootShellOwner(opts: {
           error: { name: error.name, message: error.message },
         });
       }
+      return;
+    }
+    // Durability barrier (ADR-0187): drain this realm's OPFS write-through and
+    // ack only a clean ledger — the page's flushDurable() awaits this.
+    if (isVfsFlushIpcMessage(message)) {
+      void handleVfsFlushRequest({
+        opId: message.opId,
+        flush: flushSyncMirror,
+        send: (ack) => kernelIpc.send?.(ack),
+      });
       return;
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy

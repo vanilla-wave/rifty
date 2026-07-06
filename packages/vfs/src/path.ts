@@ -123,18 +123,20 @@ export function segments(p: string): string[] {
 }
 
 /**
- * Normalise `p` and coerce to an absolute POSIX path. Relative inputs like
- * `'foo/bar'` or `'./foo/../bar.txt'` become `'/foo/bar'` and `'/bar.txt'`
- * respectively. Backends rely on this to keep their manual path-slicing
- * (parent + child name) honest even when callers pass relative paths.
+ * Normalise an ABSOLUTE POSIX path (dot-segments collapse, trailing slashes
+ * strip). Relative inputs THROW (ADR-0199): the VFS layer never guesses an
+ * anchor — silently rooting `'foo'` as `'/foo'` used to mask missing cwd
+ * resolution in callers (the fs-streams wrong-file bug, review 2026-07-05).
+ * cwd anchoring belongs to the layers above (runtime-js fs-path kit, shell
+ * `resolve(ctx.cwd, …)`, WASI preopen join).
  *
  * This is the documented invariant for `Vfs` / `FsSync` entry points: every
- * public method normalises its `path` argument before forwarding to the
- * backend.
+ * public method normalises (and thereby asserts) its `path` argument before
+ * forwarding to the backend.
  */
 export function normalizeAbsolute(p: string): string {
-  const normalized = normalizePath(p);
-  if (normalized.startsWith('/')) return normalized;
-  if (normalized === '.') return '/';
-  return `/${normalized}`;
+  if (!p.startsWith('/')) {
+    throw new Error(`VFS path must be absolute (ADR-0199); got: '${p}'`);
+  }
+  return normalizePath(p);
 }

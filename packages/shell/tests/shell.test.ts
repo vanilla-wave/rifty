@@ -579,13 +579,16 @@ describe('Shell — onChunk streaming writer', () => {
     };
     setSyncMirror(failing);
     const sh = new Shell({ cwd: '/' });
+    const stdoutChunks: string[] = [];
     const stderrChunks: string[] = [];
     const r = await sh.run('echo hi > /tmp/out', {
       onChunk: (chunk, stream) => {
+        if (stream === 'stdout') stdoutChunks.push(chunk);
         if (stream === 'stderr') stderrChunks.push(chunk);
       },
     });
     expect(r.exitCode).not.toBe(0);
+    expect(stdoutChunks).toEqual([]);
     expect(stderrChunks.join('')).toMatch(/redirect write failed/);
   });
 });
@@ -701,6 +704,24 @@ describe('Shell — redirect correctness (Phase-1 fixes)', () => {
     expect(r.exitCode).toBe(0);
     const cat = await sh.run('cat ./-dash.txt');
     expect(cat.stdout).toBe('hi\n');
+  });
+
+  it('redirected byte stdout is captured to the file, not streamed to onChunk', async () => {
+    const sh = new Shell({ cwd: '/' });
+    sh.registerCommand('bytes', async (_args, ctx) => {
+      ctx.stdout.write(new Uint8Array([0xff, 0x41]));
+      return 0;
+    });
+    const stdoutChunks: string[] = [];
+    const r = await sh.run('bytes > /bytes.bin', {
+      onChunk: (chunk, stream) => {
+        if (stream === 'stdout') stdoutChunks.push(chunk);
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe('');
+    expect(stdoutChunks).toEqual([]);
+    expect(Array.from(syncMirror().readFileBytesSync('/bytes.bin'))).toEqual([0xff, 0x41]);
   });
 });
 

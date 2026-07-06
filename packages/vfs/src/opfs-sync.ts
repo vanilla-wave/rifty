@@ -48,7 +48,7 @@ import {
   basenameNormalized,
   dirname,
   dirnameNormalized,
-  normalizePath,
+  normalizeAbsolute,
   segments,
 } from './path.ts';
 import type { VfsDirent } from './types.ts';
@@ -88,6 +88,39 @@ export interface PairedAsyncSurface {
   writeFile(path: string, data: Uint8Array): Promise<void>;
   rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
 }
+
+/** One path whose LAST OPFS persist attempt failed — disk lags the mirror. */
+export interface PersistFailure {
+  readonly path: string;
+  readonly op: 'write' | 'mkdir' | 'rm' | 'rename';
+  readonly message: string;
+}
+
+/** {@link OpfsFsSync.flush} result (ADR-0187 Corrected): the still-unhealed
+ * persist failures. `failures` is a SAMPLE (first {@link
+ * PERSIST_REPORT_SAMPLE} by ledger order); `total` is the full count —
+ * `total === 0` ⇔ everything drained IS durable. Every counted path stays
+ * individually healable (the ledger itself is never truncated). */
+export interface PersistFailureReport {
+  readonly failures: ReadonlyArray<PersistFailure>;
+  readonly total: number;
+  /**
+   * FULL-ledger predicate query. `failures` is a SAMPLE (first {@link
+   * PERSIST_REPORT_SAMPLE}), so a durability gate that scans it can MISS damage
+   * beyond the sample — e.g. 20 foreign failures fill the sample while a
+   * `node_modules` failure sits outside it. Callers that gate on "is any path
+   * matching X still unhealed?" MUST ask the whole ledger via this. Present on
+   * the OpfsFsSync backend; absent on report literals / the memory backend
+   * (there the sample IS the full set), where callers fall back to `failures`.
+   */
+  readonly anyFailure?: (predicate: (path: string) => boolean) => boolean;
+}
+
+/** Report-sample size: consumers read `failures[0]` + `total`; shipping the
+ * whole ledger on every flush is waste, truncating the LEDGER (not just the
+ * report) would make over-cap failures unhealable — `total` could then never
+ * return to 0 after a big quota event. */
+const PERSIST_REPORT_SAMPLE = 20;
 
 /**
  * Walks an OPFS directory tree and yields `{ path, kind, size, children? }`
@@ -297,11 +330,11 @@ export class OpfsFsSync implements FsSync {
    * async surface — the intended bootstrap path.
    */
   private async ensureHandle(path: string, create: boolean): Promise<FileSystemSyncAccessHandle> {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const existing = this.handles.get(normalized);
     if (existing) return existing;
     const parent = await this.resolveParent(normalized);
-    // `normalized` = normalizePath(path) (#10) — basenameNormalized skips the
+    // `normalized` = normalizeAbsolute(path) (#10) — basenameNormalized skips the
     // redundant normalize pass.
     const file = await parent.getFileHandle(basenameNormalized(normalized), { create });
     const handle = await file.createSyncAccessHandle();
@@ -391,43 +424,110 @@ export class OpfsFsSync implements FsSync {
   /**
    * Fire-and-forget async persist of a directory creation to OPFS. Caller
    * already mutated the in-memory mirror; this brings disk in line.
-   * Errors are swallowed — the next `refreshIndex` will reconcile.
+   * Errors never reject the queue — they land in the persist-failure ledger
+   * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
     this.enqueuePending(async () => {
       try {
         await this.persistDirectoryPath(path, recursive);
-      } catch {
+        this.persistFailures.delete(path);
+        // A persisted dir proves its ancestors exist on disk too — heal any
+        // stale ancestor mkdir failure.
+        this.healAncestorPersistFailures(path);
+      } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
-        // reconciles on next refresh.
+        // reconciles on next refresh — but the divergence is RECORDED so a
+        // durability-gated caller (install stamp) can refuse to trust it.
+        this.recordPersistFailure(path, 'mkdir', err);
       }
     });
   }
 
   /**
    * Async persist of an `rm` to OPFS, tracked in {@link pending} so
-   * {@link flush} drains deletes too (ADR-0072). Errors are swallowed —
-   * the next `refreshIndex` reconciles any mismatch.
+   * {@link flush} drains deletes too (ADR-0072). Errors never reject the
+   * queue — they land in the persist-failure ledger; the next `refreshIndex`
+   * reconciles any mismatch.
    */
   private persistRmAsync(path: string, recursive: boolean): void {
     this.enqueuePending(async () => {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
-      } catch {
-        // See `persistMkdirAsync` — mismatch reconciles on refresh.
+        // A durably-removed subtree heals EVERY ledger entry under it: disk
+        // and mirror now agree the paths are gone, so an unhealed child write
+        // failure is moot — leaving it would make a durable tree look torn
+        // and wrongly skip/revoke install stamps.
+        this.clearPersistFailuresUnder(path);
+      } catch (err) {
+        // See `persistMkdirAsync` — mismatch reconciles on refresh; recorded
+        // meanwhile. A missing OPFS entry is already-removed = success.
+        if ((err as { name?: string }).name === 'NotFoundError') {
+          this.clearPersistFailuresUnder(path);
+          return;
+        }
+        this.recordPersistFailure(path, 'rm', err);
       }
     });
   }
 
+  /** Heal `path` and every ledger entry beneath it (recursive rm / moved-away
+   * subtree): once disk agrees the subtree is gone, its unhealed write
+   * failures no longer describe a divergence. */
+  private clearPersistFailuresUnder(path: string): void {
+    const prefix = path === '/' ? '/' : `${path}/`;
+    for (const key of [...this.persistFailures.keys()]) {
+      if (key === path || key.startsWith(prefix)) this.persistFailures.delete(key);
+    }
+  }
+
+  /** A persisted write/dir at `path` proves each ANCESTOR directory exists on
+   * disk: mkdir creates the chain, and writeFile can now only succeed when the
+   * chain is already present. A stale ancestor mkdir failure no longer
+   * describes a divergence — clear it. Guarded on a non-empty ledger so the
+   * common (nothing-failed) path stays O(1). */
+  private healAncestorPersistFailures(path: string): void {
+    if (this.persistFailures.size === 0) return;
+    let parent = dirnameNormalized(path);
+    while (parent !== '/') {
+      this.persistFailures.delete(parent);
+      const next = dirnameNormalized(parent);
+      if (next === parent) break;
+      parent = next;
+    }
+  }
+
   existsSync(path: string): boolean {
-    return this.index.has(normalizePath(path));
+    return this.index.has(normalizeAbsolute(path));
+  }
+
+  /**
+   * Strict-walk guard (Node parity; mirrors `MemoryBackend.resolveStrict`):
+   * when the nearest EXISTING ancestor of `normalized` is a file, the lookup
+   * traversed through a file → `ENOTDIR` named after `reportPath`, never a
+   * silent miss→ENOENT. A missing ancestor stays a miss (caller picks
+   * ENOENT vs `force`). Parity case: fs/error-shape-errno-syscall.
+   */
+  private assertNoFileAncestor(normalized: string, reportPath: string): void {
+    let p = normalized;
+    while (p !== '/') {
+      p = dirnameNormalized(p);
+      const e = this.index.get(p);
+      if (e) {
+        if (e.kind !== 'dir') throw new VfsError('ENOTDIR', reportPath);
+        return;
+      }
+    }
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
     // Content cache (ADR-0072) is authoritative for sync reads. The
     // `?? new Uint8Array()` covers a file the boot preload couldn't read
@@ -437,13 +537,18 @@ export class OpfsFsSync implements FsSync {
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     // `normalized` (#10) — skip dirname's redundant normalize.
     const parent = dirnameNormalized(normalized);
     const parentEntry = this.index.get(parent);
-    if (!parentEntry || parentEntry.kind !== 'dir') {
-      throw new VfsError('ENOENT', parent);
+    // Errors name the TARGET path (Node parity); a file on the parent chain
+    // is ENOTDIR, a missing chain is ENOENT.
+    if (!parentEntry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
     }
+    if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+    if (this.index.get(normalized)?.kind === 'dir') throw new VfsError('EISDIR', path);
     // In-cache write (ADR-0072): ONE defensive slice shared by the content
     // cache and the async write-through (#3, perf audit 2026-06-05: 2N->N
     // copies/write). This single entry-point slice is the SOLE barrier
@@ -457,13 +562,17 @@ export class OpfsFsSync implements FsSync {
     const copy = data.slice();
     this.content.set(normalized, copy);
     const wasKnown = this.index.has(normalized);
+    const previousTimes = this.times.get(normalized);
+    const now = Date.now();
+    const previousMtime = previousTimes?.mtime ?? 0;
+    const mtime = now <= previousMtime ? previousMtime + 1 : now;
+    this.times.set(normalized, { atime: previousTimes?.atime ?? now, mtime });
     this.index.set(normalized, { kind: 'file', size: data.byteLength });
     if (!wasKnown) {
       this.attachChild(normalized); // attachChild invalidates the parent cache
     } else {
-      // Already a known child: attachChild is skipped, but the child's kind can
-      // flip (e.g. dir->file) so the parent's dirent cache must still drop
-      // (perf audit 2026-06-05; kind-flip hazard).
+      // Already a known child: attachChild is skipped, but a parent cache may
+      // exist, so drop it conservatively on every overwrite.
       const parentEntry = this.index.get(parent);
       if (parentEntry?.kind === 'dir') parentEntry.sortedDirents = null;
     }
@@ -481,12 +590,37 @@ export class OpfsFsSync implements FsSync {
     this.enqueuePending(async () => {
       try {
         await surface.writeFile(normalized, data);
-      } catch {
+        this.persistFailures.delete(normalized);
+        // A persisted write proves every ANCESTOR directory exists on disk:
+        // OpfsVfs.writeFile no longer creates parents, so success itself is the
+        // proof. Heal stale ancestor mkdir failures, else a durable tree can
+        // wrongly revoke its install stamp.
+        this.healAncestorPersistFailures(normalized);
+      } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
         // refreshIndex/preload reconciles. Cache stays correct for sync
-        // callers in this realm.
+        // callers in this realm — but the divergence is RECORDED: a caller
+        // that promises durability (install stamp) must be able to see it.
+        this.recordPersistFailure(normalized, 'write', err);
       }
     });
+  }
+
+  /**
+   * Persist-failure ledger: paths whose LAST persist attempt failed, i.e.
+   * where OPFS is known to lag the in-memory mirror. A later successful
+   * persist of the same path heals its entry (re-install after a freed
+   * quota). Deliberately UNCAPPED: keyed by path, so growth is bounded by the
+   * distinct paths written this session — the same order as the mirror's own
+   * `index`/`content` maps (which hold the actual bytes). A truncated ledger
+   * would make over-cap failures unhealable (`total` never returns to 0 after
+   * a big quota event); only the REPORT is sampled.
+   */
+  private readonly persistFailures = new Map<string, PersistFailure>();
+
+  private recordPersistFailure(path: string, op: PersistFailure['op'], err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    this.persistFailures.set(path, { path, op, message });
   }
 
   /** Adds `p` to {@link pending} and self-removes it on settle. */
@@ -499,6 +633,11 @@ export class OpfsFsSync implements FsSync {
   }
 
   private enqueuePending(task: () => Promise<void>): void {
+    // FIFO is load-bearing (ADR-0187 Corrected): the install stamp's "durable
+    // stamp implies durable tree" is delivered by write-through ORDER plus the
+    // persist-failure ledger gate (order alone can't survive a swallowed
+    // per-op failure). Parallelizing this queue requires per-path ordering +
+    // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
     const p = this.pending.length === 0 ? task() : this.pendingTail.then(task, task);
     this.pendingTail = p.catch(() => {});
     this.trackPending(p);
@@ -508,10 +647,31 @@ export class OpfsFsSync implements FsSync {
    * Drains all in-flight async OPFS write-through / structural operations
    * (ADR-0072). Callers invoke this before a deterministic boundary —
    * e.g. the runtime worker awaits it before resolving an `eval` result so
-   * persistence completes before any page reload. Never rejects.
+   * persistence completes before any page reload. Never rejects — instead it
+   * RETURNS the persist-failure ledger (ADR-0187 Corrected): paths where OPFS
+   * still lags the mirror because their last persist attempt failed. Callers
+   * that only order writes ignore the result; callers that PROMISE durability
+   * (the install stamp) gate on `report.total === 0`.
    */
-  async flush(): Promise<void> {
+  async flush(): Promise<PersistFailureReport> {
     await Promise.allSettled([...this.pending]);
+    const failures: PersistFailure[] = [];
+    for (const failure of this.persistFailures.values()) {
+      if (failures.length >= PERSIST_REPORT_SAMPLE) break;
+      failures.push(failure);
+    }
+    // `anyFailure` scans the WHOLE ledger (not the sample) so a durability gate
+    // never misses a torn-tree path beyond the first PERSIST_REPORT_SAMPLE.
+    return {
+      failures,
+      total: this.persistFailures.size,
+      anyFailure: (predicate) => {
+        for (const path of this.persistFailures.keys()) {
+          if (predicate(path)) return true;
+        }
+        return false;
+      },
+    };
   }
 
   /**
@@ -523,7 +683,7 @@ export class OpfsFsSync implements FsSync {
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {
-      const normalized = normalizePath(path);
+      const normalized = normalizeAbsolute(path);
       const dir = dirnameNormalized(normalized);
       if (dir !== '/' && !this.index.has(dir)) {
         this.mkdirSync(dir, { recursive: true });
@@ -533,20 +693,21 @@ export class OpfsFsSync implements FsSync {
   }
 
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     // mtime: prefer `utimes` side-table; fall back to 0 — OPFS exposes no
     // native mtime to the sync surface (ADR-0029).
     const mtime = this.times.get(normalized)?.mtime ?? 0;
     if (entry.kind === 'dir') {
       return { isFile: false, isDirectory: true, size: 0, mtime };
     }
-    // Prefer live size from an open sync access handle; else cached size
-    // from the last walk/write.
-    const handle = this.handles.get(normalized);
-    const size = handle ? handle.getSize() : entry.size;
-    return { isFile: true, isDirectory: false, size, mtime };
+    // Content/index cache is the authoritative sync mirror (ADR-0072). An
+    // open sync access handle can lag a write-through queued from writeFileSync.
+    return { isFile: true, isDirectory: false, size: entry.size, mtime };
   }
 
   statSyncOrNull(
@@ -556,14 +717,17 @@ export class OpfsFsSync implements FsSync {
     // the same statSync path (live-handle size + utimes-side-table mtime).
     // One normalize; statSync re-normalizes the already-normalized arg cheaply
     // via the #10 fast-path.
-    const norm = normalizePath(path);
+    const norm = normalizeAbsolute(path);
     if (!this.index.has(norm)) return null;
     return this.statSync(norm);
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    const normalized = normalizePath(path);
-    if (!this.index.has(normalized)) throw new VfsError('ENOENT', path);
+    const normalized = normalizeAbsolute(path);
+    if (!this.index.has(normalized)) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     this.times.set(normalized, { atime: atimeMs, mtime: mtimeMs });
   }
 
@@ -574,9 +738,12 @@ export class OpfsFsSync implements FsSync {
    * `MemoryBackend.readdir`).
    */
   readdirSync(path: string): readonly VfsDirent[] {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
-    if (!entry) throw new VfsError('ENOENT', path);
+    if (!entry) {
+      this.assertNoFileAncestor(normalized, path);
+      throw new VfsError('ENOENT', path);
+    }
     if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     if (!entry.children) return [];
     if (entry.sortedDirents != null) return entry.sortedDirents;
@@ -606,11 +773,11 @@ export class OpfsFsSync implements FsSync {
    * `VfsError('ENOENT')`. If the target already exists as a directory,
    * non-recursive callers get `VfsError('EEXIST')`; recursive callers
    * are tolerated. If the target exists as a file, throws
-   * `VfsError('ENOTDIR')`.
+   * `VfsError('EEXIST')`; traversal through a file remains `ENOTDIR`.
    */
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const parts = segments(normalized);
     if (parts.length === 0) {
       // mkdir('/'): root always exists.
@@ -622,14 +789,18 @@ export class OpfsFsSync implements FsSync {
       cumulative = `${cumulative}/${parts[i]}`;
       const existing = this.index.get(cumulative);
       if (existing) {
-        if (existing.kind !== 'dir') throw new VfsError('ENOTDIR', cumulative);
+        // Full target path in the error (Node parity: `mkdir 'plain.txt/sub'`).
+        if (existing.kind !== 'dir') {
+          throw new VfsError(i === parts.length - 1 ? 'EEXIST' : 'ENOTDIR', path);
+        }
         if (i === parts.length - 1 && !recursive) {
           throw new VfsError('EEXIST', path);
         }
         continue;
       }
       if (!recursive && i < parts.length - 1) {
-        throw new VfsError('ENOENT', cumulative);
+        // Missing parent still names the TARGET (same rule as ENOTDIR above).
+        throw new VfsError('ENOENT', path);
       }
       this.index.set(cumulative, { kind: 'dir', size: 0, children: new Set() });
       this.attachChild(cumulative);
@@ -651,7 +822,7 @@ export class OpfsFsSync implements FsSync {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
     const force = options.force ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     if (normalized === '/') {
       if (recursive) {
         // Clear root's children, keep the root entry. Persist per-child:
@@ -674,6 +845,9 @@ export class OpfsFsSync implements FsSync {
     }
     const entry = this.index.get(normalized);
     if (!entry) {
+      // ENOTDIR (path through a file) throws even under `force` — Node's
+      // force suppresses only ENOENT (verified against real Node, 2026-07-05).
+      this.assertNoFileAncestor(normalized, path);
       if (force) return;
       throw new VfsError('ENOENT', path);
     }
@@ -687,16 +861,23 @@ export class OpfsFsSync implements FsSync {
   }
 
   copyFileSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'dir') throw new VfsError('EISDIR', src);
     const dstEntry = this.index.get(d);
     if (dstEntry && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
     const parent = dirname(d);
     const parentEntry = this.index.get(parent);
-    if (!parentEntry || parentEntry.kind !== 'dir') throw new VfsError('ENOENT', parent);
+    if (!parentEntry) {
+      this.assertNoFileAncestor(d, dst);
+      throw new VfsError('ENOENT', dst);
+    }
+    if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
     const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
     // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
     this.writeFileSync(d, bytes);
@@ -707,10 +888,13 @@ export class OpfsFsSync implements FsSync {
 
   cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'file') {
       this.copyFileSync(s, d);
       return;
@@ -728,16 +912,23 @@ export class OpfsFsSync implements FsSync {
   }
 
   renameSync(src: string, dst: string): void {
-    const s = normalizePath(src);
-    const d = normalizePath(dst);
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
     if (s === d) return;
     if (s === '/') throw new VfsError('EINVAL', src);
     const srcEntry = this.index.get(s);
-    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (!srcEntry) {
+      this.assertNoFileAncestor(s, src);
+      throw new VfsError('ENOENT', src);
+    }
     if (srcEntry.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
     const dstParent = dirname(d);
     const dstParentEntry = this.index.get(dstParent);
-    if (!dstParentEntry || dstParentEntry.kind !== 'dir') throw new VfsError('ENOENT', dstParent);
+    if (!dstParentEntry) {
+      this.assertNoFileAncestor(d, dst);
+      throw new VfsError('ENOENT', dst);
+    }
+    if (dstParentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
     const dstEntry = this.index.get(d);
     if (dstEntry) {
       if (srcEntry.kind === 'file' && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
@@ -828,20 +1019,51 @@ export class OpfsFsSync implements FsSync {
         const orderedDirs = [...dirCreates].sort(
           (a, b) => segments(a).length - segments(b).length || a.localeCompare(b),
         );
-        for (const dir of orderedDirs) await this.persistDirectoryPath(dir, true);
+        for (const dir of orderedDirs) {
+          await this.persistDirectoryPath(dir, true);
+          this.persistFailures.delete(dir);
+          this.healAncestorPersistFailures(dir);
+        }
         if (surface) {
           for (const move of fileMoves) {
             const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
             await surface.writeFile(move.newPath, bytes);
           }
-          await surface.rm(srcRoot, { recursive: true });
-        } else {
-          const parent = await this.resolveParent(srcRoot);
-          await parent.removeEntry(basename(srcRoot), { recursive: true });
         }
-      } catch {
+        // Remove the source subtree AFTER the destinations wrote durably.
+        // Already-gone (NotFoundError) counts as a successful removal (same
+        // rule as persistRmAsync): a rename whose source never reached disk
+        // must still HEAL its durably-written destinations below, not record
+        // bogus per-destination failures for a move that actually persisted.
+        try {
+          if (surface) {
+            await surface.rm(srcRoot, { recursive: true });
+          } else {
+            const parent = await this.resolveParent(srcRoot);
+            await parent.removeEntry(basename(srcRoot), { recursive: true });
+          }
+        } catch (err) {
+          if ((err as { name?: string }).name !== 'NotFoundError') throw err;
+        }
+        // A fully-persisted move heals both sides of the ledger: each
+        // destination just got written durably, and the removed source
+        // subtree no longer describes any divergence (same rule as
+        // `persistRmAsync`). Without this, a pre-rename write failure on a
+        // moved path would read as torn forever.
+        for (const move of fileMoves) {
+          this.persistFailures.delete(move.newPath);
+          this.healAncestorPersistFailures(move.newPath);
+        }
+        this.clearPersistFailuresUnder(srcRoot);
+      } catch (err) {
         // Mismatch reconciles on the next refreshIndex (same posture as
-        // enqueueWriteThrough / persistRmAsync).
+        // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION
+        // path — those are the files a reload would find missing; a later
+        // successful write-through of the same path heals the entry.
+        for (const move of fileMoves) {
+          this.recordPersistFailure(move.newPath, 'rename', err);
+        }
+        if (fileMoves.length === 0) this.recordPersistFailure(srcRoot, 'rename', err);
       }
     });
   }

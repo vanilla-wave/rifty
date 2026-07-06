@@ -29,7 +29,7 @@ N/A — packaging/infra item, no Node-observable behavior. The resolver's + clie
 ## Out of scope
 
 - The actual `npm publish` of `@riftydev/eddy` (wiring it into `release.yml`'s OIDC publish + the first release) — confirm-first/outward; the package is publish-READY here.
-- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not.
+- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not. DONE: **v1.1** live 2026-07-01, **v1.2** (tag `0.2.2`) redeployed 2026-07-05, CDN tier included — `docs/public/hosting-eddy.md`; `perf/eddy-upstream-registry-ab` now unblocked. (This item stays open only for the `npm publish` bullet above — user deferred it.)
 - Integrating eddy into `tools/publishing/sync-publish-config.mjs` (the packages/* generator) — the hand-authored `tsup.config.ts` stands until then; folding it in is a follow-up, not a blocker.
 - A `tools/registry/`-style live smoke wired into CI (the proxy has one) — listed in the doc as a manual `curl` smoke; CI wiring waits on a deployed eddy.
 

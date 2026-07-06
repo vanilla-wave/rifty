@@ -14,5 +14,21 @@ export {
 } from './resolver.ts';
 export { EddyCache, type EddyCacheOptions } from './cache.ts';
 export { createEddyServer, type EddyServer, type EddyServerOptions } from './server.ts';
-export { closureHashOf } from './closure-hash.ts';
+export {
+  MemoryBundleStore,
+  type BundleStore,
+  type CachedBundle,
+  type MemoryBundleStoreOptions,
+} from './bundle-store.ts';
+export { S3BundleStore, type S3BundleStoreOptions } from './s3-bundle-store.ts';
+export {
+  MemoryTarballCache,
+  TtlPackumentCache,
+  type MemoryTarballCacheOptions,
+  type TtlPackumentCacheOptions,
+} from './shared-caches.ts';
 export { readNpmClientVersion } from './npm-client-version.ts';
+// API compatibility: `@riftydev/eddy`'s `closureHashOf` has always returned a
+// plain `string` — the sync Node twin of the shared async implementation
+// (`closure-hash.ts` hashes the same `canonicalClosureJson`).
+export { closureHashOf } from './closure-hash.ts';

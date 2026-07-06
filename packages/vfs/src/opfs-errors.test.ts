@@ -68,6 +68,7 @@ type ErrorKind =
   | 'NotAllowedError'
   | 'QuotaExceededError'
   | 'TypeMismatchError'
+  | 'InvalidModificationError'
   | 'GremlinError';
 
 interface FakeDirOpts {
@@ -77,6 +78,8 @@ interface FakeDirOpts {
   fileError?: ErrorKind;
   /** Behaviour for `getDirectoryHandle`. */
   dirError?: ErrorKind;
+  /** Behaviour for `removeEntry`. */
+  removeError?: ErrorKind;
 }
 
 function makeFakeRoot(opts: FakeDirOpts): FileSystemDirectoryHandle {
@@ -94,6 +97,12 @@ function makeFakeRoot(opts: FakeDirOpts): FileSystemDirectoryHandle {
         return Promise.reject(new FakeDomException(opts.dirError));
       }
       throw new Error('unexpected fake getDirectoryHandle call without dirError set');
+    },
+    removeEntry(_name: string, _o?: { recursive?: boolean }) {
+      if (opts.removeError) {
+        return Promise.reject(new FakeDomException(opts.removeError));
+      }
+      return Promise.resolve();
     },
   };
   return handle as unknown as FileSystemDirectoryHandle;
@@ -156,6 +165,99 @@ describe('OpfsVfs error mapping', () => {
     const err = await vfs.readFile('/x').catch((e: unknown) => e);
     expect((err as VfsError).cause).toBeInstanceOf(Error);
     expect(((err as VfsError).cause as Error).name).toBe('GremlinError');
+  });
+
+  it('rm force suppresses only ENOENT from removeEntry', async () => {
+    await expect(
+      fakeVfs({ removeError: 'NotFoundError' }).rm('/missing', { force: true }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fakeVfs({ removeError: 'NotAllowedError' }).rm('/locked', { force: true }),
+    ).rejects.toMatchObject({ code: 'EACCES' });
+  });
+
+  it('rm force does not suppress ENOTDIR while resolving the parent', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.rm('/plain-file/child', { force: true })).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
+  });
+
+  it('directory-walk failures name the requested target path', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.readdir('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+    await expect(vfs.stat('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+    await expect(vfs.rm('/plain-file/child')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain-file/child',
+    });
+  });
+
+  it('mkdir with a missing parent names the TARGET path, not the failing component', async () => {
+    const vfs = fakeVfs({ dirError: 'NotFoundError' });
+    await expect(vfs.mkdir('/no/such/deep')).rejects.toMatchObject({
+      code: 'ENOENT',
+      path: '/no/such/deep',
+    });
+  });
+
+  it('mkdir targeting an existing file is EEXIST; mkdir through a file remains ENOTDIR', async () => {
+    const vfs = fakeVfs({ dirError: 'TypeMismatchError' });
+    await expect(vfs.mkdir('/plain.txt')).rejects.toMatchObject({
+      code: 'EEXIST',
+      path: '/plain.txt',
+    });
+    await expect(vfs.mkdir('/plain.txt/sub')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+      path: '/plain.txt/sub',
+    });
+  });
+
+  it('writeFile rejects a missing parent instead of creating parent directories', async () => {
+    const createdDirs: string[] = [];
+    const writable = {
+      write: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
+    const fileHandle = {
+      kind: 'file' as const,
+      createWritable: () => Promise.resolve(writable),
+    };
+    const createdDir = {
+      kind: 'directory' as const,
+      getFileHandle: (_name: string, options?: { create?: boolean }) => {
+        if (options?.create) {
+          return Promise.resolve(fileHandle as unknown as FileSystemFileHandle);
+        }
+        return Promise.reject(new FakeDomException('NotFoundError'));
+      },
+      getDirectoryHandle: () => Promise.reject(new FakeDomException('NotFoundError')),
+    };
+    const root = {
+      kind: 'directory' as const,
+      getDirectoryHandle: (name: string, options?: { create?: boolean }) => {
+        if (options?.create) {
+          createdDirs.push(name);
+          return Promise.resolve(createdDir as unknown as FileSystemDirectoryHandle);
+        }
+        return Promise.reject(new FakeDomException('NotFoundError'));
+      },
+      getFileHandle: () => Promise.reject(new FakeDomException('NotFoundError')),
+    };
+    const vfs = new OpfsVfs();
+    (vfs as unknown as { root: unknown }).root = root;
+
+    await expect(vfs.writeFile('/missing/file.txt', 'x')).rejects.toMatchObject({
+      code: 'ENOENT',
+      path: '/missing/file.txt',
+    });
+    expect(createdDirs).toEqual([]);
   });
 });
 

@@ -41,6 +41,7 @@ import {
 import { stampTsLspOwner, tsLspOwnerMatches } from './ts-lsp-owner-scope.ts';
 import {
   type VfsWriteFrame,
+  isVfsFlushAckMessage,
   isVfsWriteAckMessage,
   sendGuardedVfsWrite,
   sendVfsWrite,
@@ -54,6 +55,9 @@ import {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const VFS_WRITE_ACK_TIMEOUT_MS = 5_000;
+/** OPFS durability drain can trail a big write burst (post-install trees run
+ *  hundreds of ms; quota-pressure retries longer) — give the barrier slack. */
+const VFS_FLUSH_ACK_TIMEOUT_MS = 30_000;
 
 function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
@@ -161,6 +165,15 @@ export interface WorkspaceOwnerHandle {
    * surface as the actual owner error, not as a generic reflect timeout.
    */
   writeFrameAcked(frame: VfsWriteFrame): Promise<void>;
+  /**
+   * Durability barrier (ADR-0187 Corrected). A write ack means "applied to the
+   * owner's in-memory mirror"; OPFS write-through drains asynchronously behind
+   * it. This resolves once the owner drained the queue AND the durable tier is
+   * clean — rejects listing unhealed persist failures (disk lags the mirror),
+   * so durability is provable without wall-clock sleeps. Memory backend: no
+   * durability tier, resolves after the drain no-op.
+   */
+  flushDurable(): Promise<void>;
   /**
    * Download: ask the owner to serialize its whole source tree to a workspace
    * archive JSON (single-store-owner model: the PAGE keeps no authoritative store
@@ -432,7 +445,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       settleReady();
       return;
     }
-    if (isVfsWriteAckMessage(message)) {
+    if (isVfsWriteAckMessage(message) || isVfsFlushAckMessage(message)) {
       const pending = pendingVfsWrites.get(message.opId);
       if (!pending) return;
       pendingVfsWrites.delete(message.opId);
@@ -542,6 +555,26 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       }
     });
   };
+  const flushDurable = (): Promise<void> => {
+    if (exited) {
+      return Promise.reject(
+        new Error('workspace owner has exited — nothing to flush. Reload to respawn the owner.'),
+      );
+    }
+    const opId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingVfsWrites.delete(opId);
+        reject(new Error(`owner VFS flush ack timed out (${opId})`));
+      }, VFS_FLUSH_ACK_TIMEOUT_MS);
+      pendingVfsWrites.set(opId, { resolve, reject, timer });
+      if (!worker.send({ type: 'rifty:vfs-flush', opId })) {
+        pendingVfsWrites.delete(opId);
+        clearTimeout(timer);
+        reject(new Error(`owner VFS flush send failed (${opId})`));
+      }
+    });
+  };
   const readFileBytes = (path: string): Promise<Uint8Array> => {
     if (exited) {
       return Promise.reject(
@@ -582,6 +615,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     },
     writeFrame,
     writeFrameAcked,
+    flushDurable,
     exportArchive: () => archiveBridge.export(),
     importArchive: (archiveJson) => archiveBridge.import(archiveJson),
     readFileBytes,

@@ -10,6 +10,7 @@
  * consumer (chokidar/readdirp call these on the happy path).
  */
 import { NotImplementedError } from '@riftydev/io';
+import { VfsError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import fs, {
@@ -47,6 +48,15 @@ function codeOf(fn: () => void): string | undefined {
     return (err as { code?: string }).code;
   }
   return undefined;
+}
+
+function errorOf(fn: () => void): NodeJS.ErrnoException {
+  try {
+    fn();
+  } catch (err) {
+    return err as NodeJS.ErrnoException;
+  }
+  throw new Error('expected throw');
 }
 
 describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
@@ -99,6 +109,45 @@ describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () 
     writeFileSync('/exists.txt', 'data');
     expect(() => readlinkSync('/exists.txt')).toThrow(/EINVAL/);
     expect(() => readlinkSync('/missing.txt')).toThrow(/ENOENT/);
+  });
+});
+
+describe('stat-family { bigint: true } is a loud gap AFTER Node-visible errors', () => {
+  // Sync twins silently ignored `bigint` while `fs.promises` threw (review
+  // 2026-07-06) — one shapeStats boundary now gates every surface. The gap
+  // throw fires only where Node would SUCCEED: a missing target stays ENOENT
+  // and a bad fd stays EBADF (node v24 probes), never a NotImplementedError.
+  it('statSync/lstatSync/fstatSync on an existing target throw NotImplementedError', () => {
+    writeFileSync('/big.txt', 'data');
+    expect(() => statSync('/big.txt', { bigint: true } as never)).toThrow(NotImplementedError);
+    expect(() => lstatSync('/big.txt', { bigint: true })).toThrow(NotImplementedError);
+    const fd = openSync('/big.txt', 'r');
+    expect(() => fstatSync(fd, { bigint: true })).toThrow(NotImplementedError);
+    closeSync(fd);
+  });
+
+  it('Node-visible errors keep priority over the bigint gap', () => {
+    expect(codeOf(() => statSync('/missing-big.txt', { bigint: true } as never))).toBe('ENOENT');
+    expect(codeOf(() => lstatSync('/missing-big.txt', { bigint: true }))).toBe('ENOENT');
+    expect(codeOf(() => fstatSync(9999, { bigint: true }))).toBe('EBADF');
+  });
+
+  it('promises.stat orders ENOENT before the bigint gap too', async () => {
+    writeFileSync('/big.txt', 'data');
+    await expect(fs.promises.stat('/big.txt', { bigint: true })).rejects.toThrow(
+      NotImplementedError,
+    );
+    await expect(fs.promises.stat('/missing-big.txt', { bigint: true })).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(fs.promises.lstat('/missing-big.txt', { bigint: true })).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('statSync({ throwIfNoEntry: false, bigint: true }) on missing returns undefined', () => {
+    // Node: no stats are shaped, so no bigint error — undefined wins.
+    expect(statSync('/missing-big.txt', { throwIfNoEntry: false, bigint: true })).toBeUndefined();
   });
 });
 
@@ -181,6 +230,34 @@ describe('createReadStream true async streaming path', () => {
     expect(errored).toBeUndefined();
     expect(chunks.join('')).toBe('async-stream');
   });
+
+  it('reports async openReadable rejection as an open-shaped stream error', async () => {
+    const { MemoryFsSync, setSyncMirror } = await import('./fs-sync-mirror.ts');
+    const mirror = new MemoryFsSync();
+    const asyncSurface = {
+      openReadable: () => Promise.reject(new VfsError('EACCES', '/static.html')),
+    } as unknown as import('@riftydev/vfs').Vfs;
+    setSyncMirror(mirror, { async: asyncSurface });
+    writeFileSync('/static.html', 'sync-cache');
+
+    const events: string[] = [];
+    await new Promise<void>((resolve) => {
+      const stream = fs.createReadStream('/static.html') as {
+        on(ev: string, cb: (arg?: unknown) => void): void;
+      };
+      stream.on('open', () => events.push('open'));
+      stream.on('ready', () => events.push('ready'));
+      stream.on('error', (err) => {
+        const e = err as { code?: string; syscall?: string; path?: unknown };
+        events.push(`error:${e.code}:${e.syscall}:${String(e.path)}`);
+      });
+      stream.on('close', () => {
+        events.push('close');
+        resolve();
+      });
+    });
+    expect(events).toEqual(['error:EACCES:open:/static.html', 'close']);
+  });
 });
 
 describe('node:fs fd APIs (M11 runtime-local surface)', () => {
@@ -261,6 +338,32 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     expect(statSync('/missing-aplus.txt').isFile()).toBe(true);
   });
 
+  it('runs open preflight before access-mode errors for readFile/writeFile flags', () => {
+    writeFileSync('/exists.txt', 'seed');
+    const readWx = errorOf(() => readFileSync('/exists.txt', { flag: 'wx' }));
+    expect(readWx).toMatchObject({ code: 'EEXIST', syscall: 'open', path: '/exists.txt' });
+    expect(readFileSync('/exists.txt', 'utf8')).toBe('seed');
+
+    const readW = errorOf(() => readFileSync('/created-by-read-w.txt', { flag: 'w' }));
+    expect(readW).toMatchObject({ code: 'EBADF', syscall: 'read' });
+    expect(readFileSync('/created-by-read-w.txt', 'utf8')).toBe('');
+
+    const writeR = errorOf(() => writeFileSync('/missing-write-r.txt', 'x', { flag: 'r' }));
+    expect(writeR).toMatchObject({
+      code: 'ENOENT',
+      syscall: 'open',
+      path: '/missing-write-r.txt',
+    });
+
+    writeFileSync('/plain.txt', 'x');
+    const writeRNotDir = errorOf(() => writeFileSync('/plain.txt/deep.txt', 'x', { flag: 'r' }));
+    expect(writeRNotDir).toMatchObject({
+      code: 'ENOTDIR',
+      syscall: 'open',
+      path: '/plain.txt/deep.txt',
+    });
+  });
+
   it('ftruncateSync shrinks and zero-extends through an open fd', () => {
     writeFileSync('/truncate.txt', 'abcdef');
     const fd = openSync('/truncate.txt', 'r+');
@@ -315,6 +418,36 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     expect(codeOf(() => openSync('/created.txt', constants.O_RDONLY | constants.O_DIRECTORY))).toBe(
       'ENOTDIR',
     );
+  });
+
+  it('writeFileSync honors numeric O_DIRECTORY before writing', () => {
+    writeFileSync('/numeric-dir-flag.txt', 'old');
+    // O_CREAT|O_DIRECTORY is EINVAL before target inspection (node v24 linux
+    // + darwin; parity: fs/open-flag-target-matrix) — was pinned ENOTDIR here.
+    const writeDirFlag =
+      constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_DIRECTORY;
+    expect(
+      codeOf(() => writeFileSync('/numeric-dir-flag.txt', 'new', { flag: writeDirFlag } as never)),
+    ).toBe('EINVAL');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
+
+    const appendDirFlag =
+      constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_DIRECTORY;
+    expect(
+      codeOf(() =>
+        fs.appendFileSync('/numeric-dir-flag.txt', 'new', { flag: appendDirFlag } as never),
+      ),
+    ).toBe('EINVAL');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
+
+    // Without O_CREAT the target decides: a non-dir behind O_DIRECTORY is ENOTDIR.
+    const writeNoCreateDirFlag = constants.O_WRONLY | constants.O_TRUNC | constants.O_DIRECTORY;
+    expect(
+      codeOf(() =>
+        writeFileSync('/numeric-dir-flag.txt', 'new', { flag: writeNoCreateDirFlag } as never),
+      ),
+    ).toBe('ENOTDIR');
+    expect(readFileSync('/numeric-dir-flag.txt', 'utf8')).toBe('old');
   });
 
   it('throws loudly for unsupported numeric open flag bits', () => {

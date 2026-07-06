@@ -1,0 +1,153 @@
+import type { ParityCase } from '../../src/types.ts';
+
+/**
+ * Node error-object shape parity for the common fs failure paths: `code`,
+ * `errno`, `syscall`, `path` (as-passed, NOT resolved), `dest` (two-path ops)
+ * and the rendered `message`. Real libraries switch on `err.errno`/`err.syscall`
+ * and parse the message — a raw `VfsError` leaking through (`ENOENT: /x`, no
+ * errno/syscall) breaks them (review 2026-07-05).
+ *
+ * Only codes whose errno matches across linux/darwin appear here (ENOENT -2,
+ * EEXIST -17, ENOTDIR -20, EISDIR -21, EINVAL -22) — ENOTEMPTY diverges
+ * (-39/-66) and would make the case host-dependent. `realpath` prints no
+ * path/message: Node absolutizes before failing, so the tmpdir would leak.
+ */
+const c: ParityCase = {
+  cwd: '/app',
+  setup: {
+    files: {
+      'app/plain.txt': 'x',
+      'app/dir/keep.txt': 'k',
+    },
+  },
+  code: `
+    const fs = require('node:fs');
+    const probe = (label, fields, fn) => {
+      try {
+        fn();
+        console.log(label + ' | NO-THROW');
+      } catch (e) {
+        const parts = fields.map((f) => f + '=' + JSON.stringify(e[f]));
+        console.log(label + ' | ' + parts.join(' '));
+      }
+    };
+    const probeOwn = (label, fn) => {
+      try {
+        fn();
+        console.log(label + ' | NO-THROW');
+      } catch (e) {
+        console.log(label + ' | hasPath=' + Object.prototype.hasOwnProperty.call(e, 'path'));
+      }
+    };
+    const FULL = ['code', 'errno', 'syscall', 'path', 'message'];
+    const DUAL = ['code', 'errno', 'syscall', 'path', 'dest', 'message'];
+
+    probe('readFile-missing', FULL, () => fs.readFileSync('missing.txt'));
+    probe('readFile-dir', FULL, () => fs.readFileSync('dir'));
+    probe('readFile-notdir', FULL, () => fs.readFileSync('plain.txt/deep.txt'));
+    probe('writeFile-missing-parent', FULL, () => fs.writeFileSync('nodir/f.txt', 'x'));
+    probe('appendFile-missing-parent', FULL, () => fs.appendFileSync('nodir/a.log', 'x'));
+    probe('readdir-missing', FULL, () => fs.readdirSync('missing-dir'));
+    probe('readdir-file', FULL, () => fs.readdirSync('plain.txt'));
+    probe('stat-missing', FULL, () => fs.statSync('missing.txt'));
+    probe('stat-notdir', FULL, () => fs.statSync('plain.txt/deep.txt'));
+    probe('lstat-missing', FULL, () => fs.lstatSync('missing.txt'));
+    probe('mkdir-exists', FULL, () => fs.mkdirSync('dir'));
+    probe('mkdir-through-file', FULL, () => fs.mkdirSync('plain.txt/sub'));
+    probe('rmdir-file', FULL, () => fs.rmdirSync('plain.txt'));
+    probe('rm-missing', FULL, () => fs.rmSync('missing.txt'));
+    probe('unlink-missing', FULL, () => fs.unlinkSync('missing.txt'));
+    probe('utimes-missing', FULL, () => fs.utimesSync('missing.txt', 1, 1));
+    probe('readlink-plain-file', FULL, () => fs.readlinkSync('plain.txt'));
+    probe('readlink-missing', FULL, () => fs.readlinkSync('missing.txt'));
+    probe('readlink-notdir', FULL, () => fs.readlinkSync('plain.txt/deep'));
+    probe('realpath-missing', ['code', 'errno', 'syscall'], () => fs.realpathSync('missing.txt'));
+    probe('rename-missing-src', DUAL, () => fs.renameSync('missing.txt', 'dst.txt'));
+    probe('copyFile-missing-src', DUAL, () => fs.copyFileSync('missing.txt', 'dst.txt'));
+    probe('copyFile-excl-missing-src-dst-exists', DUAL, () =>
+      fs.copyFileSync('missing.txt', 'plain.txt', fs.constants.COPYFILE_EXCL));
+    probe('open-missing', FULL, () => fs.openSync('missing.txt', 'r'));
+    probe('open-notdir', FULL, () => fs.openSync('plain.txt/deep', 'r'));
+    probe('open-create-notdir', FULL, () => fs.openSync('plain.txt/deep', 'w'));
+    probe('readFile-rplus-notdir', FULL, () => fs.readFileSync('plain.txt/deep', { flag: 'r+' }));
+    probe('writeFile-rplus-notdir', FULL, () =>
+      fs.writeFileSync('plain.txt/deep', 'x', { flag: 'r+' }));
+    probe('appendFile-notdir', FULL, () => fs.appendFileSync('plain.txt/deep.log', 'x'));
+    probe('appendFile-rplus-missing', FULL, () =>
+      fs.appendFileSync('missing-rplus.log', 'x', { flag: 'r+' }));
+    probe('cp-missing-src', DUAL, () => fs.cpSync('missing-dir', 'dst-dir', { recursive: true }));
+    probe('cp-fast-dst-notdir', FULL, () =>
+      fs.cpSync('dir', 'plain.txt/out', { recursive: true }));
+    probe('cp-edge-dst-notdir', FULL, () =>
+      fs.cpSync('dir', 'plain.txt/out', { recursive: true, force: false }));
+    probe('opendir-missing', FULL, () => fs.opendirSync('missing-dir'));
+
+    // Flagged directory opens fail at OPEN (pathful), not at the later read
+    // (review 2026-07-05 handoff #2); appendFile 'ax' on a dir is EEXIST
+    // (O_EXCL existence check wins over EISDIR).
+    probe('readFile-dir-rplus', FULL, () => fs.readFileSync('dir', { flag: 'r+' }));
+    probe('readFile-dir-aplus', FULL, () => fs.readFileSync('dir', { flag: 'a+' }));
+    probe('readFile-dir-wplus', FULL, () => fs.readFileSync('dir', { flag: 'w+' }));
+    probe('writeFile-dir-rplus', FULL, () => fs.writeFileSync('dir', 'x', { flag: 'r+' }));
+    probe('appendFile-dir-ax', FULL, () => fs.appendFileSync('dir', 'x', { flag: 'ax' }));
+    probe('mkdir-missing-parent', FULL, () => fs.mkdirSync('no/such/deep'));
+
+    // Node's rm refuses ANY directory without recursive — ERR_FS_EISDIR, a
+    // JS-layer SystemError (POSITIVE errno 21, message embeds the path AS
+    // PASSED, host-independent); force does not suppress it and a non-empty
+    // dir is the SAME error, not ENOTEMPTY (review 2026-07-05 handoff r3).
+    // unlink-on-dir is deliberately absent: the errno diverges per host
+    // (linux EISDIR / darwin EPERM) — pinned in conformance instead.
+    const SYS = ['name', 'code', 'errno', 'syscall', 'path', 'message'];
+    fs.mkdirSync('emptydir');
+    probe('rm-emptydir', SYS, () => fs.rmSync('emptydir'));
+    probe('rm-emptydir-force', SYS, () => fs.rmSync('emptydir', { force: true }));
+    probe('rm-dir-nonempty', SYS, () => fs.rmSync('dir'));
+    probe('rm-through-file', FULL, () => fs.rmSync('plain.txt/deep'));
+    probe('rm-through-file-recursive-force', FULL, () =>
+      fs.rmSync('plain.txt/deep', { recursive: true, force: true }));
+    console.log('rm-emptydir-survives:', fs.existsSync('emptydir'), fs.existsSync('dir'));
+
+    // fd-level failures are PATHLESS in Node and carry the op's syscall name;
+    // ftruncate on a non-writable fd is EINVAL, not EBADF (handoff #3).
+    const wfd = fs.openSync('fd-w.txt', 'w');
+    probe('readSync-wronly-fd', FULL, () => fs.readSync(wfd, Buffer.alloc(4), 0, 4, 0));
+    const rfd = fs.openSync('plain.txt', 'r');
+    probe('writeSync-rdonly-fd', FULL, () => fs.writeSync(rfd, Buffer.from('x')));
+    probe('ftruncate-rdonly-fd', FULL, () => fs.ftruncateSync(rfd, 1));
+    const dirfd = fs.openSync('dir', 'r');
+    probe('readSync-dir-fd', FULL, () => fs.readSync(dirfd, Buffer.alloc(4), 0, 4, 0));
+    probe('ftruncate-dir-fd', FULL, () => fs.ftruncateSync(dirfd, 1));
+    probe('readSync-badfd', FULL, () => fs.readSync(9999, Buffer.alloc(4), 0, 4, 0));
+    probe('writeSync-badfd', FULL, () => fs.writeSync(9999, Buffer.from('x')));
+    probe('ftruncate-badfd', FULL, () => fs.ftruncateSync(9999));
+    probe('fstat-badfd', FULL, () => fs.fstatSync(9999));
+    probe('close-badfd', FULL, () => fs.closeSync(9999));
+    probeOwn('readSync-badfd-has-path', () => fs.readSync(9999, Buffer.alloc(4), 0, 4, 0));
+    probeOwn('opendir-missing-has-path', () => fs.opendirSync('missing-dir'));
+    fs.closeSync(wfd);
+    fs.closeSync(rfd);
+    fs.closeSync(dirfd);
+
+    const fsp = require('node:fs/promises');
+    const aprobe = async (label, fields, fn) => {
+      try {
+        await fn();
+        console.log(label + ' | NO-THROW');
+      } catch (e) {
+        const parts = fields.map((f) => f + '=' + JSON.stringify(e[f]));
+        console.log(label + ' | ' + parts.join(' '));
+      }
+    };
+    (async () => {
+      await aprobe('p.readFile-missing', FULL, () => fsp.readFile('missing.txt'));
+      await aprobe('p.access-missing', FULL, () => fsp.access('missing.txt'));
+      await aprobe('p.access-notdir', FULL, () => fsp.access('plain.txt/deep'));
+      await aprobe('p.readlink-plain-file', FULL, () => fsp.readlink('plain.txt'));
+      await aprobe('cb.readFile-missing', FULL, () => new Promise((res, rej) =>
+        fs.readFile('missing.txt', (e) => (e ? rej(e) : res()))));
+    })();
+  `,
+};
+
+export default c;

@@ -13,6 +13,34 @@ export class VfsError extends Error {
 }
 
 /**
+ * Validate an `openReadable` window (shared by MemoryVfs and OPFS
+ * `chunkedFileStream`). Loud RangeErrors instead of the old silent traps:
+ * `chunkSize: 0` looped the pull callback forever (reader hang) and a negative
+ * `start` fell into `subarray`'s from-the-end semantics (review 2026-07-05).
+ */
+export function assertReadWindow(opts?: {
+  chunkSize?: number;
+  start?: number;
+  end?: number;
+}): void {
+  const { chunkSize, start, end } = opts ?? {};
+  if (chunkSize !== undefined && (!Number.isInteger(chunkSize) || chunkSize <= 0)) {
+    throw new RangeError(`openReadable chunkSize must be a positive integer; got ${chunkSize}`);
+  }
+  for (const [name, value] of [
+    ['start', start],
+    ['end', end],
+  ] as const) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new RangeError(`openReadable ${name} must be a non-negative integer; got ${value}`);
+    }
+  }
+  if (start !== undefined && end !== undefined && end < start) {
+    throw new RangeError(`openReadable window is inverted: start ${start} > end ${end}`);
+  }
+}
+
+/**
  * Standard error thrown when a feature is intentionally not implemented yet
  * (so the gap is loud, not silent). The `feature` argument should follow
  * `module.method` form (e.g. `'OpfsFsSync.readdirSync'`).

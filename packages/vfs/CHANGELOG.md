@@ -2,7 +2,117 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **PR #115 root-cause round (2026-07-06): async `OpfsVfs` re-joined the
+  backend contract.** Non-recursive `mkdir` on an existing dir/file (and
+  `mkdir('/')`) is `EEXIST` — the final-segment `create:true` was masking it;
+  `stat` now OBSERVES the `utimes` side-table (files fall back to
+  `lastModified`, dirs to 0) instead of letting `utimes` succeed with no
+  observable effect, and `writeFile`/`rm` invalidate stamps so a rewrite or
+  recreate never resurrects an old mtime. Structural kill for the
+  sibling-drift axis: new `vfs-async-contract.test.ts` runs one contract
+  `describe.each` over MemoryVfs AND OpfsVfs (full fake-OPFS tree), mirroring
+  what `fs-sync-strict-paths` does for the sync backends.
+
+- **PR #115 final review path-shape fix (2026-07-06).** Async `OpfsVfs`
+  directory-walk failures from `readdir`/`rm`/`stat` now name the requested
+  target path, not the ancestor component that failed the OPFS handle walk.
+- **PR #115 final review fixes (2026-07-06).** OPFS sync writes now bump
+  `mtime` monotonically and `statSync` trusts the sync mirror's cached size
+  even when a stale sync access handle is open; `mkdirSync('/existing-file')`
+  reports Node's `EEXIST` on both Memory and OPFS sync backends while traversal
+  through a file stays `ENOTDIR`; async `OpfsVfs.writeFile` no longer creates
+  missing parent directories.
+- **Absolute-only path contract (ADR-0199).** `normalizeAbsolute` (and thus every
+  `Vfs`/`FsSync` entry point) throws on a relative path instead of silently
+  anchoring it at `/` — the silent coercion masked missing cwd resolution in
+  callers (the fs-streams wrong-file bug). cwd anchoring lives strictly above
+  the VFS. Fix round 2026-07-05: the OPFS surfaces now enforce it too —
+  `OpfsVfs` walked raw relative paths via `segments`/`dirname` (implicit
+  rooting) and `OpfsFsSync` normalized without asserting; a relative missing
+  path could even spin `assertNoFileAncestor` forever (`dirname('foo')` → `'.'`
+  → `'.'`…). Guard: `fs-sync-strict-paths.test.ts` relative-rejection suite
+  over both backends + the async `OpfsVfs` surface.
+- **Backend errors name the TARGET path and distinguish ENOTDIR.** Traversal
+  through a file is `ENOTDIR` (never a silent miss→`ENOENT`), `rm force`
+  suppresses only `ENOENT`, and `writeFile`/`mkdir`/`rename`/`copyFile` errors
+  carry the full target path instead of the parent — identical semantics in
+  `MemoryBackend` and `OpfsFsSync` (guard: `fs-sync-strict-paths.test.ts`,
+  Node truth: parity case `fs/error-shape-errno-syscall`).
+### Fixed (PR #107 round 20)
+
+- **Rename persistence heals destination ancestor failures.** A successful
+  rename write to `/dst/file` now clears stale mkdir failures for `/dst` and
+  its ancestors, so a durable moved tree is not misreported as torn.
+
+### Fixed (PR #107 round 19)
+
+- **The persist-failure ledger heals ANCESTOR dirs on a descendant persist.** A
+  successful write-through (or mkdir) now clears any stale ancestor mkdir
+  failure — a persisted descendant proves the whole parent chain exists on disk:
+  `OpfsVfs.writeFile` can only succeed once that chain is present, and mkdir
+  creates it explicitly. The old entry no longer described a divergence yet
+  still made a durable tree look torn and wrongly skipped/revoked its install
+  stamp.
+- **A rename whose SOURCE is already gone (`NotFoundError`) heals its
+  destinations.** The source removal now treats already-gone as a successful
+  removal (same rule as `rm`) instead of recording every durably-written
+  destination as a bogus `rename` failure.
+
+### Added (PR #107 round 18)
+
+- **`PersistFailureReport.anyFailure(predicate)`** — a FULL-ledger query
+  (OpfsFsSync backend). `failures` is only a SAMPLE, so a durability gate that
+  scans it can miss a torn-tree path when foreign failures fill the first
+  `PERSIST_REPORT_SAMPLE`; `anyFailure` asks the whole ledger.
+
+### Fixed (PR #107 round 15)
+
+- **The persist-failure ledger heals on structural ops.** A durably-removed
+  subtree (recursive `rm`, or the source side of a fully-persisted rename)
+  clears every ledger entry beneath it, and a rename's destination write heals
+  its path — disk and mirror agree, so the old entries no longer describe a
+  divergence. Stale entries used to make a durable tree look torn forever,
+  wrongly skipping/revoking install stamps.
+
+### Added
+
+- **Persist-failure ledger — `flush()` reports swallowed OPFS failures
+  (ADR-0187 Corrected).** `OpfsFsSync` records every failed write-through /
+  mkdir / rm / rename persist per path (a later successful persist of the same
+  path heals its entry; an `rm` hitting `NotFoundError` counts as success —
+  disk already agrees). `flush()` still never rejects but now returns a
+  `PersistFailureReport` — `failures` is a sampled view, `total` the full
+  count; the ledger itself is uncapped (keyed by path, so bounded by the
+  distinct paths written — the same order as the mirror's own index), keeping
+  every failure healable so `total` returns to 0 after a quota event. A caller
+  that promises durability (the playground install stamp) gates on
+  `total === 0` instead of trusting FIFO order across silently-failed ops.
+
+- **Write-through FIFO ordering pinned as a contract (ADR-0187).** `OpfsFsSync`'s
+  `enqueuePending` serialization is now load-bearing for the playground's non-blocking install
+  stamp ("durable stamp implies durable tree" via queue order, not a blocking flush): a
+  RED-on-parallelize test asserts completion order equals call order under inverted per-write
+  latencies, and the site carries the contract comment.
+
 ### Fixed
+
+- **mkdir missing-parent errors name the TARGET** in `MemoryBackend`,
+  `OpfsFsSync` and async `OpfsVfs.mkdir` (was: the missing/failing component —
+  the one gap in the "errors name the TARGET path" contract above; review
+  2026-07-05 handoff #7).
+- **PR #115 review follow-up:** `OpfsVfs.rm(path, { force:true })` now
+  suppresses only `ENOENT`; through-file (`ENOTDIR`), permission, quota, and
+  browser I/O failures stay loud instead of being reported as success.
+  `OpfsFsSync.cpSync('/file/child', dst)` now reports `ENOTDIR` with the
+  source path instead of collapsing the traversal failure to `ENOENT`.
+  `OpfsFsSync.writeFileSync('/dir', bytes)` now throws `EISDIR` instead of
+  mutating the warm index from directory to file and leaving stale descendants.
+- **`openReadable` validates its window.** `chunkSize: 0` previously looped the
+  pull callback forever (reader hang); a negative `start`/`end` fell into
+  `subarray`'s from-the-end semantics. Both are loud `RangeError`s now, in
+  `MemoryVfs` and OPFS `chunkedFileStream`.
 
 - **`MemoryBackend.rename` now invalidates cached dirents for both source and
   destination parents.** A move after `readdirSync()` no longer leaves stale
@@ -53,7 +163,7 @@
 - Path utilities scoped to VFS (POSIX-style joins/resolves; no Node `path` dependency).
 - **ADR-0029:** `FsSync.utimes(path, atimeMs, mtimeMs)` on the interface. `MemoryFsSync` writes through to `MemoryBackend.utimes`; `OpfsFsSync` uses an in-memory atime/mtime side-table (no native `FileSystemSyncAccessHandle` mtime mutation). Throws `VfsError('ENOENT')` for unknown paths.
 - **ADR-0041:** `Vfs.utimes(path, atimeMs, mtimeMs): Promise<void>` symmetric with the sync side. `MemoryVfs` delegates to `MemoryBackend.utimes`; `OpfsVfs` keeps its own in-memory side-table (no native mtime mutation through `FileSystemFileHandle`).
-- `normalizeAbsolute(p)` path helper — normalises and coerces relative inputs to absolute (`./foo/../bar.txt → /bar.txt`). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
+- `normalizeAbsolute(p)` path helper — normalises absolute inputs and rejects relative inputs loudly (ADR-0199). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
 
 ### Changed
 

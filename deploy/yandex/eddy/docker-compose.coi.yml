@@ -1,20 +1,35 @@
-# The rifty.dev (Yandex Container-Optimized-Image VM) compose. COI PULLS images —
-# it can't build the `build:` context — so this references the eddy image by
-# `image:` (built + pushed to the registry; see docs/public/hosting-yandex.md).
-# Identical otherwise to docker-compose.yml: Caddy terminates TLS for
-# eddy.rifty.dev and reverse-proxies to eddy:8788; eddy sets its own cross-origin
-# headers so they pass through.
+# The rifty.dev (Yandex Container-Optimized-Image VM) compose. COI PULLS images
+# — it can't build the `build:` context — so this references the eddy image by
+# `image:` (built + pushed to the registry; see docs/public/hosting-eddy.md).
+# Unlike the local self-host compose, this deploy template also serves
+# eddy-origin.rifty.dev for the CDN origin host. The checked-in file intentionally
+# keeps the EDDY_S3_* group commented; a stateless S3-backed origin uses a LOCAL
+# copy with those secrets filled and passed via `--metadata-from-file`.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.1.0
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2
     container_name: rifty-eddy
     restart: unless-stopped
     expose:
       - "8788"
     environment:
+      # The CDN registry-proxy exists for BROWSER CORS the server doesn't need
+      # — direct npmjs may be faster from the VM, but needs an on-VM A/B first
+      # (ADR-0194 §Deferred). TODO(backlog: perf/eddy-upstream-registry-ab)
       REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
       PORT: "8788"
       EDDY_TTL_SECONDS: "1800"
+      # Bundle store: WITHOUT the EDDY_S3_* group below this boots the
+      # byte-bounded MEMORY store (bundles die with the container) — the
+      # stateless-origin story (ADR-0194 §4) holds only once an operator
+      # provisions the bucket + key (hosting-eddy.md §Object-Storage) and
+      # deploys a LOCAL copy of this file with the group filled in via
+      # `--metadata-from-file`. The secret pair must NEVER be committed here.
+      # EDDY_S3_ENDPOINT: "https://storage.yandexcloud.net"
+      # EDDY_S3_BUCKET: "eddy-bundles"
+      # EDDY_S3_REGION: "ru-central1"
+      # EDDY_S3_ACCESS_KEY_ID: "<from `yc iam access-key create`>"
+      # EDDY_S3_SECRET_ACCESS_KEY: "<from `yc iam access-key create`>"
 
   caddy:
     image: caddy:2.10.2-alpine
@@ -25,6 +40,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # HTTP/3: Caddy advertises h3 via alt-svc; QUIC needs UDP 443 published
+      # here AND a `443/udp` ingress rule on the VM's security group (the
+      # reused rifty-registry-proxy group is TCP-only today — until an operator
+      # adds the rule, browsers race QUIC, fail, and stay on h2).
+      - "443:443/udp"
     volumes:
       - caddy_data:/data
       - caddy_config:/config
@@ -34,11 +54,18 @@ services:
       - |
         cat >/etc/caddy/Caddyfile <<'CADDY'
         {
-        	admin off
+          admin off
         }
 
         eddy.rifty.dev {
-        	reverse_proxy eddy:8788
+          reverse_proxy eddy:8788
+        }
+
+        # CDN origin host (ADR-0195): the eddy-cdn.rifty.dev edge fetches over
+        # https with this Host — the edge refuses POST, so the resolver DNS
+        # stays on the VM and only GET-by-hash rides the CDN.
+        eddy-origin.rifty.dev {
+          reverse_proxy eddy:8788
         }
         CADDY
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

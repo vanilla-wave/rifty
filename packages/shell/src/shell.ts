@@ -5,11 +5,11 @@
  * literal — the tokenizer only emits joiners outside quotes), and runs segments
  * per POSIX short-circuit semantics; final exit is the LAST executed segment.
  *
- * Streaming: when `options.onChunk` is supplied, every `ctx.stdout.write` /
- * `ctx.stderr.write` invokes the callback synchronously _before_ the captured
- * run-blob is appended, so the terminal sees `npm install` / `vite dev` output
- * live instead of after `await`. `RunResult` still keeps the full blob for
- * callers that read it.
+ * Streaming: when `options.onChunk` is supplied, terminal-visible stdout and
+ * all stderr invoke the callback synchronously _before_ capture, so the
+ * terminal sees `npm install` / `vite dev` output live instead of after
+ * `await`. Redirected stdout and non-final pipe stdout are captured/routed but
+ * stay silent. `RunResult` still keeps the full blob for callers that read it.
  *
  * `cwd`/`env` are mutable; only built-in `cd` can mutate cwd (via closure).
  * Custom commands see only a snapshot via the context.
@@ -56,9 +56,10 @@ export type ChunkStream = 'stdout' | 'stderr';
 /**
  * Per-call options for {@link Shell.run}.
  *
- * `onChunk` fires synchronously on each stdout/stderr write, BEFORE the chunk is
- * appended to the captured `RunResult` blob (order: callback -> capture). Keep it
- * fast. Optional and additive — omitting it preserves the blob-at-the-end contract.
+ * `onChunk` fires synchronously before capture for stderr and terminal-visible
+ * stdout. Redirected stdout and non-final pipe stdout are captured/routed but
+ * not displayed. Keep it fast. Optional and additive — omitting it preserves
+ * the blob-at-the-end contract.
  */
 export interface RunOptions {
   readonly onChunk?: (chunk: string, stream: ChunkStream) => void;
@@ -97,6 +98,27 @@ interface BackgroundJob {
 }
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+
+/**
+ * Segment-internal result: `stdoutBytes` is the byte-exact data plane
+ * (ADR-0198) feeding pipes and redirects; the public {@link RunResult} keeps
+ * only the decoded display-plane string.
+ */
+interface SegmentResult extends RunResult {
+  stdoutBytes: Uint8Array;
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
+}
 
 /** Resolved by the abort race when the foreground run is cancelled. */
 const ABORTED = Symbol('shell.aborted');
@@ -548,7 +570,9 @@ export class Shell {
       exitCode = res.exitCode;
       if (signal.aborted) break; // SIGINT cancels the whole pipeline
       if (isLast) stdout = res.stdout;
-      else pipeStdin = bufferStdin(encoder.encode(res.stdout));
+      // Byte-exact hand-off (ADR-0198): the captured stdout BYTES feed the next
+      // stage — re-encoding the display string minted U+FFFD into binary data.
+      else pipeStdin = bufferStdin(res.stdoutBytes);
     }
     return { exitCode, stdout, stderr };
   }
@@ -567,8 +591,14 @@ export class Shell {
     options: RunOptions,
     signal: AbortSignal,
     abortPromise: Promise<typeof ABORTED>,
-  ): Promise<RunResult> {
-    if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+  ): Promise<SegmentResult> {
+    const empty = (): SegmentResult => ({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      stdoutBytes: new Uint8Array(),
+    });
+    if (segmentTokens.length === 0) return empty();
 
     // Pop leading KEY=value env assignments (an operator ends the run).
     let i = 0;
@@ -586,7 +616,7 @@ export class Shell {
     const rest = segmentTokens.slice(i);
     if (rest.length === 0) {
       Object.assign(this.env, overrides);
-      return { exitCode: 0, stdout: '', stderr: '' };
+      return empty();
     }
 
     // Pull off `> path` / `>> path` redirection. bash removes redirections from
@@ -625,17 +655,50 @@ export class Shell {
     // walk-up `node_modules/.bin/<name>` → miss.
     let handler = this.commands.get(cmd);
 
-    let stdout = '';
+    const streamDisplayStdout = streamStdout && redirectTo === null;
+    // Data plane = BYTES (ADR-0198): stdout captures Uint8Array chunks (strings
+    // encode once here); pipes/redirects consume the bytes; the display string
+    // decodes from the full buffer at return. stderr stays string-typed — this
+    // shell never pipes/redirects stderr (bash parity), it has no data plane.
+    const stdoutChunks: Uint8Array[] = [];
     let stderr = '';
-    const emit = (chunk: string, stream: ChunkStream): void => {
+    // Streaming decoders for the display plane: byte chunks split mid-multibyte
+    // must not mint U+FFFD in onChunk output.
+    const stdoutTap = new TextDecoder('utf-8', { ignoreBOM: true });
+    const stderrTap = new TextDecoder('utf-8', { ignoreBOM: true });
+    const emit = (chunk: string | Uint8Array, stream: ChunkStream): void => {
       // onChunk first so the terminal sees the chunk before it lands in the blob.
-      // Fires even for redirected-stdout writes (diverted to a file later) — by
-      // design, so semantics stay composable. A non-final pipe stage
-      // (streamStdout=false) captures stdout SILENTLY — it feeds the next stage,
-      // not the terminal; stderr always streams (bash never pipes stderr).
-      if (stream === 'stderr' || streamStdout) options.onChunk?.(chunk, stream);
-      if (stream === 'stdout') stdout += chunk;
-      else stderr += chunk;
+      // Redirected stdout and non-final pipe stages capture stdout SILENTLY —
+      // they feed a file or the next stage, not the terminal. stderr always
+      // streams (bash never pipes stderr).
+      // new Uint8Array(view) is a guaranteed COPY — `.slice()` is not: Node
+      // Buffer (a Uint8Array subclass real programs write) overrides slice()
+      // with an ALIASING view, letting post-write mutation corrupt the
+      // captured bytes (review 2026-07-05 handoff r3).
+      const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : new Uint8Array(chunk);
+      if (stream === 'stdout') {
+        const text = stdoutTap.decode(bytes, { stream: true });
+        if (streamDisplayStdout) options.onChunk?.(text, 'stdout');
+        stdoutChunks.push(bytes);
+      } else {
+        const text = stderrTap.decode(bytes, { stream: true });
+        options.onChunk?.(text, 'stderr');
+        stderr += text;
+      }
+    };
+    const result = (exitCode: number): SegmentResult => {
+      // Flush the streaming display decoders: a trailing incomplete UTF-8
+      // sequence held by a tap must land (as U+FFFD) in onChunk / stderr
+      // instead of silently vanishing (review 2026-07-05).
+      const stdoutTail = stdoutTap.decode();
+      if (stdoutTail && streamDisplayStdout) options.onChunk?.(stdoutTail, 'stdout');
+      const stderrTail = stderrTap.decode();
+      if (stderrTail) {
+        options.onChunk?.(stderrTail, 'stderr');
+        stderr += stderrTail;
+      }
+      const stdoutBytes = concatBytes(stdoutChunks);
+      return { exitCode, stdout: decoder.decode(stdoutBytes), stderr, stdoutBytes };
     };
 
     // `< file` reads the file as stdin (overrides inherited pipe stdin). A miss
@@ -651,7 +714,7 @@ export class Shell {
         const code = (err as { code?: string }).code;
         const reason = code === 'EISDIR' ? 'Is a directory' : 'No such file or directory';
         emit(`${cmd}: ${redirectFrom}: ${reason}\n`, 'stderr');
-        return { exitCode: 1, stdout, stderr };
+        return result(1);
       }
     }
 
@@ -659,12 +722,12 @@ export class Shell {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
       stdout: {
-        write(c: string): void {
+        write(c: string | Uint8Array): void {
           emit(c, 'stdout');
         },
       },
       stderr: {
-        write(c: string): void {
+        write(c: string | Uint8Array): void {
           emit(c, 'stderr');
         },
       },
@@ -685,19 +748,19 @@ export class Shell {
         const nudge = packageManagerNudge(cmd);
         if (nudge) {
           emit(nudge, 'stderr');
-          return { exitCode: 127, stdout, stderr };
+          return result(127);
         }
         emit(`${cmd}: command not found\n`, 'stderr');
         const suggestion = this.suggestCommand(cmd);
         if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
-        return { exitCode: 127, stdout, stderr };
+        return result(127);
       }
       if (!this.execBin) {
         // Shim present but no Node executor wired — installed, not runnable
         // here. Exit 126 ("command found, cannot execute"), never a silent
         // stub or a misleading 127 miss.
         emit(`${cmd}: cannot execute ${binPath}: no Node executor configured\n`, 'stderr');
-        return { exitCode: 126, stdout, stderr };
+        return result(126);
       }
       // Run the resolved shim through the normal handler path so it inherits
       // SIGINT abort-race and `>` redirect flush for free.
@@ -735,10 +798,10 @@ export class Shell {
           isAbsolute(redirectTo.path) ? redirectTo.path : joinPath(this._cwd, redirectTo.path),
         );
         const fs = syncMirror();
-        const payload = encoder.encode(stdout);
+        // The captured BYTES flow to the file verbatim (ADR-0198) — encoding
+        // the display string minted U+FFFD into binary payloads.
+        const payload = concatBytes(stdoutChunks);
         if (redirectTo.append && fs.existsSync(path)) {
-          // Size by ENCODED byte length, not stdout.length (UTF-16 code units):
-          // multibyte stdout would otherwise under-allocate → set() RangeError.
           const existing = fs.readFileBytesSync(path);
           const next = new Uint8Array(existing.length + payload.length);
           next.set(existing, 0);
@@ -747,7 +810,7 @@ export class Shell {
         } else {
           fs.writeFileSync(path, payload);
         }
-        stdout = '';
+        stdoutChunks.length = 0;
       } catch (err) {
         // Loud failure: don't silently dump the redirected payload onto stdout
         // (callers expected a file). Exit 1 + EREDIRECT-tagged stderr so log
@@ -756,12 +819,12 @@ export class Shell {
           `${cmd}: redirect write failed: ${redirectTo.path}: ${(err as Error).message} [EREDIRECT]\n`,
           'stderr',
         );
-        stdout = '';
+        stdoutChunks.length = 0;
         exitCode = 1;
       }
     }
 
-    return { exitCode, stdout, stderr };
+    return result(exitCode);
   }
 
   /**

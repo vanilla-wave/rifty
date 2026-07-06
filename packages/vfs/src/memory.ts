@@ -11,6 +11,7 @@
  * share storage is `createMemoryFs()`; reaching into the wrapper for the
  * backend is not a contract any consumer should depend on.
  */
+import { assertReadWindow } from './errors.ts';
 import { MemoryBackend } from './memory-backend.ts';
 import { normalizeAbsolute } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
@@ -64,6 +65,7 @@ export class MemoryVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
+    assertReadWindow(opts);
     const data = this.#backend.readFile(normalizeAbsolute(path));
     const start = opts?.start ?? 0;
     const end = Math.min(opts?.end ?? data.byteLength, data.byteLength);

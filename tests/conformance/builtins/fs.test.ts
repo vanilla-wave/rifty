@@ -39,6 +39,15 @@ function codeOf(fn: () => void): string | undefined {
   return undefined;
 }
 
+function errorOf(fn: () => void): NodeJS.ErrnoException & { dest?: string } {
+  try {
+    fn();
+  } catch (err) {
+    return err as NodeJS.ErrnoException & { dest?: string };
+  }
+  throw new Error('expected throw');
+}
+
 describe('node:fs sync API', () => {
   it('writeFileSync + readFileSync (utf8)', () => {
     writeFileSync('/hello.txt', 'world');
@@ -80,6 +89,12 @@ describe('node:fs sync API', () => {
     expect(st.size).toBe(2);
   });
 
+  it('statSync throwIfNoEntry:false suppresses ENOENT and ENOTDIR probes', () => {
+    writeFileSync('/plain.txt', 'x');
+    expect(statSync('/missing', { throwIfNoEntry: false })).toBeUndefined();
+    expect(statSync('/plain.txt/deep', { throwIfNoEntry: false })).toBeUndefined();
+  });
+
   it('rmSync recursive removes a tree', () => {
     mkdirSync('/a/b/c', { recursive: true });
     writeFileSync('/a/b/c/x', 'x');
@@ -89,6 +104,48 @@ describe('node:fs sync API', () => {
 
   it('throws ENOENT for missing files', () => {
     expect(() => readFileSync('/missing.txt')).toThrow(/ENOENT/);
+  });
+
+  it('appendFileSync honors non-append open flags', () => {
+    expect(codeOf(() => fs.appendFileSync('/missing-rplus.txt', 'X', { flag: 'r+' }))).toBe(
+      'ENOENT',
+    );
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'r+' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('Xbc');
+
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'a' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('abcX');
+
+    writeFileSync('/existing.txt', 'abc');
+    fs.appendFileSync('/existing.txt', 'X', { flag: 'w' });
+    expect(readFileSync('/existing.txt', 'utf8')).toBe('X');
+  });
+
+  it('copyFileSync COPYFILE_EXCL reports a missing source before existing destination', () => {
+    writeFileSync('/dst.txt', 'd');
+    const err = errorOf(() => copyFileSync('/missing.txt', '/dst.txt', constants.COPYFILE_EXCL));
+    expect(err).toMatchObject({
+      code: 'ENOENT',
+      syscall: 'copyfile',
+      path: '/missing.txt',
+      dest: '/dst.txt',
+    });
+  });
+
+  it('cpSync reports destination traversal failures as Node-shaped lstat errors', () => {
+    mkdirSync('/dir', { recursive: true });
+    writeFileSync('/dir/keep.txt', 'k');
+    writeFileSync('/plain.txt', 'x');
+
+    const fast = errorOf(() => fs.cpSync('/dir', '/plain.txt/out', { recursive: true }));
+    expect(fast).toMatchObject({ code: 'ENOTDIR', syscall: 'lstat', path: '/plain.txt/out' });
+
+    const edge = errorOf(() =>
+      fs.cpSync('/dir', '/plain.txt/out', { recursive: true, force: false }),
+    );
+    expect(edge).toMatchObject({ code: 'ENOTDIR', syscall: 'lstat', path: '/plain.txt/out' });
   });
 });
 
@@ -266,5 +323,55 @@ describe('node:fs M11 directory/temp APIs', () => {
       asyncNames.push(dirent.name);
     }
     expect(asyncNames).toEqual(['a', 'b', 'c']);
+  });
+});
+
+// Remove-family kind gates (review 2026-07-05 handoff r3): the generic VFS
+// rmSync happily removes empty dirs; each Node entry point enforces its own
+// target-kind contract at the fs layer (sibling of the rmdirSync ENOTDIR gate).
+describe('unlinkSync / rmSync directory targets', () => {
+  it('unlinkSync on a directory throws EISDIR and never deletes it', () => {
+    mkdirSync('/undel');
+    // Errno persona: Linux EISDIR (FS_ERRNO's Linux ABI + the WASI layer's
+    // E_ISDIR choice); darwin Node reports EPERM here — host-divergent, so
+    // this is pinned in conformance rather than the parity case.
+    let err: NodeJS.ErrnoException | undefined;
+    try {
+      fs.unlinkSync('/undel');
+    } catch (e) {
+      err = e as NodeJS.ErrnoException;
+    }
+    expect(err?.code).toBe('EISDIR');
+    expect(err?.syscall).toBe('unlink');
+    expect(err?.path).toBe('/undel');
+    expect(existsSync('/undel')).toBe(true);
+  });
+
+  it('rmSync on a directory without recursive throws ERR_FS_EISDIR and keeps the tree', () => {
+    mkdirSync('/keepdir');
+    writeFileSync('/keepdir/f.txt', 'x');
+    let err: (NodeJS.ErrnoException & { name?: string }) | undefined;
+    try {
+      rmSync('/keepdir');
+    } catch (e) {
+      err = e as NodeJS.ErrnoException;
+    }
+    expect(err?.code).toBe('ERR_FS_EISDIR');
+    expect(err?.errno).toBe(21);
+    expect(err?.syscall).toBe('rm');
+    expect(err?.name).toBe('SystemError');
+    expect(err?.message).toBe('Path is a directory: rm returned EISDIR (is a directory) /keepdir');
+    expect(existsSync('/keepdir/f.txt')).toBe(true);
+    rmSync('/keepdir', { recursive: true });
+    expect(existsSync('/keepdir')).toBe(false);
+  });
+
+  it('rmSync recursive+force suppresses ENOTDIR through a file like Node', () => {
+    writeFileSync('/plain-file', 'x');
+    expect(() => rmSync('/plain-file/child', { recursive: true, force: true })).not.toThrow();
+    expect(existsSync('/plain-file')).toBe(true);
+    expect(() => rmSync('/plain-file/child', { recursive: true })).toThrow(
+      expect.objectContaining({ code: 'ENOTDIR', syscall: 'lstat' }),
+    );
   });
 });

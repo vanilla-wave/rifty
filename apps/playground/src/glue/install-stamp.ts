@@ -11,11 +11,13 @@
  * freshness guard.
  *
  * Trust model: the stamp trusts the tree wholesale — no per-file verification.
- * Callers own flush ordering: drain the VFS write-through BEFORE
- * `writeInstallStamp` so a durable stamp implies a durable tree.
+ * Durability ordering (ADR-0187 Corrected): trusted stamps mean durable tree.
+ * Visible `npm install` gates the stamp on a clean drain (`stampInstalledTree`).
+ * Boot/restore writes a non-blocking PENDING stamp first (`project-deps.ts`);
+ * pending stamps never satisfy reuse and are promoted only after a clean drain.
  */
 // TODO(backlog: playground/install-stamp-invalidation)
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 
 export interface InstallStamp {
   readonly version: 1;
@@ -26,10 +28,46 @@ export interface InstallStamp {
   readonly deps: Readonly<Record<string, string>>;
   /** `result.packages.length` of the install that produced the tree. */
   readonly packages: number;
+  /** Pending boot/restore stamps are visible for diagnostics but never trusted. */
+  readonly durability?: 'pending';
+  /** Per-realm token so stale deferred promoters cannot trust a newer tree. */
+  readonly promotionId?: string;
+}
+
+/** The dependency tree the stamp attests durable: `<root>/node_modules`. The
+ * stamp trusts THIS subtree wholesale — so only persist failures UNDER it mean
+ * the stamped tree is torn. A global/foreign path failing to persist (e.g.
+ * `/.rifty/eddy-learned-pins.json`, another project's tree) must NOT gate or
+ * revoke this project's stamp. */
+export function installTreeDir(root: string): string {
+  return joinPath(root, 'node_modules');
 }
 
 export function installStampPath(root: string): string {
-  return joinPath(root, 'node_modules/.rifty-install-stamp.json');
+  return joinPath(installTreeDir(root), '.rifty-install-stamp.json');
+}
+
+/** True iff `path` is inside the stamped tree AND is not the stamp file itself
+ * (a stamp-file failure is not a torn TREE: no stamp on disk simply re-runs
+ * arrival; a stamp about to be rewritten heals). */
+export function isStampedTreeDamage(path: string, root: string): boolean {
+  if (path === installStampPath(root)) return false;
+  const dir = installTreeDir(root);
+  return path === dir || path.startsWith(`${dir}/`);
+}
+
+/** Ask a {@link PersistFailureReport} whether ANY unhealed path matches, over
+ * the FULL ledger when the backend can answer it (`anyFailure`), else the
+ * SAMPLE. A durability gate must use this, never scan `report.failures`
+ * directly: the sample truncates at PERSIST_REPORT_SAMPLE, so a torn-tree path
+ * beyond it would be missed and the stamp would trust a broken tree. */
+export function reportHasFailure(
+  report: PersistFailureReport,
+  predicate: (path: string) => boolean,
+): boolean {
+  return report.anyFailure
+    ? report.anyFailure(predicate)
+    : report.failures.some((f) => predicate(f.path));
 }
 
 function readStringMap(value: unknown): Record<string, string> {
@@ -102,15 +140,27 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
     slug?: unknown;
     deps?: unknown;
     packages?: unknown;
+    durability?: unknown;
+    promotionId?: unknown;
   };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
+  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
+  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
   return {
     version: 1,
     slug: typeof raw.slug === 'string' ? raw.slug : '',
     deps: readStringMap(raw.deps),
     packages: raw.packages,
+    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
+      ? { promotionId: raw.promotionId }
+      : {}),
   };
+}
+
+export function stampTrusted(stamp: InstallStamp): boolean {
+  return stamp.durability !== 'pending';
 }
 
 /**
@@ -123,10 +173,19 @@ export async function writeInstallStamp(
   root: string,
   packages: number,
   slug = '',
+  durability?: 'pending',
+  promotionId?: string,
 ): Promise<void> {
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps) return;
-  const stamp: InstallStamp = { version: 1, slug, deps, packages };
+  const stamp: InstallStamp = {
+    version: 1,
+    slug,
+    deps,
+    packages,
+    ...(durability === 'pending' ? { durability } : {}),
+    ...(durability === 'pending' && promotionId ? { promotionId } : {}),
+  };
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
   await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
@@ -159,6 +218,7 @@ export async function installStampSatisfied(
 ): Promise<InstallStamp | null> {
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const deps = await readEffectiveDeps(vfs, root);
@@ -184,8 +244,94 @@ export async function installStampSatisfiedForPackageJson(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   if (!depsEqual(stamp.deps, currentDeps)) return null;
   return stamp;
+}
+
+/** The sync fs slice the SYNC stamp predicate reads through. */
+export interface InstallStampSyncFs {
+  existsSync(path: string): boolean;
+  readFileBytesSync(path: string): Uint8Array;
+}
+
+const stampDecoder = new TextDecoder('utf-8');
+
+/**
+ * Sync twin of {@link installStampSatisfiedForPackageJson} over the sync
+ * mirror. Exists for the owner-boot eddy prefetch gate (ADR-0195): an ASYNC
+ * gate starves behind the owner's busy boot loop, so the prefetch used to fire
+ * AFTER the install it was meant to feed — a sync gate lets the fetch start
+ * before any boot work blocks the realm.
+ */
+export function installStampSatisfiedForPackageJsonSync(
+  fs: InstallStampSyncFs,
+  root: string,
+  slug: string,
+  packageJsonText: string,
+): InstallStamp | null {
+  const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
+  if (!expectedDeps) return null;
+  const currentDeps = readEffectiveDepsSync(fs, root);
+  if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
+  const stamp = readInstallStampSync(fs, root);
+  if (!stamp) return null;
+  if (!stampTrusted(stamp)) return null;
+  if (stamp.slug !== slug) return null;
+  if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
+  if (!depsEqual(stamp.deps, currentDeps)) return null;
+  return stamp;
+}
+
+function readTextSyncOrNull(fs: InstallStampSyncFs, path: string): string | null {
+  if (!fs.existsSync(path)) return null;
+  try {
+    return stampDecoder.decode(fs.readFileBytesSync(path));
+  } catch {
+    return null;
+  }
+}
+
+function readEffectiveDepsSync(
+  fs: InstallStampSyncFs,
+  root: string,
+): Record<string, string> | null {
+  const text = readTextSyncOrNull(fs, joinPath(root, 'package.json'));
+  return text === null ? null : effectiveDepsFromPackageJsonText(text);
+}
+
+function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
+  const text = readTextSyncOrNull(fs, installStampPath(root));
+  if (text === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const raw = parsed as {
+    version?: unknown;
+    slug?: unknown;
+    deps?: unknown;
+    packages?: unknown;
+    durability?: unknown;
+    promotionId?: unknown;
+  };
+  if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
+  if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
+  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
+  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
+  return {
+    version: 1,
+    slug: typeof raw.slug === 'string' ? raw.slug : '',
+    deps: readStringMap(raw.deps),
+    packages: raw.packages,
+    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
+      ? { promotionId: raw.promotionId }
+      : {}),
+  };
 }

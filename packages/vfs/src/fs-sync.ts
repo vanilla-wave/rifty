@@ -10,10 +10,9 @@ import type { VfsDirent } from './types.ts';
  * Own module so backend impls and the swap-in registry (`sync-mirror.ts`)
  * don't import each other.
  *
- * **Normalisation invariant** — every method normalises `path` on entry:
- * trailing slashes stripped, `.`/`..` collapsed, relative coerced to
- * absolute. Backends MAY assume normalised input here but should still
- * tolerate un-normalised paths from external sources.
+ * **Path invariant** — every method asserts an absolute POSIX path on entry,
+ * then normalises it: trailing slashes stripped, `.`/`..` collapsed. Relative
+ * inputs throw (ADR-0199); cwd anchoring belongs to callers above VFS.
  */
 export interface FsSync {
   existsSync(path: string): boolean;

@@ -6,6 +6,7 @@ import {
   lstatSync,
   mkdirSync,
   readdir,
+  readlinkSync,
   realpath,
   realpathSync,
   stat,
@@ -37,6 +38,22 @@ describe('node:fs realpath/lstat — no-symlink VFS semantics', () => {
 
   it('realpathSync throws ENOENT for a missing path', () => {
     expect(() => realpathSync('/nope')).toThrow(/ENOENT/);
+  });
+
+  it('realpathSync and readlinkSync report ENOTDIR through a file', () => {
+    writeFileSync('/plain.txt', 'x');
+    for (const fn of [
+      () => realpathSync('/plain.txt/deep'),
+      () => readlinkSync('/plain.txt/deep'),
+    ]) {
+      try {
+        fn();
+      } catch (err) {
+        expect(err).toMatchObject({ code: 'ENOTDIR' });
+        continue;
+      }
+      throw new Error('expected ENOTDIR');
+    }
   });
 
   it('realpathSync.native exists and resolves identically', () => {

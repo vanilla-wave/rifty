@@ -51,15 +51,25 @@ export interface EddyBundleManifestV1 {
   tarballs: EddyBundleTarballEntry[];
 }
 
-/** Decoded bundle: manifest + lockfile text + each tarball's bytes. */
+/** Bundle contents: manifest + lockfile text + each tarball's bytes. */
 export interface EddyBundleContents {
   manifest: EddyBundleManifestV1;
   lockfileText: string;
   tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }>;
+  /** Present on unpacked bundles: EVERY member name in the container, in order
+   * — including ones the manifest does not claim. Optional so existing callers
+   * can still construct `EddyBundleContents` for pack/mutate tests. */
+  memberNames?: string[];
 }
 
-const MANIFEST_FILE = 'eddy-bundle.json';
-const LOCKFILE_FILE = 'package-lock.json';
+export interface UnpackedEddyBundleContents extends EddyBundleContents {
+  memberNames: string[];
+}
+
+/** Bundle member names — fixed order `manifest → lockfile → tarballs/*` (the
+ * streaming client gates on the first two before any tarball bytes arrive). */
+export const MANIFEST_FILE = 'eddy-bundle.json';
+export const LOCKFILE_FILE = 'package-lock.json';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
@@ -121,7 +131,11 @@ function emitFile(chunks: Uint8Array[], name: string, data: Uint8Array): void {
 }
 
 /** Serialize bundle contents to `EddyBundleV1` tar bytes. */
-export function packEddyBundle(contents: EddyBundleContents): Uint8Array {
+/** Pack input: the layout (`manifest → lockfile → tarballs/*`) is DERIVED, so
+ * `memberNames` — an unpack observation — is ignored when present. */
+export type EddyBundleSource = EddyBundleContents;
+
+export function packEddyBundle(contents: EddyBundleSource): Uint8Array {
   const chunks: Uint8Array[] = [];
   emitFile(chunks, MANIFEST_FILE, encoder.encode(JSON.stringify(contents.manifest)));
   emitFile(chunks, LOCKFILE_FILE, encoder.encode(contents.lockfileText));
@@ -142,9 +156,13 @@ export function packEddyBundle(contents: EddyBundleContents): Uint8Array {
 /** Parse `EddyBundleV1` tar bytes back into contents. Throws if the bytes are
  * not a valid bundle (missing/format-mismatched manifest, missing lockfile, or
  * a manifest tarball entry with no matching tar member). */
-export function unpackEddyBundle(bytes: Uint8Array): EddyBundleContents {
+export function unpackEddyBundle(bytes: Uint8Array): UnpackedEddyBundleContents {
   const byName = new Map<string, Uint8Array>();
-  for (const e of parseTarEntries(bytes)) byName.set(e.name, e.data);
+  const memberNames: string[] = [];
+  for (const e of parseTarEntries(bytes)) {
+    byName.set(e.name, e.data);
+    memberNames.push(e.name);
+  }
 
   const manifestBytes = byName.get(MANIFEST_FILE);
   if (!manifestBytes) {
@@ -175,5 +193,5 @@ export function unpackEddyBundle(bytes: Uint8Array): EddyBundleContents {
     return { entry, bytes: data };
   });
 
-  return { manifest, lockfileText: decoder.decode(lockBytes), tarballs };
+  return { manifest, lockfileText: decoder.decode(lockBytes), tarballs, memberNames };
 }

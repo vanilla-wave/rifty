@@ -4,6 +4,46 @@
 
 ### Fixed
 
+- **`cat -A` now implies `-v` like GNU (review 2026-07-06 #10).** `-A`=`-vET`
+  renders non-printing bytes in GNU `^X`/`M-x` notation (`0x80`→`M-^@`,
+  `0xff`→`M-^?`, DEL→`^?`); `-v`, `-e` (=`-vE`), `-t` (=`-vT`) and plain `-T`
+  are accepted too. Before, `-A` silently enabled only ends+tabs and passed
+  high bytes raw. Goldens verified byte-for-byte against coreutils cat
+  (debian); guards: binary-transparency tests.
+- **`cat` transform modes preserve binary bytes.** `cat -n/-b/-E` now splits
+  on byte `0x0a` and inserts ASCII markers while preserving non-UTF-8 byte runs
+  (`-v`-family modes render those bytes as GNU marks by design);
+  before, those modes decoded to a JS string and re-encoded `0x80..0xff` as
+  U+FFFD bytes in pipes/redirects.
+- **Display decoding preserves a leading UTF-8 BOM.** Shell display strings
+  (`RunResult.stdout` and live `onChunk`) now use TextDecoder's `ignoreBOM:true`,
+  matching Node `Buffer.toString('utf8')` for byte streams that begin with
+  `EF BB BF` while leaving the byte-transparent data plane unchanged.
+- **Redirected stdout no longer streams to `onChunk`.** `cmd > file` and
+  redirect-write failures still capture byte-exact stdout for the file path, but
+  the terminal/display callback stays silent for stdout, matching shell
+  redirect UX and avoiding binary replacement-char spew from `cat bin > out`.
+- **Byte snapshot copies Buffer chunks (handoff r3).** `Writer.write` snapshots
+  via `new Uint8Array(chunk)` — Node `Buffer#slice()` ALIASES memory, so the
+  old `.slice()` let a command mutate its buffer after write and corrupt the
+  captured/redirected bytes. Guard: binary-transparency Buffer-mutation test.
+- **`cat` byte pump now has a frozen GNU coreutils fixture guard** for raw
+  binary output, complementing the ADR-0198 pipe/redirect byte-transparency
+  package tests.
+- **Byte-transparent data plane (ADR-0198).** `Writer.write` accepts
+  `string | Uint8Array`; stdout capture, pipe hand-off and `>`/`>>` redirects
+  carry bytes end-to-end, and `cat` pumps raw bytes on its plain path.
+  Previously every chunk round-tripped through a JS string, so
+  `cat img.png > copy.png` (and any binary through a pipe) permanently minted
+  U+FFFD into the payload. Display plane (`RunResult.stdout`, `onChunk`) stays
+  string-typed; byte chunks decode through streaming decoders, and the decoders
+  FLUSH at segment end (fix round 2026-07-05) — a trailing incomplete UTF-8
+  sequence lands in `onChunk`/`RunResult.stderr` as U+FFFD instead of silently
+  vanishing. PR #115 review follow-up: captured byte chunks are snapshotted
+  before command-owned buffers can mutate, and string writes share the same
+  streaming decoder as byte writes so live `onChunk` display matches final
+  stdout/stderr ordering. Guard: `tests/binary-transparency.test.ts`.
+
 - **A pre-aborted `run()` never starts segment 0 and resolves 130.** The
   documented contract ("resolves immediately when already aborted") was
   violated: the segment loop checked the abort AFTER `runSegment`, so a run

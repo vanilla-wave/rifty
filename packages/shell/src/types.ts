@@ -6,7 +6,11 @@
  */
 
 export interface Writer {
-  write(chunk: string): void;
+  /**
+   * Strings are display/text writes (encoded once at the sink); `Uint8Array`
+   * flows through capture → pipes → redirects byte-identically (ADR-0198).
+   */
+  write(chunk: string | Uint8Array): void;
 }
 
 /**
