@@ -358,6 +358,15 @@ export function App(props: AppProps) {
   // Reactive mirror so the LS-wiring effect (ADR-0166 P1.9b) reacts when the
   // editor registers its imperative api (captured during EditorHost mount).
   const [editorApiSig, setEditorApiSig] = createSignal<EditorApi | undefined>(undefined);
+  // A user open clicked while the LAZY EditorHost chunk is still loading must
+  // not vanish (pre-split the mount-to-registerApi window was ~0; the chunk
+  // load made it real): queue and flush on registerApi. Cleared when the
+  // editor context resets so a stale open never replays into a LATER project.
+  let pendingEditorOps: ((api: EditorApi) => void)[] = [];
+  const withEditorApi = (op: (api: EditorApi) => void): void => {
+    if (editorApi) op(editorApi);
+    else pendingEditorOps.push(op);
+  };
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
     setToast({ message, tone });
@@ -629,6 +638,12 @@ export function App(props: AppProps) {
     pickDeepLinkStarter: (id) => void onPickStarter(id),
   });
 
+  // Queue hygiene for withEditorApi: losing the editor context drops opens
+  // queued against it — they must never replay into a LATER project's editor.
+  createEffect(() => {
+    if (!indexBoot.editorProjectContextReady()) pendingEditorOps = [];
+  });
+
   // Headless preset-boot core (ADR-0197 slice 3) bound to the REAL ports: the
   // dev-server core (dependency spine), the owner dev-config, the page terminal
   // echo loop, the picked-starter paint/seed glue and the TS re-init hook.
@@ -749,8 +764,8 @@ export function App(props: AppProps) {
     requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
     joinRootPath: (root, path) => joinPath(root, path),
     editor: {
-      openTextDiff: (spec) => editorApi?.openTextDiff(spec),
-      openWorkingDiff: (spec) => editorApi?.openWorkingDiff(spec),
+      openTextDiff: (spec) => withEditorApi((api) => api.openTextDiff(spec)),
+      openWorkingDiff: (spec) => withEditorApi((api) => api.openWorkingDiff(spec)),
       closePath: (path) => editorApi?.closePath(path),
     },
     flushEditorWrites: () => flushPendingEditorWrites(),
@@ -1880,7 +1895,7 @@ export function App(props: AppProps) {
   function onTerminalLink(uri: string): void {
     const path = pathFromTerminalFileLink(uri, activeRoot());
     if (path) {
-      editorApi?.openFile(path);
+      withEditorApi((api) => api.openFile(path));
       return;
     }
     try {
@@ -1942,7 +1957,7 @@ export function App(props: AppProps) {
         section: 'Files',
         label: path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path,
         icon: 'file',
-        run: () => editorApi?.openFile(path),
+        run: () => withEditorApi((api) => api.openFile(path)),
       });
     }
     if (workspace.truncated) {
@@ -2258,7 +2273,7 @@ export function App(props: AppProps) {
                   visible={!layout.sidebarCollapsed()}
                   activePath={activeFilePath()}
                   gitStatus={scm.gitStatus()}
-                  onOpenFile={(path) => editorApi?.openFile(path)}
+                  onOpenFile={(path) => withEditorApi((api) => api.openFile(path))}
                   onDownloadFile={(path) => void files.downloadFile(path)}
                   onCompareFiles={(left, right) => void scm.openWorkingFileCompare(left, right)}
                   onCompareWithHead={(path) => void scm.openWorkingHeadCompare(path)}
@@ -2303,6 +2318,9 @@ export function App(props: AppProps) {
                   registerApi={(api) => {
                     editorApi = api;
                     setEditorApiSig(() => api);
+                    const queued = pendingEditorOps;
+                    pendingEditorOps = [];
+                    for (const op of queued) op(api);
                   }}
                   onActive={(info) => {
                     setActiveFile(info.label);
@@ -2379,7 +2397,7 @@ export function App(props: AppProps) {
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
-                editorApi?.openFile(path, { reveal: { line, column } })
+                withEditorApi((api) => api.openFile(path, { reveal: { line, column } }))
               }
             />
           </main>

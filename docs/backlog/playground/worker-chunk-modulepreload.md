@@ -11,7 +11,16 @@ code: [apps/playground/index.html, apps/playground/vite.config.ts, apps/playgrou
 
 ## Context
 
-Carved out of the delivered lazy-monaco-bundle-split (PR boot-speedup-phase-b):
+Carved out of the delivered lazy-monaco-bundle-split (PR boot-speedup-phase-b).
+Process note, recorded loud: that item was implemented from `draft` (rule says
+refine to `ready` first). Its contract was resolved inline and MET measured —
+main chunk 1103→247 kB gz, cold-start-to-interactive 693→~170 ms, bench + e2e
+green, seams enforced by check:arch — with the two non-delivered related wins
+dispositioned honestly (chooser-on-publish was already delivered in PR #113;
+the modulepreload hint is THIS item). Deviation cause: pre-refined acceptance
+already present in the draft; not a precedent.
+
+Original essence:
 the editor-stack split landed; this hint did not, because its benefit is
 unproven — `<link rel="modulepreload">` populates the DOCUMENT module map,
 which module workers do NOT share; the win (if any) comes from the HTTP cache

@@ -275,7 +275,7 @@ export function PreviewPanel(props: {
           <div class="rf-preview__overlay">
             <p class="rf-preview__overlay-title">Dev server didn't come up</p>
             <p class="rf-preview__overlay-body">
-              The preview route never responded on port {port()}. Check the terminal for errors,
+              The preview route never answered OK on port {port()}. Check the terminal for errors,
               then{' '}
               <button type="button" class="rf-linkbtn" onClick={reload}>
                 Reload
@@ -298,7 +298,7 @@ function PhasePill(props: { phase: Accessor<Phase> }) {
       : props.phase() === 'error'
         ? 'Preview unavailable — the frame did not commit'
         : props.phase() === 'unreachable'
-          ? 'Preview unavailable — the dev server never responded'
+          ? 'Preview unavailable — the dev server never answered OK'
           : 'Waiting for the dev server…';
   return (
     <span class="rf-preview__status" data-phase={props.phase()} title={title()}>
