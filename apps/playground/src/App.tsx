@@ -126,32 +126,33 @@ import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts'
 export { createAppProjectStore } from './glue/app-project-store.ts';
 
 // The Monaco editor stack (monaco-editor + EditorHost + editor-host-core +
-// monaco-env workers wiring) loads as its own chunk at first editor mount — it
-// renders only after a project pick, so its ~3 MB of never-yet-needed code must
-// not sit on the cold-start critical path. The TS-LS provider suite splits the
-// same way (dynamic import in the LS wiring effect below); check:arch pins
-// both seams (monaco-only-in-lazy-editor-stack, editor-stack-loads-lazily).
+// monaco-env workers wiring) loads as its own chunk, off the cold-start main
+// chunk. First-run chooser idle does not fetch it; returning/project-ready boot
+// and starter-pick intent warm it before the editor mount. The TS-LS provider
+// suite splits the same way (dynamic import in the LS wiring effect below);
+// check:arch pins both seams (monaco-only-in-lazy-editor-stack,
+// editor-stack-loads-lazily).
 const EditorHost = lazy(() =>
   import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
 );
-// Warm the lazy editor chunks in the background from app eval. Deliberate
-// trade-off: a visitor who never picks a project pays the chunk FETCH (and its
-// off-critical-path eval) — but pick→editor-source must stay fast (m0 pins
-// ≤1 s) even where the editor graph loads slowly (dev serves monaco unbundled,
-// optimizeDeps.exclude; CI proved an at-pick warm starts too late there). The
-// cold-start win is untouched — measured cold-start-to-interactive stays
-// ~170 ms (was 693 ms eager): the win came from unblocking the synchronous
-// main-chunk parse, not from skipping the background load. The module
-// registry dedupes these against the lazy()/effect imports.
-void import('./components/EditorHost.tsx');
-void import('./glue/ts-ls-monaco-providers.ts');
+
+let editorStackWarm: Promise<unknown> | undefined;
+function warmEditorStack(): void {
+  if (editorStackWarm !== undefined) return;
+  editorStackWarm = Promise.all([
+    import('./components/EditorHost.tsx'),
+    import('./glue/ts-ls-monaco-providers.ts'),
+  ]).catch((err: unknown) => {
+    editorStackWarm = undefined;
+    console.warn('[editor] lazy stack warm failed', err);
+  });
+}
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
 const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
-const fatalDec = new TextDecoder('utf-8', { fatal: true });
 const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {
@@ -643,6 +644,7 @@ export function App(props: AppProps) {
     },
     closeLauncher: () => store.closeLauncher(),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
+    warmEditorStack,
     restore: (idx) => void workspace.restoreOnReload(idx),
     pickDeepLinkStarter: (id) => void onPickStarter(id),
   });
@@ -692,6 +694,7 @@ export function App(props: AppProps) {
     setOwnerReady: (ready) => workspace.setOwnerReady(ready),
     paintStarterUi: (preset) => paintPickedStarterUi(preset),
     markEditorContextReady: () => indexBoot.setEditorProjectContextReady(true),
+    warmEditorStack,
     noteStarterBaselinePending: () => {
       if (!workspace.started()) starterGeneratedBaselinePendingForNextOwner = true;
     },

@@ -5,11 +5,11 @@
 ### Changed
 
 - Monaco editor stack (monaco-editor, EditorHost, editor-host-core, monaco-env,
-  TS-LS Monaco providers) loads as lazy chunks at first editor mount instead of
-  the cold-start main chunk: main bundle 4221→877 kB raw / 1103→247 kB gz.
-  monaco reaches App glue via `api.monaco` (typeof import type); provider
-  registration lands when the chunk does (e2e `__riftyTs*` hooks stay
-  wait-guarded). Import seams enforced by check:arch rules
+  TS-LS Monaco providers) leaves the cold-start main chunk and warms only on
+  project/returning-user intent (not first-run chooser idle): main bundle
+  4221→877 kB raw / 1103→247 kB gz. monaco reaches App glue via `api.monaco`
+  (typeof import type); provider registration lands when the chunk does (e2e
+  `__riftyTs*` hooks stay wait-guarded). Import seams enforced by check:arch rules
   (`monaco-only-in-lazy-editor-stack`, `editor-stack-loads-lazily`) with
   arch-boundary fixture coverage.
 - Owner boot overlaps the starter initial commit with the instant-deps snapshot

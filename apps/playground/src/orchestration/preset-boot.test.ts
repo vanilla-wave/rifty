@@ -27,6 +27,8 @@ class Harness {
   startResult = true;
   ephemeral = false;
   dirty = false;
+  dirtyChecks = 0;
+  warmEditorCount = 0;
   reserveSwapsTo: string | null = null;
   releaseBoot: (() => void) | null = null;
   holdBoot = false;
@@ -86,12 +88,19 @@ class Harness {
         this.log.push(`run:${id}:${lines.join('|')}`);
       },
       reinitializeTs: () => this.log.push('reinitTs'),
-      dirtyScratchPick: () => this.dirty,
+      dirtyScratchPick: () => {
+        this.dirtyChecks += 1;
+        return this.dirty;
+      },
       setOwnerReady: (ready) => this.log.push(`ownerReady:${ready}`),
       paintStarterUi: async (preset) => {
         this.log.push(`paint:${preset.id}`);
       },
       markEditorContextReady: () => this.log.push('editorReady'),
+      warmEditorStack: () => {
+        this.warmEditorCount += 1;
+        this.log.push('warmEditor');
+      },
       noteStarterBaselinePending: () => this.log.push('noteBaseline'),
       ensureOwnerStarted: async () => {
         this.log.push('ensureStarted');
@@ -294,7 +303,8 @@ describe('gallery-pick flow', () => {
     const { h, boot } = setup();
     await boot.pickStarter('real-vite', pickOpts(h));
     await tick(20); // fresh pick is fire-and-forget — let the queued boot settle
-    expect(h.log.slice(0, 10)).toEqual([
+    expect(h.log.slice(0, 11)).toEqual([
+      'warmEditor',
       'ownerReady:false',
       'commit:real-vite',
       'paint:real-vite',
@@ -306,6 +316,7 @@ describe('gallery-pick flow', () => {
       'ownerReady:true',
       'pick:t10', // runPreset takes over
     ]);
+    expect(h.dirtyChecks).toBe(1);
     expect(h.log).toContain('reinitTs');
   });
 
@@ -320,8 +331,17 @@ describe('gallery-pick flow', () => {
       gated = false;
     });
     await tick(0);
-    expect(h.log).toEqual(['commit:real-vite']);
+    expect(h.log).toEqual(['warmEditor', 'commit:real-vite']);
+    expect(h.dirtyChecks).toBe(1);
+    expect(h.warmEditorCount).toBe(1);
     expect(gated).toBe(false); // no gate was opened
+  });
+
+  it('starter pick warms the lazy editor stack immediately on user intent', async () => {
+    const { h, boot } = setup();
+    await boot.pickStarter('real-vite', pickOpts(h));
+    expect(h.log[0]).toBe('warmEditor');
+    expect(h.warmEditorCount).toBe(1);
   });
 
   it('memory mode AWAITS the workspace seed before the dev server boots', async () => {

@@ -68,6 +68,8 @@ export interface PresetBootDeps<S extends PresetBootSessionLike> {
   paintStarterUi(preset: Preset): Promise<void>;
   /** Optimistic editor mount — the owner index publish lags the pick. */
   markEditorContextReady(): void;
+  /** Intent-gated warm of the lazy editor stack before EditorHost mount. */
+  warmEditorStack(): void;
   /** Flag the next owner spawn as starter-baseline-pending when not yet started. */
   noteStarterBaselinePending(): void;
   ensureOwnerStarted(): Promise<unknown>;
@@ -233,6 +235,7 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
 
   async function pickStarter(id: string, opts: PickStarterOpts): Promise<void> {
     const eagerGate = opts.eagerTsGate ? beginTsTransition() : undefined;
+    deps.warmEditorStack();
     const run = (): Promise<void> => bootPickedStarter(id, eagerGate, opts);
     // Mid-transition picks QUEUE and are awaited (the caller must observe the
     // serialized boot); a fresh pick is fire-and-forget behind the veil.
