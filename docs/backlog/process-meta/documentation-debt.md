@@ -11,6 +11,17 @@ code: [docs/adr/README.md, .github/workflows/release.yml]
 
 ## Context
 
+- **(E) Process deviation, boot-speedup-phase-b (2026-07-07):** the
+  `playground/lazy-monaco-bundle-split` item was implemented and closed from
+  `status: draft` (rule: refine to `ready` first, decision-workflow §Backlog
+  readiness). The draft already carried acceptance (main-chunk gz halves,
+  cold-start no regress, e2e green) and the delivered result met it measured
+  (1103→247 kB gz, 693→~170 ms, seams enforced by check:arch rules +
+  arch-fixture tests; related wins dispositioned: chooser-on-publish already
+  shipped in PR #113, modulepreload carved into
+  `playground/worker-chunk-modulepreload`). Debt = the refine step was skipped,
+  not the contract; recorded here so it is loud, not precedent.
+
 Each line is a record that disagrees with the code. Two kinds:
 **(E) plain edit** — a backlog/README/features-doc file, fix in place.
 **(A) ADR-process** — touches an active (immutable) ADR; reconcile via `docs/adr/README.md` "Historical references" / a superseding ADR, never by rewriting the ADR body.

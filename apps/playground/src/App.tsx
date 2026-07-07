@@ -10,7 +10,16 @@ import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { joinPath } from '@riftydev/vfs';
 import type * as monaco from 'monaco-editor';
-import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  lazy,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import {
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
@@ -360,12 +369,17 @@ export function App(props: AppProps) {
   const [editorApiSig, setEditorApiSig] = createSignal<EditorApi | undefined>(undefined);
   // A user open clicked while the LAZY EditorHost chunk is still loading must
   // not vanish (pre-split the mount-to-registerApi window was ~0; the chunk
-  // load made it real): queue and flush on registerApi. Cleared when the
-  // editor context resets so a stale open never replays into a LATER project.
+  // load made it real): queue and flush on registerApi. Queued ONLY inside the
+  // context-ready→registerApi window — before an editor context exists this
+  // stays the old no-op, so a pre-context click can never replay into a LATER
+  // project's editor (the context-reset effect below clears the belt too).
   let pendingEditorOps: ((api: EditorApi) => void)[] = [];
   const withEditorApi = (op: (api: EditorApi) => void): void => {
-    if (editorApi) op(editorApi);
-    else pendingEditorOps.push(op);
+    if (editorApi) {
+      op(editorApi);
+      return;
+    }
+    if (untrack(() => indexBoot.editorProjectContextReady())) pendingEditorOps.push(op);
   };
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
