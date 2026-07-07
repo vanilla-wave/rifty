@@ -6,13 +6,13 @@ created: 2026-07-05
 why: the SW reply-await is unbounded and hop deaths (worker kill, channel close, socket destroy) can park a request forever; parity-first error UX needs ONE place that turns «no response will ever come» into a diagnosable reply
 user_story: As a developer, I want any preview or loopback request whose upstream died to settle with a diagnosable error promptly, but today `route-preview.ts:108` awaits the reply forever and mid-request worker-death semantics are untested
 epic: fault-honest-sw-preview
-blocked_by: [service-worker/preview-blocked-host-hang]
+blocked_by: []
 code: [packages/service-worker/src/route-preview.ts, packages/net/src/cross-realm/preview-port.ts, packages/net/src/registry.ts]
 ---
 
 ## Context
 
-Chain: SW `routePreview` (MessageChannel reply-await — UNBOUNDED, `route-preview.ts:108-164`) → page `bridgeCrossRealmPreview` (30s no-progress timer, 502 on dispose) → worker `serveCrossRealmPreview` (accept frame) → `dispatchToPort` → vite/user server. Loopback `http.request` (ADR-0180) rides the same broker. Some terminal events are already honest (owner-departed 503, bridge-disposed 502) — pin them; the rest park. Blocked by the hang diagnosis: its evidence decides where terminal events are observable.
+Chain: SW `routePreview` (MessageChannel reply-await — UNBOUNDED, `route-preview.ts:108-164`) → page `bridgeCrossRealmPreview` (30s no-progress timer, 502 on dispose) → worker `serveCrossRealmPreview` (accept frame) → `dispatchToPort` → vite/user server. Loopback `http.request` (ADR-0180) rides the same broker. Some terminal events are already honest (owner-departed 503, bridge-disposed 502) — pin them; the rest park. (The blocking `preview-blocked-host-hang` diagnosis RESOLVED — the "host-check parks the iframe" hang was rifty `node:net` missing `isIP` throwing inside vite's async host-check middleware, NOT a lost response; real `isIP` landed with parity `cases/net/is-ip`, and the preview path is unreachable for a rejected Host anyway since the SW stamps `Host: localhost` (ADR-0189 D3). So this chokepoint is now unblocked, and its evidence base is that a hang here means a lost TERMINAL event, never a lost upstream 4xx.)
 
 ## Acceptance
 
