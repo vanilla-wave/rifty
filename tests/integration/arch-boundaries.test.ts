@@ -97,6 +97,39 @@ describe('check:arch layer boundaries', () => {
     expect(ruleNames([root])).not.toContain('solid-only-in-playground');
   });
 
+  it('flags an eager monaco-editor import outside the lazy editor stack', () => {
+    const root = fixture({
+      'playground/src/glue/eager.ts': "import 'monaco-editor';\nexport const a = 1;\n",
+    });
+    expect(ruleNames([root])).toContain('monaco-only-in-lazy-editor-stack');
+  });
+
+  it('allows monaco-editor inside the lazy editor stack allowlist', () => {
+    const root = fixture({
+      'playground/src/components/editor-host-core.ts':
+        "import 'monaco-editor';\nexport const a = 1;\n",
+    });
+    expect(ruleNames([root])).not.toContain('monaco-only-in-lazy-editor-stack');
+  });
+
+  it('flags a STATIC App.tsx import of the editor host (must stay a lazy chunk)', () => {
+    const root = fixture({
+      'playground/src/App.tsx':
+        "import { EditorHost } from './components/EditorHost.tsx';\nexport const a = EditorHost;\n",
+      'playground/src/components/EditorHost.tsx': 'export const EditorHost = 1;\n',
+    });
+    expect(ruleNames([root])).toContain('editor-stack-loads-lazily');
+  });
+
+  it('allows App.tsx to reach the editor host via dynamic import', () => {
+    const root = fixture({
+      'playground/src/App.tsx':
+        "void import('./components/EditorHost.tsx');\nexport const a = 1;\n",
+      'playground/src/components/EditorHost.tsx': 'export const EditorHost = 1;\n',
+    });
+    expect(ruleNames([root])).not.toContain('editor-stack-loads-lazily');
+  });
+
   it('resolves cross-package subpath exports (madge blindspot regression)', () => {
     const edges = runArch(['packages/runtime-js/src/worker-entry.ts']).modules.flatMap(
       (m) => m.dependencies,

@@ -52,6 +52,15 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
   });
 
+  it('does not warm the lazy editor stack at app eval before user/project intent', () => {
+    // First-run chooser idle must not fetch/eval Monaco. Warm only through the
+    // boot/pick intent ports (behavioral pins in project-index/preset-boot tests).
+    const appEvalBlock = source.slice(0, source.indexOf('/** BroadcastChannel key'));
+    expect(appEvalBlock).not.toContain("void import('./components/EditorHost.tsx')");
+    expect(appEvalBlock).not.toContain("void import('./glue/ts-ls-monaco-providers.ts')");
+    expect(source).toContain('function warmEditorStack(): void');
+  });
+
   it('holds no page-side authoritative VFS store — the owner is the single store', () => {
     // (a) one authoritative owner; the page must not construct a local mirror.
     // `@riftydev/vfs/internal` is a declared export, so check:arch ALLOWS it —

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- bench: the `viteReadyMs` stage marker follows real vite's own ready banner
+  (`VITE vX.Y ready in N ms`) — the rifty-authored `[vite] dev server ready on
+  port` line died with the generic dev-server lifecycle (PR #109), so stage
+  attribution silently recorded null since then.
+
 ### Added
 
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
