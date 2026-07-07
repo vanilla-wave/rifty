@@ -31,6 +31,10 @@ test.describe('manual Vite install path', () => {
 
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     await expectViteDevServerReady(page, 5174, 60_000);
+    const pill = page.locator('.rf-livepill');
+    await page.locator('[data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect(pill).not.toHaveAttribute('data-state', 'running', { timeout: 60_000 });
 
     await openShellTerminal(page);
     await runTerminalLine(
@@ -45,7 +49,7 @@ test.describe('manual Vite install path', () => {
     // no rifty-authored terminal marker exists anymore (generic dev lifecycle).
     await expectViteDevServerReady(page, 5174, 60_000);
 
-    const previewFrame = page.frameLocator('iframe').first();
+    const previewFrame = page.frameLocator('iframe[title="Preview port 5174"]');
     const previewBody = previewFrame.locator('body');
     // ADR-0189: the generic preview-path injection (no vite wrapper plugin).
     await expect(previewFrame.locator('script[data-rifty-ws-bridge]')).toHaveCount(1, {

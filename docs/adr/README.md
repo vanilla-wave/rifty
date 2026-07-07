@@ -246,6 +246,8 @@ superseded.
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
+| 0036 `synthesizePreviewUrl(path)` host clause | 0189 / note 2026-07-04 | SW preview HTTP routing now synthesizes `localhost[:port]`; `PREVIEW_LOCAL_HOST=preview.local` remains for explicit legacy HMR bridge paths |
+| 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
@@ -263,6 +265,7 @@ superseded.
 | 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
+| 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |
 | 0137 backlog path / follow-up status | 0137 note 2026-06-23 | shell `.bin` execution backlog file retired after owner-worker child path + non-dev `npm run` routing landed; `execSync` node-entry residual remains separate |
 | 0143 pre-ADR backlog reference | 0143 note 2026-06-23 | pre-ADR analysis backlog file retired after shell `.bin` transport closure; ADR-0143 remains the historical record |
 | 0144 owner CLI in-realm phrase | 0144 note 2026-06-23 | `.bin` commands now run in supervised child workers over owner remote-fs; `execSync` node-entry residual remains separate |

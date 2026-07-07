@@ -5,7 +5,7 @@ title: Preset de-glue — equivalent libs work like preset libs
 created: 2026-07-02
 value: A developer who swaps a preset library for an equivalent (vite → webpack-dev-server, express → fastify, esbuild → swc) keeps a working sandbox — LIVE/preview/HMR/install ride generic platform mechanisms, and every substitution or remaining gap is loud.
 user_story: As a developer forking a preset, I want to replace its libraries with equivalents and keep the sandbox working, but today the dev-server lifecycle is keyed to the literal `vite` bin name, three packages are patched only at vite-preset boot, readiness is faked via `[vite]` stdout markers, and shadow-registry substitutions happen silently.
-items: [net/preview-websocket-bridge]
+items: [net/preview-websocket-bridge, playground/vite-strictport-fallback-proof, playground/vite-curated-boot-residual-forces]
 ---
 
 ## Outcome
@@ -27,4 +27,6 @@ Delivered (closed 2026-07-02; unit + full e2e lanes green):
 
 Open:
 
-- `net/preview-websocket-bridge` (ready; design ratified in ADR-0189, Accepted) — CORE DELIVERED: generic text/html injection at the preview path + guest-port remap in the injected `window.WebSocket` patch, wrapper HMR half deleted, socket-lab `browser-preview-websocket` = supported (echo + server-close parity). REMAINING (item acceptance 4): per-forced-option wrapper retirement (allowedHosts/host, strictPort, `base './'`, `optimizeDeps.noDiscovery`, user-config discovery env) → delete `withViteCliArgs`/`withViteCliEnv` + the wrapper file; re-home the `configureServer` invalidation plugin + `RIFTY_VITE_CLI_HMR_OFF` (ADR-0161 pin). Details: the item's Phase state block.
+- `net/preview-websocket-bridge` (ready; design ratified in ADR-0189, Accepted) — CORE DELIVERED: generic text/html injection at the preview path + guest-port remap in the injected `window.WebSocket` patch, wrapper HMR half deleted, socket-lab `browser-preview-websocket` = supported (echo + server-close parity). Host rewrite LANDED (2026-07-02): the preview path stamps `Host: localhost:<port>` (SW_ROUTING_VERSION 6). On the live shell/.bin Vite wrapper path, `server.host`, preview `--host`, auto-boot `--host`/generated `--strictPort`, `base './'`, and `appType` are retired with e2e/unit proofs. REMAINING (item acceptance 4): `optimizeDeps.noDiscovery` (needs real bundling esbuild — PR #111 esbuild-wasm) + `server.allowedHosts` (dispatch hangs without it even with the localhost Host — untraced) → then delete `withViteCliArgs`/`withViteCliEnv` + the wrapper file; re-home the `configureServer` invalidation plugin + `RIFTY_VITE_CLI_HMR_OFF` (ADR-0161 pin). Direct fallback-port proof and legacy curated Vite boot cleanup are split into the two playground child items. Details: the item's Phase state block.
+- `playground/vite-strictport-fallback-proof` (ready) — prove with browser e2e that shell/.bin Vite without generated `strictPort` publishes Vite's actual fallback port when the requested port is busy.
+- `playground/vite-curated-boot-residual-forces` (ready) — delete or narrow legacy direct Vite boot config (`ServerSpec`, `bootDevServer`, `bootPreview`) so path-scoped retirement no longer looks global.

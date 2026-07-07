@@ -21,7 +21,10 @@ New module `@riftydev/io/src/preview-protocol.ts` owns the addressing primitives
 
 - `PREVIEW_PREFIX_RE` — `/^\/preview\/(\d+)(\/.*)?$/`.
 - `PREVIEW_LOCAL_HOST` — `'preview.local'`.
-- `synthesizePreviewUrl(path)` — returns `http://preview.local${path}`.
+- `synthesizePreviewUrl(path, port?)` — originally returned `http://preview.local${path}`;
+  corrected 2026-07-04 by ADR-0189 D3: returns `http://localhost${path}` or
+  `http://localhost:<port>${path}` for SW preview HTTP routing. `PREVIEW_LOCAL_HOST`
+  remains for the explicit legacy HMR bridge path.
 - `parsePreviewPath(path)` — `{ port: number; rest: string } | null` via the regex with the port parsed to a number.
 
 Re-exported from `@riftydev/io/src/index.ts`.
@@ -41,10 +44,12 @@ Lives in `@riftydev/io` because:
 
 - `service-worker/package.json` gains `"@riftydev/io": "workspace:*"` (was zero deps); forward import direction preserved (`io` is its lowest layer).
 - `preview-bridge.ts` drops its inline `PREVIEW_PREFIX_RE`; `matchPreviewUrl` now calls `parsePreviewPath` and remains a thin shape-adapter (`{port, path}` vs `{port, rest}`) for back-compat with `index.ts` consumers.
-- `route-preview.ts` calls `synthesizePreviewUrl(match.path)` instead of inlining the literal.
+- `route-preview.ts` calls `synthesizePreviewUrl(match.path, match.port)` instead of inlining the literal.
 - `net/src/registry.ts` doc comment now points at `@riftydev/io/preview-protocol` as canonical.
 - SW's `protocol.ts` (`SW_PROTOCOL_VERSION`, wire-frame versioning) stays — a different concern (frame format vs addressing).
-- Future scheme changes (`/preview/<port>/`→`/p/<port>/`, `preview.local`→`preview.invalid`) become a single-touch edit in `io` + CHANGELOG note; consumers can't drift.
+- Future scheme changes (`/preview/<port>/`→`/p/<port>/`, HTTP Host synthesis
+  `localhost`→another loopback shape) become a single-touch edit in `io` +
+  CHANGELOG note; consumers can't drift.
 - (Negative / follow-up) The playground literals in `hmr-bridge.ts` and `realVite.ts` remain on the playground side — it builds `ws://preview.local:<port>/__hmr` and only *mentions* `preview.local` in a comment, never parsing `/preview/<port>/`. Wiring them to `@riftydev/io` is a follow-up; `PREVIEW_LOCAL_HOST` is exported to make it a one-line swap when the HMR adapter graduates from the playground.
 
 ## References
@@ -59,7 +64,7 @@ Lives in `@riftydev/io` because:
 - [x] `packages/io/src/preview-protocol.ts` exports `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`.
 - [x] `packages/io/src/index.ts` re-exports the full surface.
 - [x] `packages/service-worker/src/preview-bridge.ts` imports the regex from `@riftydev/io`; no inline copy.
-- [x] `packages/service-worker/src/route-preview.ts` calls `synthesizePreviewUrl`; no inline `http://preview.local${...}`.
+- [x] `packages/service-worker/src/route-preview.ts` calls `synthesizePreviewUrl`; no inline upstream host literal.
 - [x] `packages/service-worker/package.json` lists `@riftydev/io` in `dependencies`.
 - [x] `packages/net/src/registry.ts` doc comment cross-references the shared protocol module.
 - [x] Unit suite `packages/io/src/preview-protocol.test.ts` pins the regex and host behaviour.

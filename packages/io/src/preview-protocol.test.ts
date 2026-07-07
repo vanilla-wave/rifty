@@ -38,16 +38,14 @@ describe('parsePreviewPath', () => {
 });
 
 describe('synthesizePreviewUrl', () => {
-  it('prefixes the synthetic host with the http:// scheme', () => {
-    expect(synthesizePreviewUrl('/foo')).toBe('http://preview.local/foo');
-    expect(synthesizePreviewUrl('/')).toBe('http://preview.local/');
-    expect(synthesizePreviewUrl('')).toBe('http://preview.local');
+  it('stamps the Host a real local dev run would (localhost) — dev-server allow-lists pass untouched', () => {
+    expect(synthesizePreviewUrl('/foo')).toBe('http://localhost/foo');
+    expect(synthesizePreviewUrl('/')).toBe('http://localhost/');
+    expect(synthesizePreviewUrl('')).toBe('http://localhost');
   });
 
-  it('preserves the preview port when supplied', () => {
-    expect(synthesizePreviewUrl('/api/messages', 3321)).toBe(
-      'http://preview.local:3321/api/messages',
-    );
+  it('preserves the preview port when supplied (Host-derived consumers keep it)', () => {
+    expect(synthesizePreviewUrl('/api/messages', 3321)).toBe('http://localhost:3321/api/messages');
   });
 });
 

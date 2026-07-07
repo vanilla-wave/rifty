@@ -332,9 +332,7 @@ describe('sandbox setup kinds (ADR-0135)', () => {
   it('boots instant presets straight to the dev line', () => {
     const instant = PRESETS.filter((preset) => preset.setup === 'instant');
     for (const preset of instant) {
-      expect(presetBootLines(preset, '/workspace')).toEqual([
-        'vite --host 0.0.0.0 --strictPort --port 5174',
-      ]);
+      expect(presetBootLines(preset, '/workspace')).toEqual(['vite --port 5174']);
     }
   });
 
@@ -346,7 +344,7 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     const realVite = PRESETS.find((preset) => preset.id === 'real-vite');
     expect(realVite?.setup).toBe('from-scratch');
     expect(presetBootLines(realVite as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm install && vite --host 0.0.0.0 --strictPort --port 5174',
+      'cd /workspace && npm install && vite --port 5174',
     ]);
 
     const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');

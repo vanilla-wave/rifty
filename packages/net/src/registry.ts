@@ -6,12 +6,12 @@
  * inside a single Worker), we keep an in-process table here so user code
  * can simulate the round-trip without involving a Worker.
  *
- * The `/preview/<port>/...` URL scheme and the synthetic `preview.local`
- * host are the addressing primitives shared between this registry and the
- * SW. They live in `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`,
- * `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`) — see
- * ADR-0036 for the rationale. Adapters that need to parse a preview URL or
- * synthesise the upstream form import from there, not from this file.
+ * The `/preview/<port>/...` URL scheme, legacy explicit-HMR `preview.local`
+ * host constant, and SW upstream `localhost:<port>` synthesis live in
+ * `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
+ * `synthesizePreviewUrl`, `parsePreviewPath`) — see ADR-0036 for the
+ * rationale. Adapters that need to parse a preview URL or synthesise the
+ * upstream form import from there, not from this file.
  */
 
 export type PortHandler = (request: Request) => Promise<Response> | Response;

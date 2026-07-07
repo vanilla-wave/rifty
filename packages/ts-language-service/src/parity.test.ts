@@ -52,6 +52,7 @@ import { createTsLanguageService } from './service.ts';
 import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 const require = createRequire(import.meta.url);
+const TS_PARITY_TIMEOUT_MS = 20_000;
 
 /** A fixture: a map of POSIX-relative path → file contents, plus the files to diagnose. */
 interface Fixture {
@@ -441,19 +442,23 @@ const FIXTURES: readonly Fixture[] = [
 
 describe('parity: rifty TS language service vs real ts.LanguageService (gold standard)', () => {
   for (const fixture of FIXTURES) {
-    it(`matches real TS — ${fixture.name} [${fixture.probes}]`, async () => {
-      const root = writeFixtureToTmp(fixture);
-      const gold = goldDiagnostics(fixture, root); // Side A (expectations)
-      const rifty = await riftyDiagnostics(fixture); // Side B
+    it(
+      `matches real TS — ${fixture.name} [${fixture.probes}]`,
+      async () => {
+        const root = writeFixtureToTmp(fixture);
+        const gold = goldDiagnostics(fixture, root); // Side A (expectations)
+        const rifty = await riftyDiagnostics(fixture); // Side B
 
-      // Sanity: the fixture must actually exercise diagnostics (a green run on
-      // zero diagnostics on both sides would be a vacuous parity pass). Every
-      // fixture here is engineered to produce ≥1 gold diagnostic.
-      expect(gold.length).toBeGreaterThan(0);
+        // Sanity: the fixture must actually exercise diagnostics (a green run on
+        // zero diagnostics on both sides would be a vacuous parity pass). Every
+        // fixture here is engineered to produce ≥1 gold diagnostic.
+        expect(gold.length).toBeGreaterThan(0);
 
-      // The real assertion: Side B deep-equals Side A.
-      expect(rifty).toEqual(gold);
-    });
+        // The real assertion: Side B deep-equals Side A.
+        expect(rifty).toEqual(gold);
+      },
+      TS_PARITY_TIMEOUT_MS,
+    );
   }
 });
 
@@ -586,347 +591,377 @@ const QUERY_FIXTURE: Fixture = {
 };
 
 describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', () => {
-  it('hover (quick-info) matches real TS — cross-file fn + node_modules symbol', async () => {
-    const root = writeFixtureToTmp(QUERY_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+  it(
+    'hover (quick-info) matches real TS — cross-file fn + node_modules symbol',
+    async () => {
+      const root = writeFixtureToTmp(QUERY_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(QUERY_FIXTURE);
 
-    // (1) cross-file function `add` at its call site; (2) node_modules `padder`.
-    const probes: Probe[] = [
-      { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // cursor on `add`
-      { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // cursor on `padder`
-    ];
-    for (const probe of probes) {
-      const gold = goldHover(gsvc, ghost, nodePath.join(root, probe.file), probe);
-      const text = QUERY_FIXTURE.files[probe.file] ?? '';
-      const pos = probePosition(text, probe);
-      const rifty = svc.getQuickInfo(`${RIFTY_ROOT}/${probe.file}`, pos);
-      expect(gold).not.toBeNull(); // non-vacuous: there IS quick-info here
-      expect(rifty).toEqual(gold);
-    }
-  });
+      // (1) cross-file function `add` at its call site; (2) node_modules `padder`.
+      const probes: Probe[] = [
+        { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // cursor on `add`
+        { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // cursor on `padder`
+      ];
+      for (const probe of probes) {
+        const gold = goldHover(gsvc, ghost, nodePath.join(root, probe.file), probe);
+        const text = QUERY_FIXTURE.files[probe.file] ?? '';
+        const pos = probePosition(text, probe);
+        const rifty = svc.getQuickInfo(`${RIFTY_ROOT}/${probe.file}`, pos);
+        expect(gold).not.toBeNull(); // non-vacuous: there IS quick-info here
+        expect(rifty).toEqual(gold);
+      }
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 
-  it('definition matches real TS — cross-file + into node_modules .d.ts', async () => {
-    const root = writeFixtureToTmp(QUERY_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(QUERY_FIXTURE);
-    const grel = goldRel(root);
+  it(
+    'definition matches real TS — cross-file + into node_modules .d.ts',
+    async () => {
+      const root = writeFixtureToTmp(QUERY_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(QUERY_FIXTURE);
+      const grel = goldRel(root);
 
-    const probes: Probe[] = [
-      { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // → math.ts add
-      { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // → node_modules leftpad
-    ];
-    for (const probe of probes) {
+      const probes: Probe[] = [
+        { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // → math.ts add
+        { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // → node_modules leftpad
+      ];
+      for (const probe of probes) {
+        const text = QUERY_FIXTURE.files[probe.file] ?? '';
+        const offset = positionToOffset(text, probePosition(text, probe));
+        const goldDefs = sortLocations(
+          goldDefinitions(
+            gsvc.getDefinitionAtPosition(nodePath.join(root, probe.file), offset),
+            ghost,
+            grel,
+          ),
+        );
+        const riftyDefs = sortLocations(
+          relLocations(
+            svc.getDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
+            riftyRel,
+          ),
+        );
+        expect(goldDefs.length).toBeGreaterThan(0); // non-vacuous
+        expect(riftyDefs).toEqual(goldDefs);
+      }
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
+
+  it(
+    'type-definition matches real TS — node_modules interface',
+    async () => {
+      const root = writeFixtureToTmp(QUERY_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(QUERY_FIXTURE);
+      const grel = goldRel(root);
+
+      // `padder`'s TYPE is `Padder` (the interface in node_modules) — different
+      // location from go-to-definition (which lands on the `padder` const).
+      const probe: Probe = { file: 'main.ts', needle: 'padder.pad', inner: 1 };
       const text = QUERY_FIXTURE.files[probe.file] ?? '';
       const offset = positionToOffset(text, probePosition(text, probe));
       const goldDefs = sortLocations(
         goldDefinitions(
-          gsvc.getDefinitionAtPosition(nodePath.join(root, probe.file), offset),
+          gsvc.getTypeDefinitionAtPosition(nodePath.join(root, probe.file), offset),
           ghost,
           grel,
         ),
       );
       const riftyDefs = sortLocations(
         relLocations(
-          svc.getDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
+          svc.getTypeDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
           riftyRel,
         ),
       );
-      expect(goldDefs.length).toBeGreaterThan(0); // non-vacuous
+      expect(goldDefs.length).toBeGreaterThan(0);
       expect(riftyDefs).toEqual(goldDefs);
-    }
-  });
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 
-  it('type-definition matches real TS — node_modules interface', async () => {
-    const root = writeFixtureToTmp(QUERY_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(QUERY_FIXTURE);
-    const grel = goldRel(root);
+  it(
+    'completions match real TS — member access + global, names+kinds as sets',
+    async () => {
+      const root = writeFixtureToTmp(QUERY_FIXTURE);
+      const { service: gsvc } = buildGoldService(root);
+      const { svc } = await buildRiftyService(QUERY_FIXTURE);
 
-    // `padder`'s TYPE is `Padder` (the interface in node_modules) — different
-    // location from go-to-definition (which lands on the `padder` const).
-    const probe: Probe = { file: 'main.ts', needle: 'padder.pad', inner: 1 };
-    const text = QUERY_FIXTURE.files[probe.file] ?? '';
-    const offset = positionToOffset(text, probePosition(text, probe));
-    const goldDefs = sortLocations(
-      goldDefinitions(
-        gsvc.getTypeDefinitionAtPosition(nodePath.join(root, probe.file), offset),
-        ghost,
-        grel,
-      ),
-    );
-    const riftyDefs = sortLocations(
-      relLocations(
-        svc.getTypeDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
-        riftyRel,
-      ),
-    );
-    expect(goldDefs.length).toBeGreaterThan(0);
-    expect(riftyDefs).toEqual(goldDefs);
-  });
+      // Member access `arr.|` and a global position (start of an expression line).
+      const probes: Probe[] = [
+        { file: 'main.ts', needle: 'arr.map', inner: 4 }, // after `arr.`
+        { file: 'main.ts', needle: 'const total = add', inner: 14 }, // global, at `add`
+      ];
+      for (const probe of probes) {
+        const text = QUERY_FIXTURE.files[probe.file] ?? '';
+        const offset = positionToOffset(text, probePosition(text, probe));
+        const goldInfo = gsvc.getCompletionsAtPosition(
+          nodePath.join(root, probe.file),
+          offset,
+          undefined,
+        );
+        const riftyList = svc.getCompletions(
+          `${RIFTY_ROOT}/${probe.file}`,
+          probePosition(text, probe),
+        );
 
-  it('completions match real TS — member access + global, names+kinds as sets', async () => {
-    const root = writeFixtureToTmp(QUERY_FIXTURE);
-    const { service: gsvc } = buildGoldService(root);
-    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+        // Compare as sorted (name, kind) SETS — order-independent, no truncation.
+        const goldSet = (goldInfo?.entries ?? [])
+          .map((e) => `${e.name}\t${scriptElementKindToCompletionKind(e.kind)}`)
+          .sort();
+        const riftySet = riftyList.items.map((i) => `${i.label}\t${i.kind}`).sort();
+        expect(goldSet.length).toBeGreaterThan(0); // non-vacuous
+        expect(riftySet).toEqual(goldSet);
+        expect(riftyList.isIncomplete).toBe(goldInfo?.isIncomplete === true);
+        expect(riftyList.flags).toBe(goldInfo?.flags);
+        expect(riftyList.isGlobalCompletion).toBe(goldInfo?.isGlobalCompletion ?? false);
+        expect(riftyList.isMemberCompletion).toBe(goldInfo?.isMemberCompletion ?? false);
+        expect(riftyList.isNewIdentifierLocation).toBe(goldInfo?.isNewIdentifierLocation ?? false);
+      }
 
-    // Member access `arr.|` and a global position (start of an expression line).
-    const probes: Probe[] = [
-      { file: 'main.ts', needle: 'arr.map', inner: 4 }, // after `arr.`
-      { file: 'main.ts', needle: 'const total = add', inner: 14 }, // global, at `add`
-    ];
-    for (const probe of probes) {
+      // getCompletionEntryDetails probe: resolve ONE member entry's detail.
+      const probe: Probe = { file: 'main.ts', needle: 'arr.map', inner: 4 };
       const text = QUERY_FIXTURE.files[probe.file] ?? '';
       const offset = positionToOffset(text, probePosition(text, probe));
-      const goldInfo = gsvc.getCompletionsAtPosition(
+      const goldDetail = gsvc.getCompletionEntryDetails(
         nodePath.join(root, probe.file),
         offset,
+        'map',
+        undefined,
+        undefined,
+        undefined,
         undefined,
       );
-      const riftyList = svc.getCompletions(
+      const riftyDetail = svc.getCompletionDetails(
         `${RIFTY_ROOT}/${probe.file}`,
         probePosition(text, probe),
+        'map',
+      );
+      expect(goldDetail).not.toBeUndefined();
+      expect(riftyDetail?.detail).toBe(partsToString(goldDetail?.displayParts));
+      expect(riftyDetail?.label).toBe('map');
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
+
+  it(
+    'completion metadata matches real TS for replacement spans, commit characters, snippets and actions',
+    async () => {
+      const fixture: Fixture = {
+        name: 'completion metadata',
+        probes:
+          'replacement spans, default/per-entry commit characters, snippets, and completion details code actions',
+        files: {
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: {
+              strict: true,
+              module: 'esnext',
+              moduleResolution: 'bundler',
+              target: 'es2022',
+            },
+          }),
+          'helpers.ts': 'export function helperValue(): number { return 1; }\n',
+          'main.ts':
+            'const record = { "a-b": 1 };\n' +
+            'record.a\n' +
+            'help\n' +
+            '/** @par */\n' +
+            'function documented(param: string) {}\n' +
+            'function takes(cb: (value: string) => void) {}\n' +
+            'takes(\n',
+        },
+        diagnose: ['main.ts'],
+      };
+      const root = writeFixtureToTmp(fixture);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(fixture);
+      const mainText = fixture.files['main.ts'] ?? '';
+
+      const propertyProbe = probePosition(mainText, {
+        file: 'main.ts',
+        needle: 'record.a',
+        inner: 8,
+      });
+      const propertyOffset = positionToOffset(mainText, propertyProbe);
+      const goldProperty = gsvc.getCompletionsAtPosition(
+        nodePath.join(root, 'main.ts'),
+        propertyOffset,
+        { includeInsertTextCompletions: true },
+      );
+      const riftyProperty = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, propertyProbe, {
+        includeInsertTextCompletions: true,
+      });
+      const goldBracket = goldProperty?.entries.find((entry) => entry.name === 'a-b');
+      const riftyBracket = riftyProperty.items.find((entry) => entry.label === 'a-b');
+      expect(goldProperty?.optionalReplacementSpan).toBeDefined();
+      expect(goldBracket?.replacementSpan).toBeDefined();
+      expect(riftyProperty.optionalReplacementRange).toEqual(
+        spanToRange(mainText, goldProperty?.optionalReplacementSpan ?? { start: 0, length: 0 }),
+      );
+      expect(riftyBracket?.replacementRange).toEqual(
+        spanToRange(mainText, goldBracket?.replacementSpan ?? { start: 0, length: 0 }),
+      );
+      expect(riftyProperty.defaultCommitCharacters).toEqual(goldProperty?.defaultCommitCharacters);
+      expect(riftyBracket?.commitCharacters).toEqual(goldBracket?.commitCharacters);
+
+      const snippetProbe = probePosition(mainText, { file: 'main.ts', needle: '@par', inner: 4 });
+      const snippetOffset = positionToOffset(mainText, snippetProbe);
+      const goldSnippet = gsvc
+        .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), snippetOffset, {
+          includeCompletionsWithSnippetText: true,
+        })
+        ?.entries.find((entry) => entry.isSnippet === true);
+      const riftySnippet = svc
+        .getCompletions(`${RIFTY_ROOT}/main.ts`, snippetProbe, {
+          includeCompletionsWithSnippetText: true,
+        })
+        .items.find((entry) => entry.label === goldSnippet?.name);
+      expect(goldSnippet).toBeDefined();
+      expect(riftySnippet?.isSnippet).toBe(true);
+
+      const autoImportProbe = probePosition(mainText, {
+        file: 'main.ts',
+        needle: 'help',
+        inner: 4,
+      });
+      const autoImportOffset = positionToOffset(mainText, autoImportProbe);
+      const goldAutoImportList = gsvc.getCompletionsAtPosition(
+        nodePath.join(root, 'main.ts'),
+        autoImportOffset,
+        {
+          includeCompletionsForModuleExports: true,
+          includeInsertTextCompletions: true,
+        },
+      );
+      const goldHelper = goldAutoImportList?.entries.find((entry) => entry.name === 'helperValue');
+      const riftyHelper = svc
+        .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
+          includeCompletionsForModuleExports: true,
+          includeInsertTextCompletions: true,
+        })
+        .items.find((entry) => entry.label === 'helperValue');
+      const goldDeprecatedAliasHelper = gsvc
+        .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), autoImportOffset, {
+          includeExternalModuleExports: true,
+          includeInsertTextCompletions: true,
+        })
+        ?.entries.find((entry) => entry.name === 'helperValue');
+      const riftyDeprecatedAliasHelper = svc
+        .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
+          includeExternalModuleExports: true,
+          includeInsertTextCompletions: true,
+        })
+        .items.find((entry) => entry.label === 'helperValue');
+      expect(goldHelper?.hasAction).toBe(true);
+      expect(riftyHelper?.hasAction).toBe(true);
+      expect(goldDeprecatedAliasHelper?.hasAction).toBe(true);
+      expect(riftyDeprecatedAliasHelper?.hasAction).toBe(true);
+      const goldDetails = gsvc.getCompletionEntryDetails(
+        nodePath.join(root, 'main.ts'),
+        autoImportOffset,
+        'helperValue',
+        DEFAULT_FMT,
+        goldHelper?.source,
+        undefined,
+        goldHelper?.data,
+      );
+      const riftyDetails = svc.getCompletionDetails(
+        `${RIFTY_ROOT}/main.ts`,
+        autoImportProbe,
+        'helperValue',
+        riftyHelper?.source,
+        structuredClone(riftyHelper?.data),
+        {
+          includeCompletionsForModuleExports: true,
+          includeInsertTextCompletions: true,
+        },
+      );
+      expect(goldDetails).toBeDefined();
+      expect(goldDetails?.codeActions?.length).toBeGreaterThan(0);
+      expect(riftyDetails?.kind).toBe(
+        scriptElementKindToCompletionKind(goldDetails?.kind ?? ts.ScriptElementKind.unknown),
+      );
+      expect(riftyDetails?.sortText).toBe(riftyHelper?.sortText);
+      expect(riftyDetails?.sourceDisplay).toBe(
+        partsToString(goldDetails?.sourceDisplay ?? goldDetails?.source),
+      );
+      const goldAutoImportEdits = fileTextChangesToWorkspaceEdit(
+        goldDetails?.codeActions?.flatMap((a) => a.changes) ?? [],
+        (fileName) => ghost.readFile?.(fileName) ?? '',
+      );
+      expect(riftyDetails?.additionalTextEdits).toEqual(
+        goldAutoImportEdits.changes[`${root}/main.ts`],
+      );
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
+
+  it(
+    'completion and signature trigger contexts match real TS',
+    async () => {
+      const fixture: Fixture = {
+        name: 'trigger context',
+        probes: 'completion trigger-character and signature characterTyped options',
+        files: {
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: { strict: true, module: 'esnext', target: 'es2022' },
+          }),
+          'main.ts':
+            'const foo = { alpha: 1, beta: 2 };\n' +
+            'foo.\n' +
+            'function take(value: number): void {}\n' +
+            'take(\n',
+        },
+        diagnose: ['main.ts'],
+      };
+      const root = writeFixtureToTmp(fixture);
+      const { service: gsvc } = buildGoldService(root);
+      const { svc } = await buildRiftyService(fixture);
+      const text = fixture.files['main.ts'] ?? '';
+
+      const completionProbe = probePosition(text, { file: 'main.ts', needle: 'foo.\n', inner: 4 });
+      const completionOffset = positionToOffset(text, completionProbe);
+      const goldCompletions = gsvc.getCompletionsAtPosition(
+        nodePath.join(root, 'main.ts'),
+        completionOffset,
+        {
+          triggerKind: ts.CompletionTriggerKind.TriggerCharacter,
+          triggerCharacter: '.',
+        },
+      );
+      const riftyCompletions = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, completionProbe, {
+        triggerKind: 'trigger-character',
+        triggerCharacter: '.',
+      });
+      expect(goldCompletions?.entries.length).toBeGreaterThan(0);
+      expect(riftyCompletions.isMemberCompletion).toBe(
+        goldCompletions?.isMemberCompletion ?? false,
+      );
+      expect(riftyCompletions.items.map((entry) => entry.label).sort()).toEqual(
+        (goldCompletions?.entries ?? []).map((entry) => entry.name).sort(),
       );
 
-      // Compare as sorted (name, kind) SETS — order-independent, no truncation.
-      const goldSet = (goldInfo?.entries ?? [])
-        .map((e) => `${e.name}\t${scriptElementKindToCompletionKind(e.kind)}`)
-        .sort();
-      const riftySet = riftyList.items.map((i) => `${i.label}\t${i.kind}`).sort();
-      expect(goldSet.length).toBeGreaterThan(0); // non-vacuous
-      expect(riftySet).toEqual(goldSet);
-      expect(riftyList.isIncomplete).toBe(goldInfo?.isIncomplete === true);
-      expect(riftyList.flags).toBe(goldInfo?.flags);
-      expect(riftyList.isGlobalCompletion).toBe(goldInfo?.isGlobalCompletion ?? false);
-      expect(riftyList.isMemberCompletion).toBe(goldInfo?.isMemberCompletion ?? false);
-      expect(riftyList.isNewIdentifierLocation).toBe(goldInfo?.isNewIdentifierLocation ?? false);
-    }
-
-    // getCompletionEntryDetails probe: resolve ONE member entry's detail.
-    const probe: Probe = { file: 'main.ts', needle: 'arr.map', inner: 4 };
-    const text = QUERY_FIXTURE.files[probe.file] ?? '';
-    const offset = positionToOffset(text, probePosition(text, probe));
-    const goldDetail = gsvc.getCompletionEntryDetails(
-      nodePath.join(root, probe.file),
-      offset,
-      'map',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    const riftyDetail = svc.getCompletionDetails(
-      `${RIFTY_ROOT}/${probe.file}`,
-      probePosition(text, probe),
-      'map',
-    );
-    expect(goldDetail).not.toBeUndefined();
-    expect(riftyDetail?.detail).toBe(partsToString(goldDetail?.displayParts));
-    expect(riftyDetail?.label).toBe('map');
-  });
-
-  it('completion metadata matches real TS for replacement spans, commit characters, snippets and actions', async () => {
-    const fixture: Fixture = {
-      name: 'completion metadata',
-      probes:
-        'replacement spans, default/per-entry commit characters, snippets, and completion details code actions',
-      files: {
-        'tsconfig.json': JSON.stringify({
-          compilerOptions: {
-            strict: true,
-            module: 'esnext',
-            moduleResolution: 'bundler',
-            target: 'es2022',
-          },
-        }),
-        'helpers.ts': 'export function helperValue(): number { return 1; }\n',
-        'main.ts':
-          'const record = { "a-b": 1 };\n' +
-          'record.a\n' +
-          'help\n' +
-          '/** @par */\n' +
-          'function documented(param: string) {}\n' +
-          'function takes(cb: (value: string) => void) {}\n' +
-          'takes(\n',
-      },
-      diagnose: ['main.ts'],
-    };
-    const root = writeFixtureToTmp(fixture);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(fixture);
-    const mainText = fixture.files['main.ts'] ?? '';
-
-    const propertyProbe = probePosition(mainText, {
-      file: 'main.ts',
-      needle: 'record.a',
-      inner: 8,
-    });
-    const propertyOffset = positionToOffset(mainText, propertyProbe);
-    const goldProperty = gsvc.getCompletionsAtPosition(
-      nodePath.join(root, 'main.ts'),
-      propertyOffset,
-      { includeInsertTextCompletions: true },
-    );
-    const riftyProperty = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, propertyProbe, {
-      includeInsertTextCompletions: true,
-    });
-    const goldBracket = goldProperty?.entries.find((entry) => entry.name === 'a-b');
-    const riftyBracket = riftyProperty.items.find((entry) => entry.label === 'a-b');
-    expect(goldProperty?.optionalReplacementSpan).toBeDefined();
-    expect(goldBracket?.replacementSpan).toBeDefined();
-    expect(riftyProperty.optionalReplacementRange).toEqual(
-      spanToRange(mainText, goldProperty?.optionalReplacementSpan ?? { start: 0, length: 0 }),
-    );
-    expect(riftyBracket?.replacementRange).toEqual(
-      spanToRange(mainText, goldBracket?.replacementSpan ?? { start: 0, length: 0 }),
-    );
-    expect(riftyProperty.defaultCommitCharacters).toEqual(goldProperty?.defaultCommitCharacters);
-    expect(riftyBracket?.commitCharacters).toEqual(goldBracket?.commitCharacters);
-
-    const snippetProbe = probePosition(mainText, { file: 'main.ts', needle: '@par', inner: 4 });
-    const snippetOffset = positionToOffset(mainText, snippetProbe);
-    const goldSnippet = gsvc
-      .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), snippetOffset, {
-        includeCompletionsWithSnippetText: true,
-      })
-      ?.entries.find((entry) => entry.isSnippet === true);
-    const riftySnippet = svc
-      .getCompletions(`${RIFTY_ROOT}/main.ts`, snippetProbe, {
-        includeCompletionsWithSnippetText: true,
-      })
-      .items.find((entry) => entry.label === goldSnippet?.name);
-    expect(goldSnippet).toBeDefined();
-    expect(riftySnippet?.isSnippet).toBe(true);
-
-    const autoImportProbe = probePosition(mainText, { file: 'main.ts', needle: 'help', inner: 4 });
-    const autoImportOffset = positionToOffset(mainText, autoImportProbe);
-    const goldAutoImportList = gsvc.getCompletionsAtPosition(
-      nodePath.join(root, 'main.ts'),
-      autoImportOffset,
-      {
-        includeCompletionsForModuleExports: true,
-        includeInsertTextCompletions: true,
-      },
-    );
-    const goldHelper = goldAutoImportList?.entries.find((entry) => entry.name === 'helperValue');
-    const riftyHelper = svc
-      .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
-        includeCompletionsForModuleExports: true,
-        includeInsertTextCompletions: true,
-      })
-      .items.find((entry) => entry.label === 'helperValue');
-    const goldDeprecatedAliasHelper = gsvc
-      .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), autoImportOffset, {
-        includeExternalModuleExports: true,
-        includeInsertTextCompletions: true,
-      })
-      ?.entries.find((entry) => entry.name === 'helperValue');
-    const riftyDeprecatedAliasHelper = svc
-      .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
-        includeExternalModuleExports: true,
-        includeInsertTextCompletions: true,
-      })
-      .items.find((entry) => entry.label === 'helperValue');
-    expect(goldHelper?.hasAction).toBe(true);
-    expect(riftyHelper?.hasAction).toBe(true);
-    expect(goldDeprecatedAliasHelper?.hasAction).toBe(true);
-    expect(riftyDeprecatedAliasHelper?.hasAction).toBe(true);
-    const goldDetails = gsvc.getCompletionEntryDetails(
-      nodePath.join(root, 'main.ts'),
-      autoImportOffset,
-      'helperValue',
-      DEFAULT_FMT,
-      goldHelper?.source,
-      undefined,
-      goldHelper?.data,
-    );
-    const riftyDetails = svc.getCompletionDetails(
-      `${RIFTY_ROOT}/main.ts`,
-      autoImportProbe,
-      'helperValue',
-      riftyHelper?.source,
-      structuredClone(riftyHelper?.data),
-      {
-        includeCompletionsForModuleExports: true,
-        includeInsertTextCompletions: true,
-      },
-    );
-    expect(goldDetails).toBeDefined();
-    expect(goldDetails?.codeActions?.length).toBeGreaterThan(0);
-    expect(riftyDetails?.kind).toBe(
-      scriptElementKindToCompletionKind(goldDetails?.kind ?? ts.ScriptElementKind.unknown),
-    );
-    expect(riftyDetails?.sortText).toBe(riftyHelper?.sortText);
-    expect(riftyDetails?.sourceDisplay).toBe(
-      partsToString(goldDetails?.sourceDisplay ?? goldDetails?.source),
-    );
-    const goldAutoImportEdits = fileTextChangesToWorkspaceEdit(
-      goldDetails?.codeActions?.flatMap((a) => a.changes) ?? [],
-      (fileName) => ghost.readFile?.(fileName) ?? '',
-    );
-    expect(riftyDetails?.additionalTextEdits).toEqual(
-      goldAutoImportEdits.changes[`${root}/main.ts`],
-    );
-  });
-
-  it('completion and signature trigger contexts match real TS', async () => {
-    const fixture: Fixture = {
-      name: 'trigger context',
-      probes: 'completion trigger-character and signature characterTyped options',
-      files: {
-        'tsconfig.json': JSON.stringify({
-          compilerOptions: { strict: true, module: 'esnext', target: 'es2022' },
-        }),
-        'main.ts':
-          'const foo = { alpha: 1, beta: 2 };\n' +
-          'foo.\n' +
-          'function take(value: number): void {}\n' +
-          'take(\n',
-      },
-      diagnose: ['main.ts'],
-    };
-    const root = writeFixtureToTmp(fixture);
-    const { service: gsvc } = buildGoldService(root);
-    const { svc } = await buildRiftyService(fixture);
-    const text = fixture.files['main.ts'] ?? '';
-
-    const completionProbe = probePosition(text, { file: 'main.ts', needle: 'foo.\n', inner: 4 });
-    const completionOffset = positionToOffset(text, completionProbe);
-    const goldCompletions = gsvc.getCompletionsAtPosition(
-      nodePath.join(root, 'main.ts'),
-      completionOffset,
-      {
-        triggerKind: ts.CompletionTriggerKind.TriggerCharacter,
-        triggerCharacter: '.',
-      },
-    );
-    const riftyCompletions = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, completionProbe, {
-      triggerKind: 'trigger-character',
-      triggerCharacter: '.',
-    });
-    expect(goldCompletions?.entries.length).toBeGreaterThan(0);
-    expect(riftyCompletions.isMemberCompletion).toBe(goldCompletions?.isMemberCompletion ?? false);
-    expect(riftyCompletions.items.map((entry) => entry.label).sort()).toEqual(
-      (goldCompletions?.entries ?? []).map((entry) => entry.name).sort(),
-    );
-
-    const signatureProbe = probePosition(text, { file: 'main.ts', needle: 'take(\n', inner: 5 });
-    const signatureOffset = positionToOffset(text, signatureProbe);
-    const goldSignatures = gsvc.getSignatureHelpItems(
-      nodePath.join(root, 'main.ts'),
-      signatureOffset,
-      {
+      const signatureProbe = probePosition(text, { file: 'main.ts', needle: 'take(\n', inner: 5 });
+      const signatureOffset = positionToOffset(text, signatureProbe);
+      const goldSignatures = gsvc.getSignatureHelpItems(
+        nodePath.join(root, 'main.ts'),
+        signatureOffset,
+        {
+          triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+        },
+      );
+      const riftySignatures = svc.getSignatureHelp(`${RIFTY_ROOT}/main.ts`, signatureProbe, {
         triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
-      },
-    );
-    const riftySignatures = svc.getSignatureHelp(`${RIFTY_ROOT}/main.ts`, signatureProbe, {
-      triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
-    });
-    expect(goldSignatures).not.toBeUndefined();
-    expect(riftySignatures).toEqual(
-      goldSignatures ? signatureHelpItemsToSignatureHelp(goldSignatures) : null,
-    );
-  });
+      });
+      expect(goldSignatures).not.toBeUndefined();
+      expect(riftySignatures).toEqual(
+        goldSignatures ? signatureHelpItemsToSignatureHelp(goldSignatures) : null,
+      );
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 });
 
 // ===========================================================================
@@ -990,177 +1025,197 @@ const PHASE3_FIXTURE: Fixture = {
 };
 
 describe('parity: phase-3 queries vs real ts.LanguageService (gold standard)', () => {
-  it('references match real TS — cross-file, includeDeclaration true AND false', async () => {
-    const root = writeFixtureToTmp(PHASE3_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
-    const grel = goldRel(root);
+  it(
+    'references match real TS — cross-file, includeDeclaration true AND false',
+    async () => {
+      const root = writeFixtureToTmp(PHASE3_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+      const grel = goldRel(root);
 
-    // Cursor on `add` at its definition (math.ts) — references span both files.
-    const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
-    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
-    const offset = positionToOffset(text, probePosition(text, probe));
+      // Cursor on `add` at its definition (math.ts) — references span both files.
+      const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
+      const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+      const offset = positionToOffset(text, probePosition(text, probe));
 
-    // Side A: findReferences flattened to {uri,range}, honoring includeDeclaration.
-    const goldRefs = (include: boolean) => {
-      const syms = gsvc.findReferences(nodePath.join(root, probe.file), offset) ?? [];
-      const out: { uri: string; range: Range }[] = [];
-      for (const sym of syms)
-        for (const ref of sym.references) {
-          if (!include && ref.isDefinition === true) continue;
-          const t = ghost.readFile?.(ref.fileName) ?? '';
-          out.push({ uri: grel(ref.fileName), range: spanToRange(t, ref.textSpan) });
-        }
-      return sortLocations(out);
-    };
+      // Side A: findReferences flattened to {uri,range}, honoring includeDeclaration.
+      const goldRefs = (include: boolean) => {
+        const syms = gsvc.findReferences(nodePath.join(root, probe.file), offset) ?? [];
+        const out: { uri: string; range: Range }[] = [];
+        for (const sym of syms)
+          for (const ref of sym.references) {
+            if (!include && ref.isDefinition === true) continue;
+            const t = ghost.readFile?.(ref.fileName) ?? '';
+            out.push({ uri: grel(ref.fileName), range: spanToRange(t, ref.textSpan) });
+          }
+        return sortLocations(out);
+      };
 
-    for (const include of [true, false]) {
-      const gold = goldRefs(include);
-      const rifty = sortLocations(
-        relLocations(
-          svc.getReferences(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), {
-            includeDeclaration: include,
-          }),
-          riftyRel,
-        ),
-      );
-      expect(gold.length).toBeGreaterThan(0); // non-vacuous
-      expect(rifty).toEqual(gold);
-    }
-
-    // Sanity: excluding the declaration drops ≥1 result vs including it (so the
-    // includeDeclaration:false path is genuinely tested, not a no-op equality).
-    expect(goldRefs(false).length).toBeLessThan(goldRefs(true).length);
-  });
-
-  it('rename edits match real TS — cross-file + property-shorthand prefix', async () => {
-    const root = writeFixtureToTmp(PHASE3_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
-    const grel = goldRel(root);
-    const NEW_NAME = 'sum';
-
-    // Rename from the DEFINITION site (math.ts `add`): this propagates across BOTH
-    // files (def + import + every use, incl. the `{ add }` shorthand). NB renaming
-    // from an imported alias instead would only touch main.ts and add an
-    // `import { add as sum }` binding — also faithful, but not the cross-file case.
-    const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
-    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
-    const offset = positionToOffset(text, probePosition(text, probe));
-
-    // Side A: findRenameLocations → WorkspaceEdit via the SAME mapper.
-    const goldLocs =
-      gsvc.findRenameLocations(nodePath.join(root, probe.file), offset, false, false, {
-        providePrefixAndSuffixTextForRename: true,
-      }) ?? [];
-    const goldChanges: Record<string, TextEdit[]> = {};
-    for (const loc of goldLocs) {
-      const t = ghost.readFile?.(loc.fileName) ?? '';
-      const edits = goldChanges[loc.fileName] ?? [];
-      edits.push(renameLocationToTextEdit(loc, NEW_NAME, t));
-      goldChanges[loc.fileName] = edits;
-    }
-    const goldEdit = normWorkspaceEdit(goldChanges, grel);
-
-    const riftyEdit = normWorkspaceEdit(
-      svc.getRenameEdits(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), NEW_NAME)
-        .changes,
-      riftyRel,
-    );
-
-    // Non-vacuous: rename spans BOTH files (math.ts def + main.ts uses).
-    expect(Object.keys(goldEdit).length).toBeGreaterThanOrEqual(2);
-    expect(riftyEdit).toEqual(goldEdit);
-    // The shorthand `{ add }` rewrite carries prefix text in BOTH sides (proves
-    // prefix handling is real, not coincidentally absent).
-    const allNewTexts = Object.values(goldEdit)
-      .flat()
-      .map((e) => e.newText);
-    expect(allNewTexts).toContain(`add: ${NEW_NAME}`);
-  });
-
-  it('prepareRename matches real TS — true on a symbol, null on a string literal', async () => {
-    const root = writeFixtureToTmp(PHASE3_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
-
-    // (1) on the `add` symbol → canRename.
-    const symProbe: Probe = { file: 'main.ts', needle: 'add(1, 2)', inner: 1 };
-    const symText = PHASE3_FIXTURE.files[symProbe.file] ?? '';
-    const symOffset = positionToOffset(symText, probePosition(symText, symProbe));
-    const goldInfo = gsvc.getRenameInfo(nodePath.join(root, symProbe.file), symOffset, {
-      allowRenameOfImportPath: false,
-    });
-    expect(goldInfo.canRename).toBe(true); // non-vacuous: it IS renameable
-    const goldPrepare = goldInfo.canRename
-      ? {
-          range: spanToRange(
-            ghost.readFile?.(nodePath.join(root, symProbe.file)) ?? '',
-            goldInfo.triggerSpan,
+      for (const include of [true, false]) {
+        const gold = goldRefs(include);
+        const rifty = sortLocations(
+          relLocations(
+            svc.getReferences(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), {
+              includeDeclaration: include,
+            }),
+            riftyRel,
           ),
-          placeholder: goldInfo.displayName,
-        }
-      : null;
-    const riftyPrepare = svc.prepareRename(
-      `${RIFTY_ROOT}/${symProbe.file}`,
-      probePosition(symText, symProbe),
-    );
-    expect(riftyPrepare).toEqual(goldPrepare);
+        );
+        expect(gold.length).toBeGreaterThan(0); // non-vacuous
+        expect(rifty).toEqual(gold);
+      }
 
-    // (2) inside the import string literal `'./math'` → not renameable → null
-    // (both sides; allowRenameOfImportPath:false matches the service).
-    const strProbe: Probe = { file: 'main.ts', needle: "'./math'", inner: 3 };
-    const strText = PHASE3_FIXTURE.files[strProbe.file] ?? '';
-    const strOffset = positionToOffset(strText, probePosition(strText, strProbe));
-    const goldStr = gsvc.getRenameInfo(nodePath.join(root, strProbe.file), strOffset, {
-      allowRenameOfImportPath: false,
-    });
-    expect(goldStr.canRename).toBe(false); // non-vacuous: it really is not renameable
-    const riftyStr = svc.prepareRename(
-      `${RIFTY_ROOT}/${strProbe.file}`,
-      probePosition(strText, strProbe),
-    );
-    expect(riftyStr).toBeNull();
-  });
+      // Sanity: excluding the declaration drops ≥1 result vs including it (so the
+      // includeDeclaration:false path is genuinely tested, not a no-op equality).
+      expect(goldRefs(false).length).toBeLessThan(goldRefs(true).length);
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 
-  it('signature-help matches real TS — at a call site between args', async () => {
-    const root = writeFixtureToTmp(PHASE3_FIXTURE);
-    const { service: gsvc } = buildGoldService(root);
-    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+  it(
+    'rename edits match real TS — cross-file + property-shorthand prefix',
+    async () => {
+      const root = writeFixtureToTmp(PHASE3_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+      const grel = goldRel(root);
+      const NEW_NAME = 'sum';
 
-    // `add(total, |3)` — cursor on the 2nd argument (`3`) so argumentIndex = 1.
-    const probe: Probe = { file: 'main.ts', needle: 'add(total, 3)', inner: 11 };
-    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
-    const offset = positionToOffset(text, probePosition(text, probe));
+      // Rename from the DEFINITION site (math.ts `add`): this propagates across BOTH
+      // files (def + import + every use, incl. the `{ add }` shorthand). NB renaming
+      // from an imported alias instead would only touch main.ts and add an
+      // `import { add as sum }` binding — also faithful, but not the cross-file case.
+      const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
+      const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+      const offset = positionToOffset(text, probePosition(text, probe));
 
-    const goldItems = gsvc.getSignatureHelpItems(
-      nodePath.join(root, probe.file),
-      offset,
-      undefined,
-    );
-    const goldTriggeredItems = gsvc.getSignatureHelpItems(nodePath.join(root, probe.file), offset, {
-      triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
-    });
-    expect(goldItems).not.toBeUndefined(); // non-vacuous: there IS a call context
-    const gold = goldItems ? signatureHelpItemsToSignatureHelp(goldItems) : null;
-    const goldTriggered = goldTriggeredItems
-      ? signatureHelpItemsToSignatureHelp(goldTriggeredItems)
-      : null;
-    const rifty = svc.getSignatureHelp(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe));
-    const riftyTriggered = svc.getSignatureHelp(
-      `${RIFTY_ROOT}/${probe.file}`,
-      probePosition(text, probe),
-      {
-        triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
-      },
-    );
-    expect(rifty).toEqual(gold);
-    expect(goldTriggered).not.toBeNull();
-    expect(riftyTriggered).toEqual(goldTriggered);
-    // Spot-check the rendering is meaningful (label + active param), not empty.
-    expect(rifty?.signatures[0]?.label).toContain('add(a: number, b: number): number');
-    expect(rifty?.activeParameter).toBe(1);
-  });
+      // Side A: findRenameLocations → WorkspaceEdit via the SAME mapper.
+      const goldLocs =
+        gsvc.findRenameLocations(nodePath.join(root, probe.file), offset, false, false, {
+          providePrefixAndSuffixTextForRename: true,
+        }) ?? [];
+      const goldChanges: Record<string, TextEdit[]> = {};
+      for (const loc of goldLocs) {
+        const t = ghost.readFile?.(loc.fileName) ?? '';
+        const edits = goldChanges[loc.fileName] ?? [];
+        edits.push(renameLocationToTextEdit(loc, NEW_NAME, t));
+        goldChanges[loc.fileName] = edits;
+      }
+      const goldEdit = normWorkspaceEdit(goldChanges, grel);
+
+      const riftyEdit = normWorkspaceEdit(
+        svc.getRenameEdits(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), NEW_NAME)
+          .changes,
+        riftyRel,
+      );
+
+      // Non-vacuous: rename spans BOTH files (math.ts def + main.ts uses).
+      expect(Object.keys(goldEdit).length).toBeGreaterThanOrEqual(2);
+      expect(riftyEdit).toEqual(goldEdit);
+      // The shorthand `{ add }` rewrite carries prefix text in BOTH sides (proves
+      // prefix handling is real, not coincidentally absent).
+      const allNewTexts = Object.values(goldEdit)
+        .flat()
+        .map((e) => e.newText);
+      expect(allNewTexts).toContain(`add: ${NEW_NAME}`);
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
+
+  it(
+    'prepareRename matches real TS — true on a symbol, null on a string literal',
+    async () => {
+      const root = writeFixtureToTmp(PHASE3_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+
+      // (1) on the `add` symbol → canRename.
+      const symProbe: Probe = { file: 'main.ts', needle: 'add(1, 2)', inner: 1 };
+      const symText = PHASE3_FIXTURE.files[symProbe.file] ?? '';
+      const symOffset = positionToOffset(symText, probePosition(symText, symProbe));
+      const goldInfo = gsvc.getRenameInfo(nodePath.join(root, symProbe.file), symOffset, {
+        allowRenameOfImportPath: false,
+      });
+      expect(goldInfo.canRename).toBe(true); // non-vacuous: it IS renameable
+      const goldPrepare = goldInfo.canRename
+        ? {
+            range: spanToRange(
+              ghost.readFile?.(nodePath.join(root, symProbe.file)) ?? '',
+              goldInfo.triggerSpan,
+            ),
+            placeholder: goldInfo.displayName,
+          }
+        : null;
+      const riftyPrepare = svc.prepareRename(
+        `${RIFTY_ROOT}/${symProbe.file}`,
+        probePosition(symText, symProbe),
+      );
+      expect(riftyPrepare).toEqual(goldPrepare);
+
+      // (2) inside the import string literal `'./math'` → not renameable → null
+      // (both sides; allowRenameOfImportPath:false matches the service).
+      const strProbe: Probe = { file: 'main.ts', needle: "'./math'", inner: 3 };
+      const strText = PHASE3_FIXTURE.files[strProbe.file] ?? '';
+      const strOffset = positionToOffset(strText, probePosition(strText, strProbe));
+      const goldStr = gsvc.getRenameInfo(nodePath.join(root, strProbe.file), strOffset, {
+        allowRenameOfImportPath: false,
+      });
+      expect(goldStr.canRename).toBe(false); // non-vacuous: it really is not renameable
+      const riftyStr = svc.prepareRename(
+        `${RIFTY_ROOT}/${strProbe.file}`,
+        probePosition(strText, strProbe),
+      );
+      expect(riftyStr).toBeNull();
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
+
+  it(
+    'signature-help matches real TS — at a call site between args',
+    async () => {
+      const root = writeFixtureToTmp(PHASE3_FIXTURE);
+      const { service: gsvc } = buildGoldService(root);
+      const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+
+      // `add(total, |3)` — cursor on the 2nd argument (`3`) so argumentIndex = 1.
+      const probe: Probe = { file: 'main.ts', needle: 'add(total, 3)', inner: 11 };
+      const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+      const offset = positionToOffset(text, probePosition(text, probe));
+
+      const goldItems = gsvc.getSignatureHelpItems(
+        nodePath.join(root, probe.file),
+        offset,
+        undefined,
+      );
+      const goldTriggeredItems = gsvc.getSignatureHelpItems(
+        nodePath.join(root, probe.file),
+        offset,
+        {
+          triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+        },
+      );
+      expect(goldItems).not.toBeUndefined(); // non-vacuous: there IS a call context
+      const gold = goldItems ? signatureHelpItemsToSignatureHelp(goldItems) : null;
+      const goldTriggered = goldTriggeredItems
+        ? signatureHelpItemsToSignatureHelp(goldTriggeredItems)
+        : null;
+      const rifty = svc.getSignatureHelp(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe));
+      const riftyTriggered = svc.getSignatureHelp(
+        `${RIFTY_ROOT}/${probe.file}`,
+        probePosition(text, probe),
+        {
+          triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+        },
+      );
+      expect(rifty).toEqual(gold);
+      expect(goldTriggered).not.toBeNull();
+      expect(riftyTriggered).toEqual(goldTriggered);
+      // Spot-check the rendering is meaningful (label + active param), not empty.
+      expect(rifty?.signatures[0]?.label).toContain('add(a: number, b: number): number');
+      expect(rifty?.activeParameter).toBe(1);
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 });
 
 // ===========================================================================
@@ -1267,124 +1322,139 @@ const FORMAT_FIXTURE: Fixture = {
 };
 
 describe('parity: phase-4 queries vs real ts.LanguageService (gold standard)', () => {
-  it('code-fixes match real TS — missing-import diagnostic (TS2304)', async () => {
-    const root = writeFixtureToTmp(CODEFIX_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(CODEFIX_FIXTURE);
-    const grel = goldRel(root);
-    const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
+  it(
+    'code-fixes match real TS — missing-import diagnostic (TS2304)',
+    async () => {
+      const root = writeFixtureToTmp(CODEFIX_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(CODEFIX_FIXTURE);
+      const grel = goldRel(root);
+      const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
 
-    const text = CODEFIX_FIXTURE.files['main.ts'] ?? '';
-    const abs = nodePath.join(root, 'main.ts');
+      const text = CODEFIX_FIXTURE.files['main.ts'] ?? '';
+      const abs = nodePath.join(root, 'main.ts');
 
-    // The editor requests code-actions for a diagnostic's OWN span (tsc only
-    // surfaces a fix when the request span lies within the error span — a
-    // whole-line span yields nothing). So anchor the range + codes on the first
-    // TS2304 diagnostic (the unimported `greet`), exactly as an editor would.
-    const targetDiag = gsvc
-      .getSemanticDiagnostics(abs)
-      .find((d) => d.code === 2304 && d.start !== undefined);
-    expect(targetDiag).toBeDefined(); // non-vacuous: there IS a fixable diagnostic
-    const dStart = targetDiag?.start ?? 0;
-    const dEnd = dStart + (targetDiag?.length ?? 0);
-    const range: Range = {
-      start: offsetToPosition(text, dStart),
-      end: offsetToPosition(text, dEnd),
-    };
-    const start = dStart;
-    const end = dEnd;
-    const inRangeCodes = [2304];
+      // The editor requests code-actions for a diagnostic's OWN span (tsc only
+      // surfaces a fix when the request span lies within the error span — a
+      // whole-line span yields nothing). So anchor the range + codes on the first
+      // TS2304 diagnostic (the unimported `greet`), exactly as an editor would.
+      const targetDiag = gsvc
+        .getSemanticDiagnostics(abs)
+        .find((d) => d.code === 2304 && d.start !== undefined);
+      expect(targetDiag).toBeDefined(); // non-vacuous: there IS a fixable diagnostic
+      const dStart = targetDiag?.start ?? 0;
+      const dEnd = dStart + (targetDiag?.length ?? 0);
+      const range: Range = {
+        start: offsetToPosition(text, dStart),
+        end: offsetToPosition(text, dEnd),
+      };
+      const start = dStart;
+      const end = dEnd;
+      const inRangeCodes = [2304];
 
-    // Side A: raw getCodeFixesAtPosition → CodeAction[] via the SAME mapper +
-    // the SAME DEFAULT_FMT the service uses.
-    const goldActions = relCodeActions(
-      gsvc.getCodeFixesAtPosition(abs, start, end, inRangeCodes, DEFAULT_FMT, {}).map(
-        (fix): CodeAction => ({
-          title: fix.description,
-          kind: 'quickfix',
-          edit: fileTextChangesToWorkspaceEdit(fix.changes, goldRead),
-          ...(fix.fixId !== undefined ? { fixId: fix.fixId } : {}),
-          ...(fix.fixName !== undefined ? { fixName: fix.fixName } : {}),
-          ...(fix.fixAllDescription !== undefined
-            ? { fixAllDescription: fix.fixAllDescription }
-            : {}),
-        }),
-      ),
-      grel,
-    );
+      // Side A: raw getCodeFixesAtPosition → CodeAction[] via the SAME mapper +
+      // the SAME DEFAULT_FMT the service uses.
+      const goldActions = relCodeActions(
+        gsvc.getCodeFixesAtPosition(abs, start, end, inRangeCodes, DEFAULT_FMT, {}).map(
+          (fix): CodeAction => ({
+            title: fix.description,
+            kind: 'quickfix',
+            edit: fileTextChangesToWorkspaceEdit(fix.changes, goldRead),
+            ...(fix.fixId !== undefined ? { fixId: fix.fixId } : {}),
+            ...(fix.fixName !== undefined ? { fixName: fix.fixName } : {}),
+            ...(fix.fixAllDescription !== undefined
+              ? { fixAllDescription: fix.fixAllDescription }
+              : {}),
+          }),
+        ),
+        grel,
+      );
 
-    const riftyActions = relCodeActions(
-      svc.getCodeFixes(`${RIFTY_ROOT}/main.ts`, range, inRangeCodes),
-      riftyRel,
-    );
+      const riftyActions = relCodeActions(
+        svc.getCodeFixes(`${RIFTY_ROOT}/main.ts`, range, inRangeCodes),
+        riftyRel,
+      );
 
-    expect(goldActions.length).toBeGreaterThan(0); // non-vacuous
-    expect(riftyActions).toEqual(goldActions);
-    // Spot-check the headline fix is the import fix (proves it's meaningful).
-    expect(goldActions.map((a) => a.title)).toContain('Add import from "./helper"');
-  });
+      expect(goldActions.length).toBeGreaterThan(0); // non-vacuous
+      expect(riftyActions).toEqual(goldActions);
+      // Spot-check the headline fix is the import fix (proves it's meaningful).
+      expect(goldActions.map((a) => a.title)).toContain('Add import from "./helper"');
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 
-  it('organize-imports matches real TS — sort + drop unused', async () => {
-    const root = writeFixtureToTmp(ORGANIZE_FIXTURE);
-    const { service: gsvc, host: ghost } = buildGoldService(root);
-    const { svc } = await buildRiftyService(ORGANIZE_FIXTURE);
-    const grel = goldRel(root);
-    const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
-    const abs = nodePath.join(root, 'main.ts');
+  it(
+    'organize-imports matches real TS — sort + drop unused',
+    async () => {
+      const root = writeFixtureToTmp(ORGANIZE_FIXTURE);
+      const { service: gsvc, host: ghost } = buildGoldService(root);
+      const { svc } = await buildRiftyService(ORGANIZE_FIXTURE);
+      const grel = goldRel(root);
+      const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
+      const abs = nodePath.join(root, 'main.ts');
 
-    const goldEdit = relWorkspaceEdit(
-      fileTextChangesToWorkspaceEdit(
-        gsvc.organizeImports({ type: 'file', fileName: abs }, DEFAULT_FMT, {}),
-        goldRead,
-      ).changes,
-      grel,
-    );
-    const riftyEdit = relWorkspaceEdit(
-      svc.organizeImports(`${RIFTY_ROOT}/main.ts`).changes,
-      riftyRel,
-    );
+      const goldEdit = relWorkspaceEdit(
+        fileTextChangesToWorkspaceEdit(
+          gsvc.organizeImports({ type: 'file', fileName: abs }, DEFAULT_FMT, {}),
+          goldRead,
+        ).changes,
+        grel,
+      );
+      const riftyEdit = relWorkspaceEdit(
+        svc.organizeImports(`${RIFTY_ROOT}/main.ts`).changes,
+        riftyRel,
+      );
 
-    // Non-vacuous: organize actually produces edits (the imports ARE unsorted/unused).
-    expect(Object.keys(goldEdit).length).toBeGreaterThan(0);
-    expect(goldEdit['main.ts']?.length).toBeGreaterThan(0);
-    expect(riftyEdit).toEqual(goldEdit);
-    // Spot-check: the surviving import keeps only `aa` (the used one), sorted.
-    expect(goldEdit['main.ts']?.[0]?.newText).toContain("import { aa } from './a';");
-  });
+      // Non-vacuous: organize actually produces edits (the imports ARE unsorted/unused).
+      expect(Object.keys(goldEdit).length).toBeGreaterThan(0);
+      expect(goldEdit['main.ts']?.length).toBeGreaterThan(0);
+      expect(riftyEdit).toEqual(goldEdit);
+      // Spot-check: the surviving import keeps only `aa` (the used one), sorted.
+      expect(goldEdit['main.ts']?.[0]?.newText).toContain("import { aa } from './a';");
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 
-  it('formatting matches real TS — whole document + a range', async () => {
-    const root = writeFixtureToTmp(FORMAT_FIXTURE);
-    const { service: gsvc } = buildGoldService(root);
-    const { svc } = await buildRiftyService(FORMAT_FIXTURE);
-    const abs = nodePath.join(root, 'fmt.ts');
-    const text = FORMAT_FIXTURE.files['fmt.ts'] ?? '';
-    const options: FormattingOptions = { tabSize: 2, insertSpaces: true };
-    // BOTH sides derive the SAME FormatCodeSettings from `options` (else diverge).
-    const settings = formattingOptionsToFormatCodeSettings(options);
+  it(
+    'formatting matches real TS — whole document + a range',
+    async () => {
+      const root = writeFixtureToTmp(FORMAT_FIXTURE);
+      const { service: gsvc } = buildGoldService(root);
+      const { svc } = await buildRiftyService(FORMAT_FIXTURE);
+      const abs = nodePath.join(root, 'fmt.ts');
+      const text = FORMAT_FIXTURE.files['fmt.ts'] ?? '';
+      const options: FormattingOptions = { tabSize: 2, insertSpaces: true };
+      // BOTH sides derive the SAME FormatCodeSettings from `options` (else diverge).
+      const settings = formattingOptionsToFormatCodeSettings(options);
 
-    // Whole document.
-    const goldDoc = textChangesToTextEdits(gsvc.getFormattingEditsForDocument(abs, settings), text);
-    const riftyDoc = svc.getFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, options);
-    expect(goldDoc.length).toBeGreaterThan(0); // non-vacuous: it IS badly spaced
-    expect(riftyDoc).toEqual(goldDoc);
+      // Whole document.
+      const goldDoc = textChangesToTextEdits(
+        gsvc.getFormattingEditsForDocument(abs, settings),
+        text,
+      );
+      const riftyDoc = svc.getFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, options);
+      expect(goldDoc.length).toBeGreaterThan(0); // non-vacuous: it IS badly spaced
+      expect(riftyDoc).toEqual(goldDoc);
 
-    // A range covering only the `const a=1;` line (line 1) — wrongly indented +
-    // missing spaces, so it yields edits, but FEWER than the whole document.
-    const l1Start = text.indexOf('const a=1;');
-    const l1End = text.indexOf('\n', l1Start);
-    const range: Range = {
-      start: offsetToPosition(text, l1Start),
-      end: offsetToPosition(text, l1End),
-    };
-    const goldRange = textChangesToTextEdits(
-      gsvc.getFormattingEditsForRange(abs, l1Start, l1End, settings),
-      text,
-    );
-    const riftyRange = svc.getRangeFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, range, options);
-    expect(goldRange.length).toBeGreaterThan(0); // non-vacuous
-    expect(riftyRange).toEqual(goldRange);
-    // The range result is a STRICT subset of the whole-document result (range
-    // formatting only touches inside the range), proving it's genuinely scoped.
-    expect(goldRange.length).toBeLessThan(goldDoc.length);
-  });
+      // A range covering only the `const a=1;` line (line 1) — wrongly indented +
+      // missing spaces, so it yields edits, but FEWER than the whole document.
+      const l1Start = text.indexOf('const a=1;');
+      const l1End = text.indexOf('\n', l1Start);
+      const range: Range = {
+        start: offsetToPosition(text, l1Start),
+        end: offsetToPosition(text, l1End),
+      };
+      const goldRange = textChangesToTextEdits(
+        gsvc.getFormattingEditsForRange(abs, l1Start, l1End, settings),
+        text,
+      );
+      const riftyRange = svc.getRangeFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, range, options);
+      expect(goldRange.length).toBeGreaterThan(0); // non-vacuous
+      expect(riftyRange).toEqual(goldRange);
+      // The range result is a STRICT subset of the whole-document result (range
+      // formatting only touches inside the range), proving it's genuinely scoped.
+      expect(goldRange.length).toBeLessThan(goldDoc.length);
+    },
+    TS_PARITY_TIMEOUT_MS,
+  );
 });
