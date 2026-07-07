@@ -53,6 +53,16 @@ The v1.2 deploy (image `0.2.2` live) unblocked this.
   npmjs directly while the browser path keeps the proxy (ADR-0163's shared
   trust boundary forks) — checked, and recorded only if it actually forks.
 
+## Fault matrix
+
+| Fault | Expected outcome | Proof |
+|---|---|---|
+| Side container cannot start/listen on secondary port | Measurement aborts; live eddy container untouched | side-container command/logs |
+| Restart-cold discipline not applied before a run | Run discarded; no median from warm contaminated samples | per-run restart log |
+| Direct npmjs returns 429/throttle during repeated cold resolves | Flip disqualified regardless of speed | eddy logs + upstream status |
+| Direct npmjs median is within spread or <20% faster | Keep CDN proxy; record measured-worse/insufficient delta | A/B run table + decision line |
+| Probe uses laptop/browser bench instead of VM shell | Result invalid; item remains open | command provenance in recorded evidence |
+
 ## Parity cases
 
 N/A — operator measurement + env flip; no Node-observable behavior. (The

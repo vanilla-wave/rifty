@@ -166,6 +166,21 @@ export function verifyTransportPin(mode, runProtocols) {
   };
 }
 
+/**
+ * Eddy bench pass proof: resolverUrl configured is not enough. The installer
+ * auto-falls back to the standard path on any resolver decline/failure, and the
+ * preview can still go live. Only the terminal line emitted from
+ * `result.source === 'eddy'` proves the measured run used the fast path.
+ */
+export function verifyEddyInstallProof(terminalText) {
+  return /via eddy \(fast\)/.test(terminalText)
+    ? { ok: true }
+    : {
+        ok: false,
+        note: 'eddy pass reached first Vite response without terminal proof `via eddy (fast)`',
+      };
+}
+
 function buildInstallMetric(install, stepMs) {
   if (!install || install.status !== 'measured') {
     // Non-measured is still RECORDED (never silently skipped): `requires proxy`

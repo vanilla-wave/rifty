@@ -9,8 +9,17 @@ import {
 import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { joinPath } from '@riftydev/vfs';
-import * as monaco from 'monaco-editor';
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import type * as monaco from 'monaco-editor';
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  lazy,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import {
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
@@ -23,7 +32,6 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
-import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
 import { FileExplorer, type FileExplorerMutations } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -34,6 +42,7 @@ import { ScmPanel } from './components/ScmPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
+import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
@@ -84,13 +93,14 @@ import {
   shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
-import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
+import type { TsLanguageServiceProvidersHandle } from './glue/ts-ls-monaco-providers.ts';
 import {
   type VfsSnapshotEntry,
   requestVfsSnapshot,
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
+import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
@@ -115,6 +125,29 @@ import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts'
 // the node vitest env can unit-test it without importing this browser-only module
 // (xterm → `self is not defined`); App.tsx exposes it under its public name too.
 export { createAppProjectStore } from './glue/app-project-store.ts';
+
+// The Monaco editor stack (monaco-editor + EditorHost + editor-host-core +
+// monaco-env workers wiring) loads as its own chunk, off the cold-start main
+// chunk. First-run chooser idle does not fetch it; returning/project-ready boot
+// and starter-pick intent warm it before the editor mount. The TS-LS provider
+// suite splits the same way (dynamic import in the LS wiring effect below);
+// check:arch pins both seams (monaco-only-in-lazy-editor-stack,
+// editor-stack-loads-lazily).
+const EditorHost = lazy(() =>
+  import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
+);
+
+let editorStackWarm: Promise<unknown> | undefined;
+function warmEditorStack(): void {
+  if (editorStackWarm !== undefined) return;
+  editorStackWarm = Promise.all([
+    import('./components/EditorHost.tsx'),
+    import('./glue/ts-ls-monaco-providers.ts'),
+  ]).catch((err: unknown) => {
+    editorStackWarm = undefined;
+    console.warn('[editor] lazy stack warm failed', err);
+  });
+}
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
 const UNAVAILABLE_OWNER_PORT = -1;
@@ -335,6 +368,29 @@ export function App(props: AppProps) {
   // Reactive mirror so the LS-wiring effect (ADR-0166 P1.9b) reacts when the
   // editor registers its imperative api (captured during EditorHost mount).
   const [editorApiSig, setEditorApiSig] = createSignal<EditorApi | undefined>(undefined);
+  // A user open clicked while the LAZY EditorHost chunk is still loading must
+  // not vanish (pre-split the mount-to-registerApi window was ~0; the chunk
+  // load made it real): queue and flush on registerApi. Queued ONLY inside the
+  // context-ready→registerApi window — before an editor context exists this
+  // stays the old no-op, so a pre-context click can never replay into a LATER
+  // project's editor (the context-reset effect below clears the belt too).
+  const editorOpQueue = createEditorOpQueue<EditorApi>();
+  const editorContextKey = (): string =>
+    [
+      store.activeId(),
+      activeRoot(),
+      activeStarterId(),
+      workspaceOwner().previewOwnerToken,
+      String(workspaceOwner().snapshotPort),
+    ].join('\0');
+  const withEditorApi = (op: (api: EditorApi) => void): void => {
+    editorOpQueue.runOrQueue(
+      editorApi,
+      untrack(() => indexBoot.editorProjectContextReady()),
+      untrack(editorContextKey),
+      op,
+    );
+  };
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
     setToast({ message, tone });
@@ -598,8 +654,16 @@ export function App(props: AppProps) {
     },
     closeLauncher: () => store.closeLauncher(),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
+    warmEditorStack,
     restore: (idx) => void workspace.restoreOnReload(idx),
     pickDeepLinkStarter: (id) => void onPickStarter(id),
+  });
+
+  // Queue hygiene for withEditorApi: losing or switching the editor context drops
+  // opens queued against it — they must never replay into another project's editor.
+  createEffect(() => {
+    const ready = indexBoot.editorProjectContextReady();
+    editorOpQueue.discardStale(ready, ready ? editorContextKey() : '');
   });
 
   // Headless preset-boot core (ADR-0197 slice 3) bound to the REAL ports: the
@@ -641,6 +705,7 @@ export function App(props: AppProps) {
     setOwnerReady: (ready) => workspace.setOwnerReady(ready),
     paintStarterUi: (preset) => paintPickedStarterUi(preset),
     markEditorContextReady: () => indexBoot.setEditorProjectContextReady(true),
+    warmEditorStack,
     noteStarterBaselinePending: () => {
       if (!workspace.started()) starterGeneratedBaselinePendingForNextOwner = true;
     },
@@ -722,8 +787,8 @@ export function App(props: AppProps) {
     requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
     joinRootPath: (root, path) => joinPath(root, path),
     editor: {
-      openTextDiff: (spec) => editorApi?.openTextDiff(spec),
-      openWorkingDiff: (spec) => editorApi?.openWorkingDiff(spec),
+      openTextDiff: (spec) => withEditorApi((api) => api.openTextDiff(spec)),
+      openWorkingDiff: (spec) => withEditorApi((api) => api.openWorkingDiff(spec)),
       closePath: (path) => editorApi?.closePath(path),
     },
     flushEditorWrites: () => flushPendingEditorWrites(),
@@ -989,11 +1054,21 @@ export function App(props: AppProps) {
       await ready;
     };
     // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
-    // type-def / completions now come from the REAL service over the relay, not
+    // type-def / completions come from the REAL service over the relay, not
     // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
-    // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
-    const providers = registerTsLanguageServiceProviders(client, api, {
-      beforeRequest: waitForTsReady,
+    // OFF in EditorHost). The provider module drags monaco-editor, so it loads
+    // with the LAZY editor chunk — never in the cold-start main chunk; the
+    // api's presence proves monaco is already loaded, so registration lands
+    // one microtask-or-fetch later (check:arch pins the seam). Same
+    // lifetime as the client — disposed on cleanup; a cleanup racing the load
+    // skips registration entirely.
+    let providers: TsLanguageServiceProvidersHandle | undefined;
+    void import('./glue/ts-ls-monaco-providers.ts').then((mod) => {
+      if (disposed) return;
+      providers = mod.registerTsLanguageServiceProviders(client, api, {
+        beforeRequest: waitForTsReady,
+      });
+      installDevTsHooks(providers);
     });
 
     async function initAndReplay(root = activeRoot(), spec = activeTemplate()): Promise<boolean> {
@@ -1034,17 +1109,20 @@ export function App(props: AppProps) {
     // a Monaco model+position from a VFS path + 1-based coords and calls the
     // registered provider function, then serializes the result for assertions.
     // Returns null when no model is open for the path (provider can't run yet).
-    if (import.meta.env.DEV) {
+    // Installed by the provider-chunk .then above (hooks are undefined until the
+    // lazy chunk lands — e2e already waits for them / null-guards).
+    const installDevTsHooks = (providers: TsLanguageServiceProvidersHandle): void => {
+      if (!import.meta.env.DEV) return;
+      const mon = api.monaco;
       const NEVER_CANCEL: monaco.CancellationToken = {
         isCancellationRequested: false,
         onCancellationRequested: () => ({ dispose() {} }),
       };
       const modelFor = (path: string): monaco.editor.ITextModel | null => {
         const uri = api.ensureModel(path);
-        return uri ? monaco.editor.getModel(uri) : null;
+        return uri ? mon.editor.getModel(uri) : null;
       };
-      const pos = (line: number, column: number): monaco.Position =>
-        new monaco.Position(line, column);
+      const pos = (line: number, column: number): monaco.Position => new mon.Position(line, column);
       const g = globalThis as unknown as {
         __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
         __riftyTsDefinition?: (
@@ -1159,7 +1237,7 @@ export function App(props: AppProps) {
           // Round-trip the target uri back to its VFS path (proves the full
           // Location.uri → model → path resolution, incl. an opened node_modules
           // `.d.ts`). Falls back to the raw uri string if the model is foreign.
-          const target = monaco.editor.getModel(d.uri);
+          const target = mon.editor.getModel(d.uri);
           const targetPath = target ? api.pathForModel(target) : undefined;
           return {
             uri: targetPath ?? d.uri.toString(),
@@ -1222,7 +1300,7 @@ export function App(props: AppProps) {
       // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
       // falls back to the raw uri string for a foreign model.
       const pathForUri = (uri: monaco.Uri): string => {
-        const target = monaco.editor.getModel(uri);
+        const target = mon.editor.getModel(uri);
         const targetPath = target ? api.pathForModel(target) : undefined;
         return targetPath ?? uri.toString();
       };
@@ -1287,7 +1365,7 @@ export function App(props: AppProps) {
           pos(line, col),
           NEVER_CANCEL,
           {
-            triggerKind: monaco.languages.SignatureHelpTriggerKind.Invoke,
+            triggerKind: mon.languages.SignatureHelpTriggerKind.Invoke,
             isRetrigger: false,
           },
         );
@@ -1325,11 +1403,11 @@ export function App(props: AppProps) {
       g.__riftyTsCodeFixes = async (path, startLine, startCol, endLine, endCol) => {
         const model = modelFor(path);
         if (!model) return [];
-        const range = new monaco.Range(startLine, startCol, endLine, endCol);
+        const range = new mon.Range(startLine, startCol, endLine, endCol);
         const list = await providers.providers.codeAction.provideCodeActions(
           model,
           range,
-          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          { markers: [], trigger: mon.languages.CodeActionTriggerType.Invoke },
           NEVER_CANCEL,
         );
         if (!list) return [];
@@ -1354,7 +1432,7 @@ export function App(props: AppProps) {
         const list = await providers.providers.codeAction.provideCodeActions(
           model,
           model.getFullModelRange(),
-          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          { markers: [], trigger: mon.languages.CodeActionTriggerType.Invoke },
           NEVER_CANCEL,
         );
         if (!list) return null;
@@ -1384,7 +1462,7 @@ export function App(props: AppProps) {
           NEVER_CANCEL,
         );
         if (!edits) return null;
-        const scratch = monaco.editor.createModel(model.getValue(), model.getLanguageId());
+        const scratch = mon.editor.createModel(model.getValue(), model.getLanguageId());
         try {
           scratch.applyEdits(edits.map((e) => ({ range: e.range, text: e.text })));
           return { editCount: edits.length, applied: scratch.getValue() };
@@ -1398,12 +1476,12 @@ export function App(props: AppProps) {
         const result =
           await providers.providers.rangeSemanticTokens.provideDocumentRangeSemanticTokens(
             model,
-            new monaco.Range(startLine, startCol, endLine, endCol),
+            new mon.Range(startLine, startCol, endLine, endCol),
             NEVER_CANCEL,
           );
         return result ? result.data.length : null;
       };
-    }
+    };
 
     const diagnosticSync = createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>({
       client,
@@ -1432,7 +1510,7 @@ export function App(props: AppProps) {
       disposed = true;
       diagnosticSync.dispose();
       unsubscribe();
-      providers.dispose();
+      providers?.dispose();
       client.dispose();
       if (import.meta.env.DEV) {
         const g = globalThis as unknown as Record<string, unknown>;
@@ -1839,7 +1917,7 @@ export function App(props: AppProps) {
   function onTerminalLink(uri: string): void {
     const path = pathFromTerminalFileLink(uri, activeRoot());
     if (path) {
-      editorApi?.openFile(path);
+      withEditorApi((api) => api.openFile(path));
       return;
     }
     try {
@@ -1901,7 +1979,7 @@ export function App(props: AppProps) {
         section: 'Files',
         label: path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path,
         icon: 'file',
-        run: () => editorApi?.openFile(path),
+        run: () => withEditorApi((api) => api.openFile(path)),
       });
     }
     if (workspace.truncated) {
@@ -2217,7 +2295,7 @@ export function App(props: AppProps) {
                   visible={!layout.sidebarCollapsed()}
                   activePath={activeFilePath()}
                   gitStatus={scm.gitStatus()}
-                  onOpenFile={(path) => editorApi?.openFile(path)}
+                  onOpenFile={(path) => withEditorApi((api) => api.openFile(path))}
                   onDownloadFile={(path) => void files.downloadFile(path)}
                   onCompareFiles={(left, right) => void scm.openWorkingFileCompare(left, right)}
                   onCompareWithHead={(path) => void scm.openWorkingHeadCompare(path)}
@@ -2262,6 +2340,7 @@ export function App(props: AppProps) {
                   registerApi={(api) => {
                     editorApi = api;
                     setEditorApiSig(() => api);
+                    editorOpQueue.flush(api, untrack(editorContextKey));
                   }}
                   onActive={(info) => {
                     setActiveFile(info.label);
@@ -2338,7 +2417,7 @@ export function App(props: AppProps) {
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
-                editorApi?.openFile(path, { reveal: { line, column } })
+                withEditorApi((api) => api.openFile(path, { reveal: { line, column } }))
               }
             />
           </main>

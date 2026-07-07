@@ -21,6 +21,7 @@ code: [services/eddy/package.json, services/eddy/tsup.config.ts, deploy/yandex/e
 - A Dockerfile (`deploy/yandex/eddy/Dockerfile`) builds eddy + its workspace deps from source and runs `node dist/bin.js`; a `docker-compose.yml` deploys it alongside the registry proxy with the env knobs, mirroring the ADR-0163 deploy shape.
 - Self-host docs cover deploy steps, the operator TTL/`prefer` knobs, and the trust boundary: `docs/public/hosting-eddy.md` + a `docs/public/hosting-domains.md` row + the eddy section of `docs/public/trust-model.md`.
 - Arch enforcement covers `services/`: `check:arch` (and the `arch-boundaries` sweep) scan it; the `no-browser-imports-eddy` rule forbids any browser-layer import of eddy; `eddy → npm-client` stays allowed (eddy kept out of `TIERS`).
+- Operator-gated publish closure: with explicit publish confirmation, wire the first `@riftydev/eddy` npm release into the existing release/OIDC path and publish it; without that confirmation the item remains ready/open.
 
 ## Parity cases
 
@@ -28,8 +29,8 @@ N/A — packaging/infra item, no Node-observable behavior. The resolver's + clie
 
 ## Out of scope
 
-- The actual `npm publish` of `@riftydev/eddy` (wiring it into `release.yml`'s OIDC publish + the first release) — confirm-first/outward; the package is publish-READY here.
-- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not. DONE: **v1.1** live 2026-07-01, **v1.2** (tag `0.2.2`) redeployed 2026-07-05, CDN tier included — `docs/public/hosting-eddy.md`; `perf/eddy-upstream-registry-ab` now unblocked. (This item stays open only for the `npm publish` bullet above — user deferred it.)
+- Publishing without explicit operator confirmation — npm publish is outward/shared-state work, so execution is confirm-first.
+- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not. DONE: **v1.1** live 2026-07-01, **v1.2** (tag `0.2.2`) redeployed 2026-07-05, CDN tier included — `docs/public/hosting-eddy.md`; `perf/eddy-upstream-registry-ab` now unblocked. (This item stays open only for the operator-gated npm publish acceptance above — user deferred it.)
 - Integrating eddy into `tools/publishing/sync-publish-config.mjs` (the packages/* generator) — the hand-authored `tsup.config.ts` stands until then; folding it in is a follow-up, not a blocker.
 - A `tools/registry/`-style live smoke wired into CI — DONE 2026-07-01: `tools/eddy/smoke-eddy.mjs` (real POST → tar + as-of/CORS headers asserted) runs in `.github/workflows/netlify.yml` on both deploy paths.
 

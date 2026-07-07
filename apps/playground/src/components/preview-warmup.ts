@@ -6,11 +6,13 @@
  *     whichever first. A probe launched before the preview bridge is wired can
  *     hang in the SW ready-wait up to its cap; waking on the announce re-probes
  *     immediately instead of paying that cap + interval. A deadline with NO ok
- *     probe is `error` — never navigate: the SW's 503 error page commits like a
- *     real document, so the commit phase cannot arbitrate a dead route (a dead
- *     dev server used to show a LIVE preview and measure as a real boot).
+ *     probe is `unreachable` — never navigate: the SW's 503 error page commits
+ *     like a real document, so the commit phase cannot arbitrate a dead route
+ *     (a dead dev server used to show a LIVE preview and measure as a real boot).
  *  2. NAVIGATE the frame after an ok probe, then confirm the document
- *     committed — checked immediately and on every wake/interval tick.
+ *     committed — checked immediately and on every wake/interval tick. A commit
+ *     that never happens is `error` — distinct from `unreachable` so the UI
+ *     never claims "the route responds" without an observed ok probe.
  */
 export interface PreviewWarmupHooks {
   /** One GET probe of the preview route; resolves true on `res.ok`, false on
@@ -34,11 +36,13 @@ export interface PreviewWarmupConfig {
   readonly commitIntervalMs: number;
 }
 
+export type PreviewWarmupResult = 'live' | 'error' | 'unreachable' | 'cancelled';
+
 export async function runPreviewWarmup(
   hooks: PreviewWarmupHooks,
   cfg: PreviewWarmupConfig,
   isAlive: () => boolean,
-): Promise<'live' | 'error' | 'cancelled'> {
+): Promise<PreviewWarmupResult> {
   const probeDeadline = hooks.now() + cfg.warmupTimeoutMs;
   const WAKE = Symbol('wake');
   let reachable = false;
@@ -69,7 +73,7 @@ export async function runPreviewWarmup(
     await Promise.race([hooks.sleep(cfg.warmupIntervalMs), wake]);
   }
   if (!isAlive()) return 'cancelled';
-  if (!reachable) return 'error';
+  if (!reachable) return 'unreachable';
   await hooks.navigate();
   const commitDeadline = hooks.now() + cfg.commitTimeoutMs;
   while (isAlive()) {

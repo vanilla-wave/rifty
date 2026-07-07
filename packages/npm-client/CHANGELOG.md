@@ -162,9 +162,9 @@
   and the pipeline proceeds to the next attempt / standard install. New
   `InstallOptions.resolverStallTimeoutMs` overrides the bound. Unit + a
   covering-bundle-stalls-mid-tarball roundtrip regression, RED-checked. The
-  remaining sibling gap — STANDARD-path registry fetches have no bound either
-  (pre-existing; real npm has make-fetch-happen timeouts) — is recorded:
-  `docs/backlog/npm-client/registry-fetch-no-progress-bound.md`.
+  then-remaining sibling gap — STANDARD-path registry fetches had no bound
+  either (pre-existing; real npm has make-fetch-happen timeouts) — is now
+  closed by ADR-0201 / the shared `bounded-fetch` chokepoint above.
 - **Partial-bundle completeness gate — a covering lockfile with omitted
   tarballs is declined, never adopted as `source: 'eddy'`.** The client only
   verified tarballs the MANIFEST named; a divergent/buggy resolver could send a

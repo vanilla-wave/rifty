@@ -6,10 +6,14 @@
  * component keeps only the DOM/signal bindings (iframe ref, keyed remount,
  * phase signal) and passes them in as a PreviewFrameHost.
  */
-import { type PreviewWarmupConfig, runPreviewWarmup } from './preview-warmup.ts';
+import {
+  type PreviewWarmupConfig,
+  type PreviewWarmupResult,
+  runPreviewWarmup,
+} from './preview-warmup.ts';
 
 // Warm-up budget spans a Real Vite npm install + boot (ADR-0076/0077); a down
-// dev server resolves to `error`, just later. Per-probe cap keeps a 30 s
+// dev server resolves to `unreachable`, just later. Per-probe cap keeps a 30 s
 // cross-realm preview-bridge timeout (worker not serving yet) from blocking
 // the poll loop — abort and re-probe instead.
 export const PREVIEW_WARMUP_CONFIG: PreviewWarmupConfig = {
@@ -67,7 +71,7 @@ export function runPreviewFrameWarmup(
   url: string,
   host: PreviewFrameHost,
   cfg: PreviewWarmupConfig = PREVIEW_WARMUP_CONFIG,
-): Promise<'live' | 'error' | 'cancelled'> {
+): Promise<PreviewWarmupResult> {
   return runPreviewWarmup(
     {
       probe: async (signal) => {

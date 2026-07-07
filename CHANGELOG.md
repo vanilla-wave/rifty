@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- bench: the `viteReadyMs` stage marker follows real vite's own ready banner
+  (`VITE vX.Y ready in N ms`) — the rifty-authored `[vite] dev server ready on
+  port` line died with the generic dev-server lifecycle (PR #109), so stage
+  attribution silently recorded null since then.
+
 ### Added
 
 - **Bench transport matrix (`pnpm bench --transport auto|h2|h3`,
@@ -52,12 +59,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - **Bench install metric un-parked from a retired terminal marker.** The
-  `[vite] dev server ready on port` line the install leg awaited was retired
-  (readiness went out-of-band with the generic dev-server lifecycle), so every
-  install pass timed out at 180s — unnoticed because CI's bench smoke runs the
-  cold-start leg only. The leg now waits for the preview pill going LIVE with
-  the same verified-document guard as the preset phase (an SW 503 error page
-  cannot count as ready).
+  rifty-authored `[vite] dev server ready on port` line the install leg awaited
+  was retired (readiness went out-of-band with the generic dev-server
+  lifecycle), so every install pass timed out at 180s — unnoticed because CI's
+  bench smoke runs the cold-start leg only. The leg now waits for real Vite's
+  own ready banner (`VITE vX.Y ready in N ms`), keeping
+  `npmInstallToFirstViteResponseMs` honest.
+- **Bench eddy pass must prove it used eddy.** A resolver-configured install can
+  fall back to the standard path and still reach first Vite response. The eddy
+  pass now refuses the sample unless the terminal contains `via eddy (fast)`,
+  the line emitted only when `install()` returned `source: 'eddy'`.
+- **Standard-path registry fetch bound is closed.** The earlier
+  fault-honesty changelog entry named
+  `npm-client/registry-fetch-no-progress-bound` as the remaining open
+  standard-path gap; ADR-0201 and the shared npm-client `bounded-fetch`
+  chokepoint deliver that item and delete it.
 - **browser-unit: the restore-gate spec no longer races the 250ms slow-progress
   threshold.** The stamp rework (PR #107, ADR-0187 Corrected) removed the awaited
   OPFS drains from the instant restore path, so a fast host could finish the

@@ -137,6 +137,13 @@ jobs:
                 || !Number.isFinite(pb[0].median) || pb[0].median <= 0) {
               throw new Error("preset-boot not measured: " + JSON.stringify(pb));
             }
+            // Stage attribution must be REAL for a vite preset: viteReadyMs went
+            // silently null when PR #109 removed the rifty-authored ready line
+            // (the bench honestly records null, so only this gate notices).
+            const vr = pb[0].stages && pb[0].stages.viteReadyMs;
+            if (!Number.isFinite(vr) || vr <= 0) {
+              throw new Error("preset-boot viteReadyMs stage not attributed (ready-banner marker drifted?): " + JSON.stringify(pb[0].stages));
+            }
             console.log(`bench artifact OK: cold median ${cold.median}ms, install=${install.status}, presetBoot[${pb[0].presetId}]=${pb[0].status}${pb[0].median ? ` ${pb[0].median}ms` : ""}`);
           '
       - if: failure()

@@ -36,6 +36,8 @@ export interface ProjectIndexBootDeps {
   openLauncherOnStarters(): void;
   closeLauncher(): void;
   resetEditorInitialFiles(): void;
+  /** Intent-gated warm of the lazy editor stack once a project context is likely. */
+  warmEditorStack(): void;
   /** Reload restore (workspace-lifecycle port): re-root/adopt + relaunch. */
   restore(idx: ProjectIndex): void;
   /** `?preset=` deep-link auto-pick (bypasses the chooser). */
@@ -83,6 +85,7 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
   const [editorProjectContextReady, setEditorProjectContextReady] = createSignal(false);
   let initialBootDecisionMade = false;
   let autoOpenedFirstRunLauncher = false;
+  let editorWarmRequested = false;
   // §56 durable-delete tracking: posted but not yet confirmed by an owner
   // re-publish — cleared once the published index no longer lists the id.
   const pendingOnDiskDeletes = new Set<string>();
@@ -100,12 +103,19 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
     deps.closeLauncher();
   }
 
+  function warmEditorStack(): void {
+    if (editorWarmRequested) return;
+    editorWarmRequested = true;
+    deps.warmEditorStack();
+  }
+
   function onIndexPublished(idx: ProjectIndex): void {
     setProjectIndex(idx);
     deps.recordPresenceHint(idx);
     deps.hydrateIndex(idx);
     const wasReady = editorProjectContextReady();
     const ready = !needsProjectChoiceOnBoot(idx);
+    if (ready) warmEditorStack();
     // Never let a stale/in-flight scratch:null publish RE-HIDE an editor already
     // shown: once the boot decision is made a needs-choice index is a lagging
     // owner mirror, not a real return to the chooser — flipping it false here
@@ -185,6 +195,7 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
       openFirstRunLauncher();
       return () => {};
     }
+    warmEditorStack();
     // Returning user: the chooser is INDEX-DRIVEN — the first publish decides.
     // The timer survives only as a degraded fallback: no index AT ALL within the
     // beat = owner boot is broken — surface the gallery rather than a blank IDE.

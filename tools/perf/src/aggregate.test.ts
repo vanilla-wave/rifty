@@ -7,6 +7,7 @@ import {
   median,
   roundUpMs,
   summarize,
+  verifyEddyInstallProof,
   verifyTransportPin,
 } from './aggregate.mjs';
 
@@ -341,6 +342,23 @@ describe('buildArtifact — transport evidence', () => {
     const m = art.metrics.npmInstallToFirstViteResponseMs;
     expect(m.status).toBe('unmeasured');
     expect(m.transport.mode).toBe('h3');
+  });
+});
+
+describe('verifyEddyInstallProof', () => {
+  it('accepts the terminal line emitted only when install() returned source=eddy', () => {
+    const proof = verifyEddyInstallProof(
+      '$ npm install\nnpm: installed 17 package(s) in 1.2s via eddy (fast)\n$ vite\n',
+    );
+    expect(proof.ok).toBe(true);
+  });
+
+  it('refuses a resolver-configured run that fell back to standard install', () => {
+    const proof = verifyEddyInstallProof(
+      '$ npm install\nnpm: fast install (eddy) unavailable, using standard install\nnpm: installed 17 package(s) in 3.8s\n$ vite\n',
+    );
+    expect(proof.ok).toBe(false);
+    expect(proof.note).toMatch(/without terminal proof/);
   });
 });
 

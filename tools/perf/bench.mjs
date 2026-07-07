@@ -41,7 +41,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { buildArtifact, verifyTransportPin } from './src/aggregate.mjs';
+import { buildArtifact, verifyEddyInstallProof, verifyTransportPin } from './src/aggregate.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
@@ -133,7 +133,10 @@ const PRESET_BOOT_TIMEOUT = 120_000;
 // terminal. Only PAGE-observable markers qualify — the dev-server child's
 // other log lines ("importing vite…", "listening on internal port") never
 // reach the page terminal buffer. A missing marker records null, never a guess.
-const PRESET_STAGE_MARKERS = [['viteReadyMs', /\[vite\] dev server ready on port/]];
+// The rifty-authored `[vite] dev server ready on port` line died with the
+// generic dev-server lifecycle (PR #109); the marker is now REAL vite's own
+// ready banner — strictly more faithful (it is what Node prints too).
+const PRESET_STAGE_MARKERS = [['viteReadyMs', /VITE v[\d.]+\s+ready in \d+ ms/]];
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -205,11 +208,10 @@ async function waitForTerminal(page, regex, timeoutMs) {
 }
 
 /**
- * False-live guard (ONE copy for the install + preset phases): LIVE must mean
- * the preview DOCUMENT answers ok — the SW serves an honest 503 error page
- * that still commits into the iframe, and measuring that would be a
- * launch-citable lie. Bounded; runs AFTER the sample point so it never
- * inflates a measured number. Throws on a not-ok document.
+ * False-live guard for preview-live metrics: LIVE must mean the preview document
+ * answers ok — the SW serves an honest 503 error page that still commits into
+ * the iframe, and measuring that would be a launch-citable lie. Bounded; runs
+ * AFTER the sample point so it never inflates a measured number.
  */
 async function assertPreviewDocumentOk(page, label) {
   const doc = await page.evaluate(async () => {
@@ -228,30 +230,6 @@ async function assertPreviewDocumentOk(page, label) {
       `${label} preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
     );
   }
-}
-
-/**
- * Dev-server readiness signal for the install metric: the preview pill going
- * LIVE. The former `[vite] dev server ready on port` terminal marker was
- * RETIRED (dev-server-boot.ts: readiness is out-of-band — the child posts its
- * port set; the terminal carries only tool-authored output), so a terminal
- * regex would wait forever. Returns the LIVE-detection timestamp (the sample
- * point); the false-live guard runs after it.
- */
-async function waitForPreviewLive(page, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const live = await page.evaluate(
-      () => document.querySelector('.rf-preview__status[data-phase="live"]') !== null,
-    );
-    if (live) {
-      const liveAt = Date.now();
-      await assertPreviewDocumentOk(page, 'install');
-      return liveAt;
-    }
-    await sleep(100);
-  }
-  throw new Error(`preview never reached live within ${timeoutMs}ms`);
 }
 
 function startDevServer(withResolver) {
@@ -335,7 +313,7 @@ async function probeOriginProtocols(page) {
   return Object.fromEntries(origins.map((o) => [o, seen.get(o) ?? 'unreachable']));
 }
 
-async function runOnce(browser, measureInstall) {
+async function runOnce(browser, measureInstall, expectEddyFastPath = false) {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
@@ -368,15 +346,21 @@ async function runOnce(browser, measureInstall) {
     let installError = null;
     let transportEvidence = null;
     if (measureInstall) {
-      // Install starts when the autorun types `npm install`; "first Vite
-      // response" is the preview pill going LIVE (verified document — see
-      // waitForPreviewLive). A slow or failed install/vite-boot is recorded,
-      // NOT thrown — it must never nuke the already-measured cold-start sample.
+      // Install starts when the autorun types `npm install`; first Vite response
+      // is real vite's own ready banner (the rifty-authored ready line died with
+      // the generic dev-server lifecycle, PR #109). A slow or failed
+      // install/vite-boot is recorded, NOT thrown — it must never nuke the
+      // already-measured cold-start sample.
       try {
         await waitForTerminal(page, /npm install/, INTERACTIVE_TIMEOUT);
         const tInstall = Date.now();
-        const liveAt = await waitForPreviewLive(page, INSTALL_TIMEOUT);
-        installMs = liveAt - tInstall;
+        await waitForTerminal(page, /VITE v[\d.]+\s+ready in \d+ ms/, INSTALL_TIMEOUT);
+        const viteReadyAt = Date.now();
+        if (expectEddyFastPath) {
+          const proof = verifyEddyInstallProof((await terminalText(page)).replace(ANSI_SGR, ''));
+          if (!proof.ok) throw new Error(proof.note);
+        }
+        installMs = viteReadyAt - tInstall;
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       }
@@ -426,14 +410,14 @@ async function runPhase(browser, label, withResolver, measureInstall) {
     // a cold-only pass (no proxy, e.g. CI smoke) needs no warm-up.
     if (measureInstall) {
       for (let w = 0; w < WARMUP; w++) {
-        const wr = await runOnce(browser, measureInstall);
+        const wr = await runOnce(browser, measureInstall, withResolver);
         console.log(
           `  [${label}] warmup ${w + 1}/${WARMUP}: cold=${wr.coldMs}ms${wr.installMs != null ? ` install=${wr.installMs}ms` : wr.installError ? ` install=FAILED (${wr.installError})` : ''} (discarded)`,
         );
       }
     }
     for (let i = 0; i < RUNS; i++) {
-      const r = await runOnce(browser, measureInstall);
+      const r = await runOnce(browser, measureInstall, withResolver);
       cold.push(r.coldMs);
       if (r.installMs != null) install.push(r.installMs);
       else if (r.installError) installError = r.installError;

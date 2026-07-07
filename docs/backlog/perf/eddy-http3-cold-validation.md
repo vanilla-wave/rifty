@@ -72,6 +72,15 @@ after the 1.70x measurement.
 - Decision rule applied + recorded (see Decisions), epic Outcome updated with
   the transport-qualified number, this item deleted → epic's "Done when" met.
 
+## Fault matrix
+
+| Fault | Expected outcome | Proof |
+|---|---|---|
+| Forced h3 cannot reach an origin (UDP 443 blocked / no QUIC) | Pass records `unmeasured` with protocol evidence (`unreachable`), no h3 median quoted | `pnpm bench --transport h3` artifact note + `transport.runs` |
+| Browser negotiates a protocol other than the pinned mode on any used origin | Pass refused; artifact keeps evidence but no median | `verifyTransportPin` unit + per-run CDP protocol |
+| Pinned run makes zero measured-origin requests | Pass refused as vacuous proof | `verifyTransportPin` unit |
+| Eddy pass falls back to standard install while resolver URL is configured | Eddy median refused; no `speedupX` published | terminal proof `via eddy (fast)` required |
+
 ## Parity cases
 
 N/A — measurement tooling + operator step; no Node-observable behavior. The
