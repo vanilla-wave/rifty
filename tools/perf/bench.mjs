@@ -205,14 +205,38 @@ async function waitForTerminal(page, regex, timeoutMs) {
 }
 
 /**
+ * False-live guard (ONE copy for the install + preset phases): LIVE must mean
+ * the preview DOCUMENT answers ok — the SW serves an honest 503 error page
+ * that still commits into the iframe, and measuring that would be a
+ * launch-citable lie. Bounded; runs AFTER the sample point so it never
+ * inflates a measured number. Throws on a not-ok document.
+ */
+async function assertPreviewDocumentOk(page, label) {
+  const doc = await page.evaluate(async () => {
+    const el = document.querySelector('[data-testid="preview"] iframe');
+    const url = el?.src;
+    if (!url) return { ok: false, note: 'no preview iframe src' };
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+      return { ok: res.ok, note: `status ${res.status}` };
+    } catch (err) {
+      return { ok: false, note: String(err) };
+    }
+  });
+  if (!doc.ok) {
+    throw new Error(
+      `${label} preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
+    );
+  }
+}
+
+/**
  * Dev-server readiness signal for the install metric: the preview pill going
  * LIVE. The former `[vite] dev server ready on port` terminal marker was
  * RETIRED (dev-server-boot.ts: readiness is out-of-band — the child posts its
  * port set; the terminal carries only tool-authored output), so a terminal
- * regex would wait forever. Same false-live guard as the preset phase: LIVE
- * must mean the preview DOCUMENT answers ok — the SW serves an honest 503
- * error page that still commits into the iframe, and measuring that would be
- * a launch-citable lie.
+ * regex would wait forever. Returns the LIVE-detection timestamp (the sample
+ * point); the false-live guard runs after it.
  */
 async function waitForPreviewLive(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -221,25 +245,8 @@ async function waitForPreviewLive(page, timeoutMs) {
       () => document.querySelector('.rf-preview__status[data-phase="live"]') !== null,
     );
     if (live) {
-      // Sample point = LIVE detection. The document verification below runs
-      // AFTER it (bounded) so the guard never inflates the measured number.
       const liveAt = Date.now();
-      const doc = await page.evaluate(async () => {
-        const el = document.querySelector('[data-testid="preview"] iframe');
-        const url = el?.src;
-        if (!url) return { ok: false, note: 'no preview iframe src' };
-        try {
-          const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
-          return { ok: res.ok, note: `status ${res.status}` };
-        } catch (err) {
-          return { ok: false, note: String(err) };
-        }
-      });
-      if (!doc.ok) {
-        throw new Error(
-          `preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
-        );
-      }
+      await assertPreviewDocumentOk(page, 'install');
       return liveAt;
     }
     await sleep(100);
@@ -484,27 +491,7 @@ async function runPresetBootOnce(browser, presetId) {
       );
       if (live) {
         const liveMs = Date.now() - t0;
-        // Harness-level false-live guard (independent of the app's warmup fix):
-        // LIVE must mean the preview DOCUMENT answers ok — the SW serves an
-        // honest 503 error page that still commits into the iframe, and a
-        // measurement of that page would be a launch-citable lie. Runs after
-        // the sample is taken, so it never inflates the number.
-        const doc = await page.evaluate(async () => {
-          const el = document.querySelector('[data-testid="preview"] iframe');
-          const url = el?.src;
-          if (!url) return { ok: false, note: 'no preview iframe src' };
-          try {
-            const res = await fetch(url, { cache: 'no-store' });
-            return { ok: res.ok, note: `status ${res.status}` };
-          } catch (err) {
-            return { ok: false, note: String(err) };
-          }
-        });
-        if (!doc.ok) {
-          throw new Error(
-            `[${presetId}] preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
-          );
-        }
+        await assertPreviewDocumentOk(page, `[${presetId}]`);
         // One final scan: a marker's terminal PAINT can lag preview-live by a
         // beat (the preview probe races the pty chunk); its cause precedes live,
         // so a marker visible now is real — anything still missing is null.
@@ -584,12 +571,12 @@ async function runPresetBootPhase(browser) {
 /** Merge per-run transport evidence across passes into the artifact's
  * transport record: `originProtocols` (unique probed protocols per origin —
  * the summary) + `runs` (the verbatim per-run `{ origin: { protocol,
- * requests } }` audit list — which transport each sample actually rode) + the
- * raw list `verifyTransportPin` consumes. No evidence (local-only run) → an
- * empty spread (no transport key on the metric). */
+ * requests } }` audit list — which transport each sample actually rode).
+ * Returns `record: undefined` when there is no evidence (local-only run) —
+ * callers then omit the metric's `transport` key. */
 function summarizeTransport(...phases) {
   const runsEvidence = phases.flatMap((p) => p.transportRuns);
-  if (runsEvidence.length === 0) return { transport: {}, runsEvidence };
+  if (runsEvidence.length === 0) return { record: undefined, runsEvidence };
   const perOrigin = {};
   for (const rec of runsEvidence) {
     for (const [origin, evidence] of Object.entries(rec)) {
@@ -605,7 +592,7 @@ function summarizeTransport(...phases) {
     ),
     runs: runsEvidence,
   };
-  return { transport: { transport: record }, runsEvidence };
+  return { record, runsEvidence };
 }
 
 function measuredOrUnmeasured(samples, error) {
@@ -642,7 +629,8 @@ async function main() {
       const base = await runPhase(browser, 'standard', false, true);
       const eddy = await runPhase(browser, 'eddy', true, true);
       coldSamples = eddy.cold;
-      const { transport } = summarizeTransport(base, eddy);
+      const { record } = summarizeTransport(base, eddy);
+      const transport = record === undefined ? {} : { transport: record };
       // Pin verification is PER PHASE: a well-evidenced standard pass must not
       // vouch for an eddy pass that never proved a measured-origin request
       // (merged counting once let exactly that through).
@@ -678,7 +666,8 @@ async function main() {
     } else if (measureInstall) {
       const std = await runPhase(browser, 'standard', false, true);
       coldSamples = std.cold;
-      const { transport, runsEvidence } = summarizeTransport(std);
+      const { record, runsEvidence } = summarizeTransport(std);
+      const transport = record === undefined ? {} : { transport: record };
       const pin = verifyTransportPin(TRANSPORT, runsEvidence);
       const m = measuredOrUnmeasured(std.install, std.installError);
       installMetric = !pin.ok
