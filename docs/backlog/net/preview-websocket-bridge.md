@@ -6,7 +6,7 @@ created: 2026-07-02
 why: the browser has no loopback WebSocket, so preview WS works only for vite and only via a vite-keyed `--config` wrapper that rewrites the HMR endpoint + injects the bridge script through a vite plugin — any other tool's WS (webpack HMR, socket.io) silently fails
 user_story: As a developer, I want the stock HMR/WS of ANY dev server to work in the preview (vite with untouched config, webpack-dev-server, a socket.io app), but today only vite works, and only because rifty rewrites its CLI args and injects a plugin.
 epic: preset-deglue
-blocked_by: []
+blocked_by: [service-worker/preview-blocked-host-hang]
 sources: [docs/adr/net/0189-preview-loopback-websocket-bridge.md, docs/adr/service-worker/0123-port-aware-preview-owner-routing.md]
 code: [packages/net/src/ws/browser-client-script.ts, packages/net/src/http/server.ts, packages/net/src/registry.ts, apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/glue/hmr-bridge.ts]
 ---

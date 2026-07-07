@@ -33,11 +33,12 @@ export const PREVIEW_LOCAL_HOST = 'preview.local';
  * Build the upstream URL the SW forwards to the owning client. `path` is the
  * post-prefix portion of the request (e.g. `/foo` for `/preview/3000/foo`).
  * The host is `localhost:<port>` — exactly what a real local dev run puts in
- * `Host` — so ANY dev server's default host allow-list (vite/webpack
- * `allowedHosts`) passes with zero rifty config injection, and `Host`-derived
- * consumers (`@hono/node-server`) keep the original preview port. Scheme is
- * hard-coded `http://`: the request never leaves the page realm, so there is
- * nothing to negotiate over TLS. Addressing change = SW_ROUTING_VERSION bump.
+ * `Host` — so host-derived consumers (`@hono/node-server`) keep the original
+ * preview port and generic host allow-lists can be retired at the protocol
+ * layer. Vite's `allowedHosts` force still has a separate recorded hang before
+ * it can retire. Scheme is hard-coded `http://`: the request never leaves the
+ * page realm, so there is nothing to negotiate over TLS. Addressing change =
+ * SW_ROUTING_VERSION bump.
  */
 export function synthesizePreviewUrl(path: string, port?: number): string {
   const host = port === undefined ? 'localhost' : `localhost:${port}`;

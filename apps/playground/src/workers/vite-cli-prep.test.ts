@@ -516,6 +516,25 @@ describe('withViteCliArgs — retired preview forces stay retired (behavioral, P
     ]);
   });
 
+  it('dev mode injects the wrapper config before -- rest args so Vite still parses it', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['--', 'preview'], ctx)).toEqual([
+      '--config',
+      '/proj/.rifty/vite-cli.config.mjs',
+      '--',
+      'preview',
+    ]);
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['dev', '--', '--host', 'x'], ctx),
+    ).toEqual(['dev', '--config', '/proj/.rifty/vite-cli.config.mjs', '--', '--host', 'x']);
+    expect(
+      withViteCliArgs(
+        '/proj/node_modules/.bin/vite',
+        ['--config', 'vite.custom.mjs', '--', 'tail'],
+        ctx,
+      ),
+    ).toEqual(['--config', '/proj/.rifty/vite-cli.config.mjs', '--', 'tail']);
+  });
+
   it('non-vite bins pass through untouched', () => {
     expect(withViteCliArgs('/proj/node_modules/.bin/webpack', ['serve'], ctx)).toEqual(['serve']);
   });

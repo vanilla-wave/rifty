@@ -375,6 +375,13 @@ function withoutViteConfigArgs(args: readonly string[]): string[] {
     .flatMap((t) => [...t.raw]);
 }
 
+function withGeneratedViteConfigArg(args: readonly string[], configPath: string): string[] {
+  const stripped = withoutViteConfigArgs(args);
+  const restAt = stripped.indexOf('--');
+  if (restAt === -1) return [...stripped, '--config', configPath];
+  return [...stripped.slice(0, restAt), '--config', configPath, ...stripped.slice(restAt)];
+}
+
 function resolveCliPath(cwd: string, path: string): string {
   return normalizePath(path.startsWith('/') ? path : `${cwd}/${path}`);
 }
@@ -387,13 +394,13 @@ export function withViteCliArgs(
   if (binNameOf(binPath) !== 'vite') return [...args];
   const mode = viteCliMode(args);
   // No preview-mode '--host': the SW preview path stamps Host localhost:<port>
-  // (ADR-0189 D3), which vite's default allowedHosts accepts.
+  // (ADR-0189 D3). The separate allowedHosts force remains below until the
+  // recorded vite host-middleware hang is traced.
   if (mode !== 'dev') return [...args];
-  return [
-    ...withoutViteConfigArgs(args),
-    '--config',
+  return withGeneratedViteConfigArg(
+    args,
     normalizePath(`${ctx.cwd}/${VITE_CLI_CONFIG_WRAPPER_RELATIVE_PATH}`),
-  ];
+  );
 }
 
 export function withViteCliEnv(
