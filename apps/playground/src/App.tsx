@@ -134,18 +134,17 @@ export { createAppProjectStore } from './glue/app-project-store.ts';
 const EditorHost = lazy(() =>
   import('./components/EditorHost.tsx').then((m) => ({ default: m.EditorHost })),
 );
-// Warm the lazy editor chunks ONLY once an editor is coming (never for a
-// first-run visitor idling on the chooser — they must not pay Monaco's network
-// + eval): a returning user (project presence hint) warms at boot, a first-run
-// pick warms the moment the pick starts, a chunk-load head start over the
-// owner boot + seed it overlaps (m0 pins pick→editor-source ≤1 s). import()
-// loads AND evaluates, but off the boot's critical path — measured
-// cold-start-to-interactive stays ~170 ms (was 693 ms eager). The module
+// Warm the lazy editor chunks in the background from app eval. Deliberate
+// trade-off: a visitor who never picks a project pays the chunk FETCH (and its
+// off-critical-path eval) — but pick→editor-source must stay fast (m0 pins
+// ≤1 s) even where the editor graph loads slowly (dev serves monaco unbundled,
+// optimizeDeps.exclude; CI proved an at-pick warm starts too late there). The
+// cold-start win is untouched — measured cold-start-to-interactive stays
+// ~170 ms (was 693 ms eager): the win came from unblocking the synchronous
+// main-chunk parse, not from skipping the background load. The module
 // registry dedupes these against the lazy()/effect imports.
-function warmEditorChunks(): void {
-  void import('./components/EditorHost.tsx');
-  void import('./glue/ts-ls-monaco-providers.ts');
-}
+void import('./components/EditorHost.tsx');
+void import('./glue/ts-ls-monaco-providers.ts');
 
 /** BroadcastChannel key the unavailable-owner stub reports; never served. */
 const UNAVAILABLE_OWNER_PORT = -1;
@@ -627,10 +626,6 @@ export function App(props: AppProps) {
       );
     },
   });
-
-  // A returning user (persisted project hint) is heading for an editor — warm
-  // its chunks now; a true first-run stays cost-free until a pick starts.
-  if (hasPersistedProjectHint(globalThis.localStorage)) warmEditorChunks();
 
   // Headless project-index + boot-decision core (ADR-0197 slice 2): the page
   // mirror of the owner-published index (the launcher renders from it), the
@@ -1750,7 +1745,6 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
-    warmEditorChunks(); // chunk fetch overlaps the whole pick→boot pipeline
     if (!(await saveFlow.beginStarterPick())) return;
     indexBoot.markBootDecisionMade();
     // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
