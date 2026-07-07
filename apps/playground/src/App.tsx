@@ -100,6 +100,7 @@ import {
   subscribeVfsSnapshot,
 } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
+import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
@@ -373,13 +374,22 @@ export function App(props: AppProps) {
   // context-ready→registerApi window — before an editor context exists this
   // stays the old no-op, so a pre-context click can never replay into a LATER
   // project's editor (the context-reset effect below clears the belt too).
-  let pendingEditorOps: ((api: EditorApi) => void)[] = [];
+  const editorOpQueue = createEditorOpQueue<EditorApi>();
+  const editorContextKey = (): string =>
+    [
+      store.activeId(),
+      activeRoot(),
+      activeStarterId(),
+      workspaceOwner().previewOwnerToken,
+      String(workspaceOwner().snapshotPort),
+    ].join('\0');
   const withEditorApi = (op: (api: EditorApi) => void): void => {
-    if (editorApi) {
-      op(editorApi);
-      return;
-    }
-    if (untrack(() => indexBoot.editorProjectContextReady())) pendingEditorOps.push(op);
+    editorOpQueue.runOrQueue(
+      editorApi,
+      untrack(() => indexBoot.editorProjectContextReady()),
+      untrack(editorContextKey),
+      op,
+    );
   };
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
@@ -649,10 +659,11 @@ export function App(props: AppProps) {
     pickDeepLinkStarter: (id) => void onPickStarter(id),
   });
 
-  // Queue hygiene for withEditorApi: losing the editor context drops opens
-  // queued against it — they must never replay into a LATER project's editor.
+  // Queue hygiene for withEditorApi: losing or switching the editor context drops
+  // opens queued against it — they must never replay into another project's editor.
   createEffect(() => {
-    if (!indexBoot.editorProjectContextReady()) pendingEditorOps = [];
+    const ready = indexBoot.editorProjectContextReady();
+    editorOpQueue.discardStale(ready, ready ? editorContextKey() : '');
   });
 
   // Headless preset-boot core (ADR-0197 slice 3) bound to the REAL ports: the
@@ -2329,9 +2340,7 @@ export function App(props: AppProps) {
                   registerApi={(api) => {
                     editorApi = api;
                     setEditorApiSig(() => api);
-                    const queued = pendingEditorOps;
-                    pendingEditorOps = [];
-                    for (const op of queued) op(api);
+                    editorOpQueue.flush(api, untrack(editorContextKey));
                   }}
                   onActive={(info) => {
                     setActiveFile(info.label);

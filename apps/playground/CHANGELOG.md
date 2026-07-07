@@ -20,6 +20,9 @@
 
 ### Fixed
 
+- Queued editor opens made while the lazy EditorHost chunk is loading are scoped
+  to the current project/editor context, so a project or starter switch cannot
+  replay an old click into the newly registered editor.
 - Preview warm-up distinguishes `unreachable` (route never answered ok — dev
   server down) from `error` (route ok, frame didn't commit); the OFF overlay no
   longer claims "the dev server is running (the route responds)" it never
