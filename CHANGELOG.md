@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Bench transport matrix (`pnpm bench --transport auto|h2|h3`,
+- **Bench transport matrix (`pnpm bench --transport matrix`,
   perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
   the measured remote origins (h2 = `--disable-quic`; h3 =
   `--origin-to-force-quic-on` on the registry + eddy + optional bundle hosts —
@@ -28,12 +28,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pin refuses too — the artifact labels the leg h2) or lacking any positive
   proof (`unreachable` / `unknown`), and a pinned run or pass that made no
   measured-origin request at all (vacuous probe-only evidence), each refuse
-  the pass (`unmeasured` + note; evidence still recorded — merged
-  `transport.originProtocols` + the verbatim per-run `transport.runs` audit
-  list) — never a lying median. `auto` records evidence without pinning
-  (end-of-run connection class, no per-request claim). Smoke-proven live: h2
-  pass measured with both origins evidenced `h2` (standard run: 50 registry
-  requests; eddy run: the single bundle POST); h3 pass refused loudly
+  the pass (`unmeasured` + note; evidence still recorded under
+  `transportMatrix.<mode>.<phase>.transport` with phase-local
+  `originProtocols` + the verbatim per-run `runs` audit list) — never a lying
+  median. The top-level headline stays the `auto` eddy-vs-standard result (the
+  transport real users get), while `h2` and `h3` sit beside it for the
+  controlled comparison. Single-mode `--transport auto|h2|h3` stays available
+  for focused diagnosis. `auto` records evidence without pinning (end-of-run
+  connection class, no per-request claim). Smoke-proven live: h2 standard
+  measured with registry evidence (`50` requests over `h2`); eddy phases kept
+  their resolver protocol evidence but refused the median when the terminal did
+  not prove `via eddy (fast)`; h3 refused loudly on the registry leg
   (`unreachable` — UDP 443 blocked at the SG, the documented deploy gap).
 
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic

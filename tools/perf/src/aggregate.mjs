@@ -189,6 +189,9 @@ function buildInstallMetric(install, stepMs) {
     const record = { status: install?.status ?? 'requires proxy' };
     if (install?.note) record.note = install.note;
     if (install?.transport) record.transport = install.transport;
+    if (install?.transportMatrix) {
+      record.transportMatrix = buildTransportMatrixMetric(install.transportMatrix, stepMs);
+    }
     return record;
   }
   const summary = summarize(install.samples, stepMs);
@@ -201,8 +204,42 @@ function buildInstallMetric(install, stepMs) {
   if (install.baselineSamples && install.baselineSamples.length > 0) {
     const baseline = summarize(install.baselineSamples, stepMs);
     baseline.label = 'standard';
+    if (install.baselineTransport) baseline.transport = install.baselineTransport;
     summary.baseline = baseline;
     summary.speedupX = Math.round((baseline.median / summary.median) * 100) / 100;
   }
+  if (install.transportMatrix) {
+    summary.transportMatrix = buildTransportMatrixMetric(install.transportMatrix, stepMs);
+  }
   return summary;
+}
+
+function buildTransportMatrixMetric(matrix, stepMs) {
+  const out = {};
+  for (const [mode, phases] of Object.entries(matrix)) {
+    const row = {};
+    if (phases.standard) row.standard = buildInstallPhaseMetric(phases.standard, stepMs);
+    if (phases.eddy) row.eddy = buildInstallPhaseMetric(phases.eddy, stepMs);
+    if (row.standard?.status === 'measured' && row.eddy?.status === 'measured') {
+      row.speedupX = Math.round((row.standard.median / row.eddy.median) * 100) / 100;
+    }
+    out[mode] = row;
+  }
+  return out;
+}
+
+function buildInstallPhaseMetric(phase, stepMs) {
+  if (phase.status !== 'measured') {
+    const out = { status: phase.status };
+    if (phase.note) out.note = phase.note;
+    if (phase.registryUrl) out.registryUrl = phase.registryUrl;
+    if (phase.resolverUrl) out.resolverUrl = phase.resolverUrl;
+    if (phase.transport) out.transport = phase.transport;
+    return out;
+  }
+  const out = summarize(phase.samples, stepMs);
+  if (phase.registryUrl) out.registryUrl = phase.registryUrl;
+  if (phase.resolverUrl) out.resolverUrl = phase.resolverUrl;
+  if (phase.transport) out.transport = phase.transport;
+  return out;
 }

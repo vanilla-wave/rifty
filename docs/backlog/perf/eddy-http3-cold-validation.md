@@ -26,8 +26,10 @@ the headline).
 Two former blockers, both resolved: (a) "Playwright can't pin the transport"
 — Chromium CAN be pinned per-origin via launch args (see Decisions); the
 transport matrix below is DELIVERED (2026-07-07): `pnpm bench --transport
-auto|h2|h3` pins + verifies via CDP evidence, smoke-proven live (h2 pass:
-both origins evidenced `h2`, measured; h3 pass refused loudly pre-SG-rule).
+matrix` runs auto+h2+h3 into one phase-labelled artifact, pins + verifies via
+CDP evidence, smoke-proven live (h2 standard measured with registry `h2`
+evidence; eddy phases keep resolver protocol evidence but refuse the median
+without `via eddy (fast)` proof; h3 registry leg refused loudly pre-SG-rule).
 (b) h3 was unreachable on the live deploy — compose already publishes
 `443/udp`; only the reused `rifty-registry-proxy` security group lacks a
 `443/udp` ingress rule (operator, confirm-first, `hosting-eddy.md` §Deploy
@@ -42,8 +44,9 @@ after the 1.70x measurement.
 
 ## Acceptance
 
-- `tools/perf/bench.mjs` gains a transport matrix: per pass, Chromium is
-  PINNED to a transport via launch args — h3 pass:
+- `tools/perf/bench.mjs` gains a transport matrix mode
+  (`--transport matrix`; single `auto|h2|h3` modes remain diagnostic): per pass,
+  Chromium is PINNED to a transport via launch args — h3 pass:
   `--enable-quic --origin-to-force-quic-on=<eddy-host>:443,<registry-host>:443`
   (both origins: the standard baseline's tarball phase is exactly the leg h3
   could lift); h2 pass: `--disable-quic`; plus the default `auto` pass (what a
@@ -61,8 +64,10 @@ after the 1.70x measurement.
   eddy verify separately — one well-evidenced pass never vouches for the
   other; a pinned run with zero measured-origin requests is vacuous and
   refuses). Under `auto` the probe is recorded as end-of-run connection-class
-  evidence, no per-request claim. Artifact carries the merged
-  `originProtocols` + the verbatim per-run audit list.
+  evidence, no per-request claim. Artifact carries phase-local evidence under
+  `transportMatrix.<mode>.<standard|eddy>.transport` — each phase has its own
+  `originProtocols` summary + verbatim per-run audit list, so standard and eddy
+  proof never rely on implicit array ordering.
 - With UDP 443 live end-to-end: `perf/benchmarks.json` carries
   {h2, h3, auto} × {standard, eddy} medians + protocol evidence; the headline
   is re-derived from the AUTO pass (the transport real users actually get).

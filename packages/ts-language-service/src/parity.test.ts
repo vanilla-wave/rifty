@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import * as nodePath from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { CodeAction, FormattingOptions, Position, Range, TextEdit } from './lsp-types.ts';
 import {
   fileTextChangesToWorkspaceEdit,
@@ -52,6 +52,10 @@ import { createTsLanguageService } from './service.ts';
 import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 const require = createRequire(import.meta.url);
+
+// These parity cases build real TS services over real/vfs workspaces; pr:check
+// runs them next to other heavy lanes, so the default 5s budget is too tight.
+vi.setConfig({ testTimeout: 20_000 });
 
 /** A fixture: a map of POSIX-relative path → file contents, plus the files to diagnose. */
 interface Fixture {

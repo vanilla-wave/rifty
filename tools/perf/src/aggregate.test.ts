@@ -343,6 +343,92 @@ describe('buildArtifact — transport evidence', () => {
     expect(m.status).toBe('unmeasured');
     expect(m.transport.mode).toBe('h3');
   });
+
+  it('keeps baseline transport evidence on the baseline metric, not only the eddy headline', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        baselineSamples: [4300],
+        registryUrl: 'https://registry.example/npm-registry',
+        resolverUrl: 'https://eddy.example',
+        transport: {
+          mode: 'auto',
+          originProtocols: { 'https://eddy.example': ['h2'] },
+          runs: [{ 'https://eddy.example': { protocol: 'h2', requests: 1 } }],
+        },
+        baselineTransport: {
+          mode: 'auto',
+          originProtocols: { 'https://registry.example': ['h2'] },
+          runs: [{ 'https://registry.example': { protocol: 'h2', requests: 50 } }],
+        },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.transport.runs[0]['https://eddy.example'].requests).toBe(1);
+    expect(m.baseline.transport.runs[0]['https://registry.example'].requests).toBe(50);
+  });
+
+  it('carries a per-transport matrix with phase-local evidence and keeps the headline on auto', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        baselineSamples: [4250],
+        registryUrl: 'https://registry.example/npm-registry',
+        resolverUrl: 'https://eddy.example',
+        transportMatrix: {
+          auto: {
+            standard: {
+              status: 'measured',
+              samples: [4250],
+              registryUrl: 'https://registry.example/npm-registry',
+              transport: {
+                mode: 'auto',
+                originProtocols: { 'https://registry.example': ['h2'] },
+                runs: [{ 'https://registry.example': { protocol: 'h2', requests: 50 } }],
+              },
+            },
+            eddy: {
+              status: 'measured',
+              samples: [2500],
+              resolverUrl: 'https://eddy.example',
+              transport: {
+                mode: 'auto',
+                originProtocols: { 'https://eddy.example': ['h2'] },
+                runs: [{ 'https://eddy.example': { protocol: 'h2', requests: 1 } }],
+              },
+            },
+          },
+          h2: {
+            standard: { status: 'measured', samples: [4300] },
+            eddy: { status: 'measured', samples: [2600] },
+          },
+          h3: {
+            standard: { status: 'unmeasured', note: 'transport pinned to h3 but unreachable' },
+            eddy: { status: 'unmeasured', note: 'transport pinned to h3 but unreachable' },
+          },
+        },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.median).toBe(2500);
+    expect(m.baseline.median).toBe(4250);
+    expect(m.speedupX).toBe(1.7);
+    expect(
+      m.transportMatrix.auto.standard.transport.runs[0]['https://registry.example'].requests,
+    ).toBe(50);
+    expect(m.transportMatrix.auto.eddy.transport.runs[0]['https://eddy.example'].requests).toBe(1);
+    expect(m.transportMatrix.h2.speedupX).toBe(1.65);
+    expect(m.transportMatrix.h3.standard.status).toBe('unmeasured');
+    expect(m.transportMatrix.h3.eddy.status).toBe('unmeasured');
+  });
 });
 
 describe('verifyEddyInstallProof', () => {

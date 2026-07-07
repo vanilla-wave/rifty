@@ -19,6 +19,11 @@
 
 ### Fixed
 
+- **TS parity tests keep their gold-standard asserts under parallel PR gates.**
+  The parity file now carries a local timeout budget for real
+  `ts.LanguageService` construction instead of inheriting Vitest's 5s default,
+  which could time out under `pnpm pr:check` concurrency without a divergence.
+
 - **Diagnostics compat row no longer overclaims tags/related info.** The
   generated TS language-service matrix now marks diagnostics `⚠️` until
   `relatedInformation` plus unused/deprecated diagnostic tags are plumbed through
