@@ -110,7 +110,7 @@ test.describe('M0 — Foundation', () => {
       .toBe(false);
   });
 
-  test('starter pick paints editor source before the workspace owner finishes booting', async ({
+  test('starter pick paints initial editor tabs while lazy editor source loads', async ({
     page,
   }) => {
     await page.goto('/');
@@ -122,8 +122,13 @@ test.describe('M0 — Foundation', () => {
     await page.click('[data-preset="project-files"]');
 
     await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+    // Lazy-Monaco split: the starter intent paints the chosen starter's initial
+    // tabs/snapshot promptly; Monaco source follows when the editor chunk lands.
+    await expect(page.locator('.rf-tab', { hasText: 'src/main.js' })).toBeVisible({
+      timeout: 5_000,
+    });
     await expect(editorLines).toContainText("import project from './project.json'", {
-      timeout: 1_000,
+      timeout: 60_000,
     });
   });
 

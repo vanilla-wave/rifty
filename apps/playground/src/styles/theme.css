@@ -1342,10 +1342,12 @@ body {
 .rf-preview__status[data-phase="live"] .rf-preview__status-dot {
   background: var(--rf-accent);
 }
-.rf-preview__status[data-phase="error"] {
+.rf-preview__status[data-phase="error"],
+.rf-preview__status[data-phase="unreachable"] {
   color: var(--rf-err);
 }
-.rf-preview__status[data-phase="error"] .rf-preview__status-dot {
+.rf-preview__status[data-phase="error"] .rf-preview__status-dot,
+.rf-preview__status[data-phase="unreachable"] .rf-preview__status-dot {
   background: var(--rf-err);
 }
 @keyframes rf-blink {

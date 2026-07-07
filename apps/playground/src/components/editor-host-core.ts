@@ -72,6 +72,13 @@ export interface EditorDocumentEvent {
 
 /** Imperative handle handed to the App so the explorer can open files. */
 export interface EditorApi {
+  /**
+   * The live monaco namespace. The App's LS/e2e glue builds models, positions
+   * and ranges through this instead of an eager `monaco-editor` import — the
+   * editor stack loads as a lazy chunk and this api existing proves monaco is
+   * loaded (check:arch pins the seam).
+   */
+  readonly monaco: typeof monaco;
   openFile(path: string, options?: EditorOpenFileOptions): void;
   openInitialFiles(paths: readonly string[]): void;
   openWorkingDiff(input: EditorWorkingDiffInput): void;
@@ -1075,6 +1082,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   }
 
   const api: EditorApi = {
+    monaco,
     openFile,
     openInitialFiles,
     openWorkingDiff,

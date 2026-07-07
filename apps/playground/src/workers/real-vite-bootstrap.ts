@@ -429,14 +429,22 @@ async function bootShellOwner(opts: {
   } else {
     seedProject(cfg);
     if (freshRoot) seedStarterBaseline(starter, cfg.root);
-    await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
-  }
-  // Instant presets: pre-seed node_modules from the baked snapshot into the owner
-  // store NOW, before any dev line (the full fs is already present). from-scratch
-  // deps come from the explicit `npm install` boot step — nothing to do here.
-  if (!fromScratch && !hiddenEmptyBoot) {
-    await restoreInstantDeps(cfg, spec.id, slug);
-    await absorbPendingStarterGeneratedBaseline(cfg.root);
+    // Instant presets: pre-seed node_modules from the baked snapshot into the
+    // owner store NOW, before any dev line (the full fs is already present);
+    // from-scratch deps come from the explicit `npm install` boot step. The
+    // initial commit races the restore instead of serializing ahead of the
+    // snapshot download: node_modules is .gitignore-pruned by the status walk
+    // and a lockfile landing mid-walk is folded by the amend either way
+    // (starter.fault.test.ts pins the race). The amend itself stays BEFORE the
+    // first publish — deferring it past ready would flash a phantom
+    // package-lock.json change in SCM on every fresh pick.
+    const initialCommit = ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+    if (fromScratch) {
+      await initialCommit;
+    } else {
+      await Promise.all([initialCommit, restoreInstantDeps(cfg, spec.id, slug)]);
+      await absorbPendingStarterGeneratedBaseline(cfg.root);
+    }
   }
   if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);
   const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });

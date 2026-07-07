@@ -82,17 +82,27 @@ describe('runPreviewWarmup', () => {
     expect(hooks.sleep).not.toHaveBeenCalled();
   });
 
-  it('probes that never see res.ok end in error — NO navigation, no false live', async () => {
+  it('probes that never see res.ok end in unreachable — NO navigation, no false live', async () => {
     // Regression: the old "commit phase is the arbiter" path navigated after the
     // probe deadline and counted a committed SW 503 error page as live — a dead
     // dev server showed a LIVE preview (and the bench measured it as a real boot).
+    // `unreachable` (never an ok probe) is distinct from `error` (route ok, frame
+    // didn't commit) so the UI can't claim "the route responds" without proof.
     const { hooks } = makeWorld({
       probe: vi.fn(async () => false),
       committed: vi.fn(() => true), // the 503 error page DOES commit — must not count
     });
-    await expect(runPreviewWarmup(hooks, CFG, () => true)).resolves.toBe('error');
+    await expect(runPreviewWarmup(hooks, CFG, () => true)).resolves.toBe('unreachable');
     expect(hooks.navigate).not.toHaveBeenCalled();
     expect(hooks.committed).not.toHaveBeenCalled();
+  });
+
+  it('an ok probe whose navigation never commits ends in error (not unreachable)', async () => {
+    const { hooks } = makeWorld({
+      committed: vi.fn(() => false),
+    });
+    await expect(runPreviewWarmup(hooks, CFG, () => true)).resolves.toBe('error');
+    expect(hooks.navigate).toHaveBeenCalledTimes(1);
   });
 
   it('returns cancelled and never navigates once alive flips during probing', async () => {

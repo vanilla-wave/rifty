@@ -68,6 +68,7 @@ class Harness {
   openedStarters = 0;
   closedLauncher = 0;
   resetEditor = 0;
+  warmedEditor = 0;
   restored: ProjectIndex[] = [];
   deepPicks: string[] = [];
   fallbackMs = 30;
@@ -88,6 +89,9 @@ class Harness {
       },
       resetEditorInitialFiles: () => {
         this.resetEditor += 1;
+      },
+      warmEditorStack: () => {
+        this.warmedEditor += 1;
       },
       restore: (idx) => this.restored.push(idx),
       pickDeepLinkStarter: (id) => this.deepPicks.push(id),
@@ -228,6 +232,23 @@ describe('boot policy (deep link / presence hint / degraded fallback)', () => {
     expect(second.h.openedStarters).toBe(0);
   });
 
+  it('warms the editor stack for returning/project-ready boots, never first-run chooser idle', () => {
+    const firstRun = setup();
+    firstRun.h.presenceHint = false;
+    firstRun.boot.startBootPolicy(undefined);
+    expect(firstRun.h.warmedEditor).toBe(0);
+
+    const returning = setup();
+    returning.boot.startBootPolicy(undefined);
+    expect(returning.h.warmedEditor).toBe(1);
+
+    const staleNoHint = setup();
+    staleNoHint.h.presenceHint = false;
+    staleNoHint.boot.startBootPolicy(undefined);
+    staleNoHint.mirror.publish(projIdx('p1'));
+    expect(staleNoHint.h.warmedEditor).toBe(1);
+  });
+
   it('the returned cancel clears the fallback timer', async () => {
     const { h, boot } = setup();
     const cancel = boot.startBootPolicy(undefined);
@@ -267,6 +288,7 @@ describe('eventually-consistent on-disk delete (ADR-0165 §56)', () => {
       openLauncherOnStarters: () => {},
       closeLauncher: () => {},
       resetEditorInitialFiles: () => {},
+      warmEditorStack: () => {},
       restore: () => {},
       pickDeepLinkStarter: () => {},
     });

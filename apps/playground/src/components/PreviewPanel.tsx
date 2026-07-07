@@ -39,7 +39,10 @@ import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
 import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-panel-core.ts';
 
-type Phase = 'starting' | 'live' | 'error';
+// `unreachable` = the route never answered ok (dev server down); `error` = the
+// route responded but the in-page frame didn't commit. Distinct so the overlay
+// never claims a running server it hasn't observed.
+type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 
 // Which port the switcher should show given the live set + current selection
 // (ADR-0155). Empty set → keep current (manual-input fallback owns it). A port
@@ -268,6 +271,19 @@ export function PreviewPanel(props: {
             </p>
           </div>
         )}
+        {phase() === 'unreachable' && (
+          <div class="rf-preview__overlay">
+            <p class="rf-preview__overlay-title">Dev server didn't come up</p>
+            <p class="rf-preview__overlay-body">
+              The preview route never answered OK on port {port()}. Check the terminal for errors,
+              then{' '}
+              <button type="button" class="rf-linkbtn" onClick={reload}>
+                Reload
+              </button>
+              .
+            </p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -275,13 +291,15 @@ export function PreviewPanel(props: {
 
 function PhasePill(props: { phase: Accessor<Phase> }) {
   const label = (): string =>
-    props.phase() === 'live' ? 'LIVE' : props.phase() === 'error' ? 'OFF' : 'STARTING';
+    props.phase() === 'live' ? 'LIVE' : props.phase() === 'starting' ? 'STARTING' : 'OFF';
   const title = (): string =>
     props.phase() === 'live'
       ? 'Preview is live'
       : props.phase() === 'error'
         ? 'Preview unavailable — the frame did not commit'
-        : 'Waiting for the dev server…';
+        : props.phase() === 'unreachable'
+          ? 'Preview unavailable — the dev server never answered OK'
+          : 'Waiting for the dev server…';
   return (
     <span class="rf-preview__status" data-phase={props.phase()} title={title()}>
       <span class="rf-preview__status-dot" />

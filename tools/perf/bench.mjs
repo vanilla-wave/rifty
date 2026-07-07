@@ -72,7 +72,10 @@ const PRESET_BOOT_TIMEOUT = 120_000;
 // terminal. Only PAGE-observable markers qualify — the dev-server child's
 // other log lines ("importing vite…", "listening on internal port") never
 // reach the page terminal buffer. A missing marker records null, never a guess.
-const PRESET_STAGE_MARKERS = [['viteReadyMs', /\[vite\] dev server ready on port/]];
+// The rifty-authored `[vite] dev server ready on port` line died with the
+// generic dev-server lifecycle (PR #109); the marker is now REAL vite's own
+// ready banner — strictly more faithful (it is what Node prints too).
+const PRESET_STAGE_MARKERS = [['viteReadyMs', /VITE v[\d.]+\s+ready in \d+ ms/]];
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -180,13 +183,14 @@ async function runOnce(browser, measureInstall) {
     let installError = null;
     if (measureInstall) {
       // Install starts when the autorun types `npm install`; first Vite response
-      // is the dev-server-ready marker the real-vite bootstrap prints. A slow or
-      // failed install/vite-boot is recorded, NOT thrown — it must never nuke the
+      // is real vite's own ready banner (the rifty-authored ready line died with
+      // the generic dev-server lifecycle, PR #109). A slow or failed
+      // install/vite-boot is recorded, NOT thrown — it must never nuke the
       // already-measured cold-start sample.
       try {
         await waitForTerminal(page, /npm install/, INTERACTIVE_TIMEOUT);
         const tInstall = Date.now();
-        await waitForTerminal(page, /\[vite\] dev server ready on port/, INSTALL_TIMEOUT);
+        await waitForTerminal(page, /VITE v[\d.]+\s+ready in \d+ ms/, INSTALL_TIMEOUT);
         installMs = Date.now() - tInstall;
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
