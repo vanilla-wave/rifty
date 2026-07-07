@@ -7,6 +7,24 @@
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).
+### Fixed (vite CLI wrapper — deletion attempt reverted, finding recorded)
+
+- **manual-vite e2e fixed + the vite-CLI-HMR finding recorded (backlog
+  net/preview-websocket-bridge acceptance 4).** Two pre-existing bugs in the
+  opt-in `manual-vite-install` spec: unpinned `npm install vite` drifted onto
+  vite 8 (Rolldown WASI dev server can't boot in the foreground `.bin` child —
+  new backlog `playground/vite8-cli-nested-worker-boot`), and the manual
+  `npm run dev` served stock port 5173 while the spec hardcoded 5174. Pinned
+  vite 7 (the supported default) and gave the user script `vite --port 5174`
+  (a real user picks a port; also exercises the wrapper's untouched arg
+  passthrough). WHILE fixing it, re-checked the wrapper-deletion blocker now
+  that PR #115's recursive `fs.watch` landed: **stock chokidar does NOT drive
+  real-vite-CLI HMR over it** — deleting the `configureServer` server-handle
+  plugin + `rifty:vite-file-change` fan-out left the editor write with no HMR
+  update (line-118 30 s timeout); the wrapper+bridge restored, the same test
+  passes in 17.5 s. Deletion reverted; the plugin/bridge stay as the only
+  working editor-write→HMR path for the real vite CLI.
+
 ### Fixed (PR #112 review)
 
 - **Vite CLI mode classifier follows real cac/mri grammar — option-first forms

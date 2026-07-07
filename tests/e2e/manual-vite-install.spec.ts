@@ -37,9 +37,17 @@ test.describe('manual Vite install path', () => {
     await expect(pill).not.toHaveAttribute('data-state', 'running', { timeout: 60_000 });
 
     await openShellTerminal(page);
+    // Pin the SUPPORTED default (vite 7 / esbuild). Unpinned `npm install vite`
+    // drifts onto vite 8, whose Rolldown WASI dev server needs a nested-worker
+    // pool the foreground `.bin` child does not spawn (backlog
+    // playground/vite8-cli-nested-worker-boot). The dev script pins `--port
+    // 5174` (a real user picks a port): stock `vite` defaults to 5173, and the
+    // retired CLI wrapper no longer forces the port — the arg now passes
+    // through the untouched `.bin/vite` exec, so the flag is what lands the
+    // manual server on the port the preview iframe below asserts.
     await runTerminalLine(
       page,
-      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite"},"dependencies":{}}\\n\' > package.json && npm install vite',
+      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite --port 5174"},"dependencies":{}}\\n\' > package.json && npm install vite@^7.0.0',
     );
     await expectTerminalContains(page, 'npm: installing vite', 20_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 120_000);
