@@ -124,11 +124,15 @@ function medianStages(stageRuns) {
  * would quote an h2 number as h3:
  *   'auto' → always ok (evidence recorded, nothing pinned);
  *   'h3'   → every USED origin (requests > 0) must positively probe 'h3';
- *   'h2'   → every USED origin must positively probe non-QUIC ('h2'/'http/1.1')
- *            — 'unreachable'/'unknown' is NOT proof and refuses.
+ *   'h2'   → every USED origin must positively probe 'h2' — 'http/1.1' refuses
+ *            too (the artifact labels the leg h2; an h1 fallback would
+ *            misrepresent the h2-vs-h3 comparison), as does
+ *            'unreachable'/'unknown' (not proof).
  * Unused origins (requests 0 — e.g. the eddy host during the standard
- * baseline) are recorded, never enforced. A pin with no evidence at all is
- * refused (nothing was ever probed).
+ * baseline) are recorded, never enforced. The proof is PER RUN: a pinned run
+ * in which NO measured origin saw a request verifies nothing (probe-only) and
+ * refuses — one well-evidenced run must not vouch for another. A pin with no
+ * evidence at all is refused (nothing was ever probed).
  */
 export function verifyTransportPin(mode, runProtocols) {
   if (mode === 'auto') return { ok: true };
@@ -138,23 +142,22 @@ export function verifyTransportPin(mode, runProtocols) {
       note: `transport pinned to ${mode} but no protocol evidence was collected`,
     };
   }
-  const positive = mode === 'h3' ? ['h3'] : ['h2', 'http/1.1'];
+  const positive = mode === 'h3' ? 'h3' : 'h2';
   const violations = [];
-  let usedOrigins = 0;
-  for (const run of runProtocols) {
+  for (const [i, run] of runProtocols.entries()) {
+    let usedInRun = 0;
     for (const [origin, evidence] of Object.entries(run)) {
       if (evidence.requests === 0) continue;
-      usedOrigins += 1;
-      if (!positive.includes(evidence.protocol)) {
+      usedInRun += 1;
+      if (evidence.protocol !== positive) {
         violations.push(`${origin} observed ${evidence.protocol}`);
       }
     }
-  }
-  if (violations.length === 0 && usedOrigins === 0) {
-    return {
-      ok: false,
-      note: `transport pinned to ${mode} but no measured-window request ever hit a measured origin — the pin would verify vacuously (probe-only), refusing the pass`,
-    };
+    if (usedInRun === 0) {
+      violations.push(
+        `run ${i + 1} made no measured-window request to any measured origin — the pin would verify vacuously (probe-only)`,
+      );
+    }
   }
   if (violations.length === 0) return { ok: true };
   return {

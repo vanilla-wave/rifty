@@ -221,12 +221,15 @@ async function waitForPreviewLive(page, timeoutMs) {
       () => document.querySelector('.rf-preview__status[data-phase="live"]') !== null,
     );
     if (live) {
+      // Sample point = LIVE detection. The document verification below runs
+      // AFTER it (bounded) so the guard never inflates the measured number.
+      const liveAt = Date.now();
       const doc = await page.evaluate(async () => {
         const el = document.querySelector('[data-testid="preview"] iframe');
         const url = el?.src;
         if (!url) return { ok: false, note: 'no preview iframe src' };
         try {
-          const res = await fetch(url, { cache: 'no-store' });
+          const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
           return { ok: res.ok, note: `status ${res.status}` };
         } catch (err) {
           return { ok: false, note: String(err) };
@@ -237,7 +240,7 @@ async function waitForPreviewLive(page, timeoutMs) {
           `preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
         );
       }
-      return;
+      return liveAt;
     }
     await sleep(100);
   }
@@ -301,14 +304,20 @@ async function probeOriginProtocols(page) {
   try {
     await cdp.send('Network.enable');
     for (const origin of origins) {
-      await page.evaluate(
-        (u) =>
-          fetch(u, { cache: 'no-store' }).then(
-            () => undefined,
-            () => undefined,
-          ),
-        `${origin}/`,
-      );
+      // The probe itself is bounded (its own axis): the in-page fetch aborts
+      // at 3s and the evaluate is raced at 5s — a forced-QUIC blackhole origin
+      // records `unreachable` instead of hanging the harness.
+      await Promise.race([
+        page.evaluate(
+          (u) =>
+            fetch(u, { cache: 'no-store', signal: AbortSignal.timeout(3_000) }).then(
+              () => undefined,
+              () => undefined,
+            ),
+          `${origin}/`,
+        ),
+        sleep(5_000),
+      ]);
     }
     // responseReceived races the fetch settle — poll briefly for stragglers.
     const deadline = Date.now() + 3_000;
@@ -359,8 +368,8 @@ async function runOnce(browser, measureInstall) {
       try {
         await waitForTerminal(page, /npm install/, INTERACTIVE_TIMEOUT);
         const tInstall = Date.now();
-        await waitForPreviewLive(page, INSTALL_TIMEOUT);
-        installMs = Date.now() - tInstall;
+        const liveAt = await waitForPreviewLive(page, INSTALL_TIMEOUT);
+        installMs = liveAt - tInstall;
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       }
@@ -633,8 +642,17 @@ async function main() {
       const base = await runPhase(browser, 'standard', false, true);
       const eddy = await runPhase(browser, 'eddy', true, true);
       coldSamples = eddy.cold;
-      const { transport, runsEvidence } = summarizeTransport(base, eddy);
-      const pin = verifyTransportPin(TRANSPORT, runsEvidence);
+      const { transport } = summarizeTransport(base, eddy);
+      // Pin verification is PER PHASE: a well-evidenced standard pass must not
+      // vouch for an eddy pass that never proved a measured-origin request
+      // (merged counting once let exactly that through).
+      const pinBase = verifyTransportPin(TRANSPORT, base.transportRuns);
+      const pinEddy = verifyTransportPin(TRANSPORT, eddy.transportRuns);
+      const pin = !pinBase.ok
+        ? { ok: false, note: `standard pass: ${pinBase.note}` }
+        : !pinEddy.ok
+          ? { ok: false, note: `eddy pass: ${pinEddy.note}` }
+          : { ok: true };
       // Both passes must yield ALL `RUNS` samples — a median of N means N runs,
       // not "whatever survived". A partial set is recorded `unmeasured` (never a
       // launch-citable thin median), the item's Fidelity contract. A violated

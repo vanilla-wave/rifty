@@ -15,15 +15,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   no TCP fallback) and VERIFIES the pin with per-run evidence tied to the
   measured requests: measured-window request counts per origin + a post-window
   CDP protocol probe (`Network.responseReceived`; page-context probe shares the
-  context's socket pools; runs after the sample so it never primes the
-  measured connections). A USED origin lacking positive pinned-protocol proof
-  (wrong protocol / `unreachable` / `unknown`) refuses the pass (`unmeasured` +
-  note; evidence still recorded — merged `transport.originProtocols` + the
-  verbatim per-run `transport.runs` audit list) — never a lying median. `auto`
-  records evidence without pinning (end-of-run connection class, no
-  per-request claim). Smoke-proven live: h2 pass measured with both origins
-  evidenced `h2`; h3 pass refused loudly (`unreachable` — UDP 443 blocked at
-  the SG, the documented deploy gap).
+  context's socket pools; runs bounded and after the sample so it never primes
+  the measured connections or hangs the harness). Proof is EXACT, PER RUN and
+  PER PASS: a used origin lacking the pinned protocol (`http/1.1` under an h2
+  pin refuses too — the artifact labels the leg h2) or lacking any positive
+  proof (`unreachable` / `unknown`), and a pinned run or pass that made no
+  measured-origin request at all (vacuous probe-only evidence), each refuse
+  the pass (`unmeasured` + note; evidence still recorded — merged
+  `transport.originProtocols` + the verbatim per-run `transport.runs` audit
+  list) — never a lying median. `auto` records evidence without pinning
+  (end-of-run connection class, no per-request claim). Smoke-proven live: h2
+  pass measured with both origins evidenced `h2` (standard run: 50 registry
+  requests; eddy run: the single bundle POST); h3 pass refused loudly
+  (`unreachable` — UDP 443 blocked at the SG, the documented deploy gap).
 
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new

@@ -292,8 +292,10 @@ describe('verifyTransportPin', () => {
     expect(u.ok).toBe(false);
   });
 
-  it('h2 pin: positive h1/h2 mixes are ok (the pin only forbids QUIC)', () => {
-    expect(verifyTransportPin('h2', [run(used('h2'), used('http/1.1'))]).ok).toBe(true);
+  it('h2 pin: http/1.1 refuses — the artifact would label an h1 run as the h2 leg', () => {
+    const v = verifyTransportPin('h2', [run(used('h2'), used('http/1.1'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/http\/1\.1/);
   });
 
   it('a pin with no evidence at all is refused (no run ever probed)', () => {
@@ -342,14 +344,29 @@ describe('buildArtifact — transport evidence', () => {
   });
 });
 
-describe('verifyTransportPin — vacuous-proof guard', () => {
+describe('verifyTransportPin — vacuous-proof guard (per run)', () => {
+  const zero = {
+    'https://eddy.example': { protocol: 'h2', requests: 0 },
+    'https://registry.example': { protocol: 'h2', requests: 0 },
+  };
+  const usedRun = {
+    'https://eddy.example': { protocol: 'h2', requests: 0 },
+    'https://registry.example': { protocol: 'h2', requests: 12 },
+  };
+
   it('refuses a pinned pass whose runs never hit any measured origin (no request proof at all)', () => {
-    const zero = {
-      'https://eddy.example': { protocol: 'h2', requests: 0 },
-      'https://registry.example': { protocol: 'h2', requests: 0 },
-    };
     const v = verifyTransportPin('h2', [zero, zero]);
     expect(v.ok).toBe(false);
     expect(v.note).toMatch(/no measured-window request/);
+  });
+
+  it('refuses when ANY single run has no measured-origin request (per-run proof, not merged)', () => {
+    const v = verifyTransportPin('h2', [usedRun, zero]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/no measured-window request/);
+  });
+
+  it('accepts when every run proves at least one used origin', () => {
+    expect(verifyTransportPin('h2', [usedRun, usedRun]).ok).toBe(true);
   });
 });

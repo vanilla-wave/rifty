@@ -55,9 +55,13 @@ after the 1.70x measurement.
   flags are hard guarantees (`--origin-to-force-quic-on` admits no TCP,
   `--disable-quic` no QUIC), so used-origin requests rode the pinned class and
   the probe supplies the POSITIVE protocol proof; a used origin lacking that
-  proof (wrong protocol, `unreachable`, `unknown`) REFUSES the pass loudly (a
-  `note`, no median). Under `auto` the probe is recorded as end-of-run
-  connection-class evidence, no per-request claim. Artifact carries the merged
+  EXACT proof (wrong protocol — `http/1.1` under an h2 pin included, the
+  artifact labels the leg h2 — or `unreachable`/`unknown`) REFUSES the pass
+  loudly (a `note`, no median). Proof is PER RUN and PER PASS (standard and
+  eddy verify separately — one well-evidenced pass never vouches for the
+  other; a pinned run with zero measured-origin requests is vacuous and
+  refuses). Under `auto` the probe is recorded as end-of-run connection-class
+  evidence, no per-request claim. Artifact carries the merged
   `originProtocols` + the verbatim per-run audit list.
 - With UDP 443 live end-to-end: `perf/benchmarks.json` carries
   {h2, h3, auto} × {standard, eddy} medians + protocol evidence; the headline
