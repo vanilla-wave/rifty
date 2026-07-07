@@ -147,6 +147,37 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
+  it('cancels the non-OK resolver body on fallback (an unread body must not hold its stream open)', async () => {
+    // 5xx with a body the client never consumes: the attempt pipeline moves on,
+    // and the abandoned body must be CANCELLED (h2 stream hygiene — an unread
+    // body holds its stream/connection open; the 404 GET-miss path hits this on
+    // every unpinned install). Observable as the response closing server-side
+    // while the handler still holds it open.
+    let responseClosed = false;
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(503, { 'content-type': 'text/plain' });
+      res.write('upstream down, verbosely: ');
+      res.on('close', () => {
+        responseClosed = true;
+      });
+      // never res.end() — only a client-side cancel can close this response.
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, DEPS);
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+      expect(result.source).toBe('standard');
+      const deadline = Date.now() + 2_000;
+      while (!responseClosed && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(responseClosed).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
   it('falls back (NOT a silent wrong install) when a bundle tarball fails integrity', async () => {
     // Build a real bundle, then tamper one tarball's bytes while leaving the
     // manifest integrity intact → the client's non-disableable byte check trips.

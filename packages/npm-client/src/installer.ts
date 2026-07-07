@@ -30,7 +30,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
-import { fetchHeadersBounded } from './bounded-fetch.ts';
+import { discardBody, fetchHeadersBounded } from './bounded-fetch.ts';
 import { closureHashOf } from './closure-hash.ts';
 import {
   DEFAULT_BUNDLE_STALL_MS,
@@ -809,7 +809,12 @@ async function consumeEddyResponse(
     }
     return `resolver declined (${decline?.feature ?? decline?.error ?? 'unsupported'})`;
   }
-  if (!response.ok) return `resolver returned HTTP ${response.status}`;
+  if (!response.ok) {
+    // Never-consumed body (the attempt pipeline moves on) — hits every
+    // unpinned 404 GET miss; see discardBody.
+    discardBody(response);
+    return `resolver returned HTTP ${response.status}`;
+  }
 
   // Bounded stream (round 6): a stall/runaway on the DIRECT GET/POST paths
   // must fail the attempt (→ fallback), exactly like the prefetch's bounded

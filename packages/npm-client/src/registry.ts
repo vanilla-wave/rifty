@@ -5,7 +5,12 @@
  * {@link getRegistryBaseUrl} is the single factory every consumer goes through.
  */
 
-import { DEFAULT_FETCH_STALL_MS, drainBodyBounded, fetchHeadersBounded } from './bounded-fetch.ts';
+import {
+  DEFAULT_FETCH_STALL_MS,
+  discardBody,
+  drainBodyBounded,
+  fetchHeadersBounded,
+} from './bounded-fetch.ts';
 
 export interface Packument {
   name: string;
@@ -167,11 +172,9 @@ export class RegistryClient {
             label,
           });
         } else {
-          // A non-OK body is never consumed (callers read only the status) —
-          // cancel it NOW: an unread body holds its h2 stream open, and the
-          // retry ladder would pile such streams onto the one coalesced
-          // connection (the measured stalled-stream class).
-          void response.body?.cancel().catch(() => {});
+          // Never-consumed body (callers read only the status) — cancelled
+          // NOW, or the retry ladder piles open streams; see discardBody.
+          discardBody(response);
         }
         lastNetworkError = undefined;
       } catch (err) {

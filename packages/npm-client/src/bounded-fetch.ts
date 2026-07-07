@@ -28,6 +28,17 @@ export interface BodyBounds {
 }
 
 /**
+ * Discard a response body the caller will never consume (non-OK statuses read
+ * for `.status` only). An unread body holds its h2 stream open — piled across
+ * a retry ladder or the eddy attempt pipeline they stall the one coalesced
+ * connection per origin (the measured stalled-stream class). Fire-and-forget;
+ * a body-less or already-consumed response is a no-op.
+ */
+export function discardBody(response: Response): void {
+  void response.body?.cancel().catch(() => {});
+}
+
+/**
  * Bound the HEADER phase of one fetch attempt: body bounds only start once a
  * body exists — a fetch whose connection/headers hang would otherwise park
  * the caller before any body bound could run. Rejects (and aborts the fetch)
