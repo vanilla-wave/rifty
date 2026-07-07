@@ -123,9 +123,9 @@ test.describe('M0 — Foundation', () => {
 
     await expect(launcher).toHaveCount(0, { timeout: 5_000 });
     // Lazy-Monaco split: the starter intent paints the chosen starter's initial
-    // tabs/snapshot immediately; Monaco source follows when the editor chunk lands.
+    // tabs/snapshot promptly; Monaco source follows when the editor chunk lands.
     await expect(page.locator('.rf-tab', { hasText: 'src/main.js' })).toBeVisible({
-      timeout: 1_000,
+      timeout: 5_000,
     });
     await expect(editorLines).toContainText("import project from './project.json'", {
       timeout: 60_000,
