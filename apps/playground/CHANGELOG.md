@@ -2,7 +2,20 @@
 
 ## [Unreleased]
 
-### Fixed (PR #113 follow-up)
+### Fixed (PR #112 review)
+
+- **Vite CLI mode classifier follows real cac/mri grammar — option-first forms
+  no longer misroute.** `viteCliMode` took the first non-dash token as the
+  subcommand, so `vite --config x preview` / `vite --mode production preview`
+  classified as dev and got the dev wrapper `--config` +
+  `RIFTY_VITE_CLI_MODE=dev` injected into a preview run. One tokenizer
+  (per-command boolean tables copied from vite 7.3.6 `dist/node/cli.js`,
+  probed against the real binary) now backs `viteCliMode`, user-config
+  extraction and wrapper `--config` splicing; non-boolean flags consume the
+  next non-dash token, `--` ends matching. Note the probe-proven inverse
+  cases: `vite --cors preview` really IS dev (cors is dev-only, preview's
+  grammar eats the token) — a "skip every flag value" fix would have broken
+  those.
 
 - **SCM owner-currency check consolidated to one chokepoint; closes the
   same-root/same-port respawn hole.** The "is `owner` still the live owner"
@@ -114,7 +127,8 @@
   follows any port), or `server.host`; the vite-template auto-boot line now keeps
   only `--port <template-port>`, and the preview-mode `--host preview.local` CLI arg
   is gone too. Proofs: project-spec unit pins no auto `--host`/`--strictPort`,
-  manual-vite stops the preset server before bare `npm run dev`, vite7-build-preview,
+  manual-vite (opt-in lane, `RIFTY_E2E_MANUAL_VITE=1`) stops the preset server
+  before bare `npm run dev`, vite7-build-preview,
   generic-lifecycle (asserts `host=localhost:<port>` reaches the guest). TWO forces
   survive with recorded re-tests: `optimizeDeps.noDiscovery` (dropping it: LIVE
   lights but the optimizer breaks page serving — the WASI-bridge esbuild loud-refuses
