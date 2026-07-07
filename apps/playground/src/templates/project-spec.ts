@@ -22,6 +22,8 @@
  *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
  *  worker builds them from {@link ViteProjectSpec.hmr} after resolving the spec. */
 export interface ServerSpec {
+  // TODO(backlog: playground/vite-curated-boot-residual-forces): remove retired
+  // direct-boot Vite knobs from ServerSpec unless a live direct path proves them.
   readonly appType: string;
   readonly strictPort: boolean;
   readonly optimizeDepsDisabled: boolean;
@@ -183,6 +185,8 @@ export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
  * the project.
  */
 export function terminalDevLine(spec: ProjectSpec, root: string): string {
+  // TODO(backlog: playground/vite-strictport-fallback-proof): browser-prove that
+  // Vite's selected fallback port becomes rifty's LIVE/preview port.
   if (spec.runtime === 'vite') return `vite --port ${spec.defaultPort}`;
   return `cd ${root} && npm run dev`;
 }

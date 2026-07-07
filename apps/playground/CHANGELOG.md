@@ -146,9 +146,10 @@
 
 ### Changed
 
-- **Vite wrapper forces retired to two (backlog net/preview-websocket-bridge,
-  acceptance 4 partial).** With the preview path now stamping `Host: localhost:<port>`
-  (`@riftydev/io`, ADR-0189 D3), the dev config wrapper no longer forces
+- **Shell/.bin Vite wrapper forces retired to two (backlog
+  net/preview-websocket-bridge, acceptance 4 partial).** With the preview path now
+  stamping `Host: localhost:<port>` (`@riftydev/io`, ADR-0189 D3), the live
+  shell/.bin dev config wrapper no longer forces
   `base './'` (the SW routes root-relative requests by port context, ADR-0097),
   `appType` (vite's own default), `server.strictPort` (the port-derived lifecycle
   follows any port), or `server.host`; the vite-template auto-boot line now keeps
@@ -161,7 +162,10 @@
   lights but the optimizer breaks page serving — the WASI-bridge esbuild loud-refuses
   entry-point contexts; needs real esbuild-wasm) and `server.allowedHosts` (dispatch
   HANGS without it even with the localhost Host — untraced vite host-middleware
-  stall; also kept in the vite-preview cli patch).
+  stall; also kept in the vite-preview cli patch). The claim is path-scoped:
+  strictPort fallback proof and legacy direct Vite boot cleanup are recorded as
+  `playground/vite-strictport-fallback-proof` and
+  `playground/vite-curated-boot-residual-forces`.
 - **Epic playground-testable-core CLOSED: source-grep asserts 888 → 141, every
   residual with a recorded why (`tools/checks/source-grep-ratchet.mjs`).**
   Remaining App.tsx flows extracted to headless cores with mutation-RED-checked

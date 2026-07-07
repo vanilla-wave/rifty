@@ -255,6 +255,9 @@ export async function bootDevServer(opts: {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
     log(`[real-vite/worker] starting dev server on port ${port}…\n`);
+    // TODO(backlog: playground/vite-curated-boot-residual-forces): delete or
+    // narrow this direct Vite boot config; shell/.bin Vite no longer carries
+    // these retired wrapper forces.
     const server = await viteNs.createServer({
       root,
       base: './',
