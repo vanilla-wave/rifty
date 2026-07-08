@@ -5,6 +5,7 @@ title: Publish + deploy @riftydev/eddy (npm + Docker)
 created: 2026-06-28
 why: eddy must be self-hostable to keep the speedup a property of the OPEN stack (the wedge vs closed competitors) — a published npm package + a Docker image deployed alongside the Caddy proxy, with self-host docs
 user_story: As a self-hoster I want to run my own eddy next to my registry proxy with one npm/Docker command, but today there is no package, image, or deploy recipe.
+epic: fast-install-resolver
 sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/adr/npm-client/0163-yandex-cloud-streaming-npm-registry-proxy.md]
 code: [services/eddy/package.json, services/eddy/tsup.config.ts, deploy/yandex/eddy/docker-compose.yml, tools/checks/arch-rules.cjs]
 ---

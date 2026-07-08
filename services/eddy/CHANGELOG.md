@@ -307,9 +307,8 @@
   commented placeholders + the secret-injection workflow (local copy →
   `--metadata-from-file`; never committed), and `hosting-eddy.md` states the
   live deploy is memory-backed until that step. Both composes also publish
-  `443/udp` for HTTP/3, and the docs/backlog now say plainly: the reused
-  security group is TCP-only, so h3 is NOT reachable until an operator adds a
-  `443/udp` ingress rule — no h3 number is quotable before then.
+  `443/udp` for HTTP/3; h3 speed claims still require a committed browser
+  transport artifact proving the measured origins actually negotiated h3.
 
 ### Added
 

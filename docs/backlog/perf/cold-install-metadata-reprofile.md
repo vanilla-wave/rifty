@@ -16,7 +16,7 @@ The 2026-06-24 profile (~98% serial packument waterfall) predates ADR-0175 (clie
 
 Clean boundary vs the `pnpm bench` harness (delivered — the launch headline numbers): this item reuses that harness for a per-axis decomposition that exists only to gate the next lever. Output is a measurement + a recorded decision, not a feature.
 
-FINDING (adversarial measurement 2026-06-28, faithful browser transport): BOTH the metadata waterfall (~2s) AND the tarball-fetch phase (~1.7-2.2s) are latency-bound — abbreviated packuments cut bytes ~2.5x but ZERO wall-time, and raising the fetch semaphore is inert (one coalesced h2 connection per origin). The structural cold-install win is therefore the delivered eddy resolver (ADR-0182), not the cheap levers in this epic. The 2026-07-07 transport measurement recorded the production headline as `auto` h2 (standard 5180ms → eddy 2761ms = 1.88x); direct-origin forced h3 exists but is not the production CDN path.
+FINDING (adversarial measurement 2026-06-28, faithful browser transport): BOTH the metadata waterfall (~2s) AND the tarball-fetch phase (~1.7-2.2s) are latency-bound — abbreviated packuments cut bytes ~2.5x but ZERO wall-time, and raising the fetch semaphore is inert (one coalesced h2 connection per origin). The structural cold-install win is therefore the delivered eddy resolver (ADR-0182), not the cheap levers in this epic. The 2026-07-07 committed artifact records the production headline as `auto` h2 (standard 5180ms → eddy 2761ms = 1.88x); full h2/h3 validation remains open in `perf/eddy-http3-cold-validation`.
 
 ## Open forks (resolve to reach ready)
 

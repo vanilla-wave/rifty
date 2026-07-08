@@ -10,28 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Eddy S3 durable store handles closure hashes containing `/`.** Yandex
   Object Storage rejects SigV4 PUTs whose canonical URI signs `%2F`; the
-  store now signs the raw-slash object key while leaving `+`/`=` encoded, so
-  standard base64 closure hashes no longer degrade to `x-eddy-store-durable: 0`.
+  store now signs the raw-slash object key while leaving `+`/`=` encoded, and
+  the regression proves a client-shaped public `%2F` GET resolves to that same
+  object, so standard base64 closure hashes no longer degrade to
+  `x-eddy-store-durable: 0`.
 - bench: the `viteReadyMs` stage marker follows real vite's own ready banner
   (`VITE vX.Y ready in N ms`) — the rifty-authored `[vite] dev server ready on
   port` line died with the generic dev-server lifecycle (PR #109), so stage
   attribution silently recorded null since then.
 
-### Added
-
-- **Bench transport matrix (`pnpm bench --transport matrix`,
-  perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
 ### Changed
 
 - **Eddy launch headline re-measured on the real production transport.** With
   `443/udp` open on the shared security group, Chromium `auto` still negotiated
   `h2` for both production origins (`registry.rifty.dev` via the Yandex CDN and
   `eddy.rifty.dev`). The committed benchmark is now the production `auto`
-  median-of-5: standard **5180ms** → eddy **2761ms** = **1.88x**. Forced `h2`
-  measured **2.23x** (6107ms → 2741ms). Forced `h3` is available on the direct
-  origins (`registry-origin.rifty.dev` + `eddy.rifty.dev`) and measured
-  **2.77x** (8439ms → 3048ms), but the CDN hostname does not accept forced
-  QUIC, so the quotable user headline stays the `auto` production run.
+  median-of-5: standard **5180ms** → eddy **2761ms** = **1.88x**. The committed
+  artifact does not carry the full h2/h3 matrix evidence, so the HTTP/3
+  validation item remains open and the quotable user headline is only the
+  production `auto` run.
 - **eddy.rifty.dev now resolves directly against npmjs.** The on-VM side-
   container A/B for express+eslint cold resolves measured the former CDN proxy
   upstream at **8.668s** median (19.269s, 8.668s, 5.265s) and direct
@@ -51,8 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Bench transport matrix (`pnpm bench --transport auto|h2|h3`).** The harness
-  PINS Chromium's transport for
+- **Bench transport matrix (`pnpm bench --transport matrix`,
+  perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
   the measured remote origins (h2 = `--disable-quic`; h3 =
   `--origin-to-force-quic-on` on the registry + eddy + optional bundle hosts —
   no TCP fallback) and VERIFIES the pin with per-run evidence tied to the
@@ -71,15 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   transport real users get), while `h2` and `h3` sit beside it for the
   controlled comparison. Single-mode `--transport auto|h2|h3` stays available
   for focused diagnosis. `auto` records evidence without pinning (end-of-run
-  connection class, no per-request claim). Smoke-proven live: h2 standard
-  measured with registry evidence (`50` requests over `h2`); eddy phases kept
-  their resolver protocol evidence but refused the median when the terminal did
-  not prove `via eddy (fast)`; h3 refused loudly on the registry leg
-  (`unreachable` — UDP 443 blocked at the SG, the documented deploy gap).
-  the pass (`unmeasured` + note; evidence still recorded — merged
-  `transport.originProtocols` + the verbatim per-run `transport.runs` audit
-  list) — never a lying median. `auto` records evidence without pinning
-  (end-of-run connection class, no per-request claim).
+  connection class, no per-request claim).
 
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new

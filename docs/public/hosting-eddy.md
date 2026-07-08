@@ -8,9 +8,9 @@ network — structurally ~100 cold round-trips collapse to 1 POST. Measured on a
 real browser over the production `auto` transport: **1.88x** (2026-07-07 run:
 standard 5180ms → eddy 2761ms; both production origins negotiated h2;
 `perf/benchmarks.json` tracks the current figure, which drifts with the standard
-baseline's network variance). Forced h3 works on the direct origin hosts, but
-`registry.rifty.dev` is CDN-fronted and the CDN hostname does not accept forced
-QUIC, so the launch number is the production `auto` run. (The older "~6x" is a
+baseline's network variance). The committed artifact does not carry the full
+h2/h3 matrix, so h3 remains unquoted until
+`docs/backlog/perf/eddy-http3-cold-validation.md` closes. (The older "~6x" is a
 Node/sandbox model, not a browser number — don't quote it at launch.)
 It is **additive and opt-in** — standard install is untouched and is the
 always-on fallback.
@@ -248,10 +248,9 @@ first.
    `eddy.rifty.dev` AND `eddy-origin.rifty.dev` (the COI Caddy serves both — the
    `-origin` host is the CDN origin, needed once you add the CDN tier below).
    **HTTP/3:** the group must include `443/udp` and the compose must publish
-   `443:443/udp`; both are live for `eddy.rifty.dev`. The registry proxy origin
-   can negotiate h3 too, but the production `registry.rifty.dev` CDN hostname did
-   not accept forced QUIC in the 2026-07-07 browser probe, so production `auto`
-   stayed h2.
+   `443:443/udp`; both are live for `eddy.rifty.dev`. The production launch
+   headline still comes only from the committed `auto` artifact; h2/h3 matrix
+   claims stay owned by `docs/backlog/perf/eddy-http3-cold-validation.md`.
 
 4. A COI compose starts from `deploy/yandex/eddy/docker-compose.yml`, replaces
    eddy's `build:` with `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed

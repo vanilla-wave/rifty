@@ -100,6 +100,14 @@ function s3PathHash(closureHash: string): string {
   return encodeURIComponent(closureHash).replaceAll('%2F', '/');
 }
 
+function publicClientBundlePath(closureHash: string): string {
+  return `/eddy-bundles/bundle/${encodeURIComponent(closureHash)}`;
+}
+
+function publicReadKey(path: string): string {
+  return path.replaceAll('%2F', '/').replaceAll('%2f', '/');
+}
+
 // The ONLY shape a strict get() accepts as a HIT: a REAL bundle whose manifest
 // hash === closureHashOf(lockfile) and whose tarball integrities match. Built
 // once from the vendored fixture registry (it has tarballs → mutable for the
@@ -160,13 +168,14 @@ function startFakeS3(): Promise<FakeS3> {
       });
       return;
     }
-    const body = objects.get(path);
+    const key = publicReadKey(path);
+    const body = objects.get(path) ?? objects.get(key);
     if (!body) {
       res.writeHead(404, { 'content-type': 'application/xml' });
       res.end(req.method === 'HEAD' ? undefined : '<Error><Code>NoSuchKey</Code></Error>');
       return;
     }
-    const cc = cacheControls.get(path);
+    const cc = cacheControls.get(path) ?? cacheControls.get(key);
     res.writeHead(200, {
       'content-type': 'application/x-tar',
       'content-length': body.length,
@@ -523,6 +532,21 @@ describe('S3BundleStore', () => {
     expect(fake.requests.map((r) => `${r.method} ${r.path}`)).toContain(`PUT ${expectedPath}`);
     await store.get(URL_SPECIALS_HASH);
     expect(fake.requests.at(-1)).toMatchObject({ method: 'GET', path: expectedPath });
+  });
+
+  it('serves a client-shaped %2F public GET from the raw-slash object key', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    await store.put(URL_SPECIALS_HASH, { bytes: syntheticBundle, manifest: syntheticManifest });
+
+    const res = await fetch(`${fake.url}${publicClientBundlePath(URL_SPECIALS_HASH)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(fake.requests.at(-1)).toMatchObject({
+      method: 'GET',
+      path: '/eddy-bundles/bundle/sha256-ab%2Fcd%2Bef%3D',
+    });
+    expect([...(new Uint8Array(await res.arrayBuffer()))]).toEqual([...syntheticBundle]);
   });
 
   it('signs the PUT (SigV4 authorization + payload hash headers); GET/HEAD stay unsigned public reads', async () => {
