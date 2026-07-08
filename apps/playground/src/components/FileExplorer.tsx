@@ -622,6 +622,7 @@ export function FileExplorer(props: {
         disabled={busy()}
         aria-label="File name"
         onInput={(e) => setEditName(e.currentTarget.value)}
+        onBlur={() => void submitEdit()}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();

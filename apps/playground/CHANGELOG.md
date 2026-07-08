@@ -34,6 +34,9 @@
 
 ### Fixed
 
+- File Explorer inline rename commits on input blur, so the filename field
+  leaves edit mode when focus moves away. Browser-unit coverage mounts the real
+  Solid component and verifies the DOM lifecycle.
 - Queued editor opens made while the lazy EditorHost chunk is loading are scoped
   to the current project/editor context, so a project or starter switch cannot
   replay an old click into the newly registered editor.
