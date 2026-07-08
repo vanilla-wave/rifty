@@ -1,42 +1,121 @@
 ---
 area: perf
-status: draft
+status: ready
 title: Validate the eddy launch speed number on a real browser over HTTP/3 (warm h2 = 1.70x; h3 unmeasured)
 created: 2026-06-28
 why: warm h2 is measured at 1.70x (the launch number); the historical ~6x is a Node/sandbox model that assumed the bundled single stream beats the per-origin single-h2 tarball phase. HTTP/3 (advertised via alt-svc, untested) could lift the single-connection ceiling and shift the measured number — it must be confirmed on the real transport before any h3 figure is quoted.
 user_story: As the maker quoting an eddy speed number at launch I want it measured on a real Chromium tab over the actual transport (h2/h3); warm h2 is 1.70x today and the h3 path is unmeasured (the "~6x" is a Node/sandbox model, never the launch quote).
 epic: fast-install-resolver
 blocked_by: []
-sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/backlog/perf/reference/speed-benchmarks.md]
+sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/backlog/perf/reference/speed-benchmarks.md, docs/public/hosting-eddy.md]
+code: [tools/perf/bench.mjs, deploy/yandex/eddy/docker-compose.coi.yml]
 ---
 
 ## Context
 
-Adversarial measurement established the structure (standard ~4s; eddy ~0.6-0.7s; ~6x) but on a Node/sandbox transport. The faithful browser path is ONE coalesced h2 connection per origin, where the tarball phase is single-connection-bound. The open risk (ADR-0182 "Open validation"): a real browser uses HTTP/3/QUIC (alt-svc advertised on the prod CDN, untestable from Node/curl here) which could raise the single-connection ceiling and shrink standard-path A's gap to eddy's bundle — narrowing the ~6x.
+Warm-h2 is measured and quotable: **1.70x** (standard 4284ms → eddy 2517ms,
+`real-vite` preset, median-of-5, `perf/benchmarks.json`; the ~6x was a
+Node/sandbox model — never quote it). The engine, client, `pnpm bench`
+harness, and a deployed eddy all exist. What remains is the ONE open risk from
+ADR-0182 "Open validation": the 1.70x rode whatever transport Chromium
+negotiated (h2); HTTP/3 could lift the standard path's single-h2-connection
+tarball ceiling and narrow eddy's gap — or not. This item closes the epic's
+"Done when" (a real-browser measurement over the actual transport confirms
+the headline).
 
-**Engine + client + harness + a deployed eddy now ALL exist** — the two original blockers (no harness, no deployed eddy) are resolved and the real-browser number is measured (see below). ONE reason keeps this open, and it is outside the current e2e reach:
+Two former blockers, both resolved: (a) "Playwright can't pin the transport"
+— Chromium CAN be pinned per-origin via launch args (see Decisions); the
+transport matrix below is DELIVERED (2026-07-07): `pnpm bench --transport
+matrix` runs auto+h2+h3 into one phase-labelled artifact, pins + verifies via
+CDP evidence, smoke-proven live (h2 standard measured with registry `h2`
+evidence; eddy phases keep resolver protocol evidence but refuse the median
+without `via eddy (fast)` proof; h3 registry leg refused loudly pre-SG-rule).
+(b) h3 was unreachable on the live deploy — compose already publishes
+`443/udp`; only the reused `rifty-registry-proxy` security group lacks a
+`443/udp` ingress rule (operator, confirm-first, `hosting-eddy.md` §Deploy
+step 3). Remaining work = the SG rule + the measurement runs + the recorded
+decision.
 
-- **No h3 control.** Chromium picks h2 vs h3 itself (alt-svc / connection racing); Playwright exposes no per-request transport pin, so "measure over h2 AND h3" is not forceable from the current e2e infra. The measured 1.70x is whatever Chromium negotiated (likely h2); the h3 delta — the actual open risk in ADR-0182 "Open validation" — is still unmeasured.
+Folded (2026-07-01, ex `perf/install-transport-tuning`): fetch-semaphore
+raise DROPPED (inert — one coalesced connection per origin); preconnect
+SHIPPED (ADR-0195). Re-baseline with `pnpm bench` before attributing any
+delta to h3: ADR-0195 + ADR-0187 each cut the eddy path's non-transport share
+after the 1.70x measurement.
 
-Until the h3 delta is measured, the h3 leg stays explicitly **unvalidated** (per ADR-0182 "Open validation"); the warm-h2 1.70x below IS measured and quotable.
+## Acceptance
 
-## Measured (2026-07-01) — 2 of 3 blockers cleared
+- `tools/perf/bench.mjs` gains a transport matrix mode
+  (`--transport matrix`; single `auto|h2|h3` modes remain diagnostic): per pass,
+  Chromium is PINNED to a transport via launch args — h3 pass:
+  `--enable-quic --origin-to-force-quic-on=<eddy-host>:443,<registry-host>:443`
+  (both origins: the standard baseline's tarball phase is exactly the leg h3
+  could lift); h2 pass: `--disable-quic`; plus the default `auto` pass (what a
+  real user gets).
+- Pin is VERIFIED, not trusted — per-run evidence of the requests that
+  produced the sample: measured-window REQUEST COUNTS per origin (which
+  origins the sample actually rode) + a post-window CDP-probed negotiated
+  protocol (`Network.responseReceived` → `response.protocol`). Under a pin the
+  flags are hard guarantees (`--origin-to-force-quic-on` admits no TCP,
+  `--disable-quic` no QUIC), so used-origin requests rode the pinned class and
+  the probe supplies the POSITIVE protocol proof; a used origin lacking that
+  EXACT proof (wrong protocol — `http/1.1` under an h2 pin included, the
+  artifact labels the leg h2 — or `unreachable`/`unknown`) REFUSES the pass
+  loudly (a `note`, no median). Proof is PER RUN and PER PASS (standard and
+  eddy verify separately — one well-evidenced pass never vouches for the
+  other; a pinned run with zero measured-origin requests is vacuous and
+  refuses). Under `auto` the probe is recorded as end-of-run connection-class
+  evidence, no per-request claim. Artifact carries phase-local evidence under
+  `transportMatrix.<mode>.<standard|eddy>.transport` — each phase has its own
+  `originProtocols` summary + verbatim per-run audit list, so standard and eddy
+  proof never rely on implicit array ordering.
+- With UDP 443 live end-to-end: `perf/benchmarks.json` carries
+  {h2, h3, auto} × {standard, eddy} medians + protocol evidence; the headline
+  is re-derived from the AUTO pass (the transport real users actually get).
+- Until the SG rule lands, the h3/auto-QUIC passes fail loudly at the
+  protocol-evidence gate (that failure exercises the verification mechanics);
+  no h3 number is quoted.
+- Decision rule applied + recorded (see Decisions), epic Outcome updated with
+  the transport-qualified number, this item deleted → epic's "Done when" met.
 
-Blockers 1 (harness) + 2 (deployed eddy) are now RESOLVED: `pnpm bench` measures a standard-baseline + eddy pass with a nested `speedupX` (`perf/benchmarks.json`), pointed at the live `registry.rifty.dev` + `eddy.rifty.dev`.
+## Fault matrix
 
-- **First real-browser number** (`real-vite` preset, warm, median-of-5, one discarded warm-up): standard **4284ms** → eddy **2517ms** = **1.70x**. eddy is deterministic (2266–2518, one bundle POST); the variance is all in the standard baseline (packument+tarball waterfall). Structural: **~100 network round-trips → 1 POST**.
-- **The ~6x does NOT hold on warm h2** — it was a Node/sandbox model. The metric shares the ~vite-boot (~0.5s, in both), and the standard baseline rides a WARM single-h2 proxy connection (not the 4s cold path the ~6x assumed). Install-only (directional): eddy ~1.3s vs standard ~3.8–7.4s. **Launch headline: quote 1.70x (or the structural 100→1 round-trips), never ~6x.**
-- **eddy was BROKEN, not just slow, before this** — the client's lockfile fast path did not replay shadow/user overrides, so eddy's pre-seeded lockfile threw `EBROKENLOCK` on every override package (`vite` → esbuild). Fixed in `@riftydev/npm-client` (`createLockfileSource` override-aware) with a regression test; without it the eddy pass here times out. See memory / `installer.ts`.
+| Fault | Expected outcome | Proof |
+|---|---|---|
+| Forced h3 cannot reach an origin (UDP 443 blocked / no QUIC) | Pass records `unmeasured` with protocol evidence (`unreachable`), no h3 median quoted | `pnpm bench --transport h3` artifact note + `transport.runs` |
+| Browser negotiates a protocol other than the pinned mode on any used origin | Pass refused; artifact keeps evidence but no median | `verifyTransportPin` unit + per-run CDP protocol |
+| Pinned run makes zero measured-origin requests | Pass refused as vacuous proof | `verifyTransportPin` unit |
+| Eddy pass falls back to standard install while resolver URL is configured | Eddy median refused; no `speedupX` published | terminal proof `via eddy (fast)` required |
 
-**Still open (blocker 3 only): h3 vs h2 control.** Playwright can't pin the transport; the 1.70x above is whatever Chromium negotiated to `*.rifty.dev` (likely h2). Measuring the h3 delta + the decision rule below remain.
+## Parity cases
 
-**Folded here (2026-07-01, ex `perf/install-transport-tuning`):** of that item's three levers, the fetch-semaphore raise was DROPPED (measured inert — one coalesced h2 connection per origin) and `<link rel=preconnect>` SHIPPED (ADR-0195: playground boot preconnects the registry + resolver origins, env-config only). h3 — the only remaining transport lever — lives HERE. Re-baseline with `pnpm bench` before attributing any delta to h3: ADR-0195 (preflight-free POST, pinned GET-by-hash, owner-boot prefetch, streaming unpack) and ADR-0187 (non-blocking stamp) each cut the eddy path's non-transport share after the 1.70x measurement.
+N/A — measurement tooling + operator step; no Node-observable behavior. The
+protocol-evidence gate is the harness's own honesty check (asserted by
+running the matrix, not by unit parity).
 
-**Deploy prerequisite (2026-07-04): h3 is NOT reachable on the live deploy.** Caddy would serve it natively, but QUIC needs UDP 443 end-to-end: the compose now publishes `443/udp` (lands with the next redeploy), while the reused `rifty-registry-proxy` security group is still TCP-only — an operator must add an ingress `443/udp` rule (confirm-first, shared infra) before any h3 measurement means anything. Until both land, Chromium falls back to h2 and every h3 number is void (`hosting-eddy.md` §Deploy step 3).
+## Out of scope
 
-## Open forks (resolve to reach ready)
+- Serving h3 itself — Caddy negotiates it natively once UDP 443 is open; no
+  server code/config beyond the SG rule + existing compose.
+- QUIC parameter tuning, 0-RTT, connection migration — measure stock.
+- Non-Chromium browsers (project scope).
+- `curl --http3` server-side timings — a vantage-poisoned proxy for a browser
+  claim; the browser matrix above replaces it (curl is fine as the SG-rule
+  REACHABILITY check, never as the quoted number).
 
-- h3 control: force (or at least distinguish) an h3 vs h2 negotiation for the eddy bundle POST + the standard tarball phase, so the h2-vs-h3 delta is measurable — the last gap the `pnpm bench` harness (delivered) can't yet cover.
-- Decision rule: if h3 narrows the gap below a threshold, re-weight eddy's headline (or re-scope the bundle vs lockfile-only tradeoff) — record the decision.
+## Decisions
+
+- Transport control = PIN + VERIFY: per-origin QUIC forcing/disabling via
+  Chromium launch args, negotiated-protocol evidence via CDP per request;
+  observe-only (no pin) was rejected — it can't produce the h2-vs-h3 delta on
+  demand; trust-the-flag (no evidence) was rejected — a silently-fallen-back
+  h3 pass would quote an h2 number as h3. REVERSIBLE (bench tooling).
+- Decision rule: if the AUTO pass matches warm-h2 within noise → headline
+  stays 1.70x, recorded transport-insensitive. If h3 shifts either path →
+  headline becomes the auto number. If h3 narrows eddy below **1.3x** →
+  additionally record a NEW draft item re-scoping the bundle-vs-lockfile-only
+  tradeoff (never silently absorbed). Every branch = CHANGELOG line + epic
+  Outcome update.
+- SG `443/udp` ingress rule = operator confirm-first; reachability check
+  before any browser pass: `curl --http3-only https://eddy.rifty.dev/` (any
+  response = QUIC end-to-end OK; timeout = rule not live).
 - REVERSIBLE — measurement + recorded decision (CHANGELOG line). No ADR.
-- (Done) harness built + eddy deployed + warm-h2 number emitted to `perf/benchmarks.json` — see Measured above.

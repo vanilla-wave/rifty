@@ -15,6 +15,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Bench transport matrix (`pnpm bench --transport matrix`,
+  perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
+  the measured remote origins (h2 = `--disable-quic`; h3 =
+  `--origin-to-force-quic-on` on the registry + eddy + optional bundle hosts —
+  no TCP fallback) and VERIFIES the pin with per-run evidence tied to the
+  measured requests: measured-window request counts per origin + a post-window
+  CDP protocol probe (`Network.responseReceived`; page-context probe shares the
+  context's socket pools; runs bounded and after the sample so it never primes
+  the measured connections or hangs the harness). Proof is EXACT, PER RUN and
+  PER PASS: a used origin lacking the pinned protocol (`http/1.1` under an h2
+  pin refuses too — the artifact labels the leg h2) or lacking any positive
+  proof (`unreachable` / `unknown`), and a pinned run or pass that made no
+  measured-origin request at all (vacuous probe-only evidence), each refuse
+  the pass (`unmeasured` + note; evidence still recorded under
+  `transportMatrix.<mode>.<phase>.transport` with phase-local
+  `originProtocols` + the verbatim per-run `runs` audit list) — never a lying
+  median. The top-level headline stays the `auto` eddy-vs-standard result (the
+  transport real users get), while `h2` and `h3` sit beside it for the
+  controlled comparison. Single-mode `--transport auto|h2|h3` stays available
+  for focused diagnosis. `auto` records evidence without pinning (end-of-run
+  connection class, no per-request claim). Smoke-proven live: h2 standard
+  measured with registry evidence (`50` requests over `h2`); eddy phases kept
+  their resolver protocol evidence but refused the median when the terminal did
+  not prove `via eddy (fast)`; h3 refused loudly on the registry leg
+  (`unreachable` — UDP 443 blocked at the SG, the documented deploy gap).
+
 - **Source-grep test ratchet (`pnpm check:source-grep`, epic
   playground-testable-core).** CI refuses new
   `expect(source).toContain`-style tests in apps/playground and forces the
@@ -37,6 +63,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Bench install metric un-parked from a retired terminal marker.** The
+  rifty-authored `[vite] dev server ready on port` line the install leg awaited
+  was retired (readiness went out-of-band with the generic dev-server
+  lifecycle), so every install pass timed out at 180s — unnoticed because CI's
+  bench smoke runs the cold-start leg only. The leg now waits for real Vite's
+  own ready banner (`VITE vX.Y ready in N ms`), keeping
+  `npmInstallToFirstViteResponseMs` honest.
+- **Bench eddy pass must prove it used eddy.** A resolver-configured install can
+  fall back to the standard path and still reach first Vite response. The eddy
+  pass now refuses the sample unless the terminal contains `via eddy (fast)`,
+  the line emitted only when `install()` returned `source: 'eddy'`.
+- **Standard-path registry fetch bound is closed.** The earlier
+  fault-honesty changelog entry named
+  `npm-client/registry-fetch-no-progress-bound` as the remaining open
+  standard-path gap; ADR-0201 and the shared npm-client `bounded-fetch`
+  chokepoint deliver that item and delete it.
 - **browser-unit: the restore-gate spec no longer races the 250ms slow-progress
   threshold.** The stamp rework (PR #107, ADR-0187 Corrected) removed the awaited
   OPFS drains from the instant restore path, so a fast host could finish the

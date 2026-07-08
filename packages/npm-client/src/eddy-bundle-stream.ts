@@ -11,16 +11,18 @@
  * gate decline) cancels the source stream so the download stops.
  */
 
+import { DEFAULT_FETCH_MAX_BYTES, DEFAULT_FETCH_STALL_MS } from './bounded-fetch.ts';
 import { parseTarHeader } from './unpacker.ts';
 
-const dec = new TextDecoder('utf-8');
+// Historical eddy-scoped names; the implementation is the shared
+// bounded-fetch chokepoint (one `unbounded-read` boundary for npm-client).
+export {
+  DEFAULT_FETCH_MAX_BYTES as DEFAULT_BUNDLE_MAX_BYTES,
+  DEFAULT_FETCH_STALL_MS as DEFAULT_BUNDLE_STALL_MS,
+  drainBodyBounded,
+} from './bounded-fetch.ts';
 
-/** Real bundles are single-digit MB; the cap only guards a runaway body (or a
- * forged tar header claiming a giant entry that would buffer unbounded). */
-export const DEFAULT_BUNDLE_MAX_BYTES = 128 * 1024 * 1024;
-/** Matches the measured h2-stall class (~10s); a healthy stream delivers
- * chunks sub-second, so no-progress ≥ this is a dead connection. */
-export const DEFAULT_BUNDLE_STALL_MS = 10_000;
+const dec = new TextDecoder('utf-8');
 
 export interface StreamTarEntriesBounds {
   /** No-progress bound (ms): a body chunk must arrive within this window or
@@ -31,69 +33,12 @@ export interface StreamTarEntriesBounds {
   maxBytes?: number;
 }
 
-/**
- * Buffer a whole response body under the SAME no-progress + byte bounds as
- * {@link streamTarEntries}. A never-ending or runaway body must REJECT (→ the
- * eddy attempt falls through), never park the consumer forever: an unbounded
- * `arrayBuffer()`/`json()` once hung `npm install` with no error when the
- * resolver held the connection open. A `content-type: application/json` decline
- * body is equally proxy/attacker-controlled, so it is drained here too — its
- * bounds are the ONLY thing standing between a stalled decline and a parked
- * install. Returns the concatenated bytes.
- */
-export async function drainBodyBounded(
-  response: Response,
-  bounds: StreamTarEntriesBounds = {},
-): Promise<Uint8Array<ArrayBuffer>> {
-  const stallMs = bounds.stallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
-  const maxBytes = bounds.maxBytes ?? DEFAULT_BUNDLE_MAX_BYTES;
-  const body = response.body;
-  if (!body) return new Uint8Array(await response.arrayBuffer());
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const read = reader.read();
-      // A raced-out read settles later (cancel() resolves it {done:true});
-      // never let a late rejection surface as unhandled.
-      read.catch(() => {});
-      const next = await Promise.race([
-        read,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`eddy bundle: no body progress for ${stallMs}ms`)),
-            stallMs,
-          );
-        }),
-      ]).finally(() => clearTimeout(timer));
-      if (next.done) break;
-      total += next.value.length;
-      if (total > maxBytes) {
-        throw new Error(`eddy bundle: body exceeded ${maxBytes} bytes`);
-      }
-      chunks.push(next.value);
-    }
-  } catch (err) {
-    void reader.cancel().catch(() => {});
-    throw err;
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
-
 export async function* streamTarEntries(
   stream: ReadableStream<Uint8Array>,
   bounds: StreamTarEntriesBounds = {},
 ): AsyncGenerator<{ name: string; data: Uint8Array }, void, undefined> {
-  const stallMs = bounds.stallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
-  const maxBytes = bounds.maxBytes ?? DEFAULT_BUNDLE_MAX_BYTES;
+  const stallMs = bounds.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;
+  const maxBytes = bounds.maxBytes ?? DEFAULT_FETCH_MAX_BYTES;
   const reader = stream.getReader();
   // Unconsumed chunks in arrival order; `available` = total buffered bytes.
   const pending: Uint8Array[] = [];

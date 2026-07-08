@@ -3,6 +3,7 @@ export {
   RegistryClient,
   getRegistryBaseUrl,
   type Packument,
+  type RegistryClientOptions,
   type VersionManifest,
   type Fetcher,
 } from './registry.ts';

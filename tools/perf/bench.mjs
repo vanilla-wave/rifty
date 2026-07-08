@@ -22,17 +22,26 @@
  *       the headline number with the standard baseline + measured `speedupX`
  *       nested under it (the resolver is baked per dev server, so it takes two).
  *
- * Usage: node tools/perf/bench.mjs [--runs N] [--out path]
+ * Usage: node tools/perf/bench.mjs [--runs N] [--out path] [--transport auto|h2|h3|matrix]
  *   RIFTY_PLAYGROUND_PORT  isolate the dev-server port (default 5390)
  *   VITE_RIFTY_REGISTRY_URL  enables (b), routes install at the live proxy
  *   VITE_RIFTY_RESOLVER_URL  adds the eddy fast-path pass + speedup vs baseline
+ *   VITE_RIFTY_EDDY_BUNDLE_URL  optional split-host GET tier — probed too
+ *
+ * Transport matrix (docs/backlog/perf/eddy-http3-cold-validation): `--transport
+ * matrix` runs auto+h2+h3 and writes one phase-labelled artifact. h2 PINS with
+ * --disable-quic; h3 PINS with --origin-to-force-quic-on and no TCP fallback.
+ * Every pinned pass verifies with per-run evidence: measured-window request
+ * counts per origin + a post-window CDP protocol probe. A pass whose USED
+ * origins lack positive pinned-protocol proof is refused — never a lying median.
+ * `auto` (default) records evidence without pinning.
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { buildArtifact } from './src/aggregate.mjs';
+import { buildArtifact, verifyEddyInstallProof, verifyTransportPin } from './src/aggregate.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
@@ -54,8 +63,61 @@ const OUT = resolve(REPO_ROOT, argVal('--out', 'perf/benchmarks.json'));
 const PORT = Number(process.env.RIFTY_PLAYGROUND_PORT ?? '5390');
 const REGISTRY_URL = process.env.VITE_RIFTY_REGISTRY_URL; // D-004 — enables (b)
 const RESOLVER_URL = process.env.VITE_RIFTY_RESOLVER_URL; // optional eddy fast path
+const BUNDLE_URL = process.env.VITE_RIFTY_EDDY_BUNDLE_URL; // optional split-host GET tier
 const BASE = `http://localhost:${PORT}`;
 const DEEP_LINK = `${BASE}/?preset=real-vite&autorun=1`;
+
+const TRANSPORT_ARG = argVal('--transport', 'auto');
+if (!['auto', 'h2', 'h3', 'matrix'].includes(TRANSPORT_ARG)) {
+  console.error(`--transport must be auto|h2|h3|matrix, got ${JSON.stringify(TRANSPORT_ARG)}`);
+  process.exit(2);
+}
+const TRANSPORT_MODES = TRANSPORT_ARG === 'matrix' ? ['auto', 'h2', 'h3'] : [TRANSPORT_ARG];
+if (TRANSPORT_MODES.some((mode) => mode !== 'auto') && !REGISTRY_URL) {
+  console.error(
+    `--transport ${TRANSPORT_ARG} pins the install path's remote origins, but no install pass is configured (set VITE_RIFTY_REGISTRY_URL) — refusing a pin that measures nothing.`,
+  );
+  process.exit(2);
+}
+if (TRANSPORT_MODES.includes('h3') && measuredOrigins().length === 0) {
+  console.error(
+    '--transport h3 needs at least one remote https origin to force QUIC on (VITE_RIFTY_REGISTRY_URL / VITE_RIFTY_RESOLVER_URL are not https URLs).',
+  );
+  process.exit(2);
+}
+
+/** The remote https origins the install path actually rides (registry proxy,
+ * eddy resolver, optional split-host bundle tier) — the transport pin +
+ * protocol evidence target exactly these. A relative/dev-proxy URL (e.g.
+ * `/npm-registry`) is not a remote origin and is excluded. */
+function measuredOrigins() {
+  const origins = new Set();
+  for (const u of [REGISTRY_URL, RESOLVER_URL, BUNDLE_URL]) {
+    if (!u) continue;
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol === 'https:') origins.add(parsed.origin);
+    } catch {
+      /* relative dev-proxy path → local, not a measured remote origin */
+    }
+  }
+  return [...origins];
+}
+
+/** Chromium launch args pinning the transport for the measured origins.
+ * `--origin-to-force-quic-on` admits NO TCP fallback — a blocked UDP 443 shows
+ * up as `unreachable` evidence (a loud refusal), never a silent h2 number. */
+function transportLaunchArgs(mode) {
+  if (mode === 'h2') return ['--disable-quic'];
+  if (mode === 'h3') {
+    const hosts = measuredOrigins().map((o) => {
+      const u = new URL(o);
+      return `${u.hostname}:${u.port || '443'}`;
+    });
+    return ['--enable-quic', `--origin-to-force-quic-on=${hosts.join(',')}`];
+  }
+  return [];
+}
 
 const DEV_READY_TIMEOUT = 90_000;
 const INTERACTIVE_TIMEOUT = 45_000;
@@ -146,6 +208,31 @@ async function waitForTerminal(page, regex, timeoutMs) {
   throw new Error(`terminal never matched ${regex} within ${timeoutMs}ms`);
 }
 
+/**
+ * False-live guard for preview-live metrics: LIVE must mean the preview document
+ * answers ok — the SW serves an honest 503 error page that still commits into
+ * the iframe, and measuring that would be a launch-citable lie. Bounded; runs
+ * AFTER the sample point so it never inflates a measured number.
+ */
+async function assertPreviewDocumentOk(page, label) {
+  const doc = await page.evaluate(async () => {
+    const el = document.querySelector('[data-testid="preview"] iframe');
+    const url = el?.src;
+    if (!url) return { ok: false, note: 'no preview iframe src' };
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+      return { ok: res.ok, note: `status ${res.status}` };
+    } catch (err) {
+      return { ok: false, note: String(err) };
+    }
+  });
+  if (!doc.ok) {
+    throw new Error(
+      `${label} preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
+    );
+  }
+}
+
 function startDevServer(withResolver) {
   const env = { ...process.env, RIFTY_PLAYGROUND_PORT: String(PORT) };
   if (REGISTRY_URL) env.VITE_RIFTY_REGISTRY_URL = REGISTRY_URL;
@@ -170,10 +257,87 @@ function stopDevServer(child) {
   }
 }
 
-async function runOnce(browser, measureInstall) {
+/**
+ * Post-window protocol probe for the measured origins: a page-context probe
+ * fetch per origin, protocol read via CDP `Network.responseReceived`
+ * (resource-timing's `nextHopProtocol` is TAO-gated cross-origin — useless
+ * here). Combined with the measured-window per-origin REQUEST COUNTS this is
+ * per-request-grade evidence under a pin: `--origin-to-force-quic-on` admits
+ * no TCP and `--disable-quic` admits no QUIC (browser-global), so requests
+ * that succeeded during the window rode the pinned class, and the probe
+ * supplies the POSITIVE protocol proof (the page shares the context's socket
+ * pools with the install worker). It runs AFTER the sample window — it never
+ * primes connections the install would reuse, and never inflates the number.
+ * `unreachable` = the probe could not connect at all (e.g. QUIC forced but
+ * UDP 443 blocked end-to-end). Under `auto` the probe is end-of-run
+ * connection-class evidence only (no per-request claim — recorded as such).
+ */
+async function probeOriginProtocols(page) {
+  const origins = measuredOrigins();
+  if (origins.length === 0) return null;
+  const cdp = await page.context().newCDPSession(page);
+  const seen = new Map();
+  cdp.on('Network.responseReceived', (e) => {
+    try {
+      const origin = new URL(e.response.url).origin;
+      if (origins.includes(origin) && !seen.has(origin)) {
+        seen.set(origin, e.response.protocol ?? 'unknown');
+      }
+    } catch {
+      /* data:/blob: URLs → not a measured origin */
+    }
+  });
+  try {
+    await cdp.send('Network.enable');
+    for (const origin of origins) {
+      // The probe itself is bounded (its own axis): the in-page fetch aborts
+      // at 3s and the evaluate is raced at 5s — a forced-QUIC blackhole origin
+      // records `unreachable` instead of hanging the harness.
+      await Promise.race([
+        page.evaluate(
+          (u) =>
+            fetch(u, { cache: 'no-store', signal: AbortSignal.timeout(3_000) }).then(
+              () => undefined,
+              () => undefined,
+            ),
+          `${origin}/`,
+        ),
+        sleep(5_000),
+      ]);
+    }
+    // responseReceived races the fetch settle — poll briefly for stragglers.
+    const deadline = Date.now() + 3_000;
+    while (seen.size < origins.length && Date.now() < deadline) await sleep(50);
+  } finally {
+    await cdp.detach().catch(() => {});
+  }
+  return Object.fromEntries(origins.map((o) => [o, seen.get(o) ?? 'unreachable']));
+}
+
+async function runOnce(browser, measureInstall, expectEddyFastPath = false) {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
+    // Measured-window request counts per measured origin (worker fetches are
+    // visible on page request events): which origins the sample actually rode
+    // — the enforcement scope for the transport pin. Counting stops when the
+    // sample window closes so the post-window probe never counts itself.
+    const origins = measuredOrigins();
+    const requestCounts = new Map();
+    let windowOpen = true;
+    if (measureInstall && origins.length > 0) {
+      page.on('request', (req) => {
+        if (!windowOpen) return;
+        try {
+          const origin = new URL(req.url()).origin;
+          if (origins.includes(origin)) {
+            requestCounts.set(origin, (requestCounts.get(origin) ?? 0) + 1);
+          }
+        } catch {
+          /* data:/blob: URLs */
+        }
+      });
+    }
     const t0 = Date.now();
     await page.goto(DEEP_LINK, { waitUntil: 'commit' });
     await page.waitForFunction(interactivePredicate, null, { timeout: INTERACTIVE_TIMEOUT });
@@ -181,6 +345,7 @@ async function runOnce(browser, measureInstall) {
 
     let installMs = null;
     let installError = null;
+    let transportEvidence = null;
     if (measureInstall) {
       // Install starts when the autorun types `npm install`; first Vite response
       // is real vite's own ready banner (the rifty-authored ready line died with
@@ -191,12 +356,30 @@ async function runOnce(browser, measureInstall) {
         await waitForTerminal(page, /npm install/, INTERACTIVE_TIMEOUT);
         const tInstall = Date.now();
         await waitForTerminal(page, /VITE v[\d.]+\s+ready in \d+ ms/, INSTALL_TIMEOUT);
-        installMs = Date.now() - tInstall;
+        const viteReadyAt = Date.now();
+        if (expectEddyFastPath) {
+          const proof = verifyEddyInstallProof((await terminalText(page)).replace(ANSI_SGR, ''));
+          if (!proof.ok) throw new Error(proof.note);
+        }
+        installMs = viteReadyAt - tInstall;
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       }
+      windowOpen = false;
+      // Probe runs AFTER the sample window — it never inflates the number.
+      const protocols = await probeOriginProtocols(page).catch(() =>
+        Object.fromEntries(origins.map((o) => [o, 'unreachable'])),
+      );
+      if (protocols) {
+        transportEvidence = Object.fromEntries(
+          origins.map((o) => [
+            o,
+            { protocol: protocols[o] ?? 'unreachable', requests: requestCounts.get(o) ?? 0 },
+          ]),
+        );
+      }
     }
-    return { coldMs, installMs, installError };
+    return { coldMs, installMs, installError, transportEvidence };
   } finally {
     await context.close();
   }
@@ -211,6 +394,7 @@ async function runPhase(browser, label, withResolver, measureInstall) {
   const dev = startDevServer(withResolver);
   const cold = [];
   const install = [];
+  const transportRuns = [];
   let installError = null;
   try {
     await waitForHttp(`${BASE}/`, DEV_READY_TIMEOUT);
@@ -227,26 +411,27 @@ async function runPhase(browser, label, withResolver, measureInstall) {
     // a cold-only pass (no proxy, e.g. CI smoke) needs no warm-up.
     if (measureInstall) {
       for (let w = 0; w < WARMUP; w++) {
-        const wr = await runOnce(browser, measureInstall);
+        const wr = await runOnce(browser, measureInstall, withResolver);
         console.log(
           `  [${label}] warmup ${w + 1}/${WARMUP}: cold=${wr.coldMs}ms${wr.installMs != null ? ` install=${wr.installMs}ms` : wr.installError ? ` install=FAILED (${wr.installError})` : ''} (discarded)`,
         );
       }
     }
     for (let i = 0; i < RUNS; i++) {
-      const r = await runOnce(browser, measureInstall);
+      const r = await runOnce(browser, measureInstall, withResolver);
       cold.push(r.coldMs);
       if (r.installMs != null) install.push(r.installMs);
       else if (r.installError) installError = r.installError;
+      if (r.transportEvidence) transportRuns.push(r.transportEvidence);
       console.log(
-        `  [${label}] run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}`,
+        `  [${label}] run ${i + 1}/${RUNS}: cold=${r.coldMs}ms${r.installMs != null ? ` install=${r.installMs}ms` : r.installError ? ` install=FAILED (${r.installError})` : ''}${r.transportEvidence ? ` transport=${JSON.stringify(r.transportEvidence)}` : ''}`,
       );
     }
   } finally {
     stopDevServer(dev);
     await sleep(1_000); // let the strict port free before the next pass spawns
   }
-  return { cold, install, installError };
+  return { cold, install, installError, transportRuns };
 }
 
 async function runPresetBootOnce(browser, presetId) {
@@ -291,27 +476,7 @@ async function runPresetBootOnce(browser, presetId) {
       );
       if (live) {
         const liveMs = Date.now() - t0;
-        // Harness-level false-live guard (independent of the app's warmup fix):
-        // LIVE must mean the preview DOCUMENT answers ok — the SW serves an
-        // honest 503 error page that still commits into the iframe, and a
-        // measurement of that page would be a launch-citable lie. Runs after
-        // the sample is taken, so it never inflates the number.
-        const doc = await page.evaluate(async () => {
-          const el = document.querySelector('[data-testid="preview"] iframe');
-          const url = el?.src;
-          if (!url) return { ok: false, note: 'no preview iframe src' };
-          try {
-            const res = await fetch(url, { cache: 'no-store' });
-            return { ok: res.ok, note: `status ${res.status}` };
-          } catch (err) {
-            return { ok: false, note: String(err) };
-          }
-        });
-        if (!doc.ok) {
-          throw new Error(
-            `[${presetId}] preview reported LIVE but its document is not ok (${doc.note}) — refusing a false-live measurement`,
-          );
-        }
+        await assertPreviewDocumentOk(page, `[${presetId}]`);
         // One final scan: a marker's terminal PAINT can lag preview-live by a
         // beat (the preview probe races the pty chunk); its cause precedes live,
         // so a marker visible now is real — anything still missing is null.
@@ -388,6 +553,33 @@ async function runPresetBootPhase(browser) {
   return out;
 }
 
+/** Merge per-run transport evidence across passes into the artifact's
+ * transport record: `originProtocols` (unique probed protocols per origin —
+ * the summary) + `runs` (the verbatim per-run `{ origin: { protocol,
+ * requests } }` audit list — which transport each sample actually rode).
+ * Returns `record: undefined` when there is no evidence (local-only run) —
+ * callers then omit the metric's `transport` key. */
+function summarizeTransportPhase(mode, phase) {
+  const runsEvidence = phase.transportRuns;
+  if (runsEvidence.length === 0) return { record: undefined, runsEvidence };
+  const perOrigin = {};
+  for (const rec of runsEvidence) {
+    for (const [origin, evidence] of Object.entries(rec)) {
+      const seen = perOrigin[origin] ?? new Set();
+      perOrigin[origin] = seen;
+      seen.add(evidence.protocol);
+    }
+  }
+  const record = {
+    mode,
+    originProtocols: Object.fromEntries(
+      Object.entries(perOrigin).map(([o, s]) => [o, [...s].sort()]),
+    ),
+    runs: runsEvidence,
+  };
+  return { record, runsEvidence };
+}
+
 function measuredOrUnmeasured(samples, error) {
   // All `RUNS` must succeed — a partial set is not a median of N (Fidelity).
   return samples.length === RUNS
@@ -397,76 +589,161 @@ function measuredOrUnmeasured(samples, error) {
       };
 }
 
+function phaseMetric(mode, phase, label, urlFields, pin) {
+  const { record, runsEvidence } = summarizeTransportPhase(mode, phase);
+  const verifiedPin = pin ?? verifyTransportPin(mode, runsEvidence);
+  if (!verifiedPin.ok) {
+    return {
+      status: 'unmeasured',
+      note: verifiedPin.note,
+      ...urlFields,
+      ...(record ? { transport: record } : {}),
+    };
+  }
+  const measured = measuredOrUnmeasured(phase.install, phase.installError);
+  return measured.samples
+    ? {
+        status: 'measured',
+        samples: measured.samples,
+        ...urlFields,
+        ...(record ? { transport: record } : {}),
+      }
+    : {
+        status: 'unmeasured',
+        note: `${label}: ${measured.note}`,
+        ...urlFields,
+        ...(record ? { transport: record } : {}),
+      };
+}
+
+function installMetricFromRow(mode, row) {
+  if (row.eddy) {
+    if (row.standard.status === 'measured' && row.eddy.status === 'measured') {
+      return {
+        status: 'measured',
+        samples: row.eddy.samples,
+        baselineSamples: row.standard.samples,
+        registryUrl: REGISTRY_URL,
+        resolverUrl: RESOLVER_URL,
+        ...(row.eddy.transport ? { transport: row.eddy.transport } : {}),
+        ...(row.standard.transport ? { baselineTransport: row.standard.transport } : {}),
+      };
+    }
+    const notes = [];
+    if (row.standard.status !== 'measured') notes.push(`standard: ${row.standard.note}`);
+    if (row.eddy.status !== 'measured') notes.push(`eddy: ${row.eddy.note}`);
+    return {
+      status: 'unmeasured',
+      note: `transport ${mode} did not produce complete standard+eddy install samples — ${notes.join('; ')}`,
+      registryUrl: REGISTRY_URL,
+      resolverUrl: RESOLVER_URL,
+      ...(row.eddy.transport ? { transport: row.eddy.transport } : {}),
+      ...(row.standard.transport ? { baselineTransport: row.standard.transport } : {}),
+    };
+  }
+  if (row.standard.status === 'measured') {
+    return {
+      status: 'measured',
+      samples: row.standard.samples,
+      registryUrl: REGISTRY_URL,
+      ...(row.standard.transport ? { transport: row.standard.transport } : {}),
+    };
+  }
+  return {
+    status: 'unmeasured',
+    note: row.standard.note,
+    registryUrl: REGISTRY_URL,
+    ...(row.standard.transport ? { transport: row.standard.transport } : {}),
+  };
+}
+
+async function withBrowserForTransport(mode, fn) {
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+        ...transportLaunchArgs(mode),
+      ],
+    });
+    return await fn(browser);
+  } finally {
+    // Bound browser teardown so a wedged Chromium can't hang the process.
+    if (browser) await Promise.race([browser.close().catch(() => {}), sleep(10_000)]);
+  }
+}
+
+async function runInstallForTransport(browser, mode, measureInstall, measureEddy) {
+  if (measureEddy) {
+    // Two passes on the same port: standard (no resolver) then eddy. Cold-start
+    // is resolver-independent — report the eddy pass's samples.
+    const base = await runPhase(browser, `${mode}/standard`, false, true);
+    const eddy = await runPhase(browser, `${mode}/eddy`, true, true);
+    const standard = phaseMetric(mode, base, 'standard', { registryUrl: REGISTRY_URL });
+    const eddyMetric = phaseMetric(mode, eddy, 'eddy', {
+      registryUrl: REGISTRY_URL,
+      resolverUrl: RESOLVER_URL,
+    });
+    const row = { standard, eddy: eddyMetric };
+    return { coldSamples: eddy.cold, row, installMetric: installMetricFromRow(mode, row) };
+  }
+  if (measureInstall) {
+    const std = await runPhase(browser, `${mode}/standard`, false, true);
+    const standard = phaseMetric(mode, std, 'standard', { registryUrl: REGISTRY_URL });
+    const row = { standard };
+    return { coldSamples: std.cold, row, installMetric: installMetricFromRow(mode, row) };
+  }
+  const coldOnly = await runPhase(browser, 'cold', false, false);
+  return {
+    coldSamples: coldOnly.cold,
+    row: null,
+    installMetric: { status: 'requires proxy' },
+  };
+}
+
 async function main() {
   const measureInstall = Boolean(REGISTRY_URL);
   const measureEddy = measureInstall && Boolean(RESOLVER_URL);
   console.log(
-    `bench: ${RUNS} run(s), port ${PORT}, install ${measureInstall ? `via ${REGISTRY_URL}` : 'SKIPPED (no VITE_RIFTY_REGISTRY_URL → requires proxy)'}${measureEddy ? ` — standard baseline + eddy fast path (${RESOLVER_URL})` : ''}`,
+    `bench: ${RUNS} run(s), port ${PORT}, transport ${TRANSPORT_ARG}, install ${measureInstall ? `via ${REGISTRY_URL}` : 'SKIPPED (no VITE_RIFTY_REGISTRY_URL → requires proxy)'}${measureEddy ? ` — standard baseline + eddy fast path (${RESOLVER_URL})` : ''}`,
   );
-  let browser;
-  try {
-    await assertPortFree();
-    browser = await chromium.launch({
-      headless: true,
-      args: process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
-    });
+  await assertPortFree();
 
-    let coldSamples;
-    let installMetric;
-    if (measureEddy) {
-      // Two passes on the same port: standard (no resolver) then eddy. Cold-start
-      // is resolver-independent — report the eddy pass's samples.
-      const base = await runPhase(browser, 'standard', false, true);
-      const eddy = await runPhase(browser, 'eddy', true, true);
-      coldSamples = eddy.cold;
-      // Both passes must yield ALL `RUNS` samples — a median of N means N runs,
-      // not "whatever survived". A partial set is recorded `unmeasured` (never a
-      // launch-citable thin median), the item's Fidelity contract.
-      if (eddy.install.length === RUNS && base.install.length === RUNS) {
-        installMetric = {
-          status: 'measured',
-          samples: eddy.install,
-          baselineSamples: base.install,
-          registryUrl: REGISTRY_URL,
-          resolverUrl: RESOLVER_URL,
-        };
-      } else {
-        installMetric = {
-          status: 'unmeasured',
-          note: `proxy ${REGISTRY_URL} + resolver ${RESOLVER_URL} configured but only standard ${base.install.length}/${RUNS} + eddy ${eddy.install.length}/${RUNS} runs reached first Vite response — refusing a partial median${eddy.installError ? ` (eddy: ${eddy.installError})` : base.installError ? ` (standard: ${base.installError})` : ''}`,
-        };
-      }
-    } else if (measureInstall) {
-      const std = await runPhase(browser, 'standard', false, true);
-      coldSamples = std.cold;
-      const m = measuredOrUnmeasured(std.install, std.installError);
-      installMetric = m.samples
-        ? { status: 'measured', samples: m.samples, registryUrl: REGISTRY_URL }
-        : { status: 'unmeasured', note: m.note };
-    } else {
-      const coldOnly = await runPhase(browser, 'cold', false, false);
-      coldSamples = coldOnly.cold;
-      installMetric = { status: 'requires proxy' };
+  const transportRows = {};
+  let coldSamples;
+  let installMetric;
+  let firstResult;
+  for (const mode of TRANSPORT_MODES) {
+    const result = await withBrowserForTransport(mode, (browser) =>
+      runInstallForTransport(browser, mode, measureInstall, measureEddy),
+    );
+    firstResult ??= result;
+    if (result.row) transportRows[mode] = result.row;
+    if (mode === 'auto') {
+      coldSamples = result.coldSamples;
+      installMetric = result.installMetric;
     }
-
-    const presetBoot = await runPresetBootPhase(browser);
-
-    const artifact = buildArtifact({
-      generatedAt: new Date().toISOString(),
-      runs: RUNS,
-      coldStartSamples: coldSamples,
-      install: installMetric,
-      presetBoot,
-    });
-
-    mkdirSync(dirname(OUT), { recursive: true });
-    writeFileSync(OUT, `${JSON.stringify(artifact, null, 2)}\n`);
-    console.log(`\nartifact → ${OUT}\n${JSON.stringify(artifact.metrics, null, 2)}`);
-  } finally {
-    // Bound the browser teardown so a wedged Chromium can't hang the process
-    // (→ CI job timeout); each phase SIGKILLs its own dev-server group.
-    if (browser) await Promise.race([browser.close().catch(() => {}), sleep(10_000)]);
   }
+  if (!coldSamples || !installMetric) {
+    coldSamples = firstResult.coldSamples;
+    installMetric = firstResult.installMetric;
+  }
+  if (Object.keys(transportRows).length > 0) installMetric.transportMatrix = transportRows;
+
+  const presetBoot = await withBrowserForTransport('auto', runPresetBootPhase);
+
+  const artifact = buildArtifact({
+    generatedAt: new Date().toISOString(),
+    runs: RUNS,
+    coldStartSamples: coldSamples,
+    install: installMetric,
+    presetBoot,
+  });
+
+  mkdirSync(dirname(OUT), { recursive: true });
+  writeFileSync(OUT, `${JSON.stringify(artifact, null, 2)}\n`);
+  console.log(`\nartifact → ${OUT}\n${JSON.stringify(artifact.metrics, null, 2)}`);
 }
 
 // Explicit exit: a lingering browser/dev-server handle must never keep the

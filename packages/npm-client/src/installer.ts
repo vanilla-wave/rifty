@@ -30,6 +30,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { discardBody, fetchHeadersBounded } from './bounded-fetch.ts';
 import { closureHashOf } from './closure-hash.ts';
 import {
   DEFAULT_BUNDLE_STALL_MS,
@@ -711,10 +712,16 @@ async function tryEddyFastPath(
   const reasons: string[] = [];
   for (const attempt of attempts) {
     try {
+      // Header-phase bound (shared chokepoint): `resolverStallTimeoutMs` (and
+      // the default stall bound) only start once a body exists — a fetch whose
+      // connection/headers hang parked `npm install` before any body bound
+      // could run. Prefetch carries its own header + eager-drain bounds in
+      // `startEddyPrefetch`; racing its already-buffering promise here would
+      // abandon a slow-but-progressing download and duplicate the request.
       const response =
         attempt.kind === 'prefetch'
           ? await attempt.response
-          : await fetchHeadersBounded(attempt.run, headersStallMs, attempt.label);
+          : await fetchHeadersBounded(attempt.run, headersStallMs, `eddy ${attempt.label}`);
       const outcome = await consumeEddyResponse(
         response,
         effectiveRequest,
@@ -734,38 +741,6 @@ async function tryEddyFastPath(
     }
   }
   return declineEddy(reasons.join('; '));
-}
-
-/**
- * Bound the HEADER phase of one direct GET/POST attempt: `resolverStallTimeoutMs`
- * (and the default stall bound) only start once a body exists — a fetch whose
- * connection/headers hang parked `npm install` before any body bound could
- * run. Prefetch carries its own header + eager-drain bounds in
- * `startEddyPrefetch`; racing its already-buffering promise here would abandon
- * a slow-but-progressing download and duplicate the request.
- */
-async function fetchHeadersBounded(
-  run: (signal: AbortSignal) => Promise<Response>,
-  stallMs: number,
-  label: string,
-): Promise<Response> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const attempt = run(controller.signal);
-  attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
-  try {
-    return await Promise.race([
-      attempt,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error(`eddy ${label}: no response headers for ${stallMs}ms`));
-        }, stallMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 const eddyDecoder = new TextDecoder('utf-8');
@@ -819,8 +794,8 @@ async function consumeEddyResponse(
       const bytes = await drainBodyBounded(
         response,
         opts.resolverStallTimeoutMs === undefined
-          ? {}
-          : { stallTimeoutMs: opts.resolverStallTimeoutMs },
+          ? { label: 'eddy decline body' }
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs, label: 'eddy decline body' },
       );
       declineText = eddyDecoder.decode(bytes);
     } catch {
@@ -834,7 +809,12 @@ async function consumeEddyResponse(
     }
     return `resolver declined (${decline?.feature ?? decline?.error ?? 'unsupported'})`;
   }
-  if (!response.ok) return `resolver returned HTTP ${response.status}`;
+  if (!response.ok) {
+    // Never-consumed body (the attempt pipeline moves on) — hits every
+    // unpinned 404 GET miss; see discardBody.
+    discardBody(response);
+    return `resolver returned HTTP ${response.status}`;
+  }
 
   // Bounded stream (round 6): a stall/runaway on the DIRECT GET/POST paths
   // must fail the attempt (→ fallback), exactly like the prefetch's bounded

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 // The pure core is `.mjs` so `../bench.mjs` (a zero-dep node runner) imports it
 // directly; the unit suite drives it here.
-import { SCHEMA_VERSION, buildArtifact, median, roundUpMs, summarize } from './aggregate.mjs';
+import {
+  SCHEMA_VERSION,
+  buildArtifact,
+  median,
+  roundUpMs,
+  summarize,
+  verifyEddyInstallProof,
+  verifyTransportPin,
+} from './aggregate.mjs';
 
 describe('bench aggregate core', () => {
   describe('median', () => {
@@ -226,5 +234,243 @@ describe('bench aggregate core', () => {
     it('bumps the schema version for the new metric', () => {
       expect(SCHEMA_VERSION).toBe(2);
     });
+  });
+});
+
+// Transport pin verification (docs/backlog/perf/eddy-http3-cold-validation):
+// a pass whose observed evidence contradicts its pinned transport must be
+// REFUSED (no median) — a silently-fallen-back h3 pass would quote an h2
+// number as h3. Per-run evidence = per-origin { protocol (post-window CDP
+// probe), requests (measured-window request count) }. A pin demands POSITIVE
+// protocol proof for every origin the run actually used (requests > 0);
+// unused origins are recorded, never enforced.
+describe('verifyTransportPin', () => {
+  const run = (eddy, registry) => ({
+    'https://eddy.example': eddy,
+    'https://registry.example': registry,
+  });
+  const used = (protocol) => ({ protocol, requests: 3 });
+  const unused = (protocol) => ({ protocol, requests: 0 });
+
+  it('auto: always ok — evidence recorded, nothing pinned', () => {
+    expect(verifyTransportPin('auto', [run(used('h2'), used('h3'))]).ok).toBe(true);
+  });
+
+  it('h3 pin: ok when every USED origin in every run positively probed h3', () => {
+    expect(
+      verifyTransportPin('h3', [run(used('h3'), used('h3')), run(used('h3'), used('h3'))]).ok,
+    ).toBe(true);
+  });
+
+  it('h3 pin: a used origin probing h2 refuses the pass, naming origin + protocol', () => {
+    const v = verifyTransportPin('h3', [run(used('h3'), used('h3')), run(used('h2'), used('h3'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/https:\/\/eddy\.example/);
+    expect(v.note).toMatch(/h2/);
+  });
+
+  it('h3 pin: a used origin probing unreachable (QUIC blocked) refuses loudly', () => {
+    const v = verifyTransportPin('h3', [run(used('unreachable'), used('h3'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/unreachable/);
+  });
+
+  it('h3 pin: an UNUSED origin with no proof is recorded, not enforced', () => {
+    expect(verifyTransportPin('h3', [run(unused('unreachable'), used('h3'))]).ok).toBe(true);
+  });
+
+  it('h2 pin: refuses when a used origin negotiated h3 (QUIC leaked past --disable-quic)', () => {
+    const v = verifyTransportPin('h2', [run(used('h2'), used('h3'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/registry\.example/);
+  });
+
+  it('h2 pin: refuses a used origin with NO positive proof (unreachable/unknown)', () => {
+    const v = verifyTransportPin('h2', [run(used('unreachable'), used('h2'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/unreachable/);
+    const u = verifyTransportPin('h2', [run(used('unknown'), used('h2'))]);
+    expect(u.ok).toBe(false);
+  });
+
+  it('h2 pin: http/1.1 refuses — the artifact would label an h1 run as the h2 leg', () => {
+    const v = verifyTransportPin('h2', [run(used('h2'), used('http/1.1'))]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/http\/1\.1/);
+  });
+
+  it('a pin with no evidence at all is refused (no run ever probed)', () => {
+    expect(verifyTransportPin('h3', []).ok).toBe(false);
+  });
+});
+
+describe('buildArtifact — transport evidence', () => {
+  it('a measured install carries the transport record verbatim (incl. per-run audit list)', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        registryUrl: 'https://registry.example/npm-registry',
+        transport: {
+          mode: 'h2',
+          originProtocols: { 'https://registry.example': ['h2'] },
+          runs: [{ 'https://registry.example': { protocol: 'h2', requests: 41 } }],
+        },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.status).toBe('measured');
+    expect(m.transport.mode).toBe('h2');
+    expect(m.transport.originProtocols['https://registry.example']).toEqual(['h2']);
+    expect(m.transport.runs[0]['https://registry.example'].requests).toBe(41);
+  });
+
+  it('a refused (unmeasured) install still records the transport evidence', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'unmeasured',
+        note: 'transport pin violated',
+        transport: { mode: 'h3', originProtocols: { 'https://eddy.example': ['h2'] }, runs: [] },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.status).toBe('unmeasured');
+    expect(m.transport.mode).toBe('h3');
+  });
+
+  it('keeps baseline transport evidence on the baseline metric, not only the eddy headline', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        baselineSamples: [4300],
+        registryUrl: 'https://registry.example/npm-registry',
+        resolverUrl: 'https://eddy.example',
+        transport: {
+          mode: 'auto',
+          originProtocols: { 'https://eddy.example': ['h2'] },
+          runs: [{ 'https://eddy.example': { protocol: 'h2', requests: 1 } }],
+        },
+        baselineTransport: {
+          mode: 'auto',
+          originProtocols: { 'https://registry.example': ['h2'] },
+          runs: [{ 'https://registry.example': { protocol: 'h2', requests: 50 } }],
+        },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.transport.runs[0]['https://eddy.example'].requests).toBe(1);
+    expect(m.baseline.transport.runs[0]['https://registry.example'].requests).toBe(50);
+  });
+
+  it('carries a per-transport matrix with phase-local evidence and keeps the headline on auto', () => {
+    const art = buildArtifact({
+      generatedAt: '2026-07-01T00:00:00.000Z',
+      runs: 1,
+      coldStartSamples: [600],
+      install: {
+        status: 'measured',
+        samples: [2500],
+        baselineSamples: [4250],
+        registryUrl: 'https://registry.example/npm-registry',
+        resolverUrl: 'https://eddy.example',
+        transportMatrix: {
+          auto: {
+            standard: {
+              status: 'measured',
+              samples: [4250],
+              registryUrl: 'https://registry.example/npm-registry',
+              transport: {
+                mode: 'auto',
+                originProtocols: { 'https://registry.example': ['h2'] },
+                runs: [{ 'https://registry.example': { protocol: 'h2', requests: 50 } }],
+              },
+            },
+            eddy: {
+              status: 'measured',
+              samples: [2500],
+              resolverUrl: 'https://eddy.example',
+              transport: {
+                mode: 'auto',
+                originProtocols: { 'https://eddy.example': ['h2'] },
+                runs: [{ 'https://eddy.example': { protocol: 'h2', requests: 1 } }],
+              },
+            },
+          },
+          h2: {
+            standard: { status: 'measured', samples: [4300] },
+            eddy: { status: 'measured', samples: [2600] },
+          },
+          h3: {
+            standard: { status: 'unmeasured', note: 'transport pinned to h3 but unreachable' },
+            eddy: { status: 'unmeasured', note: 'transport pinned to h3 but unreachable' },
+          },
+        },
+      },
+    });
+    const m = art.metrics.npmInstallToFirstViteResponseMs;
+    expect(m.median).toBe(2500);
+    expect(m.baseline.median).toBe(4250);
+    expect(m.speedupX).toBe(1.7);
+    expect(
+      m.transportMatrix.auto.standard.transport.runs[0]['https://registry.example'].requests,
+    ).toBe(50);
+    expect(m.transportMatrix.auto.eddy.transport.runs[0]['https://eddy.example'].requests).toBe(1);
+    expect(m.transportMatrix.h2.speedupX).toBe(1.65);
+    expect(m.transportMatrix.h3.standard.status).toBe('unmeasured');
+    expect(m.transportMatrix.h3.eddy.status).toBe('unmeasured');
+  });
+});
+
+describe('verifyEddyInstallProof', () => {
+  it('accepts the terminal line emitted only when install() returned source=eddy', () => {
+    const proof = verifyEddyInstallProof(
+      '$ npm install\nnpm: installed 17 package(s) in 1.2s via eddy (fast)\n$ vite\n',
+    );
+    expect(proof.ok).toBe(true);
+  });
+
+  it('refuses a resolver-configured run that fell back to standard install', () => {
+    const proof = verifyEddyInstallProof(
+      '$ npm install\nnpm: fast install (eddy) unavailable, using standard install\nnpm: installed 17 package(s) in 3.8s\n$ vite\n',
+    );
+    expect(proof.ok).toBe(false);
+    expect(proof.note).toMatch(/without terminal proof/);
+  });
+});
+
+describe('verifyTransportPin — vacuous-proof guard (per run)', () => {
+  const zero = {
+    'https://eddy.example': { protocol: 'h2', requests: 0 },
+    'https://registry.example': { protocol: 'h2', requests: 0 },
+  };
+  const usedRun = {
+    'https://eddy.example': { protocol: 'h2', requests: 0 },
+    'https://registry.example': { protocol: 'h2', requests: 12 },
+  };
+
+  it('refuses a pinned pass whose runs never hit any measured origin (no request proof at all)', () => {
+    const v = verifyTransportPin('h2', [zero, zero]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/no measured-window request/);
+  });
+
+  it('refuses when ANY single run has no measured-origin request (per-run proof, not merged)', () => {
+    const v = verifyTransportPin('h2', [usedRun, zero]);
+    expect(v.ok).toBe(false);
+    expect(v.note).toMatch(/no measured-window request/);
+  });
+
+  it('accepts when every run proves at least one used origin', () => {
+    expect(verifyTransportPin('h2', [usedRun, usedRun]).ok).toBe(true);
   });
 });

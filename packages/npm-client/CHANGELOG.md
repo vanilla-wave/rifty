@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Standard-path registry fetches are stall-bounded.** `RegistryClient`
+  packument/tarball fetches now bound BOTH phases (headers + body) through the
+  shared `bounded-fetch` chokepoint (no-progress window, default 10s + 128MiB
+  byte cap); a breach counts as transient (rides the existing retry ladder)
+  then fails loudly naming the operation, phase, and bound — a hung registry
+  can no longer park `npm install` forever. New
+  `RegistryClientOptions.stallTimeoutMs` mirrors
+  `InstallOptions.resolverStallTimeoutMs` (type now exported from the barrel).
+  Decision record (public API + the no-progress-vs-npm's-300s-total delta):
+  ADR-0201. The eddy header-bound twins (`installer.ts`, `eddy-prefetch.ts`)
+  melted into the same chokepoint (`unbounded-read` class-kill), and
+  never-consumed non-OK bodies (registry retry ladder + the eddy attempt
+  pipeline's 404/5xx responses) are now CANCELLED via one `discardBody`
+  helper — an unread body holds its h2 stream open.
+
 ### Fixed (PR #107 round 22)
 
 - **`InstallResult.closureHash` no longer leaks unproven POST hashes.** Eddy
@@ -145,9 +162,9 @@
   and the pipeline proceeds to the next attempt / standard install. New
   `InstallOptions.resolverStallTimeoutMs` overrides the bound. Unit + a
   covering-bundle-stalls-mid-tarball roundtrip regression, RED-checked. The
-  remaining sibling gap — STANDARD-path registry fetches have no bound either
-  (pre-existing; real npm has make-fetch-happen timeouts) — is recorded:
-  `docs/backlog/npm-client/registry-fetch-no-progress-bound.md`.
+  then-remaining sibling gap — STANDARD-path registry fetches had no bound
+  either (pre-existing; real npm has make-fetch-happen timeouts) — is now
+  closed by ADR-0201 / the shared `bounded-fetch` chokepoint above.
 - **Partial-bundle completeness gate — a covering lockfile with omitted
   tarballs is declined, never adopted as `source: 'eddy'`.** The client only
   verified tarballs the MANIFEST named; a divergent/buggy resolver could send a

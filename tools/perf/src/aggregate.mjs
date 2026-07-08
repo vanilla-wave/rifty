@@ -114,6 +114,73 @@ function medianStages(stageRuns) {
   return out;
 }
 
+/**
+ * Verify per-run transport evidence against the pinned transport
+ * (docs/backlog/perf/eddy-http3-cold-validation). One record per run:
+ * `{ origin: { protocol, requests } }` — `protocol` from the post-window CDP
+ * probe ('h2' | 'h3' | 'http/1.1' | 'unreachable' | 'unknown'), `requests` =
+ * how many measured-window requests actually hit that origin. A pass whose
+ * evidence contradicts its pin is REFUSED — a silently-fallen-back h3 pass
+ * would quote an h2 number as h3:
+ *   'auto' → always ok (evidence recorded, nothing pinned);
+ *   'h3'   → every USED origin (requests > 0) must positively probe 'h3';
+ *   'h2'   → every USED origin must positively probe 'h2' — 'http/1.1' refuses
+ *            too (the artifact labels the leg h2; an h1 fallback would
+ *            misrepresent the h2-vs-h3 comparison), as does
+ *            'unreachable'/'unknown' (not proof).
+ * Unused origins (requests 0 — e.g. the eddy host during the standard
+ * baseline) are recorded, never enforced. The proof is PER RUN: a pinned run
+ * in which NO measured origin saw a request verifies nothing (probe-only) and
+ * refuses — one well-evidenced run must not vouch for another. A pin with no
+ * evidence at all is refused (nothing was ever probed).
+ */
+export function verifyTransportPin(mode, runProtocols) {
+  if (mode === 'auto') return { ok: true };
+  if (runProtocols.length === 0) {
+    return {
+      ok: false,
+      note: `transport pinned to ${mode} but no protocol evidence was collected`,
+    };
+  }
+  const positive = mode === 'h3' ? 'h3' : 'h2';
+  const violations = [];
+  for (const [i, run] of runProtocols.entries()) {
+    let usedInRun = 0;
+    for (const [origin, evidence] of Object.entries(run)) {
+      if (evidence.requests === 0) continue;
+      usedInRun += 1;
+      if (evidence.protocol !== positive) {
+        violations.push(`${origin} observed ${evidence.protocol}`);
+      }
+    }
+    if (usedInRun === 0) {
+      violations.push(
+        `run ${i + 1} made no measured-window request to any measured origin — the pin would verify vacuously (probe-only)`,
+      );
+    }
+  }
+  if (violations.length === 0) return { ok: true };
+  return {
+    ok: false,
+    note: `transport pinned to ${mode} but ${[...new Set(violations)].join('; ')} — refusing the pass`,
+  };
+}
+
+/**
+ * Eddy bench pass proof: resolverUrl configured is not enough. The installer
+ * auto-falls back to the standard path on any resolver decline/failure, and the
+ * preview can still go live. Only the terminal line emitted from
+ * `result.source === 'eddy'` proves the measured run used the fast path.
+ */
+export function verifyEddyInstallProof(terminalText) {
+  return /via eddy \(fast\)/.test(terminalText)
+    ? { ok: true }
+    : {
+        ok: false,
+        note: 'eddy pass reached first Vite response without terminal proof `via eddy (fast)`',
+      };
+}
+
 function buildInstallMetric(install, stepMs) {
   if (!install || install.status !== 'measured') {
     // Non-measured is still RECORDED (never silently skipped): `requires proxy`
@@ -121,19 +188,58 @@ function buildInstallMetric(install, stepMs) {
     // set but install didn't reach first Vite response.
     const record = { status: install?.status ?? 'requires proxy' };
     if (install?.note) record.note = install.note;
+    if (install?.transport) record.transport = install.transport;
+    if (install?.transportMatrix) {
+      record.transportMatrix = buildTransportMatrixMetric(install.transportMatrix, stepMs);
+    }
     return record;
   }
   const summary = summarize(install.samples, stepMs);
   if (install.registryUrl) summary.registryUrl = install.registryUrl;
   if (install.resolverUrl) summary.resolverUrl = install.resolverUrl;
+  if (install.transport) summary.transport = install.transport;
   // An eddy pass with a standard baseline: nest the baseline + the measured
   // speedup (baseline median ÷ eddy median, 2 d.p.). No baseline → standard-only
   // run, top-level samples ARE the standard number.
   if (install.baselineSamples && install.baselineSamples.length > 0) {
     const baseline = summarize(install.baselineSamples, stepMs);
     baseline.label = 'standard';
+    if (install.baselineTransport) baseline.transport = install.baselineTransport;
     summary.baseline = baseline;
     summary.speedupX = Math.round((baseline.median / summary.median) * 100) / 100;
   }
+  if (install.transportMatrix) {
+    summary.transportMatrix = buildTransportMatrixMetric(install.transportMatrix, stepMs);
+  }
   return summary;
+}
+
+function buildTransportMatrixMetric(matrix, stepMs) {
+  const out = {};
+  for (const [mode, phases] of Object.entries(matrix)) {
+    const row = {};
+    if (phases.standard) row.standard = buildInstallPhaseMetric(phases.standard, stepMs);
+    if (phases.eddy) row.eddy = buildInstallPhaseMetric(phases.eddy, stepMs);
+    if (row.standard?.status === 'measured' && row.eddy?.status === 'measured') {
+      row.speedupX = Math.round((row.standard.median / row.eddy.median) * 100) / 100;
+    }
+    out[mode] = row;
+  }
+  return out;
+}
+
+function buildInstallPhaseMetric(phase, stepMs) {
+  if (phase.status !== 'measured') {
+    const out = { status: phase.status };
+    if (phase.note) out.note = phase.note;
+    if (phase.registryUrl) out.registryUrl = phase.registryUrl;
+    if (phase.resolverUrl) out.resolverUrl = phase.resolverUrl;
+    if (phase.transport) out.transport = phase.transport;
+    return out;
+  }
+  const out = summarize(phase.samples, stepMs);
+  if (phase.registryUrl) out.registryUrl = phase.registryUrl;
+  if (phase.resolverUrl) out.resolverUrl = phase.resolverUrl;
+  if (phase.transport) out.transport = phase.transport;
+  return out;
 }

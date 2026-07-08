@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Lint unbreak carried for red main: removed the unused `fatalDec` decoder
+  `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
+  every `pr:check` on a clean main).
 ### Fixed (PR #112 review)
 
 - **Vite CLI mode classifier follows real cac/mri grammar — option-first forms

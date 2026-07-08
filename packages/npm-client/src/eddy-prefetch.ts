@@ -10,6 +10,7 @@
  * (format, v3, integrity, coverage) like any other bundle.
  */
 
+import { fetchHeadersBounded } from './bounded-fetch.ts';
 import {
   DEFAULT_BUNDLE_MAX_BYTES,
   DEFAULT_BUNDLE_STALL_MS,
@@ -55,34 +56,6 @@ export interface StartEddyPrefetchOptions {
 export const DEFAULT_PREFETCH_MAX_BYTES = DEFAULT_BUNDLE_MAX_BYTES;
 export const DEFAULT_PREFETCH_STALL_MS = DEFAULT_BUNDLE_STALL_MS;
 
-/**
- * Bound the HEADER phase of the prefetch fetch: the drain bounds only start
- * once a body exists — a resolver whose connection/headers hang would
- * otherwise park the eventual taker forever. Rejects (and aborts) on timeout
- * even if the fetch ignores the signal.
- */
-async function headersBounded(
-  attempt: Promise<Response>,
-  stallMs: number,
-  controller: AbortController,
-): Promise<Response> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
-  try {
-    return await Promise.race([
-      attempt,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error(`eddy prefetch: no response headers for ${stallMs}ms`));
-        }, stallMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchHandle {
   const key = canonicalEddyRequestKey(opts.request, opts.prefer ?? 'cached');
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -95,20 +68,21 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
   // prefer:'online' (a boot-time prefetch is only as fresh as boot).
   const pin = opts.prefer === 'online' ? undefined : opts.closureHash;
   const stallMs = opts.stallTimeoutMs ?? DEFAULT_PREFETCH_STALL_MS;
-  const controller = new AbortController();
-  const response = headersBounded(
-    pin
-      ? fetchImpl(bundleUrlFor(opts.bundleBaseUrl ?? opts.resolverUrl, pin), {
-          signal: controller.signal,
-        })
-      : // Same CORS-simple POST the installer sends (no content-type header).
-        fetchImpl(opts.resolverUrl, {
-          method: 'POST',
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        }),
+  // Header-phase bound (shared chokepoint): the drain bounds only start once
+  // a body exists — a resolver whose connection/headers hang would otherwise
+  // park the eventual taker forever.
+  const response = fetchHeadersBounded(
+    (signal) =>
+      pin
+        ? fetchImpl(bundleUrlFor(opts.bundleBaseUrl ?? opts.resolverUrl, pin), { signal })
+        : // Same CORS-simple POST the installer sends (no content-type header).
+          fetchImpl(opts.resolverUrl, {
+            method: 'POST',
+            body: JSON.stringify(body),
+            signal,
+          }),
     stallMs,
-    controller,
+    'eddy prefetch',
   );
   // Drain the body EAGERLY: a response left unread across the boot window
   // stalls its h2 stream (measured ~10s on ~1-in-3 installs, 2026-07-02
@@ -125,7 +99,7 @@ export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchH
     status: r.status,
     statusText: r.statusText,
     headers: r.headers,
-    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes }),
+    bytes: await drainBodyBounded(r, { stallTimeoutMs: stallMs, maxBytes, label: 'eddy prefetch' }),
   }));
   // An untaken failed prefetch must never surface as an unhandled rejection;
   // the ORIGINAL rejection still reaches whoever takes the handle.
