@@ -201,16 +201,19 @@ export function PreviewPanel(props: {
               />
             }
           >
-            <select
-              class="rf-preview__switcher"
-              aria-label="Preview server"
-              value={port()}
-              onChange={(e) => setPort(Number(e.currentTarget.value))}
-            >
-              <For each={entries()}>
-                {(e) => <option value={e.port}>{`${e.label} (:${e.port})`}</option>}
-              </For>
-            </select>
+            <span class="rf-preview__switcher-shell">
+              <select
+                class="rf-preview__switcher"
+                aria-label="Preview server"
+                value={port()}
+                onChange={(e) => setPort(Number(e.currentTarget.value))}
+              >
+                <For each={entries()}>
+                  {(e) => <option value={e.port}>{`${e.label} (:${e.port})`}</option>}
+                </For>
+              </select>
+              <Icon name="chevron-down" size={12} class="rf-preview__switcher-caret" />
+            </span>
           </Show>
           <PhasePill phase={phase} />
         </div>

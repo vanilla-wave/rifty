@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Preview port switcher in the browser chrome now uses the playground chip
+  styling, with a custom caret, hover/focus states, and label truncation.
 - Monaco editor stack (monaco-editor, EditorHost, editor-host-core, monaco-env,
   TS-LS Monaco providers) leaves the cold-start main chunk and warms only on
   project/returning-user intent (not first-run chooser idle): main bundle
