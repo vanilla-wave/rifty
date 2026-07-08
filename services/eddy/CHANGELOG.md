@@ -4,11 +4,31 @@
 
 ### Deployed
 
+- **eddy.rifty.dev bundle store moved to Object Storage** (2026-07-07). The
+  live VM uses secret-bearing `EDDY_S3_*` metadata (not committed) against the
+  public-read `eddy-bundles` bucket. Verified live: POST emits
+  `x-eddy-store-durable: 1`, public Object Storage HEAD serves immutable cache
+  metadata, and `GET /bundle/<hash>` survives a VM cold restart. The
+  `eddy-cdn.rifty.dev` resource now fetches GET-by-hash bytes from the bucket
+  with CDN-added ACAO `*` + CORP `cross-origin`.
+- **eddy.rifty.dev upstream flipped to direct npmjs** (2026-07-07). On-VM side-
+  container A/B measured `REGISTRY_BASE_URL=https://registry.npmjs.org` at
+  **4.682s** median versus **8.668s** for the CDN registry proxy on the
+  express+eslint cold resolve, with no 429/rate-limit signal. The browser
+  standard install path still uses `registry.rifty.dev`.
 - **eddy v1.2 live on rifty.dev** (2026-07-05). Image `cr.yandex/…/eddy:0.2.2`
   (amd64) redeployed from `main`; COI compose tag bumped `0.2.1`→`0.2.2`. Live
   POST now emits `x-eddy-store-durable`; deep-canonical closure hash is upstream-
-  registry-URL independent. Memory store (no `EDDY_S3_*`). Unblocks
-  `perf/eddy-upstream-registry-ab`.
+  registry-URL independent.
+
+### Fixed
+
+- **S3 object paths keep base64 `/` raw for signed PUTs.** Yandex Object
+  Storage rejects SigV4 PUTs whose canonical URI carries `%2F`; closure hashes
+  containing `/` therefore degraded to `x-eddy-store-durable: 0` even though
+  hashes without `/` were durable. The store now signs `bundle/<hash>` with raw
+  slash while keeping `+`/`=` percent-encoded; public GET/HEAD with the client's
+  percent-encoded URL still resolves to the same object.
 
 ### Fixed (PR #107 round 23)
 
@@ -287,9 +307,8 @@
   commented placeholders + the secret-injection workflow (local copy →
   `--metadata-from-file`; never committed), and `hosting-eddy.md` states the
   live deploy is memory-backed until that step. Both composes also publish
-  `443/udp` for HTTP/3, and the docs/backlog now say plainly: the reused
-  security group is TCP-only, so h3 is NOT reachable until an operator adds a
-  `443/udp` ingress rule — no h3 number is quotable before then.
+  `443/udp` for HTTP/3; h3 speed claims still require a committed browser
+  transport artifact proving the measured origins actually negotiated h3.
 
 ### Added
 

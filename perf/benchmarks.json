@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-02T13:57:19.526Z",
+  "generatedAt": "2026-07-07T18:13:41.204Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,82 +11,161 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        693,
-        710,
-        686,
-        688,
-        694
+        1053,
+        1005,
+        864,
+        918,
+        857
       ],
-      "median": 693,
-      "displayMs": 700
+      "median": 918,
+      "displayMs": 1000
     },
     "npmInstallToFirstViteResponseMs": {
       "status": "measured",
       "count": 5,
       "samples": [
-        2772,
-        2774,
-        2773,
-        2773,
-        2769
+        2847,
+        2748,
+        2761,
+        2775,
+        2652
       ],
-      "median": 2773,
+      "median": 2761,
       "displayMs": 2800,
       "registryUrl": "https://registry.rifty.dev/npm-registry",
       "resolverUrl": "https://eddy.rifty.dev",
+      "transport": {
+        "mode": "auto",
+        "originProtocols": {
+          "https://registry.rifty.dev": [
+            "h2"
+          ],
+          "https://eddy.rifty.dev": [
+            "h2"
+          ]
+        },
+        "runs": [
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 50
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 50
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 50
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 50
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 50
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 1
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 1
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 1
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 1
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 0
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h2",
+              "requests": 1
+            }
+          }
+        ]
+      },
       "baseline": {
         "status": "measured",
         "count": 5,
         "samples": [
-          4778,
-          4529,
-          4273,
-          4774,
-          5545
+          6511,
+          5474,
+          4873,
+          4772,
+          5180
         ],
-        "median": 4774,
-        "displayMs": 4800,
+        "median": 5180,
+        "displayMs": 5200,
         "label": "standard"
       },
-      "speedupX": 1.72
+      "speedupX": 1.88
     },
-    "presetBootToPreviewLiveMs": [
-      {
-        "presetId": "project-files",
-        "status": "measured",
-        "count": 5,
-        "samples": [
-          2657,
-          2736,
-          3861,
-          3884,
-          2822
-        ],
-        "median": 2822,
-        "displayMs": 2900,
-        "stages": {
-          "interactiveMs": 765,
-          "viteReadyMs": 2734
-        }
-      },
-      {
-        "presetId": "typescript-ls",
-        "status": "measured",
-        "count": 5,
-        "samples": [
-          3166,
-          3171,
-          3242,
-          3725,
-          3942
-        ],
-        "median": 3242,
-        "displayMs": 3300,
-        "stages": {
-          "interactiveMs": 724,
-          "viteReadyMs": 3069
-        }
-      }
-    ]
+    "presetBootToPreviewLiveMs": {
+      "status": "skipped",
+      "note": "--presets none"
+    }
   }
 }
