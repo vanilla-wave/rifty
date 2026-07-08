@@ -30,3 +30,23 @@ export function assertNoUserViteConfig(
     `${configPath} exists, but the legacy owner Vite dev-server path cannot load user config yet; run the real vite CLI path or remove the config before using npm-run dev.`,
   );
 }
+
+export function assertNoUserVitePreviewConfig(
+  root: string,
+  exists: (path: string) => boolean = (path) => syncMirror().existsSync(path),
+  explicitConfigPath?: string | null,
+): void {
+  const configPath =
+    explicitConfigPath === undefined
+      ? findUserViteConfig(root, exists)
+      : explicitConfigPath === null
+        ? '--config'
+        : normalizePath(
+            explicitConfigPath.startsWith('/') ? explicitConfigPath : `${root}/${explicitConfigPath}`,
+          );
+  if (configPath === null) return;
+  throw new NotImplementedError(
+    'vite.preview.config-loading',
+    `${configPath} would run through rifty's preview CORS bridge before preview config/CORS parity is modelled; remove the config before running vite preview.`,
+  );
+}

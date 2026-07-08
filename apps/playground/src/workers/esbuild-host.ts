@@ -23,6 +23,7 @@
  *   when the caller asked for writes — the same observable behavior as
  *   esbuild on Node (files on disk, no `outputFiles` in the result).
  */
+import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, VfsError, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import wasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import * as esbuildWasm from 'esbuild-wasm/esm/browser.js';
@@ -600,7 +601,12 @@ export function createEsbuildHost(deps: {
           writeOutputFiles(mirror(), result.outputFiles);
           return withoutOutputFiles(result);
         },
-        watch: (options) => ctx.watch(options),
+        watch: async (_options) => {
+          throw new NotImplementedError(
+            'esbuild.context.watch.write',
+            'esbuild-wasm browser contexts run with write:false; watched rebuild output writes are not normalized yet',
+          );
+        },
         serve: (options) => ctx.serve(options),
         cancel: () => ctx.cancel(),
         dispose: () => ctx.dispose(),

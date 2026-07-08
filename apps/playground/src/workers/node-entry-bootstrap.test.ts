@@ -24,7 +24,7 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     // residual source pin: the call happens in top-level await of the worker
     // entry; viteCliMode parsing is behavioral in vite-cli-prep.test.ts.
     expect(source).toMatch(
-      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*viteCliMode\(proc\.argv\.slice\(2\)\)[\s\S]*await prepareViteCli\(proc\.cwd\(\), viteMode\);/,
+      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*viteCliMode\(proc\.argv\.slice\(2\)\)[\s\S]*await prepareViteCli\(proc\.cwd\(\), viteMode, proc\.argv\.slice\(2\)\);/,
     );
   });
 

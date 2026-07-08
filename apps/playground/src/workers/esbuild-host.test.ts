@@ -264,6 +264,43 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('context({write:true}).watch() loud-throws instead of silently dropping output writes', async () => {
+    const watch = vi.fn().mockResolvedValue(undefined);
+    const context = vi.fn().mockResolvedValue({
+      rebuild: vi.fn().mockResolvedValue({ errors: [], warnings: [], outputFiles: [] }),
+      watch,
+      serve: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    });
+    const { lib } = fakeLib({ context } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+
+    const ctx = await host.context({ entryPoints: ['a'], outdir: '/deps' });
+    await expect(ctx.watch()).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'esbuild.context.watch.write',
+    });
+    expect(watch).not.toHaveBeenCalled();
+  });
+
+  it('context({write:false}).watch() still delegates to the real context', async () => {
+    const watch = vi.fn().mockResolvedValue(undefined);
+    const context = vi.fn().mockResolvedValue({
+      rebuild: vi.fn(),
+      watch,
+      serve: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    });
+    const { lib } = fakeLib({ context } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+
+    const ctx = await host.context({ entryPoints: ['a'], outdir: '/deps', write: false });
+    await ctx.watch({ delay: 10 });
+    expect(watch).toHaveBeenCalledWith({ delay: 10 });
+  });
+
   it('stop(): no-op before init; after init stops the service and the next call re-initializes', async () => {
     const { lib, initialize } = fakeLib();
     const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });

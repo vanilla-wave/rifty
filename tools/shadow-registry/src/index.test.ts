@@ -205,6 +205,26 @@ describe('esbuild shim behavior (CJS body executed)', () => {
     );
   });
 
+  it('initialize can retry after a failed host initialization', async () => {
+    let hostInits = 0;
+    await withHost(
+      {
+        initialize: () => {
+          hostInits += 1;
+          return hostInits === 1
+            ? Promise.reject(new Error('wasm fetch failed'))
+            : Promise.resolve();
+        },
+      },
+      async (esbuild) => {
+        await expect(esbuild.initialize()).rejects.toThrow('wasm fetch failed');
+        await esbuild.initialize();
+        expect(hostInits).toBe(2);
+        await expect(esbuild.initialize()).rejects.toThrow(/more than once/);
+      },
+    );
+  });
+
   it('sync APIs loud-throw (esbuild-wasm has no synchronous API in a browser realm)', () => {
     const esbuild = loadCjsShim();
     expect(() => esbuild.transformSync('x')).toThrow(/esbuild\.transformSync/);

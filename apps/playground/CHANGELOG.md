@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- `vite preview` now loud-throws `NotImplementedError('vite.preview.config-loading')`
+  when a project root config or `--config` would run through the preview CORS
+  bridge before parity is modelled, and every Vite CLI mode installs the lazy
+  esbuild host bridge. `context({ write:true }).watch()` now loud-throws instead
+  of silently dropping watched output writes.
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

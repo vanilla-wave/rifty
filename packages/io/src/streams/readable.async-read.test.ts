@@ -56,4 +56,23 @@ describe('Readable async _read()', () => {
     expect(ended).toBe(true);
     expect(readable.readCount).toBe(1);
   });
+
+  it('does not re-enter an async _read before the awaited producer pushes', async () => {
+    let reads = 0;
+    const readable = new Readable({
+      objectMode: true,
+      async read() {
+        reads += 1;
+        await Promise.resolve();
+        this.push('src');
+        this.push(null);
+      },
+    });
+
+    readable.read(0);
+    readable.read(0);
+    await Promise.resolve();
+
+    expect(reads).toBe(1);
+  });
 });

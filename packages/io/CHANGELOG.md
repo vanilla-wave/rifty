@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Async `Readable` `_read(size)` implementations now keep the `reading` latch
+  until their returned thenable settles, preventing duplicate producer re-entry
+  before the awaited `push()`.
 - **`Readable` now drives subclass `_read(size)` implementations when no
   `read` constructor option is supplied.** This restores Node's stream subclass
   extension point (`class X extends Readable { _read() { ... } }`), which real

@@ -84,17 +84,25 @@ function hostEsbuild() {
 }
 
 let initializeCalled = false;
+let initializePromise = null;
 async function initialize(options = {}) {
   // Node esbuild parity: browser-only options are rejected and a second call
   // throws; the actual service start is owned by the host bridge.
   if (options.wasmURL || options.wasmModule || options.worker !== undefined) {
     throw new Error('The "wasmURL", "wasmModule" and "worker" options only work in esbuild-wasm');
   }
-  if (initializeCalled) {
+  if (initializeCalled || initializePromise) {
     throw new Error('Cannot call "initialize" more than once');
   }
-  initializeCalled = true;
-  await hostEsbuild().initialize();
+  initializePromise = hostEsbuild().initialize();
+  try {
+    await initializePromise;
+    initializeCalled = true;
+  } catch (err) {
+    initializePromise = null;
+    throw err;
+  }
+  initializePromise = null;
 }
 
 function transform(input, options) {

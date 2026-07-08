@@ -30,14 +30,14 @@ export interface ReadableOptions {
   highWaterMark?: number;
   encoding?: string;
   objectMode?: boolean;
-  read?(this: Readable, size: number): void;
+  read?(this: Readable, size: number): void | PromiseLike<unknown>;
 }
 
 export interface ReadableToWebOptions {
   strategy?: QueuingStrategy<unknown>;
 }
 
-type ReadOverride = (this: Readable, size: number) => void;
+type ReadOverride = (this: Readable, size: number) => void | PromiseLike<unknown>;
 
 /**
  * Single state container shared across all `Readable` instances per Node's
@@ -396,15 +396,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           if (this._readableState.buffer.length > 0 && !this._readableState.endEmitted) {
             this.emit('readable');
           }
-          const readImpl = this.resolveRead();
-          if (!this._readableState.ended && !this._readableState.reading && readImpl) {
-            this._readableState.reading = true;
-            try {
-              readImpl.call(this, this._readableState.highWaterMark);
-            } finally {
-              this._readableState.reading = false;
-            }
-          }
+          this.maybeRead(this._readableState.highWaterMark);
         });
       }
     });
@@ -616,10 +608,33 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     if (state.ended || state.reading || !readImpl || state.destroyed) return;
     const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
     state.reading = true;
+    let pending = false;
     try {
-      readImpl.call(this, size);
+      const result = readImpl.call(this, size);
+      if (isPromiseLike(result)) {
+        pending = true;
+        void result.then(
+          () => {
+            state.reading = false;
+            if (
+              state.flowing &&
+              !state.ended &&
+              !state.destroyed &&
+              state.length < state.highWaterMark
+            ) {
+              this.maybeRead();
+              if (state.buffer.length > 0) this.scheduleFlow();
+            }
+          },
+          (err) => {
+            state.reading = false;
+            this.destroy(err instanceof Error ? err : new Error(String(err)));
+          },
+        );
+        return;
+      }
     } finally {
-      state.reading = false;
+      if (!pending) state.reading = false;
     }
   }
 

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Failed esbuild host initialization no longer consumes the shim's one-shot
+  `initialize()` latch; a later retry can start the real host, while concurrent
+  or post-success second calls still throw like Node esbuild.
+
 ### Changed
 
 - **esbuild shim delegates the REAL esbuild JS API to the host esbuild-wasm

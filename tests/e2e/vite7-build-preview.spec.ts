@@ -66,7 +66,7 @@ test.describe('Vite 7 production build/preview', () => {
     const afterBuild = await terminalBuffer(page);
     expect(afterBuild).not.toContain('/src/main.js');
 
-    await runTerminalLine(page, 'vite preview');
+    await runTerminalLine(page, 'rm vite.config.* && vite preview');
 
     await expect
       .poll(async () => fetchPreview(page, 4173), {

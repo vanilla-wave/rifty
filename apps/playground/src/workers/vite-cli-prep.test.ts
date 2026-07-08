@@ -5,7 +5,7 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
+import { type ViteCliMode, prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): every test drives the REAL prepareViteCli against
@@ -100,6 +100,16 @@ function previewConfig(): (options: typeof PREVIEW_OPTIONS) => Record<string, un
   return synthesize;
 }
 
+function prepareWithArgs(
+  root: string,
+  mode: ViteCliMode,
+  args: readonly string[],
+): Promise<void> {
+  return (
+    prepareViteCli as (root: string, mode: ViteCliMode, args: readonly string[]) => Promise<void>
+  )(root, mode, args);
+}
+
 function walkTree(fsSync: MemoryFsSync, dir: string, out: string[] = []): string[] {
   for (const entry of fsSync.readdirSync(dir)) {
     const path = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
@@ -180,7 +190,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 });
 
 describe('prepareViteCli — vite preview inline config patch', () => {
-  it('preserves configFile:options.config and adds cors:false only', async () => {
+  it('config-free preview preserves configFile unset and adds cors:false only', async () => {
     const fsSync = bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
     await prepareViteCli('/app', 'preview');
     runPatchedCli(fsSync);
@@ -188,8 +198,8 @@ describe('prepareViteCli — vite preview inline config patch', () => {
     // toEqual is exact: proves the patch adds NOTHING beyond cors (no
     // `...user.preview` spread, no allowedHosts — the "hang, not 403" was
     // rifty's missing net.isIP, fixed with parity cases/net/is-ip).
-    expect(previewConfig()(PREVIEW_OPTIONS)).toEqual({
-      configFile: '/app/vite.config.ts',
+    expect(previewConfig()({ ...PREVIEW_OPTIONS, config: undefined })).toEqual({
+      configFile: undefined,
       configLoader: 'bundle',
       logLevel: 'info',
       mode: 'production',
@@ -206,6 +216,28 @@ describe('prepareViteCli — vite preview inline config patch', () => {
     expect(readText(fsSync, CLI_PATH)).toContain(
       'TODO(backlog: playground/vite-preview-cors-middleware-parity)',
     );
+  });
+
+  it('preview mode loud-rejects project-root vite.config until preview CORS/config parity lands', async () => {
+    bootFs({
+      [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}`,
+      '/app/vite.config.ts': 'export default { preview: { cors: true } };\n',
+    });
+
+    await expect(prepareViteCli('/app', 'preview')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'vite.preview.config-loading',
+    });
+  });
+
+  it('preview mode loud-rejects explicit --config until preview CORS/config parity lands', async () => {
+    bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
+
+    await expect(prepareWithArgs('/app', 'preview', ['--config', 'preview.config.ts'])).rejects
+      .toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'vite.preview.config-loading',
+      });
   });
 
   it('dev mode leaves the preview inline config untouched — the patch executes only under vite preview', async () => {
@@ -244,10 +276,11 @@ describe('prepareViteCli — wrapper deletion guard', () => {
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
   });
 
-  it('dev and build install the esbuild host bridge (ADR-0192); run/preview do not need it', async () => {
+  it('all vite CLI modes install the lazy esbuild host bridge (ADR-0192)', async () => {
     bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
     await prepareViteCli('/app', 'run');
-    expect(g.__riftyEsbuild).toBeUndefined();
+    expect(g.__riftyEsbuild).toBeDefined();
+    g.__riftyEsbuild = undefined;
     await prepareViteCli('/app', 'build');
     expect(g.__riftyEsbuild).toBeDefined();
     g.__riftyEsbuild = undefined;
@@ -255,7 +288,7 @@ describe('prepareViteCli — wrapper deletion guard', () => {
     expect(g.__riftyEsbuild).toBeDefined();
     g.__riftyEsbuild = undefined;
     await prepareViteCli('/app', 'preview');
-    expect(g.__riftyEsbuild).toBeUndefined();
+    expect(g.__riftyEsbuild).toBeDefined();
   });
 
   it('writes ONLY the CLI patch — zero shim glue or wrapper files at prep time (ADR-0188)', async () => {

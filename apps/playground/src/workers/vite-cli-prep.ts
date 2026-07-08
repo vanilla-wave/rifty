@@ -1,6 +1,7 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { installEsbuildBridge } from './esbuild-host.ts';
+import { assertNoUserVitePreviewConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -72,9 +73,14 @@ function installCliActionPatches(root: string, mode: ViteCliMode): void {
   if (changed) fs.writeFileSync(path, enc.encode(source));
 }
 
-export async function prepareViteCli(root: string, mode: ViteCliMode): Promise<void> {
+export async function prepareViteCli(
+  root: string,
+  mode: ViteCliMode,
+  args: readonly string[] = [],
+): Promise<void> {
+  if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, viteConfigArg(args));
   installCliActionPatches(root, mode);
-  if (mode === 'build' || mode === 'dev') installEsbuildBridge();
+  installEsbuildBridge();
 }
 
 export function binNameOf(path: string): string {
@@ -186,6 +192,17 @@ function parseViteCliArgs(args: readonly string[]): ViteCliParse {
 
 export function viteCliMode(args: readonly string[]): ViteCliMode {
   return parseViteCliArgs(args).mode;
+}
+
+function isConfigFlag(t: ViteCliToken): t is Extract<ViteCliToken, { kind: 'flag' }> {
+  return t.kind === 'flag' && (t.flag === '--config' || t.flag === '-c');
+}
+
+function viteConfigArg(args: readonly string[]): string | null | undefined {
+  for (const t of parseViteCliArgs(args).tokens) {
+    if (isConfigFlag(t)) return t.value;
+  }
+  return undefined;
 }
 
 export function createPreviewScope(): string {
