@@ -24,8 +24,17 @@ afterEach(() => {
   for (const teardown of teardowns.splice(0)) teardown();
 });
 
-async function tick(ms = 20): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+async function waitFor(assertion: () => void, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  assertion();
 }
 
 describe('git status publisher', () => {
@@ -108,9 +117,8 @@ describe('git status page channel/cache', () => {
     const frames: Parameters<typeof applyGitStatusFrame>[1][] = [];
     teardowns.push(subscribeGitStatus('git-status-channel', (frame) => frames.push(frame)));
 
-    await tick();
+    await waitFor(() => expect(frames).toHaveLength(1));
 
-    expect(frames).toHaveLength(1);
     const cache = new Map<string, string>();
     const first = frames[0];
     if (first === undefined) throw new Error('expected status frame');
@@ -132,9 +140,8 @@ describe('git status page channel/cache', () => {
     const store = createGitStatusStore('git-status-store');
     teardowns.push(() => store.dispose());
 
-    await tick();
+    await waitFor(() => expect([...store.map.entries()]).toEqual([['a.txt', ' M']]));
 
-    expect([...store.map.entries()]).toEqual([['a.txt', ' M']]);
     store.clear();
     expect([...store.map.entries()]).toEqual([]);
   });

@@ -22,6 +22,8 @@
  *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
  *  worker builds them from {@link ViteProjectSpec.hmr} after resolving the spec. */
 export interface ServerSpec {
+  // TODO(backlog: playground/vite-curated-boot-residual-forces): remove retired
+  // direct-boot Vite knobs from ServerSpec unless a live direct path proves them.
   readonly appType: string;
   readonly strictPort: boolean;
   readonly optimizeDepsDisabled: boolean;
@@ -176,14 +178,16 @@ export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
 
 /**
  * The visible terminal line the playground runs to boot a template — the real
- * `vite` CLI with template port flags for vite templates, `npm run dev`
+ * `vite` CLI with only the template's preferred port for vite templates, `npm run dev`
  * (resolved through the seeded package.json script) for node servers. The node
  * line is `cd <root> && …`-pinned: `npm run` reads package.json from the
  * SESSION cwd, and the auto-boot session may have a persisted/user cwd outside
  * the project.
  */
 export function terminalDevLine(spec: ProjectSpec, root: string): string {
-  if (spec.runtime === 'vite') return `vite --host 0.0.0.0 --strictPort --port ${spec.defaultPort}`;
+  // TODO(backlog: playground/vite-strictport-fallback-proof): browser-prove that
+  // Vite's selected fallback port becomes rifty's LIVE/preview port.
+  if (spec.runtime === 'vite') return `vite --port ${spec.defaultPort}`;
   return `cd ${root} && npm run dev`;
 }
 

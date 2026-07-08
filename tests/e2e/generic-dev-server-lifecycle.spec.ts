@@ -72,7 +72,7 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
     await openShellTerminal(page);
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(); } else { res.end("FORK-OK"); } }); s.listen(4100);\' > /scratch/server.mjs',
+      'echo \'import http from "node:http"; const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(); } else { res.end("FORK-OK host=" + req.headers.host); } }); s.listen(4100);\' > /scratch/server.mjs',
     );
     await runLineConfirmed(
       page,
@@ -100,12 +100,15 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
           clearTimeout(timer);
         }
       }, path);
+    // Host parity (ADR-0189 D3): the preview path stamps the Host a real local
+    // dev run would — localhost:<port> — so any dev server's default host
+    // allow-list passes without rifty config injection.
     await expect
       .poll(() => fetchPreview('/preview/4100/'), {
         timeout: 90_000,
         intervals: [1_000, 2_000, 4_000],
       })
-      .toContain('FORK-OK');
+      .toContain('FORK-OK host=localhost:4100');
 
     // 2. server.close() — port unregisters, NO process exit, session still held.
     // The response body can be LOST by design: close() tears the preview bridge

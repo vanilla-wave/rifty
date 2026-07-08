@@ -1,9 +1,8 @@
 // Generated from packages/service-worker/src/sw.ts — do not edit. Source of truth: ADR 0016.
 // ../../packages/io/src/preview-protocol.ts
 var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
-var PREVIEW_LOCAL_HOST = "preview.local";
 function synthesizePreviewUrl(path, port) {
-  const host = port === void 0 ? PREVIEW_LOCAL_HOST : `${PREVIEW_LOCAL_HOST}:${port}`;
+  const host = port === void 0 ? "localhost" : `localhost:${port}`;
   return `http://${host}${path}`;
 }
 function parsePreviewPath(path) {
@@ -16,7 +15,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "5";
+var SW_ROUTING_VERSION = "6";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";

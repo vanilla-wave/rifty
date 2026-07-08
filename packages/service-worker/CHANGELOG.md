@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`SW_ROUTING_VERSION` 5 → 6:** the upstream URL the SW forwards for `/preview/<port>/*`
+  now carries `Host: localhost:<port>` (was `preview.local:<port>`) — see
+  `@riftydev/io` `synthesizePreviewUrl` (ADR-0189 D3). A stale SW + new page (or vice
+  versa) 503s previews until reload, as the version stamp intends.
+
 ### Added
 
 - **ADR-0160:** window owners advertise an additive-optional `ports` field on

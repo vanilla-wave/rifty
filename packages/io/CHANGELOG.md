@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`synthesizePreviewUrl` stamps `Host: localhost:<port>`** instead of the synthetic
+  `preview.local` (ADR-0189 D3, backlog net/preview-websocket-bridge): guest servers see
+  the Host a REAL local dev run would; `Host`-derived consumers keep the original
+  preview port and protocol-level `server.host` forcing can retire. Vite
+  `allowedHosts` still has a separate recorded hang before that force can retire.
+  `PREVIEW_LOCAL_HOST` stays exported for the explicit `setupHmrBridge`/devMode
+  legacy path. Addressing change → SW_ROUTING_VERSION bump (`@riftydev/service-worker`).
+
 ### Added
 
 - **`stream.compose` + `Readable.prototype.wrap` + `Duplex.from`** (Node v16) —

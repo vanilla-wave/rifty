@@ -1,7 +1,8 @@
 /**
  * Preview-protocol addressing primitives — single source of truth for the
- * `/preview/<port>/...` URL convention and the synthetic `preview.local` host,
- * shared between `@riftydev/service-worker` and `@riftydev/net`.
+ * `/preview/<port>/...` URL convention, plus the legacy explicit-HMR
+ * `preview.local` host constant, shared between `@riftydev/service-worker`
+ * and `@riftydev/net`.
  *
  * Per ADR-0036 the regex and host literal live here so a routing-scheme change
  * is a one-edit change rather than a multi-package hunt for inlined copies. Both
@@ -21,22 +22,26 @@
 export const PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
 
 /**
- * Synthetic host for upstream URLs after stripping the `/preview/<port>` prefix.
- * Uses the `.local` mDNS-reserved suffix so it never collides with a real DNS
- * name even if the URL leaks into a log or `fetch` error.
+ * Synthetic host kept for the EXPLICIT `setupHmrBridge`/devMode legacy path
+ * (never a real DNS name — `.local` is mDNS-reserved). The SW preview path no
+ * longer uses it: {@link synthesizePreviewUrl} emits `localhost` so guest
+ * servers see the Host a real local dev run would.
  */
 export const PREVIEW_LOCAL_HOST = 'preview.local';
 
 /**
  * Build the upstream URL the SW forwards to the owning client. `path` is the
  * post-prefix portion of the request (e.g. `/foo` for `/preview/3000/foo`).
- * `port` preserves the original preview target in `Host`-derived consumers
- * such as `@hono/node-server`. Scheme is hard-coded `http://`: the hostname is
- * fictitious and the request never leaves the page realm, so there is nothing
- * to negotiate over TLS.
+ * The host is `localhost:<port>` — exactly what a real local dev run puts in
+ * `Host` — so host-derived consumers (`@hono/node-server`) keep the original
+ * preview port and generic host allow-lists can be retired at the protocol
+ * layer. Vite's `allowedHosts` force still has a separate recorded hang before
+ * it can retire. Scheme is hard-coded `http://`: the request never leaves the
+ * page realm, so there is nothing to negotiate over TLS. Addressing change =
+ * SW_ROUTING_VERSION bump.
  */
 export function synthesizePreviewUrl(path: string, port?: number): string {
-  const host = port === undefined ? PREVIEW_LOCAL_HOST : `${PREVIEW_LOCAL_HOST}:${port}`;
+  const host = port === undefined ? 'localhost' : `localhost:${port}`;
   return `http://${host}${path}`;
 }
 

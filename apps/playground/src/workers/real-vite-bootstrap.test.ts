@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
  *   - editor write → owner fan-out → child HMR → preview update (incl.
  *     liveBinChildren) → m7-preview-sw.spec.ts
  *   - real .bin/vite dispatch + dev wrapper config → vite-command-honesty.spec.ts
- *   - preview mode (--host synthetic local host) → vite7-build-preview.spec.ts
+ *   - preview mode (stock args, SW-stamped Host) → vite7-build-preview.spec.ts
  *   - uniform bin/preview-registry lifecycle → generic-dev-server-lifecycle,
  *     node-command, socket-lab/hono-api/koa-api specs
  *   - node-cli preset lifecycle → cli-report.spec.ts
@@ -39,23 +39,16 @@ const source = readFileSync(
 );
 
 describe('residual source pins', () => {
-  it('pins the ADR-0161 hmr-off env for vite .bin dev children (vite8 is opt-in — no default e2e)', () => {
-    // residual source pin: RIFTY_VITE_CLI_HMR_OFF only affects the opt-in vite8
-    // template; observing it needs a full Vite-8 dev child boot no default lane runs.
-    expect(source).toContain('RIFTY_VITE_CLI_HMR_OFF');
-    // the ADR-0189 endpoint-rewrite envs must stay retired
+  it('bin lifecycle stays uniform — ZERO vite-name dispatch in the owner bootstrap', () => {
+    // residual source pin: the per-bin-name dispatch class regresses silently
+    // (webpack-dev-server et al. keep working through generic paths in e2e).
+    // The only allowed vite keying lives in vite-cli-prep's withViteCliArgs/
+    // withViteCliEnv (behavioral tests there; ADR-0161 hmr-off pin included);
+    // the ADR-0189 endpoint-rewrite envs must stay retired.
+    expect(source).not.toContain("!== 'vite'");
+    expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
     expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
     expect(source).not.toContain('VITE_DEFAULT_DEV_PORT');
-  });
-
-  it('bin lifecycle stays uniform — vite-name dispatch only inside the CLI wrapper prep', () => {
-    // residual source pin: the per-bin-name dispatch class regresses silently
-    // (webpack-dev-server et al. keep working through generic paths in e2e);
-    // only the HMR CLI wrapper (backlog: net/preview-websocket-bridge) may key
-    // on the vite name.
-    const allowed = [...source.matchAll(/binNameOf\(binPath\) !== 'vite'/g)].length;
-    expect(allowed).toBe(2); // withViteCliArgs + withViteCliEnv, nothing else
-    expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
   });
 
   it('dev-config ack never awaits the deps restore (echo-behind-download regression)', () => {

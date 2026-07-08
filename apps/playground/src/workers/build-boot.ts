@@ -122,6 +122,9 @@ export async function bootPreview(opts: {
     configFile: false,
     clearScreen: false,
     logLevel: 'info',
+    // TODO(backlog: playground/vite-curated-boot-residual-forces): align or
+    // delete this curated preview path; shell/.bin `vite preview` keeps user
+    // host/strictPort options instead of forcing them here.
     preview: { port, strictPort: true, host: true },
   });
   const tearPreviewBridge = serveCrossRealmPreview(

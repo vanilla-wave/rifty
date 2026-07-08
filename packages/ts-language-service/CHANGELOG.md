@@ -23,6 +23,9 @@
   The parity file now carries a local timeout budget for real
   `ts.LanguageService` construction instead of inheriting Vitest's 5s default,
   which could time out under `pnpm pr:check` concurrency without a divergence.
+- **TS parity harness no longer flakes under full PR load.** The heavy
+  real-`ts.LanguageService` comparison tests now get an explicit timeout budget
+  while keeping the same gold-standard assertions.
 
 - **Diagnostics compat row no longer overclaims tags/related info.** The
   generated TS language-service matrix now marks diagnostics `⚠️` until

@@ -9,7 +9,7 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareViteCli } from './vite-cli-prep.ts';
+import { prepareViteCli, viteCliMode, withViteCliArgs, withViteCliEnv } from './vite-cli-prep.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): every test drives the REAL prepareViteCli against
@@ -174,6 +174,10 @@ afterEach(() => {
 });
 
 describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions)', () => {
+  it('module parses and loads (a stray backtick in a template-literal comment breaks the worker fetch)', async () => {
+    await expect(import('./vite-cli-prep.ts')).resolves.toBeDefined();
+  });
+
   it('patched CLI hands a detached async action promise to the keepalive tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
     await prepareViteCli('/app', 'run');
@@ -303,19 +307,23 @@ describe('prepareViteCli — vite preview inline config patch (no config-file lo
 });
 
 describe('prepareViteCli — dev CLI config wrapper (forced options + server handle, ADR-0189)', () => {
-  it('without a user config the executed wrapper forces the browser-required defaults', async () => {
+  it('without a user config the executed wrapper forces ONLY the two surviving options (PR #112)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
     await prepareViteCli('/app', 'dev');
     const config = await importWrapperDefault(fsSync);
     const merged = await config({ command: 'serve', mode: 'development' });
 
-    expect(merged.base).toBe('./');
-    expect(merged.appType).toBe('spa');
+    // Retired forces stay retired (each with its e2e proof, backlog
+    // net/preview-websocket-bridge): base './' (SW port-context routing,
+    // ADR-0097), appType (vite default), server.strictPort (port-derived
+    // lifecycle), server.host (SW stamps Host localhost:<port>, ADR-0189 D3).
+    expect(merged.base).toBeUndefined();
+    expect(merged.appType).toBeUndefined();
     expect(merged.optimizeDeps).toEqual({ noDiscovery: true, include: [] });
-    // Exact server object: strictPort/host/allowedHosts forced and NO hmr key —
-    // stock HMR flows through the generic preview bridge (ADR-0189 retired the
-    // endpoint rewrite + client-script injection).
-    expect(merged.server).toEqual({ strictPort: true, host: true, allowedHosts: true });
+    // Exact server object: ONLY allowedHosts forced and NO hmr key — stock HMR
+    // flows through the generic preview bridge (ADR-0189 retired the endpoint
+    // rewrite + client-script injection).
+    expect(merged.server).toEqual({ allowedHosts: true });
   });
 
   it('hmrOff pins server.hmr:false (Vite 8 Rolldown socket parity, ADR-0161)', async () => {
@@ -365,10 +373,9 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
     expect(merged.appType).toBe('mpa');
     expect(merged.optimizeDeps).toEqual({ force: true, noDiscovery: true, include: ['react'] });
     expect(merged.server).toEqual({
-      host: false, // explicit user host survives the forcing (`?? true` default only)
+      host: false, // host force retired (PR #112) — user value flows through
       hmr: { port: 24678 }, // stock HMR: user's server.hmr flows through untouched
       proxy: { '/api': 'http://upstream' },
-      strictPort: true,
       allowedHosts: true,
     });
     expect(merged.plugins.map((plugin) => plugin.name)).toEqual([
@@ -415,5 +422,153 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
     await prepareViteCli('/app', 'dev');
     const after = walkTree(fsSync, '/').sort();
     expect(after).toEqual([...before, '/app/.rifty', WRAPPER_PATH].sort());
+  });
+});
+
+describe('viteCliMode — CAC command matching (every case probed on REAL vite 7.3.6 CLI, 2026-07-07)', () => {
+  // Real cac semantics: a command matches when the FIRST positional under THAT
+  // command's grammar (global + its own booleans) equals its name; any flag the
+  // candidate grammar doesn't declare boolean consumes the next non-dash token
+  // (mri default). Probe harness: `vite <form>` in an empty project, dev=:5173
+  // vs preview=:4173 vs build/optimize exit.
+  it('global value options before the subcommand do not swallow it', () => {
+    expect(viteCliMode(['--config', 'vite.custom.mjs', 'preview'])).toBe('preview');
+    expect(viteCliMode(['-c', 'vite.custom.mjs', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--config=vite.custom.mjs', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--mode', 'production', 'preview'])).toBe('preview');
+    expect(viteCliMode(['-m', 'production', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--host', '127.0.0.1', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--base', '/x/', 'preview'])).toBe('preview');
+    expect(viteCliMode(['-l', 'info', 'preview'])).toBe('preview');
+    expect(viteCliMode(['-f', 'foo', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--mode', 'production', 'build'])).toBe('build');
+  });
+
+  it('boolean flags of the matched command pass the subcommand through', () => {
+    expect(viteCliMode(['--clearScreen', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--no-clearScreen', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--strictPort', 'preview'])).toBe('preview');
+    expect(viteCliMode(['--emptyOutDir', 'build'])).toBe('build');
+    expect(viteCliMode(['-w', 'build'])).toBe('build');
+    expect(viteCliMode(['--force', 'optimize'])).toBe('run');
+  });
+
+  it('flags UNKNOWN to the candidate command eat the would-be subcommand — real vite runs dev', () => {
+    // --cors/--open/--debug/--force are not declared on the preview command
+    // (and --profile is a raw-argv hack, invisible to cac) → each consumed
+    // 'preview' in the probe and vite served :5173.
+    expect(viteCliMode(['--cors', 'preview'])).toBe('dev');
+    expect(viteCliMode(['--open', 'preview'])).toBe('dev');
+    expect(viteCliMode(['--debug', 'preview'])).toBe('dev');
+    expect(viteCliMode(['-d', 'preview'])).toBe('dev');
+    expect(viteCliMode(['--profile', 'preview'])).toBe('dev');
+    expect(viteCliMode(['--host', 'preview'])).toBe('dev');
+    expect(viteCliMode(['--force', 'preview'])).toBe('dev');
+  });
+
+  it('tokens after -- never match a command (cac strips them before matching)', () => {
+    expect(viteCliMode(['--', 'preview'])).toBe('dev');
+    expect(viteCliMode(['build', '--', 'x'])).toBe('build');
+  });
+
+  it('plain forms: bare dev, root arg, aliases, subcommand-first', () => {
+    expect(viteCliMode([])).toBe('dev');
+    expect(viteCliMode(['--port', '5174'])).toBe('dev');
+    expect(viteCliMode(['my-app'])).toBe('dev');
+    expect(viteCliMode(['serve'])).toBe('dev');
+    expect(viteCliMode(['dev'])).toBe('dev');
+    expect(viteCliMode(['preview'])).toBe('preview');
+    expect(viteCliMode(['preview', '--port', '4173'])).toBe('preview');
+    expect(viteCliMode(['build'])).toBe('build');
+    expect(viteCliMode(['optimize'])).toBe('run');
+  });
+
+  it('help/version anywhere short-circuits to run (vite prints and exits)', () => {
+    expect(viteCliMode(['--help'])).toBe('run');
+    expect(viteCliMode(['-h'])).toBe('run');
+    expect(viteCliMode(['--version'])).toBe('run');
+    expect(viteCliMode(['-v'])).toBe('run');
+    expect(viteCliMode(['build', '--help'])).toBe('run');
+  });
+});
+
+describe('withViteCliArgs — retired preview forces stay retired (behavioral, PR #112)', () => {
+  const ctx = {
+    cwd: '/proj',
+    env: {},
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  } as unknown as Parameters<typeof withViteCliArgs>[2];
+
+  it('preview mode passes args through UNTOUCHED — no --host/--strictPort injection (ADR-0189 D3)', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['preview'], ctx)).toEqual(['preview']);
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['preview', '--port', '4173'], ctx),
+    ).toEqual(['preview', '--port', '4173']);
+  });
+
+  it('dev mode injects ONLY the wrapper --config (user config re-routed via env, not args)', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx)).toEqual([
+      '--port',
+      '5174',
+      '--config',
+      '/proj/.rifty/vite-cli.config.mjs',
+    ]);
+  });
+
+  it('dev mode injects the wrapper config before -- rest args so Vite still parses it', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/vite', ['--', 'preview'], ctx)).toEqual([
+      '--config',
+      '/proj/.rifty/vite-cli.config.mjs',
+      '--',
+      'preview',
+    ]);
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['dev', '--', '--host', 'x'], ctx),
+    ).toEqual(['dev', '--config', '/proj/.rifty/vite-cli.config.mjs', '--', '--host', 'x']);
+    expect(
+      withViteCliArgs(
+        '/proj/node_modules/.bin/vite',
+        ['--config', 'vite.custom.mjs', '--', 'tail'],
+        ctx,
+      ),
+    ).toEqual(['--config', '/proj/.rifty/vite-cli.config.mjs', '--', 'tail']);
+  });
+
+  it('non-vite bins pass through untouched', () => {
+    expect(withViteCliArgs('/proj/node_modules/.bin/webpack', ['serve'], ctx)).toEqual(['serve']);
+  });
+
+  it('option-first preview forms pass through untouched too (review-blocker case)', () => {
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['--mode', 'production', 'preview'], ctx),
+    ).toEqual(['--mode', 'production', 'preview']);
+    const enved = withViteCliEnv(
+      '/proj/node_modules/.bin/vite',
+      ['--config', 'vite.custom.mjs', 'preview'],
+      ctx,
+    );
+    expect(enved.env.RIFTY_VITE_CLI_MODE).toBe('preview');
+    expect(enved.env.RIFTY_VITE_CLI_USER_CONFIG).toBe('/proj/vite.custom.mjs');
+  });
+
+  it('--config followed by a flag has no value (mri never consumes a dash token)', () => {
+    const enved = withViteCliEnv('/proj/node_modules/.bin/vite', ['--config', '--port', '1'], ctx);
+    expect(enved.env.RIFTY_VITE_CLI_USER_CONFIG).toBeUndefined();
+    // Dev wrapper injection must strip exactly the config FLAG, not its neighbours.
+    expect(
+      withViteCliArgs('/proj/node_modules/.bin/vite', ['--config', '--port', '1'], ctx),
+    ).toEqual(['--port', '1', '--config', '/proj/.rifty/vite-cli.config.mjs']);
+  });
+
+  it('withViteCliEnv threads mode + hmr-off pin, nothing else for stock HMR', () => {
+    const enved = withViteCliEnv('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx, {
+      hmrOff: true,
+    });
+    expect(enved.env.RIFTY_VITE_CLI_MODE).toBe('dev');
+    expect(enved.env.RIFTY_VITE_CLI_HMR_OFF).toBe('1');
+    const stock = withViteCliEnv('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx);
+    expect(stock.env.RIFTY_VITE_CLI_HMR_OFF).toBeUndefined();
+    expect(stock.env.RIFTY_VITE_CLI_PORT).toBeUndefined();
   });
 });

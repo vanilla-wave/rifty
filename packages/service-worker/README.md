@@ -17,8 +17,8 @@ that port. The default owner binding is port-aware (ADR-0123): a Worker client
 that announces the controlling window's `ownerToken` plus `ports: [port]` wins,
 otherwise routing falls back to the historical first controlled window bridge.
 
-- URL convention + `preview.local` synthetic host: `@riftydev/io/preview-protocol`,
-  ADR-0036.
+- URL convention + upstream `localhost:<port>` Host synthesis:
+  `@riftydev/io/preview-protocol`, ADR-0036 (+ ADR-0189 D3).
 - SW-side wiring: `installPreviewInterceptor(self)` in `sw.ts` /
   `preview-bridge.ts`.
 - Main-side wiring: `setupPreviewBridge(handler)` posts the
@@ -91,14 +91,14 @@ per-field semantics.
 
 `SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
 `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
-`synthesizePreviewUrl` return shape, `parsePreviewPath`), (b) the preview-frame port
+`synthesizePreviewUrl` return shape / synthesized Host, `parsePreviewPath`), (b) the preview-frame port
 context that routes root-relative iframe requests to the same preview port
 by iframe `clientId` or same-origin `/preview/<port>/` request referrer, and
 (c) the owner-fallback and owner-scoping rules in the
 preview owner bindings, including the unambiguous Worker fallback for copied
 top-level preview URLs and the ready-window preference for no-clientId fallback.
-Bumping requires: changes to the URL regex shape, the synthetic host literal,
-the preview-frame port-context rule, the resolver fallback order, the Worker
+Bumping requires: changes to the URL regex shape, the `synthesizePreviewUrl`
+return shape / synthesized Host, the preview-frame port-context rule, the resolver fallback order, the Worker
 claim scope, or the mismatch / one-shot-warn dedup key shape.
 
 ADR-0040 is the source-of-truth for the split; ADR-0031 is the

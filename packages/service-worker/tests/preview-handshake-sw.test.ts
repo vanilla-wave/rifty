@@ -753,7 +753,7 @@ describe('SW-side handshake state machine', () => {
     const call = workerClient.postMessage.mock.calls[0]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/');
+    expect(message.request?.url).toBe('http://localhost:5174/');
     const replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -794,7 +794,7 @@ describe('SW-side handshake state machine', () => {
     const call = workerClient.postMessage.mock.calls[0]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/src/main.js');
+    expect(message.request?.url).toBe('http://localhost:5174/src/main.js');
     const replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -851,7 +851,7 @@ describe('SW-side handshake state machine', () => {
     call = workerClient.postMessage.mock.calls[1]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/src/main.js');
+    expect(message.request?.url).toBe('http://localhost:5174/src/main.js');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -891,7 +891,7 @@ describe('SW-side handshake state machine', () => {
     const call = pageClient.postMessage.mock.calls[0]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/');
+    expect(message.request?.url).toBe('http://localhost:5174/');
     const replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1019,7 +1019,7 @@ describe('SW-side handshake state machine', () => {
     const call = workerA.postMessage.mock.calls[0]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/');
+    expect(message.request?.url).toBe('http://localhost:5174/');
     const replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1146,7 +1146,7 @@ describe('SW-side handshake state machine', () => {
     let call = pageClient.postMessage.mock.calls[0]!;
     let message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/');
+    expect(message.request?.url).toBe('http://localhost:5174/');
     let replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
     expect((await navResponse).status).toBe(200);
@@ -1161,7 +1161,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[1]!;
     message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/src/main.js');
+    expect(message.request?.url).toBe('http://localhost:5174/src/main.js');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1266,7 +1266,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[1]!;
     let message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(3000);
-    expect(message.request?.url).toBe('http://preview.local:3000/api/ping');
+    expect(message.request?.url).toBe('http://localhost:3000/api/ping');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
     expect((await crossPortResponse).status).toBe(200);
@@ -1280,7 +1280,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[2]!;
     message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5173);
-    expect(message.request?.url).toBe('http://preview.local:5173/src/main.js');
+    expect(message.request?.url).toBe('http://localhost:5173/src/main.js');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1316,7 +1316,7 @@ describe('SW-side handshake state machine', () => {
     const call = pageClient.postMessage.mock.calls[0]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/logo.png');
+    expect(message.request?.url).toBe('http://localhost:5174/logo.png');
     const replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1371,7 +1371,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[1]!;
     let message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/api/config');
+    expect(message.request?.url).toBe('http://localhost:5174/api/config');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1391,7 +1391,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[2]!;
     message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/dashboard');
+    expect(message.request?.url).toBe('http://localhost:5174/dashboard');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1410,7 +1410,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[3]!;
     message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/assets/chunk.js');
+    expect(message.request?.url).toBe('http://localhost:5174/assets/chunk.js');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1458,7 +1458,7 @@ describe('SW-side handshake state machine', () => {
     call = pageClient.postMessage.mock.calls[1]!;
     const message = call[0] as { request?: { port: number; url: string } };
     expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local:5174/src/main.js');
+    expect(message.request?.url).toBe('http://localhost:5174/src/main.js');
     replyPort = (call[1] as MessagePort[])[0]!;
     replyPort.postMessage({
       status: 200,
@@ -1571,7 +1571,7 @@ describe('SW-side body serialization', () => {
       request: { url: string; headers: Record<string, string>; body: Uint8Array | null };
     };
     const expectedLength = new TextEncoder().encode(payload).byteLength;
-    expect(request.url).toBe('http://preview.local:3000/api/todos');
+    expect(request.url).toBe('http://localhost:3000/api/todos');
     expect(request.body?.byteLength).toBe(expectedLength);
     expect(request.headers['content-length']).toBe(String(expectedLength));
     const replyPort = (transfer as MessagePort[])[0]!;

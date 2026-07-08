@@ -96,9 +96,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
-    count: 13,
-    digest: 'e9d75ad5d63c',
-    why: 'worker-only owner entry; residual = ADR-0161 hmr-off env (vite8 opt-in), prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); heirs in tests/browser-unit + e2e',
+    count: 12,
+    digest: '0c9f1de026ac',
+    why: 'worker-only owner entry; residual = zero-vite-name-dispatch pins, prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); withViteCliArgs/Env moved to vite-cli-prep (behavioral tests there incl. ADR-0161 hmr-off); heirs in tests/browser-unit + e2e',
   },
   {
     file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
