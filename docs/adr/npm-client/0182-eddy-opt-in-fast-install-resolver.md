@@ -20,6 +20,11 @@ lockfile + extracted node_modules (4.3x byte penalty to save ~50ms decompress
 (ADR-0163, 2.5-3.5MB response cap); eddy is a streaming Node service, KB-to-MB
 responses are fine.
 
+**Correction 2026-07-07:** the original ~6x figure was a Node/sandbox model,
+not the browser launch quote. The committed production `auto` browser artifact
+is the quotable number; h2/h3 comparison remains gated by
+`docs/backlog/perf/eddy-http3-cold-validation.md`.
+
 ## Decision
 
 1. **New package `@riftydev/eddy`** — a Node HTTP service (published to npm + a Docker image, mirroring the Caddy proxy), living at `services/eddy/`. rifty.dev runs it alongside the registry proxy; self-hosters deploy their own. It is OPT-IN; absence changes nothing.

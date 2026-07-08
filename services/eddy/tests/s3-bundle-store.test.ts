@@ -546,7 +546,7 @@ describe('S3BundleStore', () => {
       method: 'GET',
       path: '/eddy-bundles/bundle/sha256-ab%2Fcd%2Bef%3D',
     });
-    expect([...(new Uint8Array(await res.arrayBuffer()))]).toEqual([...syntheticBundle]);
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([...syntheticBundle]);
   });
 
   it('signs the PUT (SigV4 authorization + payload hash headers); GET/HEAD stay unsigned public reads', async () => {
