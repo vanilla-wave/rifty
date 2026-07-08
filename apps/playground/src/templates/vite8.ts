@@ -20,6 +20,12 @@ if (import.meta.hot) {
 }
 `;
 
+const VITE8_CONFIG_JS = `export default {
+  server: { hmr: false },
+  optimizeDeps: { noDiscovery: true, include: [] },
+};
+`;
+
 export const VITE8_TEMPLATE: ViteProjectSpec = {
   id: 'vite8',
   displayName: 'Vite 8 (Rolldown experimental)',
@@ -31,15 +37,10 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
   defaultPort: 5174,
   estimatedBootSeconds: 25,
   htmlTitle: 'rifty + real Vite 8 (Rolldown, worker)',
-  server: {
-    appType: 'spa',
-    strictPort: true,
+  extraFiles: {
     // Vite 8 dep pre-bundling drives Rolldown's WASI bundler, upstream-blocked
-    // for this path (ADR-0173) — stays off regardless of the real esbuild
-    // bridge (ADR-0192 covers esbuild, not Rolldown).
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
+    // for this path (ADR-0173); HMR also stays off until its socket path is re-proven.
+    '/vite.config.js': VITE8_CONFIG_JS,
   },
   hmr: { enabled: false },
 };

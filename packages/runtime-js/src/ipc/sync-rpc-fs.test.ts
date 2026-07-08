@@ -1,7 +1,8 @@
 import { VfsError } from '@riftydev/vfs';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resetSyncMirror, syncMirror } from '../builtins/fs-sync-mirror.ts';
+import { watch } from '../builtins/fs-watch.ts';
 import { installRuntimeJsFsHandlers } from './fs-handlers.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
 import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
@@ -22,6 +23,7 @@ function loopback(vfs: MemoryFsSync): (m: string, p: unknown) => unknown {
 
 describe('installRemoteSyncFs', () => {
   afterEach(() => {
+    vi.useRealTimers();
     // prevent global-mirror swap from leaking into sibling tests
     resetSyncMirror();
   });
@@ -39,6 +41,27 @@ describe('installRemoteSyncFs', () => {
     expect(new TextDecoder().decode(syncMirror().readFileBytesSync('/g.txt'))).toBe('global');
     // confirm it actually landed in the fixture (round-trip through the owner)
     expect(new TextDecoder().decode(ownerStore.readFileBytesSync('/g.txt'))).toBe('global');
+  });
+
+  it('polling fs.watch observes writes made directly in the owner store through the remote mirror', () => {
+    vi.useFakeTimers();
+    const ownerStore = new MemoryFsSync();
+    ownerStore.mkdirSync('/workspace/src', { recursive: true });
+    ownerStore.writeFileSync('/workspace/src/main.js', new TextEncoder().encode('one'));
+    installRemoteSyncFs(loopback(ownerStore));
+
+    const events: Array<[string, string | null]> = [];
+    const watcher = watch('/workspace', { recursive: true, interval: 50 }, (event, name) => {
+      events.push([event, name]);
+    });
+    try {
+      ownerStore.writeFileSync('/workspace/src/main.js', new TextEncoder().encode('two'));
+      vi.advanceTimersByTime(60);
+
+      expect(events).toContainEqual(['change', 'src/main.js']);
+    } finally {
+      watcher.close();
+    }
   });
 });
 

@@ -40,7 +40,6 @@ import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
-import type { BinWorkerHandle } from '../glue/bin-executor.ts';
 import {
   learnedPinForPackageJsonSync,
   readLearnedPin,
@@ -117,7 +116,7 @@ import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import { binNameOf, createPreviewScope, withViteCliArgs, withViteCliEnv } from './vite-cli-prep.ts';
+import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -611,23 +610,13 @@ async function bootShellOwner(opts: {
     },
   });
 
-  // Live foreground bin children — editor writes are forwarded to EVERY one so
-  // HMR invalidation is not keyed on a bin name; a child without an active vite
-  // server ignores the frame (node-entry-bootstrap's isViteFileChangeMessage
-  // handler no-ops). HMR itself is stock (ADR-0189 generic preview WS bridge);
-  // the vite-NAMED remainder is the wrapper's forced options in
-  // withViteCliArgs/withViteCliEnv below — owned by backlog:
-  // net/preview-websocket-bridge (acceptance: per-option retirement).
-  const liveBinChildren = new Set<BinWorkerHandle>();
-  // Editor writes land via the vfs-write bridge; forward them to the running dev
-  // server's HMR (the virtual FS fires no real watcher events) + republish.
+  // Editor writes land via the vfs-write bridge; stock watchers in child
+  // processes observe them through the remote sync FS, so the owner only
+  // republishes its state and notifies the owner-resident dev-server controller.
   const onVfsWrite = (paths: readonly string[]): void => {
     publishOwnerState();
     for (const path of paths) {
       devServer.notifyFileChanged(path);
-      for (const child of liveBinChildren) {
-        child.send?.({ type: 'rifty:vite-file-change', path });
-      }
     }
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
@@ -637,7 +626,6 @@ async function bootShellOwner(opts: {
   const registry = createProxiedRegistryClient();
   let binRunSeq = 0;
   const binPreviewSids = new WeakMap<object, string>();
-  const binChildHandles = new WeakMap<object, BinWorkerHandle>();
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
   // the real `.bin` shim. Lifecycle is UNIFORM — the child posts its listening
   // port set (`rifty:node-listening`, sourced from the net registry's
@@ -647,10 +635,6 @@ async function bootShellOwner(opts: {
   const childBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl, {
     onStart: (req) => {
       binPreviewSids.set(req, `bin-${++binRunSeq}`);
-    },
-    onSpawn: (req, handle) => {
-      binChildHandles.set(req, handle);
-      liveBinChildren.add(handle);
     },
     onMessage: (req, message, ctx) => {
       if (!isNodeChildMessage(message)) return;
@@ -663,24 +647,12 @@ async function bootShellOwner(opts: {
       });
     },
     onExit: (req) => {
-      const handle = binChildHandles.get(req);
-      if (handle) liveBinChildren.delete(handle);
       const sid = binPreviewSids.get(req);
       if (sid !== undefined) previews.removeBySid(sid);
     },
   });
-  const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
-    const viteArgs = withViteCliArgs(binPath, args, ctx);
-    const viteCtx = withViteCliEnv(
-      binPath,
-      args,
-      ctx,
-      devCfg.runtime === 'vite'
-        ? { hmrOff: !devCfg.hmrEnabled, noDepDiscovery: devCfg.server.optimizeDepsDisabled }
-        : undefined,
-    );
-    return childBinExecutor(binPath, viteArgs, withPreviewScope(viteCtx));
-  };
+  const ownerBinExecutor: BinExecutor = (binPath, args, ctx) =>
+    childBinExecutor(binPath, args, withPreviewScope(ctx));
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.

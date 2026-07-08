@@ -180,7 +180,7 @@ describe('runtime dispatch + seeding (behavioral)', () => {
     expect(fs.existsSync(`${root}/data/packages.yml`)).toBe(true);
   });
 
-  it('loud-rejects a user vite.config before curated dev boot could ignore it', async () => {
+  it('does not reject a user vite.config before the real Vite boot path can load it', async () => {
     const root = '/bu-devboot/vite-config';
     const fs = syncMirror();
     fs.mkdirSync(root, { recursive: true });
@@ -188,8 +188,9 @@ describe('runtime dispatch + seeding (behavioral)', () => {
     const cfg = resolveBootstrapConfig(HIDDEN_EMPTY_TEMPLATE, 5175, root);
     const sinks = makeSinks();
 
-    await expect(
-      bootDevServer({
+    let error: unknown;
+    try {
+      await bootDevServer({
         cfg,
         port: 5175,
         root,
@@ -198,8 +199,13 @@ describe('runtime dispatch + seeding (behavioral)', () => {
         fromScratch: true,
         publishSnapshot: sinks.publishSnapshot,
         log: sinks.log,
-      }),
-    ).rejects.toThrow(/vite\.config/);
+      });
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(String(error)).toMatch(/vite/);
+    expect(String(error)).not.toMatch(/vite\.config/);
   });
 
   it('vite deps are a PRECONDITION: no node_modules → loud resolve failure, never a silent install', async () => {
@@ -236,10 +242,12 @@ describe('residual source pins', () => {
     'utf8',
   );
 
-  it('pins the ADR-0161 hmr-off knob for templates pinned off (Vite 8)', () => {
-    // residual source pin: `hmr: false` matters only for the opt-in vite8
-    // template — no default-on e2e boots Vite 8 (upstream-broken build path),
-    // and the node harness cannot boot the real vite dev server to observe it.
-    expect(source).toContain('hmr: cfg.hmrEnabled ? undefined : false');
+  it('does not reconstruct hidden Vite server/template gates in the dev child', () => {
+    // Template-specific Vite policy now lives in visible seed files (vite.config.js).
+    // The child still passes the routed port, but must not hide appType/HMR/host/
+    // allowedHosts/optimizer policy in inline config.
+    expect(source).not.toMatch(
+      /assertNoUserViteConfig\(root\)|cfg\.server|cfg\.hmrEnabled|allowedHosts|noDiscovery/,
+    );
   });
 });

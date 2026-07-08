@@ -49,6 +49,14 @@ Introduce a **ProjectSpec/Template** value object owned by the playground; route
 
 IRREVERSIBLE-by-checklist (>2 files / >100 lines), recorded here per ADR-0063. No external dependency, no cross-package public API (ProjectSpec is playground-internal).
 
+Correction (2026-07-07, wrapper retirement / ADR-0189 acceptance 4): the
+`server: ServerSpec` and derived `hmrEnabled` bootstrap fields are retired.
+ProjectSpec still owns install/runtime/entry/default-port/template metadata, but
+template-specific Vite policy (optimizer opt-out, Vite 8 `server.hmr:false`) is
+seeded as visible project `vite.config.js`, not reconstructed by the worker or
+threaded through the Vite CLI wrapper. This keeps real Vite/user config loading
+observable instead of hiding Rifty-only forces in argv/env/inline config.
+
 ## Alternatives considered
 
 - **Status-quo hardcode.** Rejected: user asked for headroom; a second template would fork the worker bootstrap.

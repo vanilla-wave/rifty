@@ -24,27 +24,9 @@ export function assertNoUserViteConfig(
 ): void {
   const configPath = findUserViteConfig(root, exists);
   if (configPath === null) return;
-  // TODO(backlog: playground/honest-vite-config-file-loading)
+  // TODO(backlog: playground/vite-curated-boot-residual-forces)
   throw new NotImplementedError(
     'vite.config-loading',
     `${configPath} exists, but the legacy owner Vite dev-server path cannot load user config yet; run the real vite CLI path or remove the config before using npm-run dev.`,
-  );
-}
-
-export function assertNoUserVitePreviewConfig(
-  root: string,
-  exists: (path: string) => boolean = (path) => syncMirror().existsSync(path),
-  explicitConfigPath?: string,
-): void {
-  const configPath =
-    explicitConfigPath === undefined
-      ? findUserViteConfig(root, exists)
-      : normalizePath(
-          explicitConfigPath.startsWith('/') ? explicitConfigPath : `${root}/${explicitConfigPath}`,
-        );
-  if (configPath === null) return;
-  throw new NotImplementedError(
-    'vite.preview.config-loading',
-    `${configPath} would be ignored by rifty's browser preview bridge; remove the config before running vite preview until preview config/CORS parity lands.`,
   );
 }

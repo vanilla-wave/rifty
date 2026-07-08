@@ -16,9 +16,17 @@ The browser has no loopback WebSocket and the SW cannot intercept `ws://` (fetch
 3. **Wrapper retirement is the acceptance, phased per forced option.** The HMR half (`RIFTY_VITE_CLI_HMR`/`RIFTY_VITE_CLI_PORT` env, the wrapper's `server.hmr` rewrite + plugin injection) dies with 1+2. The remaining forced options each need a generic resolution or a drop-with-proof before `withViteCliArgs`/`withViteCliEnv` delete: `allowedHosts`/`host` (candidate: rewrite the request Host to `localhost:<port>` at the preview bridge — generic), `strictPort`, `base: './'`, `optimizeDeps.noDiscovery` (re-test under wasm esbuild), user-config discovery env. The backlog item `net/preview-websocket-bridge` stays open until the wrapper is gone.
 4. **Token scoping is dropped for the port channel; the per-server nonce stays available** for explicit `setupHmrBridge` users. The preview channel is same-origin-only (BroadcastChannel), scope-keyed like the HTTP preview bridge; anti-hijack aligns with ADR-0160 ready-frame routing (the port-keyed channel only reaches a server that LISTENS on that port in the guest realm).
 
+Correction (2026-07-07): wrapper retirement acceptance closed. `withViteCliArgs`,
+`withViteCliEnv`, `.rifty/vite-cli.config.mjs`, and `RIFTY_VITE_CLI_*` template
+gates were deleted; Vite 8 HMR-off and preset dep-optimizer opt-outs moved into
+visible seeded `vite.config.js`. The backlog item `net/preview-websocket-bridge`
+and `preset-deglue` epic were removed per delete-on-done.
+
 ## Consequences
 
 - Any dev server's stock WS client works in the preview — vite untouched-config HMR, webpack-dev-server, socket.io — flipping socket-lab `browser-preview-websocket` to supported (the acceptance gate).
-- The last vite-keyed branch (`binNameOf === 'vite'` in the CLI prep) becomes deletable once every forced option retires (tracked in the item; phased).
+- The last Vite CLI wrapper/argv/env branch is deleted; the remaining Vite-name
+  check only identifies real `.bin/vite` children before patching Vite's own CLI
+  keepalive/preview-CORS internals.
 - Buffered HTML injection adds latency on very large documents (streaming rewrite is a follow-up if measured).
 - Close/backpressure semantics remain the bridge protocol's (no send-queue backpressure); real `ws` parity for high-volume streams is out of scope v1 — gaps stay loud in socket-lab.

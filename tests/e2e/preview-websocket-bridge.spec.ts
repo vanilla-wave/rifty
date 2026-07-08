@@ -1,6 +1,5 @@
 /**
- * Non-vite WebSocket through the generic preview bridge (ADR-0189, backlog
- * net/preview-websocket-bridge).
+ * Non-vite WebSocket through the generic preview bridge (ADR-0189).
  *
  * A bare npm `ws` echo server rides an untouched node:http server (socket-lab
  * preset); the PREVIEW page opens a plain browser

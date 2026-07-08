@@ -44,10 +44,11 @@ test.describe('manual Vite install path', () => {
     // 5174` (a real user picks a port): stock `vite` defaults to 5173, and the
     // retired CLI wrapper no longer forces the port — the arg now passes
     // through the untouched `.bin/vite` exec, so the flag is what lands the
-    // manual server on the port the preview iframe below asserts.
+    // manual server on the port the preview iframe below asserts. Delete the
+    // template's visible vite.config.* too: this lane is the real user path.
     await runTerminalLine(
       page,
-      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite --port 5174"},"dependencies":{}}\\n\' > package.json && npm install vite@^7.0.0',
+      'rm -rf node_modules package-lock.json package.json vite.config.* && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite --port 5174"},"dependencies":{}}\\n\' > package.json && npm install vite@^7.0.0',
     );
     await expectTerminalContains(page, 'npm: installing vite', 20_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 120_000);

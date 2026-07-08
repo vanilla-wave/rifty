@@ -185,6 +185,7 @@ export function PreviewPanel(props: {
             onClick={() => void copyUrl()}
           >
             <Icon name="lock" size={11} />
+            {/* TODO(backlog: playground/vite-preview-origin-isolation-signpost) */}
             <span class="rf-preview__host">localhost:</span>
           </button>
           <Show

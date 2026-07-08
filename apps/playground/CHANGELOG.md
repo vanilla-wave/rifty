@@ -7,23 +7,22 @@
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).
-### Fixed (vite CLI wrapper — deletion attempt reverted, finding recorded)
+### Fixed (Vite CLI wrapper retirement)
 
-- **manual-vite e2e fixed + the vite-CLI-HMR finding recorded (backlog
-  net/preview-websocket-bridge acceptance 4).** Two pre-existing bugs in the
-  opt-in `manual-vite-install` spec: unpinned `npm install vite` drifted onto
-  vite 8 (Rolldown WASI dev server can't boot in the foreground `.bin` child —
-  new backlog `playground/vite8-cli-nested-worker-boot`), and the manual
-  `npm run dev` served stock port 5173 while the spec hardcoded 5174. Pinned
-  vite 7 (the supported default) and gave the user script `vite --port 5174`
-  (a real user picks a port; also exercises the wrapper's untouched arg
-  passthrough). WHILE fixing it, re-checked the wrapper-deletion blocker now
-  that PR #115's recursive `fs.watch` landed: **stock chokidar does NOT drive
-  real-vite-CLI HMR over it** — deleting the `configureServer` server-handle
-  plugin + `rifty:vite-file-change` fan-out left the editor write with no HMR
-  update (line-118 30 s timeout); the wrapper+bridge restored, the same test
-  passes in 17.5 s. Deletion reverted; the plugin/bridge stay as the only
-  working editor-write→HMR path for the real vite CLI.
+- **Deleted the Vite CLI wrapper path; closes ADR-0189 wrapper retirement.**
+  After fixing `Readable` subclass `_read` in `@riftydev/io`, stock
+  chokidar/readdirp scans the remote sync FS correctly, creates real `fs.watch`
+  subscriptions for project files, and manual-vite HMR updates via Vite's own
+  watcher. Removed `.rifty/vite-cli.config.mjs`, `withViteCliArgs`,
+  `withViteCliEnv`, all `RIFTY_VITE_CLI_*` template gates, the
+  `rifty:vite-server-handle` plugin, and owner `rifty:vite-file-change`
+  fork-IPC fan-out. Template opt-outs that remain intentional are now visible
+  project files: default/TypeScript presets seed `vite.config.js` with
+  `optimizeDeps.noDiscovery`, and Vite 8 also seeds `server.hmr:false`.
+- **manual-vite e2e stays a real user path.** The opt-in manual-vite setup
+  now deletes any template `vite.config.*` before installing Vite 7 and running
+  the user's `vite --port 5174` script, so it proves stock CLI/config behavior
+  rather than the preset's visible config.
 
 ### Fixed (PR #112 review)
 
@@ -185,10 +184,10 @@
   write-emulation for browser `write:true`); the WASI transform bridge
   (`esbuild-wasi-transform.ts`, `__riftyEsbuildTransform`) is deleted. The
   wrapper's `optimizeDeps.noDiscovery` BLANKET force is retired — zero-config
-  projects run vite's REAL dep optimizer (manual-vite e2e green with discovery);
-  a template-declared opt-out remains (`RIFTY_VITE_CLI_NO_DEP_DISCOVERY`:
-  zero-dep instant presets keep the 13.5 MB wasm off their boot path, vite8 pins
-  off for Rolldown). Cost honestly measured: vite7-build-preview e2e 7.9→37 s
+  projects run vite's REAL dep optimizer (manual-vite e2e green with discovery).
+  Zero-dep instant presets and Vite 8 still opt out, but now via visible seeded
+  `vite.config.js` rather than `RIFTY_VITE_CLI_*` env. Cost honestly measured:
+  vite7-build-preview e2e 7.9→37 s
   (cold service init in the build child; backlog
   perf/esbuild-wasm-build-path-latency); instant-preset boot unchanged (m1 4.8 s).
 
@@ -199,7 +198,8 @@
   `@riftydev/net` with a parity case). Causal e2e proof one-variable-at-a-time:
   force removed + isIP reverted → preview fetch 502 (bridge timeout); force removed +
   isIP present → 200. Zero-config `manual-vite`, HMR, preview, ws-bridge, generic
-  dev-server e2e green. ONE wrapper force remains: `optimizeDeps.noDiscovery`.
+  dev-server e2e green. The remaining wrapper forces are retired by the final
+  wrapper-deletion entry above.
 
 - **Vite wrapper forces retired to two (backlog net/preview-websocket-bridge,
   acceptance 4 partial).** With the preview path now stamping `Host: localhost:<port>`
@@ -220,6 +220,9 @@
   strictPort fallback proof and legacy direct Vite boot cleanup are recorded as
   `playground/vite-strictport-fallback-proof` and
   `playground/vite-curated-boot-residual-forces`.
+  generic-lifecycle (asserts `host=localhost:<port>` reaches the guest). The
+  remaining forces were re-tested and later retired by the final wrapper-deletion
+  entry above.
 - **Epic playground-testable-core CLOSED: source-grep asserts 888 → 141, every
   residual with a recorded why (`tools/checks/source-grep-ratchet.mjs`).**
   Remaining App.tsx flows extracted to headless cores with mutation-RED-checked
@@ -313,20 +316,16 @@
   stamp when the ledger shows tree persist failures, so a later boot re-runs
   dependency arrival instead of trusting a torn tree.
 
-- **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189, backlog
-  net/preview-websocket-bridge, partial).** The vite CLI config wrapper no longer
+- **Stock vite HMR — the wrapper's HMR half is deleted (ADR-0189; superseded by
+  full wrapper retirement above).** The vite CLI config wrapper no longer
   rewrites `server.hmr` or injects the HMR client plugin; the user's own hmr config
   flows through and vite's stock client rides the generic preview-path WS bridge
   (`@riftydev/net` injects it into every text/html preview response — webpack/socket.io
   get the same transport for free). Deleted: `RIFTY_VITE_CLI_HMR`/`RIFTY_VITE_CLI_PORT`
   env plumbing, `viteHmrClientScript`/`createHmrBridgeVitePlugin` (+ structural plugin
-  types), the dev-server-boot bespoke hmr wiring. The wrapper keeps a minimal
-  `configureServer` plugin (sets `__riftyActiveViteServer` for editor-write HMR
-  invalidation — the VFS has no watcher events) and its OTHER forced options
-  (allowedHosts/host/strictPort/base/optimizeDeps — remaining wrapper retirement is
-  tracked in the backlog item). New env `RIFTY_VITE_CLI_HMR_OFF=1` threads only the
-  ADR-0161 Vite 8 hmr-off pin. A user `--config` path now also threads to the dev
-  wrapper (was preview-only). Socket-lab `browser-preview-websocket` flips to
+  types), the dev-server-boot bespoke hmr wiring. The later wrapper-deletion entry
+  above removes the temporary `configureServer` plugin and residual CLI env/argv
+  plumbing too. Socket-lab `browser-preview-websocket` flips to
   `supported` with a real round-trip probe — the probe also asserts close parity:
   the lab `/ws` server honours a `close:<code>:<reason>` trigger and the browser
   CloseEvent must land faithful (code/reason/wasClean) through the bridge (backlog

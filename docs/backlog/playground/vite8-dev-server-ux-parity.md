@@ -19,6 +19,10 @@ real-Vite-with-hmr:false, but noise vs a normal HMR-on project. The SW
 WASI pthread pool); third-party subresources without CORP would be blocked inside
 the preview but load fine on localhost:5173. None of this is signposted.
 
+General preview-origin/isolation signposting for all Vite templates is now tracked
+in `playground/vite-preview-origin-isolation-signpost`. This item keeps the
+Vite-8-specific UX residuals: missing CLI banner and HMR-off websocket warning.
+
 ## Options or Next
 
 Print a sandbox-equivalent "ready" line with the REAL preview URL the user should

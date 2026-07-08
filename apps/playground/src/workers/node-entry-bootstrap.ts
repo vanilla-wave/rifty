@@ -40,15 +40,7 @@ import { syncMirror } from '@riftydev/vfs';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
-import {
-  type ViteDevServerWithModuleGraph,
-  invalidateViteModule,
-} from './real-vite-invalidation.ts';
-import {
-  prepareViteCli,
-  viteCliModeFromEnv,
-  viteCliPrepareOptionsFromEnv,
-} from './vite-cli-prep.ts';
+import { binNameOf, prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -84,35 +76,12 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
   installRemoteSyncFs(syncApi.call);
 }
 
-declare global {
-  // Set by the generated Vite CLI config wrapper's configureServer hook.
-  // eslint-disable-next-line no-var
-  var __riftyActiveViteServer: ViteDevServerWithModuleGraph | undefined;
-}
-
-interface ViteFileChangeMessage {
-  readonly type: 'rifty:vite-file-change';
-  readonly path: string;
-}
-
-function isViteFileChangeMessage(message: unknown): message is ViteFileChangeMessage {
-  if (!message || typeof message !== 'object') return false;
-  const candidate = message as { readonly type?: unknown; readonly path?: unknown };
-  return candidate.type === 'rifty:vite-file-change' && typeof candidate.path === 'string';
-}
-
-function installViteFileChangeBridge(): void {
-  proc.on?.('message', (message: unknown) => {
-    if (!isViteFileChangeMessage(message)) return;
-    const server = globalThis.__riftyActiveViteServer;
-    if (server) invalidateViteModule(server, message.path);
-  });
-}
-
-const viteCliMode = viteCliModeFromEnv(proc.env.RIFTY_VITE_CLI_MODE);
-if (viteCliMode !== null) {
-  await prepareViteCli(proc.cwd(), viteCliMode, viteCliPrepareOptionsFromEnv(proc.env));
-  if (viteCliMode === 'dev') installViteFileChangeBridge();
+const viteMode =
+  proc.env.RIFTY_BIN === '1' && binNameOf(entryPath) === 'vite'
+    ? viteCliMode(proc.argv.slice(2))
+    : null;
+if (viteMode !== null) {
+  await prepareViteCli(proc.cwd(), viteMode);
 }
 
 const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;

@@ -21,10 +21,12 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 - `service-worker/preview-dispatch-termination-chokepoint` (ready) — settle on every terminal event; ONE chokepoint, parity-first synthesized page only when no response exists; covers loopback http.request.
 - `net/preview-ws-bridge-termination` (ready) — WS/HMR sockets error/close under faults, vite's own reconnect UX works.
 
-RESOLVED + removed: `service-worker/preview-blocked-host-hang` — the "host-check rejection parks the iframe" hang was diagnosed to rifty `node:net` missing `isIP` (vite's async host-check threw a TypeError connect swallowed), fixed with real `isIP` + parity `cases/net/is-ip`; the preview-path rejected-Host it feared is unreachable (SW stamps `Host: localhost`, ADR-0189 D3). No lost-403 bug existed. Its promised unblock of preset-deglue's allowedHosts retirement is delivered.
+RESOLVED + removed: `service-worker/preview-blocked-host-hang` — the "host-check rejection parks the iframe" hang was diagnosed to rifty `node:net` missing `isIP` (vite's async host-check threw a TypeError connect swallowed), fixed with real `isIP` + parity `cases/net/is-ip`; the preview-path rejected-Host it feared is unreachable (SW stamps `Host: localhost`, ADR-0189 D3). No lost-403 bug existed. Its promised unblock of the retired preset-deglue forced-option work is delivered.
 
 ## Decisions (epic-level, ratified at refine 2026-07-05)
 
 - Failure UX = parity-first (user): real responses byte-verbatim; synthesized page only when no response exists.
 - Scope = the two remaining broker flows (user): WS/HMR and loopback http.request termination (the iframe-HTTP host-check-403 scenario was refuted — see RESOLVED above).
-- Boundary with preset-deglue (mechanism): retirement of forced options stays in `net/preview-websocket-bridge`; this epic's blocker-removal for it is already delivered (via `net.isIP`).
+- Boundary with retired preset-deglue work (mechanism): forced-option retirement
+  is closed; this epic's blocker-removal for it is already delivered (via
+  `net.isIP`).

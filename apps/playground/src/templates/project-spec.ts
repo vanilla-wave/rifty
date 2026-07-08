@@ -5,8 +5,8 @@
  * template is a data change rather than a worker fork.
  *
  * Runtimes (discriminated on `runtime`):
- * - `'vite'` — the worker imports `runtimeSpecifier` and boots its dev server
- *   (`createServer` + HMR bridge); the worker seeds an index.html for it.
+ * - `'vite'` — the worker imports `runtimeSpecifier` and boots its dev server;
+ *   template-specific Vite knobs live in visible seed files (e.g. vite.config.js).
  * - `'node-server'` — the worker imports the ENTRY itself; the entry is a
  *   long-running Node program (e.g. Express) that calls `listen(port)` and
  *   serves its own HTML. No index.html is seeded — it would shadow the server.
@@ -17,19 +17,6 @@
  * altitude). Only `id` crosses a realm boundary (over env as
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
-
-/** Serializable subset of Vite's `createServer` knobs the worker reconstructs.
- *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
- *  worker builds them from {@link ViteProjectSpec.hmr} after resolving the spec. */
-export interface ServerSpec {
-  // TODO(backlog: playground/vite-curated-boot-residual-forces): remove retired
-  // direct-boot Vite knobs from ServerSpec unless a live direct path proves them.
-  readonly appType: string;
-  readonly strictPort: boolean;
-  readonly optimizeDepsDisabled: boolean;
-  readonly host: boolean;
-  readonly allowedHosts: boolean;
-}
 
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
@@ -73,7 +60,7 @@ export interface ViteProjectSpec extends ProjectSpecBase {
   readonly htmlTitle: string;
   /** Root-relative files seeded before Vite starts (tsconfig, sibling modules, .d.ts fixtures). */
   readonly extraFiles?: Readonly<Record<string, string>>;
-  readonly server: ServerSpec;
+  /** Template metadata only; runtime HMR policy is declared in visible Vite config. */
   readonly hmr: { readonly enabled: boolean };
 }
 
@@ -118,8 +105,6 @@ interface BootstrapConfigBase {
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
   readonly runtime: 'vite';
   readonly runtimeSpecifier: string;
-  readonly server: ServerSpec;
-  readonly hmrEnabled: boolean;
 }
 
 export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
@@ -185,8 +170,6 @@ export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
  * the project.
  */
 export function terminalDevLine(spec: ProjectSpec, root: string): string {
-  // TODO(backlog: playground/vite-strictport-fallback-proof): browser-prove that
-  // Vite's selected fallback port becomes rifty's LIVE/preview port.
   if (spec.runtime === 'vite') return `vite --port ${spec.defaultPort}`;
   return `cd ${root} && npm run dev`;
 }
@@ -310,8 +293,6 @@ export function resolveBootstrapConfig(
     ...base,
     runtime: 'vite',
     runtimeSpecifier: spec.runtimeSpecifier,
-    server: spec.server,
-    hmrEnabled: spec.hmr.enabled,
     seedFiles,
   };
 }

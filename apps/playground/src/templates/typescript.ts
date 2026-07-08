@@ -1,5 +1,5 @@
 import type { ViteProjectSpec } from './project-spec.ts';
-import { VITE_TEMPLATE } from './vite.ts';
+import { DEFAULT_VITE_CONFIG_JS, VITE_TEMPLATE } from './vite.ts';
 
 export const TYPESCRIPT_ENTRY_SOURCE = `import type { LibraryShape } from '@rifty/example-types';
 import './styles.css';
@@ -216,6 +216,9 @@ export const TYPESCRIPT_TEMPLATE = {
   estimatedBootSeconds: 20,
   htmlTitle: 'rifty + TypeScript',
   extraFiles: {
+    // Type-only fixture deps have no runtime dep graph; keep optimizer startup
+    // off the template path with visible user config.
+    '/vite.config.js': DEFAULT_VITE_CONFIG_JS,
     '/tsconfig.json': TSCONFIG_JSON,
     '/src/model.ts': MODEL_TS,
     '/src/math.ts': MATH_TS,
@@ -224,16 +227,6 @@ export const TYPESCRIPT_TEMPLATE = {
     '/src/styles.css': STYLES_CSS,
     '/node_modules/@rifty/example-types/package.json': EXAMPLE_TYPES_PACKAGE_JSON,
     '/node_modules/@rifty/example-types/index.d.ts': EXAMPLE_TYPES_DTS,
-  },
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    // Zero runtime deps (the seeded @rifty/example-types package is types-only,
-    // unresolvable as a runtime dep) — discovery has nothing real to optimize
-    // (ADR-0192). Dep-carrying projects run the real optimizer.
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
   },
   hmr: { enabled: true },
 } satisfies ViteProjectSpec;

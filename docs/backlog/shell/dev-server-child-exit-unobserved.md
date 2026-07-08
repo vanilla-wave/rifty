@@ -1,6 +1,6 @@
 ---
 area: shell
-status: draft
+status: ready
 title: Post-ready dev-server child exit is unobserved (stale LIVE pill on a mid-run crash)
 created: 2026-06-17
 why: P6b moved the dev server into a serve:true supervised child; the owner driver watches the child's exit only during the boot window and inside stop(). If the child crashes AFTER it reported ready (request-handler throw, OOM), nothing transitions the controller — the LIVE pill stays 'running' and /preview/<port>/ 502s until the user Ctrl-Cs/restarts.
@@ -17,6 +17,40 @@ Found by the P6b final whole-branch review (non-blocking — happy path + the go
 
 **P6b review fix (2026-06-18):** the Ctrl-C recovery itself used to HANG — `stop()` killed the child then awaited `'exit'`, but `WorkerHandle.kill()` on an already-exited child returns `false` and emits no `'exit'`, so the await never resolved (the dev-run + the controller's `stopped` transition hung forever). `stop()` now resolves when `kill()` returns `false`, so Ctrl-C/restart genuinely recovers. The REMAINING gap here is purely the AUTOMATIC observation: nothing transitions the controller on a post-ready child exit, so the LIVE pill stays lit until the user interrupts.
 
+## User scenario
+
+A developer has a Vite or Node dev server running and visible as LIVE. The
+serve:true child crashes after readiness (throw in a request handler, process
+exit, or Worker termination). The UI should leave running state, the preview
+should tear down or show a diagnosable stopped state, and the terminal should
+record that the dev server exited.
+
+## Acceptance
+
+- Add a post-ready child-exit signal to the dev-server driver and have
+  `createDevServerController.run` race it against Ctrl-C abort.
+- On post-ready exit, the controller emits a stopped/error frame, clears the LIVE
+  pill, and removes the preview port entry.
+- Ctrl-C recovery remains green when the child is already gone.
+- Unit test: boot resolves, then the child exits without user abort; controller
+  transitions to stopped exactly once.
+- Browser or integration test: a killed Vite dev-server child does not leave a
+  stale LIVE preview.
+
+## Parity cases
+
+- Real local Vite exiting after ready leaves no running server; clients fail or
+  reconnect from a stopped state rather than staying "live".
+- Rifty owner/panel state matches the actual child lifecycle: no running status
+  without a live child/server.
+
+## Fault matrix
+
+- `false-fallback` x child exits after ready -> stopped/error frame, never stale
+  running state.
+- `torn-state` x preview registry still has port after child exit -> registry
+  removes the port before or with the stopped frame.
+
 ## Options or Next
 
 A clean fix touches the controller contract (which ADR-0150 deliberately left "state machine unchanged" for P6b), so it is a follow-up, not a P6b in-scope change. Candidates:
@@ -25,6 +59,20 @@ A clean fix touches the controller contract (which ADR-0150 deliberately left "s
 - Either way: emit a `pty:dev-server { status: 'stopped', error: 'dev server exited (code …)' }` so the page tears the LIVE pill + preview (mirrors `realVite.ts`'s owner-exit synthesized frame).
 
 Relates to ADR-0152 serve-mode keepalive / loud-fail behavior and `shell/owner-graceful-drain-on-terminate`.
+
+## Out of scope
+
+- Gracefully stopping arbitrary user servers inside the child process; this item
+  observes exit and updates UI state.
+- Preview request terminal-event backstops; tracked in
+  `service-worker/preview-dispatch-termination-chokepoint`.
+
+## Decisions
+
+- The controller owns visible dev-server state. Driver-level exit observation
+  must feed the controller instead of mutating UI state out of band.
+- Stopped/error frame is additive to the existing `pty:dev-server` shape; exact
+  error text is reversible.
 
 ## Reversibility
 

@@ -14,12 +14,5 @@ export const HIDDEN_EMPTY_TEMPLATE: ViteProjectSpec = {
   defaultPort: 5174,
   estimatedBootSeconds: 0,
   htmlTitle: 'rifty empty workspace',
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
-  },
   hmr: { enabled: false },
 };

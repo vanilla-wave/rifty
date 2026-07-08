@@ -25,6 +25,11 @@ if (import.meta.hot) {
 }
 `;
 
+export const DEFAULT_VITE_CONFIG_JS = `export default {
+  optimizeDeps: { noDiscovery: true, include: [] },
+};
+`;
+
 export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
@@ -41,16 +46,11 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   defaultPort: 5174,
   estimatedBootSeconds: 20,
   htmlTitle: 'rifty + real Vite (worker)',
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    // Zero deps + plain-JS sources: dep discovery would drag the 13.5 MB
-    // esbuild-wasm onto the default preset's boot path for an empty result
-    // (ADR-0192 lazy-init contract). Dep-carrying projects run the real
-    // optimizer.
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
+  extraFiles: {
+    // Zero deps + plain-JS sources: dep discovery would initialize esbuild-wasm
+    // for an empty result. The opt-out is visible user config, not CLI wrapper
+    // state. TODO(backlog: playground/vite-template-dep-optimizer-policy)
+    '/vite.config.js': DEFAULT_VITE_CONFIG_JS,
   },
   // Vite 7 uses the proven cross-realm native-HMR bridge; Vite 8 keeps HMR off
   // separately until its Rolldown WASI socket path is re-proven (ADR-0161).

@@ -5,9 +5,8 @@ title: Prove Vite fallback-port preview after strictPort retirement
 created: 2026-07-08
 why: PR #112 removes generated `--strictPort` from the shell/.bin Vite dev path, but no browser e2e proves that Vite's fallback port becomes the LIVE/preview port when the preferred port is busy
 user_story: As a developer running Vite in rifty, I want Vite's own fallback-port behavior to work like local Node, but today the PR only proves that the generated command no longer contains `--strictPort`.
-epic: preset-deglue
 blocked_by: []
-sources: [docs/backlog/net/preview-websocket-bridge.md]
+sources: [docs/adr/net/0189-preview-loopback-websocket-bridge.md]
 code: [apps/playground/src/templates/project-spec.ts, tests/e2e/manual-vite-install.spec.ts]
 ---
 
@@ -18,6 +17,12 @@ wrapper no longer injects `server.strictPort`. That is the right direction, but 
 proof is incomplete: a unit test sees the command string, while no browser e2e occupies
 the preferred port and then checks that Vite's actual fallback port is the port rifty
 publishes to LIVE/preview.
+
+## User scenario
+
+A developer runs `vite --port <preferred>` through rifty while `<preferred>` is
+already occupied. Vite chooses a fallback port exactly as it does under real Node,
+and rifty publishes that actual port to the LIVE pill and preview route.
 
 ## Acceptance
 
@@ -33,8 +38,6 @@ publishes to LIVE/preview.
 
 ## Out of scope
 
-- Retiring `server.allowedHosts`; blocked by `service-worker/preview-blocked-host-hang`.
-- Retiring `optimizeDeps.noDiscovery`; blocked by real bundling esbuild support.
 - Deleting legacy direct Vite boot config; tracked in `playground/vite-curated-boot-residual-forces`.
 
 ## Decisions

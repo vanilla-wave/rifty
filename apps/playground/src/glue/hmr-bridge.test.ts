@@ -65,11 +65,13 @@ describe('setupHmrBridge', () => {
       c1.addEventListener('message', (e) => seen1.push(String((e as MessageEvent).data)));
       c2.addEventListener('message', (e) => seen2.push(String((e as MessageEvent).data)));
 
-      bridge.broadcast(JSON.stringify({ type: 'update', path: '/src/main.js' }));
-      await new Promise((r) => setTimeout(r, 20));
+      const payload = JSON.stringify({ type: 'update', path: '/src/main.js' });
+      bridge.broadcast(payload);
 
-      expect(seen1).toEqual([JSON.stringify({ type: 'update', path: '/src/main.js' })]);
-      expect(seen2).toEqual([JSON.stringify({ type: 'update', path: '/src/main.js' })]);
+      await waitFor(() => {
+        expect(seen1).toEqual([payload]);
+        expect(seen2).toEqual([payload]);
+      });
 
       c1.close();
       c2.close();
@@ -95,6 +97,19 @@ describe('setupHmrBridge', () => {
     expect(script).toContain('__riftyWebSocketBridgeInstalled');
   });
 });
+
+async function waitFor(assertion: () => void): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  assertion();
+}
 
 describe('hmrClientScript', () => {
   it('produces valid JS (parses without SyntaxError)', () => {

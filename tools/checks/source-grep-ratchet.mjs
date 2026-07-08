@@ -77,9 +77,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 6,
-    digest: 'e188a3aa7a22',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, file-change bridge wiring; env-decoder heirs in vite-cli-prep.test.ts',
+    count: 4,
+    digest: 'b1b859ab9f1a',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, retired file-change/env bridge absence; vite mode parser heirs in vite-cli-prep.test.ts',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
@@ -91,14 +91,20 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/workers/dev-server-boot.test.ts',
     count: 1,
-    digest: 'cea1282fdc73',
-    why: 'ADR-0161 hmr flag is vite8-opt-in only (no default-lane seam); boot behavior heirs = in-file node tests + tests/browser-unit + e2e m7/generic-dev-server-lifecycle',
+    digest: '4a6b32f82866',
+    why: 'dev-server child is a worker-only runtime entry; residual pin prevents hidden Vite server/template gates from returning after wrapper deletion; behavior heirs = visible template config tests + e2e m7/generic-dev-server-lifecycle/manual-vite',
+  },
+  {
+    file: 'apps/playground/src/workers/esbuild-host.test.ts',
+    count: 3,
+    digest: '593802232181',
+    why: 'version-coupling invariant spans package.json + shadow-registry source and must fail before an esbuild-wasm/shim trigger pin drift; bridge behavior itself is covered in this file and manual-vite e2e',
   },
   {
     file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
-    count: 12,
-    digest: '0c9f1de026ac',
-    why: 'worker-only owner entry; residual = zero-vite-name-dispatch pins, prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); withViteCliArgs/Env moved to vite-cli-prep (behavioral tests there incl. ADR-0161 hmr-off); heirs in tests/browser-unit + e2e',
+    count: 9,
+    digest: '435b52b3f4b0',
+    why: 'worker-only owner entry; residual = no vite args/env rewriting, prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); heirs in tests/browser-unit + e2e',
   },
   {
     file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',

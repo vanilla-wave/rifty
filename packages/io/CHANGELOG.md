@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Readable` now drives subclass `_read(size)` implementations when no
+  `read` constructor option is supplied.** This restores Node's stream subclass
+  extension point (`class X extends Readable { _read() { ... } }`), which real
+  packages such as readdirp/chokidar use to pump directory scans.
+
 ### Changed
 
 - **`synthesizePreviewUrl` stamps `Host: localhost:<port>`** instead of the synthetic

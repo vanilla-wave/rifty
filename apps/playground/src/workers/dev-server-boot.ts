@@ -24,7 +24,6 @@ import type {
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildBridge } from './esbuild-host.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
-import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 
@@ -33,16 +32,9 @@ interface ViteUserConfig {
   base?: string;
   server?: {
     port?: number;
-    strictPort?: boolean;
     middlewareMode?: boolean;
-    /** `undefined` = vite's stock HMR (ADR-0189); `false` = pinned off (ADR-0161, Vite 8). */
-    hmr?: false | undefined;
-    host?: boolean;
-    allowedHosts?: boolean;
   };
-  appType?: string;
   clearScreen?: boolean;
-  optimizeDeps?: { disabled?: boolean };
   plugins?: unknown[];
 }
 
@@ -245,7 +237,6 @@ export async function bootDevServer(opts: {
   }
 
   if (cfg.runtime === 'vite') {
-    assertNoUserViteConfig(root);
     installEsbuildBridge();
     log(`importing ${cfg.runtimeSpecifier}…\n`);
     const viteNs = (await loader.import(
@@ -263,24 +254,9 @@ export async function bootDevServer(opts: {
       base: './',
       server: {
         port,
-        strictPort: cfg.server.strictPort,
         middlewareMode: false,
-        // Stock vite HMR (ADR-0189): the generic preview-path WS bridge carries
-        // vite's own server.ws — no rifty token/plugin/endpoint rewrite.
-        // `false` stays only for templates pinned off (Vite 8, ADR-0161).
-        hmr: cfg.hmrEnabled ? undefined : false,
-        host: cfg.server.host,
-        allowedHosts: cfg.server.allowedHosts,
       },
-      appType: cfg.server.appType,
       clearScreen: false,
-      // Vite 8 REMOVED `optimizeDeps.disabled` (Vite 5.1) — it warns and ignores
-      // it, then runs dep discovery on the first request, which drives Rolldown's
-      // WASI bundler and hung the preview request past the readiness window. The
-      // supported off-switch is `noDiscovery: true` + empty `include`.
-      optimizeDeps: (cfg.server.optimizeDepsDisabled
-        ? { noDiscovery: true, include: [] }
-        : {}) as unknown as ViteUserConfig['optimizeDeps'],
       plugins: [],
     });
     await server.listen();

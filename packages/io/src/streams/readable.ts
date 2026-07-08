@@ -37,6 +37,8 @@ export interface ReadableToWebOptions {
   strategy?: QueuingStrategy<unknown>;
 }
 
+type ReadOverride = (this: Readable, size: number) => void;
+
 /**
  * Single state container shared across all `Readable` instances per Node's
  * `_readableState` convention. Field names mirror Node's `internal/streams/state.js`;
@@ -394,14 +396,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           if (this._readableState.buffer.length > 0 && !this._readableState.endEmitted) {
             this.emit('readable');
           }
-          if (
-            !this._readableState.ended &&
-            !this._readableState.reading &&
-            this.readImpl !== undefined
-          ) {
+          const readImpl = this.resolveRead();
+          if (!this._readableState.ended && !this._readableState.reading && readImpl) {
             this._readableState.reading = true;
             try {
-              this.readImpl.call(this, this._readableState.highWaterMark);
+              readImpl.call(this, this._readableState.highWaterMark);
             } finally {
               this._readableState.reading = false;
             }
@@ -410,6 +409,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     });
   }
+
+  _read(_size: number): void {}
 
   get readable(): boolean {
     return (
@@ -611,14 +612,20 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   private maybeRead(hint?: number): void {
     const state = this._readableState;
-    if (state.ended || state.reading || !this.readImpl || state.destroyed) return;
+    const readImpl = this.resolveRead();
+    if (state.ended || state.reading || !readImpl || state.destroyed) return;
     const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
     state.reading = true;
     try {
-      this.readImpl.call(this, size);
+      readImpl.call(this, size);
     } finally {
       state.reading = false;
     }
+  }
+
+  private resolveRead(): ReadOverride | undefined {
+    if (this.readImpl) return this.readImpl;
+    return this._read !== Readable.prototype._read ? this._read : undefined;
   }
 
   /**
@@ -653,7 +660,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     this.finishIfDone();
     if (
       state.flowing &&
-      this.readImpl &&
+      this.resolveRead() &&
       !state.ended &&
       state.length < state.highWaterMark &&
       !state.reading

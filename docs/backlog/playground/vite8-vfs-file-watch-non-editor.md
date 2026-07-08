@@ -1,31 +1,40 @@
 ---
 area: playground
 status: draft
-title: vite8 — non-editor file changes don't update the preview (chokidar dead over the VFS)
+title: Re-prove Vite non-editor file changes after sync-rpc fs.watch work
 created: 2026-06-21
-why: Vite's chokidar watcher gets NO events over rifty's VFS (sync-mirror/OPFS fires no real fs.watch); only editor saves route via a bespoke IPC. A file changed from the terminal (`echo > src/x.js`), a generated file, or an `npm`-written file triggers ZERO preview reaction — real Vite would watcher-detect it and (HMR off) full-reload.
-user_story: As a dev who changes a project file from the terminal or a tool, I want the preview to pick it up like a real `vite` dev server, but today only in-editor saves are seen and every other writer is silently ignored (stale preview, no hint).
-sources: [apps/playground/src/workers/dev-server-controller.ts, apps/playground/src/workers/dev-server-boot.ts, apps/playground/src/workers/real-vite-invalidation.ts]
-code: [apps/playground/src/workers/dev-server-controller.ts]
+why: the old premise ("chokidar gets no events over the VFS") is partly stale after sync-rpc fs.watch and Readable fixes, but there is still no browser e2e proving a terminal/tool write updates a live Vite preview through the normal `.bin` path.
+user_story: As a dev who changes a project file from the terminal or a tool, I want the preview to pick it up like a real `vite` dev server, but today the current proof covers editor saves and lower-level watch plumbing, not the end-to-end non-editor Vite flow.
+sources: [apps/playground/src/workers/dev-server-controller.ts, apps/playground/src/workers/dev-server-boot.ts, apps/playground/src/workers/real-vite-invalidation.ts, packages/runtime-js/src/ipc/sync-rpc-fs.test.ts, packages/io/src/streams/readable.async-read.test.ts]
+code: [apps/playground/src/workers/dev-server-controller.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts]
 ---
 
 ## Context
 
-`dev-server-controller.ts` documents it: "the virtual FS fires no real watcher
-events." `server.watcher?.on('change', …)` is wired but never fires; the only
-change signal is `onFileChanged` fed by editor-save IPC (`dev-server-child-bootstrap.ts`).
-So ANY non-editor writer (terminal, generated file, `npm`, a running program)
-produces no invalidation and no reload. This is broader than the HMR-off story
-(ADR-0161): even a full reload is never triggered for those writers.
+This item was written when Vite's watcher effectively saw only editor-save IPC.
+Current HEAD is better:
+
+- `SyncRpcFsSync` has a unit proof that polling `fs.watch` in a child observes
+  owner-store writes.
+- `Readable` now calls subclass async `_read`, covering a chokidar/readdirp-like
+  stream shape.
+
+That does not yet prove the end-to-end user scenario: a terminal or tool writes a
+file while Vite is running through the normal `.bin` path and the preview updates
+without a manual editor-save IPC.
 
 ## Options or Next
 
-Emit VFS change events for ALL writers (not just the editor IPC) and feed them
-into Vite's watcher/invalidation — i.e. bridge real `fs.watch`-shaped change
-notifications over the sync-mirror/OPFS layer. With HMR off, a non-accepted
-change should at least full-reload the preview (real-Vite behavior). Acceptance:
-a terminal `echo >> src/main.js` updates the preview (manual reload or auto),
-proven by a test driving a non-editor write.
+First re-triage with a browser e2e on the normal `.bin/vite` path:
+
+- start a Vite preview;
+- write `src/main.js` from the terminal (`node -e`, `printf`, or another tool);
+- assert Vite's watcher/HMR observes it and the iframe updates.
+
+If green, delete this item and update stale comments that still claim the VFS
+fires no real watcher events. If red, refine to `ready` with the exact missing
+watch boundary (runtime `fs.watch`, sync-rpc owner store, chokidar stream, or
+dev-server controller IPC).
 
 ## Reversibility
 
