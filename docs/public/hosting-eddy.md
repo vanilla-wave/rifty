@@ -292,9 +292,10 @@ first.
 ## CDN tier on rifty.dev (deployed 2026-07-01)
 
 The resources below are LIVE from the 2026-07-01 CDN setup. The running image is
-**v1.2** (tag `0.2.2`, redeployed 2026-07-05 — h3/UDP, eddy wire protocol v1.1,
-non-blocking stamp; a live POST now emits `x-eddy-store-durable` + a
-deep-canonical closure hash independent of the upstream registry URL). On
+**v1.2** (tag `0.2.3`, redeployed 2026-07-08 — h3/UDP, eddy wire protocol v1.1,
+non-blocking stamp, raw-slash S3 bundle-key signing; a live POST now emits
+`x-eddy-store-durable` + a deep-canonical closure hash independent of the
+upstream registry URL). On
 2026-07-07 the on-VM A/B measured direct npmjs faster than the CDN registry
 proxy for eddy cold resolves, so live `REGISTRY_BASE_URL` is
 `https://registry.npmjs.org`. S3 bundle store is live: POSTs publish durable

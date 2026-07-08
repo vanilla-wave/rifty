@@ -7,7 +7,7 @@
 # secret-bearing copy passed via `--metadata-from-file`; never commit that copy.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.3
     container_name: rifty-eddy
     restart: unless-stopped
     expose:
