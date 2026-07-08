@@ -21,6 +21,15 @@
   POST now emits `x-eddy-store-durable`; deep-canonical closure hash is upstream-
   registry-URL independent.
 
+### Fixed
+
+- **S3 object paths keep base64 `/` raw for signed PUTs.** Yandex Object
+  Storage rejects SigV4 PUTs whose canonical URI carries `%2F`; closure hashes
+  containing `/` therefore degraded to `x-eddy-store-durable: 0` even though
+  hashes without `/` were durable. The store now signs `bundle/<hash>` with raw
+  slash while keeping `+`/`=` percent-encoded; public GET/HEAD with the client's
+  percent-encoded URL still resolves to the same object.
+
 ### Fixed (PR #107 round 23)
 
 - **Eddy bundle-store modules stay acyclic.** `CachedBundle` now lives with the

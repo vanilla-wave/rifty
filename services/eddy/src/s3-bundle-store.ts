@@ -7,10 +7,12 @@
  * itself does. Only PUT is signed (SigV4, `sigv4.ts`).
  *
  * Object key = `bundle/<closureHash>` with the hash RAW (base64 `/`+`=`
- * kept): the client's `bundleUrlFor` percent-encodes the hash and S3
- * percent-decodes the request path, so a CDN origin re-point VM → bucket
- * changes nothing on the wire. The manifest is recovered from the bundle
- * bytes on `get` (it IS the first tar member) — no sidecar metadata to drift.
+ * kept): the client's `bundleUrlFor` percent-encodes the hash, while this
+ * signed S3 path keeps `/` raw (Yandex Object Storage rejects a SigV4 PUT whose
+ * canonical URI carries `%2F`). Public GET/HEAD with `%2F` still resolves to
+ * the same raw-slash key, so a CDN origin re-point VM → bucket changes nothing
+ * on the wire. The manifest is recovered from the bundle bytes on `get` (it IS
+ * the first tar member) — no sidecar metadata to drift.
  *
  * Every network op is BOUNDED (per-op deadline, body byte cap): `EddyCache`
  * awaits store calls before replying, so a stalled bucket must fail loudly
@@ -46,6 +48,10 @@ const ERROR_SNIPPET_BYTES = 4096;
 
 const errMsg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
+function encodeObjectKeyHash(closureHash: string): string {
+  return encodeURIComponent(closureHash).replaceAll('%2F', '/');
+}
+
 export interface S3BundleStoreOptions {
   /** Storage endpoint, e.g. `https://storage.yandexcloud.net`. */
   endpoint: string;
@@ -74,7 +80,7 @@ export class S3BundleStore implements BundleStore {
 
   private urlFor(closureHash: string): URL {
     const base = this.opts.endpoint.replace(/\/+$/, '');
-    return new URL(`${base}/${this.opts.bucket}/bundle/${encodeURIComponent(closureHash)}`);
+    return new URL(`${base}/${this.opts.bucket}/bundle/${encodeObjectKeyHash(closureHash)}`);
   }
 
   /**

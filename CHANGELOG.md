@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Eddy S3 durable store handles closure hashes containing `/`.** Yandex
+  Object Storage rejects SigV4 PUTs whose canonical URI signs `%2F`; the
+  store now signs the raw-slash object key while leaving `+`/`=` encoded, so
+  standard base64 closure hashes no longer degrade to `x-eddy-store-durable: 0`.
 - bench: the `viteReadyMs` stage marker follows real vite's own ready banner
   (`VITE vX.Y ready in N ms`) — the rifty-authored `[vite] dev server ready on
   port` line died with the generic dev-server lifecycle (PR #109), so stage

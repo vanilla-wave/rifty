@@ -75,8 +75,11 @@ linking it (durable-before-link, ADR-0194 §5) and the origin keeps only
 reconstructible RAM caches — restarts/deploys lose nothing durable, extra
 hosts need no shared disk, and the CDN can serve GET bytes straight from the
 bucket. Object key = `bundle/<closure-hash>` with the hash RAW (base64 `/`
-`=` as-is): the client percent-encodes and S3 percent-decodes, so re-pointing
-the CDN origin from the VM to the bucket needs no client/wire change.
+kept as an object-key slash; `+`/`=` percent-encoded in the signed request):
+the client percent-encodes the hash and Yandex Object Storage public reads
+still resolve `%2F` to the same raw-slash key, so re-pointing the CDN origin
+from the VM to the bucket needs no client/wire change. This raw-slash signing
+is required: Yandex rejects a SigV4 PUT whose canonical URI carries `%2F`.
 
 **Deploy status (2026-07-07):** live rifty.dev is S3-backed. The committed
 `docker-compose.coi.yml` intentionally keeps the `EDDY_S3_*` group commented;
