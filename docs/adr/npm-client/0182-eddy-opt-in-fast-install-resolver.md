@@ -52,4 +52,5 @@ Adversarially verified (express@^4 + eslint@^9, faithful browser transport): sta
 - ADR-0135 — baked snapshots (instant presets; the boundary eddy does NOT cross).
 - ADR-0051 — native dependency policy (eddy applies the same gate).
 - `docs/process/decision-workflow.md` — record-and-continue + confirm-first for outward infra.
-- Epic: `docs/backlog/epics/fast-install-resolver.md`.
+- Backlog epic closed 2026-07-07 after the production transport measurement
+  and upstream A/B deploy.

@@ -5,10 +5,13 @@ rifty's OWN resolution server-side and returns one `EddyBundleV1` (lockfile +
 compressed tarballs); the client pre-seeds its tarball cache + writes the
 lockfile, then the existing lockfile fast path installs with zero packument
 network — structurally ~100 cold round-trips collapse to 1 POST. Measured on a
-real browser over warm h2: **~1.7x** (2026-07-01 run: standard 4284ms → eddy
-2517ms; `perf/benchmarks.json` tracks the current figure, which drifts with the
-standard baseline's network variance). (The older "~6x" is a Node/sandbox model,
-not a browser number — don't quote it at launch.)
+real browser over the production `auto` transport: **1.88x** (2026-07-07 run:
+standard 5180ms → eddy 2761ms; both production origins negotiated h2;
+`perf/benchmarks.json` tracks the current figure, which drifts with the standard
+baseline's network variance). Forced h3 works on the direct origin hosts, but
+`registry.rifty.dev` is CDN-fronted and the CDN hostname does not accept forced
+QUIC, so the launch number is the production `auto` run. (The older "~6x" is a
+Node/sandbox model, not a browser number — don't quote it at launch.)
 It is **additive and opt-in** — standard install is untouched and is the
 always-on fallback.
 
@@ -43,7 +46,7 @@ Once `@riftydev/eddy` is published to npm, a thin image is just
 | Var | Default | Meaning |
 |---|---|---|
 | `PORT` | `8788` | Listen port |
-| `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (point at your registry proxy to share one trust boundary, ADR-0163) |
+| `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (rifty.dev uses direct npmjs; the browser standard path still uses the CORS registry proxy) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
 | `EDDY_PACKUMENT_TTL_SECONDS` | `300` | Process-wide packument cache (ADR-0194 §1; `300` = npmjs edge `max-age`); `0` = off |
 | `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap (ADR-0194 §2) |
@@ -75,25 +78,33 @@ bucket. Object key = `bundle/<closure-hash>` with the hash RAW (base64 `/`
 `=` as-is): the client percent-encodes and S3 percent-decodes, so re-pointing
 the CDN origin from the VM to the bucket needs no client/wire change.
 
-**Deploy status (honest):** the committed `docker-compose.coi.yml` is the
-checked-in COI template for the next VM metadata update; the live rifty.dev VM
-may lag it until the confirm-first redeploy below. Both the committed template
-and the current live VM run the MEMORY store unless an operator supplies the
-S3 group locally. The access-key pair is a secret and is never committed: fill
-the commented `EDDY_S3_*` placeholders in a LOCAL copy of the COI compose and
-hand it to the VM via
-`yc compute instance add-metadata --metadata-from-file docker-compose=<local-copy>`
-(then restart). The committed file keeps placeholders only.
+**Deploy status (2026-07-07):** live rifty.dev is S3-backed. The committed
+`docker-compose.coi.yml` intentionally keeps the `EDDY_S3_*` group commented;
+the live VM metadata uses a LOCAL secret-bearing compose uploaded with
+`yc compute instance add-metadata --metadata-from-file docker-compose=<local-copy>`.
+The access-key pair is never committed and was not printed during deploy.
+Verified live: POST returned `x-eddy-store-durable: 1`, public Object Storage
+HEAD returned `200` with immutable cache-control, and after a VM cold restart
+`GET /bundle/<known-hash>` still returned `200` with `durable=1`. Uploading the
+checked-in placeholder compose still boots the memory store; use the local
+secret-bearing copy for redeploys.
 
 Yandex Object Storage recipe (operator, confirm-first — spend):
 
 ```bash
 yc storage bucket create --name eddy-bundles --public-read
 yc iam service-account create --name rifty-eddy-s3
-yc storage bucket grant-access --name eddy-bundles \
-  --role storage.uploader --service-account-name rifty-eddy-s3
+SA_ID=$(yc iam service-account get --name rifty-eddy-s3 --format json | jq -r .id)
+yc resource-manager folder add-access-binding <folder-id> \
+  --role storage.uploader \
+  --subject serviceAccount:$SA_ID
 yc iam access-key create --service-account-name rifty-eddy-s3   # prints key id + secret
 ```
+
+Prefer a bucket-scoped writer grant when the provider/CLI supports it. The
+rifty.dev deploy uses the folder-scoped `storage.uploader` binding because this
+`yc` build did not expose a working bucket-scoped grant path; the bucket itself
+still has anonymous read enabled and list disabled.
 
 VM env (compose): `EDDY_S3_ENDPOINT=https://storage.yandexcloud.net`,
 `EDDY_S3_BUCKET=eddy-bundles`, `EDDY_S3_REGION=ru-central1`, plus the static
@@ -107,23 +118,19 @@ store/proxy that strips that metadata fails the put loudly (POST degrades to
 compute-and-serve, no link published). Every store op is bounded (30s per-op
 deadline, 128 MiB body cap): a stalled bucket degrades, never parks the origin.
 
-CDN re-point: change the `eddy-cdn.rifty.dev` resource's origin from
-`eddy-origin.rifty.dev` to the bucket
-(`eddy-bundles.storage.yandexcloud.net`, host header pinned to the bucket
-host). Keep 404/negative caching OFF at the edge — a miss must stay
-`no-store` so the client's next POST can re-seed the very same hash. The
+CDN re-point (live 2026-07-07): `eddy-cdn.rifty.dev` now uses the bucket
+origin (`eddy-bundles.storage.yandexcloud.net`) with the Host header pinned to
+that bucket host. Keep 404/negative caching OFF at the edge — a miss must stay
+uncached so the client's next POST can re-seed the very same hash. The VM
 origin's own `GET /bundle/<hash>` keeps working either way (it reads the same
-store), so the re-point can happen any time after the env lands.
+store), so `eddy-origin.rifty.dev` remains a rollback/smoke host, not the live
+CDN origin.
 
-**Browser-header prerequisite (do this BEFORE the re-point):** the eddy
-ORIGIN sets `Access-Control-Allow-Origin: *` and
-`Cross-Origin-Resource-Policy: cross-origin` on every response — today they
-pass through the CDN unchanged (verified live 2026-07-04 with an
-`Origin: https://play.rifty.dev` GET through `eddy-cdn`). The BUCKET sets
-neither (the store PUTs only `Cache-Control` + `Content-Type`), so a
-bucket-origin edge would serve bundles the browser refuses cross-origin.
-Configure the CDN resource's static response headers (ACAO `*`, CORP
-`cross-origin`) — or an equivalent bucket CORS rule — first, then smoke:
+**Browser-header prerequisite (do this BEFORE any bucket re-point):** the
+bucket sets neither CORS nor CORP (the store PUTs only `Cache-Control` +
+`Content-Type`), so a bucket-origin edge would serve bundles the browser
+refuses cross-origin unless the CDN adds headers. The live resource sets CORS
+`*` plus static `Cross-Origin-Resource-Policy: cross-origin`; smoke:
 
 ```sh
 curl -fsSI -H 'Origin: https://play.rifty.dev' \
@@ -233,25 +240,25 @@ first.
    ```
 
 3. Reserve a static IP, reuse the proxy's `rifty-registry-proxy` security group
-   (ingress `80/tcp` + `443/tcp`), and add the DNS records **first** (both A → the
+   (ingress `80/tcp` + `443/tcp` + `443/udp`), and add the DNS records **first** (both A → the
    reserved IP, in the `rifty` zone — `docs/public/hosting-domains.md`):
    `eddy.rifty.dev` AND `eddy-origin.rifty.dev` (the COI Caddy serves both — the
    `-origin` host is the CDN origin, needed once you add the CDN tier below).
-   **HTTP/3:** that group is TCP-only, so QUIC cannot negotiate — Caddy
-   advertises h3 but browsers fall back to h2. The compose now publishes
-   `443/udp`; to actually serve h3, also add an ingress `443/udp` rule (or a
-   dedicated group). Until then every h3 claim/measurement is void
-   (`docs/backlog/perf/eddy-http3-cold-validation.md`).
+   **HTTP/3:** the group must include `443/udp` and the compose must publish
+   `443:443/udp`; both are live for `eddy.rifty.dev`. The registry proxy origin
+   can negotiate h3 too, but the production `registry.rifty.dev` CDN hostname did
+   not accept forced QUIC in the 2026-07-07 browser probe, so production `auto`
+   stayed h2.
 
 4. A COI compose starts from `deploy/yandex/eddy/docker-compose.yml`, replaces
    eddy's `build:` with `image: cr.yandex/$REG/eddy:<tag>` (the built+pushed
    tag), and carries the deploy-only Caddy origin host
    `eddy-origin.rifty.dev`. The checked-in
-   `deploy/yandex/eddy/docker-compose.coi.yml` is the memory-store template and
-   may be ahead of the live VM until the operator redeploys it. For a stateless
-   S3-backed origin, copy that file locally, fill the `EDDY_S3_*` group, and use
-   the local copy below; uploading the checked-in placeholder file boots the
-   memory store.
+   `deploy/yandex/eddy/docker-compose.coi.yml` is a placeholder-safe template;
+   the live rifty.dev VM uses a local secret-bearing copy with `EDDY_S3_*`
+   filled. For a stateless S3-backed origin, copy that file locally, fill the
+   `EDDY_S3_*` group, and use the local copy below; uploading the checked-in
+   placeholder file boots the memory store.
    Create the VM with that service account (mirrors the proxy specs):
 
    ```bash
@@ -285,23 +292,27 @@ first.
 The resources below are LIVE from the 2026-07-01 CDN setup. The running image is
 **v1.2** (tag `0.2.2`, redeployed 2026-07-05 — h3/UDP, eddy wire protocol v1.1,
 non-blocking stamp; a live POST now emits `x-eddy-store-durable` + a
-deep-canonical closure hash independent of the upstream registry URL). This
-unblocks `docs/backlog/perf/eddy-upstream-registry-ab.md`. Still MEMORY store
-(no `EDDY_S3_*` — bundles die with the container); the S3 tier is a separate
-operator step (§Object-Storage).
+deep-canonical closure hash independent of the upstream registry URL). On
+2026-07-07 the on-VM A/B measured direct npmjs faster than the CDN registry
+proxy for eddy cold resolves, so live `REGISTRY_BASE_URL` is
+`https://registry.npmjs.org`. S3 bundle store is live: POSTs publish durable
+objects to the public-read `eddy-bundles` bucket before exposing a learnable
+hash, and the CDN GET tier now reads from that bucket.
 
 Live resources (ADR-0195; Yandex CDN provider `ourcdn` refuses POST at the
 edge, hence the split-host shape):
 
-- CDN resource `bc8rtmpmtax5opcdex6x`: cname `eddy-cdn.rifty.dev`, origin
-  `https://eddy-origin.rifty.dev` (host header pinned to the origin name),
-  methods GET/HEAD/OPTIONS, `cache-expiration-time-default 300`
-  (origin `Cache-Control` wins — bundles are `immutable`), certificate
-  `fpq8rrab6e3n0jo4jlts` (CM managed LE, DNS-01 via the
-  `_acme-challenge.eddy-cdn` CNAME). Custom-cert propagation to the edge took
-  ~10 min (the default `*.yccdn.cloud.yandex.net` cert answers until then).
+- CDN resource `bc8rtmpmtax5opcdex6x`: cname `eddy-cdn.rifty.dev`, origin group
+  `3357755679591203785` origin `eddy-bundles.storage.yandexcloud.net` (origin
+  id `102946`, host header pinned to the bucket host), methods
+  GET/HEAD/OPTIONS, CORS `*`, static CORP `cross-origin`,
+  `cache-expiration-time-default 300` (origin `Cache-Control` wins — bundles are
+  `immutable`), certificate `fpq8rrab6e3n0jo4jlts` (CM managed LE, DNS-01 via
+  the `_acme-challenge.eddy-cdn` CNAME). Custom-cert propagation to the edge
+  took ~10 min (the default `*.yccdn.cloud.yandex.net` cert answers until then).
 - VM Caddy serves BOTH `eddy.rifty.dev` and `eddy-origin.rifty.dev`
-  (`deploy/yandex/eddy/docker-compose.coi.yml`).
+  (`deploy/yandex/eddy/docker-compose.coi.yml`); `eddy-origin` is now the
+  rollback/smoke origin for GET-by-hash, while live CDN misses fetch the bucket.
 - Playground env (operator-set, OPT-IN — `netlify.toml` ships only
   `VITE_RIFTY_RESOLVER_URL` today): to route pinned GETs through the CDN, add
   `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev`; to pin presets, add
@@ -310,8 +321,8 @@ edge, hence the split-host shape):
   2026-07-02
   (median-of-5, same session): pin@origin == POST on a warm origin
   (~2.77s install→vite-ready vs standard 4.53s); pin@CDN traded ~+0.8s from a
-  EU vantage (geo transit to the RU POP) for cold-restart immunity — the edge
-  keeps serving pinned bundles when the origin's in-process LRU is empty
-  (a cold-origin POST spiked to ~12.6s in the same session).
+  EU vantage (geo transit to the RU POP) for cold-restart immunity. Since
+  2026-07-07 the CDN origin is the bucket, so a CDN miss no longer needs the VM
+  to have the bundle in memory.
 
 Tracked in `docs/backlog/distribution/eddy-package-and-deploy.md`.

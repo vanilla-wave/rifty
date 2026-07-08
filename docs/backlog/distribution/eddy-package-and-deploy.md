@@ -5,7 +5,6 @@ title: Publish + deploy @riftydev/eddy (npm + Docker)
 created: 2026-06-28
 why: eddy must be self-hostable to keep the speedup a property of the OPEN stack (the wedge vs closed competitors) — a published npm package + a Docker image deployed alongside the Caddy proxy, with self-host docs
 user_story: As a self-hoster I want to run my own eddy next to my registry proxy with one npm/Docker command, but today there is no package, image, or deploy recipe.
-epic: fast-install-resolver
 sources: [docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/adr/npm-client/0163-yandex-cloud-streaming-npm-registry-proxy.md]
 code: [services/eddy/package.json, services/eddy/tsup.config.ts, deploy/yandex/eddy/docker-compose.yml, tools/checks/arch-rules.cjs]
 ---
@@ -13,6 +12,10 @@ code: [services/eddy/package.json, services/eddy/tsup.config.ts, deploy/yandex/e
 ## Context
 
 `@riftydev/eddy` (the `npm-client/eddy-resolver-service` engine) ships two ways, mirroring the Caddy proxy (ADR-0163): a published npm package (`npx @riftydev/eddy` / library) and a Docker image deployed on rifty.dev alongside the registry proxy. It imports `@riftydev/npm-client`, so it sits OUTSIDE the browser layer graph — `services/eddy/` with an arch-rules carve-out (`eddy → npm-client` allowed; no browser-layer package may import `eddy`). rifty.dev's eddy URL is wired via env-config (D-004), like the registry URL. The actual deploy + first npm publish are outward, operator-owned actions → confirm-first; the package, image, recipe, and docs land here.
+
+## User scenario
+
+A self-hoster installs `@riftydev/eddy` from npm or runs the Docker image, points it at their registry, and gets the same opt-in fast-install resolver without depending on rifty.dev. The Docker/rifty.dev path is live; this item now tracks only the first npm publish path the user deferred.
 
 ## Acceptance
 
@@ -30,7 +33,7 @@ N/A — packaging/infra item, no Node-observable behavior. The resolver's + clie
 ## Out of scope
 
 - Publishing without explicit operator confirmation — npm publish is outward/shared-state work, so execution is confirm-first.
-- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not. DONE: **v1.1** live 2026-07-01, **v1.2** (tag `0.2.2`) redeployed 2026-07-05, CDN tier included — `docs/public/hosting-eddy.md`; `perf/eddy-upstream-registry-ab` now unblocked. (This item stays open only for the operator-gated npm publish acceptance above — user deferred it.)
+- The actual rifty.dev VM deploy of the eddy image — confirm-first/outward (operator infra); the recipe + compose land here, the `yc ... --docker-compose-file` run does not. DONE: **v1.1** live 2026-07-01, **v1.2** (tag `0.2.2`) redeployed 2026-07-05, `REGISTRY_BASE_URL` flipped to direct npmjs on 2026-07-07 after the on-VM A/B, S3-backed bundle store activated, and `eddy-cdn.rifty.dev` re-pointed to the bucket — `docs/public/hosting-eddy.md`. (This item stays open only for the `npm publish` bullet above — user deferred it.)
 - Integrating eddy into `tools/publishing/sync-publish-config.mjs` (the packages/* generator) — the hand-authored `tsup.config.ts` stands until then; folding it in is a follow-up, not a blocker.
 - A `tools/registry/`-style live smoke wired into CI — DONE 2026-07-01: `tools/eddy/smoke-eddy.mjs` (real POST → tar + as-of/CORS headers asserted) runs in `.github/workflows/netlify.yml` on both deploy paths.
 
@@ -39,5 +42,5 @@ N/A — packaging/infra item, no Node-observable behavior. The resolver's + clie
 - Package at `services/eddy/` (new top-level) + the `no-browser-imports-eddy` arch carve-out; eddy NOT in `TIERS` so its upward `eddy → npm-client` import stays allowed. Workspace/arch/backlog tooling extended to scan `services/`. (ADR-0182; this item)
 - `tsup.config.ts` hand-authored (eddy is outside the packages/* publish generator); `index` + `bin` entries, `@riftydev/*` + `node:` external. REVERSIBLE.
 - Docker image built from monorepo source (multi-stage + `pnpm deploy --prod`), so it works pre-publish; a thin `npm i -g @riftydev/eddy` image is the post-publish alternative (documented). REVERSIBLE.
-- Upstream registry via `REGISTRY_BASE_URL` env-config, default npmjs (Node-tool convention, cf. `bake-dep-snapshots`); the rifty.dev compose points it at the registry proxy so eddy + proxy share one upstream + trust boundary (ADR-0163).
+- Upstream registry via `REGISTRY_BASE_URL` env-config, default npmjs (Node-tool convention, cf. `bake-dep-snapshots`). The initial rifty.dev compose shared the registry proxy; the 2026-07-07 on-VM A/B measured direct npmjs faster with no 429 signal, so live + checked-in COI now point eddy directly at npmjs while the browser standard path stays on the CORS proxy.
 - Deploy + first publish are confirm-first/outward (recipe in-repo; the action is a separate authorized step).

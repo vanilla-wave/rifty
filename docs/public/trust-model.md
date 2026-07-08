@@ -50,15 +50,23 @@ URL via env-config (D-004); standard `npm install` is untouched and is the alway
 - **What is NOT verified.** The bundle is NOT re-checked against npm's source-of-truth packument —
   doing so would re-introduce the metadata waterfall eddy exists to remove. Fast mode therefore
   trusts the eddy operator **exactly as you already trust a registry mirror / proxy** (the
-  ADR-0163 boundary). A dishonest eddy could serve a different-but-internally-consistent closure;
-  it cannot serve corrupted bytes (integrity catches that), and it cannot make an install silently
-  wrong-and-undetected any more than a malicious registry mirror could.
+  ADR-0163 boundary). On rifty.dev, eddy resolves directly against
+  `https://registry.npmjs.org` while the browser standard install path still uses the
+  CORS-clean `registry.rifty.dev` proxy; both are operator-controlled routing choices, not a
+  client-side source-of-truth recheck. A dishonest eddy could serve a
+  different-but-internally-consistent closure; it cannot serve corrupted bytes (integrity catches
+  that), and it cannot make an install silently wrong-and-undetected any more than a malicious
+  registry mirror could.
 - **Fail-soft.** Unreachable, HTTP error, malformed bundle, integrity mismatch, lockfile-coverage
   gap, or a typed `unsupported` decline → the client warns and runs the standard verifying
   install. A user never gets a wrong or failed install because the fast path was down.
 - **Bounded staleness, visible.** Every bundle carries an as-of stamp (resolution timestamp,
   upstream registry, closure hash). `prefer: 'online'` forces a fresh recompute; the resolution
   TTL is operator-configurable (including 0). Staleness is auditable, never hidden.
+- **Durable/CDN tier.** rifty.dev stores immutable bundles in Object Storage and serves CDN
+  `GET /bundle/<hash>` from that bucket. This is a cache/delivery tier for content-addressed
+  bytes, not a second source of truth: the client still verifies bundle integrity and falls back
+  on any mismatch or miss.
 - **Provenance.** `InstallResult.source` reports whether the eddy path or the standard path ran.
 
 Run your own eddy (npm or Docker) to keep the speedup a property of the open, auditable,

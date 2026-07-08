@@ -4,11 +4,22 @@
 
 ### Deployed
 
+- **eddy.rifty.dev bundle store moved to Object Storage** (2026-07-07). The
+  live VM uses secret-bearing `EDDY_S3_*` metadata (not committed) against the
+  public-read `eddy-bundles` bucket. Verified live: POST emits
+  `x-eddy-store-durable: 1`, public Object Storage HEAD serves immutable cache
+  metadata, and `GET /bundle/<hash>` survives a VM cold restart. The
+  `eddy-cdn.rifty.dev` resource now fetches GET-by-hash bytes from the bucket
+  with CDN-added ACAO `*` + CORP `cross-origin`.
+- **eddy.rifty.dev upstream flipped to direct npmjs** (2026-07-07). On-VM side-
+  container A/B measured `REGISTRY_BASE_URL=https://registry.npmjs.org` at
+  **4.682s** median versus **8.668s** for the CDN registry proxy on the
+  express+eslint cold resolve, with no 429/rate-limit signal. The browser
+  standard install path still uses `registry.rifty.dev`.
 - **eddy v1.2 live on rifty.dev** (2026-07-05). Image `cr.yandex/…/eddy:0.2.2`
   (amd64) redeployed from `main`; COI compose tag bumped `0.2.1`→`0.2.2`. Live
   POST now emits `x-eddy-store-durable`; deep-canonical closure hash is upstream-
-  registry-URL independent. Memory store (no `EDDY_S3_*`). Unblocks
-  `perf/eddy-upstream-registry-ab`.
+  registry-URL independent.
 
 ### Fixed (PR #107 round 23)
 
