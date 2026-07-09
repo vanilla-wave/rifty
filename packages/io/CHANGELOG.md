@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Lint unbreak: the `_read`/`read`-option `void | PromiseLike` return type (the
+  real Node `_read` signature) carries a `noConfusingVoidType` biome-ignore + why
+  instead of failing `biome check` — `undefined` would reject plain `read(){…}`
+  (`() => void`) implementations.
 - Async `Readable` `_read(size)` implementations now keep the `reading` latch
   until their returned thenable settles, preventing duplicate producer re-entry
   before the awaited `push()`.

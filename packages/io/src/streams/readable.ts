@@ -30,6 +30,7 @@ export interface ReadableOptions {
   highWaterMark?: number;
   encoding?: string;
   objectMode?: boolean;
+  // biome-ignore lint/suspicious/noConfusingVoidType: Node's `_read` returns void (sync) OR a promise (async backpressure) — the void|promise union IS the real Node signature; `undefined` would reject plain `read(){…}` (`() => void`) implementations.
   read?(this: Readable, size: number): void | PromiseLike<unknown>;
 }
 
@@ -37,6 +38,7 @@ export interface ReadableToWebOptions {
   strategy?: QueuingStrategy<unknown>;
 }
 
+// biome-ignore lint/suspicious/noConfusingVoidType: matches ReadableOptions.read — void (sync) | promise (async backpressure), the real Node `_read` signature.
 type ReadOverride = (this: Readable, size: number) => void | PromiseLike<unknown>;
 
 /**
