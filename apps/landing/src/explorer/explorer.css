@@ -602,6 +602,8 @@
   font-weight: 500;
   color: var(--t1);
   cursor: pointer;
+  width: 100%;
+  text-align: left;
   transition: border-color 0.2s linear, background 0.2s linear, opacity 0.2s linear, box-shadow 0.2s
     linear;
 }
@@ -631,3 +633,78 @@
    position:relative), same as the graph views' viewport inspector. Inherits
    left/bottom/pointer-events:none from .exp-inspector, so it never blocks
    lane-card hover or lane scrolling underneath. */
+
+@media (max-width: 600px) {
+  .exp-switcher {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .exp-switcher-label {
+    grid-column: 1 / -1;
+    padding-right: 0;
+  }
+
+  .exp-view-btn {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 8px;
+    justify-content: center;
+  }
+
+  .exp-bar-row {
+    padding: 10px;
+  }
+
+  .exp-bar-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .exp-bar-label,
+  .exp-bar-divider,
+  .exp-chip {
+    flex: none;
+  }
+
+  .exp-chip {
+    min-height: 44px;
+  }
+
+  .exp-legend {
+    align-items: center;
+  }
+
+  .exp-hint {
+    display: none;
+  }
+
+  .exp-reset-btn {
+    height: 44px;
+  }
+
+  .exp-viewport {
+    /* buildBoard owns a desktop inline height; mobile deliberately overrides it. */
+    height: min(520px, 70svh) !important;
+    touch-action: pan-y;
+  }
+
+  .exp-lanes {
+    grid-template-columns: 1fr;
+    max-height: min(70svh, 620px);
+    overflow-y: auto;
+    gap: 10px;
+  }
+
+  .exp-lane {
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .exp-lane-card {
+    min-width: 0;
+    min-height: 44px;
+  }
+}

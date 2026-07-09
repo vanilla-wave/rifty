@@ -108,6 +108,9 @@ jobs:
       # Local runs keep parallel (beefy machines don't oversubscribe). Re-enabling
       # light parallelism for speed needs the owner to survive concurrent boots.
       - run: pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }}
+      - name: Landing browser regression
+        if: matrix.lane == 'prod'
+        run: pnpm test:landing
       # Cold-start benchmark smoke (docs/backlog/perf/cold-start-and-install-benchmark).
       # Runs once, on the fast prod lane (chromium already installed above). Gates on
       # the harness PRODUCING a well-formed artifact — cold-start measured, the install

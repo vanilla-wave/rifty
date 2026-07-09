@@ -44,6 +44,9 @@
   border-radius: var(--r-chip);
   padding: 12px 18px;
   margin-bottom: 24px;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .cta-chip-dollar {
@@ -119,5 +122,22 @@
   }
   .cta-footer-stamp {
     margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .cta-panel {
+    padding: 36px 18px;
+  }
+
+  .cta-buttons {
+    flex-direction: column;
+  }
+
+  .cta-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
   }
 }

@@ -10,13 +10,13 @@ interface Feature {
 
 const FEATURES: readonly Feature[] = [
   {
-    title: 'A real Node runtime',
-    body: 'CJS + ESM loader and node: builtins. Real require, real import.',
+    title: 'A Node-compatible runtime',
+    body: 'CJS + ESM loader and tested node: builtin subsets. Real require, real import.',
     icon: 'feature-runtime',
   },
   {
     title: 'npm install, in-browser',
-    body: 'semver resolve, registry fetch, unpack and link — no backend.',
+    body: 'Resolve, fetch, verify, unpack and link packages; execution stays browser-local.',
     icon: 'feature-npm',
   },
   {
@@ -36,7 +36,7 @@ function makeHeader(): HTMLElement {
   head.className = 'what-head';
   const index = document.createElement('span');
   index.className = 'what-index';
-  index.textContent = '01';
+  index.textContent = '02';
   const label = document.createElement('h2');
   label.className = 'what-label';
   label.textContent = 'What you get';

@@ -141,7 +141,7 @@ interface Board {
 // the root (SPA route change / re-mount) to avoid leaked listeners + timers.
 export function mountExplorer(root: HTMLElement): () => void {
   // ---- state ----
-  let impl: ImplId = 1;
+  let impl: ImplId = window.matchMedia('(max-width: 600px)').matches ? 2 : 1;
   let scn: ScnState = 'none';
   let step = 0;
   let playing = false;
@@ -463,11 +463,12 @@ export function mountExplorer(root: HTMLElement): () => void {
     return { root: container, lanes, inspectorEl };
   }
 
-  function buildLaneCard(id: NodeId): HTMLElement {
+  function buildLaneCard(id: NodeId): HTMLButtonElement {
     const meta = NODES[id];
     const rc = REALM_COL[meta.realm];
     const kind = KINDS[KIND_OF[id]];
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'exp-lane-card';
     card.setAttribute('data-lane-node', id);
     card.style.setProperty('--rc', rc);
@@ -771,12 +772,15 @@ export function mountExplorer(root: HTMLElement): () => void {
   function syncChrome(): void {
     // view switcher active
     for (const [n, btn] of switcherBtns) {
-      btn.classList.toggle('exp-view-btn-on', n === impl);
+      const on = n === impl;
+      btn.classList.toggle('exp-view-btn-on', on);
+      btn.setAttribute('aria-pressed', String(on));
     }
     // scenario chips
     for (const [id, chip] of chipEls) {
       const on = id === scn;
       chip.classList.toggle('exp-chip-on', on);
+      chip.setAttribute('aria-pressed', String(on));
       const dot = chip.querySelector<HTMLElement>('.exp-chip-dot');
       if (dot) dot.classList.toggle('exp-chip-dot-play', on && playing);
     }
@@ -981,6 +985,7 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
 
   // ---- initial paint ----
   layoutBoard(boards[1]);
@@ -1013,6 +1018,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     clearTimeout(remeasureTimer);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
     window.removeEventListener('resize', onResize);
   };
 }
