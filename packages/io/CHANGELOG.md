@@ -4,13 +4,20 @@
 
 ### Fixed
 
-- Lint unbreak: the `_read`/`read`-option `void | PromiseLike` return type (the
-  real Node `_read` signature) carries a `noConfusingVoidType` biome-ignore + why
-  instead of failing `biome check` — `undefined` would reject plain `read(){…}`
-  (`() => void`) implementations.
-- Async `Readable` `_read(size)` implementations now keep the `reading` latch
-  until their returned thenable settles, preventing duplicate producer re-entry
-  before the awaited `push()`.
+- **`Readable` `_read` return value is now IGNORED — real Node semantics**
+  (parity case `stream/readable-async-read-contract`, probed on Node v24).
+  `reading` is cleared ONLY by `push()` (Node's `readableAddChunk`), so an
+  async `_read` is called once and waited on. This replaces the earlier
+  invented promise protocol, whose fulfilled-promise retrigger spun the
+  microtask queue FOREVER on a no-push async `_read` (starving the realm's
+  timers and IPC), whose pending promise wrongly serialized reads past an
+  early `push()`, and which converted a rejection into `destroy(err)` (Node:
+  unhandled rejection). A SYNC throw inside `_read` now destroys the stream
+  with the error instead of propagating to the `read()` caller (Node parity).
+- Lint unbreak: the `_read`/`read`-option `void | PromiseLike` return type
+  carries a `noConfusingVoidType` biome-ignore + why — the union types what we
+  ACCEPT (sync void / async promise, ignored like Node), and `undefined` would
+  reject plain `read(){…}` (`() => void`) implementations.
 - **`Readable` now drives subclass `_read(size)` implementations when no
   `read` constructor option is supplied.** This restores Node's stream subclass
   extension point (`class X extends Readable { _read() { ... } }`), which real

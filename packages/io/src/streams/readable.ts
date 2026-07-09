@@ -30,7 +30,7 @@ export interface ReadableOptions {
   highWaterMark?: number;
   encoding?: string;
   objectMode?: boolean;
-  // biome-ignore lint/suspicious/noConfusingVoidType: Node's `_read` returns void (sync) OR a promise (async backpressure) — the void|promise union IS the real Node signature; `undefined` would reject plain `read(){…}` (`() => void`) implementations.
+  // biome-ignore lint/suspicious/noConfusingVoidType: ecosystem `_read`s are sync (void) or `async` (promise); Node ACCEPTS both and IGNORES the return value — the union types what we accept, not a protocol; `undefined` would reject plain `read(){…}` (`() => void`) implementations.
   read?(this: Readable, size: number): void | PromiseLike<unknown>;
 }
 
@@ -38,7 +38,7 @@ export interface ReadableToWebOptions {
   strategy?: QueuingStrategy<unknown>;
 }
 
-// biome-ignore lint/suspicious/noConfusingVoidType: matches ReadableOptions.read — void (sync) | promise (async backpressure), the real Node `_read` signature.
+// biome-ignore lint/suspicious/noConfusingVoidType: matches ReadableOptions.read — void (sync) | promise (async, accepted and ignored like Node).
 type ReadOverride = (this: Readable, size: number) => void | PromiseLike<unknown>;
 
 /**
@@ -476,6 +476,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   push(chunk: unknown): boolean {
     const state = this._readableState;
     if (chunk === null) {
+      // Node's readableAddChunk: ANY push — data or EOF — clears `reading`.
+      // This is the ONLY place `reading` is cleared (see maybeRead), so an
+      // async `_read` is re-entered exactly when its producer delivers.
+      state.reading = false;
       state.ended = true;
       if (state.flowing) this.scheduleFlow();
       else {
@@ -498,6 +502,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       return false;
     }
     if (state.destroyed) return false;
+    state.reading = false;
     state.buffer.push(chunk);
     state.length += state.objectMode ? 1 : chunkSize(chunk);
     if (state.flowing) {
@@ -600,9 +605,21 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   /**
-   * Schedule a synchronous `_read` call if the source has more to give and a
-   * read isn't already in flight. Caller passes the desired size hint; default
-   * is the current high-water headroom.
+   * Dispatch `_read` if the source has more to give and a read isn't already
+   * in flight. Caller passes the desired size hint; default is the current
+   * high-water headroom.
+   *
+   * Node semantics (pinned by parity case stream/readable-async-read-contract
+   * against real Node v24):
+   * - the RETURN VALUE of `_read` is IGNORED — an async `_read`'s promise is
+   *   neither awaited nor error-bridged (a rejection surfaces as an unhandled
+   *   rejection, exactly like Node). `reading` is cleared ONLY by `push()`
+   *   (Node's readableAddChunk), so a no-push async producer is called once
+   *   and then waited on. The previous fulfilled-promise retrigger spun the
+   *   microtask queue forever on a no-push async `_read`, starving the realm's
+   *   timers and IPC (the PR-125 owner wedge).
+   * - a SYNC throw inside `_read` destroys the stream with the error instead
+   *   of propagating to the `read()` caller.
    */
   private maybeRead(hint?: number): void {
     const state = this._readableState;
@@ -610,33 +627,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     if (state.ended || state.reading || !readImpl || state.destroyed) return;
     const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
     state.reading = true;
-    let pending = false;
     try {
-      const result = readImpl.call(this, size);
-      if (isPromiseLike(result)) {
-        pending = true;
-        void result.then(
-          () => {
-            state.reading = false;
-            if (
-              state.flowing &&
-              !state.ended &&
-              !state.destroyed &&
-              state.length < state.highWaterMark
-            ) {
-              this.maybeRead();
-              if (state.buffer.length > 0) this.scheduleFlow();
-            }
-          },
-          (err) => {
-            state.reading = false;
-            this.destroy(err instanceof Error ? err : new Error(String(err)));
-          },
-        );
-        return;
-      }
-    } finally {
-      if (!pending) state.reading = false;
+      readImpl.call(this, size);
+    } catch (err) {
+      state.reading = false;
+      this.destroy(err instanceof Error ? err : new Error(String(err)));
     }
   }
 
