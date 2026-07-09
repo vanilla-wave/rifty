@@ -20,13 +20,19 @@ Correction (2026-07-07): wrapper retirement acceptance closed. `withViteCliArgs`
 `withViteCliEnv`, `.rifty/vite-cli.config.mjs`, and `RIFTY_VITE_CLI_*` template
 gates were deleted; Vite 8 HMR-off and preset dep-optimizer opt-outs moved into
 visible seeded `vite.config.js`. The backlog item `net/preview-websocket-bridge`
-and `preset-deglue` epic were removed per delete-on-done.
+and `preset-deglue` epic were removed per delete-on-done. Two of decision 3's
+per-option residuals remain OPEN as standalone items (not silently absorbed by
+the closure): `playground/vite-strictport-fallback-proof` (browser-prove Vite's
+fallback port becomes the LIVE/preview port) and
+`playground/vite-curated-boot-residual-forces` (classify/remove the curated
+direct-boot path's remaining inline knobs).
 
 ## Consequences
 
 - Any dev server's stock WS client works in the preview — vite untouched-config HMR, webpack-dev-server, socket.io — flipping socket-lab `browser-preview-websocket` to supported (the acceptance gate).
 - The last Vite CLI wrapper/argv/env branch is deleted; the remaining Vite-name
-  check only identifies real `.bin/vite` children before patching Vite's own CLI
-  keepalive/preview-CORS internals.
+  check only identifies real `.bin/vite` children before applying Vite's own CLI
+  keepalive pin (the preview-CORS source patch was later retired with the
+  config-presence guard — execution-boundary honesty, PR #125).
 - Buffered HTML injection adds latency on very large documents (streaming rewrite is a follow-up if measured).
 - Close/backpressure semantics remain the bridge protocol's (no send-queue backpressure); real `ws` parity for high-volume streams is out of scope v1 — gaps stay loud in socket-lab.

@@ -5,7 +5,7 @@ title: Vite preview CORS/header parity over the browser preview bridge
 created: 2026-06-28
 why: `vite preview` runs the real installed CLI on the user's config — rifty no longer force-disables preview CORS or guards config presence (both were pre-flight config validation, the wrong layer). Response headers and same-realm/external proxy already flow through the SW bridge; the open parity question is whether observable CORS/header behavior matches real Vite, given the Origin the middleware sees is the playground origin, not direct localhost.
 user_story: As a developer using `vite preview` in rifty, I want preview HTTP headers and CORS behavior to match real Vite where observable, or a loud execution-boundary throw / signpost instead of a silent sandbox-only divergence.
-sources: [ADR-0173, ADR-0189, docs/backlog/playground/vite-preview-origin-isolation-signpost.md]
+sources: [ADR-0173, ADR-0189]
 code: [apps/playground/src/workers/vite-cli-prep.ts, packages/service-worker/src/route-preview.ts, tests/e2e/vite7-build-preview.spec.ts]
 ---
 
@@ -49,7 +49,9 @@ rather than making template-specific behavior look portable.
 - Observable CORS/header behavior through `/preview/<port>/...` is byte-for-byte
   equivalent to direct Vite preview where the bridge models it (headers,
   Host-based checks), or the Origin/isolation difference is signposted
-  (`vite-preview-origin-isolation-signpost`) — never a silent divergence.
+  (DELIVERED: PreviewPanel address chip shows the real `/preview/<port>/`
+  route + COEP/CORP copy tooltip, pinned by `PreviewPanel.test.ts`) — never a
+  silent divergence.
 - A `preview.proxy` target the bridge cannot reach loud-throws at the net
   execution boundary, not a silent readiness hang.
 

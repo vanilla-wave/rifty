@@ -77,7 +77,8 @@
   preview option the same-origin bridge cannot honor surfaces at its net
   execution boundary; Origin/isolation shape differences are signposted (backlog
   `playground/vite-preview-cors-middleware-parity` /
-  `playground/vite-preview-origin-isolation-signpost`). `prepareViteCli` is now
+  `playground/vite-preview-origin-isolation-signpost`, since DELIVERED as the
+  PreviewPanel `/preview/` chip + COEP/CORP tooltip). `prepareViteCli` is now
   mode-independent; every Vite CLI mode still installs the lazy esbuild host
   bridge. `context({ write:true }).watch()` loud-throws instead of silently
   dropping watched output writes (backlog
@@ -91,11 +92,11 @@
   resolved through one precondition boundary.
 - The foreground `.bin` child spawn spec (`buildChildSpawnSpec`) forwards the
   recursive worker URLs (`RIFTY_KERNEL_WORKER_URL`/`RIFTY_NODE_ENTRY_WORKER_URL`)
-  and forces `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child — so a
-  foreground `.bin/vite@8` can spawn Rolldown's WASI pthread pool via
-  `kernel.spawnWorker` instead of degrading to a silent same-realm hang, and a
-  failed WASI load is loud. Vite 7 is inert (no dev pthread pool). Full v8
-  boot-or-loud e2e tracked in backlog `playground/vite8-cli-nested-worker-boot`.
+  and forces `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child. (The
+  forward alone was INERT — the child never consumed the URLs; fixed in the
+  review-blockers entry above, which also installs the nested-worker fs relay.)
+  Vite 7 is inert (no dev pthread pool). Full v8 boot-or-loud e2e tracked in
+  backlog `playground/vite8-cli-nested-worker-boot`.
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

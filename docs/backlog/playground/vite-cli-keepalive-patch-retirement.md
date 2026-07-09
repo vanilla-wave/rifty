@@ -12,14 +12,14 @@ code: [apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/workers
 
 ## Context
 
-ADR-0174 moved `vite` to the real installed `.bin/vite` CLI. PR #125 removes the
-generated config wrapper and all `RIFTY_VITE_CLI_*` gates, but `prepareViteCli`
-still rewrites Vite's own `dist/node/cli.js`:
-
-- the keepalive patch replaces CAC's `this.runMatchedCommand();` call with a
-  tracked promise handoff to `globalThis.__riftyTrackCliPromise`;
-- the preview CORS patch is tracked separately by
-  `playground/vite-preview-cors-middleware-parity`.
+ADR-0174 moved `vite` to the real installed `.bin/vite` CLI. PR #125 removed the
+generated config wrapper, all `RIFTY_VITE_CLI_*` gates, AND the preview-CORS
+source patch (retired outright — execution-boundary honesty; observable CORS
+parity questions live in `playground/vite-preview-cors-middleware-parity`).
+`prepareViteCli` applies exactly ONE remaining rewrite to Vite's own
+`dist/node/cli.js`: the keepalive patch, replacing CAC's
+`this.runMatchedCommand();` call with a tracked promise handoff to
+`globalThis.__riftyTrackCliPromise`.
 
 The keepalive patch is not a Vite config/transport policy: it exists because the
 child realm must stay alive while Vite's async command action is in flight. Still,
@@ -44,7 +44,8 @@ shape changes.
 - If the rewrite remains, classify it as runtime lifecycle glue in
   `docs/public/compat` or an ADR note, keep the needle guard loud on Vite CLI drift, and make PR
   wording distinguish it from deleted wrapper/config gates.
-- The preview CORS source rewrite remains tracked only by
+- No other Vite source rewrite exists or gets added under this item; observable
+  preview CORS behavior stays owned by
   `playground/vite-preview-cors-middleware-parity`.
 
 ## Parity cases

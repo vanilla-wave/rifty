@@ -180,13 +180,12 @@ export function PreviewPanel(props: {
           <button
             type="button"
             class="rf-preview__copy"
-            title="Copy preview URL"
-            aria-label="Copy preview URL"
+            title="Copy preview URL — rifty serves your app at this origin's /preview/<port>/ route (Service Worker bridge), not a direct localhost:<port> origin; responses carry COEP/CORP isolation headers required by the host, not by your Vite config. Guest code still sees Host localhost:<port>."
+            aria-label="Copy preview URL (rifty same-origin /preview/ route, not a direct localhost origin)"
             onClick={() => void copyUrl()}
           >
             <Icon name="lock" size={11} />
-            {/* TODO(backlog: playground/vite-preview-origin-isolation-signpost) */}
-            <span class="rf-preview__host">localhost:</span>
+            <span class="rf-preview__host">/preview/</span>
           </button>
           <Show
             when={entries().length > 0}

@@ -80,6 +80,19 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
     expect(html).toContain('node :3000 (:3000)');
   });
 
+  it('signposts the rifty same-origin /preview/ route — never a fake localhost origin', () => {
+    // Origin/isolation signpost contract (delivered; was backlog
+    // vite-preview-origin-isolation-signpost):
+    // the address chip shows the ACTUAL copied route shape (/preview/<port>/
+    // on this origin), and the copy affordance names the COEP/CORP isolation
+    // headers as host requirements — not Vite config authored by the user.
+    const html = renderToString(() => PreviewPanel({ ports: () => TWO_PORTS }));
+    expect(html).toContain('/preview/');
+    expect(html).not.toContain('>localhost:<');
+    expect(html).toMatch(/COEP\/CORP/);
+    expect(html).toMatch(/not a direct localhost/);
+  });
+
   it('defaults the selection to the LAST entry (most-recently-added)', () => {
     const html = renderToString(() => PreviewPanel({ ports: () => TWO_PORTS }));
     // Switcher value + iframe both track the last entry (port 3000).

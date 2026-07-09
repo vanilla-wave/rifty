@@ -20,7 +20,8 @@ WASI pthread pool); third-party subresources without CORP would be blocked insid
 the preview but load fine on localhost:5173. None of this is signposted.
 
 General preview-origin/isolation signposting for all Vite templates is now tracked
-in `playground/vite-preview-origin-isolation-signpost`. This item keeps the
+by the delivered preview-UI signpost (PreviewPanel `/preview/` chip + COEP/CORP
+tooltip, `PreviewPanel.test.ts`). This item keeps the
 Vite-8-specific UX residuals: missing CLI banner and HMR-off websocket warning.
 
 ## Options or Next

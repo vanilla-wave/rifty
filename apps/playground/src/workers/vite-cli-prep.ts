@@ -24,7 +24,7 @@ declare global {
 // vite.config; a preview option the same-origin bridge cannot honor surfaces at
 // its own execution boundary (e.g. net throws on an unsupported proxy target),
 // never a pre-scan config guard. Origin/isolation-header shape differences are
-// signposted (backlog playground/vite-preview-origin-isolation-signpost), not
+// signposted in the preview UI (PreviewPanel /preview/ chip + COEP/CORP tooltip), not
 // silently forced off.
 function installCliActionPatches(root: string): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
