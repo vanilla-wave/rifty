@@ -6,6 +6,7 @@ import {
   UPLOAD_BATCH,
   type UploadSource,
   canOpenContextMenu,
+  clampMenuPosition,
   contextMenuItems,
   dropTargetForRow,
   ensureMovablePaths,
@@ -379,5 +380,44 @@ describe('FileExplorer copy path', () => {
     expect(explorerPathText('/ws/src/a.ts', '/ws', true)).toBe('src/a.ts');
     expect(explorerPathText('/other/a.ts', '/ws', true)).toBe('/other/a.ts');
     expect(explorerPathText('/ws/src/a.ts', '/ws', false)).toBe('/ws/src/a.ts');
+  });
+});
+
+describe('FileExplorer context menu viewport clamp', () => {
+  const viewport = { viewportWidth: 1280, viewportHeight: 720 };
+
+  it('keeps a fitting menu at the cursor', () => {
+    expect(
+      clampMenuPosition({ x: 100, y: 100, menuWidth: 168, menuHeight: 240, ...viewport }),
+    ).toEqual({
+      x: 100,
+      y: 100,
+    });
+  });
+
+  it('shifts a bottom-edge menu back inside the viewport', () => {
+    // Regression: a right-click near the status bar rendered the tail items
+    // (Download is LAST) past the viewport — the click hit the status bar,
+    // the document-level close handler ate it, and the action never ran.
+    const pos = clampMenuPosition({ x: 100, y: 700, menuWidth: 168, menuHeight: 240, ...viewport });
+    expect(pos.y + 240).toBeLessThanOrEqual(720);
+    expect(pos.x).toBe(100);
+  });
+
+  it('shifts a right-edge menu back inside the viewport', () => {
+    const pos = clampMenuPosition({
+      x: 1270,
+      y: 100,
+      menuWidth: 168,
+      menuHeight: 240,
+      ...viewport,
+    });
+    expect(pos.x + 168).toBeLessThanOrEqual(1280);
+    expect(pos.y).toBe(100);
+  });
+
+  it('pins an oversized menu to the top-left margin, never negative', () => {
+    const pos = clampMenuPosition({ x: 50, y: 50, menuWidth: 2000, menuHeight: 2000, ...viewport });
+    expect(pos).toEqual({ x: 4, y: 4 });
   });
 });

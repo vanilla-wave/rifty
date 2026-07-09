@@ -94,9 +94,7 @@ async function createExplorerEntry(
   name: string,
 ): Promise<void> {
   await openExplorerContextMenu(page, parent, 'dir');
-  await page
-    .getByRole('menuitem', { name: kind === 'file' ? 'New File' : 'New Folder' })
-    .click({ force: true });
+  await page.getByRole('menuitem', { name: kind === 'file' ? 'New File' : 'New Folder' }).click();
   await page.locator('.rf-row__input').fill(name);
   await page.locator('.rf-row__input').press('Enter');
   await expect(explorerRow(page, name, kind === 'file' ? 'file' : 'dir')).toBeVisible({
@@ -218,13 +216,13 @@ test.describe('GIT file manager', () => {
     const file = `ctx-${seq}.txt`;
     const dir = `ctx-dir-${seq}`;
     await openExplorerContextMenu(page, 'src', 'dir');
-    await page.getByRole('menuitem', { name: 'New File' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'New File' }).click();
     await page.locator('.rf-row__input').fill(file);
     await page.locator('.rf-row__input').press('Enter');
     await expect(explorerRow(page, file, 'file')).toBeVisible({ timeout: 30_000 });
 
     await openExplorerContextMenu(page, 'src', 'dir');
-    await page.getByRole('menuitem', { name: 'New Folder' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'New Folder' }).click();
     await page.locator('.rf-row__input').fill(dir);
     await page.locator('.rf-row__input').press('Enter');
     await expect(explorerRow(page, dir, 'dir')).toBeVisible({ timeout: 30_000 });
@@ -307,13 +305,13 @@ test.describe('GIT file manager', () => {
     await createExplorerEntry(page, 'src', 'folder', dest);
 
     await openExplorerContextMenu(page, file, 'file');
-    await page.getByRole('menuitem', { name: 'Duplicate' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click();
     await expect(explorerRow(page, copy, 'file')).toBeVisible({ timeout: 30_000 });
 
     await openExplorerContextMenu(page, file, 'file');
-    await page.getByRole('menuitem', { name: 'Cut' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'Cut' }).click();
     await openExplorerContextMenu(page, dest, 'dir');
-    await page.getByRole('menuitem', { name: 'Paste' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'Paste' }).click();
 
     const destRow = explorerRow(page, dest, 'dir');
     if ((await destRow.getAttribute('aria-expanded')) !== 'true')
@@ -350,7 +348,9 @@ test.describe('GIT file manager', () => {
 
     const downloadPromise = page.waitForEvent('download');
     await openExplorerContextMenu(page, file, 'file');
-    await page.getByRole('menuitem', { name: 'Download' }).click({ force: true });
+    // No force: if the menu is mis-stacked/covered again, fail LOUD here with
+    // the covering element named — force turned that into a silent 180s hang.
+    await page.getByRole('menuitem', { name: 'Download' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe(file);
     const downloadedPath = await download.path();
@@ -451,7 +451,7 @@ test.describe('GIT file manager', () => {
     const oldName = `open-rename-${seq}.txt`;
     const newName = `open-renamed-${seq}.txt`;
     await openExplorerContextMenu(page, 'src', 'dir');
-    await page.getByRole('menuitem', { name: 'New File' }).click({ force: true });
+    await page.getByRole('menuitem', { name: 'New File' }).click();
     await page.locator('.rf-row__input').fill(oldName);
     await page.locator('.rf-row__input').press('Enter');
     const oldRow = explorerRow(page, oldName, 'file');

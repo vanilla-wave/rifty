@@ -180,6 +180,34 @@ export interface ContextMenuItem {
   readonly disabled: 'never' | 'busy' | 'busy-or-empty-clipboard' | 'not-two-comparable';
 }
 
+/** Input for {@link clampMenuPosition}: cursor anchor + measured menu box + viewport. */
+export interface MenuClampInput {
+  readonly x: number;
+  readonly y: number;
+  readonly menuWidth: number;
+  readonly menuHeight: number;
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+}
+
+/**
+ * Clamp a cursor-anchored fixed-position menu fully into the viewport
+ * (VS-Code parity: a context menu near the bottom/right edge shifts back
+ * inside instead of overflowing). Without this, bottom-row menus render
+ * their tail items PAST the viewport: a click aimed at such an item
+ * hit-tests the status bar underneath, the document-level close handler
+ * eats it, and the action silently never runs (PR-125 scm e2e failure).
+ */
+export function clampMenuPosition(input: MenuClampInput): { x: number; y: number } {
+  const margin = 4;
+  const maxX = input.viewportWidth - input.menuWidth - margin;
+  const maxY = input.viewportHeight - input.menuHeight - margin;
+  return {
+    x: Math.max(margin, Math.min(input.x, maxX)),
+    y: Math.max(margin, Math.min(input.y, maxY)),
+  };
+}
+
 /**
  * VS-Code-parity menu per row capabilities. Mutation items appear ONLY on
  * mutable rows (download-only rows get no grayed clipboard entries); New

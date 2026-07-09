@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Fixed (PR #125 review blockers)
+
+- **Explorer context menu now stacks ABOVE the status bar and clamps into the
+  viewport.** The `.rf-explorer__context` cursor-anchored override (fixed,
+  z-30) had silently LOST the CSS cascade to the later equal-specificity
+  `.rf-rowmenu` block (absolute, z-5): a menu opened on a bottom row rendered
+  its tail items into the status bar's hit-test area — the Download click
+  landed on the footer, the document-level close handler ate it, and the
+  action silently never ran. The seeded `vite.config.js` row (this PR) pushed
+  the scm-e2e upload row 24px lower and exposed the latent bug as a
+  deterministic light-lane failure. Fix: two-class selector immune to block
+  order + z 150 (above panel chrome, below palette/dialogs — VS Code parity:
+  context menus overlay the status bar) + `clampMenuPosition` viewport clamp
+  (measured menu box, unit-tested). scm e2e menuitem clicks dropped
+  `force: true` so a covered item fails LOUD naming the covering element
+  instead of a silent 180s hang.
+- Pre-existing (not PR-caused, found while diagnosing): early git owner RPC
+  frames sent before the owner bridge attaches are silently dropped
+  (15s-timeout console warning on slow boots) — recorded honest draft
+  `backlog/playground/git-owner-rpc-boot-race`.
+
 ### Fixed
 
 - `vite preview` runs the real installed CLI on the user's config with NO rifty

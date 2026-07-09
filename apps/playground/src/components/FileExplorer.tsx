@@ -50,6 +50,7 @@ import {
   type FileExplorerMutations,
   UPLOAD_BATCH,
   canOpenContextMenu,
+  clampMenuPosition,
   contextMenuItems,
   dropTargetForRow,
   ensureMovablePaths,
@@ -140,6 +141,30 @@ export function FileExplorer(props: {
   const [clipboard, setClipboard] = createSignal<FileManagerClipboard | null>(null);
   const [dragging, setDragging] = createSignal<readonly string[] | null>(null);
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState | null>(null);
+  // Clamped screen position for the open context menu. The menu anchors at the
+  // cursor but must stay fully inside the viewport (clampMenuPosition) — the
+  // effect below measures the rendered menu and shifts it back in.
+  let contextMenuEl: HTMLDivElement | undefined;
+  const [contextMenuPos, setContextMenuPos] = createSignal<{ x: number; y: number } | null>(null);
+  createEffect(() => {
+    const menu = contextMenu();
+    if (!menu) {
+      setContextMenuPos(null);
+      return;
+    }
+    const el = contextMenuEl;
+    if (!el) return;
+    setContextMenuPos(
+      clampMenuPosition({
+        x: menu.x,
+        y: menu.y,
+        menuWidth: el.offsetWidth,
+        menuHeight: el.offsetHeight,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }),
+    );
+  });
   let editInputEl: HTMLInputElement | undefined;
   const gitDecorations = createMemo(() => gitStatusDecorationMaps(props.gitStatus ?? new Map()));
   // Per-directory async state of the node_modules subtree (ADR-0080). Written
@@ -974,9 +999,13 @@ export function FileExplorer(props: {
         <Show when={contextMenu()}>
           {(menu) => (
             <div
+              ref={contextMenuEl}
               class="rf-rowmenu rf-explorer__context"
               role="menu"
-              style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+              style={{
+                left: `${(contextMenuPos() ?? menu()).x}px`,
+                top: `${(contextMenuPos() ?? menu()).y}px`,
+              }}
             >
               <For each={contextMenuItems(menu())}>
                 {(item) => (

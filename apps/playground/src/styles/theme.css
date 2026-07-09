@@ -1047,11 +1047,19 @@ body {
   padding: 2px 6px;
   outline: none;
 }
-.rf-explorer__context {
+.rf-rowmenu.rf-explorer__context {
+  /* Two-class selector: the base .rf-rowmenu block (ProjectsTab anchor shape,
+     later in this file) has EQUAL specificity as a single class — this
+     cursor-anchored override silently LOST the cascade to it (menu became
+     absolute/z-5, hit-tested UNDER the status bar; a Download click near the
+     bottom row landed on the footer and the doc-level close handler ate it).
+     z 150: above panel chrome, below the command palette (200) / dialog veil
+     (210) / toasts (1000) — VS Code parity: a context menu overlays the
+     status bar. */
   position: fixed;
   right: auto;
   width: 168px;
-  z-index: 30;
+  z-index: 150;
 }
 
 /* ====================================================================== */
