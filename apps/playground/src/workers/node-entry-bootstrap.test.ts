@@ -22,12 +22,13 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
 
   it('prepares only real vite bin invocations; prep is mode-independent', () => {
     // residual source pin: the call happens in top-level await of the worker
-    // entry. viteCliMode still gates the recognition of a vite invocation, but
-    // prepareViteCli no longer takes mode/args — it just installs the keepalive
-    // pin + esbuild bridge; the real CLI owns config/preview behavior.
+    // entry. The recognizer is the bin name alone (the retired CAC grammar's
+    // mode result was discarded — never null, gated nothing); prepareViteCli
+    // just installs the keepalive pin + esbuild bridge.
     expect(source).toMatch(
-      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*viteCliMode\(proc\.argv\.slice\(2\)\)[\s\S]*await prepareViteCli\(proc\.cwd\(\)\);/,
+      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*await prepareViteCli\(proc\.cwd\(\)\);/,
     );
+    expect(source).not.toMatch(/viteCliMode/);
   });
 
   it('installs the esbuild host bridge for EVERY node child, not just vite', () => {
@@ -45,9 +46,9 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     // worker_threads sees null and silently degrades to same-realm) and serve
     // nested workers' fs.* sync-RPC (installRuntimeJsFsHandlers relay), or
     // Rolldown's WASI pthread pool crashes on its first fs call.
-    expect(source).toMatch(/setKernelWorkerUrl\(/);
-    expect(source).toMatch(/setNodeEntryWorkerUrl\(/);
-    expect(source).toMatch(/installRuntimeJsFsHandlers\(/);
+    expect(source).toMatch(
+      /installRuntimeJsFsHandlers\([\s\S]*setKernelWorkerUrl\([\s\S]*setNodeEntryWorkerUrl\(/,
+    );
   });
 
   it('does not carry the retired editor-write invalidation bridge', () => {

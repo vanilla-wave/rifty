@@ -77,9 +77,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 4,
-    digest: '6e55fc334446',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, mode-independent prepareViteCli(cwd) call-site, retired file-change/env bridge absence; vite mode parser heirs in vite-cli-prep.test.ts',
+    count: 7,
+    digest: '55fcca803948',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, bin-name-gated prepareViteCli(cwd) call-site (CAC grammar retired — result was discarded), retired file-change/env bridge absence, worker-URL consumption + fs relay + unconditional esbuild bridge (PR-125 review: the forward alone was inert; behavioral proof = vite8-cli-nested-worker-boot e2e, backlog REMAINING)',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',

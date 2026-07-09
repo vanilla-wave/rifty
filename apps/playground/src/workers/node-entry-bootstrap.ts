@@ -47,7 +47,7 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installEsbuildBridge } from './esbuild-host.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
-import { binNameOf, prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
+import { binNameOf, prepareViteCli } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -112,11 +112,11 @@ if (
 // API call only).
 installEsbuildBridge();
 
-const viteMode =
-  proc.env.RIFTY_BIN === '1' && binNameOf(entryPath) === 'vite'
-    ? viteCliMode(proc.argv.slice(2))
-    : null;
-if (viteMode !== null) {
+// prepareViteCli is mode-independent (keepalive pin + esbuild bridge, both
+// idempotent, harmless for --help/--version too) — the recognizer is the bin
+// name alone. The retired CAC grammar classified dev/build/preview but its
+// result was discarded (never null), so it gated nothing.
+if (proc.env.RIFTY_BIN === '1' && binNameOf(entryPath) === 'vite') {
   await prepareViteCli(proc.cwd());
 }
 

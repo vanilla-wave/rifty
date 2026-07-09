@@ -4,6 +4,13 @@
 
 ### Fixed (PR #125 review blockers)
 
+- **Retired the dead vite CLI CAC grammar** (~105 lines + probe matrix): its
+  mode result was discarded at the only call site — `viteCliMode` never
+  returned null, so it gated nothing; the recognizer is the bin name alone and
+  `prepareViteCli` is mode-independent (keepalive pin + esbuild bridge, both
+  idempotent, harmless for `--help`/`--version`). Behavior-identical deletion;
+  node-entry ratchet re-recorded with why.
+
 - **esbuild host: native-parity build shapes + esbuild for every node child.**
   (a) A build with no outfile/outdir no longer materializes a literal
   `<stdout>` file in the VFS — native esbuild (probed on 0.28.0) writes
