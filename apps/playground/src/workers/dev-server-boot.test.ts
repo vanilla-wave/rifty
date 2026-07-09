@@ -265,7 +265,7 @@ describe('template vite.config.js seeding (config slot, Vite resolution order)',
     fs.mkdirSync(root, { recursive: true });
     fs.writeFileSync(
       `${root}/vite.config.ts`,
-      enc.encode('export default {};' + String.fromCharCode(10)),
+      enc.encode(`export default {};${String.fromCharCode(10)}`),
     );
     await bootViteExpectImportFailure(root);
     expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);

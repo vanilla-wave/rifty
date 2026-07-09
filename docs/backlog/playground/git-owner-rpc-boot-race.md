@@ -1,7 +1,13 @@
-# git owner RPC: boot race silently drops early request frames
-
-Status: draft
-Area: playground
+---
+area: playground
+status: draft
+title: git owner RPC boot race silently drops early request frames
+created: 2026-07-10
+why: BroadcastChannel git RPC frames sent before the owner bridge attaches are lost (no replay); the page request parks until its 15s timeout — a dead SCM window on slow boots and a misleading "read failed" warning.
+user_story: As a user opening the GIT panel during boot, I want the first status/branch read to resolve as soon as the owner is ready, not to time out after 15s because the request raced the bridge attach.
+sources: [docs/adr/net/0189-preview-loopback-websocket-bridge.md]
+code: [apps/playground/src/glue/git-owner-port.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+---
 
 ## Symptom
 
