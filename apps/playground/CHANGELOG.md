@@ -4,6 +4,18 @@
 
 ### Fixed (PR #125 review blockers)
 
+- **Template `vite.config.js` no longer shadows a user's config or resurrects
+  after deletion.** `VITE_CONFIG_FILENAMES` now matches Vite's
+  `DEFAULT_CONFIG_FILES` VERBATIM (js → mjs → ts → …; the previous ts-first
+  order was Vite-divergent), and every seed site delegates the config-slot
+  decision to ONE gate (`shouldSeedTemplateViteConfig`): seed only into a
+  fresh root AND only when no `vite.config.*` variant exists. Before: an
+  upgraded workspace holding only `vite.config.ts` silently got the template
+  `.js` seeded next to it — and Vite loads `.js` FIRST, so the user's
+  aliases/plugins stopped applying; a deleted seeded config (the documented
+  opt-out) was re-seeded on every boot/reload. RED-first behavioral tests in
+  `dev-server-boot.test.ts` (shadow / resurrect / fresh-seed).
+
 - **Foreground `.bin` child now CONSUMES the forwarded nested-worker URLs and
   serves nested workers' fs sync-RPC.** B3's env forward (`buildChildSpawnSpec`)
   was inert on its own: `node-entry-bootstrap` never called

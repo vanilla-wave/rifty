@@ -117,6 +117,7 @@ import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
+import { isViteConfigSlotPath, shouldSeedTemplateViteConfig } from './vite-config-guard.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -168,11 +169,18 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
 
 function seedProject(cfg: BootstrapConfig): void {
   const fs = syncMirror();
+  const freshRoot = !fs.existsSync(cfg.root);
+  // Config-slot gate: never shadow a user's vite.config.* and never resurrect
+  // a deleted seeded config on a returning root (shouldSeedTemplateViteConfig).
+  const seedViteConfig = shouldSeedTemplateViteConfig(cfg.root, (p) => fs.existsSync(p), {
+    freshRoot,
+  });
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
   for (const [path, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(path);
+    if (isViteConfigSlotPath(np, cfg.root) && !seedViteConfig) continue;
     fs.mkdirSync(dirname(np), { recursive: true });
     if (!fs.existsSync(np)) {
       fs.writeFileSync(np, enc.encode(content));

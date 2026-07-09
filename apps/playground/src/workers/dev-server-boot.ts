@@ -24,6 +24,7 @@ import type {
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildBridge } from './esbuild-host.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
+import { isViteConfigSlotPath, shouldSeedTemplateViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 
@@ -165,6 +166,12 @@ export async function bootDevServer(opts: {
   // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
   function seedTemplateFiles(opts: { nodeModulesOnly: boolean }): void {
+    // Config-slot gate (shouldSeedTemplateViteConfig): computed BEFORE mkdir so
+    // "fresh root" is observable.
+    const freshRoot = !seedFs.existsSync(root);
+    const seedViteConfig = shouldSeedTemplateViteConfig(root, (p) => seedFs.existsSync(p), {
+      freshRoot,
+    });
     seedFs.mkdirSync(root, { recursive: true });
     if (!opts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
       seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
@@ -173,6 +180,7 @@ export async function bootDevServer(opts: {
       const np = normalizePath(seedPath);
       if (np === `${root}/package.json`) continue;
       if (opts.nodeModulesOnly && !np.startsWith(`${root}/node_modules/`)) continue;
+      if (isViteConfigSlotPath(np, root) && !seedViteConfig) continue;
       seedFs.mkdirSync(dirname(np), { recursive: true });
       if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
     }

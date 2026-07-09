@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLI_REPORT_TEMPLATE } from '../templates/cli-report.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from '../templates/hidden-empty.ts';
 import { type NodeServerProjectSpec, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import { VITE_TEMPLATE } from '../templates/vite.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 
 /**
@@ -233,6 +234,58 @@ describe('runtime dispatch + seeding (behavioral)', () => {
     // already be there.
     expect(g.__riftyEsbuild).toBeDefined();
     g.__riftyEsbuild = undefined;
+  });
+});
+
+describe('template vite.config.js seeding (config slot, Vite resolution order)', () => {
+  // Vite resolves js -> mjs -> ts -> cjs -> mts -> cts: seeding our .js next to
+  // a user's .ts would silently take over config loading. And a reload heal
+  // seed must not resurrect a deleted config — deleting it is the documented
+  // opt-out into stock Vite behavior (vite-template-dep-optimizer-policy).
+  async function bootViteExpectImportFailure(root: string): Promise<void> {
+    const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5177, root);
+    const sinks = makeSinks();
+    await expect(
+      bootDevServer({
+        cfg,
+        port: 5177,
+        root,
+        spec: VITE_TEMPLATE,
+        slug: 'bu',
+        fromScratch: false,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    ).rejects.toThrow(/vite/); // no installed vite in this realm — seeding already ran
+  }
+
+  it('does not shadow an existing user vite.config.ts with the template .js', async () => {
+    const root = '/bu-devboot/config-slot-ts';
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(
+      `${root}/vite.config.ts`,
+      enc.encode('export default {};' + String.fromCharCode(10)),
+    );
+    await bootViteExpectImportFailure(root);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
+    expect(fs.existsSync(`${root}/vite.config.ts`)).toBe(true);
+  });
+
+  it('does not resurrect a deleted seeded vite.config.js on an existing root', async () => {
+    const root = '/bu-devboot/config-slot-deleted';
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(`${root}/src.keep`, enc.encode('')); // existing (non-fresh) root
+    await bootViteExpectImportFailure(root);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
+  });
+
+  it('seeds the template vite.config.js into a fresh root', async () => {
+    const root = '/bu-devboot/config-slot-fresh';
+    const fs = syncMirror();
+    await bootViteExpectImportFailure(root);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(true);
   });
 });
 

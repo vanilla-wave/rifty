@@ -12,6 +12,7 @@
 import { basename } from '@riftydev/vfs';
 import { seedFilesForStarter, starterById } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
+import { isViteConfigSlotPath } from '../workers/vite-config-guard.ts';
 import type { FileReadOwnerLike, OwnerFileReader } from './owner-file-read.ts';
 
 const ownerWriteEnc = new TextEncoder();
@@ -93,6 +94,11 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
       // package.json is install-owned after boot; rewriting it here drops
       // npm-installed deps on reload while the owner/index reset already seeds it.
       if (path === rootPackageJsonPath) continue;
+      // Reload re-seed must not resurrect a deleted template vite.config.js /
+      // shadow a user's vite.config.* (deletion = the documented opt-out; the
+      // owner's fresh-root seed owns the config-slot decision —
+      // shouldSeedTemplateViteConfig in vite-config-guard.ts).
+      if (ifAbsent && isViteConfigSlotPath(path, root)) continue;
       await deps.currentOwner().writeFrameAcked({
         type: 'write',
         path,
