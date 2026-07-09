@@ -16,6 +16,19 @@ describe('runInRifty', () => {
     expect(stdout).toBe('after-drain\n');
   });
 
+  it('tracks global timers instead of truncating async output after a fixed grace', async () => {
+    const stdout = await runInRifty({
+      code: `
+        (async () => {
+          await new Promise((resolve) => setTimeout(resolve, 75));
+          console.log('after-global-timer');
+        })();
+      `,
+    });
+
+    expect(stdout).toBe('after-global-timer\n');
+  });
+
   it('exec-sync mode surfaces missing child scripts as ENOENT through the runtime handler', async () => {
     const stdout = await runInRifty({
       kind: 'exec-sync',

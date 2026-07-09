@@ -163,6 +163,7 @@ jobs:
       NETLIFY_LANDING_SITE_ID: ${{ vars.NETLIFY_LANDING_SITE_ID || secrets.NETLIFY_LANDING_SITE_ID || '823ea64a-160a-4892-b0f4-24eab1424dce' }}
       NETLIFY_LANDING_SITE_NAME: ${{ vars.NETLIFY_LANDING_SITE_NAME || 'rifty-landing' }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      VITE_RIFTY_PLAYGROUND_URL: ${{ vars.VITE_RIFTY_PLAYGROUND_URL || 'https://play.rifty.dev/' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -210,7 +211,7 @@ jobs:
           LANDING_URL: https://landing-pr-${{ github.event.pull_request.number }}--${{ env.NETLIFY_LANDING_SITE_NAME }}.netlify.app
         run: |
           set -euo pipefail
-          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Node, npm, and a dev server")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
+          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable Node-compatible runtime")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
 
       - name: Deploy landing production
         if: github.event_name == 'push'
@@ -230,4 +231,4 @@ jobs:
         run: |
           set -euo pipefail
           export LANDING_URL="https://${NETLIFY_LANDING_SITE_NAME}.netlify.app"
-          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Node, npm, and a dev server")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
+          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable Node-compatible runtime")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'

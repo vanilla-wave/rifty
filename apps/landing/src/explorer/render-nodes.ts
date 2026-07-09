@@ -67,7 +67,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '    <span style="color:var(--syn-str)">"express"</span>: <span style="color:var(--syn-str)">"^4"</span>\n  } }',
     pv:
       '<div style="font-size:12px; color:#15171D; font-weight:600;">node_modules/</div>' +
-      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">86 packages linked to the VFS</div>',
+      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">Dependencies linked to the VFS</div>',
   },
   sync: {
     file: 'app.js',

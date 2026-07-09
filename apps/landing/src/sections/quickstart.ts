@@ -55,14 +55,25 @@ function buildCodeCard(): HTMLElement {
   body.append(blankLine());
   body.append(
     codeLine([
-      ['if', 'syn-kw'],
-      [' (!', 'syn-punc'],
+      ['const', 'syn-kw'],
+      [' caps ', ''],
+      ['= ', 'syn-punc'],
       ['checkCapabilities', 'syn-fn'],
-      ['().sufficient) ', 'syn-punc'],
-      ['return', 'syn-kw'],
-      [' ', ''],
-      ['showUnsupportedNotice', 'syn-fn'],
       ['()', 'syn-punc'],
+    ]),
+  );
+  body.append(
+    codeLine([
+      ['if', 'syn-kw'],
+      [' (!caps.sufficient || !caps.capabilities.crossOriginIsolated)', 'syn-punc'],
+    ]),
+  );
+  body.append(
+    codeLine([
+      ['  throw', 'syn-kw'],
+      [' new ', 'syn-punc'],
+      ['Error', 'syn-fn'],
+      ['(caps.summary)', 'syn-punc'],
     ]),
   );
   body.append(blankLine());
@@ -193,7 +204,7 @@ export function renderQuickStart(): HTMLElement {
   head.className = 'qs-head';
   const index = document.createElement('span');
   index.className = 'qs-index';
-  index.textContent = '03';
+  index.textContent = '04';
   const label = document.createElement('h2');
   label.className = 'qs-label';
   label.textContent = 'Quick start';

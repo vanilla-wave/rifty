@@ -29,7 +29,6 @@ const c: ParityCase = {
   code: `
     const http = require('node:http');
 
-    const PORT = 4202;
     const N = 500;
     const server = http.createServer();
     server.on('request', (req, res) => {
@@ -52,8 +51,9 @@ const c: ParityCase = {
       pump();
     });
 
-    server.listen({ port: PORT }, async () => {
-      const r = await __riftyHttpRequest(PORT, '/stream');
+    server.listen({ port: 0 }, async () => {
+      const port = server.address().port;
+      const r = await __riftyHttpRequest(port, '/stream');
       console.log('status:' + r.status);
       console.log('len:' + r.body.length);
       console.log('first:' + r.body.slice(0, 10));
