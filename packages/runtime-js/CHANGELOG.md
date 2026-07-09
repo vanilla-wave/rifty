@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **Loader ESM-namespace memo validates the exports-object identity** (PR #125
+  review): a builtin re-registration returns a NEW exports object
+  (builtin-registry contract) but the id-keyed memo kept serving the STALE
+  wrapped namespace to importers; the entry now rewraps when the source object
+  changed while keeping stable namespace identity for unchanged modules.
+  RED-first in `interop-cjs-cache.test.ts`.
+
 - **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
   - `open(2)` flag×target error lattice pinned WHOLE against real Node
     (parity `fs/open-flag-target-matrix`): `O_CREAT|O_DIRECTORY` is `EINVAL`

@@ -148,13 +148,21 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // wrapped namespace with its `default` binding. Wrapping per call leaked the
   // RAW CJS exports on cache hits (`default` === undefined for the second
   // importer; broke vite7's tinyglobby→picomatch after fdir require()d it).
-  // Dropped in lockstep with the registry in `invalidate`.
-  const esmNamespaces = new Map<string, Record<string, unknown>>();
+  // The entry is validated against the CURRENT exports object identity: a
+  // builtin re-registration (builtin-registry contract: "discards its cached
+  // namespace so the next loadBuiltin invokes the new factory") yields a NEW
+  // exports object and must get a fresh wrapper — a blind id-keyed memo served
+  // the stale namespace forever. Also dropped in lockstep with the registry in
+  // `invalidate`.
+  const esmNamespaces = new Map<
+    string,
+    { readonly source: Record<string, unknown>; readonly ns: Record<string, unknown> }
+  >();
   function esmNamespaceFor(id: string, exportsObj: Record<string, unknown>) {
     const hit = esmNamespaces.get(id);
-    if (hit) return hit;
+    if (hit && hit.source === exportsObj) return hit.ns;
     const ns = wrapCjsAsEsmNamespace(exportsObj);
-    esmNamespaces.set(id, ns);
+    esmNamespaces.set(id, { source: exportsObj, ns });
     return ns;
   }
 

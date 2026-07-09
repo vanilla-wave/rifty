@@ -10,6 +10,7 @@
  * boot died in `addManuallyIncludedOptimizeDeps` (`picomatch.scan` on
  * undefined).
  */
+import { registerBuiltin } from '@riftydev/io';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
@@ -66,6 +67,27 @@ describe('ESM namespace of a CJS module across cache hits', () => {
     expect(typeof required.scan).toBe('function');
     const ns = (await loader.import('pico', '/work/__entry__.mjs')) as { default?: unknown };
     expect(typeof ns.default).toBe('function');
+  });
+
+  it('builtin re-registration invalidates the cached namespace (registry contract)', async () => {
+    // builtin-registry.ts promises: "Re-registering a name discards its cached
+    // namespace so the next loadBuiltin invokes the new factory". The loader's
+    // esmNamespaces memo must not undo that with a stale id-keyed wrapper —
+    // the cache validates against the CURRENT exports object identity.
+    const loader = createModuleLoader(fixture(), { cwd: '/work' });
+    registerBuiltin('rifty-test-esm-cache', () => ({ value: 1 }));
+    const first = (await loader.import('node:rifty-test-esm-cache', '/work/__a__.mjs')) as {
+      value?: number;
+    };
+    expect(first.value).toBe(1);
+    // Stable identity while the registration is unchanged.
+    expect(await loader.import('node:rifty-test-esm-cache', '/work/__b__.mjs')).toBe(first);
+    registerBuiltin('rifty-test-esm-cache', () => ({ value: 2 }));
+    const second = (await loader.import('node:rifty-test-esm-cache', '/work/__c__.mjs')) as {
+      value?: number;
+    };
+    expect(second.value).toBe(2);
+    expect(second).not.toBe(first);
   });
 
   it('all importers share ONE namespace object (Node parity), dropped on invalidate', async () => {
