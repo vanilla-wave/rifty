@@ -5,7 +5,7 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type ViteCliMode, prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
+import { prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): every test drives the REAL prepareViteCli against
@@ -30,44 +30,8 @@ const CAC_CALL_SITE = [
   'globalThis.__riftyTestCac = TestCac;',
 ].join('\n');
 
-/** Mirrors the `vite preview` inline-config shape of real vite dist/node/cli.js
- * (tab-indented, the preview patch's needle) wrapped so the test can execute the
- * (patched) config synthesis. */
-const PREVIEW_INLINE_CONFIG = [
-  'configFile: options.config,',
-  '\t\t\tconfigLoader: options.configLoader,',
-  '\t\t\tlogLevel: options.logLevel,',
-  '\t\t\tmode: options.mode,',
-  '\t\t\tbuild: { outDir: options.outDir },',
-  '\t\t\tpreview: {',
-  '\t\t\t\tport: options.port,',
-  '\t\t\t\tstrictPort: options.strictPort,',
-  '\t\t\t\thost: options.host,',
-  '\t\t\t\topen: options.open',
-  '\t\t\t}',
-].join('\n');
-
-const PREVIEW_CALL_SITE = [
-  'globalThis.__riftyTestPreviewConfig = function (options) {',
-  `  return {\n    ${PREVIEW_INLINE_CONFIG}\n  };`,
-  '};',
-].join('\n');
-
-const PREVIEW_OPTIONS = {
-  config: '/app/vite.config.ts',
-  configLoader: 'bundle',
-  logLevel: 'info',
-  mode: 'production',
-  outDir: 'out',
-  port: 4173,
-  strictPort: false,
-  host: '127.0.0.1',
-  open: true,
-} as const;
-
 interface TestGlobals {
   __riftyTestCac?: new (action: () => unknown) => { parse(): void };
-  __riftyTestPreviewConfig?: (options: typeof PREVIEW_OPTIONS) => Record<string, unknown>;
   __riftyEsbuild?: unknown;
   __riftyTrackCliPromise?: (promise: PromiseLike<unknown>) => void;
 }
@@ -94,22 +58,6 @@ function testCac(): new (action: () => unknown) => { parse(): void } {
   return ctor;
 }
 
-function previewConfig(): (options: typeof PREVIEW_OPTIONS) => Record<string, unknown> {
-  const synthesize = g.__riftyTestPreviewConfig;
-  if (!synthesize) throw new Error('fixture cli.js did not register the preview config synth');
-  return synthesize;
-}
-
-function prepareWithArgs(
-  root: string,
-  mode: ViteCliMode,
-  args: readonly string[],
-): Promise<void> {
-  return (
-    prepareViteCli as (root: string, mode: ViteCliMode, args: readonly string[]) => Promise<void>
-  )(root, mode, args);
-}
-
 function walkTree(fsSync: MemoryFsSync, dir: string, out: string[] = []): string[] {
   for (const entry of fsSync.readdirSync(dir)) {
     const path = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
@@ -123,7 +71,6 @@ const savedTracker = g.__riftyTrackCliPromise;
 afterEach(() => {
   g.__riftyTrackCliPromise = savedTracker;
   g.__riftyTestCac = undefined;
-  g.__riftyTestPreviewConfig = undefined;
   g.__riftyEsbuild = undefined;
   resetSyncMirror();
 });
@@ -135,7 +82,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI hands a detached async action promise to the keepalive tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app');
     // prepareViteCli itself wires the tracker global to the runtime keepalive.
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
 
@@ -151,7 +98,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI leaves synchronous action results untracked and survives an absent tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app');
     runPatchedCli(fsSync);
 
     const tracked: unknown[] = [];
@@ -167,134 +114,71 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('a second prepare leaves the patched CLI byte-identical (idempotent, still executable)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app');
     const once = readText(fsSync, CLI_PATH);
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app');
     expect(readText(fsSync, CLI_PATH)).toBe(once);
     expect(() => runPatchedCli(fsSync)).not.toThrow();
   });
 
   it('loud-throws when the vite CLI drops the runMatchedCommand call shape', async () => {
     bootFs({ [CLI_PATH]: 'export function parse() {}' });
-    await expect(prepareViteCli('/app', 'run')).rejects.toThrow(
+    await expect(prepareViteCli('/app')).rejects.toThrow(
       'vite CLI keepalive patch failed: runMatchedCommand call shape not found',
     );
   });
 
   it('tolerates a project without a vite CLI file — no patch write, tracker still wired', async () => {
     const fsSync = bootFs();
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app');
     expect(fsSync.existsSync(CLI_PATH)).toBe(false);
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
   });
 });
 
-describe('prepareViteCli — vite preview inline config patch', () => {
-  it('config-free preview preserves configFile unset and adds cors:false only', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
-    await prepareViteCli('/app', 'preview');
-    runPatchedCli(fsSync);
-
-    // toEqual is exact: proves the patch adds NOTHING beyond cors (no
-    // `...user.preview` spread, no allowedHosts — the "hang, not 403" was
-    // rifty's missing net.isIP, fixed with parity cases/net/is-ip).
-    expect(previewConfig()({ ...PREVIEW_OPTIONS, config: undefined })).toEqual({
-      configFile: undefined,
-      configLoader: 'bundle',
-      logLevel: 'info',
-      mode: 'production',
-      build: { outDir: 'out' },
-      preview: {
-        port: 4173,
-        strictPort: false,
-        host: '127.0.0.1',
-        open: true,
-        cors: false,
-      },
-    });
-    // The honest-gap pointer travels with the patched output.
-    expect(readText(fsSync, CLI_PATH)).toContain(
-      'TODO(backlog: playground/vite-preview-cors-middleware-parity)',
-    );
+describe('prepareViteCli — preview runs the real vite CLI unchanged', () => {
+  // Reframed contract (was: throw on any project-root vite.config): rifty no
+  // longer pre-scans config or force-disables preview cors. The real CLI loads
+  // the user's config; a preview option the same-origin bridge cannot honor
+  // surfaces at its OWN execution boundary (net throws on an unsupported proxy
+  // target), not a pre-flight guard here.
+  it('applies only the keepalive pin — no forced preview cors/config patch', async () => {
+    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCli('/app');
+    const patched = readText(fsSync, CLI_PATH);
+    expect(patched).toContain('__riftyTrackCliPromise'); // keepalive still lands
+    expect(patched).not.toContain('cors: false'); // no forced cors override
+    expect(patched).not.toContain('vite-preview-cors-middleware-parity');
   });
 
-  it('preview mode loud-rejects project-root vite.config until preview CORS/config parity lands', async () => {
+  it('a project-root vite.config no longer trips a rifty preview guard (real vite loads it)', async () => {
     bootFs({
-      [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}`,
+      [CLI_PATH]: CAC_CALL_SITE,
       '/app/vite.config.ts': 'export default { preview: { cors: true } };\n',
     });
-
-    await expect(prepareViteCli('/app', 'preview')).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'vite.preview.config-loading',
-    });
-  });
-
-  it('preview mode loud-rejects explicit --config until preview CORS/config parity lands', async () => {
-    bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
-
-    await expect(prepareWithArgs('/app', 'preview', ['--config', 'preview.config.ts'])).rejects
-      .toMatchObject({
-        name: 'NotImplementedError',
-        feature: 'vite.preview.config-loading',
-      });
-  });
-
-  it('dev mode leaves the preview inline config untouched — the patch executes only under vite preview', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
-    await prepareViteCli('/app', 'dev');
-    runPatchedCli(fsSync);
-
-    expect(previewConfig()(PREVIEW_OPTIONS)).toEqual({
-      configFile: '/app/vite.config.ts',
-      configLoader: 'bundle',
-      logLevel: 'info',
-      mode: 'production',
-      build: { outDir: 'out' },
-      preview: { port: 4173, strictPort: false, host: '127.0.0.1', open: true },
-    });
-  });
-
-  it('loud-throws in preview mode when the vite CLI drops the preview inline-config shape', async () => {
-    bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await expect(prepareViteCli('/app', 'preview')).rejects.toThrow(
-      'vite CLI preview patch failed: preview inline config shape not found',
-    );
+    // Was NotImplementedError('vite.preview.config-loading'); prep is now a no-op
+    // wrt config — the real CLI owns config loading.
+    await expect(prepareViteCli('/app')).resolves.toBeUndefined();
   });
 });
 
 describe('prepareViteCli — wrapper deletion guard', () => {
-  it('dev/build/preview never write a rifty Vite config wrapper', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
-    await prepareViteCli('/app', 'run');
-    expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
-    await prepareViteCli('/app', 'build');
-    expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
-    await prepareViteCli('/app', 'dev');
-    expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
-    await prepareViteCli('/app', 'preview');
+  it('never writes a rifty Vite config wrapper', async () => {
+    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCli('/app');
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
   });
 
-  it('all vite CLI modes install the lazy esbuild host bridge (ADR-0192)', async () => {
-    bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${PREVIEW_CALL_SITE}` });
-    await prepareViteCli('/app', 'run');
-    expect(g.__riftyEsbuild).toBeDefined();
-    g.__riftyEsbuild = undefined;
-    await prepareViteCli('/app', 'build');
-    expect(g.__riftyEsbuild).toBeDefined();
-    g.__riftyEsbuild = undefined;
-    await prepareViteCli('/app', 'dev');
-    expect(g.__riftyEsbuild).toBeDefined();
-    g.__riftyEsbuild = undefined;
-    await prepareViteCli('/app', 'preview');
+  it('installs the lazy esbuild host bridge (ADR-0192)', async () => {
+    bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCli('/app');
     expect(g.__riftyEsbuild).toBeDefined();
   });
 
   it('writes ONLY the CLI patch — zero shim glue or wrapper files at prep time (ADR-0188)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
     const before = walkTree(fsSync, '/').sort();
-    await prepareViteCli('/app', 'dev');
+    await prepareViteCli('/app');
     const after = walkTree(fsSync, '/').sort();
     expect(after).toEqual(before);
   });

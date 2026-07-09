@@ -1,7 +1,6 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { installEsbuildBridge } from './esbuild-host.ts';
-import { assertNoUserVitePreviewConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -11,31 +10,6 @@ const VITE_CLI_KEEPALIVE_PATCH = `var __riftyAction = this.runMatchedCommand();
       if (__riftyAction && typeof __riftyAction.then === "function" && globalThis.__riftyTrackCliPromise) {
         globalThis.__riftyTrackCliPromise(__riftyAction);
       }`;
-const VITE_CLI_PREVIEW_NEEDLE = `configFile: options.config,
-			configLoader: options.configLoader,
-			logLevel: options.logLevel,
-			mode: options.mode,
-			build: { outDir: options.outDir },
-			preview: {
-				port: options.port,
-				strictPort: options.strictPort,
-				host: options.host,
-				open: options.open
-			}`;
-const VITE_CLI_PREVIEW_PATCH = `configFile: options.config,
-			configLoader: options.configLoader,
-			logLevel: options.logLevel,
-			mode: options.mode,
-			build: { outDir: options.outDir },
-			preview: {
-				port: options.port,
-				strictPort: options.strictPort,
-				host: options.host,
-				open: options.open,
-				// TODO(backlog: playground/vite-preview-cors-middleware-parity)
-				cors: false
-			}`;
-const VITE_CLI_PREVIEW_PATCH_MARKER = 'cors: false';
 
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'run';
 
@@ -45,41 +19,33 @@ declare global {
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
 }
 
-// NOT shadow-registry shims (those apply at install time, ADR-0188): these
-// patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
-// keepalive pin (CAC never awaits async actions) and the preview inline-config
-// (executes only under `vite preview`; needle-guarded, loud on drift).
-function installCliActionPatches(root: string, mode: ViteCliMode): void {
+// NOT a shadow-registry shim (those apply at install time, ADR-0188): this
+// patches vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
+// keepalive pin (CAC never awaits async actions). Mode-independent: rifty no
+// longer touches vite's preview config/CORS. The real CLI loads the user's
+// vite.config; a preview option the same-origin bridge cannot honor surfaces at
+// its own execution boundary (e.g. net throws on an unsupported proxy target),
+// never a pre-scan config guard. Origin/isolation-header shape differences are
+// signposted (backlog playground/vite-preview-origin-isolation-signpost), not
+// silently forced off.
+function installCliActionPatches(root: string): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
   const path = normalizePath(`${root}/node_modules/vite/dist/node/cli.js`);
   if (!fs.existsSync(path)) return;
-  let source = dec.decode(fs.readFileBytesSync(path));
-  let changed = false;
-  if (!source.includes('__riftyTrackCliPromise')) {
-    if (!source.includes(VITE_CLI_KEEPALIVE_NEEDLE)) {
-      throw new Error('vite CLI keepalive patch failed: runMatchedCommand call shape not found');
-    }
-    source = source.replace(VITE_CLI_KEEPALIVE_NEEDLE, VITE_CLI_KEEPALIVE_PATCH);
-    changed = true;
+  const source = dec.decode(fs.readFileBytesSync(path));
+  if (source.includes('__riftyTrackCliPromise')) return;
+  if (!source.includes(VITE_CLI_KEEPALIVE_NEEDLE)) {
+    throw new Error('vite CLI keepalive patch failed: runMatchedCommand call shape not found');
   }
-  if (mode === 'preview' && !source.includes(VITE_CLI_PREVIEW_PATCH_MARKER)) {
-    if (!source.includes(VITE_CLI_PREVIEW_NEEDLE)) {
-      throw new Error('vite CLI preview patch failed: preview inline config shape not found');
-    }
-    source = source.replace(VITE_CLI_PREVIEW_NEEDLE, VITE_CLI_PREVIEW_PATCH);
-    changed = true;
-  }
-  if (changed) fs.writeFileSync(path, enc.encode(source));
+  fs.writeFileSync(
+    path,
+    enc.encode(source.replace(VITE_CLI_KEEPALIVE_NEEDLE, VITE_CLI_KEEPALIVE_PATCH)),
+  );
 }
 
-export async function prepareViteCli(
-  root: string,
-  mode: ViteCliMode,
-  args: readonly string[] = [],
-): Promise<void> {
-  if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, viteConfigArg(args));
-  installCliActionPatches(root, mode);
+export async function prepareViteCli(root: string): Promise<void> {
+  installCliActionPatches(root);
   installEsbuildBridge();
 }
 
@@ -192,17 +158,6 @@ function parseViteCliArgs(args: readonly string[]): ViteCliParse {
 
 export function viteCliMode(args: readonly string[]): ViteCliMode {
   return parseViteCliArgs(args).mode;
-}
-
-function isConfigFlag(t: ViteCliToken): t is Extract<ViteCliToken, { kind: 'flag' }> {
-  return t.kind === 'flag' && (t.flag === '--config' || t.flag === '-c');
-}
-
-function viteConfigArg(args: readonly string[]): string | null | undefined {
-  for (const t of parseViteCliArgs(args).tokens) {
-    if (isConfigFlag(t)) return t.value;
-  }
-  return undefined;
 }
 
 export function createPreviewScope(): string {

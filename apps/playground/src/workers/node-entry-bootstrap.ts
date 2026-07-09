@@ -81,7 +81,7 @@ const viteMode =
     ? viteCliMode(proc.argv.slice(2))
     : null;
 if (viteMode !== null) {
-  await prepareViteCli(proc.cwd(), viteMode, proc.argv.slice(2));
+  await prepareViteCli(proc.cwd());
 }
 
 const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;

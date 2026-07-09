@@ -66,7 +66,11 @@ test.describe('Vite 7 production build/preview', () => {
     const afterBuild = await terminalBuffer(page);
     expect(afterBuild).not.toContain('/src/main.js');
 
-    await runTerminalLine(page, 'rm vite.config.* && vite preview');
+    // The shipped starter's default workflow: `vite preview` runs on the
+    // template's own visible vite.config.js — rifty no longer forces its
+    // deletion (was a rifty preview-config guard; retired to execution-boundary
+    // honesty).
+    await runTerminalLine(page, 'vite preview');
 
     await expect
       .poll(async () => fetchPreview(page, 4173), {

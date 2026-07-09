@@ -78,8 +78,8 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
     count: 4,
-    digest: 'b1b859ab9f1a',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, retired file-change/env bridge absence; vite mode parser heirs in vite-cli-prep.test.ts',
+    digest: '6e55fc334446',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, mode-independent prepareViteCli(cwd) call-site, retired file-change/env bridge absence; vite mode parser heirs in vite-cli-prep.test.ts',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',

@@ -20,11 +20,13 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     expect(source).toContain('bin: proc.env.RIFTY_BIN ===');
   });
 
-  it('prepares only real vite bin invocations, deriving the mode from argv', () => {
+  it('prepares only real vite bin invocations; prep is mode-independent', () => {
     // residual source pin: the call happens in top-level await of the worker
-    // entry; viteCliMode parsing is behavioral in vite-cli-prep.test.ts.
+    // entry. viteCliMode still gates the recognition of a vite invocation, but
+    // prepareViteCli no longer takes mode/args — it just installs the keepalive
+    // pin + esbuild bridge; the real CLI owns config/preview behavior.
     expect(source).toMatch(
-      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*viteCliMode\(proc\.argv\.slice\(2\)\)[\s\S]*await prepareViteCli\(proc\.cwd\(\), viteMode, proc\.argv\.slice\(2\)\);/,
+      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*viteCliMode\(proc\.argv\.slice\(2\)\)[\s\S]*await prepareViteCli\(proc\.cwd\(\)\);/,
     );
   });
 

@@ -18,6 +18,12 @@ export function findUserViteConfig(root: string, exists: (path: string) => boole
   return null;
 }
 
+// The CURATED owner build/preview path (build-boot.ts) runs vite with
+// `configFile:false` — it genuinely cannot load user config, so a present config
+// is a loud gap, not a silent ignore. The REAL vite CLI path (prepareViteCli)
+// loads user config for real and has NO such guard: unsupported preview options
+// surface at their own execution boundary (backlog
+// vite-curated-boot-residual-forces tracks aligning/removing this curated path).
 export function assertNoUserViteConfig(
   root: string,
   exists: (path: string) => boolean = (path) => syncMirror().existsSync(path),
@@ -28,25 +34,5 @@ export function assertNoUserViteConfig(
   throw new NotImplementedError(
     'vite.config-loading',
     `${configPath} exists, but the legacy owner Vite dev-server path cannot load user config yet; run the real vite CLI path or remove the config before using npm-run dev.`,
-  );
-}
-
-export function assertNoUserVitePreviewConfig(
-  root: string,
-  exists: (path: string) => boolean = (path) => syncMirror().existsSync(path),
-  explicitConfigPath?: string | null,
-): void {
-  const configPath =
-    explicitConfigPath === undefined
-      ? findUserViteConfig(root, exists)
-      : explicitConfigPath === null
-        ? '--config'
-        : normalizePath(
-            explicitConfigPath.startsWith('/') ? explicitConfigPath : `${root}/${explicitConfigPath}`,
-          );
-  if (configPath === null) return;
-  throw new NotImplementedError(
-    'vite.preview.config-loading',
-    `${configPath} would run through rifty's preview CORS bridge before preview config/CORS parity is modelled; remove the config before running vite preview.`,
   );
 }

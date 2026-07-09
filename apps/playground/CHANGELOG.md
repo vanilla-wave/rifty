@@ -4,11 +4,18 @@
 
 ### Fixed
 
-- `vite preview` now loud-throws `NotImplementedError('vite.preview.config-loading')`
-  when a project root config or `--config` would run through the preview CORS
-  bridge before parity is modelled, and every Vite CLI mode installs the lazy
-  esbuild host bridge. `context({ write:true }).watch()` now loud-throws instead
-  of silently dropping watched output writes (backlog
+- `vite preview` runs the real installed CLI on the user's config with NO rifty
+  preview-config guard and NO forced `cors:false`: the retired guard + cli.js
+  CORS patch were the wrong layer (pre-flight config validation). The shipped
+  starter's `vite build && vite preview` now runs on its own visible
+  `vite.config.js` (no `rm`, verified by `vite7-build-preview.spec.ts`); a
+  preview option the same-origin bridge cannot honor surfaces at its net
+  execution boundary; Origin/isolation shape differences are signposted (backlog
+  `playground/vite-preview-cors-middleware-parity` /
+  `playground/vite-preview-origin-isolation-signpost`). `prepareViteCli` is now
+  mode-independent; every Vite CLI mode still installs the lazy esbuild host
+  bridge. `context({ write:true }).watch()` loud-throws instead of silently
+  dropping watched output writes (backlog
   `playground/esbuild-context-watch-write-normalization`).
 - The esbuild host `wasm_exec` fs facade returns Node-shaped errno AT THE
   OPERATION boundary instead of silently succeeding: `read()` on a directory fd
