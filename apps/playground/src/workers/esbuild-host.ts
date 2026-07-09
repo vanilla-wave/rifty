@@ -134,6 +134,7 @@ const O_EXCL = 0o200;
 const O_TRUNC = 0o1000;
 const O_APPEND = 0o2000;
 const ACCMODE = 0o3;
+const O_RDONLY = 0o0;
 const O_WRONLY = 0o1;
 const O_RDWR = 0o2;
 
@@ -152,6 +153,10 @@ function toFsError(err: unknown, path: string): Error & { code: string } {
 
 interface OpenFile {
   readonly path: string;
+  // Node fds carry a kind + access mode; reads/writes enforce them (EISDIR /
+  // EBADF) instead of silently succeeding off the cached bytes.
+  readonly kind: 'file' | 'dir';
+  readonly accessMode: number;
   bytes: Uint8Array;
   pos: number;
   dirty: boolean;
@@ -256,7 +261,14 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
       bytes = fs.readFileBytesSync(np);
     }
     const fd = nextFd++;
-    fds.set(fd, { path: np, bytes, pos: (flags & O_APPEND) !== 0 ? bytes.length : 0, dirty });
+    fds.set(fd, {
+      path: np,
+      kind: stat?.isDirectory ? 'dir' : 'file',
+      accessMode: flags & ACCMODE,
+      bytes,
+      pos: (flags & O_APPEND) !== 0 ? bytes.length : 0,
+      dirty,
+    });
     ok(callback, fd);
   }
 
@@ -267,6 +279,52 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
       return null;
     }
     return file;
+  }
+
+  // Single precondition boundary: every read/write path resolves its fd through
+  // these, so the Node errno (EISDIR / EBADF) is decided in ONE place, not
+  // re-derived per op.
+  function readableFile(fd: number, callback: FsCallback): OpenFile | null {
+    const file = trackedFile(fd, callback);
+    if (file === null) return null;
+    if (file.kind === 'dir') {
+      fail(callback, fsError('EISDIR', file.path));
+      return null;
+    }
+    if (file.accessMode === O_WRONLY) {
+      fail(callback, fsError('EBADF', `fd ${fd}`));
+      return null;
+    }
+    return file;
+  }
+  function writableFile(fd: number, callback: FsCallback): OpenFile | null {
+    const file = trackedFile(fd, callback);
+    if (file === null) return null;
+    if (file.accessMode === O_RDONLY) {
+      fail(callback, fsError('EBADF', `fd ${fd}`));
+      return null;
+    }
+    return file;
+  }
+
+  // Ownership/permission ops carry no VFS metadata to change, so they are a
+  // Node-style no-op success — but ONLY after the same existence check Node
+  // does first (else a missing path / bad fd silently "succeeds").
+  function requirePath(path: string, callback: FsCallback): void {
+    const np = normalizePath(path);
+    try {
+      if (mirror().statSyncOrNull(np) === null) {
+        fail(callback, fsError('ENOENT', np));
+        return;
+      }
+      ok(callback);
+    } catch (err) {
+      fail(callback, toFsError(err, np));
+    }
+  }
+  function requireFd(fd: number, callback: FsCallback): void {
+    if (trackedFile(fd, callback) === null) return;
+    ok(callback);
   }
 
   return {
@@ -295,7 +353,7 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
           stdioRead(fd, buffer, offset, length, position, callback);
           return;
         }
-        const file = trackedFile(fd, callback);
+        const file = readableFile(fd, callback);
         if (file === null) return;
         const pos = position ?? file.pos;
         const n = Math.max(0, Math.min(length, file.bytes.length - pos));
@@ -316,7 +374,9 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
           return buffer.length;
         }
         const file = fds.get(fd);
-        if (file === undefined) throw fsError('EBADF', `fd ${fd}`);
+        if (file === undefined || file.kind === 'dir' || file.accessMode === O_RDONLY) {
+          throw fsError('EBADF', `fd ${fd}`);
+        }
         writeAt(file, buffer, file.pos);
         file.pos += buffer.length;
         return buffer.length;
@@ -336,7 +396,7 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
         }
         return;
       }
-      const file = trackedFile(fd, callback);
+      const file = writableFile(fd, callback);
       if (file === null) return;
       const chunk = buffer.subarray(offset, offset + length);
       const pos = position ?? file.pos;
@@ -478,7 +538,7 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
       }
     },
     ftruncate(fd, length, callback): void {
-      const file = trackedFile(fd, callback);
+      const file = writableFile(fd, callback);
       if (file === null) return;
       const next = new Uint8Array(length);
       next.set(file.bytes.subarray(0, Math.min(length, file.bytes.length)));
@@ -496,21 +556,22 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
       fail(callback, fsError('ENOSYS', `symlink: rifty VFS has no symlinks (${path})`));
     },
     // The VFS carries no ownership/permission metadata — there is nothing to
-    // change, so these succeed exactly like Node on a permissionless mount.
-    chmod(_path, _mode, callback): void {
-      ok(callback);
+    // change, so these are a no-op success on a VALID target, but Node still
+    // errors on a missing path (ENOENT) / bad fd (EBADF), so validate first.
+    chmod(path, _mode, callback): void {
+      requirePath(path, callback);
     },
-    fchmod(_fd, _mode, callback): void {
-      ok(callback);
+    fchmod(fd, _mode, callback): void {
+      requireFd(fd, callback);
     },
-    chown(_path, _uid, _gid, callback): void {
-      ok(callback);
+    chown(path, _uid, _gid, callback): void {
+      requirePath(path, callback);
     },
-    fchown(_fd, _uid, _gid, callback): void {
-      ok(callback);
+    fchown(fd, _uid, _gid, callback): void {
+      requireFd(fd, callback);
     },
-    lchown(_path, _uid, _gid, callback): void {
-      ok(callback);
+    lchown(path, _uid, _gid, callback): void {
+      requirePath(path, callback);
     },
     utimes(path, atime, mtime, callback): void {
       const np = normalizePath(path);
@@ -521,8 +582,8 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
         fail(callback, toFsError(err, np));
       }
     },
-    fsync(_fd, callback): void {
-      ok(callback);
+    fsync(fd, callback): void {
+      requireFd(fd, callback);
     },
   };
 
@@ -602,6 +663,7 @@ export function createEsbuildHost(deps: {
           return withoutOutputFiles(result);
         },
         watch: async (_options) => {
+          // TODO(backlog: playground/esbuild-context-watch-write-normalization)
           throw new NotImplementedError(
             'esbuild.context.watch.write',
             'esbuild-wasm browser contexts run with write:false; watched rebuild output writes are not normalized yet',

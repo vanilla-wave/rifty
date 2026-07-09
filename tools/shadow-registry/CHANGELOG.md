@@ -11,10 +11,13 @@
 ### Changed
 
 - **esbuild shim delegates the REAL esbuild JS API to the host esbuild-wasm
-  instance (ADR-0192).** `transform`/`build`/`context` (rebuild/watch/dispose)/
-  `formatMessages`/`analyzeMetafile`/`stop` all pass through to
-  `globalThis.__riftyEsbuild`; only the browser-impossible `*Sync` family keeps
-  loud `NotImplementedError`. The partial emulations died: transform-only
+  instance (ADR-0192).** `transform`/`build`/`context`
+  (rebuild/dispose/cancel/serve)/`formatMessages`/`analyzeMetafile`/`stop` all
+  pass through to `globalThis.__riftyEsbuild`; the browser-realm gaps loud-throw
+  `NotImplementedError` — the `*Sync` family (no sync API) and
+  `context({ write:true }).watch()` (watched output writes not VFS-normalized;
+  backlog `playground/esbuild-context-watch-write-normalization`). The shim
+  header comment now states this instead of claiming watch is fully real. The partial emulations died: transform-only
   `build()`, empty-only `context()`. Dual ESM/CJS entries and the static
   `version` claim stay; the pin triple (trigger `@esbuild/wasi-preview1@0.28.0`,
   shim claim, playground `esbuild-wasm` devDep) moves in lockstep, coupling

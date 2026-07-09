@@ -57,8 +57,10 @@ const SHIM_ESBUILD_VERSION = '0.28.0';
 // delegated to the host-realm esbuild-wasm instance (ADR-0192). Guest and host
 // share the worker realm, so options, results, and JS plugin callbacks (vite's
 // externalize-deps, esbuildDepPlugin) cross the bridge untouched — transform,
-// build, context (rebuild/watch/dispose) all real. Only the APIs esbuild-wasm
-// itself does not provide in a browser realm (the *Sync family) loud-throw.
+// build, context (rebuild/dispose/cancel/serve) all real. Loud-throw the gaps
+// a browser realm cannot serve: the *Sync family (esbuild-wasm has no sync API)
+// and `context({ write:true }).watch()` (watched-rebuild output writes are not
+// normalized to the VFS yet — backlog playground/esbuild-context-watch-write-normalization).
 // One body, two entries: ESM footer for import, CJS footer for require (real
 // Node `require('esbuild')` works — the rifty loader loud-fails sync require
 // of ESM).

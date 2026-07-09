@@ -8,7 +8,15 @@
   when a project root config or `--config` would run through the preview CORS
   bridge before parity is modelled, and every Vite CLI mode installs the lazy
   esbuild host bridge. `context({ write:true }).watch()` now loud-throws instead
-  of silently dropping watched output writes.
+  of silently dropping watched output writes (backlog
+  `playground/esbuild-context-watch-write-normalization`).
+- The esbuild host `wasm_exec` fs facade returns Node-shaped errno AT THE
+  OPERATION boundary instead of silently succeeding: `read()` on a directory fd
+  → `EISDIR`, read from an `O_WRONLY` fd / write or `ftruncate` through an
+  `O_RDONLY` fd → `EBADF`; `chmod`/`chown`/`lchown` validate the path (missing →
+  `ENOENT`) and `fchmod`/`fchown`/`fsync` validate the fd (bad → `EBADF`) before
+  the permissionless-mount no-op. `OpenFile` now carries fd kind + access mode,
+  resolved through one precondition boundary.
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

@@ -150,6 +150,99 @@ describe('createWasmExecFs — wasm_exec fs facade over the sync mirror', () => 
   });
 });
 
+describe('createWasmExecFs — Node errno fidelity at the execution boundary', () => {
+  it('read() on a directory fd → EISDIR, not silent EOF', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/workspace/dir', { recursive: true });
+    const facade = createWasmExecFs(() => fs);
+    // Node: open(dir, O_RDONLY) succeeds; read() on the dir fd → EISDIR.
+    const fd = await call<number>((cb) => facade.open('/workspace/dir', 0, 0, cb));
+    const buffer = new Uint8Array(8);
+    await expect(call((cb) => facade.read(fd, buffer, 0, 8, null, cb))).rejects.toMatchObject({
+      code: 'EISDIR',
+    });
+    await call((cb) => facade.close(fd, cb));
+  });
+
+  it('read() from an O_WRONLY fd → EBADF', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/out', { recursive: true });
+    const facade = createWasmExecFs(() => fs);
+    const flags = facade.constants.O_WRONLY | facade.constants.O_CREAT;
+    const fd = await call<number>((cb) => facade.open('/out/w.js', flags, 0o644, cb));
+    const buffer = new Uint8Array(4);
+    await expect(call((cb) => facade.read(fd, buffer, 0, 4, null, cb))).rejects.toMatchObject({
+      code: 'EBADF',
+    });
+    await call((cb) => facade.close(fd, cb));
+  });
+
+  it('write() through an O_RDONLY fd → EBADF', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/workspace', { recursive: true });
+    fs.writeFileSync('/workspace/a.txt', enc.encode('hello'));
+    const facade = createWasmExecFs(() => fs);
+    const fd = await call<number>((cb) => facade.open('/workspace/a.txt', 0, 0, cb));
+    const bytes = enc.encode('x');
+    await expect(
+      call((cb) => facade.write(fd, bytes, 0, bytes.length, null, cb)),
+    ).rejects.toMatchObject({ code: 'EBADF' });
+    await call((cb) => facade.close(fd, cb));
+    // The read-only open must not have mutated the file.
+    expect(dec.decode(fs.readFileBytesSync('/workspace/a.txt'))).toBe('hello');
+  });
+
+  it('ftruncate() through an O_RDONLY fd → EBADF', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/workspace', { recursive: true });
+    fs.writeFileSync('/workspace/a.txt', enc.encode('hello'));
+    const facade = createWasmExecFs(() => fs);
+    const fd = await call<number>((cb) => facade.open('/workspace/a.txt', 0, 0, cb));
+    await expect(call((cb) => facade.ftruncate(fd, 2, cb))).rejects.toMatchObject({
+      code: 'EBADF',
+    });
+    await call((cb) => facade.close(fd, cb));
+  });
+
+  it('chmod / chown / lchown on a missing path → ENOENT', async () => {
+    const fs = memoryMirror();
+    const facade = createWasmExecFs(() => fs);
+    await expect(call((cb) => facade.chmod('/missing', 0o644, cb))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(call((cb) => facade.chown('/missing', 0, 0, cb))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(call((cb) => facade.lchown('/missing', 0, 0, cb))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('fchmod / fchown / fsync on a bad fd → EBADF', async () => {
+    const fs = memoryMirror();
+    const facade = createWasmExecFs(() => fs);
+    await expect(call((cb) => facade.fchmod(9999, 0o644, cb))).rejects.toMatchObject({
+      code: 'EBADF',
+    });
+    await expect(call((cb) => facade.fchown(9999, 0, 0, cb))).rejects.toMatchObject({
+      code: 'EBADF',
+    });
+    await expect(call((cb) => facade.fsync(9999, cb))).rejects.toMatchObject({ code: 'EBADF' });
+  });
+
+  it('chmod on an existing path + fsync on a live fd still succeed (permissionless mount parity)', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/workspace', { recursive: true });
+    fs.writeFileSync('/workspace/a.txt', enc.encode('hi'));
+    const facade = createWasmExecFs(() => fs);
+    // The VFS has no perm/ownership metadata, so a VALID target is a Node-style no-op success.
+    await call((cb) => facade.chmod('/workspace/a.txt', 0o600, cb));
+    const fd = await call<number>((cb) => facade.open('/workspace/a.txt', 0, 0, cb));
+    await call((cb) => facade.fsync(fd, cb));
+    await call((cb) => facade.close(fd, cb));
+  });
+});
+
 function fakeLib(overrides: Partial<EsbuildWasmLib> = {}): {
   lib: EsbuildWasmLib;
   initialize: ReturnType<typeof vi.fn>;
