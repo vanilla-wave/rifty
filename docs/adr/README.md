@@ -149,6 +149,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
+| 0202 | Real nodemon restarts over remote-FS child workers |
 
 ### toolchain-build
 
