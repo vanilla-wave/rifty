@@ -4,6 +4,16 @@
 
 ### Fixed (PR #125 review blockers)
 
+- **Foreground `.bin` child now CONSUMES the forwarded nested-worker URLs and
+  serves nested workers' fs sync-RPC.** B3's env forward (`buildChildSpawnSpec`)
+  was inert on its own: `node-entry-bootstrap` never called
+  `setKernelWorkerUrl`/`setNodeEntryWorkerUrl`, so `worker_threads` still saw
+  `null` and silently degraded a foreground `.bin/vite@8` Rolldown pthread pool
+  to same-realm; and without the `installRuntimeJsFsHandlers` relay a real
+  pthread's first `fs.statOrNull` had no handler. Both mirrored from
+  dev-server-child-bootstrap; the live v8 boot-or-loud e2e remains open in
+  `backlog/playground/vite8-cli-nested-worker-boot`.
+
 - **Explorer context menu now stacks ABOVE the status bar and clamps into the
   viewport.** The `.rf-explorer__context` cursor-anchored override (fixed,
   z-30) had silently LOST the CSS cascade to the later equal-specificity

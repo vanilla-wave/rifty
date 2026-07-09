@@ -30,6 +30,18 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     );
   });
 
+  it('consumes forwarded worker URLs and installs the nested-worker fs relay', () => {
+    // buildChildSpawnSpec forwards RIFTY_KERNEL_WORKER_URL /
+    // RIFTY_NODE_ENTRY_WORKER_URL, but forwarding alone is inert: the child
+    // must CONSUME them (setKernelWorkerUrl/setNodeEntryWorkerUrl — else
+    // worker_threads sees null and silently degrades to same-realm) and serve
+    // nested workers' fs.* sync-RPC (installRuntimeJsFsHandlers relay), or
+    // Rolldown's WASI pthread pool crashes on its first fs call.
+    expect(source).toMatch(/setKernelWorkerUrl\(/);
+    expect(source).toMatch(/setNodeEntryWorkerUrl\(/);
+    expect(source).toMatch(/installRuntimeJsFsHandlers\(/);
+  });
+
   it('does not carry the retired editor-write invalidation bridge', () => {
     // Stock chokidar observes owner writes through the remote sync FS. The old
     // fork-IPC bridge hid watcher regressions by invalidating Vite directly.

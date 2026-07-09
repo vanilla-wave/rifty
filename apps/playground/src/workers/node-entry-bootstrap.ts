@@ -30,11 +30,17 @@
  * write, over RPC.
  */
 
-import { readKernelSyncApi } from '@riftydev/kernel';
+import { getKernelDispatcher, readKernelSyncApi, setKernelWorkerUrl } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import {
+  awaitDrain,
+  installConsole,
+  installRemoteSyncFs,
+  installRuntimeJsFsHandlers,
+} from '@riftydev/runtime-js';
+import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -73,7 +79,28 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
       'node-entry: RIFTY_REMOTE_FS=1 but no kernel sync call published — cannot reach the owner store',
     );
   }
-  installRemoteSyncFs(syncApi.call);
+  const remoteFs = installRemoteSyncFs(syncApi.call);
+  // A nested worker (Rolldown's WASI pthread pool under a foreground
+  // `.bin/vite@8`) lands its fs.* sync-RPC on THIS realm's dispatcher; the
+  // child has no store of its own, so relay to the owner view — mirror of
+  // dev-server-child-bootstrap. Without it the pthread crashes on its first
+  // `fs.statOrNull` ("SyncRpcDispatcher: no handler").
+  installRuntimeJsFsHandlers(getKernelDispatcher(), () => remoteFs);
+}
+
+// Consume the spawner-forwarded worker URLs — forwarding alone is inert:
+// worker_threads gates real `kernel.spawnWorker` children on
+// `getKernelWorkerUrl()/getNodeEntryWorkerUrl()`, and with them unset a
+// foreground `.bin/vite@8` silently degraded to the same-realm fallback
+// (backlog playground/vite8-cli-nested-worker-boot).
+if (typeof proc.env.RIFTY_KERNEL_WORKER_URL === 'string' && proc.env.RIFTY_KERNEL_WORKER_URL) {
+  setKernelWorkerUrl(proc.env.RIFTY_KERNEL_WORKER_URL);
+}
+if (
+  typeof proc.env.RIFTY_NODE_ENTRY_WORKER_URL === 'string' &&
+  proc.env.RIFTY_NODE_ENTRY_WORKER_URL
+) {
+  setNodeEntryWorkerUrl(proc.env.RIFTY_NODE_ENTRY_WORKER_URL);
 }
 
 const viteMode =

@@ -55,12 +55,17 @@ readiness with only a buried same-realm `worker_threads` warning.
 
 ## Status (partial — the missing-URL silent-hang cause is fixed)
 
-- DONE: `buildChildSpawnSpec` (owner-child-bin-executor.ts) now forwards
+- DONE: `buildChildSpawnSpec` (owner-child-bin-executor.ts) forwards
   `RIFTY_KERNEL_WORKER_URL` + `RIFTY_NODE_ENTRY_WORKER_URL` and sets
-  `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child — so a foreground
-  `.bin/vite@8` can spawn Rolldown's WASI pthread pool via `kernel.spawnWorker`
-  instead of silently degrading to same-realm, and a failed WASI load is loud.
-  Unit-proven in `owner-child-bin-executor.test.ts`; Vite 7 is inert (no pool).
+  `NAPI_RS_FORCE_WASI=1` (unit-proven in `owner-child-bin-executor.test.ts`).
+- DONE (PR-125 review round 2 — the forward alone was INERT): the bin child
+  now CONSUMES the URLs (`setKernelWorkerUrl`/`setNodeEntryWorkerUrl` in
+  node-entry-bootstrap.ts — worker_threads gated real spawns on them and
+  silently degraded to same-realm with them unset) and installs the
+  nested-worker fs relay (`installRuntimeJsFsHandlers` backed by the remote
+  view, mirror of dev-server-child-bootstrap) so a spawned WASI pthread's
+  first `fs.statOrNull` doesn't crash the pool. Source-pinned in
+  `node-entry-bootstrap.test.ts`; Vite 7 is inert (no pool).
 - REMAINING (why this item stays open): a live browser e2e that installs Vite 8
   through the terminal and asserts the foreground `.bin/vite@8` dev server
   reaches ready (or throws a named terminal diagnostic), NOT a silent readiness
