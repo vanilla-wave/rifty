@@ -14,7 +14,6 @@ const c: ParityCase = {
   code: `
     const http = require('node:http');
 
-    const PORT = 4211;
     const server = http.createServer((req, res) => {
       const raw = req.rawHeaders;
       const hasRawHost = Array.isArray(raw) && raw.some((name) => String(name).toLowerCase() === 'host');
@@ -30,8 +29,9 @@ const c: ParityCase = {
       ].join(' '));
     });
 
-    server.listen({ port: PORT }, async () => {
-      const r = await __riftyHttpRequest(PORT, '/headers', {
+    server.listen({ port: 0 }, async () => {
+      const port = server.address().port;
+      const r = await __riftyHttpRequest(port, '/headers', {
         headers: { 'x-probe': 'yes' },
       });
       console.log('status:' + r.status);
