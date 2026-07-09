@@ -314,6 +314,55 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(result.metafile).toEqual({ inputs: {}, outputs: {} });
   });
 
+  it('build() with no outfile/outdir writes NOTHING — the <stdout> entry is dropped (native parity)', async () => {
+    // Real esbuild (probed on 0.28.0): default-write build with no
+    // outfile/outdir succeeds, writes nothing, and the JS-API result carries
+    // no outputFiles. The browser service (forced write:false) reports one
+    // outputFile with the literal path '<stdout>' — writing that to the VFS
+    // invents a file native esbuild never creates.
+    const fs = memoryMirror();
+    const build = vi.fn().mockResolvedValue({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('<stdout>', 'export {};')],
+    });
+    const { lib } = fakeLib({ build } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+
+    const result = await host.build({ entryPoints: ['a'] });
+    expect(result).not.toHaveProperty('outputFiles');
+    expect(fs.existsSync('/<stdout>')).toBe(false);
+    expect(fs.readdirSync('/')).toEqual([]); // nothing materialized at all
+  });
+
+  it('build() defaults absWorkingDir to the guest cwd (relative outdir must not resolve from the wasm root)', async () => {
+    // Real esbuild resolves relative outdir/entryPoints against the service
+    // cwd; the browser service's internal cwd is '/', not the guest program's
+    // process.cwd() — without the default a `vite build` in /scratch writes
+    // its dist under the VFS ROOT.
+    const build = vi.fn().mockResolvedValue({ errors: [], warnings: [], outputFiles: [] });
+    const { lib } = fakeLib({ build } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+    const proc = globalThis.process as { cwd?: () => string };
+    const realCwd = proc.cwd;
+    proc.cwd = () => '/scratch';
+    try {
+      await host.build({ entryPoints: ['a'], outdir: 'dist' });
+      expect(build).toHaveBeenCalledWith(expect.objectContaining({ absWorkingDir: '/scratch' }));
+      // Caller-provided absWorkingDir wins.
+      await host.build({ entryPoints: ['a'], outdir: 'dist', absWorkingDir: '/proj' });
+      expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ absWorkingDir: '/proj' }));
+      // The write:false passthrough gets the same default (paths in the
+      // returned outputFiles must be guest-cwd-relative too).
+      await host.build({ entryPoints: ['a'], write: false });
+      expect(build).toHaveBeenLastCalledWith(
+        expect.objectContaining({ absWorkingDir: '/scratch', write: false }),
+      );
+    } finally {
+      proc.cwd = realCwd;
+    }
+  });
+
   it('build({write:false}) passes through untouched — outputFiles stay in memory', async () => {
     const fs = memoryMirror();
     const build = vi.fn().mockResolvedValue({

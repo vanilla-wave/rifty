@@ -40,10 +40,11 @@ import {
   installRemoteSyncFs,
   installRuntimeJsFsHandlers,
 } from '@riftydev/runtime-js';
-import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
+import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { syncMirror } from '@riftydev/vfs';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
+import { installEsbuildBridge } from './esbuild-host.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
 import { binNameOf, prepareViteCli, viteCliMode } from './vite-cli-prep.ts';
@@ -102,6 +103,14 @@ if (
 ) {
   setNodeEntryWorkerUrl(proc.env.RIFTY_NODE_ENTRY_WORKER_URL);
 }
+
+// The shadow-registry esbuild shim overlays EVERY installed `esbuild` package
+// (mode-independent, ADR-0188) and delegates to this realm's host bridge — so
+// the bridge must exist for every node child, or a plain
+// `node -e "require('esbuild').transform(...)"` dies on "host bridge missing"
+// while the vite paths work. Install stays lazy (13.5 MB wasm loads on first
+// API call only).
+installEsbuildBridge();
 
 const viteMode =
   proc.env.RIFTY_BIN === '1' && binNameOf(entryPath) === 'vite'

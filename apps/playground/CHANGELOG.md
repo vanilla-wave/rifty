@@ -4,6 +4,21 @@
 
 ### Fixed (PR #125 review blockers)
 
+- **esbuild host: native-parity build shapes + esbuild for every node child.**
+  (a) A build with no outfile/outdir no longer materializes a literal
+  `<stdout>` file in the VFS — native esbuild (probed on 0.28.0) writes
+  nothing and returns no outputFiles. (b) `absWorkingDir` now defaults to the
+  guest `process.cwd()` for `build`/`context` — the browser service's internal
+  cwd is `/`, so a relative `outdir` used to resolve against the VFS root
+  instead of the project. (c) `installEsbuildBridge()` runs for EVERY node
+  child, not just vite runs — the shadow-registry shim overlays every
+  installed `esbuild`, so a plain `node -e "require('esbuild').transform(…)"`
+  now reaches the real host instead of dying on "host bridge missing".
+  Real-wasm proof (no fakeLib): `tests/browser-unit/esbuild-host-real-wasm.spec.ts`
+  initializes the actual 0.28.0 service over a Memory VFS in Chromium.
+  Plugin-visible `write:false` flip recorded as a bounded divergence in
+  ADR-0192 §Consequences.
+
 - **Template `vite.config.js` no longer shadows a user's config or resurrects
   after deletion.** `VITE_CONFIG_FILENAMES` now matches Vite's
   `DEFAULT_CONFIG_FILES` VERBATIM (js → mjs → ts → …; the previous ts-first

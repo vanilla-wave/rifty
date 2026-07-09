@@ -30,6 +30,14 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     );
   });
 
+  it('installs the esbuild host bridge for EVERY node child, not just vite', () => {
+    // The shadow-registry shim overlays every installed `esbuild` package and
+    // delegates to globalThis.__riftyEsbuild — a plain `node -e
+    // "require('esbuild').transform(...)"` must reach the REAL host, not die
+    // on "host bridge missing" because only vite runs installed it.
+    expect(source).toMatch(/^installEsbuildBridge\(\);$/m);
+  });
+
   it('consumes forwarded worker URLs and installs the nested-worker fs relay', () => {
     // buildChildSpawnSpec forwards RIFTY_KERNEL_WORKER_URL /
     // RIFTY_NODE_ENTRY_WORKER_URL, but forwarding alone is inert: the child

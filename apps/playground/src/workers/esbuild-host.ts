@@ -601,10 +601,29 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
 /** Write the service's in-memory outputFiles to the VFS (native `write: true` parity). */
 export function writeOutputFiles(fs: FsSync, files: readonly OutputFile[] | undefined): void {
   for (const file of files ?? []) {
+    // No outfile/outdir → the browser service reports ONE entry with the
+    // literal path '<stdout>'. Native esbuild (probed on 0.28.0) succeeds and
+    // writes NOTHING in that shape — materializing '<stdout>' as a VFS file
+    // would invent an artifact native never creates.
+    if (file.path === '<stdout>') continue;
     const path = normalizePath(file.path);
     fs.mkdirSync(dirname(path), { recursive: true });
     fs.writeFileSync(path, file.contents);
   }
+}
+
+/**
+ * Default `absWorkingDir` to the GUEST program's cwd. Real esbuild resolves
+ * relative outdir/outfile/entryPoints against the service's working directory
+ * (probed on 0.28.0); the browser service's internal cwd is '/', so without
+ * this a `vite build` running in /scratch would drop its dist under the VFS
+ * root. A caller-provided absWorkingDir always wins.
+ */
+function withGuestWorkingDir<T extends { absWorkingDir?: string }>(options: T): T {
+  if (options.absWorkingDir !== undefined) return options;
+  const cwd = (globalThis.process as { cwd?: () => string } | undefined)?.cwd?.();
+  if (!cwd) return options;
+  return { ...options, absWorkingDir: cwd };
 }
 
 function withoutOutputFiles(result: BuildResult): BuildResult {
@@ -647,15 +666,17 @@ export function createEsbuildHost(deps: {
     },
     async build(options) {
       await ensureInitialized();
-      if (options.write === false) return lib.build(options);
-      const result = await lib.build({ ...options, write: false });
+      const opts = withGuestWorkingDir(options);
+      if (opts.write === false) return lib.build(opts);
+      const result = await lib.build({ ...opts, write: false });
       writeOutputFiles(mirror(), result.outputFiles);
       return withoutOutputFiles(result);
     },
     async context(options) {
       await ensureInitialized();
-      if (options.write === false) return lib.context(options);
-      const ctx = await lib.context({ ...options, write: false });
+      const opts = withGuestWorkingDir(options);
+      if (opts.write === false) return lib.context(opts);
+      const ctx = await lib.context({ ...opts, write: false });
       return {
         rebuild: async () => {
           const result = await ctx.rebuild();
