@@ -24,6 +24,13 @@
   `ENOENT`) and `fchmod`/`fchown`/`fsync` validate the fd (bad → `EBADF`) before
   the permissionless-mount no-op. `OpenFile` now carries fd kind + access mode,
   resolved through one precondition boundary.
+- The foreground `.bin` child spawn spec (`buildChildSpawnSpec`) forwards the
+  recursive worker URLs (`RIFTY_KERNEL_WORKER_URL`/`RIFTY_NODE_ENTRY_WORKER_URL`)
+  and forces `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child — so a
+  foreground `.bin/vite@8` can spawn Rolldown's WASI pthread pool via
+  `kernel.spawnWorker` instead of degrading to a silent same-realm hang, and a
+  failed WASI load is loud. Vite 7 is inert (no dev pthread pool). Full v8
+  boot-or-loud e2e tracked in backlog `playground/vite8-cli-nested-worker-boot`.
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

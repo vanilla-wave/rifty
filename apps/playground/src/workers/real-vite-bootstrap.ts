@@ -632,25 +632,32 @@ async function bootShellOwner(opts: {
   // register/unregister events); the preview registry derives the LIVE pill from
   // it. No bin-name dispatch: webpack-dev-server or a bare server CLI gets the
   // same preview + pill wiring vite does.
-  const childBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl, {
-    onStart: (req) => {
-      binPreviewSids.set(req, `bin-${++binRunSeq}`);
+  const childBinExecutor = createOwnerChildBinExecutor(
+    opts.nodeEntryWorkerUrl,
+    {
+      onStart: (req) => {
+        binPreviewSids.set(req, `bin-${++binRunSeq}`);
+      },
+      onMessage: (req, message, ctx) => {
+        if (!isNodeChildMessage(message)) return;
+        const sid = binPreviewSids.get(req);
+        if (sid === undefined) return;
+        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
+          ptySid: ptySidFromContext(ctx),
+          cwd: ctx.cwd,
+          labelBase: binNameOf(req.shimPath),
+        });
+      },
+      onExit: (req) => {
+        const sid = binPreviewSids.get(req);
+        if (sid !== undefined) previews.removeBySid(sid);
+      },
     },
-    onMessage: (req, message, ctx) => {
-      if (!isNodeChildMessage(message)) return;
-      const sid = binPreviewSids.get(req);
-      if (sid === undefined) return;
-      previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
-        ptySid: ptySidFromContext(ctx),
-        cwd: ctx.cwd,
-        labelBase: binNameOf(req.shimPath),
-      });
-    },
-    onExit: (req) => {
-      const sid = binPreviewSids.get(req);
-      if (sid !== undefined) previews.removeBySid(sid);
-    },
-  });
+    // A foreground `.bin/vite` that resolves to Vite 8 spawns Rolldown's WASI
+    // pthread pool; thread the recursive worker URLs like the dev-server child so
+    // the pool spawns instead of falling back to same-realm and hanging.
+    { kernelWorkerUrl: opts.kernelWorkerUrl, nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl },
+  );
   const ownerBinExecutor: BinExecutor = (binPath, args, ctx) =>
     childBinExecutor(binPath, args, withPreviewScope(ctx));
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that

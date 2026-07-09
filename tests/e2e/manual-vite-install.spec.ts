@@ -37,14 +37,17 @@ test.describe('manual Vite install path', () => {
     await expect(pill).not.toHaveAttribute('data-state', 'running', { timeout: 60_000 });
 
     await openShellTerminal(page);
-    // Pin the SUPPORTED default (vite 7 / esbuild). Unpinned `npm install vite`
-    // drifts onto vite 8, whose Rolldown WASI dev server needs a nested-worker
-    // pool the foreground `.bin` child does not spawn (backlog
-    // playground/vite8-cli-nested-worker-boot). The dev script pins `--port
-    // 5174` (a real user picks a port): stock `vite` defaults to 5173, and the
-    // retired CLI wrapper no longer forces the port — the arg now passes
-    // through the untouched `.bin/vite` exec, so the flag is what lands the
-    // manual server on the port the preview iframe below asserts. Delete the
+    // Pin vite 7 — the rifty-supported default (esbuild + the proven native-HMR
+    // bridge). Unpinned `npm install vite` drifts onto vite 8, whose Rolldown
+    // WASI dev server keeps HMR OFF (ADR-0161), so this HMR-asserting lane must
+    // pin v7. The foreground `.bin` child NOW forwards the recursive worker URLs
+    // (buildChildSpawnSpec) so a vite 8 CLI can spawn Rolldown's WASI pool
+    // instead of a silent same-realm hang; a v8 foreground boot-or-loud lane is
+    // tracked in backlog playground/vite8-cli-nested-worker-boot. The dev script
+    // pins `--port 5174` (a real user picks a port): stock `vite` defaults to
+    // 5173, and the retired CLI wrapper no longer forces the port — the arg now
+    // passes through the untouched `.bin/vite` exec, so the flag is what lands
+    // the manual server on the port the preview iframe below asserts. Delete the
     // template's visible vite.config.* too: this lane is the real user path.
     await runTerminalLine(
       page,

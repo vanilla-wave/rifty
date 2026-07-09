@@ -53,11 +53,27 @@ readiness with only a buried same-realm `worker_threads` warning.
 - `observable-order` x Vite CLI startup -> the CLI's own argument/config handling
   runs before rifty reports the nested-worker ceiling.
 
+## Status (partial — the missing-URL silent-hang cause is fixed)
+
+- DONE: `buildChildSpawnSpec` (owner-child-bin-executor.ts) now forwards
+  `RIFTY_KERNEL_WORKER_URL` + `RIFTY_NODE_ENTRY_WORKER_URL` and sets
+  `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child — so a foreground
+  `.bin/vite@8` can spawn Rolldown's WASI pthread pool via `kernel.spawnWorker`
+  instead of silently degrading to same-realm, and a failed WASI load is loud.
+  Unit-proven in `owner-child-bin-executor.test.ts`; Vite 7 is inert (no pool).
+- REMAINING (why this item stays open): a live browser e2e that installs Vite 8
+  through the terminal and asserts the foreground `.bin/vite@8` dev server
+  reaches ready (or throws a named terminal diagnostic), NOT a silent readiness
+  timeout. The forward removes the missing-URL cause but the actual Rolldown
+  WASI boot in a bin child is not yet verified end-to-end.
+
 ## Options or Next
 
-- Forward the kernel/node-entry worker URLs in `buildChildSpawnSpec` (like the dev-server child) so a foreground `.bin/vite@8` can spawn Rolldown's WASI pool. Verify against a vite-8-pinned manual-install e2e.
-- OR, if the bin child genuinely cannot host nested workers, make the fallback LOUD: detect Rolldown's same-realm degradation and surface a Node-shaped diagnosis in the terminal instead of a silent hang.
-- Whatever the choice: no silent no-boot. Today's warning-then-hang violates the fidelity mission.
+- Add the vite-8-pinned boot-or-loud e2e (boot-only assertion — v8 HMR is off,
+  ADR-0161 — so it cannot reuse the v7 manual-install HMR flow).
+- If that e2e shows v8 still does not become ready, add a loud detection of
+  Rolldown's same-realm degradation surfaced in the terminal before readiness.
+- Invariant: no silent no-boot. A warning-then-hang violates the fidelity mission.
 
 ## Out of scope
 
