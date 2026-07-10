@@ -1,22 +1,24 @@
 ---
 area: distribution
 status: draft
-title: EPIC D — framework bindings + atomic component kit (D1-D5)
+title: EPIC D residual — vue bindings, <RiftyIDE/>, default theme
 created: 2026-06-08
-why: drop-in per-framework atoms (<RiftyIDE/>, react/vue bindings) over the workbench — deferred, depends-on EPIC C
-user_story: As a dev embedding rifty in my React/Vue app, I want to drop in `<RiftyIDE/>` or `@riftydev/react` atoms (`RiftyEditor`/`Terminal`/`Preview`/`RiftyFileTree`) with my own layout/theming, but today only the Solid playground exists — no framework-binding packages, blocked on the workbench split.
+why: the ready-solution tail of the bindings ladder after react was carved out — one-tag <RiftyIDE/>, vue atoms, an optional default theme — deferred until a real consumer pulls each
+user_story: As a dev on Vue (or one who wants a one-tag IDE), I want `@riftydev/vue` atoms or `<RiftyIDE/>` with a default layout/theme, but today only the react atoms track exists.
 sources: [DD-3, DD-4, EPIC D]
 ---
+
 ## Context
-Compound components auto-wired via a context provider — drop-in atoms, consumer owns layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atoms. L3, depends-on EPIC C (the workbench controllers it binds to).
+
+2026-07-10: react atoms carved out to `distribution/react-bindings` (epic `embeddable-dev-loop`, ready); this item keeps the residual tail. All of it sits over the SAME `@riftydev/workbench` controllers.
 
 ## Options / Next
-- D1: `@riftydev/solid` — `RiftyProvider` + atoms (`RiftyEditor`/`Terminal`/`Preview`/`CapabilitiesGate`/`RunButton`); reuse existing playground components (M, accepted).
-- D2: `RiftyFileTree` — the one genuinely new atom (VFS-watch + tree); playground is ~single-file (M, idea).
-- D3: `<RiftyIDE/>` default-layout wrapper over atoms — lazy one-tag path (S, idea).
-- D4: headless theming — CSS-vars/slots + default theme (DD-4: headless + themeable, Radix/Headless-UI style, not batteries-styled) (M, idea).
-- D5: `@riftydev/react` (and/or `@riftydev/vue`) atoms over the SAME workbench — non-Solid consumers (the reason for EPIC C) (L, idea).
-- Pull after C lands; D5 is the payoff that justifies the workbench split.
+
+- `<RiftyIDE/>` default-layout wrapper over the react atoms — lazy one-tag path (S).
+- Default theme pack over the DD-4 CSS-vars contract (S).
+- `@riftydev/vue` atoms over the same workbench (L) — pull only when a real Vue consumer shows up.
+- TS language service integration in the embedded editor (squiggles/hover/defs via the owner-spawn relay) — named residual from `distribution/react-bindings`.
 
 ## Reversibility
-IRREVERSIBLE: new framework-binding packages + public component/atom API + theming contract → each gets its own ADR. Gate: EPIC C (workbench) must exist first → blocked on workbench-controllers. DD-4 (headless+themeable) promotes to ADR when D4 starts.
+
+IRREVERSIBLE per track: each new binding package/public surface gets its own ADR at start (DD-4 theming contract already pre-resolved). Gate: `distribution/react-bindings` shipped + a concrete puller per track.
