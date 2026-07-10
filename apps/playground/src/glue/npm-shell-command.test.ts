@@ -1036,11 +1036,11 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     );
   });
 
-  it('drains + CHECKS before the stamp, then drains the stamp — durable-on-exit npm parity (ADR-0187 Corrected)', async () => {
-    // A reload right after `npm install` must not lose the tree
-    // (owner-snapshot-restore-exec e2e). The tree drain is checked FIRST — a
-    // stamp must never claim a tree whose write-through failed — then the
-    // stamp rides its own (tiny) drain.
+  it('drains + CHECKS before the stamp, then drains the stamp (ADR-0187 Corrected) — in background', async () => {
+    // The tree drain is checked FIRST — a stamp must never claim a tree whose
+    // write-through failed — then the stamp rides its own (tiny) drain. The
+    // sequence runs in background (install exit does not await it), so the
+    // asserts wait for it to settle.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1066,7 +1066,9 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
-    expect(events).toEqual(['flush-before-stamp', 'flush-after-stamp']);
+    await vi.waitFor(() => {
+      expect(events).toEqual(['flush-before-stamp', 'flush-after-stamp']);
+    });
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
@@ -1106,10 +1108,12 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0); // the live tree works — durability, not the install, failed
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('NOT durable');
+    });
     const stderr = rec.stderr.join('');
     expect(stderr).toContain('137 file(s) failed to persist');
     expect(stderr).toContain('QuotaExceededError');
-    expect(stderr).toContain('NOT durable');
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
@@ -1145,8 +1149,10 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+    });
     expect(rec.stderr.join('')).toBe('');
-    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
   });
 
   it('a stamp write failure beyond the sampled failures still warns — the FULL ledger, not the sample', async () => {
@@ -1183,7 +1189,9 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
-    expect(rec.stderr.join('')).toContain('the install stamp failed to persist');
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('the install stamp failed to persist');
+    });
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
   });
 
@@ -1216,8 +1224,10 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true); // stamped
+    });
     expect(rec.stderr.join('')).toBe(''); // no NOT-durable warning
-    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true); // stamped
   });
 
   it('a tree failure BEYOND the sampled failures still gates the stamp — the FULL ledger, not the sample', async () => {
@@ -1249,7 +1259,9 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0); // live tree works
-    expect(rec.stderr.join('')).toContain('NOT durable'); // …but stamp SKIPPED
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('NOT durable'); // …but stamp SKIPPED
+    });
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
@@ -1273,7 +1285,9 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
-    expect(rec.stderr.join('')).toContain('install flush failed: rpc torn');
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('install flush failed: rpc torn');
+    });
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
@@ -1315,10 +1329,12 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     );
 
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
-    warnSpy.mockRestore();
 
     expect(exitCode).toBe(0); // install still succeeds
-    expect(flushed).toBe(true); // …and the tree was flushed despite the stamp failure
+    await vi.waitFor(() => {
+      expect(flushed).toBe(true); // …and the tree was flushed despite the stamp failure
+    });
+    warnSpy.mockRestore();
     expect(await base.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
@@ -1340,6 +1356,9 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
 
     expect(exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+    });
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { slug: string };
@@ -1363,6 +1382,180 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
 
     expect(exitCode).toBe(1);
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+});
+
+describe('npm-shell-command — background durability (install exit stops awaiting the drain)', () => {
+  function twoPackageResult(): InstallResult {
+    return {
+      packages: [
+        { name: 'lodash', version: '4.17.21', dependencies: {}, files: {} },
+        { name: 'ms', version: '2.1.3', dependencies: {}, files: {} },
+      ],
+      lockfile: {
+        name: 'root',
+        version: '0.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {},
+      },
+      conflicts: [],
+    };
+  }
+  const STAMP = '/proj/node_modules/.rifty-install-stamp.json';
+
+  it('resolves the install (and starts a &&-chained command) WITHOUT awaiting the durability sequence; the stamp still lands only after the clean drain', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    let flushCalls = 0;
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushCalls++;
+          await flushGate;
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    // Resolves while the FIRST drain is still pending — re-awaiting the
+    // sequence in the foreground deadlocks this call (the gate opens only
+    // after runShell returns), so this line IS the timing assertion.
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0 && echo NEXT');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).toContain('npm: installed 2 package(s)');
+    expect(rec.stdout.join('')).toContain('NEXT'); // the chained command ran
+    expect(flushCalls).toBe(1); // tree drain issued in background…
+    expect(await vfs.exists(STAMP)).toBe(false); // …and the stamp is GATED on it
+    releaseFlush();
+    await vi.waitFor(async () => {
+      expect(await vfs.exists(STAMP)).toBe(true); // order preserved: drain → gate → stamp
+    });
+  });
+
+  it('a DIRTY background drain still warns loudly + skips the stamp — after the prompt returned, never blocking it', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    const shell = new Shell({ cwd: '/proj' });
+    const rec: Recorded = { stdout: [], stderr: [] };
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          await flushGate;
+          return {
+            failures: [
+              {
+                path: '/proj/node_modules/lodash/package.json',
+                op: 'write' as const,
+                message: 'QuotaExceededError',
+              },
+            ],
+            total: 137,
+          };
+        },
+      }),
+    );
+
+    const r = await shell.run('npm install lodash@^4.17.0', {
+      onChunk: (chunk, stream) => {
+        rec[stream].push(chunk);
+      },
+    });
+
+    expect(r.exitCode).toBe(0);
+    expect(rec.stderr.join('')).toBe(''); // nothing failed YET — exit did not wait for the verdict
+    releaseFlush();
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('NOT durable'); // honesty stays loud, just async
+    });
+    expect(rec.stderr.join('')).toContain('137 file(s) failed to persist');
+    expect(await vfs.exists(STAMP)).toBe(false);
+  });
+
+  it('a drain that never completes (tab/worker killed) leaves NO stamp — self-heal: the next boot re-installs', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: () => new Promise(() => {}), // the drain never settles
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0); // install exit never hinged on the drain
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await vfs.exists(STAMP)).toBe(false); // never a stamped-but-unproven tree
+  });
+
+  it('a second install waits for the in-flight sequence — FIFO: stamp #1 lands before install #2 touches the tree', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    let flushCalls = 0;
+    const stampSeenByInstall: boolean[] = [];
+    const install: InstallFn = async () => {
+      stampSeenByInstall.push(await vfs.exists(STAMP));
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushCalls++;
+          if (flushCalls === 1) await flushGate; // install #1's tree drain hangs
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const first = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(first.exitCode).toBe(0); // resolved with its sequence still in flight
+
+    const second = runShell(shell, 'npm install ms@^2.1.3');
+    await new Promise((r) => setTimeout(r, 20));
+    // Install #2 must NOT have started mutating the tree while sequence #1 is
+    // in flight — a reload could see stamp #1 attesting a half-replaced tree.
+    expect(stampSeenByInstall).toHaveLength(1);
+
+    releaseFlush();
+    const { exitCode } = await second;
+    expect(exitCode).toBe(0);
+    expect(stampSeenByInstall).toHaveLength(2);
+    expect(stampSeenByInstall[1]).toBe(true); // stamp #1 was already down when #2 began
   });
 });
 

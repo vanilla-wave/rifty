@@ -785,9 +785,11 @@ async function bootShellOwner(opts: {
     const npmCommand = createNpmShellCommand({
       vfs,
       registry,
-      // Durable-on-exit (npm parity): checked drains around the stamp
-      // (ADR-0187 Corrected) — a dirty persist report skips the stamp so a
-      // reload never trusts a torn tree (owner-snapshot-restore-exec).
+      // Checked drains around the stamp (ADR-0187 Corrected) — a dirty persist
+      // report skips the stamp so a reload never trusts a torn tree
+      // (owner-snapshot-restore-exec). Runs in BACKGROUND after install exit
+      // (npm parity: real npm does not fsync node_modules); a reload beating
+      // the drain only costs a re-install.
       flush: flushSyncMirror,
       // Stamp the install for the CURRENT project slug (same key the dev-server
       // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses

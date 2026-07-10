@@ -23,6 +23,12 @@
  * drain the stamp is SKIPPED and the terminal warns loudly: the install
  * works this session, the next boot re-installs instead of trusting a torn
  * tree (npm parity stays honest — a reload cannot silently lose the install).
+ * The sequence runs in BACKGROUND (backlog install-stamp-background-flush):
+ * install exit does not await it — real `npm install` exit does not fsync
+ * node_modules either, so the durability tier (a browser-only concept) must
+ * not tax the prompt. Order is intact; a later install serializes behind the
+ * in-flight sequence so stamp #N always lands before install #N+1's tree
+ * writes.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -65,12 +71,13 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
-  /** Drains the VFS write-through before the command returns (npm parity: when
-   *  `npm install` exits the tree IS on disk — an immediate reload must not
-   *  lose it; e2e-pinned by owner-snapshot-restore-exec). Returns the drain's
-   *  persist-failure report (ADR-0187 Corrected) — a dirty report gates the
-   *  install stamp (never stamp a tree OPFS failed to hold); `undefined` means
-   *  "no durability tier" (memory backend) and reads as clean. */
+  /** Drains the VFS write-through — in BACKGROUND, after the command returned
+   *  (npm parity: real `npm install` exit does not fsync node_modules; a
+   *  reload before the drain settles only costs a re-install, never a torn
+   *  stamped tree). Returns the drain's persist-failure report (ADR-0187
+   *  Corrected) — a dirty report gates the install stamp (never stamp a tree
+   *  OPFS failed to hold); `undefined` means "no durability tier" (memory
+   *  backend) and reads as clean. */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
   /** The owner's project slug (preset id) the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
@@ -123,6 +130,12 @@ const DEFAULT_PROJECT_VERSION = '0.0.0';
  * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
+  // The in-flight background durability sequence (drain → gate → stamp →
+  // stamp-drain) of the LAST install. A new install AWAITS it before touching
+  // the tree: without that serialization stamp #N could land amid install
+  // #N+1's tree writes and a reload would trust a stamped half-replaced tree.
+  // Never rejects (stampInstalledTree reports every failure itself).
+  const state: InstallSequenceState = { pending: Promise.resolve() };
   return async (args, ctx) => {
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
@@ -142,7 +155,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(args.slice(1), ctx, deps);
+      return runInstall(args.slice(1), ctx, deps, state);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
@@ -391,10 +404,17 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'unknown' {
   return 'unknown';
 }
 
+/** See {@link createNpmShellCommand} — serializes installs behind the previous
+ *  install's background durability sequence. */
+interface InstallSequenceState {
+  pending: Promise<void>;
+}
+
 async function runInstall(
   specs: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
+  state: InstallSequenceState,
 ): Promise<number> {
   // Partition argv into save-flags vs package specs; the flags pick the target
   // dep map. `-g` is a directed loud throw (no global store in the sandbox).
@@ -444,6 +464,11 @@ async function runInstall(
     ctx.stdout.write('npm: no dependencies to install\n');
     return 0;
   }
+
+  // FIFO with the PREVIOUS install's background durability sequence: its stamp
+  // must land before this install's tree writes begin (a reload mid-#2 must
+  // never see stamp #1 attesting a half-replaced tree). No-op when idle.
+  await state.pending;
 
   const packageJsonPath = `${ctx.cwd}/package.json`;
   const hadPackageJson = await deps.vfs.exists(packageJsonPath);
@@ -516,7 +541,18 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    await stampInstalledTree(deps, ctx, ctx.cwd, result.packages.length);
+    // Background (backlog install-stamp-background-flush): the drain → gate →
+    // stamp → stamp-drain sequence runs unchanged but the command does NOT
+    // await it — the prompt returns (a `&&`-chained dev server starts) while
+    // OPFS durability settles behind it. Dirty-drain/stamp warnings arrive
+    // asynchronously (accepted: honesty stays loud, latency does not pay for
+    // it). `state.pending` serializes the NEXT install behind this sequence.
+    state.pending = stampInstalledTree(deps, ctx, ctx.cwd, result.packages.length).catch((err) => {
+      // stampInstalledTree reports every expected failure itself; this guard
+      // only keeps an unexpected reject from poisoning the serialization chain
+      // (every later install would rethrow it) — still loud, never silent.
+      console.warn(`npm: install durability sequence failed: ${(err as Error).message}`);
+    });
     // Fire-and-forget write-back: the pin is an optimization, never worth
     // blocking or failing the install line over.
     if (result.source === 'eddy' && result.closureHash && requestKey && deps.learnedPins) {
@@ -585,9 +621,11 @@ function persistFailureLine(report: PersistFailureReport): string {
  * survive a swallowed per-op quota/perm failure — a stamped-but-torn tree
  * would be TRUSTED by the next boot's `installStampSatisfied`. So the tree
  * drain is checked FIRST and a dirty report skips the stamp (self-heal: no
- * stamp → the next boot re-installs) with a loud terminal warning. Wall-cost
- * ≈ the old single drain: the queue is FIFO, so the post-stamp drain only
- * waits for the stamp's own (tiny) write.
+ * stamp → the next boot re-installs) with a loud terminal warning. Runs in
+ * BACKGROUND, un-awaited by the install command (install exit does not fsync,
+ * npm parity); warnings surface on the terminal after the prompt returned. A
+ * tab killed mid-sequence leaves no stamp — the next boot re-installs, never
+ * trusts a torn tree.
  *
  * The stamp stays best-effort: its own write/drain failure only costs the
  * next boot's skip optimization — the TREE is already proven durable.

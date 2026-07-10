@@ -66,6 +66,14 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     await expectTerminalContains(page, '< hi >', 20_000);
     expect(await terminalBuffer(page)).toContain('^__^');
 
+    // The durability sequence runs in BACKGROUND after install exit (backlog
+    // install-stamp-background-flush) — this spec's claim is the RESTORED
+    // tree, so wait for its proof: the stamp file appears only after the tree
+    // drain reported clean (drain → gate → stamp order). Its own tiny persist
+    // rides the same FIFO ahead of the reload's navigation round-trips.
+    await runTerminalLine(page, 'cat node_modules/.rifty-install-stamp.json');
+    await expectTerminalContains(page, '"version"', 30_000);
+
     // TEARDOWN + RESTORE: reload terminates the owner worker; on re-boot the owner
     // wires OPFS (initBackend) and preloads the persisted tree — node_modules + the
     // user file — before serving.
@@ -85,5 +93,21 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     // …and the user file written before teardown is still readable.
     await runTerminalLine(page, 'cat /scratch/data.txt');
     await expectTerminalContains(page, marker, 20_000);
+
+    // FAST RELOAD (backlog install-stamp-background-flush fault row): reload
+    // IMMEDIATELY after install exit, racing the background drain/stamp. The
+    // contract is self-heal — restore either reuses the tree (stamp landed) or
+    // re-installs (no stamp yet); either way the workspace boots and serves,
+    // never a crash or a trusted torn tree. Deliberately NO stamp wait here.
+    await runTerminalLine(page, 'npm install ms');
+    await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
+    await page.reload();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    await openShellTerminal(page);
+    await runTerminalLine(page, `echo fast-reload-${marker}`);
+    await expectTerminalContains(page, `fast-reload-${marker}`, 30_000);
   });
 });
