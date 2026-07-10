@@ -34,7 +34,11 @@ Revisits ADR-0195's rejected alternative "client-persisted dep-set→hash map": 
 
 Rejected: VM disk / RAM-only LRU as the bundle store (deploy invalidates, RSS-bounded, sticky GET traffic — evolution recorded in the closed backlog item); new S3 SDK dep (one signed PUT doesn't justify a dependency tree); walk-concurrency bump (measured −10% at 8→32, depth-bound); separate resolve-only wire mode (subsumed by shared tarball cache, see 2).
 
-Deferred (not rejected): the upstream-registry lever — the deployed VM resolves through the browser-CORS CDN registry-proxy the SERVER doesn't need; direct npmjs may skip cold-edge double hops but RU-region routing may be slower, so it needs an on-VM A/B before flipping `REGISTRY_BASE_URL` (`docs/backlog/perf/eddy-upstream-registry-ab.md`).
+**Correction 2026-07-07:** the deferred upstream-registry lever was measured on
+the deployed VM. Direct `https://registry.npmjs.org` beat the browser-CORS CDN
+proxy by more than 20% on cold resolves and showed no 429/rate-limit signal, so
+rifty.dev's eddy compose now sets
+`REGISTRY_BASE_URL=https://registry.npmjs.org`.
 
 ## Consequences
 

@@ -33,6 +33,13 @@
   align-items: start;
 }
 
+.qs-grid,
+.qs-code-card,
+.qs-right,
+.qs-leaf-card {
+  min-width: 0;
+}
+
 /* ---- left: code card ---- */
 .qs-code-card {
   border: 1px solid var(--bd2);
@@ -179,5 +186,17 @@
 @media (max-width: 880px) {
   .qs-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .qs-code-body {
+    padding: 16px;
+    font-size: 12px;
+  }
+
+  .qs-leaf-row {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

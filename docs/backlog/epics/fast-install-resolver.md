@@ -1,35 +1,50 @@
 ---
 kind: epic
 status: in-progress
-title: Eddy — opt-in fast npm install (warm-h2 1.70x measured)
+title: Eddy — opt-in fast npm install (production auto 1.88x measured)
 created: 2026-06-28
-value: A developer running a cold `npm install` on a real project in a browser tab gets it meaningfully faster — the same real Node dependency tree, just resolved + bundled by an open, self-hostable server (~100 serial round-trips collapse to 1 POST) instead of a dozen serial round-trips.
-user_story: As a developer (or an SDK embedder building their own sandbox) I want a cold, no-lockfile `npm install` to skip the two latency-bound waterfalls (packument metadata + many small tarballs) that no client-side knob can remove — measured 1.70x on a real browser over warm h2 (the "~6x" was a Node/sandbox model, not a launch number).
-items: [perf/eddy-http3-cold-validation, perf/eddy-upstream-registry-ab, distribution/eddy-package-and-deploy]
+value: A developer running a cold `npm install` on a real project in a browser tab gets it meaningfully faster — the same real Node dependency tree, just resolved + bundled by an open, self-hostable server instead of a serial metadata waterfall.
+user_story: As a developer or SDK embedder, I want cold no-lockfile installs to skip the latency-bound packument and tarball waterfalls without changing dependency fidelity; production `auto` is measured at 1.88x, while the h2/h3 transport matrix remains the final headline-validation gap.
+items: [perf/eddy-http3-cold-validation, distribution/eddy-package-and-deploy]
 ---
 
 ## Outcome
 
-Cold no-lockfile install is two latency-bound waterfalls — the packument metadata walk (~2s; graph-depth × RTT) and the tarball-fetch phase (~1.7-2.2s; the browser coalesces one origin to a single multiplexed h2 connection, so raising the fetch semaphore is inert). Neither is fixable client-side. `eddy` (`@riftydev/eddy`) is an OPT-IN server that runs rifty's OWN resolution (imports `@riftydev/npm-client` — one algorithm, no drift) and returns ONE artifact: a v3 lockfile + the bundled compressed tarballs. The client pre-seeds its tarball cache + writes the lockfile, then the EXISTING lockfile fast path installs in one round-trip. Measured on a real browser over warm h2: **1.70x** (standard 4284ms → eddy 2517ms; ~100 round-trips → 1 POST). The "~6x (~4s → ~0.6-0.7s)" figure is the ORIGINAL Node/sandbox model (ADR-0182) — historical, not the launch number. The standard install stays untouched and is the always-on verifying fallback. Mission anchor: faster real Node in the browser, where the speed is a property of the OPEN, auditable, self-hostable stack — not a closed vendor turbo button. Full decision record: ADR-0182.
+`eddy` (`@riftydev/eddy`) is an opt-in server that imports
+`@riftydev/npm-client`, resolves with rifty's own algorithm, and returns one
+`EddyBundleV1` artifact: v3 lockfile plus compressed tarballs. The client
+pre-seeds its tarball cache, writes the lockfile, and runs the existing lockfile
+fast path. Standard install remains the always-on verifying fallback.
 
-## User scenario
+Production `auto` benchmark (2026-07-07, median-of-5) is **1.88x**: standard
+5180ms → eddy 2761ms, with both production origins observed as h2 in the
+committed artifact. The old "~6x" number is only the pre-deploy Node/sandbox
+model; do not quote it as the browser launch number. The remaining epic gap is
+the transport-qualified validation: the committed artifact does not yet carry
+the full h2/h3 matrix evidence required to close `perf/eddy-http3-cold-validation`.
 
-A developer opens a from-scratch preset (or types their own `package.json`), runs `npm install` with fast mode on (a sandbox toggle, or `resolverUrl` set via env-config), and it completes markedly faster (measured 1.70x on warm h2) — real `package@version` lines, a working preview — while the resulting `node_modules` (versions, integrity, layout, lockfile) is byte-identical to what a standard `npm install` / lockfile replay produces (parity-proven). A self-hoster deploys their own eddy (npm or Docker) next to their registry proxy and their users get the same speed, fully offline-capable and auditable. If eddy is absent, unreachable, or returns anything that fails integrity/coverage, the standard verifying install runs instead — the user never gets a wrong or failed install because the fast path was down. Done when fast mode ships parity-gated behind a public opt-in (default OFF), the trust boundary + bounded-staleness are documented, and a real-browser HTTP/3 measurement confirms the headline number.
+## User Scenario
+
+A developer opens a from-scratch preset or writes a package.json, runs
+`npm install` with fast mode enabled via `resolverUrl`, and gets a materially
+faster install with real package versions, integrity checks, layout, and
+lockfile replay. If eddy is absent, unreachable, stale, malformed, or fails
+coverage/integrity gates, the standard verifying install runs instead.
 
 ## Items
 
-Delivered (closed; the fast-path mechanism, parity-proven + `pnpm pr:check` green). Process note (honest): these items were implemented while still `draft` — a violation of the refine-first rule (`decision-workflow.md` §Backlog readiness) that later wording cannot make valid; recorded, not normalized. The per-fork trail below is the AUDIT record of that after-the-fact closure — not a substitute for the ready contract the rule requires: it lists where each fork was resolved (acceptance = the shipped + regression-tested features; decisions = ADR-0194/0195; out-of-scope = the decided-NO and measurement-refuted forks; operator workflow = `hosting-eddy.md`), and nothing was closed with an unresolved fork:
+- `perf/eddy-http3-cold-validation` — open headline-validation gap: commit a
+  real-browser transport matrix artifact or keep h3 unquoted. (ready)
+- `distribution/eddy-package-and-deploy` — delivered except first npm publish,
+  which is operator-confirm-first and user-deferred. (ready)
 
-- **eddy resolver service** — the `@riftydev/eddy` Node service (`services/eddy/`): runs rifty's own `install()` → harvests the lockfile + compressed tarballs → `EddyBundleV1` + two-tier cache + as-of stamp + `prefer-online` + typed `unsupported` decline. One algorithm; lockfile ≡ a client live-resolve by construction. (done → removed)
-- **eddy client opt-in** — the public `InstallOptions.resolverUrl`/`prefer` seam (auto-re-exported via `@riftydev/sdk/npm-client`): fetch bundle → verify bytes vs bundle integrity (non-disableable) → pre-seed cache + write lockfile → existing fast path; default OFF, env-config, mirror-grade trust, auto-fallback on every failure mode; `InstallResult.source` provenance + `trust-model.md`. (done → removed)
-- **wire protocol v1.1 (ADR-0195)** — cacheable `GET /bundle/<closureHash>` (CDN/browser-cache tier, 404-`no-store` miss → POST fallback), CORS-simple POST (no preflight RTT), client streaming unpack (gates on manifest+lockfile before tarball bytes; per-tarball verify+seed), owner-boot prefetch (`startEddyPrefetch` + `InstallOptions.resolverPrefetch`, canonically keyed — a stale prefetch is ignored), preset pins via `VITE_RIFTY_EDDY_PINS` + boot preconnect. Profiled driver: eddy install-only ≈ the POST round-trip itself (~1060ms; extraction ~77ms). (done → removed; per-fork trail of the two closed draft items:
-  - was `distribution/eddy-cdn-tier-get-by-hash` — its forks: GET route+headers → SHIPPED (ADR-0195 §1: `immutable` on GET, 404 `no-store`); the POST↔GET chicken-egg flow → decided as a THIRD option, neither (a) hash-only POST nor (b) 302 — POST returns the full bundle + `x-eddy-closure-hash`, the hash feeds env/learned pins so the NEXT install rides GET (ADR-0195 + ADR-0194 §8); "gate on a real CDN" → deployed 2026-07-01, split-host `eddy-cdn`/`eddy-origin` (`hosting-eddy.md` §CDN-tier).
-  - was `playground/eddy-from-scratch-presets` — its forks: per-preset UI toggle → decided NO (ADR-0195 §5, env-config is the operator switch); committed per-preset lockfile pins → superseded by `VITE_RIFTY_EDDY_PINS` (template-id) + learned pins, no committed lockfiles (ADR-0195 §5, ADR-0194 §8); re-pin cadence → `hosting-eddy.md` §Pinned-presets (stale pin degrades verified); ADR-0135 reconcile → instant presets untouched (no install call); the "~0.6s live demo" → REFUTED by measurement, launch number = 1.70x (Outcome above).)
-- **non-blocking install stamp (ADR-0187)** — the ~490ms blocking write-through drain left the `npm install` / snapshot-restore critical path; durability ordering now rides the FIFO write-through (vfs contract pin). (done → removed, was the delivered half of `perf/eddy-install-client-floor` — that item's headline premise, a "~1s client extraction floor", was REFUTED by the profile above (extraction ~77ms; the floor is the POST RTT); the real client cost was this ~490ms flush, and the item's cold-spike host knobs folded into `docs/public/hosting-eddy.md` §Cold-spike knobs)
+Delivered and removed from the backlog: resolver service, client opt-in,
+wire protocol v1.1, learned pins, S3 durable bundle store, direct npmjs upstream
+flip, and the production auto benchmark update.
 
-Open:
-- `perf/eddy-http3-cold-validation` — THE epic-closer ("Done when"): the HTTP/3 leg of the real-browser cold-install number. Warm-h2 is measured at **1.70x** (standard 4284ms → eddy 2517ms, `perf/benchmarks.json`) — the ~6x was a Node/sandbox model. Method decided: pin transport per-origin via Chromium launch args + verify negotiated protocol via CDP; blocked operationally on the SG `443/udp` ingress rule (confirm-first). (ready)
-- `perf/eddy-upstream-registry-ab` — the last deferred server-side cold-origin lever (ADR-0194 §Deferred): A/B direct npmjs vs CDN-proxy from the VM (side container, restart-cold, unquantized probe, ≥20%-and-no-429 flip rule); execution operator-gated. (ready)
-- `distribution/eddy-package-and-deploy` — delivered except the first `npm publish` (operator-gated acceptance, user-deferred, confirm-first); v1.2 deployed + CI live-smoke wired. (ready)
+## Out of Scope
 
-Supersedes (folded from the `cold-npm-install-speedup` epic): the former `npm-client/server-side-closure-resolver` and `npm-client/bundled-popular-subgraph-metadata` draft items — their measured-and-verified design is now this epic + ADR-0182. Out of scope: the extracted-tree artifact variant (4.3x byte penalty, dominated); signed/attested manifests (mirror-grade only for v1); a pluggable client `ClosureSource` (URL seam only for v1); independent npm source-of-truth re-verification (would re-introduce the waterfall).
+- Quoting h2/h3 results without a committed matrix artifact.
+- Independent npm source-of-truth re-verification in the client; that would
+  reintroduce the metadata waterfall eddy removes.
+- Publishing `@riftydev/eddy` without explicit operator confirmation.

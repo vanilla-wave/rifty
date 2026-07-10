@@ -25,7 +25,7 @@ Current resources:
 - Public IPv4: `93.77.177.79` (`rifty-registry-proxy-ip`,
   `e9b0ph17evqtt1lnvl17`).
 - Security group: `rifty-registry-proxy` (`enp064boa7v26die0el1`), ingress
-  `80/tcp` + `443/tcp`, egress all.
+  `80/tcp` + `443/tcp` + `443/udp`, egress all.
 - DNS: `registry.rifty.dev. 600 CNAME
   409f80b3d8827091.topology.gslb.yccdn.ru.` in zone `rifty`.
 - CDN origin DNS: `registry-origin.rifty.dev. 600 A 93.77.177.79` in zone
@@ -73,29 +73,39 @@ tools/eddy/smoke-eddy.mjs
 
 Current resources (folder `b1g7flke7mgq94dklalu`):
 
-- Registry: `rifty` (`crpo6kvhb4o7gv41g0s4`); image
-  `cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.1.0` (linux/amd64 — the VM is x86_64).
+- Registry: `rifty` (`crpo6kvhb4o7gv41g0s4`); live image
+  `cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2` (linux/amd64 — the VM is x86_64).
 - VM: `rifty-eddy`, `ru-central1-a`; reuses the `rifty-registry-proxy` security
-  group (`enp064boa7v26die0el1`, ingress 80/443).
+  group (`enp064boa7v26die0el1`, ingress 80/443 tcp + 443 udp).
 - Public IPv4: `89.169.128.66` (`rifty-eddy-ip`, `e9bbnd8mhba48o4vq5kn`).
 - VM service account: `rifty-eddy-vm` (`ajeknkij3plg4dua0g1u`) with
   `container-registry.images.puller` on the registry (COI pulls via the VM SA).
 - DNS: `eddy.rifty.dev. 600 A 89.169.128.66` in zone `rifty`.
-- Upstream: `REGISTRY_BASE_URL=https://registry.rifty.dev/npm-registry` (eddy +
-  proxy share one upstream and trust boundary, ADR-0163).
+- Upstream: `REGISTRY_BASE_URL=https://registry.npmjs.org` (flipped
+  2026-07-07 after on-VM A/B; the browser standard path still uses
+  `registry.rifty.dev/npm-registry`, ADR-0163).
+- Bundle store: Object Storage bucket `eddy-bundles`, anonymous read enabled,
+  list disabled; writer service account `rifty-eddy-s3`
+  (`ajejj189d3hr9q33aud3`) has folder-scoped `storage.uploader`. The live VM
+  carries the `EDDY_S3_*` access key only in secret-bearing metadata.
+- CDN GET tier: resource `bc8rtmpmtax5opcdex6x` (`eddy-cdn.rifty.dev`,
+  certificate `fpq8rrab6e3n0jo4jlts`) uses origin group `3357755679591203785`,
+  origin `102946` = `eddy-bundles.storage.yandexcloud.net`, host header pinned
+  to the bucket, methods GET/HEAD/OPTIONS, CORS `*`, and static CORP
+  `cross-origin`.
 
 Build + push the image (amd64), then create the VM:
 
 ```bash
 REG=crpo6kvhb4o7gv41g0s4
-docker build --platform linux/amd64 -f deploy/yandex/eddy/Dockerfile -t cr.yandex/$REG/eddy:0.1.0 .
-yc container registry configure-docker && docker push cr.yandex/$REG/eddy:0.1.0
+docker build --platform linux/amd64 -f deploy/yandex/eddy/Dockerfile -t cr.yandex/$REG/eddy:<new-tag> .
+yc container registry configure-docker && docker push cr.yandex/$REG/eddy:<new-tag>
 yc compute instance create-with-container rifty-eddy \
   --zone ru-central1-a --cores 2 --core-fraction 20 --memory 1G \
   --create-boot-disk type=network-hdd,size=16G,auto-delete=true \
   --service-account-id ajeknkij3plg4dua0g1u \
   --network-interface subnet-name=default-ru-central1-a,nat-address=89.169.128.66,security-group-ids=enp064boa7v26die0el1 \
-  --docker-compose-file deploy/yandex/eddy/docker-compose.coi.yml
+  --docker-compose-file <local-secret-bearing-coi-compose>
 node tools/eddy/smoke-eddy.mjs https://eddy.rifty.dev
 ```
 

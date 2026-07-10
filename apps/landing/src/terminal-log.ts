@@ -1,5 +1,5 @@
 // Hero terminal boot log — looping typewriter reveal. Cosmetic only.
-// Copy ported verbatim from docs/landing/handoff/Rifty.dc.html (bootScript).
+// Every line names a current public SDK surface; no playground-private exec/preview API.
 
 // One log line: prompt prefix + text + a color class (mapped to a CSS var).
 interface BootLine {
@@ -9,13 +9,11 @@ interface BootLine {
 }
 
 const BOOT_SCRIPT: readonly BootLine[] = [
-  { p: '$ ', t: 'npm install express', c: 'cmd' },
-  { p: '  ', t: 'resolving via @riftydev/npm-client', c: 'dim' },
-  { p: '  ', t: '+ express@4.21.2  ·  57 pkgs  ·  0 conflicts', c: 'ok' },
-  { p: '$ ', t: 'node server.js', c: 'cmd' },
-  { p: '  ', t: 'runtime-js · node v22 compatible', c: 'dim' },
-  { p: '  ', t: 'express listening on :3000', c: 'lime' },
-  { p: '', t: 'GET /   200   ·   4 ms', c: 'req' },
+  { p: '→ ', t: 'runtime.ready', c: 'dim' },
+  { p: 'fs ', t: "writeFile('/hello.js')  ·  ok", c: 'ok' },
+  { p: 'eval ', t: 'console.log("hello")', c: 'cmd' },
+  { p: 'stdout ', t: 'hello', c: 'lime' },
+  { p: 'vfs ', t: 'backend  ·  opfs | memory', c: 'dim' },
 ];
 
 // per-line reveal delay (ms) and the hold before the loop restarts.
@@ -73,10 +71,13 @@ function makeCursorRow(): HTMLDivElement {
  */
 export function startTerminalLog(el: HTMLElement): void {
   clearTimers(el);
+  el.style.setProperty('--hero-term-row-count', String(BOOT_SCRIPT.length + 1));
 
   const cursorRow = makeCursorRow();
 
   const runOnce = (): void => {
+    // All handles from the previous pass have fired; retain only the live pass.
+    timers.set(el, []);
     el.replaceChildren(cursorRow);
     BOOT_SCRIPT.forEach((line, i) => {
       const id = window.setTimeout(

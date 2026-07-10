@@ -96,6 +96,18 @@ const syntheticBundle = packEddyBundle({
   tarballs: [],
 });
 
+function s3PathHash(closureHash: string): string {
+  return encodeURIComponent(closureHash).replaceAll('%2F', '/');
+}
+
+function publicClientBundlePath(closureHash: string): string {
+  return `/eddy-bundles/bundle/${encodeURIComponent(closureHash)}`;
+}
+
+function publicReadKey(path: string): string {
+  return path.replaceAll('%2F', '/').replaceAll('%2f', '/');
+}
+
 // The ONLY shape a strict get() accepts as a HIT: a REAL bundle whose manifest
 // hash === closureHashOf(lockfile) and whose tarball integrities match. Built
 // once from the vendored fixture registry (it has tarballs → mutable for the
@@ -156,13 +168,14 @@ function startFakeS3(): Promise<FakeS3> {
       });
       return;
     }
-    const body = objects.get(path);
+    const key = publicReadKey(path);
+    const body = objects.get(path) ?? objects.get(key);
     if (!body) {
       res.writeHead(404, { 'content-type': 'application/xml' });
       res.end(req.method === 'HEAD' ? undefined : '<Error><Code>NoSuchKey</Code></Error>');
       return;
     }
-    const cc = cacheControls.get(path);
+    const cc = cacheControls.get(path) ?? cacheControls.get(key);
     res.writeHead(200, {
       'content-type': 'application/x-tar',
       'content-length': body.length,
@@ -222,7 +235,7 @@ describe('S3BundleStore', () => {
   it('self-heals a corrupt/truncated object: get reads it as a miss, put overwrites the poisoned key', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     // A prior failed upload left garbage at the key.
     fake.objects.set(key, Buffer.from('truncated-garbage-not-a-tar'));
     expect(await store.get(HASH)).toBeNull(); // corrupt → miss
@@ -237,7 +250,7 @@ describe('S3BundleStore', () => {
   it('preserves a valid existing object with different bytes for the same closure hash', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     contents.manifest.asOf.resolvedAt = '2026-07-02T00:00:00.000Z';
     const firstStored = packEddyBundle(contents);
@@ -251,7 +264,7 @@ describe('S3BundleStore', () => {
   });
 
   it('loses an apparent-miss create race without overwriting the winner', async () => {
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     contents.manifest.asOf.resolvedAt = '2026-07-03T00:00:00.000Z';
     const winnerBytes = Buffer.from(packEddyBundle(contents));
@@ -328,7 +341,7 @@ describe('S3BundleStore', () => {
   it('rejects a valid bundle stored under the WRONG key (manifest self-report ≠ key)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     // A valid bundle whose manifest reports a DIFFERENT hash, mis-keyed at HASH.
     fake.objects.set(key, Buffer.from(syntheticBundle));
     expect(await store.get(HASH)).toBeNull(); // right shape, wrong hash → miss
@@ -337,7 +350,7 @@ describe('S3BundleStore', () => {
   it('rejects a bundle whose lockfile RE-DERIVES to a different hash (tampered lockfile, matching manifest hash)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     // Keep the manifest's self-reported hash === key, but mutate the lockfile so
     // closureHashOf(lockfile) no longer equals it.
     const contents = unpackEddyBundle(bundleBytes);
@@ -357,7 +370,7 @@ describe('S3BundleStore', () => {
     // serve a hit stricter clients bounce forever.
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     const before = contents.tarballs.length;
     contents.manifest.tarballs = contents.manifest.tarballs.filter((t) => t.name !== 'ms');
@@ -373,7 +386,7 @@ describe('S3BundleStore', () => {
     // every browser client refuses non-v3 bundles: a permanent decline loop.
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     const lf = JSON.parse(contents.lockfileText) as { lockfileVersion: number };
     lf.lockfileVersion = 1;
@@ -389,7 +402,7 @@ describe('S3BundleStore', () => {
     // hit strict clients bounce.
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     contents.tarballs.push({
       // NOT added to manifest.tarballs — an unclaimed extra member.
@@ -413,7 +426,7 @@ describe('S3BundleStore', () => {
     // validate the raw member SEQUENCE, not just the by-name view.
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     const manifestBytes = new TextEncoder().encode(JSON.stringify(contents.manifest));
     contents.tarballs.push({
@@ -435,7 +448,7 @@ describe('S3BundleStore', () => {
     // the manifest array.
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     const real = contents.tarballs[0];
     if (!real) throw new Error('setup: expected ≥1 tarball');
@@ -451,7 +464,7 @@ describe('S3BundleStore', () => {
   it('a parseable object whose manifest is the WRONG SHAPE (missing asOf) reads as a MISS, never a store throw/500 — round 16', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     (contents.manifest as { asOf?: unknown }).asOf = undefined; // format+tarballs intact
     fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
@@ -461,7 +474,7 @@ describe('S3BundleStore', () => {
   it('rejects a parseable manifest missing direct-GET header fields', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     (contents.manifest as { npmClientVersion?: unknown }).npmClientVersion = undefined;
     (contents.manifest.asOf as { resolvedAt?: unknown }).resolvedAt = undefined;
@@ -475,7 +488,7 @@ describe('S3BundleStore', () => {
   it('rejects an object whose manifest names DUPLICATE member files (client declines the same shape)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     const [a, b] = contents.manifest.tarballs;
     if (!a || !b) throw new Error('setup: expected ≥2 tarballs');
@@ -487,7 +500,7 @@ describe('S3BundleStore', () => {
   it('rejects a bundle with tampered tarball bytes (integrity mismatch), matching manifest+lockfile', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     const contents = unpackEddyBundle(bundleBytes);
     expect(contents.tarballs.length).toBeGreaterThan(0);
     const victim = contents.tarballs[0];
@@ -502,7 +515,7 @@ describe('S3BundleStore', () => {
   it('re-PUTs a same-byte object that lacks the immutable Cache-Control (repairs metadata)', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
-    const key = `/eddy-bundles/bundle/${encodeURIComponent(HASH)}`;
+    const key = `/eddy-bundles/bundle/${s3PathHash(HASH)}`;
     // An older upload: correct bytes but NO cache-control metadata.
     fake.objects.set(key, Buffer.from(bundleBytes));
     await store.put(HASH, { bytes: bundleBytes, manifest });
@@ -511,14 +524,29 @@ describe('S3BundleStore', () => {
     expect(fake.cacheControls.get(key)).toBe('public, max-age=31536000, immutable');
   });
 
-  it('addresses the object as /<bucket>/bundle/<percent-encoded hash> — the client bundleUrlFor shape', async () => {
+  it('addresses the object with raw slash but encoded plus/equals — Yandex S3 rejects signed %2F PUTs', async () => {
     fake = await startFakeS3();
     const store = makeStore(fake.url);
     await store.put(URL_SPECIALS_HASH, { bytes: syntheticBundle, manifest: syntheticManifest });
-    const expectedPath = `/eddy-bundles/bundle/${encodeURIComponent(URL_SPECIALS_HASH)}`;
+    const expectedPath = '/eddy-bundles/bundle/sha256-ab/cd%2Bef%3D';
     expect(fake.requests.map((r) => `${r.method} ${r.path}`)).toContain(`PUT ${expectedPath}`);
     await store.get(URL_SPECIALS_HASH);
     expect(fake.requests.at(-1)).toMatchObject({ method: 'GET', path: expectedPath });
+  });
+
+  it('serves a client-shaped %2F public GET from the raw-slash object key', async () => {
+    fake = await startFakeS3();
+    const store = makeStore(fake.url);
+    await store.put(URL_SPECIALS_HASH, { bytes: syntheticBundle, manifest: syntheticManifest });
+
+    const res = await fetch(`${fake.url}${publicClientBundlePath(URL_SPECIALS_HASH)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(fake.requests.at(-1)).toMatchObject({
+      method: 'GET',
+      path: '/eddy-bundles/bundle/sha256-ab%2Fcd%2Bef%3D',
+    });
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([...syntheticBundle]);
   });
 
   it('signs the PUT (SigV4 authorization + payload hash headers); GET/HEAD stay unsigned public reads', async () => {

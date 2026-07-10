@@ -3,13 +3,27 @@
 Status: Accepted
 Date: 2026-06
 
-> TL;DR: a new opt-in fast `npm install` path — a published Node service `@riftydev/eddy` runs rifty's OWN resolution server-side and returns one artifact (a v3 lockfile + the bundled compressed tarballs); the client pre-seeds its tarball cache + writes the lockfile, then the existing lockfile fast path installs with one round-trip (~6x cold vs the standard path). Standard install is unchanged and is the always-on fallback.
+> TL;DR: a new opt-in fast `npm install` path — a published Node service `@riftydev/eddy` runs rifty's OWN resolution server-side and returns one artifact (a v3 lockfile + the bundled compressed tarballs); the client pre-seeds its tarball cache + writes the lockfile, then the existing lockfile fast path installs with one round-trip. Production `auto` is measured at 1.88x in a real browser; the older ~6x was a Node/sandbox model. Standard install is unchanged and is the always-on fallback.
 
 ## Context
 
 Measured cold install (no lockfile) is two latency-bound waterfalls — the packument metadata walk (~2s; graph-depth × RTT, abbreviated packuments cut bytes 2.5x but NOT wall-time) plus the tarball-fetch phase (~1.7-2.2s; the browser coalesces one origin to a single multiplexed h2 connection, so the `FETCH_CONCURRENCY=8` semaphore just queues streams — raising it is inert in-browser, only HTTP/3 might help). ADR-0175 (prefetch) and ADR-0176 (CDN cache) attacked the edges; the structural floor is the depth-sequential metadata walk. Repeat/template installs are already near-optimal (ADR-0023 lockfile fast path, ADR-0135 baked snapshots). The remaining target is the cold, no-lockfile first run on a user-authored `package.json`.
 
-Adversarially verified (express@^4 + eslint@^9, faithful browser transport): standard ~4s; a server that resolves once and bundles the tarballs → ~0.6-0.7s (~6x). Three artifact shapes were measured: lockfile-only (leaves the tarball phase on the client, ~1-2s), lockfile + compressed-tarball bundle (one stream, bytes-bound), lockfile + extracted node_modules (4.3x byte penalty to save ~50ms decompress — strictly dominated). Serverless was already rejected for this traffic (ADR-0163, 2.5-3.5MB response cap); eddy is a streaming Node service, KB-to-MB responses are fine.
+The original Node/sandbox model for express@^4 + eslint@^9 projected standard
+~4s vs bundled resolver ~0.6-0.7s (~6x). The production browser headline is
+lower and is tracked by `perf/benchmarks.json`; the 2026-07-07 committed
+`auto` run measured standard 5180ms → eddy 2761ms = 1.88x. Three artifact
+shapes were measured: lockfile-only (leaves the tarball phase on the client,
+~1-2s), lockfile + compressed-tarball bundle (one stream, bytes-bound),
+lockfile + extracted node_modules (4.3x byte penalty to save ~50ms decompress
+— strictly dominated). Serverless was already rejected for this traffic
+(ADR-0163, 2.5-3.5MB response cap); eddy is a streaming Node service, KB-to-MB
+responses are fine.
+
+**Correction 2026-07-07:** the original ~6x figure was a Node/sandbox model,
+not the browser launch quote. The committed production `auto` browser artifact
+is the quotable number; h2/h3 comparison remains gated by
+`docs/backlog/perf/eddy-http3-cold-validation.md`.
 
 ## Decision
 
@@ -23,12 +37,12 @@ Adversarially verified (express@^4 + eslint@^9, faithful browser transport): sta
 
 ## Consequences
 
-- Cold no-lockfile install drops ~6x (~4s → ~0.6-0.7s, measured) by collapsing BOTH waterfalls into one bundled fetch; the win is a property of the OPEN, auditable stack (self-hostable, MIT) that closed competitors cannot structurally match.
+- Cold no-lockfile install drops materially by collapsing BOTH waterfalls into one bundled fetch; the current production `auto` measurement is 1.88x, and the win is a property of the OPEN, auditable stack (self-hostable, MIT) that closed competitors cannot structurally match.
 - The standard install path is untouched and stays compatible with a plain thin proxy / real npm; eddy is purely additive.
 - New always-on infra + operator surface (the eddy VM/container alongside Caddy) and a new published package to maintain.
 - A new trust boundary (mirror-grade) and a bounded-staleness window — both within models already accepted (ADR-0163 proxy trust; npm's own max-age freshness) and both made explicit (trust doc, as-of stamp, prefer-online escape, TTL=0 knob).
 - Version skew: eddy and the client both embed npm-client resolution, but the client only REPLAYS eddy's pins (no re-resolve), so skew cannot corrupt an install; a parity CI test pins eddy-closure ≡ client-live-resolve against the current npm-client, and eddy reports its npm-client version.
-- **Open validation (gates the perf headline, not the decision):** the ~6x assumes the bundled single-stream beats the per-origin single-h2 tarball phase; HTTP/3 (advertised via alt-svc, untested here) could lift the single-connection ceiling and narrow eddy's edge — a real-browser h3 measurement gates the quoted number.
+- **Open validation (gates h2/h3 claims, not the decision):** the committed production `auto` artifact is quotable, but HTTP/3 could lift the standard path's single-connection ceiling and narrow eddy's edge. `docs/backlog/perf/eddy-http3-cold-validation.md` stays open until `perf/benchmarks.json` carries full matrix evidence.
 - Pinned templates rot (no auto patch uptake) → a deliberate re-pin/re-bake cadence is owed.
 
 ## Acceptance criteria
@@ -52,4 +66,4 @@ Adversarially verified (express@^4 + eslint@^9, faithful browser transport): sta
 - ADR-0135 — baked snapshots (instant presets; the boundary eddy does NOT cross).
 - ADR-0051 — native dependency policy (eddy applies the same gate).
 - `docs/process/decision-workflow.md` — record-and-continue + confirm-first for outward infra.
-- Epic: `docs/backlog/epics/fast-install-resolver.md`.
+- Backlog epic: `docs/backlog/epics/fast-install-resolver.md`.

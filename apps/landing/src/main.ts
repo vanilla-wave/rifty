@@ -5,6 +5,7 @@
 import { mountExplorer } from './explorer/explorer';
 import { renderArch } from './sections/arch';
 import { renderCtaFooter } from './sections/cta-footer';
+import { renderDemos } from './sections/demos';
 import { renderHero } from './sections/hero';
 import { renderNav } from './sections/nav';
 import { renderQuickStart } from './sections/quickstart';
@@ -20,6 +21,7 @@ if (!app) {
 app.append(
   renderNav(),
   renderHero(),
+  renderDemos(),
   renderWhat(),
   renderArch(),
   renderQuickStart(),

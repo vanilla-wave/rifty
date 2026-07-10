@@ -2,6 +2,7 @@ import { logoMark } from '../icons';
 import './cta-footer.css';
 
 const GITHUB_URL = 'https://github.com/vanilla-wave/rifty';
+const SDK_DOCS_URL = `${GITHUB_URL}/tree/main/packages/rifty#readme`;
 
 function buildPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -14,7 +15,7 @@ function buildPanel(): HTMLElement {
   const sub = document.createElement('p');
   sub.className = 'cta-sub';
   sub.textContent =
-    'Open, self-hostable, browser-local runtime infrastructure. Built from scratch — MIT.';
+    'MIT-licensed, self-hostable runtime infrastructure. Audit it, deploy it, keep execution in the browser.';
 
   const chip = document.createElement('div');
   chip.className = 'cta-chip';
@@ -27,8 +28,8 @@ function buildPanel(): HTMLElement {
   row.className = 'cta-buttons';
   const primary = document.createElement('a');
   primary.className = 'cta-btn cta-btn-primary';
-  primary.href = GITHUB_URL;
-  primary.textContent = 'Read the docs';
+  primary.href = SDK_DOCS_URL;
+  primary.textContent = 'Read SDK docs';
   const secondary = document.createElement('a');
   secondary.className = 'cta-btn cta-btn-secondary';
   secondary.href = GITHUB_URL;
@@ -53,7 +54,7 @@ function buildFooter(): HTMLElement {
 
   const stamp = document.createElement('span');
   stamp.className = 'cta-footer-stamp';
-  stamp.textContent = 'M11 · Consumer Ready';
+  stamp.textContent = 'v0.1 · M11 active';
 
   footer.append(mark, name, stamp);
   return footer;

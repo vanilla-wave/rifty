@@ -1,4 +1,5 @@
 import { icon } from '../icons';
+import { buildPlaygroundHref } from '../playground-url';
 import { startTerminalLog } from '../terminal-log';
 import './hero.css';
 
@@ -27,7 +28,7 @@ function buildLeft(): HTMLElement {
   eyebrow.className = 'hero-eyebrow';
   const dot = document.createElement('span');
   dot.className = 'hero-eyebrow-dot';
-  eyebrow.append(dot, document.createTextNode('Browser-based Node runtime'));
+  eyebrow.append(dot, document.createTextNode('Open runtime · Self-hostable'));
 
   const h1 = document.createElement('h1');
   h1.className = 'hero-h1';
@@ -39,30 +40,29 @@ function buildLeft(): HTMLElement {
 
   const sub = document.createElement('p');
   sub.className = 'hero-sub';
-  sub.append(
-    document.createTextNode(
-      'rifty is a Node-compatible runtime and WASI runner built from scratch for the browser.',
-    ),
-  );
+  const subLead = document.createElement('span');
+  subLead.className = 'hero-sub-lead';
+  subLead.textContent =
+    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium.';
+  sub.append(subLead);
   sub.append(document.createElement('br'));
-  sub.append(document.createTextNode('Run Express, '));
+  sub.append(document.createTextNode('Run tested Express, Vite 7, '));
   const npmChip = document.createElement('code');
   npmChip.className = 'hero-chip hero-chip-ac';
-  npmChip.textContent = 'npm install';
+  npmChip.textContent = 'npm tooling';
   sub.append(npmChip);
-  sub.append(document.createTextNode(', even '));
+  sub.append(document.createTextNode(' and '));
   const wasmChip = document.createElement('code');
   wasmChip.className = 'hero-chip';
   wasmChip.textContent = '.wasm';
-  sub.append(wasmChip);
-  sub.append(document.createTextNode(' guests — with no server.'));
+  sub.append(wasmChip, document.createTextNode(' workflows. Execution and files stay in the tab.'));
 
   const cta = document.createElement('div');
   cta.className = 'hero-cta';
   const primary = document.createElement('a');
   primary.className = 'hero-btn hero-btn-primary';
-  primary.href = 'https://play.rifty.dev/';
-  primary.append(document.createTextNode('Open playground'));
+  primary.href = buildPlaygroundHref(import.meta.env.VITE_RIFTY_PLAYGROUND_URL);
+  primary.append(document.createTextNode('Run something real'));
   const arrow = document.createElement('span');
   arrow.className = 'hero-btn-icon';
   arrow.innerHTML = icon('arrow-right', 15);
@@ -75,7 +75,7 @@ function buildLeft(): HTMLElement {
 
   const meta = document.createElement('div');
   meta.className = 'hero-meta';
-  const metaItems = ['MIT licensed', 'ESM + .d.ts', 'Chromium-first', 'WASI preview1'];
+  const metaItems = ['MIT licensed', 'Self-hostable', 'Chromium-first', 'Node 24 parity target'];
   metaItems.forEach((item, i) => {
     if (i > 0) {
       const slash = document.createElement('span');
@@ -106,18 +106,18 @@ function buildWindow(): HTMLElement {
   }
   const host = document.createElement('span');
   host.className = 'hero-host';
-  host.textContent = 'localhost:3000';
+  host.textContent = '@riftydev/sdk · v0.1';
   const live = document.createElement('span');
   live.className = 'hero-live';
   const liveDot = document.createElement('span');
   liveDot.className = 'hero-live-dot';
-  live.append(liveDot, document.createTextNode('LIVE'));
+  live.append(liveDot, document.createTextNode('PUBLIC API'));
   titlebar.append(host, live);
 
-  // code block: createSandbox snippet
+  // Code block: only methods on the current public Sandbox contract.
   const code = document.createElement('div');
   code.className = 'hero-code';
-  code.append(codeLine([['// boot a Node runtime in the page', 'syn-com']]));
+  code.append(codeLine([['// public SDK: eval + filesystem + events', 'syn-com']]));
   code.append(
     codeLine([
       ['import', 'syn-kw'],
@@ -129,32 +129,68 @@ function buildWindow(): HTMLElement {
       ["'@riftydev/sdk'", 'syn-str'],
     ]),
   );
-  const gap = document.createElement('div');
-  gap.className = 'hero-code-gap';
-  code.append(gap);
   code.append(
     codeLine([
       ['const', 'syn-kw'],
-      [' box ', ''],
+      [' sandbox ', ''],
       ['=', 'syn-punc'],
       [' ', ''],
       ['await', 'syn-kw'],
       [' ', ''],
       ['createSandbox', 'syn-fn'],
-      ['({ … })', 'syn-punc'],
+      ['({', 'syn-punc'],
+    ]),
+    codeLine([['  workerUrl,', '']]),
+    codeLine([
+      ['  skipServiceWorker: ', ''],
+      ['true', 'syn-kw'],
+      [',', 'syn-punc'],
+    ]),
+    codeLine([['})', 'syn-punc']]),
+  );
+  code.append(
+    codeLine([
+      ['sandbox', ''],
+      ['.', 'syn-punc'],
+      ['runtime', ''],
+      ['.', 'syn-punc'],
+      ['on', 'syn-fn'],
+      ['((event) => {', 'syn-punc'],
+    ]),
+    codeLine([
+      ['  if', 'syn-kw'],
+      [' (event.type === ', 'syn-punc'],
+      ["'stdout'", 'syn-str'],
+      [') console.log(event.chunk)', 'syn-punc'],
+    ]),
+    codeLine([['})', 'syn-punc']]),
+  );
+  code.append(
+    codeLine([
+      ['await', 'syn-kw'],
+      [' sandbox', ''],
+      ['.', 'syn-punc'],
+      ['fs', ''],
+      ['.', 'syn-punc'],
+      ['writeFile', 'syn-fn'],
+      ['(', 'syn-punc'],
+      ["'/hello.js'", 'syn-str'],
+      [', ', 'syn-punc'],
+      ['\'console.log("hello")\'', 'syn-str'],
+      [')', 'syn-punc'],
     ]),
   );
   code.append(
     codeLine([
       ['await', 'syn-kw'],
-      [' box', ''],
+      [' sandbox', ''],
       ['.', 'syn-punc'],
-      ['spawn', 'syn-fn'],
+      ['runtime', ''],
+      ['.', 'syn-punc'],
+      ['eval', 'syn-fn'],
       ['(', 'syn-punc'],
-      ["'node'", 'syn-str'],
-      [', [', 'syn-punc'],
-      ["'server.js'", 'syn-str'],
-      ['])', 'syn-punc'],
+      ['\'console.log("hello")\'', 'syn-str'],
+      [')', 'syn-punc'],
     ]),
   );
 
@@ -163,15 +199,20 @@ function buildWindow(): HTMLElement {
   term.className = 'hero-term';
   const termLabel = document.createElement('div');
   termLabel.className = 'hero-term-label';
-  const viteSpan = document.createElement('span');
-  viteSpan.className = 'hero-term-vite';
-  viteSpan.textContent = '● vite';
-  termLabel.append(viteSpan, document.createTextNode(' TERMINAL'));
+  const apiSpan = document.createElement('span');
+  apiSpan.className = 'hero-term-vite';
+  apiSpan.textContent = '● runtime events';
+  termLabel.append(apiSpan, document.createTextNode(' API TRACE'));
   const termLog = document.createElement('div');
   termLog.className = 'hero-term-log';
   term.append(termLabel, termLog);
 
-  win.append(titlebar, code, term);
+  const apiNote = document.createElement('p');
+  apiNote.className = 'hero-api-note';
+  apiNote.textContent =
+    'Shown API is the public Sandbox façade: runtime.eval/on + fs. Command execution lives at @riftydev/sdk/shell and preview routing at @riftydev/sdk/service-worker — neither is a Sandbox method.';
+
+  win.append(titlebar, code, term, apiNote);
 
   // start the looping boot log on the terminal log element
   startTerminalLog(termLog);

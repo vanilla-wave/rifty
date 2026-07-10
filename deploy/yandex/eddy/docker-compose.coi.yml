@@ -3,20 +3,19 @@
 # `image:` (built + pushed to the registry; see docs/public/hosting-eddy.md).
 # Unlike the local self-host compose, this deploy template also serves
 # eddy-origin.rifty.dev for the CDN origin host. The checked-in file intentionally
-# keeps the EDDY_S3_* group commented; a stateless S3-backed origin uses a LOCAL
-# copy with those secrets filled and passed via `--metadata-from-file`.
+# keeps the EDDY_S3_* group commented. The live rifty.dev VM uses a LOCAL
+# secret-bearing copy passed via `--metadata-from-file`; never commit that copy.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.3
     container_name: rifty-eddy
     restart: unless-stopped
     expose:
       - "8788"
     environment:
-      # The CDN registry-proxy exists for BROWSER CORS the server doesn't need
-      # — direct npmjs may be faster from the VM, but needs an on-VM A/B first
-      # (ADR-0194 §Deferred). TODO(backlog: perf/eddy-upstream-registry-ab)
-      REGISTRY_BASE_URL: "https://registry.rifty.dev/npm-registry"
+      # The server does not need the browser CORS proxy; the on-VM A/B measured
+      # direct npmjs faster than the CDN proxy on cold resolves.
+      REGISTRY_BASE_URL: "https://registry.npmjs.org"
       PORT: "8788"
       EDDY_TTL_SECONDS: "1800"
       # Bundle store: WITHOUT the EDDY_S3_* group below this boots the
@@ -42,8 +41,7 @@ services:
       - "443:443"
       # HTTP/3: Caddy advertises h3 via alt-svc; QUIC needs UDP 443 published
       # here AND a `443/udp` ingress rule on the VM's security group (the
-      # reused rifty-registry-proxy group is TCP-only today — until an operator
-      # adds the rule, browsers race QUIC, fail, and stay on h2).
+      # reused rifty-registry-proxy group has that rule live on rifty.dev).
       - "443:443/udp"
     volumes:
       - caddy_data:/data
@@ -61,9 +59,10 @@ services:
           reverse_proxy eddy:8788
         }
 
-        # CDN origin host (ADR-0195): the eddy-cdn.rifty.dev edge fetches over
-        # https with this Host — the edge refuses POST, so the resolver DNS
-        # stays on the VM and only GET-by-hash rides the CDN.
+        # VM GET fallback host (ADR-0195): eddy-cdn.rifty.dev now fetches
+        # bucket-backed GET-by-hash directly, but this host stays useful for
+        # rollback and origin smoke tests. The edge refuses POST, so resolver
+        # DNS always stays on eddy.rifty.dev.
         eddy-origin.rifty.dev {
           reverse_proxy eddy:8788
         }

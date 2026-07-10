@@ -67,7 +67,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'runtime-js',
     realm: 'worker',
     compat: 'ok',
-    role: 'Node-compatible JS runtime — CJS/ESM loader + ~50 node: builtins, driven in a Worker.',
+    role: 'Node-compatible JS runtime — CJS/ESM loader plus tested node: builtin subsets, driven in a Worker.',
   },
   runtimewasi: {
     label: 'runtime-wasi',
@@ -85,7 +85,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'vite dev server',
     realm: 'worker',
     compat: 'ok',
-    role: 'The unmodified vite@5.4 in a Worker. Real module graph + native HMR payloads.',
+    role: 'The installed Vite 7 dev server in a Worker. Real module graph + cross-realm HMR bridge.',
   },
   kernel: {
     label: 'kernel',
@@ -149,8 +149,8 @@ export const CEIL: CeilDef[] = [
   {
     id: 'c_https',
     label: 'node:https',
-    compat: 'no',
-    role: 'Imports fine — every call throws. No in-browser TLS stack.',
+    compat: 'warn',
+    role: 'https.request/get use browser-validated fetch. TLS servers, custom Agents, and certificate controls throw loudly.',
   },
   {
     id: 'c_tcp',
@@ -299,7 +299,10 @@ export const SCN: Record<ScenarioId, Scenario> = {
         t: 'Fetch packuments + tarballs from npmjs through the same-origin proxy',
       },
       { node: 'npm', t: 'gunzip (DecompressionStream) + JS tar extract + SHA integrity verify' },
-      { node: 'vfs', t: 'Link 86 packages onto the VFS — flat-first-wins, nested on conflict' },
+      {
+        node: 'vfs',
+        t: 'Link the resolved dependency tree onto the VFS — flat-first-wins, nested on conflict',
+      },
     ],
   },
   express: {
@@ -319,7 +322,7 @@ export const SCN: Record<ScenarioId, Scenario> = {
     cmd: 'vite  (then edit src/main.js)',
     steps: [
       { node: 'playground', t: 'Edit src/main.js in Monaco and save' },
-      { node: 'vite', t: 'The real vite@5.4 worker re-transforms the changed module' },
+      { node: 'vite', t: 'The real Vite 7 worker re-transforms the changed module' },
       { node: 'esbuild', t: 'esbuild.wasm bundles it; Vite computes the module-graph delta' },
       { node: 'net', t: 'HMR payload rides RFC6455 frames over the BroadcastChannel WS bridge' },
       {

@@ -10,8 +10,8 @@
 | `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
 | `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
 | `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182): POST resolve + GET-by-hash origin |
-| `eddy-origin.rifty.dev` | Yandex Cloud | CDN origin host for eddy (ADR-0195) |
-| `eddy-cdn.rifty.dev` | Yandex Cloud CDN | Edge-cached `GET /bundle/<closureHash>` (the edge refuses POST, so the resolver stays on the VM) |
+| `eddy-origin.rifty.dev` | Yandex Cloud | VM GET fallback / rollback origin for eddy (ADR-0195) |
+| `eddy-cdn.rifty.dev` | Yandex Cloud CDN | Edge-cached `GET /bundle/<closureHash>` from the Object Storage bucket (the edge refuses POST, so the resolver stays on the VM) |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for
@@ -37,10 +37,11 @@ The `*.topology.gslb.yccdn.ru` target is SHARED across this folder's CDN
 resources — the provider routes at the edge by the request's Host header
 (`registry.rifty.dev` → the registry resource, `eddy-cdn.rifty.dev` → the eddy
 resource), so both CNAMEs intentionally point at the same value. Verified live
-2026-07-04: `curl -D- https://eddy-cdn.rifty.dev/bundle/<junk>` answers with
-the EDDY origin's headers (`x-eddy-*` expose list, 404 `no-store`) plus the
-edge's `cache-status`. When adding a CDN resource, take the target from
-`yc cdn resource get <id>` — do not assume it is per-resource.
+2026-07-07: `eddy-cdn.rifty.dev/bundle/<known-hash>` fetches the
+`eddy-bundles` bucket origin and serves `Cache-Control: public, max-age=31536000,
+immutable`, `Access-Control-Allow-Origin: *`, and
+`Cross-Origin-Resource-Policy: cross-origin`. When adding a CDN resource, take
+the target from `yc cdn resource get <id>` — do not assume it is per-resource.
 
 The playground production build uses
 `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, so npm

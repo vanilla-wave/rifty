@@ -39,7 +39,6 @@ const c: ParityCase = {
   code: `
     const http = require('node:http');
 
-    const PORT = 4201;
     // Effect-shaped consumption: no handler at construction, attach via 'request'.
     const server = http.createServer();
     server.on('request', (req, res) => {
@@ -47,8 +46,9 @@ const c: ParityCase = {
       res.end(JSON.stringify({ version: 'x' }));
     });
 
-    server.listen({ port: PORT }, async () => {
-      const r = await __riftyHttpRequest(PORT, '/version');
+    server.listen({ port: 0 }, async () => {
+      const port = server.address().port;
+      const r = await __riftyHttpRequest(port, '/version');
       console.log('status:' + r.status);
       console.log('content-type:' + r.contentType);
       console.log('body:' + r.body);
