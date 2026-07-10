@@ -69,6 +69,11 @@ describe('claimTemplateViteConfigSeed (marker provenance)', () => {
     return {
       files,
       existsSync: (p: string) => files.has(p),
+      readFileBytesSync: (p: string) => {
+        const content = files.get(p);
+        if (content === undefined) throw new Error(`ENOENT (test fs): ${p}`);
+        return new TextEncoder().encode(content);
+      },
       mkdirSync: () => {},
       writeFileSync: (p: string, data: Uint8Array) => {
         files.set(p, dec.decode(data));
@@ -76,9 +81,12 @@ describe('claimTemplateViteConfigSeed (marker provenance)', () => {
     };
   }
 
-  it('grants the seed for a never-seeded root (fresh OR legacy persisted) and records the marker', () => {
+  it('grants the seed for a never-seeded root (fresh OR legacy persisted) and records config + marker', () => {
     const fs = makeFs();
     expect(claimTemplateViteConfigSeed('/scratch', fs, TEMPLATE)).toBe(true);
+    // The claim IS the transaction (config first, then marker) — the caller
+    // writes nothing; torn-state coverage: vite-config-guard.fault.test.ts.
+    expect(fs.files.get('/scratch/vite.config.js')).toBe('export default {};');
     expect(JSON.parse(fs.files.get(MARKER) ?? '')).toEqual({
       file: 'vite.config.js',
       template: 'vite',

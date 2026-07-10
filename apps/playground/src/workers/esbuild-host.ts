@@ -21,7 +21,8 @@
  *   writes, returning `outputFiles`. The bridge therefore always runs the
  *   service with `write: false` and writes `outputFiles` to the VFS itself
  *   when the caller asked for writes — the same observable behavior as
- *   esbuild on Node (files on disk, no `outputFiles` in the result).
+ *   esbuild on Node (files on disk, `outputFiles` an own enumerable
+ *   `undefined` key in the result).
  */
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, VfsError, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
@@ -643,31 +644,122 @@ function withGuestWorkingDir<T extends { absWorkingDir?: string }>(options: T): 
   return { ...options, absWorkingDir: cwd };
 }
 
-function withoutOutputFiles(result: BuildResult): BuildResult {
-  // Native `write: true` results carry no outputFiles property at all (the
-  // esbuild d.ts types the key as required, hence the cast).
-  const { outputFiles: _writtenToVfs, ...rest } = result;
-  return rest as BuildResult;
+/**
+ * Native write-effective result shape (probed real esbuild 0.28.0,
+ * 2026-07-10): `outputFiles` stays an OWN ENUMERABLE key with value
+ * `undefined` — `'outputFiles' in result` is TRUE natively. Deleting the key
+ * or spread-dropping it was caller/plugin-observable (provenance-lie). ONE
+ * chokepoint for the writer plugin and the pluginless post-pass
+ * (sibling-drift kill: two masks for one semantic drifted).
+ */
+function markOutputFilesWritten(result: BuildResult): BuildResult {
+  result.outputFiles = undefined;
+  return result;
+}
+
+/**
+ * `PluginBuild.esbuild` surface: a guest-module-shaped view over the HOST
+ * bridge (probed real esbuild 0.28.0, 2026-07-10 — module key set below, NOT
+ * identical to `require('esbuild')`). The raw esbuild-wasm lib must never
+ * leak here: it bypasses write normalization, swaps the guest *Sync
+ * NotImplemented throws for browser-lib Errors, and lets one plugin stop()
+ * the SHARED realm-wide service. Keys + thrower/stop semantics stay in
+ * LOCKSTEP with the guest shim (tools/shadow-registry SHIM_ESBUILD_BODY
+ * `api`); pinned by esbuild-host.test.ts.
+ */
+interface PluginEsbuildView {
+  readonly version: string;
+  initialize(options?: object): Promise<void>;
+  transform: RiftyEsbuildHost['transform'];
+  transformSync(input?: unknown, options?: unknown): never;
+  build: RiftyEsbuildHost['build'];
+  buildSync(options?: unknown): never;
+  context: RiftyEsbuildHost['context'];
+  analyzeMetafile: RiftyEsbuildHost['analyzeMetafile'];
+  analyzeMetafileSync(metafile?: unknown, options?: unknown): never;
+  formatMessages: RiftyEsbuildHost['formatMessages'];
+  formatMessagesSync(messages?: unknown, options?: unknown): never;
+  stop(): Promise<void>;
+  readonly default: PluginEsbuildView;
+}
+
+const NO_SYNC_API = 'esbuild-wasm exposes no synchronous API in a browser realm';
+
+function createPluginEsbuildView(host: RiftyEsbuildHost): PluginEsbuildView {
+  const view: PluginEsbuildView = {
+    version: host.version,
+    initialize: (options?: object) => {
+      // The host bridge owns the wasm service config — an option-bearing call
+      // would be silently ignored, so it loud-throws instead.
+      if (options !== undefined && Object.keys(options).length > 0) {
+        throw new NotImplementedError(
+          'esbuild.PluginBuild.esbuild.initialize(options)',
+          'the rifty host bridge owns the esbuild-wasm service configuration',
+        );
+      }
+      return host.initialize();
+    },
+    transform: (input, options) => host.transform(input, options),
+    transformSync: () => {
+      throw new NotImplementedError('esbuild.transformSync', NO_SYNC_API);
+    },
+    build: (options) => host.build(options),
+    buildSync: () => {
+      throw new NotImplementedError('esbuild.buildSync', NO_SYNC_API);
+    },
+    context: (options) => host.context(options),
+    analyzeMetafile: (metafile, options) => host.analyzeMetafile(metafile, options),
+    analyzeMetafileSync: () => {
+      throw new NotImplementedError('esbuild.analyzeMetafileSync', NO_SYNC_API);
+    },
+    formatMessages: (messages, options) => host.formatMessages(messages, options),
+    formatMessagesSync: () => {
+      throw new NotImplementedError('esbuild.formatMessagesSync', NO_SYNC_API);
+    },
+    // Guest shim stop() parity: one consumer's stop() must never kill the
+    // SHARED realm-wide service (observable Node behavior: next call respawns).
+    stop: () => Promise.resolve(),
+    // Real module surface carries a CJS-interop `default` (getter, like the
+    // compiled lib's __export).
+    get default(): PluginEsbuildView {
+      return view;
+    },
+  };
+  return view;
+}
+
+interface NormalizedWriteBuild {
+  readonly options: BuildOptions;
+  /** LIVE effective write — a plugin setup() may have flipped `initialOptions.write`. */
+  effectiveWrite(): boolean;
 }
 
 /**
  * Plugin-visible write normalization: the service runs `write:false`, but user
- * plugins must see the NATIVE `write:true` surface — `initialOptions.write` as
- * the caller passed it (reads masked, mutations flow through), files already
- * on the VFS when their `onEnd` runs (a rifty writer plugin registered FIRST
- * writes + strips `outputFiles` from the shared result object), and no
- * `outputFiles` in the resolved result. Without this the rewrite was
- * plugin-observable (provenance-lie at the plugin boundary, ADR-0192).
- * Pluginless builds skip the machinery — the post-build pass is unobservable.
- * Probed on real esbuild 0.28.0 (2026-07-10): onEnd hooks run in registration
- * order, initialOptions IS the live options object, result mutations (incl.
- * delete) propagate to later hooks and the resolved value.
+ * plugins must see the NATIVE surface — `initialOptions.write` as the caller
+ * passed it (reads masked, mutations flow through AND are honored: the writer
+ * plugin re-reads the requested write LIVE in `onEnd`), `PluginBuild.esbuild`
+ * as the module-shaped bridge view (never the raw wasm lib), files already on
+ * the VFS when their `onEnd` runs (a rifty writer plugin registered FIRST
+ * writes + marks `outputFiles: undefined` on the shared result object, the
+ * native shape). Without this the rewrite was plugin-observable
+ * (provenance-lie at the plugin boundary, ADR-0192). Pluginless builds skip
+ * the machinery — the post-build pass is unobservable. Probed on real esbuild
+ * 0.28.0 (2026-07-10): onEnd hooks run in registration order, initialOptions
+ * IS the live options object, setup() write flips are honored in BOTH
+ * directions, result mutations propagate to later hooks and the resolved
+ * value.
  */
-function normalizedWriteBuildOptions(opts: BuildOptions, mirror: () => FsSync): BuildOptions {
+function normalizedWriteBuildOptions(
+  opts: BuildOptions,
+  mirror: () => FsSync,
+  pluginEsbuild: PluginEsbuildView,
+): NormalizedWriteBuild {
   const plugins = opts.plugins ?? [];
   const requestedWrite = { present: 'write' in opts, value: opts.write };
+  const effectiveWrite = (): boolean => requestedWrite.value !== false;
   const normalized: BuildOptions = { ...opts, write: false };
-  if (plugins.length === 0) return normalized;
+  if (plugins.length === 0) return { options: normalized, effectiveWrite };
   const optionsMask = new Proxy(normalized as Record<string | symbol, unknown>, {
     // 'plugins' reads back the USER's array — natively a plugin never sees the
     // injected writer or the masked wrappers.
@@ -707,12 +799,16 @@ function normalizedWriteBuildOptions(opts: BuildOptions, mirror: () => FsSync): 
     name: 'rifty-write-normalizer',
     setup(build) {
       // Registered FIRST → this onEnd runs before every user onEnd: outputs
-      // are on the VFS and outputFiles gone by the time user hooks observe.
+      // are on the VFS and outputFiles marked written (own enumerable
+      // `undefined`, native shape) by the time user hooks observe.
       build.onEnd((result) => {
+        // requestedWrite is read LIVE: real esbuild honors a plugin setup()
+        // flip of initialOptions.write in BOTH directions (probed 0.28.0 —
+        // true→false keeps the outputFiles array + touches no disk;
+        // false→true writes disk + marks outputFiles undefined).
+        if (!effectiveWrite()) return;
         writeOutputFiles(mirror(), result.outputFiles);
-        // Key must be GONE ('outputFiles' in result === false, native shape) —
-        // an `undefined` assignment would leave it visible.
-        Reflect.deleteProperty(result, 'outputFiles');
+        markOutputFilesWritten(result);
       });
     },
   };
@@ -723,7 +819,11 @@ function normalizedWriteBuildOptions(opts: BuildOptions, mirror: () => FsSync): 
         p.setup(
           new Proxy(build, {
             get: (t, prop, r) =>
-              prop === 'initialOptions' ? optionsMask : Reflect.get(t, prop, r),
+              prop === 'initialOptions'
+                ? optionsMask
+                : prop === 'esbuild'
+                  ? pluginEsbuild
+                  : Reflect.get(t, prop, r),
           }),
         ),
     }),
@@ -731,7 +831,7 @@ function normalizedWriteBuildOptions(opts: BuildOptions, mirror: () => FsSync): 
   // Mutate IN PLACE: plugin setup mutations of initialOptions (via the mask)
   // must land on the object the service receives, not a stale copy.
   normalized.plugins = [writer, ...masked];
-  return normalized;
+  return { options: normalized, effectiveWrite };
 }
 
 export function createEsbuildHost(deps: {
@@ -758,7 +858,7 @@ export function createEsbuildHost(deps: {
     return initPromise;
   }
 
-  return {
+  const host: RiftyEsbuildHost = {
     version: lib.version,
     initialize: () => ensureInitialized(),
     async transform(input, options) {
@@ -768,27 +868,37 @@ export function createEsbuildHost(deps: {
     async build(options) {
       await ensureInitialized();
       const opts = withGuestWorkingDir(options);
-      if (opts.write === false) return lib.build(opts);
       const hasPlugins = (opts.plugins?.length ?? 0) > 0;
-      const result = await lib.build(normalizedWriteBuildOptions(opts, mirror));
-      if (hasPlugins) return result; // the writer plugin already wrote + stripped
+      // ALL plugin builds run the normalized path — even caller write:false:
+      // the plugin mask (initialOptions/esbuild) must cover them too, and the
+      // writer plugin's LIVE read decides the effective write (a setup() flip
+      // in either direction is honored, real-esbuild parity).
+      if (!hasPlugins && opts.write === false) return lib.build(opts);
+      const norm = normalizedWriteBuildOptions(opts, mirror, pluginEsbuild);
+      const result = await lib.build(norm.options);
+      if (hasPlugins) return result; // the writer plugin already wrote + marked
       writeOutputFiles(mirror(), result.outputFiles);
-      return withoutOutputFiles(result);
+      return markOutputFilesWritten(result);
     },
     async context(options) {
       await ensureInitialized();
       const opts = withGuestWorkingDir(options);
-      if (opts.write === false) return lib.context(opts);
       const hasPlugins = (opts.plugins?.length ?? 0) > 0;
-      const ctx = await lib.context(normalizedWriteBuildOptions(opts, mirror));
+      if (!hasPlugins && opts.write === false) return lib.context(opts);
+      const norm = normalizedWriteBuildOptions(opts, mirror, pluginEsbuild);
+      const ctx = await lib.context(norm.options);
       return {
         rebuild: async () => {
           const result = await ctx.rebuild();
           if (hasPlugins) return result; // per-rebuild writer plugin handled it
           writeOutputFiles(mirror(), result.outputFiles);
-          return withoutOutputFiles(result);
+          return markOutputFilesWritten(result);
         },
-        watch: async (_options) => {
+        watch: async (watchOptions) => {
+          // Effective write read LIVE (plugin setup() may have flipped it):
+          // write:false watching loses nothing — the service writes nothing
+          // and the writer plugin skips — so it delegates.
+          if (!norm.effectiveWrite()) return ctx.watch(watchOptions);
           // TODO(backlog: playground/esbuild-context-watch-write-normalization)
           throw new NotImplementedError(
             'esbuild.context.watch.write',
@@ -815,6 +925,8 @@ export function createEsbuildHost(deps: {
       initPromise = null; // next API call re-initializes (Node service-restart parity)
     },
   };
+  const pluginEsbuild = createPluginEsbuildView(host);
+  return host;
 }
 
 declare global {

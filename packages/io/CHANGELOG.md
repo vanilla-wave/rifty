@@ -4,6 +4,34 @@
 
 ### Fixed
 
+- **Stream hooks dispatch via Node's OWN mechanism: ctors assign option hooks
+  onto the INSTANCE** (`this._write = opts.write`, same for
+  writev/final/read/transform/flush), all call sites do a late prototype-chain
+  lookup (`this._write`/`this._writev`/`this._final`/`this._transform`/
+  `this._flush`/`this._read`). Kills the `resolve*Override` twin helpers and
+  four probed divergences (Node v24.16.0; parity rows 11–17 in
+  `stream/bare-stream-contract`): (1) precedence was BACKWARDS on
+  Duplex/Transform — a subclass prototype method beat the ctor option (Node:
+  instance shadows prototype); a `write` option on a Transform was silently
+  DROPPED (factory shadowed it), a `final` option too. (2) `Duplex` writev/
+  write/final option hooks were called with the EMBEDDED writable side as
+  `this` — now the Duplex. (3) bare `Duplex.end('x')`/`Transform.end('x')`
+  buffered then crashed in a microtask — now throw `ERR_METHOD_NOT_IMPLEMENTED`
+  SYNCHRONOUSLY out of `end()` (destroyed/ended state still wins: callback
+  error, no throw). (4) user `final` on a Transform used to SKIP flush + EOF
+  (consumer hung on 'end') — the finalizer now runs user `_final` → `_flush` →
+  `push(null)` with Node's observable order
+  (`data → final → flush → flush-data → end → finish`). `PassThrough` identity
+  moved to the prototype (a `transform` option shadows it; a subclass
+  `_transform` overrides it). A primitive thrown from `_read` reaches 'error'
+  RAW (was wrapped into an Error). `Duplex.prototype._write` now exists (the
+  loud writev-delegate-or-throw base, like Node).
+- `_read`/`read`-option return type reverted to plain `void` (r2's
+  `void | PromiseLike<unknown>` union REJECTED value-returning sync bodies like
+  `read() { return this.push(null); }` — tsc-probed; plain `void` accepts both
+  sync and `async` implementations via TS's void-return exception). The r2
+  lint-unbreak note below reasoned about `undefined`, not `void`, and is
+  superseded.
 - **Bare streams are LOUD; subclass prototype methods dispatch — real Node
   semantics** (parity case `stream/bare-stream-contract`, probed on Node v24).
   A stream with no implementation used to be a silent stub: bare `Readable`
@@ -28,10 +56,10 @@
   early `push()`, and which converted a rejection into `destroy(err)` (Node:
   unhandled rejection). A SYNC throw inside `_read` now destroys the stream
   with the error instead of propagating to the `read()` caller (Node parity).
-- Lint unbreak: the `_read`/`read`-option `void | PromiseLike` return type
-  carries a `noConfusingVoidType` biome-ignore + why — the union types what we
-  ACCEPT (sync void / async promise, ignored like Node), and `undefined` would
-  reject plain `read(){…}` (`() => void`) implementations.
+- Lint unbreak (SUPERSEDED in r4, see above): the `_read`/`read`-option union
+  return type + `noConfusingVoidType` biome-ignore are gone — the union's
+  justification compared against `undefined`, but plain `void` already accepts
+  every shape the union tried to admit while rejecting none it should.
 - **`Readable` now drives subclass `_read(size)` implementations when no
   `read` constructor option is supplied.** This restores Node's stream subclass
   extension point (`class X extends Readable { _read() { ... } }`), which real

@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **esbuild shim is ONE module instance for `import` AND `require`** (r4):
+  the body lives once in `lib/main.cjs`; `lib/main.js` is a thin ESM
+  re-export — real esbuild is a single CJS singleton
+  (`import esbuild from 'esbuild'` default `===` `require('esbuild')`), so the
+  `initialize`/`stop` gates are shared across entry styles (two body copies
+  gave `import` and `require` separate `initializeWasCalled` gates; second
+  `initialize` across paths must throw like real). Spawn-harness oracle runs
+  the generated shim under real `node` against real esbuild.
+- **`stop()` kills pre-stop contexts like real esbuild** (r4, probe-corrected):
+  context wrappers track the stop generation; after `stop()`, `rebuild`/
+  `watch`/`serve` on pre-stop contexts reject with the real dead-channel
+  messages (`The service was stopped: …`, then `The service is no longer
+  running: …`, channel shared across sibling contexts, rebuild memoizes its
+  rejection); `cancel`/`dispose` resolve like real; `build`/`transform` and NEW
+  contexts keep working (real respawns). The shared HOST service is still never
+  stopped (r3 constraint stands — vite co-owns it); underlying host contexts
+  are best-effort disposed.
 - **esbuild shim lifecycle = real Node esbuild** (live oracle test against real
   `esbuild@0.28.0`): `initialize` validates options like `validateInitializeOptions`
   (type checks, unknown-key reject, TRUTHY per-option browser-only throws with
@@ -11,7 +28,8 @@
   `stop()` resets the initialize gate (`initialize(); stop(); initialize()` is
   legal) and never stops the shared host service — in real Node each process
   owns its service child, so a guest `stop()` must not kill vite's transformer;
-  observable guest behavior is identical (post-stop API calls keep working).
+  post-stop `build`/`transform` keep working (r4: pre-stop CONTEXTS now reject
+  like real — see the r4 entry above).
 - Failed esbuild host initialization no longer consumes the shim's one-shot
   `initialize()` latch; a later retry can start the real host, while concurrent
   or post-success second calls still throw like Node esbuild.

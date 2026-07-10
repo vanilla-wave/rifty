@@ -425,7 +425,9 @@ describe('install — package.json defaults', () => {
     // ADR-0188: the installer now materializes the `esbuild` import name from
     // the shadow-registry alias shim (was a playground boot-overlay concern).
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
-    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.js')).toContain(
+    // PR#125 F1: the delegating body lives ONLY in lib/main.cjs (main.js is
+    // a thin re-export sharing the one module instance, like real esbuild).
+    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
       'globalThis.__riftyEsbuild',
     );
   });

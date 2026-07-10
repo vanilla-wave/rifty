@@ -103,18 +103,6 @@ export interface WritableState {
 
 export class Writable extends EventEmitter {
   readonly _writableState: WritableState;
-  private writeImpl?: (
-    this: Writable,
-    chunk: unknown,
-    encoding: string,
-    cb: (err?: Error | null) => void,
-  ) => void;
-  private writevImpl?: (
-    this: Writable,
-    chunks: WriteChunk[],
-    cb: (err?: Error | null) => void,
-  ) => void;
-  private finalImpl?: (this: Writable, cb: (err?: Error | null) => void) => void;
 
   constructor(opts: WritableOptions = {}) {
     super();
@@ -134,9 +122,12 @@ export class Writable extends EventEmitter {
       drainScheduled: false,
       writevBatch: false,
     };
-    this.writeImpl = opts.write;
-    this.writevImpl = opts.writev;
-    this.finalImpl = opts.final;
+    // Node's own mechanism: option hooks are assigned onto the INSTANCE, so an
+    // own `_write` shadows a subclass PROTOTYPE `_write` (option wins) and all
+    // call sites dispatch `this._write`/`this._writev`/`this._final` late.
+    if (typeof opts.write === 'function') this._write = opts.write;
+    if (typeof opts.writev === 'function') this._writev = opts.writev;
+    if (typeof opts.final === 'function') this._final = opts.final;
   }
 
   /** Node's base `_write`: delegate a single chunk to `_writev` when only the
@@ -363,8 +354,7 @@ export class Writable extends EventEmitter {
         if (inSyncWrite) mayContinueSync = true;
         else this.scheduleDrain();
       };
-      const writeImpl = this.writeImpl ?? this._write;
-      writeImpl.call(this, next.chunk, next.encoding, done);
+      this._write(next.chunk, next.encoding, done);
       inSyncWrite = false;
       // Continue only on a clean synchronous completion; stop on async-pending
       // (`done` deferred → re-arms via scheduleDrain), error, or destroy.
@@ -373,26 +363,25 @@ export class Writable extends EventEmitter {
   }
 
   /**
-   * The batched-write implementation, if one exists: the `{ writev }` ctor
-   * option, else a subclass-defined `_writev` method (the base class has none —
-   * so `this._writev` is truthy only when a subclass overrode it, exactly like
-   * Node gating `clearBuffer` on `stream._writev`).
+   * The batched-write implementation, if one exists: an instance `_writev` (the
+   * `{ writev }` ctor option) or a subclass prototype `_writev` (the base class
+   * has none — so `this._writev` is truthy only when assigned/overridden,
+   * exactly like Node gating `clearBuffer` on `stream._writev`).
    */
   private resolveWritev():
     | ((this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void)
     | undefined {
-    if (this.writevImpl) return this.writevImpl;
     return typeof this._writev === 'function' ? this._writev : undefined;
   }
 
   /**
-   * Whether a REAL `_write` exists — the `{ write }` ctor option or a subclass
-   * `_write` override (NOT the base no-op). When false and a `_writev` exists,
-   * `_writev` is the write impl and a single buffered chunk routes through it
-   * (matches Node, which uses `_writev` whenever `_write` is not provided).
+   * Whether a REAL `_write` exists — an instance `_write` (the `{ write }` ctor
+   * option) or a subclass override (NOT the base). When false and a `_writev`
+   * exists, `_writev` is the write impl and a single buffered chunk routes
+   * through it (matches Node, which uses `_writev` whenever `_write` is not provided).
    */
   private hasRealWrite(): boolean {
-    return this.writeImpl !== undefined || this._write !== Writable.prototype._write;
+    return this._write !== Writable.prototype._write;
   }
 
   /**
@@ -478,8 +467,7 @@ export class Writable extends EventEmitter {
         this.emit('close');
       }
     };
-    const finalImpl = this.finalImpl ?? this._final;
-    finalImpl.call(this, finalize);
+    this._final(finalize);
   }
 
   destroy(err?: Error): this {

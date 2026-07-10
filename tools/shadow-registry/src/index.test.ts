@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import * as realEsbuild from 'esbuild';
 import { describe, expect, it } from 'vitest';
 import { bakedOverrides, internalsShims } from './index.ts';
@@ -55,7 +60,10 @@ describe('shadow-registry', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     expect(shim?.into).toBe('esbuild');
     expect(shim?.files['package.json']).toContain('"esbuild"');
-    const main = shim?.files['lib/main.js'] ?? '';
+    // Contract renegotiated (PR#125 F1): the delegating body lives ONLY in
+    // lib/main.cjs now — lib/main.js is a thin re-export wrapper, so the
+    // behavior markers are asserted on the single body.
+    const main = shim?.files['lib/main.cjs'] ?? '';
     expect(main).toContain('globalThis.__riftyEsbuild');
     for (const member of ['transform', 'build', 'context', 'formatMessages', 'analyzeMetafile']) {
       expect(main).toContain(`hostEsbuild().${member}(`);
@@ -88,7 +96,8 @@ describe('shadow-registry', () => {
     // they must equal the version the override actually installs, and the
     // exact-pin range must refuse any drifted trigger at install time.
     expect(pkg.version).toBe(pinned);
-    expect(shim?.files['lib/main.js']).toContain(`const version = "${pinned}"`);
+    // PR#125 F1: the `version` claim lives in the single CJS body.
+    expect(shim?.files['lib/main.cjs']).toContain(`const version = "${pinned}"`);
     expect(shim?.range).toBe(pinned);
   });
 
@@ -110,9 +119,14 @@ describe('shadow-registry', () => {
     expect(esm).not.toContain('module.exports');
     expect(cjs).toContain('module.exports');
     expect(cjs).not.toContain('export default');
-    // Same single body in both — no per-format drift.
+    // Contract renegotiated (PR#125 F1): the old assert pinned "same body in
+    // BOTH entries" — but two body copies meant two initialize/stop gates in
+    // one realm, while real esbuild is one CJS singleton (import().default ===
+    // require('esbuild'), probe-verified). The no-drift intent is now served
+    // structurally: ONE stateful body (main.cjs), ESM entry a thin re-export.
     expect(cjs).toContain('globalThis.__riftyEsbuild');
-    expect(esm).toContain('globalThis.__riftyEsbuild');
+    expect(esm).not.toContain('globalThis.__riftyEsbuild');
+    expect(esm).toContain("from './main.cjs'");
   });
 
   it('lightningcss alias shim delegates both entrypoints to lightningcss-wasm', () => {
@@ -124,14 +138,29 @@ describe('shadow-registry', () => {
   });
 });
 
+interface ShimContext {
+  readonly rebuild: () => Promise<unknown>;
+  readonly watch: (options?: object) => Promise<unknown>;
+  readonly serve: (options?: object) => Promise<unknown>;
+  readonly cancel: () => Promise<unknown>;
+  readonly dispose: () => Promise<unknown>;
+}
+
 interface EsbuildShimApi {
   readonly version: string;
   readonly initialize: (options?: unknown) => Promise<void>;
   readonly transform: (input: string, options?: object) => Promise<{ code: string }>;
   readonly build: (opts: object) => Promise<unknown>;
-  readonly context: (opts: object) => Promise<unknown>;
+  readonly context: (opts: object) => Promise<ShimContext>;
   readonly transformSync: (input: string, options?: object) => unknown;
   readonly buildSync: (opts: object) => unknown;
+  readonly stop: () => Promise<void>;
+}
+
+/** Structural subset shared by the shim and REAL esbuild for lifecycle parity. */
+interface EsbuildLifecycleApi {
+  readonly context: (options: object) => Promise<ShimContext>;
+  readonly transform: (input: string, options?: object) => Promise<unknown>;
   readonly stop: () => Promise<void>;
 }
 
@@ -297,6 +326,60 @@ describe('esbuild shim behavior (CJS body executed)', () => {
     await expect(esbuild.stop()).resolves.toBeUndefined();
   });
 
+  it('stop() kills pre-stop contexts (dead-channel rejects, host ctx disposed best-effort) without touching the shared host service', async () => {
+    const hostCalls: string[] = [];
+    const hostCtx = {
+      rebuild: () => {
+        hostCalls.push('ctx.rebuild');
+        return Promise.resolve({});
+      },
+      dispose: () => {
+        hostCalls.push('ctx.dispose');
+        return Promise.resolve(undefined);
+      },
+    };
+    await withHost(
+      {
+        context: () => Promise.resolve(hostCtx),
+        transform: () => Promise.resolve({ code: '' }),
+        stop: () => {
+          hostCalls.push('stop');
+          return Promise.resolve(undefined);
+        },
+      },
+      async (esbuild) => {
+        const ctx = await esbuild.context({});
+        await esbuild.stop();
+        // Real esbuild channel semantics (probe-verified, 0.28.0): FIRST
+        // request on the dead channel gets the write-failure flush message,
+        // later ones the settled early-return; rebuild memoizes its rejection.
+        await expect(ctx.rebuild()).rejects.toThrow(
+          'The service was stopped: Cannot call write after a stream was destroyed',
+        );
+        await expect(ctx.rebuild()).rejects.toThrow(
+          'The service was stopped: Cannot call write after a stream was destroyed',
+        );
+        await expect(ctx.watch()).rejects.toThrow(
+          'The service is no longer running: Cannot call write after a stream was destroyed',
+        );
+        await expect(ctx.serve()).rejects.toThrow(
+          'The service is no longer running: Cannot call write after a stream was destroyed',
+        );
+        await expect(ctx.cancel()).resolves.toBeUndefined();
+        await expect(ctx.dispose()).resolves.toBeUndefined();
+        // transform keeps working after stop (real esbuild respawns the
+        // service; the shim's host service never died).
+        await esbuild.transform('let x = 1');
+        // A context created AFTER stop() is live again.
+        const fresh = await esbuild.context({});
+        await expect(fresh.rebuild()).resolves.toEqual({});
+        // Host boundary: stop() disposed the old host ctx exactly once and
+        // NEVER called host stop(); dead-ctx calls never reached the host.
+        expect(hostCalls).toEqual(['ctx.dispose', 'ctx.rebuild']);
+      },
+    );
+  });
+
   it('initialize can retry after a failed host initialization', async () => {
     let hostInits = 0;
     await withHost(
@@ -323,6 +406,106 @@ describe('esbuild shim behavior (CJS body executed)', () => {
     expect(() => esbuild.buildSync({})).toThrow(/esbuild\.buildSync/);
   });
 });
+
+// --- entry-style harness: writes a package into <tmp>/node_modules/esbuild and
+// runs a probe in a REAL `node` child — the only faithful way to execute the
+// generated ESM entry against Node's actual ESM↔CJS interop (vitest's
+// transform pipeline would substitute its own interop semantics).
+interface EntryStyleProbe {
+  readonly defaultIsCjs: boolean;
+  readonly namedInitializeIsCjs: boolean;
+  readonly secondInitAcrossPaths: { ok?: boolean; err?: string };
+}
+
+const ENTRY_STYLE_PROBE = `import { createRequire } from 'node:module';
+// Inert for the real package; the shim reads it lazily on API use only.
+globalThis.__riftyEsbuild = { initialize: () => Promise.resolve() };
+const require = createRequire(import.meta.url);
+const cjs = require('esbuild');
+const esm = await import('esbuild');
+const out = {
+  defaultIsCjs: esm.default === cjs,
+  namedInitializeIsCjs: esm.initialize === cjs.initialize,
+};
+await esm.default.initialize();
+try {
+  cjs.initialize();
+  out.secondInitAcrossPaths = { ok: true };
+} catch (err) {
+  out.secondInitAcrossPaths = { err: err.message };
+}
+await cjs.stop();
+console.log(JSON.stringify(out));
+`;
+
+function probeEntryStyles(materialize: (pkgDir: string) => void): EntryStyleProbe {
+  const dir = mkdtempSync(join(tmpdir(), 'rifty-esbuild-shim-'));
+  try {
+    materialize(join(dir, 'node_modules', 'esbuild'));
+    const probePath = join(dir, 'probe.mjs');
+    writeFileSync(probePath, ENTRY_STYLE_PROBE);
+    const stdout = execFileSync(process.execPath, [probePath], { encoding: 'utf8' });
+    return JSON.parse(stdout) as EntryStyleProbe;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function writeShimPackage(pkgDir: string): void {
+  const files = internalsShims['@esbuild/wasi-preview1']?.files ?? {};
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = join(pkgDir, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, content);
+  }
+}
+
+function linkRealPackage(pkgDir: string): void {
+  mkdirSync(dirname(pkgDir), { recursive: true });
+  const realDir = dirname(dirname(createRequire(import.meta.url).resolve('esbuild')));
+  symlinkSync(realDir, pkgDir, 'dir');
+}
+
+type Outcome = { ok: true } | { err: string };
+const outcome = async (run: () => Promise<unknown>): Promise<Outcome> => {
+  try {
+    await run();
+    return { ok: true };
+  } catch (err) {
+    return { err: err instanceof Error ? err.message : String(err) };
+  }
+};
+
+const CTX_OPTIONS = { entryPoints: [], bundle: false, write: false, logLevel: 'silent' };
+
+// One script, both sides: contexts die with stop() (two-phase dead-channel
+// rejects, channel shared by sibling contexts, cancel/dispose stay silent)
+// while transform and NEW contexts keep working (service respawn).
+async function postStopLifecycle(api: EsbuildLifecycleApi): Promise<Record<string, Outcome>> {
+  const out: Record<string, Outcome> = {};
+  // Generation 1: two contexts on one service channel; rebuild goes first.
+  const a = await api.context(CTX_OPTIONS);
+  const b = await api.context(CTX_OPTIONS);
+  await api.stop();
+  out.rebuildFirst = await outcome(() => a.rebuild());
+  out.rebuildReplay = await outcome(() => a.rebuild());
+  out.watchNext = await outcome(() => a.watch());
+  out.serveNext = await outcome(() => a.serve());
+  out.cancelOnDead = await outcome(() => a.cancel());
+  out.disposeOnDead = await outcome(() => a.dispose());
+  out.siblingCtxRebuild = await outcome(() => b.rebuild());
+  // Generation 2: cancel first — it flips the dead channel yet resolves.
+  const c = await api.context(CTX_OPTIONS);
+  await api.stop();
+  out.cancelFirst = await outcome(() => c.cancel());
+  out.rebuildAfterCancelFlip = await outcome(() => c.rebuild());
+  // Post-stop, the API itself stays alive: transform + a fresh context work.
+  out.transformAfterStop = await outcome(() => api.transform('let x = 1'));
+  const d = await api.context(CTX_OPTIONS);
+  out.newContextRebuild = await outcome(() => d.rebuild());
+  await d.dispose();
+  return out;
+}
 
 // The shim is a SECOND implementation of esbuild's Node lifecycle surface —
 // pinning shim behavior against itself froze past drift in place. This oracle
@@ -373,4 +556,52 @@ describe('esbuild shim vs REAL esbuild oracle (lifecycle parity)', () => {
       await realEsbuild.stop();
     }
   });
+
+  it('import + require serve ONE module instance — cross-entry double-initialize throws exactly like real esbuild (real Node loader)', async () => {
+    // Real esbuild IS a single CJS singleton across both entry styles: the
+    // ESM default equals require('esbuild'), so initialize() has ONE gate.
+    const real = probeEntryStyles(linkRealPackage);
+    expect(real).toEqual({
+      defaultIsCjs: true,
+      namedInitializeIsCjs: true,
+      secondInitAcrossPaths: { err: 'Cannot call "initialize" more than once' },
+    });
+    expect(probeEntryStyles(writeShimPackage)).toEqual(real);
+  }, 20000);
+
+  it('stop() kills pre-stop contexts EXACTLY like real esbuild; transform + new contexts survive — BOTH sides', async () => {
+    let real: Record<string, Outcome>;
+    try {
+      real = await postStopLifecycle(realEsbuild as unknown as EsbuildLifecycleApi);
+    } finally {
+      await realEsbuild.stop();
+    }
+    // Pin the real channel shape so a silent oracle regression is loud:
+    // first dead request = write-failure flush, later = settled early-return.
+    expect(real.rebuildFirst).toEqual({
+      err: 'The service was stopped: Cannot call write after a stream was destroyed',
+    });
+    expect(real.watchNext).toEqual({
+      err: 'The service is no longer running: Cannot call write after a stream was destroyed',
+    });
+    expect(real.cancelOnDead).toEqual({ ok: true });
+    expect(real.transformAfterStop).toEqual({ ok: true });
+
+    const makeHostCtx = (): ShimContext => ({
+      rebuild: () => Promise.resolve({}),
+      watch: () => Promise.resolve(undefined),
+      serve: () => Promise.resolve({}),
+      cancel: () => Promise.resolve(undefined),
+      dispose: () => Promise.resolve(undefined),
+    });
+    await withHost(
+      {
+        context: () => Promise.resolve(makeHostCtx()),
+        transform: () => Promise.resolve({ code: 'let x = 1;\n' }),
+      },
+      async (shim) => {
+        expect(await postStopLifecycle(shim)).toEqual(real);
+      },
+    );
+  }, 30000);
 });

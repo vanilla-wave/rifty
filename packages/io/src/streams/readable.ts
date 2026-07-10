@@ -31,16 +31,16 @@ export interface ReadableOptions {
   highWaterMark?: number;
   encoding?: string;
   objectMode?: boolean;
-  // biome-ignore lint/suspicious/noConfusingVoidType: ecosystem `_read`s are sync (void) or `async` (promise); Node ACCEPTS both and IGNORES the return value — the union types what we accept, not a protocol; `undefined` would reject plain `read(){…}` (`() => void`) implementations.
-  read?(this: Readable, size: number): void | PromiseLike<unknown>;
+  // Plain `void` (not `void | PromiseLike<…>`): TS's void-return exception
+  // already accepts sync (`read(){…}`, even returning a value like
+  // `return this.push(null)`) AND `async` implementations, while the union
+  // REJECTS value-returning sync bodies (tsc-probed). Node ignores the return.
+  read?(this: Readable, size: number): void;
 }
 
 export interface ReadableToWebOptions {
   strategy?: QueuingStrategy<unknown>;
 }
-
-// biome-ignore lint/suspicious/noConfusingVoidType: matches ReadableOptions.read — void (sync) | promise (async, accepted and ignored like Node).
-type ReadOverride = (this: Readable, size: number) => void | PromiseLike<unknown>;
 
 /**
  * Single state container shared across all `Readable` instances per Node's
@@ -356,7 +356,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   readonly _readableState: ReadableState;
-  private readImpl?: (this: Readable, size: number) => void;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
   private encodingState: EncodingState | null = null;
   /**
@@ -385,7 +384,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       disturbed: false,
       flowScheduled: false,
     };
-    this.readImpl = opts.read;
+    // Node's own mechanism: the option is assigned onto the INSTANCE — an own
+    // `_read` shadows a subclass prototype `_read`, and dispatch is always
+    // `this._read` (prototype-chain lookup, loud base at the bottom).
+    if (typeof opts.read === 'function') this._read = opts.read;
     // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
     if (opts.encoding) this.setEncoding(opts.encoding);
     this.on('newListener', (event) => {
@@ -630,23 +632,21 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   private maybeRead(hint?: number): void {
     const state = this._readableState;
-    const readImpl = this.resolveRead();
-    if (state.ended || state.reading || !readImpl || state.destroyed) return;
+    if (state.ended || state.reading || state.destroyed) return;
     const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
     state.reading = true;
     try {
-      readImpl.call(this, size);
+      // Always an implementation: the instance `_read` (ctor option), a subclass
+      // prototype `_read`, or the loud base (ERR_METHOD_NOT_IMPLEMENTED throw —
+      // the catch below turns it into destroy+'error', exactly Node's path).
+      this._read(size);
     } catch (err) {
       state.reading = false;
-      this.destroy(err instanceof Error ? err : new Error(String(err)));
+      // Node reports the RAW thrown value — a primitive reaches 'error'
+      // unwrapped (identity-probed v24.16.0); the Error-typed destroy
+      // signature is narrower than the real contract here.
+      this.destroy(err as Error);
     }
-  }
-
-  private resolveRead(): ReadOverride | undefined {
-    // Always an implementation: the ctor option, a subclass `_read` (prototype
-    // dispatch), or the loud base (Node's ERR_METHOD_NOT_IMPLEMENTED throw —
-    // maybeRead's catch turns it into destroy+'error', exactly Node's path).
-    return this.readImpl ?? this._read;
   }
 
   /**
@@ -679,13 +679,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     }
     this.finishIfDone();
-    if (
-      state.flowing &&
-      this.resolveRead() &&
-      !state.ended &&
-      state.length < state.highWaterMark &&
-      !state.reading
-    ) {
+    if (state.flowing && !state.ended && state.length < state.highWaterMark && !state.reading) {
       this.maybeRead();
       // If `_read` enqueued synchronously, drain again on the next tick.
       if (state.buffer.length > 0 && state.flowing) this.scheduleFlow();
@@ -1018,9 +1012,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     this.on('data', () => {
       if (this._readableState.length < this._readableState.highWaterMark) resumeLegacy();
     });
-    // Install a `_read` so a paused-mode consumer's `read()` resumes the legacy
-    // source (Node's wrap installs a `_read` that calls `stream.resume()`).
-    this.readImpl = (): void => {
+    // Install an instance `_read` so a paused-mode consumer's `read()` resumes
+    // the legacy source (Node's wrap installs a `_read` that calls `stream.resume()`).
+    this._read = (): void => {
       resumeLegacy();
     };
     stream.on('data', onData);

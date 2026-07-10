@@ -7,9 +7,13 @@ import { expect, test } from '@playwright/test';
  * native-parity build behaviors probed on real esbuild 0.28.0:
  *  - transform executes real TS lowering;
  *  - a RELATIVE outdir resolves against the guest cwd (absWorkingDir default),
- *    and write-normalized output lands in the VFS with outputFiles stripped;
+ *    and write-normalized output lands in the VFS with `outputFiles` kept as
+ *    an OWN ENUMERABLE `undefined` key (native shape — never deleted);
  *  - a build with NO outfile/outdir writes NOTHING (the service's literal
- *    `<stdout>` entry is dropped, matching native "no files, no outputFiles").
+ *    `<stdout>` entry is dropped, matching native "no files written");
+ *  - plugin surface stays native: caller write shape in initialOptions, a
+ *    setup() write flip is honored, pluginBuild.esbuild is the masked
+ *    module-shaped bridge view (guest-shim *Sync throwers), never the raw lib.
  */
 test.describe('esbuild host over the real wasm service', () => {
   test('transform + write-normalized build + no-outfile shape', async ({ page }) => {
@@ -27,15 +31,26 @@ test.describe('esbuild host over the real wasm service', () => {
       version: '0.28.0',
       transformed: 'let x = 1;',
       relativeOutdirWrote: true,
-      buildHasOutputFiles: false,
+      // RENEGOTIATED (PR#125 r4): these fields asserted `'outputFiles' in
+      // result === false`; real esbuild 0.28.0 (probed 2026-07-10) KEEPS the
+      // key own + enumerable with value undefined on write-effective results.
+      buildOutputFiles: 'own-enumerable-undefined',
       noOutfileWroteNothing: true,
-      noOutfileHasOutputFiles: false,
-      // Plugin boundary stays native: caller's write shape, files on the VFS
-      // before user onEnd, no outputFiles anywhere plugin-visible.
+      noOutfileOutputFiles: 'own-enumerable-undefined',
       pluginSawWrite: true,
       pluginOnEndFileOnDisk: true,
-      pluginOnEndHasOutputFiles: false,
-      pluginBuildHasOutputFiles: false,
+      pluginOnEndOutputFiles: 'own-enumerable-undefined',
+      pluginBuildOutputFiles: 'own-enumerable-undefined',
+      // F2: plugin setup() write:true→false flip honored by the bridge
+      // (real-esbuild oracle: outputFiles array in memory, disk untouched).
+      writeFlipOutputFiles: 'array(1)',
+      writeFlipDiskUntouched: true,
+      // F3: pluginBuild.esbuild = masked module view (real 0.28.0 key set),
+      // guest-shim NotImplementedError for the *Sync family.
+      pluginEsbuildKeys:
+        'analyzeMetafile,analyzeMetafileSync,build,buildSync,context,default,formatMessages,formatMessagesSync,initialize,stop,transform,transformSync,version',
+      pluginEsbuildDefaultIsSelf: true,
+      pluginEsbuildBuildSyncError: 'NotImplementedError:esbuild.buildSync',
     });
   });
 });

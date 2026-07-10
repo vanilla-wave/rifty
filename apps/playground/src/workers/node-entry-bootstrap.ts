@@ -93,7 +93,7 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
 // worker_threads gates real `kernel.spawnWorker` children on
 // `getKernelWorkerUrl()/getNodeEntryWorkerUrl()`, and with them unset a
 // foreground `.bin/vite@8` silently degraded to the same-realm fallback
-// (backlog playground/vite8-cli-nested-worker-boot).
+// (boot-or-loud proof: tests/e2e/manual-vite8-install.spec.ts, ran ready).
 if (typeof proc.env.RIFTY_KERNEL_WORKER_URL === 'string' && proc.env.RIFTY_KERNEL_WORKER_URL) {
   setKernelWorkerUrl(proc.env.RIFTY_KERNEL_WORKER_URL);
 }
@@ -115,9 +115,12 @@ installEsbuildBridge();
 // prepareViteCli is mode-independent (keepalive pin + esbuild bridge, both
 // idempotent, harmless for --help/--version too) — the recognizer is the bin
 // name alone. The retired CAC grammar classified dev/build/preview but its
-// result was discarded (never null), so it gated nothing.
+// result was discarded (never null), so it gated nothing. The prep takes the
+// EXECUTED shim path (entryPath = argv[1]), never cwd: resolveBin walks
+// ancestor node_modules, so under hoisting a cwd-anchored prep silently
+// skipped the vite actually being run (PR#125, false-fallback).
 if (proc.env.RIFTY_BIN === '1' && binNameOf(entryPath) === 'vite') {
-  await prepareViteCli(proc.cwd());
+  await prepareViteCli(entryPath);
 }
 
 const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;

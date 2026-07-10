@@ -166,12 +166,13 @@ export async function bootDevServer(opts: {
   // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
   function seedTemplateFiles(opts: { nodeModulesOnly: boolean }): void {
-    // Config-slot gate (claimTemplateViteConfigSeed): marker-provenance, not
-    // root freshness — a granted claim already recorded the marker, so the
-    // loop below MUST write the slot file (it is absent by the claim's rule).
-    const seedViteConfig =
-      !opts.nodeModulesOnly &&
+    // Config-slot transaction (claimTemplateViteConfigSeed): marker-provenance,
+    // not root freshness — the guard writes the slot file + marker ITSELF
+    // (config first — a caller crash between marker and config read forever as
+    // "user deleted"), so the loop below always skips the slot.
+    if (!opts.nodeModulesOnly) {
       claimTemplateViteConfigSeed(root, seedFs, { id: spec.id, seedFiles: cfg.seedFiles });
+    }
     seedFs.mkdirSync(root, { recursive: true });
     if (!opts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
       seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
@@ -180,7 +181,7 @@ export async function bootDevServer(opts: {
       const np = normalizePath(seedPath);
       if (np === `${root}/package.json`) continue;
       if (opts.nodeModulesOnly && !np.startsWith(`${root}/node_modules/`)) continue;
-      if (isViteConfigSlotPath(np, root) && !seedViteConfig) continue;
+      if (isViteConfigSlotPath(np, root)) continue;
       seedFs.mkdirSync(dirname(np), { recursive: true });
       if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
     }

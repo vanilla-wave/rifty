@@ -78,8 +78,8 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
     count: 7,
-    digest: '55fcca803948',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, bin-name-gated prepareViteCli(cwd) call-site (CAC grammar retired — result was discarded), retired file-change/env bridge absence, worker-URL consumption + fs relay + unconditional esbuild bridge (PR-125 review: the forward alone was inert; behavioral proof = vite8-cli-nested-worker-boot e2e, backlog REMAINING)',
+    digest: '77f0cddcd94e',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, bin-name-gated prepareViteCli(entryPath) call-site (r4: patch target derived from the executed bin, not cwd — hoisted vite ran unpatched), retired file-change/env bridge absence, worker-URL consumption + fs relay + unconditional esbuild bridge (PR-125 review: the forward alone was inert; behavioral proof = manual-vite8-install boot-or-loud e2e, ran ready r4 — item closed)',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',

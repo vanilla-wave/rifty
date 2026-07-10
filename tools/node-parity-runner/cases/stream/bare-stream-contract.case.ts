@@ -99,6 +99,97 @@ const c: ParityCase = {
       pt.end();
       await settle();
       console.log('passthrough: ' + ptSeen.join('|'));
+
+      // 11. option-vs-prototype precedence: ctor assigns option hooks onto the
+      // INSTANCE, so an option shadows a subclass PROTOTYPE method.
+      class PW extends Writable { _write(c, e, cb) { console.log('prec-writable: proto'); cb(); } }
+      new PW({ write(c, e, cb) { console.log('prec-writable: option'); cb(); } }).write('x');
+      class PD extends Duplex { _read() {} _write(c, e, cb) { console.log('prec-duplex-write: proto'); cb(); } _final(cb) { console.log('prec-duplex-final: proto'); cb(); } }
+      const pd = new PD({ write(c, e, cb) { console.log('prec-duplex-write: option'); cb(); }, final(cb) { console.log('prec-duplex-final: option'); cb(); } });
+      pd.end('x');
+      class PTR extends Transform { _transform(c, e, cb) { console.log('prec-transform: proto'); cb(null, c); } }
+      const ptr = new PTR({ transform(c, e, cb) { console.log('prec-transform: option'); cb(null, c); } });
+      ptr.on('data', () => {});
+      ptr.write('x');
+      await settle();
+
+      // 12. a write OPTION on a Transform bypasses the transform machinery
+      // (instance _write shadows Transform.prototype._write).
+      const tw = new Transform({ transform(c, e, cb) { console.log('t-write-opt: transform'); cb(null, c); }, write(c, e, cb) { console.log('t-write-opt: write-option'); cb(); } });
+      tw.on('data', () => {});
+      tw.write('x');
+      await settle();
+
+      // 13. writev option on a Duplex is dispatched with the DUPLEX as this.
+      let wvThis = 'unset';
+      const dwv = new Duplex({ read() {}, writev(chunks, cb) { wvThis = String(this === dwv); cb(); } });
+      dwv.write('a');
+      dwv.write('b');
+      await settle();
+      console.log('writev-this-duplex: ' + wvThis);
+
+      // 14. end(chunk) on a bare stream throws SYNC out of end(); a DESTROYED
+      // bare stream instead reports via the write callback (state wins).
+      const endRows = [];
+      try { const d = new Duplex(); d.on('error', () => {}); d.end('x'); endRows.push('duplex:no-throw'); } catch (e) { endRows.push('duplex:' + e.code); }
+      try { const t = new Transform(); t.on('error', () => {}); t.end('x'); endRows.push('transform:no-throw'); } catch (e) { endRows.push('transform:' + e.code + ':' + e.message); }
+      try { const w = new Writable(); w.on('error', () => {}); w.end('x'); endRows.push('writable:no-throw'); } catch (e) { endRows.push('writable:' + e.code); }
+      try {
+        const d = new Duplex(); d.on('error', () => {}); d.destroy();
+        d.end('x');
+        endRows.push('destroyed:no-throw');
+      } catch (e) { endRows.push('destroyed:' + e.code); }
+      console.log('bare-end-chunk: ' + endRows.join(' '));
+
+      // 15. Transform final/flush order: user final (option) -> flush ->
+      // flush-data -> end -> finish; a final error skips flush (error, no finish/end).
+      const ord = [];
+      const tf = new Transform({
+        transform(c, e, cb) { cb(null, c); },
+        flush(cb) { ord.push('flush'); this.push('FLUSH-DATA'); cb(); },
+        final(cb) { ord.push('final'); cb(); },
+      });
+      tf.on('data', (c) => ord.push('data:' + c));
+      tf.on('end', () => ord.push('END'));
+      tf.on('finish', () => ord.push('finish'));
+      tf.end('x');
+      await settle();
+      await settle();
+      console.log('transform-final-order: ' + ord.join('|'));
+      const ordErr = [];
+      const tfe = new Transform({
+        transform(c, e, cb) { cb(null, c); },
+        flush(cb) { ordErr.push('flush'); cb(); },
+        final(cb) { ordErr.push('final'); cb(new Error('final-err')); },
+      });
+      tfe.on('data', () => {});
+      tfe.on('error', (e) => ordErr.push('error:' + e.message));
+      tfe.on('end', () => ordErr.push('END'));
+      tfe.on('finish', () => ordErr.push('finish'));
+      tfe.end('x');
+      await settle();
+      await settle();
+      console.log('transform-final-error: ' + ordErr.join('|'));
+
+      // 16. a value thrown from _read reaches 'error' RAW (primitive identity).
+      const rp = new Readable({ read() { throw 'prim-str'; } });
+      rp.on('error', (e) => console.log('read-throw-primitive: ' + typeof e + ':' + String(e) + ' destroyed=' + rp.destroyed));
+      rp.read(1);
+      await settle();
+
+      // 17. PassThrough identity lives on the prototype: a transform OPTION
+      // shadows it; a subclass prototype _transform overrides it.
+      const ptOpt = new PassThrough({ transform(c, e, cb) { cb(null, 'OPT:' + c); } });
+      const ptOptSeen = [];
+      ptOpt.on('data', (c) => ptOptSeen.push(String(c)));
+      ptOpt.write('ab');
+      class PTSub extends PassThrough { _transform(c, e, cb) { cb(null, String(c).toUpperCase()); } }
+      const ptSub = new PTSub();
+      const ptSubSeen = [];
+      ptSub.on('data', (c) => ptSubSeen.push(String(c)));
+      ptSub.write('ab');
+      await settle();
+      console.log('passthrough-precedence: option=' + ptOptSeen.join('|') + ' subclass=' + ptSubSeen.join('|'));
     })();
   `,
 };

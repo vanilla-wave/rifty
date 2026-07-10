@@ -61,9 +61,12 @@ const SHIM_ESBUILD_VERSION = '0.28.0';
 // a browser realm cannot serve: the *Sync family (esbuild-wasm has no sync API)
 // and `context({ write:true }).watch()` (watched-rebuild output writes are not
 // normalized to the VFS yet — backlog playground/esbuild-context-watch-write-normalization).
-// One body, two entries: ESM footer for import, CJS footer for require (real
-// Node `require('esbuild')` works — the rifty loader loud-fails sync require
-// of ESM).
+// ONE stateful body (main.cjs) + a thin ESM re-export (main.js): real esbuild
+// is a single CJS module, so import('esbuild').default === require('esbuild')
+// and both entry styles share ONE initialize/stop state (probe-verified). Two
+// body copies would split that state per entry style. The .cjs require entry
+// also keeps sync require('esbuild') working (the rifty loader loud-fails
+// sync require of ESM).
 const SHIM_ESBUILD_BODY = `// rifty: esbuild shim — real esbuild JS API via the host esbuild-wasm bridge (shadow registry, install-time)
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
@@ -135,8 +138,88 @@ function build(options) {
   return hostEsbuild().build(options);
 }
 
+// context()/stop() lifecycle — real esbuild 0.28 lib/main.js mechanics
+// (createChannel + stopService, probe-verified): stop() destroys the channel
+// streams SILENTLY; the FIRST later request's write failure flips the channel
+// and that caller rejects 'The service was stopped: <stream error>'; every
+// later request early-returns 'The service is no longer running: <reason>'.
+// cancel()/dispose() also send (so the first of them flips the channel) but
+// always resolve; rebuild() memoizes its dead rejection (latestResultPromise).
+// One channel per service generation, shared by ALL its contexts. The shim
+// emulates the channel per stop-generation because it must NOT stop the
+// realm-shared host service (vite rides it); stop() best-effort disposes the
+// underlying host contexts so they do not leak host-side. Known bounded gap:
+// a rebuild in flight AT stop() settles with the host dispose/cancel outcome,
+// not real Node's flush-on-next-send reject.
+const STREAM_DESTROYED_REASON = ': Cannot call write after a stream was destroyed';
+let channel = { stopped: false, didClose: false, reason: '' };
+const liveHostContexts = new Set();
+
+function deadChannelSend(chan) {
+  if (!chan.didClose) {
+    chan.didClose = true;
+    chan.reason = STREAM_DESTROYED_REASON;
+    return new Error('The service was stopped' + chan.reason);
+  }
+  return new Error('The service is no longer running' + chan.reason);
+}
+
+function wrapContext(hostCtx, chan) {
+  let didDispose = false;
+  let deadRebuild = null;
+  return {
+    rebuild() {
+      if (!chan.stopped) return hostCtx.rebuild();
+      if (!deadRebuild) {
+        deadRebuild = Promise.reject(deadChannelSend(chan));
+        // Mark handled once — callers of every replay still see the rejection.
+        deadRebuild.catch(() => {});
+      }
+      return deadRebuild;
+    },
+    watch(options) {
+      if (chan.stopped) return Promise.reject(deadChannelSend(chan));
+      return hostCtx.watch(options);
+    },
+    serve(options) {
+      if (chan.stopped) return Promise.reject(deadChannelSend(chan));
+      return hostCtx.serve(options);
+    },
+    cancel() {
+      if (didDispose) return Promise.resolve();
+      if (chan.stopped) {
+        deadChannelSend(chan); // real cancel sends too (may flip the channel) yet resolves
+        return Promise.resolve();
+      }
+      return hostCtx.cancel();
+    },
+    dispose() {
+      if (didDispose) return Promise.resolve();
+      didDispose = true;
+      liveHostContexts.delete(hostCtx);
+      if (chan.stopped) {
+        deadChannelSend(chan); // real dispose sends too — resolves regardless
+        return Promise.resolve();
+      }
+      return hostCtx.dispose();
+    },
+  };
+}
+
 function context(options) {
-  return hostEsbuild().context(options);
+  const chan = channel;
+  return Promise.resolve(hostEsbuild().context(options)).then((hostCtx) => {
+    if (chan.stopped) {
+      // stop() raced the in-flight creation: real esbuild rejects the create
+      // request at channel flush; free the host ctx and reject the same way.
+      Promise.resolve()
+        .then(() => hostCtx.dispose())
+        .catch(() => {});
+      throw deadChannelSend(chan);
+    }
+    liveHostContexts.add(hostCtx);
+    return wrapContext(hostCtx, chan);
+  });
 }
 
 function formatMessages(messages, options) {
@@ -153,9 +236,20 @@ function stop() {
   // MUST NOT stop the host: the esbuild-wasm service is shared realm-wide
   // (vite's own transforms ride it), while in real Node each process owns its
   // own child service — one consumer's stop() never kills another's. Reset the
-  // local gate only; observable guest behavior matches real Node.
+  // local gate, kill this generation's contexts (their channel died with the
+  // virtual service), keep transform/build/new contexts working.
   initializeWasCalled = false;
   initializePromise = null;
+  channel.stopped = true;
+  channel = { stopped: false, didClose: false, reason: '' };
+  for (const hostCtx of liveHostContexts) {
+    // Best-effort: free host-side resources (in real Node the killed service
+    // reaps them). A host dispose failure must never break stop().
+    Promise.resolve()
+      .then(() => hostCtx.dispose())
+      .catch(() => {});
+  }
+  liveHostContexts.clear();
   return Promise.resolve();
 }
 
@@ -191,8 +285,14 @@ const api = {
 };
 `;
 
-const SHIM_ESBUILD_ESM = `${SHIM_ESBUILD_BODY}
-export {
+// Thin ESM wrapper over the single CJS body. `import api from './main.cjs'`
+// yields module.exports in real Node AND the rifty loader
+// (wrapCjsAsEsmNamespace); the explicit destructure provides named imports
+// without relying on cjs-module-lexer detection.
+const SHIM_ESBUILD_ESM = `// rifty: esbuild shim ESM entry — re-exports the single CJS body (one module instance, one initialize/stop state, like real esbuild's lone CJS main.js)
+import api from './main.cjs';
+export default api;
+export const {
   version,
   initialize,
   transform,
@@ -205,8 +305,7 @@ export {
   formatMessages,
   formatMessagesSync,
   stop,
-};
-export default api;
+} = api;
 `;
 
 const SHIM_ESBUILD_CJS = `${SHIM_ESBUILD_BODY}

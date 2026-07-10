@@ -25,8 +25,12 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     // entry. The recognizer is the bin name alone (the retired CAC grammar's
     // mode result was discarded — never null, gated nothing); prepareViteCli
     // just installs the keepalive pin + esbuild bridge.
+    // Renegotiated (PR#125, false-fallback): the pin used to assert
+    // prepareViteCli(proc.cwd()) — that WAS the bug (hoisted vite silently
+    // unpatched; behavioral heir = vite-cli-prep.test.ts hoisted-layout test).
+    // The prep must take the executed shim path (entryPath).
     expect(source).toMatch(
-      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*await prepareViteCli\(proc\.cwd\(\)\);/,
+      /proc\.env\.RIFTY_BIN === '1' && binNameOf\(entryPath\) === 'vite'[\s\S]*await prepareViteCli\(entryPath\);/,
     );
     expect(source).not.toMatch(/viteCliMode/);
   });

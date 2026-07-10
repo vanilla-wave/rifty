@@ -292,7 +292,7 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(initialize).toHaveBeenCalledTimes(2);
   });
 
-  it('build(): the browser service never writes — the bridge writes outputFiles and strips them (native write:true parity)', async () => {
+  it('build(): the browser service never writes — the bridge writes outputFiles and marks them written (native write:true parity)', async () => {
     const fs = memoryMirror();
     const build = vi.fn().mockResolvedValue({
       errors: [],
@@ -311,16 +311,20 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(dec.decode(fs.readFileBytesSync('/proj/node_modules/.vite/deps_temp/react.js'))).toBe(
       'export {};',
     );
-    expect(result).not.toHaveProperty('outputFiles');
+    // RENEGOTIATED (PR#125 r4): this asserted the key was ABSENT; real esbuild
+    // 0.28.0 (probed 2026-07-10) keeps `outputFiles` as an own enumerable
+    // `undefined` key on write:true results.
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
     expect(result.metafile).toEqual({ inputs: {}, outputs: {} });
   });
 
   it('build() with no outfile/outdir writes NOTHING — the <stdout> entry is dropped (native parity)', async () => {
     // Real esbuild (probed on 0.28.0): default-write build with no
     // outfile/outdir succeeds, writes nothing, and the JS-API result carries
-    // no outputFiles. The browser service (forced write:false) reports one
-    // outputFile with the literal path '<stdout>' — writing that to the VFS
-    // invents a file native esbuild never creates.
+    // `outputFiles` as an own enumerable `undefined` key. The browser service
+    // (forced write:false) reports one outputFile with the literal path
+    // '<stdout>' — writing that to the VFS invents a file native esbuild
+    // never creates.
     const fs = memoryMirror();
     const build = vi.fn().mockResolvedValue({
       errors: [],
@@ -331,7 +335,9 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
 
     const result = await host.build({ entryPoints: ['a'] });
-    expect(result).not.toHaveProperty('outputFiles');
+    // RENEGOTIATED (PR#125 r4): was `not.toHaveProperty` — native shape is the
+    // own-undefined key (probe 2026-07-10).
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
     expect(fs.existsSync('/<stdout>')).toBe(false);
     expect(fs.readdirSync('/')).toEqual([]); // nothing materialized at all
   });
@@ -399,7 +405,9 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(context).toHaveBeenCalledWith(expect.objectContaining({ write: false }));
     const result = await ctx.rebuild();
     expect(dec.decode(fs.readFileBytesSync('/deps/chunk.js'))).toBe('export const a = 1;');
-    expect(result).not.toHaveProperty('outputFiles');
+    // RENEGOTIATED (PR#125 r4): was `not.toHaveProperty` — native shape is the
+    // own-undefined key (real esbuild 0.28.0 probe 2026-07-10).
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
     expect(result.metafile).toEqual({ inputs: {}, outputs: { 'deps/chunk.js': {} } });
     await ctx.cancel();
     await ctx.dispose();
@@ -537,9 +545,15 @@ describe('createWasmExecFs — fault: flush honesty', () => {
 // initialOptions.write or expecting written files in onEnd saw the rewrite).
 type ProbeBuild = {
   initialOptions: Record<string, unknown>;
+  esbuild: unknown;
   onEnd: (cb: (result: Record<string, unknown>) => unknown) => void;
 };
 type ProbePlugin = { name: string; setup: (build: ProbeBuild) => unknown };
+
+// Stands for the browser lib's module exports that the REAL service puts on
+// pluginBuild.esbuild (esm/browser.js `esbuild: streamIn.esbuild`) — the raw
+// object the bridge must never leak to plugins.
+const rawBrowserLibSentinel = { rawBrowserLib: true };
 
 function pluginRunningBuild(resultOf: () => Record<string, unknown>) {
   // Executes plugins the way esbuild does: setup at build start (initialOptions
@@ -550,6 +564,7 @@ function pluginRunningBuild(resultOf: () => Record<string, unknown>) {
     for (const p of opts.plugins ?? []) {
       await p.setup({
         initialOptions: opts as unknown as Record<string, unknown>,
+        esbuild: rawBrowserLibSentinel,
         onEnd: (cb) => onEnds.push(cb),
       });
     }
@@ -558,6 +573,44 @@ function pluginRunningBuild(resultOf: () => Record<string, unknown>) {
     return result;
   });
 }
+
+function pluginRunningContext(resultOf: () => Record<string, unknown>) {
+  // Context twin of pluginRunningBuild: setup at context creation, per-rebuild
+  // onEnd against a fresh shared result.
+  const watch = vi.fn().mockResolvedValue(undefined);
+  const context = vi.fn().mockImplementation(async (opts: { plugins?: ProbePlugin[] }) => {
+    const onEnds: Array<(r: Record<string, unknown>) => unknown> = [];
+    for (const p of opts.plugins ?? []) {
+      await p.setup({
+        initialOptions: opts as unknown as Record<string, unknown>,
+        esbuild: rawBrowserLibSentinel,
+        onEnd: (cb) => onEnds.push(cb),
+      });
+    }
+    return {
+      rebuild: async () => {
+        const r = resultOf();
+        for (const cb of onEnds) await cb(r);
+        return r;
+      },
+      watch,
+      serve: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    };
+  });
+  return { context, watch };
+}
+
+/** Own-key shape of `result.outputFiles` (native write:true oracle: own enumerable undefined). */
+function outputFilesShape(r: object): { hasOwn: boolean; value: unknown; enumerable?: boolean } {
+  return {
+    hasOwn: Object.prototype.hasOwnProperty.call(r, 'outputFiles'),
+    value: (r as { outputFiles?: unknown }).outputFiles,
+    enumerable: Object.getOwnPropertyDescriptor(r, 'outputFiles')?.enumerable,
+  };
+}
+const NATIVE_WRITTEN_SHAPE = { hasOwn: true, value: undefined, enumerable: true };
 
 describe('createEsbuildHost — plugin-visible write:true surface stays native', () => {
   it('a user plugin observes the CALLER write shape in initialOptions, not the bridge rewrite', async () => {
@@ -608,7 +661,7 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
       setup(b) {
         b.onEnd((r) => {
           observed.fileOnDisk = fs.existsSync('/out/a.js');
-          observed.hasOutputFiles = 'outputFiles' in r;
+          observed.outputFiles = outputFilesShape(r);
         });
       },
     };
@@ -618,8 +671,11 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
       outdir: '/out',
       plugins: [probe as never],
     });
-    expect(observed).toEqual({ fileOnDisk: true, hasOutputFiles: false });
-    expect(result).not.toHaveProperty('outputFiles');
+    // RENEGOTIATED (PR#125 r4): asserted `'outputFiles' in r === false`; real
+    // esbuild 0.28.0 onEnd (probed 2026-07-10) sees the own enumerable
+    // `undefined` key on the shared result.
+    expect(observed).toEqual({ fileOnDisk: true, outputFiles: NATIVE_WRITTEN_SHAPE });
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
     expect(dec.decode(fs.readFileBytesSync('/out/a.js'))).toBe('x');
   });
 
@@ -638,16 +694,38 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
     expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ define: { X: '1' } }));
   });
 
-  it('build({write:false}) with plugins passes through untouched — no injected writer, raw plugin refs', async () => {
-    const build = pluginRunningBuild(() => ({ errors: [], warnings: [], outputFiles: [] }));
+  it('build({write:false}) with plugins: outputFiles stay in memory, VFS untouched, caller shape intact', async () => {
+    // RENEGOTIATED (PR#125 r4): this pinned the passthrough implementation
+    // (raw plugin refs, no injected writer). Real esbuild 0.28.0 (probed
+    // 2026-07-10) honors a setup() write flip even on write:false builds and
+    // exposes a module-shaped pluginBuild.esbuild — both impossible under
+    // passthrough, so write:false plugin builds run the masked path now. The
+    // guest-observable contract stays: no VFS writes, outputFiles in memory,
+    // plugin reads back the caller's write:false.
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
     const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
-    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
-    const probe: ProbePlugin = { name: 'p', setup: () => {} };
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const seen: unknown[] = [];
+    const probe: ProbePlugin = {
+      name: 'p',
+      setup(b) {
+        seen.push(b.initialOptions.write, 'write' in b.initialOptions);
+      },
+    };
 
-    await host.build({ entryPoints: ['a'], write: false, plugins: [probe as never] });
-    const passed = (build.mock.calls.at(-1) as [{ plugins?: unknown[] }])[0];
-    expect(passed.plugins).toHaveLength(1);
-    expect(passed.plugins?.[0]).toBe(probe);
+    const result = await host.build({
+      entryPoints: ['a'],
+      write: false,
+      plugins: [probe as never],
+    });
+    expect(seen).toEqual([false, true]);
+    expect(result.outputFiles).toHaveLength(1);
+    expect(fs.existsSync('/out/a.js')).toBe(false);
   });
 
   it('context(): user onEnd hooks see rebuilt outputs on the VFS per rebuild, native result shape', async () => {
@@ -657,6 +735,7 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
       for (const p of opts.plugins ?? []) {
         await p.setup({
           initialOptions: opts as unknown as Record<string, unknown>,
+          esbuild: rawBrowserLibSentinel,
           onEnd: (cb) => onEnds.push(cb),
         });
       }
@@ -684,7 +763,7 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
       setup(b) {
         b.onEnd((r) => {
           observed.fileOnDisk = fs.existsSync('/deps/c.js');
-          observed.hasOutputFiles = 'outputFiles' in r;
+          observed.outputFiles = outputFilesShape(r);
         });
       },
     };
@@ -695,8 +774,281 @@ describe('createEsbuildHost — plugin-visible write:true surface stays native',
       plugins: [probe as never],
     });
     const result = await ctx.rebuild();
-    expect(observed).toEqual({ fileOnDisk: true, hasOutputFiles: false });
-    expect(result).not.toHaveProperty('outputFiles');
+    // RENEGOTIATED (PR#125 r4): was `'outputFiles' in r === false` — native
+    // shape is the own-undefined key (real esbuild 0.28.0 probe 2026-07-10).
+    expect(observed).toEqual({ fileOnDisk: true, outputFiles: NATIVE_WRITTEN_SHAPE });
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
+  });
+});
+
+// F1 (provenance-lie × result shape) — oracle: real esbuild 0.28.0 probed
+// 2026-07-10: every write-effective result KEEPS `outputFiles` as an OWN
+// ENUMERABLE key with value `undefined` (descriptor {writable, enumerable,
+// configurable}); `'outputFiles' in result` is TRUE natively. Deleting or
+// spread-dropping the key was caller/plugin-observable.
+describe('createEsbuildHost — native outputFiles key shape (own enumerable undefined)', () => {
+  it('pluginless build({write:true}): own-undefined key, never deleted', async () => {
+    const fs = memoryMirror();
+    const build = vi.fn().mockResolvedValue({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    });
+    const { lib } = fakeLib({ build } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const result = await host.build({ entryPoints: ['a'], outdir: '/out' });
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
+    expect(dec.decode(fs.readFileBytesSync('/out/a.js'))).toBe('x');
+  });
+
+  it('plugin build: user onEnd and the resolved result both see the own-undefined key', async () => {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    let onEndShape: unknown;
+    const probe: ProbePlugin = {
+      name: 'probe',
+      setup(b) {
+        b.onEnd((r) => {
+          onEndShape = outputFilesShape(r);
+        });
+      },
+    };
+    const result = await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      plugins: [probe as never],
+    });
+    expect(onEndShape).toEqual(NATIVE_WRITTEN_SHAPE);
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
+  });
+
+  it('context rebuild (pluginless): own-undefined key', async () => {
+    const fs = memoryMirror();
+    const rebuild = vi.fn().mockResolvedValue({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/deps/chunk.js', 'y')],
+    });
+    const context = vi.fn().mockResolvedValue({
+      rebuild,
+      watch: vi.fn(),
+      serve: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    });
+    const { lib } = fakeLib({ context } as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const ctx = await host.context({ entryPoints: ['a'], outdir: '/deps' });
+    const result = await ctx.rebuild();
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
+  });
+});
+
+// F2 (provenance-lie × write honoring) — oracle: real esbuild 0.28.0 probed
+// 2026-07-10 honors a plugin setup() mutation of initialOptions.write in BOTH
+// directions: true→false ⇒ outputFiles array on the result + disk untouched;
+// false→true ⇒ files written + own-undefined outputFiles.
+describe('createEsbuildHost — plugin setup() write flips are honored', () => {
+  const flipTo = (value: boolean): ProbePlugin => ({
+    name: 'flip',
+    setup(b) {
+      b.initialOptions.write = value;
+    },
+  });
+
+  it('build write:true flipped to false in setup: outputFiles stay in memory, VFS untouched', async () => {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const result = await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      write: true,
+      plugins: [flipTo(false) as never],
+    });
+    expect(result.outputFiles).toHaveLength(1);
+    expect(fs.existsSync('/out/a.js')).toBe(false);
+  });
+
+  it('build write:false flipped to true in setup: VFS written, own-undefined outputFiles', async () => {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const result = await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      write: false,
+      plugins: [flipTo(true) as never],
+    });
+    expect(dec.decode(fs.readFileBytesSync('/out/a.js'))).toBe('x');
+    expect(outputFilesShape(result)).toEqual(NATIVE_WRITTEN_SHAPE);
+  });
+
+  it('context write:true flipped to false in setup: rebuild keeps outputFiles, VFS untouched', async () => {
+    const fs = memoryMirror();
+    const { context } = pluginRunningContext(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/deps/c.js', 'y')],
+    }));
+    const { lib } = fakeLib({ context } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const ctx = await host.context({
+      entryPoints: ['a'],
+      outdir: '/deps',
+      write: true,
+      plugins: [flipTo(false) as never],
+    });
+    const result = await ctx.rebuild();
+    expect(result.outputFiles).toHaveLength(1);
+    expect(fs.existsSync('/deps/c.js')).toBe(false);
+  });
+
+  it('context write:true flipped to false in setup: watch() delegates (effective write is false)', async () => {
+    const { context, watch } = pluginRunningContext(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [],
+    }));
+    const { lib } = fakeLib({ context } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+    const ctx = await host.context({
+      entryPoints: ['a'],
+      outdir: '/deps',
+      write: true,
+      plugins: [flipTo(false) as never],
+    });
+    await ctx.watch({ delay: 5 });
+    expect(watch).toHaveBeenCalledWith({ delay: 5 });
+  });
+});
+
+// F3 (provenance-lie × plugin surface) — oracle: real esbuild 0.28.0 probed
+// 2026-07-10: pluginBuild.esbuild is a MODULE-shaped surface (key set pinned
+// below; NOT identical to require('esbuild')). Leaking the raw esbuild-wasm
+// lib bypassed write normalization, replaced the guest *Sync NotImplemented
+// throws with browser-lib Errors, and let one plugin stop() the SHARED
+// realm-wide service.
+describe('createEsbuildHost — PluginBuild.esbuild masked to the bridge module view', () => {
+  // Sorted own keys of real pluginBuild.esbuild (probe 2026-07-10, esbuild 0.28.0).
+  const REAL_PLUGIN_ESBUILD_KEYS = [
+    'analyzeMetafile',
+    'analyzeMetafileSync',
+    'build',
+    'buildSync',
+    'context',
+    'default',
+    'formatMessages',
+    'formatMessagesSync',
+    'initialize',
+    'stop',
+    'transform',
+    'transformSync',
+    'version',
+  ];
+
+  async function captureView(write?: boolean) {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    let view: Record<string, unknown> | undefined;
+    const cap: ProbePlugin = {
+      name: 'cap',
+      setup(b) {
+        view = b.esbuild as Record<string, unknown>;
+      },
+    };
+    await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      ...(write === undefined ? {} : { write }),
+      plugins: [cap as never],
+    });
+    if (view === undefined) throw new Error('plugin setup never ran');
+    return { view, fs, lib };
+  }
+
+  it('is module-shaped over the host bridge, never the raw wasm lib (default-write build)', async () => {
+    const { view, lib } = await captureView();
+    expect(view).not.toBe(rawBrowserLibSentinel);
+    expect(Reflect.ownKeys(view).map(String).sort()).toEqual(REAL_PLUGIN_ESBUILD_KEYS);
+    expect(view.version).toBe(lib.version);
+    expect(view.default).toBe(view);
+  });
+
+  it('is masked on write:false plugin builds too (the leak was mode-independent)', async () => {
+    const { view } = await captureView(false);
+    expect(view).not.toBe(rawBrowserLibSentinel);
+    expect(Reflect.ownKeys(view).map(String).sort()).toEqual(REAL_PLUGIN_ESBUILD_KEYS);
+  });
+
+  it('view.build routes through the bridge write normalization (raw lib would leave the VFS empty)', async () => {
+    const { view, fs } = await captureView();
+    fs.rmSync('/out/a.js', { force: false });
+    const nested = (await (view.build as (o: object) => Promise<object>)({
+      entryPoints: ['b'],
+      outdir: '/out',
+    })) as Record<string, unknown>;
+    expect(dec.decode(fs.readFileBytesSync('/out/a.js'))).toBe('x');
+    expect(outputFilesShape(nested)).toEqual(NATIVE_WRITTEN_SHAPE);
+  });
+
+  it('*Sync entries + stop() keep guest-shim semantics (NotImplementedError; stop never kills the shared service)', async () => {
+    const { view, lib } = await captureView();
+    for (const name of [
+      'transformSync',
+      'buildSync',
+      'formatMessagesSync',
+      'analyzeMetafileSync',
+    ]) {
+      let err: unknown;
+      try {
+        (view[name] as () => unknown)();
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toMatchObject({ name: 'NotImplementedError', feature: `esbuild.${name}` });
+    }
+    await (view.stop as () => Promise<void>)();
+    // One consumer's stop() must never kill the SHARED realm service (guest
+    // shim stop() parity — see SHIM_ESBUILD_BODY in tools/shadow-registry).
+    expect(lib.stop).not.toHaveBeenCalled();
+  });
+
+  it('stays in lockstep with the guest shim export surface (executes the generated CJS shim)', async () => {
+    const { internalsShims } = await import('@riftydev/shadow-registry');
+    const cjsBody = internalsShims['@esbuild/wasi-preview1']?.files['lib/main.cjs'];
+    if (cjsBody === undefined) {
+      throw new Error('esbuild shim CJS body missing from shadow-registry internalsShims');
+    }
+    // Execute the generated shim string (template-literal shims break
+    // silently — run the real artifact). The body touches the host bridge
+    // only lazily, so bare module/exports suffice.
+    const moduleRef: { exports: Record<string, unknown> } = { exports: {} };
+    new Function('module', 'exports', cjsBody)(moduleRef, moduleRef.exports);
+    // Guest CJS exports + the ESM `default` = the module surface the view mirrors.
+    expect([...Object.keys(moduleRef.exports), 'default'].sort()).toEqual(REAL_PLUGIN_ESBUILD_KEYS);
   });
 });
 

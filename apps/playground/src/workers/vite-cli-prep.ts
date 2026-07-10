@@ -26,10 +26,17 @@ declare global {
 // never a pre-scan config guard. Origin/isolation-header shape differences are
 // signposted in the preview UI (PreviewPanel /preview/ chip + COEP/CORP tooltip), not
 // silently forced off.
-function installCliActionPatches(root: string): void {
+//
+// The patch target derives from the EXECUTED shim (`argv[1]` =
+// `<dir>/node_modules/.bin/vite` → `<dir>/node_modules/vite/dist/node/cli.js`),
+// never from cwd: resolveBin walks ANCESTOR node_modules (hoisting), so a
+// cwd-anchored lookup silently skipped the hoisted vite → CAC exited early →
+// dev server died with no signal (PR#125, false-fallback). Silent skip remains
+// ONLY when the derived cli.js is absent (a foreign bin merely named `vite`).
+function installCliActionPatches(binPath: string): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
-  const path = normalizePath(`${root}/node_modules/vite/dist/node/cli.js`);
+  const path = normalizePath(`${binPath}/../../vite/dist/node/cli.js`);
   if (!fs.existsSync(path)) return;
   const source = dec.decode(fs.readFileBytesSync(path));
   if (source.includes('__riftyTrackCliPromise')) return;
@@ -42,8 +49,9 @@ function installCliActionPatches(root: string): void {
   );
 }
 
-export async function prepareViteCli(root: string): Promise<void> {
-  installCliActionPatches(root);
+/** `binPath` = the executed `.bin/vite` shim path (`process.argv[1]`), NOT cwd. */
+export async function prepareViteCli(binPath: string): Promise<void> {
+  installCliActionPatches(binPath);
   installEsbuildBridge();
 }
 

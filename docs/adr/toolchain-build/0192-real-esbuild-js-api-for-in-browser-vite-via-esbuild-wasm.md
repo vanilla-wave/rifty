@@ -81,20 +81,28 @@ pinned by esbuild-host.test.ts + the shadow-registry exact-pin range).
 - If a future guest tool pins a different esbuild version with breaking API
   drift, the single-host-instance model needs revisiting (per-version
   instances) — record then, not now.
-- **Write normalization is plugin-invisible (corrected 2026-07-10).**
-  esbuild-wasm rejects `write: true` in browsers, so the host runs the service
-  with `write: false` and normalizes the WHOLE observable surface to native
-  `write: true`: result stripped of `outputFiles`; native no-outfile builds
+- **Write normalization is plugin-invisible (corrected 2026-07-10, shape
+  re-corrected same day).** esbuild-wasm rejects `write: true` in browsers, so
+  the host runs the service with `write: false` and normalizes the WHOLE
+  observable surface to native `write: true`: `outputFiles` marked written as
+  an OWN ENUMERABLE `undefined` key (native shape — never deleted; the first
+  correction said "stripped", refuted by re-probe); native no-outfile builds
   write nothing (the service's literal `<stdout>` entry is dropped); relative
   outdir resolves via injected `absWorkingDir` = guest cwd; and the PLUGIN
   boundary — a rifty writer plugin registered first lands outputs on the VFS
-  and strips `outputFiles` from the shared result BEFORE any user `onEnd`,
-  while a Proxy masks `initialOptions.write`/`plugins` to the caller's shape
-  (mutations flow through). Probed on real esbuild 0.28.0: onEnd order =
-  registration order, `initialOptions` is the live options object, result
-  mutations propagate. The earlier "plugin-visible flip, revisit if a plugin
-  breaks" wait-for-the-lie stance is superseded by this normalization
-  (esbuild-host.test.ts plugin suite + browser-unit real-wasm spec).
+  and marks `outputFiles` written on the shared result BEFORE any user
+  `onEnd`, while a Proxy masks `initialOptions.write`/`plugins` to the
+  caller's shape (mutations flow through AND are honored: a setup() write flip
+  in either direction is re-read LIVE by the writer) and masks
+  `PluginBuild.esbuild` to a module-shaped view over the host bridge (guest
+  shim lockstep) — the raw esbuild-wasm lib never leaks. ALL plugin builds run
+  this masked path, including caller `write:false`. Probed on real esbuild
+  0.28.0: onEnd order = registration order, `initialOptions` is the live
+  options object, write flips honored both directions, result mutations
+  propagate, `pluginBuild.esbuild` is module-shaped. The earlier
+  "plugin-visible flip, revisit if a plugin breaks" wait-for-the-lie stance is
+  superseded by this normalization (esbuild-host.test.ts plugin suites +
+  browser-unit real-wasm spec).
 - **Fault matrix (fs facade + output writes)**: `provenance-lie` × fsync →
   dirty bytes flush to the mirror, mirror failure = caller's errno (was a
   no-op success); `quota-perm-fail` × flush → loud errno, never a silent ok;

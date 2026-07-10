@@ -41,7 +41,7 @@ describe('buildChildSpawnSpec', () => {
       nodeEntryWorkerUrl: 'blob:node-entry-2',
     });
     // Without these the Rolldown WASI pthread pool falls back to same-realm and
-    // the dev server hangs past readiness (backlog vite8-cli-nested-worker-boot).
+    // the dev server hangs past readiness (proof: manual-vite8-install e2e).
     expect(spec.env.RIFTY_KERNEL_WORKER_URL).toBe('blob:kernel');
     expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBe('blob:node-entry-2');
   });

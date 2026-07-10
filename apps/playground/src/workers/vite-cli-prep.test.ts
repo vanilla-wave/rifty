@@ -13,6 +13,10 @@ import { prepareViteCli } from './vite-cli-prep.ts';
 // (template-literal trap: generated code must run, not just match).
 
 const dec = new TextDecoder();
+// prepareViteCli's contract (renegotiated, PR#125 false-fallback): the argument
+// is the EXECUTED `.bin/vite` shim path (argv[1]), no longer a project root —
+// the patch target derives from the shim's node_modules, not from cwd.
+const BIN_PATH = '/app/node_modules/.bin/vite';
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
 const WRAPPER_PATH = '/app/.rifty/vite-cli.config.mjs';
 
@@ -82,7 +86,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI hands a detached async action promise to the keepalive tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     // prepareViteCli itself wires the tracker global to the runtime keepalive.
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
 
@@ -98,7 +102,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI leaves synchronous action results untracked and survives an absent tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     runPatchedCli(fsSync);
 
     const tracked: unknown[] = [];
@@ -114,24 +118,56 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('a second prepare leaves the patched CLI byte-identical (idempotent, still executable)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     const once = readText(fsSync, CLI_PATH);
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     expect(readText(fsSync, CLI_PATH)).toBe(once);
     expect(() => runPatchedCli(fsSync)).not.toThrow();
   });
 
   it('loud-throws when the vite CLI drops the runMatchedCommand call shape', async () => {
     bootFs({ [CLI_PATH]: 'export function parse() {}' });
-    await expect(prepareViteCli('/app')).rejects.toThrow(
+    await expect(prepareViteCli(BIN_PATH)).rejects.toThrow(
       'vite CLI keepalive patch failed: runMatchedCommand call shape not found',
     );
   });
 
   it('tolerates a project without a vite CLI file — no patch write, tracker still wired', async () => {
     const fsSync = bootFs();
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     expect(fsSync.existsSync(CLI_PATH)).toBe(false);
+    expect(typeof g.__riftyTrackCliPromise).toBe('function');
+  });
+
+  // PR#125 finding (false-fallback): resolveBin walks ANCESTOR node_modules
+  // (hoisting), but a cwd-anchored patch lookup silently skipped the hoisted
+  // vite → CAC exited early → dev server died with no signal. The patch target
+  // must derive from the EXECUTED shim path (argv[1]).
+  it('hoisted layout: patches the vite the executed shim belongs to, not a cwd-anchored lookup', async () => {
+    const hoistedCli = '/repo/node_modules/vite/dist/node/cli.js';
+    const fsSync = bootFs({
+      '/repo/node_modules/.bin/vite': '#!/usr/bin/env node',
+      [hoistedCli]: CAC_CALL_SITE,
+      '/repo/app/package.json': '{}', // process cwd lives HERE — no vite below it
+    });
+    await prepareViteCli('/repo/node_modules/.bin/vite');
+    expect(readText(fsSync, hoistedCli)).toContain('__riftyTrackCliPromise');
+
+    new Function(readText(fsSync, hoistedCli))();
+    const tracked: unknown[] = [];
+    g.__riftyTrackCliPromise = (promise) => {
+      tracked.push(promise);
+    };
+    const action = Promise.resolve('served');
+    new (testCac())(() => action).parse();
+    expect(tracked).toEqual([action]);
+  });
+
+  it('foreign bin named vite (no cli.js at the derived package path) skips without throwing', async () => {
+    const foreignShim = '/tools/node_modules/.bin/vite';
+    const fsSync = bootFs({ [foreignShim]: 'console.log("not the real vite")' });
+    await expect(prepareViteCli(foreignShim)).resolves.toBeUndefined();
+    expect(fsSync.existsSync('/tools/node_modules/vite/dist/node/cli.js')).toBe(false);
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
   });
 });
@@ -144,7 +180,7 @@ describe('prepareViteCli — preview runs the real vite CLI unchanged', () => {
   // target), not a pre-flight guard here.
   it('applies only the keepalive pin — no forced preview cors/config patch', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     const patched = readText(fsSync, CLI_PATH);
     expect(patched).toContain('__riftyTrackCliPromise'); // keepalive still lands
     expect(patched).not.toContain('cors: false'); // no forced cors override
@@ -158,27 +194,27 @@ describe('prepareViteCli — preview runs the real vite CLI unchanged', () => {
     });
     // Was NotImplementedError('vite.preview.config-loading'); prep is now a no-op
     // wrt config — the real CLI owns config loading.
-    await expect(prepareViteCli('/app')).resolves.toBeUndefined();
+    await expect(prepareViteCli(BIN_PATH)).resolves.toBeUndefined();
   });
 });
 
 describe('prepareViteCli — wrapper deletion guard', () => {
   it('never writes a rifty Vite config wrapper', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
   });
 
   it('installs the lazy esbuild host bridge (ADR-0192)', async () => {
     bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     expect(g.__riftyEsbuild).toBeDefined();
   });
 
   it('writes ONLY the CLI patch — zero shim glue or wrapper files at prep time (ADR-0188)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
     const before = walkTree(fsSync, '/').sort();
-    await prepareViteCli('/app');
+    await prepareViteCli(BIN_PATH);
     const after = walkTree(fsSync, '/').sort();
     expect(after).toEqual(before);
   });

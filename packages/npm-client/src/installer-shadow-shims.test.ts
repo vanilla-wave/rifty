@@ -261,7 +261,10 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
       },
     );
 
-    const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.js');
+    // PR#125 F1: the delegating body lives ONLY in lib/main.cjs now
+    // (lib/main.js is a thin re-export — one module instance across
+    // import/require, like real esbuild's lone CJS entry).
+    const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     expect(aliasMain).toContain('globalThis.__riftyEsbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
     expect(fresh).toContain(REDIRECT_LINE);
@@ -282,7 +285,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     );
     expect(replay).toContain(REDIRECT_LINE);
     expect(replay).toContain(PATCH_LINE);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.js')).toBe(aliasMain);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
   });
 
   it('prints the redirect + patch lines for a TRANSITIVE baked override on fresh AND replay', async () => {

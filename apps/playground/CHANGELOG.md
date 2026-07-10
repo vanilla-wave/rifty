@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Fixed (PR #125 round-4 fix pass)
+
+- **esbuild bridge native result shape** (probed real esbuild 0.28.0):
+  write-effective builds keep an OWN ENUMERABLE `outputFiles: undefined` (r3
+  deleted the key — real esbuild keeps it); plugin `setup()` mutations of
+  `initialOptions.write` are HONORED both directions (writer plugin decides
+  LIVE: flip-to-false keeps the in-memory `outputFiles` array + VFS untouched,
+  flip-to-true writes + own-undefined); `PluginBuild.esbuild` is masked to a
+  module-shaped view over the host bridge (raw esbuild-wasm lib no longer
+  leaks past write normalization/lifecycle; guest-shim lockstep test executes
+  the generated shim and compares surfaces).
+- **Seeded vite-config claim is ONE transaction** (`torn-state` kill): the
+  chokepoint writes the CONFIG first, THEN the provenance marker (callers no
+  longer write the config) — a crash/quota failure between the two no longer
+  reads forever as "user deleted the config"; marker-less configs whose bytes
+  equal the template seed are healed (marker written), user bytes never.
+- **vite CLI keepalive patch targets the EXECUTED bin's package**
+  (`false-fallback` kill): patch path derived from `proc.argv[1]`
+  (`<dir>/node_modules/.bin/vite` → `…/vite/dist/node/cli.js`), not
+  `proc.cwd()` — hoisted vite (parent `node_modules`) no longer runs unpatched
+  into a silent CAC early-exit dev-server death. Silent skip only when the
+  derived `cli.js` is absent (foreign bin named `vite`).
+
 ### Fixed (PR #125 round-3 fix pass)
 
 - **esbuild fs facade: honest `fsync`.** Dirty fd bytes flush to the VFS mirror
@@ -10,8 +33,9 @@
   tests (`provenance-lie`/`quota-perm-fail`/`torn-state` rows in ADR-0192):
   esbuild-host.test.ts "fault: flush honesty".
 - **esbuild write normalization is now plugin-invisible.** A rifty writer
-  plugin (registered first) lands `write:true` outputs on the VFS and strips
-  `outputFiles` BEFORE user `onEnd` hooks; a Proxy masks
+  plugin (registered first) lands `write:true` outputs on the VFS BEFORE user
+  `onEnd` hooks (r4: `outputFiles` becomes own-enumerable `undefined`, not a
+  deleted key — see round-4 entry); a Proxy masks
   `initialOptions.write`/`plugins` to the caller's shape (mutations flow
   through). Kills the recorded ADR-0192 "plugin-visible flip" divergence;
   probed on real esbuild 0.28.0 + real-wasm browser spec.
@@ -68,8 +92,8 @@
   `null` and silently degraded a foreground `.bin/vite@8` Rolldown pthread pool
   to same-realm; and without the `installRuntimeJsFsHandlers` relay a real
   pthread's first `fs.statOrNull` had no handler. Both mirrored from
-  dev-server-child-bootstrap; the live v8 boot-or-loud e2e remains open in
-  `backlog/playground/vite8-cli-nested-worker-boot`.
+  dev-server-child-bootstrap; the live v8 boot-or-loud e2e landed in r4
+  (`tests/e2e/manual-vite8-install.spec.ts`, ran ready — item closed).
 
 - **Explorer context menu now stacks ABOVE the status bar and clamps into the
   viewport.** The `.rf-explorer__context` cursor-anchored override (fixed,
@@ -118,8 +142,8 @@
   and forces `NAPI_RS_FORCE_WASI=1`, mirroring the dev-server child. (The
   forward alone was INERT — the child never consumed the URLs; fixed in the
   review-blockers entry above, which also installs the nested-worker fs relay.)
-  Vite 7 is inert (no dev pthread pool). Full v8 boot-or-loud e2e tracked in
-  backlog `playground/vite8-cli-nested-worker-boot`.
+  Vite 7 is inert (no dev pthread pool). Full v8 boot-or-loud e2e landed in r4
+  (`tests/e2e/manual-vite8-install.spec.ts`).
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

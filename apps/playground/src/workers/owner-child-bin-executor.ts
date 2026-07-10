@@ -47,8 +47,8 @@ export function buildChildSpawnSpec(
       NAPI_RS_FORCE_WASI: req.env.NAPI_RS_FORCE_WASI ?? '1',
       // Forward the recursive worker URLs so a foreground `.bin/vite@8` child can
       // spawn Rolldown's WASI pthread pool via kernel.spawnWorker — else the pool
-      // falls back to same-realm and the dev server hangs past readiness (backlog
-      // playground/vite8-cli-nested-worker-boot). Vite 7 (esbuild, no dev pthread
+      // falls back to same-realm and the dev server hangs past readiness (boot-or-
+      // loud proof: tests/e2e/manual-vite8-install.spec.ts). Vite 7 (esbuild, no dev pthread
       // pool) never spawns them, so this is inert for the default path.
       ...(workerUrls.kernelWorkerUrl
         ? { RIFTY_KERNEL_WORKER_URL: workerUrls.kernelWorkerUrl }

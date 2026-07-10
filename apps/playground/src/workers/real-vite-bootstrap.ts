@@ -169,10 +169,13 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
 
 function seedProject(cfg: BootstrapConfig, templateId: string): void {
   const fs = syncMirror();
-  // Config-slot gate: never shadow a user's vite.config.* and never resurrect
-  // a deleted seeded config — marker-provenance, not root freshness
+  // Config-slot transaction: never shadow a user's vite.config.* and never
+  // resurrect a deleted seeded config — marker-provenance, not root freshness
   // (claimTemplateViteConfigSeed; a legacy pre-marker root seeds + migrates).
-  const seedViteConfig = claimTemplateViteConfigSeed(cfg.root, fs, {
+  // The guard writes the slot file + marker ITSELF (config first — a caller
+  // crash between marker and config read forever as "user deleted"), so the
+  // loop below always skips the slot.
+  claimTemplateViteConfigSeed(cfg.root, fs, {
     id: templateId,
     seedFiles: cfg.seedFiles,
   });
@@ -181,7 +184,7 @@ function seedProject(cfg: BootstrapConfig, templateId: string): void {
   // file (returning session) is left alone.
   for (const [path, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(path);
-    if (isViteConfigSlotPath(np, cfg.root) && !seedViteConfig) continue;
+    if (isViteConfigSlotPath(np, cfg.root)) continue;
     fs.mkdirSync(dirname(np), { recursive: true });
     if (!fs.existsSync(np)) {
       fs.writeFileSync(np, enc.encode(content));

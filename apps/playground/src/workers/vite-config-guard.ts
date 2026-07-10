@@ -41,15 +41,25 @@ export function templateViteConfigSeedMarkerPath(root: string): string {
 /** Sync-mirror subset the seed claim touches (structural — both realms' mirrors satisfy it). */
 export interface ViteConfigSeedFs {
   existsSync(path: string): boolean;
+  readFileBytesSync(path: string): Uint8Array;
   mkdirSync(path: string, options?: { readonly recursive?: boolean }): unknown;
   writeFileSync(path: string, data: Uint8Array): unknown;
 }
 
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /**
- * ONE seed-decision for the template's `/vite.config.js` (every seed site
- * delegates here — dev-server-boot/real-vite-bootstrap heal seeds, and the
- * page's reload re-seed skips the slot outright). Returns true = caller must
- * seed the slot file now; the marker is already recorded.
+ * ONE seed-TRANSACTION for the template's `/vite.config.js` (every seed site
+ * delegates here; the page's reload re-seed skips the slot outright). Writes
+ * BOTH halves itself, config FIRST then marker — callers never write the slot
+ * file. A failure mid-transaction leaves config-without-marker (healed below),
+ * never marker-without-config, which the marker semantics would read forever
+ * as "user deleted the config" (torn-state: partial pair trusted later).
+ * Returns true = the config was seeded now.
  *
  * Provenance = the `.rifty/vite-config.seeded` marker, NOT root freshness. The
  * marker distinguishes "user deleted the seeded config" from "never seeded":
@@ -60,31 +70,51 @@ export interface ViteConfigSeedFs {
  * - template carries no config-slot seed → nothing to claim;
  * - some vite.config.* variant exists → never seed — Vite resolves `.js`
  *   FIRST, so seeding it next to a user's `.ts` would silently take over
- *   config loading;
+ *   config loading. Heal: exact template-seed bytes at the slot with NO
+ *   marker (crash between the two writes, the page preset-reset slot write,
+ *   a pre-marker-era root) → record the marker so a later deletion is
+ *   respected; user bytes are never marker-claimed;
  * - marker exists → the user deleted the seeded config: the documented opt-out
  *   into stock Vite behavior (vite-template-dep-optimizer-policy) — never
  *   resurrect;
- * - else seed AND record the marker (one-line JSON: seeded file + template id).
+ * - else write config THEN marker (one-line JSON: seeded file + template id).
  */
 export function claimTemplateViteConfigSeed(
   root: string,
   fs: ViteConfigSeedFs,
   template: { readonly id: string; readonly seedFiles: Readonly<Record<string, string>> },
 ): boolean {
-  const slotPath = Object.keys(template.seedFiles)
-    .map((p) => normalizePath(p))
-    .find((p) => isViteConfigSlotPath(p, root));
-  if (slotPath === undefined) return false;
-  if (findUserViteConfig(root, (p) => fs.existsSync(p)) !== null) return false;
+  const slotEntry = Object.entries(template.seedFiles)
+    .map(([p, content]) => [normalizePath(p), content] as const)
+    .find(([p]) => isViteConfigSlotPath(p, root));
+  if (slotEntry === undefined) return false;
+  const [slotPath, seedContent] = slotEntry;
+  const seedBytes = enc.encode(seedContent);
   const marker = templateViteConfigSeedMarkerPath(root);
+  const writeMarker = (): void => {
+    fs.mkdirSync(dirname(marker), { recursive: true });
+    fs.writeFileSync(
+      marker,
+      enc.encode(
+        `${JSON.stringify({ file: slotPath.slice(normalizePath(root).length + 1), template: template.id })}\n`,
+      ),
+    );
+  };
+  const existing = findUserViteConfig(root, (p) => fs.existsSync(p));
+  if (existing !== null) {
+    if (
+      existing === slotPath &&
+      !fs.existsSync(marker) &&
+      bytesEqual(fs.readFileBytesSync(slotPath), seedBytes)
+    ) {
+      writeMarker();
+    }
+    return false;
+  }
   if (fs.existsSync(marker)) return false;
-  fs.mkdirSync(dirname(marker), { recursive: true });
-  fs.writeFileSync(
-    marker,
-    enc.encode(
-      `${JSON.stringify({ file: slotPath.slice(normalizePath(root).length + 1), template: template.id })}\n`,
-    ),
-  );
+  fs.mkdirSync(dirname(slotPath), { recursive: true });
+  fs.writeFileSync(slotPath, seedBytes);
+  writeMarker();
   return true;
 }
 
