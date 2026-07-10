@@ -212,6 +212,14 @@ same hash on the next POST.
    long a client keeps *requesting* the old hash without consulting the
    server; the revocation makes any such request miss.
 
+Verified live 2026-07-10 (throwaway closure `left-pad@1.3.0` + `is-odd@3.0.1`,
+hash `sha256-sKf7LT1+mOeYnTm0d0gjuNsoKg+K/QSnWalgHxuIvT0=`): POST 200
+`x-eddy-store-durable: 1` → CDN GET 200 `immutable` → bucket delete →
+pre-purge CDN GET **200 cache-status HIT** off a stale edge (proof the ordered
+verify catches a skipped purge) → purge → origin GET 404 `no-store`, CDN GET
+404 (ex-HIT edge included) → re-POST 200 durable, same hash (deps resolved
+identically upstream — the re-seed note above in action).
+
 ## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
 
 A playground deploy can pin a preset's resolved closure so its install rides
