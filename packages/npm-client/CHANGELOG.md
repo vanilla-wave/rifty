@@ -4,16 +4,25 @@
 
 ### Added
 
-- **`resolveEddyClosure`** (stale-pin SWR primitive, backlog
-  `playground/eddy-stale-pin-revalidate`): POST the canonical request and read
-  the response ONLY up to the manifest member (early-cancel via
-  `streamTarEntries` — the tarball tail never downloads), returning
-  `{ closureHash, resolvedAt }`. Bounded on every phase through the ADR-0201
-  chokepoint (header wait, decline-body drain, body no-progress); throws on
-  decline/HTTP error/stall/malformed manifest. No wire-protocol change.
-- **`InstallResult.resolvedAt`**: eddy-sourced installs expose the adopted
-  bundle's `manifest.asOf.resolvedAt` so the playground's stale-pin honesty
-  line reports the SERVED resolution's age, not the pin file's.
+- **`resolveEddyClosure`** (stale-pin SWR primitive, ADR-0216): POST the
+  canonical request and read the response ONLY up to the manifest member
+  (early-cancel via `streamTarEntries` — the tarball tail never downloads),
+  returning `{ closureHash, resolvedAt, storeDurable }` (`storeDurable` = the
+  `x-eddy-store-durable` proof, required before pinning a never-GET-verified
+  hash — mirrors the installer's learnable gate). Bounded on every phase
+  through the ADR-0201 chokepoint (header wait, decline-body drain, body
+  no-progress); throws on decline/HTTP error/stall/malformed manifest
+  (including a non-parseable `resolvedAt`). No wire-protocol change.
+- **`InstallResult.resolvedAt` + `InstallResult.resolvedVia`**: eddy-sourced
+  installs expose the adopted bundle's validated `manifest.asOf.resolvedAt`
+  (the stale-pin honesty line reports the SERVED resolution's age, not the
+  pin file's) and the attempt provenance (`'prefetch' | 'get' | 'post'`) —
+  hash equality cannot distinguish a cache serve from a POST that recomputed
+  the same closure, and the playground's pin/`as-of` policy hangs off the
+  difference. `EDDY_STORE_DURABLE_HEADER` moved to `eddy-request.ts` and is
+  exported from the barrel — one wire-protocol home; the eddy server now
+  imports it instead of duplicating the literal (no cross-package string
+  drift, same rationale as `MANIFEST_FILE`).
 
 ### Fixed
 

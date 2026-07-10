@@ -352,6 +352,9 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     // `as-of <resolvedAt>` must come from the SERVED manifest, not pin age).
     expect(typeof fast.resolvedAt).toBe('string');
     expect(Number.isNaN(Date.parse(fast.resolvedAt as string))).toBe(false);
+    // …and the attempt provenance: this install POSTed (no pin) — the pin
+    // policy hangs off this (only a POST re-vouches a resolution's age).
+    expect(fast.resolvedVia).toBe('post');
 
     // Standard install (resolver off) — no hash, key for learned pins staying
     // eddy-only.

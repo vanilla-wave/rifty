@@ -116,6 +116,12 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
       timeout: 60_000,
     });
     await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    // The dev server reaching LIVE proves the boot install path completed —
+    // either the stamp landed (tree reused) or the restore re-installed; a
+    // torn trusted tree could not serve the dev server. That IS the fault-row
+    // claim: self-heal, no crash (the ms package itself may legitimately be
+    // re-installed away — the accepted cost of reloading inside the window).
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
     await openShellTerminal(page);
     await runTerminalLine(page, `echo fast-reload-${marker}`);
     await expectTerminalContains(page, `fast-reload-${marker}`, 30_000);

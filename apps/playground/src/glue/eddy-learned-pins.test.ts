@@ -213,7 +213,7 @@ describe('revalidateLearnedPin — background manifest-only POST refresh', () =>
     };
   }
 
-  function bundleResponse(closureHash: string): Response {
+  function bundleResponse(closureHash: string, opts: { durable?: boolean } = {}): Response {
     const bytes = packEddyBundle({
       manifest: manifestFor(closureHash),
       lockfileText: JSON.stringify({ lockfileVersion: 3, packages: {} }),
@@ -221,7 +221,12 @@ describe('revalidateLearnedPin — background manifest-only POST refresh', () =>
         { entry: manifestFor(closureHash).tarballs[0] as never, bytes: new Uint8Array(2048) },
       ],
     });
-    return new Response(new Uint8Array(bytes), { status: 200 });
+    return new Response(new Uint8Array(bytes), {
+      status: 200,
+      // Default durable: the replace path requires the store proof; individual
+      // tests drop it to exercise the non-durable decline.
+      headers: opts.durable === false ? {} : { 'x-eddy-store-durable': '1' },
+    });
   }
 
   it('identical closure → savedAt refreshed: the pin reads back FRESH again', async () => {
@@ -264,6 +269,50 @@ describe('revalidateLearnedPin — background manifest-only POST refresh', () =>
     expect(outcome).toBe('replaced');
     expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
       closureHash: 'sha256-NEW=',
+      stale: false,
+    });
+  });
+
+  it('a DIFFERENT closure WITHOUT the durable-store proof keeps the old pin and throws — never a pin to an object that may not exist', async () => {
+    // Mirrors the installer's learnable gate (ADR-0194): a POST-computed hash
+    // is pin-worthy only when the server proved the immutable store held it.
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    const before = await vfs.readFileText(LEARNED_PINS_PATH);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000;
+
+    await expect(
+      revalidateLearnedPin({
+        vfs,
+        resolverUrl: 'http://eddy.test',
+        request: REQUEST,
+        staleClosureHash: HASH,
+        fetchImpl: async () => bundleResponse('sha256-NEW=', { durable: false }),
+        now: () => nowMs,
+      }),
+    ).rejects.toThrow(/durable/i);
+    expect(await vfs.readFileText(LEARNED_PINS_PATH)).toBe(before);
+  });
+
+  it('an IDENTICAL closure refreshes even without the durable header — the just-served GET already proved the object exists', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000;
+
+    const outcome = await revalidateLearnedPin({
+      vfs,
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      staleClosureHash: HASH,
+      fetchImpl: async () => bundleResponse(HASH, { durable: false }),
+      now: () => nowMs,
+    });
+
+    expect(outcome).toBe('refreshed');
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
+      closureHash: HASH,
       stale: false,
     });
   });

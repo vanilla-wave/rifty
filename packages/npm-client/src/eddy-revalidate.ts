@@ -19,7 +19,7 @@ import {
   streamTarEntries,
 } from './eddy-bundle-stream.ts';
 import { EDDY_BUNDLE_FORMAT, type EddyBundleManifestV1, MANIFEST_FILE } from './eddy-bundle.ts';
-import type { EddyRequestBody } from './eddy-request.ts';
+import { EDDY_STORE_DURABLE_HEADER, type EddyRequestBody } from './eddy-request.ts';
 
 export interface ResolveEddyClosureOptions {
   resolverUrl: string;
@@ -34,8 +34,14 @@ export interface ResolveEddyClosureOptions {
 /** The served resolution's identity: content address + honesty stamp. */
 export interface EddyClosureSummary {
   closureHash: string;
-  /** ISO-8601 `asOf.resolvedAt` — when eddy resolved this closure. */
+  /** ISO-8601 `asOf.resolvedAt` (validated parseable) — when eddy resolved
+   * this closure. */
   resolvedAt: string;
+  /** True iff the response carried the durable-store proof
+   * (`x-eddy-store-durable: 1`) — required before PINNING a hash the caller
+   * has never GET-verified (mirrors the installer's learnable gate,
+   * ADR-0194). */
+  storeDurable: boolean;
 }
 
 const dec = new TextDecoder('utf-8');
@@ -88,13 +94,18 @@ export async function resolveEddyClosure(
     if (
       typeof closureHash !== 'string' ||
       closureHash.length === 0 ||
-      typeof resolvedAt !== 'string'
+      typeof resolvedAt !== 'string' ||
+      Number.isNaN(Date.parse(resolvedAt))
     ) {
       throw new Error('malformed EddyBundleV1 manifest: missing asOf.closureHash/resolvedAt');
     }
     // Returning from inside for-await runs the generator's finally block —
     // the source stream is CANCELLED, so the tarball tail never downloads.
-    return { closureHash, resolvedAt };
+    return {
+      closureHash,
+      resolvedAt,
+      storeDurable: response.headers.get(EDDY_STORE_DURABLE_HEADER) === '1',
+    };
   }
   throw new Error('malformed EddyBundleV1 bundle: empty tar stream');
 }

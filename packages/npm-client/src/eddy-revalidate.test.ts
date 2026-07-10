@@ -101,6 +101,7 @@ describe('resolveEddyClosure (manifest-only POST revalidate)', () => {
     expect(out).toEqual({
       closureHash: 'sha256-closure/abc=',
       resolvedAt: '2026-07-10T12:00:00.000Z',
+      storeDurable: false, // no x-eddy-store-durable header on this response
     });
     // Wire shape = the installer's POST: CORS-simple (no content-type header),
     // JSON body of the request.
@@ -184,5 +185,32 @@ describe('resolveEddyClosure (manifest-only POST revalidate)', () => {
     await expect(
       resolveEddyClosure({ resolverUrl: 'http://eddy.test', request: REQUEST, fetchImpl }),
     ).rejects.toThrow(/malformed/i);
+  });
+
+  it('a non-ISO resolvedAt throws malformed — the honesty stamp must be a real date, never printed raw', async () => {
+    const manifest = makeManifest({ resolvedAt: 'not-a-date' });
+    const fetchImpl: typeof fetch = async () =>
+      new Response(new Uint8Array(bundleBytes(manifest)), { status: 200 });
+
+    await expect(
+      resolveEddyClosure({ resolverUrl: 'http://eddy.test', request: REQUEST, fetchImpl }),
+    ).rejects.toThrow(/malformed/i);
+  });
+
+  it('reports the durable-store proof: storeDurable=true iff x-eddy-store-durable is 1', async () => {
+    const manifest = makeManifest();
+    const fetchImpl: typeof fetch = async () =>
+      new Response(new Uint8Array(bundleBytes(manifest)), {
+        status: 200,
+        headers: { 'x-eddy-store-durable': '1' },
+      });
+
+    const out = await resolveEddyClosure({
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      fetchImpl,
+    });
+
+    expect(out.storeDurable).toBe(true);
   });
 });

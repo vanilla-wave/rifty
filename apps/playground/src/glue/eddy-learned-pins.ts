@@ -232,6 +232,16 @@ export async function revalidateLearnedPin(
     request: opts.request,
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
   });
+  if (summary.closureHash !== opts.staleClosureHash && !summary.storeDurable) {
+    // Mirrors the installer's learnable gate (ADR-0194): a NEW hash is
+    // pin-worthy only with the durable-store proof — a pin to an object the
+    // store may not hold would 404 every install until it expires. The SAME
+    // hash needs no proof: the GET that just served this install already
+    // demonstrated the object exists.
+    throw new Error(
+      'resolver returned a new closure without the durable-store proof — keeping the existing pin',
+    );
+  }
   const requestKey = canonicalEddyRequestKey(opts.request);
   await writeLearnedPin(opts.vfs, requestKey, summary.closureHash, opts.now ?? Date.now);
   return summary.closureHash === opts.staleClosureHash ? 'refreshed' : 'replaced';

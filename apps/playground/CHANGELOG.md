@@ -2,32 +2,43 @@
 
 ## [Unreleased]
 
-### Changed (install-tail-latency)
+### Changed (install-tail-latency, ADR-0216)
 
-- **Install exit stops awaiting the OPFS durability drain** (backlog
-  `playground/install-stamp-background-flush`): the drain → full-ledger gate →
-  stamp → stamp-drain sequence (ADR-0187 Corrected, order and gate semantics
-  intact) now runs in background after `npm install` returns, so a
-  `&&`-chained dev server starts immediately. Dirty-drain/stamp warnings still
-  print, asynchronously. A later install serializes behind the in-flight
-  sequence (stamp #N lands before install #N+1's tree writes); a tab killed
-  mid-drain leaves no stamp → next boot re-installs, never a torn stamped
-  tree. Measured install→vite-ready (eddy path, real-vite preset, local, n=5
-  median): 3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the
-  full ~490ms profiled drain does not all land on this marker).
+- **Install exit stops awaiting the OPFS durability drain** (ADR-0216,
+  supersedes ADR-0187's command-site durable-on-exit clause): the drain →
+  full-ledger gate → stamp → stamp-drain sequence (gate semantics intact) now
+  runs in background after `npm install` returns, so a `&&`-chained dev
+  server starts immediately; dirty-drain/stamp warnings still print,
+  asynchronously. Reloads stay TRUST-safe via the boot path's pending-first
+  pattern applied to the command site: any trusted stamp is demoted to
+  `pending` before the first tree mutation (a mid-install or mid-drain reload
+  re-arrives — this also NARROWS the pre-existing torn-window where a bare
+  re-install's reload could trust the old stamp, and a failed install no
+  longer resurrects it), the trusted stamp attests the INSTALL-TIME deps+slug
+  snapshot, and a per-tree generation guard (cross-terminal) cancels an older
+  sequence's stamp instead of racing it — deliberately no await-chain (a
+  wedged drain must not park later installs). A reload inside the ~0.5–2s
+  window costs a re-install (self-heal), never a torn trusted tree. Measured
+  install→vite-ready (eddy path, real-vite preset, local, n=5 median):
+  3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the full
+  ~490ms profiled drain does not all land on this marker).
 - **Learned pins serve-stale-while-revalidate inside a hard 24h bound**
-  (backlog `playground/eddy-stale-pin-revalidate`): a pin older than the 30min
-  fresh TTL but ≤ 24h now still rides the immutable pinned GET (install AND
-  boot prefetch); the terminal prints
+  (ADR-0216, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
+  ≤ 24h now still rides the immutable pinned GET (install AND boot prefetch);
+  the terminal prints
   `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in background`
-  (`resolvedAt` = the SERVED bundle manifest's stamp) and ONE background
-  manifest-only POST revalidate refreshes the pin (same closure → savedAt
-  refresh; new closure → pin replaced). Beyond 24h the pin drops (foreground
-  POST as before). The immediate write-back is skipped on a stale serve —
-  refreshing `savedAt` without consulting the server would self-renew the pin
-  past the 24h bound. Deliberate npm deviation recorded in the backlog item's
-  Parity section; `prefer:'online'` bypass unchanged; revocation safety net:
-  §Revocation runbook in `docs/public/hosting-eddy.md`.
+  (`resolvedAt` = the SERVED bundle manifest's validated stamp; the line and
+  the revalidate fire only on a real cache serve — `resolvedVia` provenance,
+  not hash equality) and ONE background manifest-only POST revalidate
+  refreshes the pin (same closure → savedAt refresh; new closure → pin
+  replaced only with the `x-eddy-store-durable` proof). Beyond 24h the pin
+  drops (foreground POST as before). `savedAt` now moves ONLY on
+  server-vouched resolutions: the post-install write-back fires only for
+  POST-adopted bundles — a GET/prefetch cache serve never rewrites the pin,
+  so repeat installs cannot self-renew a stale closure past the bound.
+  Deliberate npm deviation recorded in ADR-0216; `prefer:'online'` bypass
+  unchanged; revocation safety net: §Revocation runbook in
+  `docs/public/hosting-eddy.md`.
 
 ### Fixed
 

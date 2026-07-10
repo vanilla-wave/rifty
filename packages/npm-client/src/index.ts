@@ -36,6 +36,10 @@ export {
   bundleUrlFor,
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
+  // One wire-protocol home for the durable-store proof header — the server
+  // sets it, the client gates learning on it (no cross-package string drift,
+  // same rationale as MANIFEST_FILE/LOCKFILE_FILE above).
+  EDDY_STORE_DURABLE_HEADER,
   type EddyRequestBody,
 } from './eddy-request.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';

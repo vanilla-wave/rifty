@@ -1383,6 +1383,39 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(exitCode).toBe(1);
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
+
+  it('a failed install leaves a previously TRUSTED stamp demoted to pending — the tree may be part-mutated', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    await runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(
+        await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
+      ) as { durability?: string };
+      expect(stamp.durability).toBeUndefined(); // trusted stamp #1 down
+    });
+
+    const failing: InstallFn = async () => {
+      throw new Error('network down');
+    };
+    const shell2 = new Shell({ cwd: '/proj' });
+    shell2.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: failing }),
+    );
+    const { exitCode } = await runShell(shell2, 'npm install ms');
+
+    expect(exitCode).toBe(1);
+    // The failing install may have part-mutated the tree before throwing —
+    // the old trusted stamp must NOT resurrect (pending = next boot re-installs).
+    const stamp = JSON.parse(
+      await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
+    ) as { durability?: string };
+    expect(stamp.durability).toBe('pending');
+  });
 });
 
 describe('npm-shell-command — background durability (install exit stops awaiting the drain)', () => {
@@ -1403,6 +1436,18 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     };
   }
   const STAMP = '/proj/node_modules/.rifty-install-stamp.json';
+  /** The stamp iff present AND trusted (not pending); null otherwise. */
+  async function trustedStamp(
+    vfs: MemoryVfs,
+  ): Promise<{ deps: Record<string, string>; slug: string } | null> {
+    if (!(await vfs.exists(STAMP))) return null;
+    const stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
+      durability?: string;
+      deps: Record<string, string>;
+      slug: string;
+    };
+    return stamp.durability === undefined ? stamp : null;
+  }
 
   it('resolves the install (and starts a &&-chained command) WITHOUT awaiting the durability sequence; the stamp still lands only after the clean drain', async () => {
     const vfs = new MemoryVfs();
@@ -1437,10 +1482,10 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(rec.stdout.join('')).toContain('npm: installed 2 package(s)');
     expect(rec.stdout.join('')).toContain('NEXT'); // the chained command ran
     expect(flushCalls).toBe(1); // tree drain issued in background…
-    expect(await vfs.exists(STAMP)).toBe(false); // …and the stamp is GATED on it
+    expect(await trustedStamp(vfs)).toBeNull(); // …and the TRUSTED stamp is GATED on it
     releaseFlush();
     await vi.waitFor(async () => {
-      expect(await vfs.exists(STAMP)).toBe(true); // order preserved: drain → gate → stamp
+      expect(await trustedStamp(vfs)).not.toBeNull(); // order preserved: drain → gate → stamp
     });
   });
 
@@ -1489,7 +1534,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       expect(rec.stderr.join('')).toContain('NOT durable'); // honesty stays loud, just async
     });
     expect(rec.stderr.join('')).toContain('137 file(s) failed to persist');
-    expect(await vfs.exists(STAMP)).toBe(false);
+    expect(await trustedStamp(vfs)).toBeNull(); // never a trusted stamp over a dirty drain
   });
 
   it('a drain that never completes (tab/worker killed) leaves NO stamp — self-heal: the next boot re-installs', async () => {
@@ -1511,10 +1556,15 @@ describe('npm-shell-command — background durability (install exit stops awaiti
 
     expect(exitCode).toBe(0); // install exit never hinged on the drain
     await new Promise((r) => setTimeout(r, 20));
-    expect(await vfs.exists(STAMP)).toBe(false); // never a stamped-but-unproven tree
+    // Never a TRUSTED stamp for an unproven tree — the next boot re-installs.
+    expect(await trustedStamp(vfs)).toBeNull();
   });
 
-  it('a second install waits for the in-flight sequence — FIFO: stamp #1 lands before install #2 touches the tree', async () => {
+  it('a NEWER install cancels the in-flight sequence\u2019s trusted stamp \u2014 stamp #1 can never attest install #2\u2019s tree', async () => {
+    // Generation guard (review round 1): install #2 does NOT wait on install
+    // #1\u2019s wedged drain (an await-chain would park every later install behind
+    // a dead durability layer); instead #1\u2019s sequence loses the right to
+    // write a trusted stamp the moment #2 claims the tree.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let releaseFlush!: () => void;
@@ -1522,11 +1572,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       releaseFlush = r;
     });
     let flushCalls = 0;
-    const stampSeenByInstall: boolean[] = [];
-    const install: InstallFn = async () => {
-      stampSeenByInstall.push(await vfs.exists(STAMP));
-      return twoPackageResult();
-    };
+    const { install } = makeStubInstall(() => twoPackageResult());
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
@@ -1545,17 +1591,180 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const first = await runShell(shell, 'npm install lodash@^4.17.0');
     expect(first.exitCode).toBe(0); // resolved with its sequence still in flight
 
-    const second = runShell(shell, 'npm install ms@^2.1.3');
+    // Install #2 proceeds immediately (never parked behind #1's drain) and
+    // its own sequence stamps the tree.
+    const second = await runShell(shell, 'npm install ms@^2.1.3');
+    expect(second.exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+    });
+
+    // Now #1's drain finally settles — its sequence must NOT overwrite the
+    // newer stamp with the stale lodash-only attestation.
+    releaseFlush();
     await new Promise((r) => setTimeout(r, 20));
-    // Install #2 must NOT have started mutating the tree while sequence #1 is
-    // in flight — a reload could see stamp #1 attesting a half-replaced tree.
-    expect(stampSeenByInstall).toHaveLength(1);
+    expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+  });
+
+  it('the generation guard is per TREE, not per command instance \u2014 another terminal\u2019s install cancels it too', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    let hangNext = true;
+    const makeDeps = () => ({
+      vfs,
+      registry: fakeRegistry,
+      install: makeStubInstall(() => twoPackageResult()).install,
+      flush: async () => {
+        const hang = hangNext;
+        hangNext = false;
+        if (hang) await flushGate; // only terminal A's tree drain hangs
+        return { failures: [], total: 0 };
+      },
+    });
+    const shellA = new Shell({ cwd: '/proj' });
+    shellA.registerCommand('npm', createNpmShellCommand(makeDeps()));
+    const shellB = new Shell({ cwd: '/proj' });
+    shellB.registerCommand('npm', createNpmShellCommand(makeDeps()));
+
+    const a = await runShell(shellA, 'npm install lodash@^4.17.0');
+    expect(a.exitCode).toBe(0); // A's sequence still in flight
+
+    const b = await runShell(shellB, 'npm install ms@^2.1.3');
+    expect(b.exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+    });
 
     releaseFlush();
-    const { exitCode } = await second;
+    await new Promise((r) => setTimeout(r, 20));
+    // A's late sequence (a DIFFERENT command instance) still must not clobber
+    // B's stamp \u2014 the generation map is module-level, keyed by tree root.
+    expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+  });
+
+  it('an in-flight install REPLACES the previous trusted stamp with a PENDING one BEFORE touching the tree', async () => {
+    // Regression (review round 1): without this, a reload during install #2
+    // (or its background drain) sees install #1's still-trusted stamp over a
+    // half-replaced tree and trusts it. Same pending-first pattern as the
+    // boot path (ADR-0187).
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install: firstInstall } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: firstInstall }),
+    );
+    await runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(await vfs.readFileText(STAMP)) as { durability?: string };
+      expect(stamp.durability).toBeUndefined(); // trusted stamp #1 down
+    });
+
+    let stampDuringInstall: string | undefined = 'UNREAD';
+    const secondInstall: InstallFn = async () => {
+      stampDuringInstall = (JSON.parse(await vfs.readFileText(STAMP)) as { durability?: string })
+        .durability;
+      return twoPackageResult();
+    };
+    const shell2 = new Shell({ cwd: '/proj' });
+    shell2.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: secondInstall }),
+    );
+    const { exitCode } = await runShell(shell2, 'npm install ms@^2.1.3');
+
     expect(exitCode).toBe(0);
-    expect(stampSeenByInstall).toHaveLength(2);
-    expect(stampSeenByInstall[1]).toBe(true); // stamp #1 was already down when #2 began
+    expect(stampDuringInstall).toBe('pending'); // trusted #1 was demoted before tree writes
+  });
+
+  it('the background stamp attests the INSTALL-TIME dep set — a package.json edit during the drain cannot leak in', async () => {
+    // Regression (review round 1): the deferred stamper re-read package.json
+    // after the drain, so an edit in the window produced a trusted stamp for
+    // deps the completed install never installed.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          await flushGate;
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(exitCode).toBe(0);
+
+    // Edit package.json while the drain is still in flight.
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', dependencies: { lodash: '^4.17.0', evil: '9.9.9' } }, null, 2)}\n`,
+    );
+    releaseFlush();
+
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
+        durability?: string;
+        deps: Record<string, string>;
+      };
+      expect(stamp.durability).toBeUndefined();
+      expect(stamp.deps).toEqual({ lodash: '^4.17.0' }); // never { …, evil }
+    });
+  });
+
+  it('the background stamp carries the INSTALL-TIME project slug — a preset switch during the drain cannot re-key it', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    let slug = 'preset-a';
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        projectSlug: () => slug,
+        flush: async () => {
+          await flushGate;
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(exitCode).toBe(0);
+
+    slug = 'preset-b'; // the active preset changes during the drain window
+    releaseFlush();
+
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
+        durability?: string;
+        slug: string;
+      };
+      expect(stamp.durability).toBeUndefined();
+      expect(stamp.slug).toBe('preset-a'); // the slug the install actually ran under
+    });
   });
 });
 
@@ -1704,12 +1913,16 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
   const STALE_HASH = 'sha256-stale/pin=';
   const RESOLVED_AT = '2026-07-09T08:00:00.000Z';
 
-  function eddyResult(closureHash: string): InstallResult {
+  function eddyResult(
+    closureHash: string,
+    resolvedVia: 'prefetch' | 'get' | 'post' = 'get',
+  ): InstallResult {
     return {
       ...singletonResult('debug', '4.4.1'),
       source: 'eddy',
       closureHash,
       resolvedAt: RESOLVED_AT,
+      resolvedVia,
     };
   }
 
@@ -1772,7 +1985,12 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
     expect(seams.sets).toEqual([]);
   });
 
-  it('a FRESH pin keeps the existing behavior — no line, no revalidate, fire-and-forget refresh write-back', async () => {
+  it('a FRESH pin served via GET stays silent AND writes NOTHING back — a cache serve must never refresh savedAt (no self-renew past 24h)', async () => {
+    // Regression (review round 1): the unconditional write-back let installs
+    // repeated within 30 min keep an arbitrarily old closure perpetually
+    // fresh with zero server contact — the "hard 24h bound" was a lie for
+    // actively-used dep sets. savedAt may move only on server-vouched
+    // resolutions (POST write-back, revalidate).
     const vfs = await projVfs();
     const seams = makeSeams({ closureHash: STALE_HASH, stale: false });
     const shell = new Shell({ cwd: '/proj' });
@@ -1783,7 +2001,34 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
         registry: fakeRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
-        install: async () => eddyResult(STALE_HASH),
+        install: async () => eddyResult(STALE_HASH, 'get'),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).not.toContain('eddy cached resolution');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(seams.sets).toEqual([]);
+    expect(seams.revalidations).toEqual([]);
+  });
+
+  it('a stale pin whose POST fallback re-resolved the SAME closure is NOT a cache serve — no as-of line, ordinary re-learn', async () => {
+    // GET missed (revoked/evicted), the POST recomputed the identical closure:
+    // the resolution is FRESH (server-vouched now), so no honesty line, no
+    // revalidate — just the ordinary write-back with a fresh savedAt.
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: true });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => eddyResult(STALE_HASH, 'post'),
       }),
     );
 
@@ -1812,7 +2057,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
         registry: fakeRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
-        install: async () => eddyResult('sha256-fresh/post='),
+        install: async () => eddyResult('sha256-fresh/post=', 'post'),
       }),
     );
 
@@ -2019,6 +2264,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
           ...singletonResult('kleur', '4.1.5'),
           source: 'eddy',
           closureHash: 'sha256-new',
+          resolvedVia: 'post',
         }),
       }),
     );
@@ -2085,6 +2331,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
           ...singletonResult('debug', '4.4.1'),
           source: 'eddy',
           closureHash: 'sha256-new',
+          resolvedVia: 'post',
         }),
       }),
     );

@@ -47,6 +47,7 @@ import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import {
   installStampPath,
   isStampedTreeDamage,
+  readEffectiveDeps,
   reportHasFailure,
   writeInstallStamp,
 } from './install-stamp.ts';
@@ -153,12 +154,6 @@ const DEFAULT_PROJECT_VERSION = '0.0.0';
  * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
-  // The in-flight background durability sequence (drain → gate → stamp →
-  // stamp-drain) of the LAST install. A new install AWAITS it before touching
-  // the tree: without that serialization stamp #N could land amid install
-  // #N+1's tree writes and a reload would trust a stamped half-replaced tree.
-  // Never rejects (stampInstalledTree reports every failure itself).
-  const state: InstallSequenceState = { pending: Promise.resolve() };
   return async (args, ctx) => {
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
@@ -178,7 +173,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(args.slice(1), ctx, deps, state);
+      return runInstall(args.slice(1), ctx, deps);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
@@ -427,17 +422,23 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'unknown' {
   return 'unknown';
 }
 
-/** See {@link createNpmShellCommand} — serializes installs behind the previous
- *  install's background durability sequence. */
-interface InstallSequenceState {
-  pending: Promise<void>;
-}
+/**
+ * Per-TREE install generation (module scope — two terminals share it): each
+ * install bumps its root's generation at mutation start; a background
+ * durability sequence may write its TRUSTED stamp only while its generation
+ * is still current. A newer install therefore cancels the older sequence's
+ * stamp instead of racing it — stamp #N can never land over install #N+1's
+ * half-replaced tree (same stale-promoter guard as the boot path's
+ * `promotionId`, ADR-0187). Deliberately NOT an await-chain: waiting on the
+ * previous drain would park the next install forever behind a wedged
+ * durability layer (unbounded-wait class).
+ */
+const installGenerations = new Map<string, number>();
 
 async function runInstall(
   specs: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
-  state: InstallSequenceState,
 ): Promise<number> {
   // Partition argv into save-flags vs package specs; the flags pick the target
   // dep map. `-g` is a directed loud throw (no global store in the sandbox).
@@ -488,10 +489,19 @@ async function runInstall(
     return 0;
   }
 
-  // FIFO with the PREVIOUS install's background durability sequence: its stamp
-  // must land before this install's tree writes begin (a reload mid-#2 must
-  // never see stamp #1 attesting a half-replaced tree). No-op when idle.
-  await state.pending;
+  // Claim the tree: any in-flight background sequence of an OLDER install
+  // loses its right to write a trusted stamp the moment this generation is
+  // bumped (see installGenerations).
+  const generation = (installGenerations.get(ctx.cwd) ?? 0) + 1;
+  installGenerations.set(ctx.cwd, generation);
+
+  // Demote any TRUSTED stamp to PENDING before the first tree mutation —
+  // the boot path's pending-first pattern (ADR-0187) applied to the command
+  // site: a reload during this install (or its background drain) must find
+  // an untrusted marker and re-arrive, never trust a half-replaced tree. A
+  // failed install leaves it pending (self-heal: the tree may be part-
+  // mutated, the old stamp must not resurrect). No-op without package.json.
+  await writeInstallStamp(deps.vfs, ctx.cwd, 0, deps.projectSlug?.() ?? '', 'pending');
 
   const packageJsonPath = `${ctx.cwd}/package.json`;
   const hadPackageJson = await deps.vfs.exists(packageJsonPath);
@@ -564,16 +574,28 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    // Background (backlog install-stamp-background-flush): the drain → gate →
-    // stamp → stamp-drain sequence runs unchanged but the command does NOT
-    // await it — the prompt returns (a `&&`-chained dev server starts) while
-    // OPFS durability settles behind it. Dirty-drain/stamp warnings arrive
-    // asynchronously (accepted: honesty stays loud, latency does not pay for
-    // it). `state.pending` serializes the NEXT install behind this sequence.
-    state.pending = stampInstalledTree(deps, ctx, ctx.cwd, result.packages.length).catch((err) => {
+    // Background (backlog install-stamp-background-flush, ADR'd): the drain →
+    // gate → stamp → stamp-drain sequence runs unchanged but the command does
+    // NOT await it — the prompt returns (a `&&`-chained dev server starts)
+    // while OPFS durability settles behind it. Dirty-drain/stamp warnings
+    // arrive asynchronously (accepted: honesty stays loud, latency does not
+    // pay for it). Deps + slug are SNAPSHOTTED NOW: the deferred stamp must
+    // attest what THIS install produced — a package.json edit or preset
+    // switch inside the drain window must not leak into a trusted stamp.
+    const stampDeps = await readEffectiveDeps(deps.vfs, ctx.cwd);
+    const stampSlug = deps.projectSlug?.() ?? '';
+    void stampInstalledTree(
+      deps,
+      ctx,
+      ctx.cwd,
+      result.packages.length,
+      stampDeps,
+      stampSlug,
+      generation,
+    ).catch((err) => {
       // stampInstalledTree reports every expected failure itself; this guard
-      // only keeps an unexpected reject from poisoning the serialization chain
-      // (every later install would rethrow it) — still loud, never silent.
+      // only keeps an unexpected reject from surfacing unhandled — still
+      // loud, never silent.
       console.warn(`npm: install durability sequence failed: ${(err as Error).message}`);
     });
     // A STALE pin actually served this install (SWR): the tree came from a
@@ -585,6 +607,10 @@ async function runInstall(
     const stalePinServed =
       learnedPin?.stale === true &&
       result.source === 'eddy' &&
+      // 'prefetch'/'get' = a CACHE serve of the pinned closure; a POST that
+      // recomputed the same hash is a FRESH resolution (no line, ordinary
+      // re-learn) — hash equality alone cannot tell them apart.
+      result.resolvedVia !== 'post' &&
       result.closureHash === learnedPin.closureHash;
     if (stalePinServed && eddyRequest && deps.learnedPins) {
       const { learnedPins } = deps;
@@ -601,7 +627,16 @@ async function runInstall(
             `npm: WARNING: eddy pin refresh failed (${(err as Error).message}) — retrying on the next install\n`,
           );
         });
-    } else if (result.source === 'eddy' && result.closureHash && eddyRequest && deps.learnedPins) {
+    } else if (
+      result.source === 'eddy' &&
+      // Only a POST re-vouches the resolution's age: writing savedAt on a
+      // GET/prefetch cache serve would let repeat installs self-renew a pin
+      // forever with zero server contact, voiding the 24h stale bound.
+      result.resolvedVia === 'post' &&
+      result.closureHash &&
+      eddyRequest &&
+      deps.learnedPins
+    ) {
       // Fire-and-forget write-back: the pin is an optimization, never worth
       // blocking or failing the install line over.
       const { learnedPins } = deps;
@@ -686,6 +721,9 @@ async function stampInstalledTree(
   ctx: CommandContext,
   cwd: string,
   packages: number,
+  stampDeps: Record<string, string> | null,
+  stampSlug: string,
+  generation: number,
 ): Promise<void> {
   const notDurable = (cause: string): void => {
     ctx.stderr.write(
@@ -716,8 +754,16 @@ async function stampInstalledTree(
       return;
     }
   }
+  // A NEWER install claimed this tree while the drain ran: its pending stamp
+  // is already down and only ITS sequence may promote — writing this stale
+  // trusted stamp would attest a tree the newer install is replacing. Not a
+  // failure (the newer install owns stamping now), so no warning.
+  if (installGenerations.get(cwd) !== generation) return;
   try {
-    await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
+    // The INSTALL-TIME snapshot, never a re-read: package.json/slug may have
+    // moved while the drain ran, and the stamp attests what WAS installed.
+    if (!stampDeps) return;
+    await writeInstallStamp(deps.vfs, cwd, packages, stampSlug, undefined, undefined, stampDeps);
   } catch (err) {
     // Terminal, not console: the user's reload behavior changes (next boot
     // re-installs) — that must be visible where the install ran.

@@ -3,6 +3,14 @@
 Status: Accepted
 Date: 2026-07
 
+> Amended (2026-07-10, epic `install-tail-latency`): the command-site
+> "returns only when tree + stamp are durable" clause is superseded by
+> ADR-0216 — the drain→check→stamp→drain sequence now runs in BACKGROUND
+> behind a pending-first, generation-guarded stamp (this ADR's boot-path
+> pattern applied to the command site). Every other decision here — the
+> checked-drain gate, full-ledger scoping, FIFO contract, boot pending
+> stamps — stands.
+
 > Corrected (2026-07-04, PR #107 round 10; tightened round 21): FIFO order alone does NOT deliver "durable stamp implies durable tree" — per-op persist failures (quota/perm) were swallowed, so a failed tree write + a succeeded stamp write can stamp a torn tree. Fix: `OpfsFsSync` keeps a per-path persist-failure ledger (healed by a later successful persist of the same path); `flush()` still never rejects but now RETURNS the ledger report. The visible `npm install` gates the stamp on a clean tree drain (drain→check→stamp→drain; wall-cost ≈ the single drain — the post-stamp drain only waits for the stamp's own write) and warns loudly + skips the stamp on a dirty one (self-heal: no stamp → next boot re-installs). The boot/restore stamp stays non-blocking by first writing a PENDING stamp (`durability:"pending"`) that never satisfies reuse. A fire-and-forget post-boot drain promotes it only after a clean tree+stamp report; tree damage discards it, and stamp-file damage leaves it pending/untrusted. A crash/reload before promotion re-runs arrival instead of trusting an unproven tree.
 
 > TL;DR: FIFO order is necessary but not sufficient: the tree drain must be CHECKED before writing a trusted stamp, then the stamp itself must drain. Boot/restore stays non-blocking via pending stamps; a deferred clean drain promotes only the same dep-set it stamped. The visible `npm install` command uses drain→check→stamp→drain — npm parity says the tree is on disk when the command returns (e2e-pinned: install survives an immediate reload).

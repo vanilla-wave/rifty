@@ -164,9 +164,12 @@ export function stampTrusted(stamp: InstallStamp): boolean {
 }
 
 /**
- * Stamp the tree for project `slug` + the CURRENT package.json effective dep
- * set. No-op when package.json is unreadable (nothing to match against later).
- * `slug` defaults to `''` (page-side ad-hoc installs that no boot ever reuses).
+ * Stamp the tree for project `slug` + the package.json effective dep set —
+ * the CURRENT one by default, or `precomputedDeps` when the caller snapshotted
+ * it earlier (the deferred command stamp must attest the INSTALL-TIME set, not
+ * whatever package.json says after the drain). No-op when package.json is
+ * unreadable (nothing to match against later). `slug` defaults to `''`
+ * (page-side ad-hoc installs that no boot ever reuses).
  */
 export async function writeInstallStamp(
   vfs: Vfs,
@@ -175,8 +178,9 @@ export async function writeInstallStamp(
   slug = '',
   durability?: 'pending',
   promotionId?: string,
+  precomputedDeps?: Record<string, string>,
 ): Promise<void> {
-  const deps = await readEffectiveDeps(vfs, root);
+  const deps = precomputedDeps ?? (await readEffectiveDeps(vfs, root));
   if (!deps) return;
   const stamp: InstallStamp = {
     version: 1,

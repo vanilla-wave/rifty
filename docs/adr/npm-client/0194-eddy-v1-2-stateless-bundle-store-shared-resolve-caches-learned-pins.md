@@ -3,6 +3,12 @@
 Status: Accepted
 Date: 2026-07
 
+> Amended (2026-07-10, epic `install-tail-latency`): §8's freshness clause
+> (TTL 1800s = hard drop) is extended by ADR-0216 — past the fresh TTL a pin
+> turns STALE and is served up to 24h with an `as-of` honesty line and a
+> background manifest-only revalidate; `savedAt` moves only on server-vouched
+> resolutions. Everything else here stands.
+
 > TL;DR: eddy's origin becomes stateless-restartable — bundles live in a `BundleStore` (byte-bounded memory LRU locally, S3-compatible Object Storage behind the CDN in prod) written durably BEFORE the dep-set link; cold resolves share process-wide packument (TTL 300s) + tarball (immutable, byte-bounded) caches with single-flight per dep-set; the client returns `InstallResult.closureHash` so the playground can persist learned `requestKey → closureHash` pins and turn ANY repeat dep set into a cacheable GET.
 
 ## Context

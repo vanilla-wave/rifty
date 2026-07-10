@@ -13,6 +13,7 @@
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { EDDY_STORE_DURABLE_HEADER } from '@riftydev/npm-client';
 import type { EddyBundleManifestV1, Fetcher } from '@riftydev/npm-client';
 import type { BundleStore } from './bundle-store.ts';
 import { EddyCache } from './cache.ts';
@@ -226,7 +227,6 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
 }
 
 const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
-const EDDY_STORE_DURABLE_HEADER = 'x-eddy-store-durable';
 
 /** 200-bundle headers, shared by the POST resolve and the GET-by-hash route —
  * only the cache policy differs: `immutable` is load-bearing on the GET (a
