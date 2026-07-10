@@ -19,7 +19,7 @@ Thin React binding over `@riftydev/workbench` controllers (carved out of the old
 - `npm i @riftydev/react` (peer `react` >= 18) exposes `RiftyProvider` (config: project files/starter, `registryUrl`, worker/sw/wasm URLs) + `RiftyTerminal`, `RiftyPreview`, `RiftyEditor`, `RiftyFileTree`, `CapabilitiesGate`.
 - Zero manual glue in consumer code for the epic scenario — provider context wires every atom to the workbench session.
 - Headless + themeable per DD-4: minimal markup, CSS custom properties + className/slot pass-through; no global styles leaking into the host page.
-- `RiftyEditor` = Monaco, lazy-loaded on first mount (dynamic import); `RiftyTerminal` = xterm; Monaco/xterm worker serving covered by `docs/public/embedding.md`.
+- `RiftyEditor` = Monaco, lazy-loaded on first mount (dynamic import); `RiftyTerminal` = xterm; Monaco/xterm worker serving covered by the `docs/public/` embedding doc.
 - `CapabilitiesGate` renders the host-provided fallback on non-COI/unsupported browsers; broken atoms never mount.
 - Package in sync:publish SPEC, lockstep 0.x; arch: imports workbench/sdk only, never playground; no solid-js.
 - Component tests render real React (not source-grep), RED-checked; the epic e2e (`distribution/embed-host-vite-example`) exercises every atom.

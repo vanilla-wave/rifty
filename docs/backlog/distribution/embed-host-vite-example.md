@@ -18,7 +18,7 @@ A plain Vite + React app in `apps/` (private, never published) standing in for t
 - `apps/embed-example` — Vite + React host importing only published-surface entry points of `@riftydev/sdk`/`@riftydev/workbench`/`@riftydev/react` (workspace-resolved); `check:arch` forbids playground/`src/internal/*` imports.
 - Host wiring = exactly the doc's steps, nothing else: COOP/COEP headers on the route, `sw.js` build + registration, WASM asset copy, worker URLs, `registryUrl` from env (D-004).
 - CI e2e (chromium) against `vite build` + preview of the example: mount → `npm install` output scrolls in `RiftyTerminal` → vite dev server LIVE in `RiftyPreview` → edit a file in `RiftyEditor` → preview updates via HMR. Assertions reuse the playground e2e oracles (LIVE state, preview readiness), isolated port per worktree.
-- `docs/public/embedding.md`: every step the example needs and nothing more; honest notes — "verified on Vite; other bundlers untested", COOP/COEP route consequences for third-party content (OAuth popups, foreign iframes) with the dedicated-route recommendation, host-SW scope note, self-hosted registry requirement with `hosting-*` links.
+- Embedding doc (`embedding.md` in `docs/public/`): every step the example needs and nothing more; honest notes — "verified on Vite; other bundlers untested", COOP/COEP route consequences for third-party content (OAuth popups, foreign iframes) with the dedicated-route recommendation, host-SW scope note, self-hosted registry requirement with `hosting-*` links.
 - New-dir tooling wiring complete if the app lands outside existing globs (workspace, vitest, check:arch, backlog SCAN_ROOTS — see services/ precedent).
 
 ## Parity cases
@@ -36,4 +36,4 @@ None — packaging/integration item. Oracle = the e2e above asserting the same o
 
 - Location `apps/` (private) — reuses existing app tooling globs; NOT a template repo.
 - e2e runs against the built bundle (catches the prod worker dual-copy class); lane placement follows the existing chromium lane split.
-- Doc lives at `docs/public/embedding.md` and is maintained against this example — drift between doc and example is a defect.
+- Doc lives at `embedding.md` in `docs/public/` and is maintained against this example — drift between doc and example is a defect.

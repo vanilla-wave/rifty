@@ -40,7 +40,7 @@ None — no new Node-API surface; runtime behavior stays in the existing `@rifty
 - DD-3 (package justified) is the decision; implementer records it as the ADR at track start (`pnpm adr:new distribution "…"`) — content pre-resolved here: package name `@riftydev/workbench`, layer position, framework-free API shape, single-instance rule. No open forks.
 - API style: explicit attach/dispose + subscribe callbacks (matches existing orchestration modules) — no reactive-framework primitives in the public surface.
 - Registry endpoint: required explicit config, no default URL (D-004; self-host recipes already in `docs/public/hosting-*`).
-- Verified host = Vite only this epic; design stays bundler-agnostic, other bundlers honestly "not verified" in `docs/public/embedding.md` (user call 2026-07-10).
+- Verified host = Vite only this epic; design stays bundler-agnostic, other bundlers honestly "not verified" in the `docs/public/` embedding doc (user call 2026-07-10).
 
 ## Fault matrix
 

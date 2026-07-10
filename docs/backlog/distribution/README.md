@@ -19,7 +19,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `public-api-ai-agent-exec-preview.md` | parked | SDK API | residual streamed exec + preview URL API after ADR-0131 FS slice |
 | `workbench-controllers.md` | ready | embeddable-dev-loop | lift framework-agnostic `glue/*`+orchestration → `@riftydev/workbench`; playground becomes a thin binding (DD-3) |
 | `react-bindings.md` | ready | embeddable-dev-loop | `@riftydev/react` provider + Terminal/Preview/Editor/FileTree/CapabilitiesGate atoms, headless+themeable (DD-4) |
-| `embed-host-vite-example.md` | ready | embeddable-dev-loop | reference Vite React host + `docs/public/embedding.md` + CI e2e on the built bundle |
+| `embed-host-vite-example.md` | ready | embeddable-dev-loop | reference Vite React host + `docs/public/` embedding doc + CI e2e on the built bundle |
 | `iframe-embed.md` | draft | — | hosted-embed tier (StackBlitz-style iframe + postMessage); records the top-level COOP/COEP+allow constraint |
 | `framework-bindings-kit.md` | draft | — | EPIC D residual: vue atoms + `<RiftyIDE/>` + default theme + editor TS-LS (react carved out 2026-07-10) |
 | `create-rifty-template.md` | parked | E | un-packageable host config (COOP/COEP, module-worker, sw.js build, WASM copy, Monaco) as a scaffold |

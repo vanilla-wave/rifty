@@ -17,7 +17,7 @@ The primary distribution scenario: rifty consumed by embedding into an EXISTING 
 A SaaS developer with an existing Vite + React app:
 
 1. `npm i @riftydev/sdk @riftydev/workbench @riftydev/react`.
-2. Follows `docs/public/embedding.md`: COOP/COEP headers on the embedding route, `sw.js` build + registration, WASM assets, worker URLs, `registryUrl` pointing at a SELF-HOSTED registry proxy (explicit config, recipes in `docs/public/hosting-*`; no default endpoint — D-004).
+2. Follows the embedding host doc (`embedding.md` in `docs/public/`, deliverable of `distribution/embed-host-vite-example`): COOP/COEP headers on the embedding route, `sw.js` build + registration, WASM assets, worker URLs, `registryUrl` pointing at a SELF-HOSTED registry proxy (explicit config, recipes in `docs/public/hosting-*`; no default endpoint — D-004).
 3. Mounts own layout: `<RiftyProvider config={…}>` wrapping `<RiftyEditor/>`, `<RiftyTerminal/>`, `<RiftyPreview/>` placed inside the SaaS's own components, branded via CSS custom properties.
 4. End user opens the SaaS page: terminal runs real `npm install` (output scrolls), vite dev server boots, preview goes LIVE; user edits a file in the editor → preview updates via HMR.
 5. Everything runs on the SaaS origin. Non-COI page / unsupported browser → the host's own fallback UI via `CapabilitiesGate`, never a broken mount.
@@ -28,6 +28,6 @@ Done when the in-repo reference host (a plain Vite React app standing in for the
 
 - `distribution/workbench-controllers` — the parts: lift framework-agnostic playground glue/orchestration into `@riftydev/workbench`; playground repointed onto it (anti-drift dogfood). Blocks the other two.
 - `distribution/react-bindings` — the ready components: `@riftydev/react` provider + atoms over the workbench, headless + themeable (DD-4).
-- `distribution/embed-host-vite-example` — the acceptance vehicle: reference Vite React host app + `docs/public/embedding.md` + CI e2e on the built bundle.
+- `distribution/embed-host-vite-example` — the acceptance vehicle: reference Vite React host app + the `docs/public/` embedding doc + CI e2e on the built bundle.
 
-Out of scope for this epic: iframe tier (`distribution/iframe-embed`, draft — hosted embed, different persona: docs/tutorial authors), vue + `<RiftyIDE/>` + default theme (residual `distribution/framework-bindings-kit`), `create-rifty-template` (scaffolds a NEW app; this epic embeds into existing ones), TS language service in the embedded editor (residual, named in `distribution/react-bindings`).
+Out of scope for this epic: iframe tier (`distribution/iframe-embed`, draft — hosted embed, different persona: tutorial/course-site authors), vue + `<RiftyIDE/>` + default theme (residual `distribution/framework-bindings-kit`), `create-rifty-template` (scaffolds a NEW app; this epic embeds into existing ones), TS language service in the embedded editor (residual, named in `distribution/react-bindings`).
