@@ -68,11 +68,21 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
 
     // The durability sequence runs in BACKGROUND after install exit (backlog
     // install-stamp-background-flush) — this spec's claim is the RESTORED
-    // tree, so wait for its proof: the stamp file appears only after the tree
-    // drain reported clean (drain → gate → stamp order). Its own tiny persist
-    // rides the same FIFO ahead of the reload's navigation round-trips.
-    await runTerminalLine(page, 'cat node_modules/.rifty-install-stamp.json');
-    await expectTerminalContains(page, '"version"', 30_000);
+    // tree, so wait for its proof: THIS install's stamp (deps include cowsay —
+    // the boot install's earlier stamp does not) appears only after the tree
+    // drain reported clean (drain → gate → stamp order). Re-run `cat` until it
+    // shows: a single cat could race the in-flight sequence and match the
+    // boot-install stamp. The stamp's own tiny persist rides the same FIFO
+    // ahead of the reload's navigation round-trips.
+    await expect
+      .poll(
+        async () => {
+          await runTerminalLine(page, 'cat node_modules/.rifty-install-stamp.json');
+          return terminalBuffer(page);
+        },
+        { timeout: 60_000 },
+      )
+      .toMatch(/"cowsay"/);
 
     // TEARDOWN + RESTORE: reload terminates the owner worker; on re-boot the owner
     // wires OPFS (initBackend) and preloads the persisted tree — node_modules + the

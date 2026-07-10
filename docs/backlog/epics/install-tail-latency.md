@@ -1,11 +1,11 @@
 ---
 kind: epic
-status: ready
+status: in-progress
 title: Install tail latency — background durability, stale-pin instant replay
 created: 2026-07-10
 value: Repeat installs feel instant and `npm install` exit stops paying the OPFS durability tax — the measured non-network tail of the install path goes away without changing dependency fidelity.
 user_story: As a developer returning to a rifty project (same tab, >30 min later or next day), I want `npm install` to complete near-instantly from the already-proven bundle and the dev server to start without waiting on durability flushes, but today the learned pin is hard-dropped at 30 min (foreground POST re-resolve) and install exit blocks on the full OPFS drain.
-items: [playground/install-stamp-background-flush, playground/eddy-stale-pin-revalidate, distribution/eddy-bundle-revocation-runbook]
+items: [distribution/eddy-bundle-revocation-runbook]
 ---
 
 ## Outcome
@@ -45,12 +45,18 @@ fresh resolve.
 
 ## Items
 
-- `playground/install-stamp-background-flush` — take the drain→gate→stamp→drain
-  sequence off the install exit path; sequence and stamp honesty unchanged.
-- `playground/eddy-stale-pin-revalidate` — serve stale learned pins (≤24h) via
-  pinned GET + background manifest-only POST revalidate; hard-expire beyond.
 - `distribution/eddy-bundle-revocation-runbook` — documented + verified
-  operator path: object delete + CDN purge + fallback proof.
+  operator path: object delete + CDN purge + fallback proof. Runbook text is
+  in `docs/public/hosting-eddy.md` §Revocation; OPEN until the one live
+  verification run (confirm-first: shared-infra delete + purge) is executed
+  and recorded there.
+
+Delivered 2026-07-10 (items closed, record = code + playground/npm-client
+CHANGELOGs): `playground/install-stamp-background-flush` (background
+drain→gate→stamp→drain, install-serialization FIFO, measured
+install→vite-ready −357ms median) and `playground/eddy-stale-pin-revalidate`
+(SWR ≤24h, as-of honesty line, manifest-only POST revalidate via
+`resolveEddyClosure`).
 
 ## Out of scope
 

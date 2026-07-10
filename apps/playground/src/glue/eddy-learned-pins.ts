@@ -218,9 +218,11 @@ export interface RevalidateLearnedPinOptions {
  * bounded, early-cancel, no bundle download), then a hash compare. Identical
  * closure → the pin's `savedAt` refreshes (fresh again — the server itself
  * re-vouched for it); different → the pin is REPLACED so the next install
- * rides the new hash's GET. Throws on any resolver failure — the pin file is
- * written only after a successful compare, so an abandoned/failed revalidate
- * leaves it byte-intact (retried on the next stale install).
+ * rides the new hash's GET (the OLD bundle may sit in the browser HTTP cache —
+ * harmless: the pin points elsewhere, so it is simply never requested again;
+ * no purge needed). Throws on any resolver failure — the pin file is written
+ * only after a successful compare, so an abandoned/failed revalidate leaves
+ * it byte-intact (retried on the next stale install).
  */
 export async function revalidateLearnedPin(
   opts: RevalidateLearnedPinOptions,
