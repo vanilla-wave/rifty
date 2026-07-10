@@ -45,9 +45,11 @@ import {
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import {
+  depsEqual,
   installStampPath,
   installTreeDir,
   isStampedTreeDamage,
+  readEffectiveDeps,
   readInstallStamp,
   reportHasFailure,
   stampTrusted,
@@ -74,6 +76,18 @@ export interface NpmShellCommandDeps {
   readonly registry: RegistryClient;
   /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
+  /** Pre-install tree preparation (e.g. the from-scratch clean-start
+   *  clear/reseed) — runs INSIDE the per-tree install phase lock, before any
+   *  read or mutation of this install: a preparation that deletes/reseeds the
+   *  tree outside the lock could raze it under ANOTHER terminal's in-flight
+   *  exclusive install. `fullInstall` = bare `npm install` (no specs);
+   *  `sessionInstallActivity` = THIS realm already ran an install on this
+   *  tree (its background durability may still be in flight — a PENDING
+   *  stamp seen now is ours, not a foreign/torn leftover). */
+  readonly prepareInstall?: (
+    ctx: CommandContext,
+    info: { fullInstall: boolean; sessionInstallActivity: boolean },
+  ) => Promise<void>;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
   /** Drains the VFS write-through — in BACKGROUND, after the command returned
@@ -117,7 +131,11 @@ export interface NpmShellCommandDeps {
    *  `resolverUrl`. */
   readonly learnedPins?: {
     get(requestKey: string): Promise<LearnedPinLookup | undefined>;
-    set(requestKey: string, closureHash: string): Promise<void>;
+    /** Persist a pin. `expectedCurrent` = the pin observed at install START
+     *  (`null` = none) — the store writes compare-and-set against it, so a
+     *  slower install adopting an OLDER resolution cannot roll back a newer
+     *  pin written while it ran (the revalidate-CAS sibling). */
+    set(requestKey: string, closureHash: string, expectedCurrent?: string | null): Promise<void>;
     /** Background revalidate of a STALE pin that was just served: POST the
      *  same canonical request, compare closure hashes, refresh/replace the
      *  pin. Rejection = one async terminal warning; the pin stays untouched
@@ -534,6 +552,16 @@ async function runInstallExclusive(
     pkgSpecs.push(spec);
   }
 
+  // Tree preparation INSIDE the phase lock, before this install reads
+  // anything: a clear/reseed running outside the lock could raze the tree
+  // under another terminal's in-flight exclusive install (see the seam doc).
+  if (deps.prepareInstall) {
+    await deps.prepareInstall(ctx, {
+      fullInstall: pkgSpecs.length === 0,
+      sessionInstallActivity: installStateFor(deps.vfs, ctx.cwd).generation > 0,
+    });
+  }
+
   const pkg = await readPackageJson(deps.vfs, ctx.cwd);
   const dependencies = { ...pkg.dependencies };
   const devDependencies = { ...pkg.devDependencies };
@@ -577,11 +605,21 @@ async function runInstallExclusive(
   // site: a reload during this install (or its background drain) must find
   // an untrusted marker and re-arrive, never trust a half-replaced tree. A
   // failed install leaves it pending (self-heal: the tree may be part-
-  // mutated, the old stamp must not resurrect). No-op without package.json.
-  // On the stamp chain: the demote must land AFTER any in-flight older
-  // sequence's trusted write, never under it.
+  // mutated, the old stamp must not resurrect). Demote deps fall back to the
+  // prior stamp's own snapshot: a trusted stamp must never survive un-demoted
+  // just because package.json is missing (the silent no-op would also make
+  // the durability proof below pass vacuously). On the stamp chain: the
+  // demote must land AFTER any in-flight older sequence's trusted write,
+  // never under it.
   const priorStamp = await readInstallStamp(deps.vfs, ctx.cwd);
-  await chainStampWrite(state, () => writeInstallStamp(deps.vfs, ctx.cwd, 0, stampSlug, 'pending'));
+  const demoteDeps: Record<string, string> | undefined =
+    (await readEffectiveDeps(deps.vfs, ctx.cwd)) ??
+    (priorStamp ? { ...priorStamp.deps } : undefined);
+  if (demoteDeps) {
+    await chainStampWrite(state, () =>
+      writeInstallStamp(deps.vfs, ctx.cwd, 0, stampSlug, 'pending', undefined, demoteDeps),
+    );
+  }
   // A demote that revokes a TRUSTED stamp must be PROVEN durable before the
   // first tree write (r17 class: a revocation that never reached disk is a
   // lie) — else OPFS keeps the old trusted stamp while the tree mutates, and
@@ -590,26 +628,39 @@ async function runInstallExclusive(
   // normally idle after boot). Fallback ladder: demote persisted → proceed;
   // failed → durable RM of the stamp; even that failing → ABORT before any
   // mutation (tree intact, attestation still true — the only honest state
-  // left).
+  // left). On abort the MIRROR stamp is restored to the trusted original:
+  // OPFS still holds it, and a retry must see a trusted prior stamp so it
+  // re-runs this proof instead of skipping it (mirror/durable split).
   if (priorStamp && stampTrusted(priorStamp) && deps.flush) {
     const stampPath = installStampPath(ctx.cwd);
     const failedToPersist = (report: PersistFailureReport | undefined): boolean =>
       report !== undefined && reportHasFailure(report, (p) => p === stampPath);
+    const abortRestoringMirror = async (message: string): Promise<1> => {
+      await chainStampWrite(state, () =>
+        writeDeferredTrustedStamp(deps.vfs, ctx.cwd, priorStamp.packages, priorStamp.slug, {
+          ...priorStamp.deps,
+        }),
+      ).catch(() => {
+        // Even the in-memory restore failed — the retry then reads an
+        // untrusted (pending/absent) stamp and self-heals at boot; the abort
+        // itself is already loud.
+      });
+      ctx.stderr.write(message);
+      return 1;
+    };
     try {
       if (failedToPersist(await deps.flush())) {
         await chainStampWrite(state, () => deps.vfs.rm(stampPath, { force: true }));
         if (failedToPersist(await deps.flush())) {
-          ctx.stderr.write(
+          return abortRestoringMirror(
             'npm: install aborted: the previous install stamp could not be demoted or removed durably — installing now could let a reload trust a torn tree; check browser storage (quota) and retry\n',
           );
-          return 1;
         }
       }
     } catch (err) {
-      ctx.stderr.write(
+      return abortRestoringMirror(
         `npm: install aborted: durability check failed (${(err as Error).message}) — cannot prove the previous install stamp was demoted\n`,
       );
-      return 1;
     }
   }
 
@@ -646,7 +697,7 @@ async function runInstallExclusive(
   // (a throwing/warning pin store or prefetch handle must not touch an
   // eddy-disabled install).
   const envPin = deps.resolverUrl ? deps.resolverClosureHash?.() : undefined;
-  const resolverPrefetch = deps.resolverUrl ? deps.resolverPrefetch?.() : undefined;
+  const prefetchCandidate = deps.resolverUrl ? deps.resolverPrefetch?.() : undefined;
   // Pin selection (ADR-0194). requestKey is the EXACT post-merge dep set —
   // computed AFTER the package.json write above, so `npm i kleur` keys {…+kleur},
   // not the stale file. A learned pin, keyed on that exact request, is the CORRECT
@@ -662,6 +713,17 @@ async function runInstallExclusive(
       ? await deps.learnedPins.get(eddyRequest.key).catch(() => undefined)
       : undefined;
   const resolverClosureHash = learnedPin?.closureHash ?? envPin;
+  // A PINNED boot prefetch (handle carries a closureHash) is forwarded only
+  // while that hash IS the current pin decision: the handle was primed at
+  // boot, and a pin expired past 24h or replaced since must not ride in via
+  // the buffered GET — it would serve the dropped closure with no as-of line
+  // and no revalidate, silently past the stale bound. An UNPINNED prefetch
+  // (no hash — a boot POST resolve) is a fresh server answer and passes.
+  const resolverPrefetch =
+    prefetchCandidate?.closureHash !== undefined &&
+    prefetchCandidate.closureHash !== resolverClosureHash
+      ? undefined
+      : prefetchCandidate;
   try {
     const result = await installFn({
       vfs: deps.vfs,
@@ -753,11 +815,14 @@ async function runInstallExclusive(
       deps.learnedPins
     ) {
       // Fire-and-forget write-back: the pin is an optimization, never worth
-      // blocking or failing the install line over.
+      // blocking or failing the install line over. CAS baseline = the pin
+      // this install READ at its start (null = absent): if the entry moved
+      // meanwhile, a newer install already re-learned it — skip, never roll
+      // it back.
       const { learnedPins } = deps;
       const closureHash = result.closureHash;
       void Promise.resolve()
-        .then(() => learnedPins.set(eddyRequest.key, closureHash))
+        .then(() => learnedPins.set(eddyRequest.key, closureHash, learnedPin?.closureHash ?? null))
         .catch((err) => {
           console.warn(`npm: learned pin write failed: ${(err as Error).message}`);
         });
@@ -877,6 +942,21 @@ async function stampInstalledTree(
   // slot below.)
   const state = installStateFor(deps.vfs, cwd);
   if (state.generation !== generation) return;
+  // The stamp writes the INSTALL-TIME snapshot, but only when package.json
+  // provably did not move since (the boot promoter's contract): the real
+  // installer re-reads package.json AFTER the eddy pin window, so a
+  // mid-install edit can put deps in the tree the snapshot never named — a
+  // trusted stamp for either set would be a provenance lie. Moved → loud
+  // skip, self-heal (the next boot re-installs). Checked AFTER the
+  // generation guard: a newer install legitimately rewrote package.json and
+  // owns stamping — that is not an edit, no warning.
+  const currentDeps = await readEffectiveDeps(deps.vfs, cwd);
+  if (!currentDeps || !depsEqual(currentDeps, stampDeps)) {
+    ctx.stderr.write(
+      'npm: WARNING: package.json changed during the install — install stamp skipped; the next boot re-installs\n',
+    );
+    return;
+  }
   // The tree itself vanished while the drain ran (`npm install && rm -rf
   // node_modules`): the deferred writer must not resurrect a trusted stamp
   // into an empty dir. The user deleted it; no stamp is the honest state. A
@@ -891,9 +971,6 @@ async function stampInstalledTree(
       // here proves that demote (if any) lands AFTER this write, never under
       // it.
       if (state.generation !== generation) return false;
-      // The INSTALL-TIME snapshot, never a re-read: package.json/slug may
-      // have moved while the drain ran, and the stamp attests what WAS
-      // installed.
       await writeDeferredTrustedStamp(deps.vfs, cwd, packages, stampSlug, stampDeps);
       return true;
     });

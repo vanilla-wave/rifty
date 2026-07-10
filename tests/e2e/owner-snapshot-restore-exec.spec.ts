@@ -114,6 +114,9 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     // re-installs (no stamp yet); either way the workspace boots and serves,
     // never a crash or a trusted torn tree. Deliberately NO stamp wait here.
     await runTerminalLine(page, 'npm install ms');
+    // The terminal buffer does NOT survive the reload above (verified live —
+    // review r4's "stale cowsay summary matches first" concern is refuted):
+    // this fresh buffer's first summary line IS the ms install's own exit.
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
     await page.reload();
     await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({

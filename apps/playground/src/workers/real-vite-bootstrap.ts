@@ -54,6 +54,7 @@ import {
   effectiveDepsFromPackageJsonText,
   installStampSatisfiedForPackageJson,
   installStampSatisfiedForPackageJsonSync,
+  readInstallStamp,
 } from '../glue/install-stamp.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
@@ -792,6 +793,41 @@ async function bootShellOwner(opts: {
       // (npm parity: real npm does not fsync node_modules); a reload beating
       // the drain only costs a re-install.
       flush: flushSyncMirror,
+      // Faithful from-scratch (INSIDE the per-tree install phase lock — a
+      // clear running outside it could raze another terminal's in-flight
+      // install): the FIRST full `npm install` of a from-scratch preset (no
+      // satisfying stamp) starts CLEAN — clear any prior preset's tree and
+      // re-seed THIS preset's package.json, so it is a real COLD install, not
+      // an EBROKENLOCK over a foreign tree. A satisfying stamp (reload)
+      // installs over the existing tree, preserving user edits. A PENDING
+      // stamp for this slug WITH session install activity is OURS — an
+      // install of this very realm still mid background-durability; clearing
+      // would reset the user's package.json and force a cold re-install
+      // inside the drain window (review round 4).
+      prepareInstall: async (_ctx, info) => {
+        if (!devFromScratch || !info.fullInstall) return;
+        const checkVfs = new SyncMirrorVfs();
+        if (
+          await installStampSatisfiedForPackageJson(
+            checkVfs,
+            devCfg.root,
+            devSlug,
+            devCfg.packageJson,
+          )
+        ) {
+          return;
+        }
+        if (info.sessionInstallActivity) {
+          const stamp = await readInstallStamp(checkVfs, devCfg.root);
+          if (stamp?.durability === 'pending' && stamp.slug === devSlug) return;
+        }
+        const fs = syncMirror();
+        clearProjectTree(fs, devCfg.root);
+        fs.writeFileSync(
+          normalizePath(`${devCfg.root}/package.json`),
+          enc.encode(devCfg.packageJson),
+        );
+      },
       // Stamp the install for the CURRENT project slug (same key the dev-server
       // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
       // this tree — otherwise the arrival re-runs and replaces node_modules,
@@ -813,8 +849,10 @@ async function bootShellOwner(opts: {
       // refreshes it via a manifest-only POST (backlog eddy-stale-pin-revalidate).
       learnedPins: {
         get: (key) => readLearnedPin(vfs, key),
-        set: async (key, hash) => {
-          await writeLearnedPin(vfs, key, hash); // unconditional learn — always written
+        set: async (key, hash, expectedCurrent) => {
+          // CAS against the install-START baseline (see the seam doc) —
+          // a skipped write means a newer install already re-learned the key.
+          await writeLearnedPin(vfs, key, hash, undefined, expectedCurrent);
         },
         revalidate: async (_key, request, servedHash) => {
           const resolverUrl = getResolverUrl();
@@ -828,29 +866,8 @@ async function bootShellOwner(opts: {
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
         devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
-      // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
-      // slug stamp yet) starts CLEAN — clear any prior preset's node_modules +
-      // lockfile and re-seed THIS preset's package.json — so it is a real COLD
-      // install, not an EBROKENLOCK over a foreign (e.g. instant-snapshot) tree. A
-      // reload (slug stamped) installs over the existing tree (npm-faithful no-op),
-      // preserving the user's edits. Runs in the owner, ATOMIC with the install (the
-      // `npm install && <dev>` boot line never races it).
-      if (devFromScratch && isFullInstall(args)) {
-        const stamped = await installStampSatisfiedForPackageJson(
-          new SyncMirrorVfs(),
-          devCfg.root,
-          devSlug,
-          devCfg.packageJson,
-        );
-        if (!stamped) {
-          const fs = syncMirror();
-          clearProjectTree(fs, devCfg.root);
-          fs.writeFileSync(
-            normalizePath(`${devCfg.root}/package.json`),
-            enc.encode(devCfg.packageJson),
-          );
-        }
-      }
+      // The from-scratch clean-start moved into `prepareInstall` (above) — it
+      // must run INSIDE the per-tree install phase lock (review round 4).
       const code = await npmCommand(args, ctx);
       if (code === 0 && absorbGeneratedBaseline) {
         await absorbPendingStarterGeneratedBaseline(devCfg.root);

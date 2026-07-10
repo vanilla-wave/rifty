@@ -125,6 +125,43 @@ indefinitely.
    `EDDY_STORE_DURABLE_HEADER` moves to `eddy-request.ts` (one wire-protocol
    home, two consumers).
 
+Round-4 hardening (2026-07-11, review r4 — production semantics):
+
+- **SyncMirrorVfs.writeFile no longer auto-mkdirs** (sibling-drift kill): the
+  no-mkdir deferred-write guarantee was proven only on the strict MemoryVfs;
+  production's lenient twin resurrected deleted trees anyway. Node `fs`
+  parity now contracted across siblings (the npm-client linker mkdirs
+  explicitly — unaffected).
+- **From-scratch clean-start runs INSIDE the install phase lock**
+  (`prepareInstall` seam): the wrapper's clear/reseed could raze a tree under
+  another terminal's exclusive install. A PENDING stamp for this slug with
+  session install activity is OURS (mid background-durability) — no clear, no
+  package.json reset inside the drain window.
+- **Boot promoter re-checks the stamp SYNCHRONOUSLY at its write**: the async
+  read could resolve before a command-site demote landed — the stale read
+  then promoted trusted right over it.
+- **Demote never silently no-ops**: without package.json the pending demote
+  falls back to the prior stamp's own dep snapshot (a vacuous durability
+  proof over an un-demoted trusted stamp was the alternative). An ABORTED
+  install restores the mirror's trusted stamp so a retry re-runs the proof
+  (mirror/durable split).
+- **Trusted stamp only when package.json provably did not move** since the
+  install-time snapshot (the boot promoter's contract — supersedes the r1
+  "stamp the snapshot regardless" reading): the real installer re-reads
+  package.json after the eddy pin window, so a mid-install edit can put deps
+  in the tree the snapshot never named. Moved → loud skip, next boot
+  re-installs.
+- **Pin write-back is CAS** (the revalidate-CAS sibling): baseline = the pin
+  read at install start (`null` = absent); a slower install adopting an older
+  resolution skips instead of rolling back a newer pin.
+- **A pinned boot prefetch is forwarded only while its hash IS the current
+  pin decision** — a pin expired past 24h (or replaced) must not ride in via
+  the buffered GET with no as-of line.
+- Revocation runbook: server RAM caches (mutable link + packuments,
+  ≤`EDDY_TTL_SECONDS`) can re-seed a revoked closure from an ORDINARY client
+  POST inside the TTL window — named in the runbook with the restart
+  escape hatch.
+
 ## Consequences
 
 - The install prompt returns ~0.5s earlier and a `&&`-chained dev server
@@ -150,3 +187,8 @@ indefinitely.
 - ADR-0187 keeps governing everything but the command-site await (amendment
   pointer added there); ADR-0194 §8's freshness clause is extended by §4–5
   here (pointer added there).
+- Honest residual: the from-scratch FIRST install still awaits the
+  generated-baseline absorption's global flush before the prompt returns —
+  pre-existing, outside this epic's install→vite-ready claim (which measured
+  the repeat/visible-install path); removing it is future perf work, not a
+  silent promise of this ADR.

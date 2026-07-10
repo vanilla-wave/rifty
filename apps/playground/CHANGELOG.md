@@ -40,6 +40,49 @@
   unchanged; revocation safety net: §Revocation runbook in
   `docs/public/hosting-eddy.md`.
 
+### Fixed (install-tail-latency review round 4, ADR-0216 r4 notes)
+
+- **`SyncMirrorVfs.writeFile` no longer auto-creates parent directories**
+  (Node `fs.writeFile` parity; sibling-drift kill): the lenient production
+  twin voided the r3 no-mkdir guarantee — a `rm -rf node_modules` completing
+  inside the deferred write window was silently resurrected in production
+  while the strict-MemoryVfs unit test stayed green. Contract test added; the
+  npm-client linker mkdirs explicitly and is unaffected.
+- **From-scratch clean-start moved INSIDE the per-tree install phase lock**
+  (`prepareInstall` seam): the wrapper's clear/reseed ran before the lock, so
+  terminal B could raze the tree under terminal A's exclusive install. A
+  PENDING stamp for this slug with session install activity is recognized as
+  OURS (an install of this realm mid background-durability) — a boot-line
+  re-run inside the drain window no longer resets the user's package.json and
+  forces a cold re-install.
+- **Boot promoter (project-deps) re-checks the stamp SYNCHRONOUSLY at its
+  write**: its async read could resolve, then a command-site demote landed
+  before the continuation ran — the stale read promoted a trusted stamp right
+  over the demote while the install mutated the tree.
+- **Trusted-stamp demotion never silently no-ops**: with package.json absent
+  it falls back to the prior stamp's own dep snapshot (previously the demote
+  no-op'ed and the durability proof passed vacuously over the still-trusted
+  stamp). An ABORTED install now restores the mirror's trusted stamp so a
+  retry re-runs the proof instead of skipping it (mirror/OPFS split).
+- **The deferred trusted stamp lands only if package.json provably did not
+  move since the install-time snapshot** (boot promoter's contract): the real
+  installer re-reads package.json after the eddy pin window, so a mid-install
+  edit could put deps in the tree the snapshot never named — the stamp now
+  skips loudly instead (contract renegotiated from r1's "stamp the snapshot
+  regardless"; next boot re-installs).
+- **Learned-pin write-back is compare-and-set** (the r3 revalidate-CAS
+  sibling the sweep missed): baseline = the pin observed at install start; a
+  slower install adopting an older cached resolution can no longer roll back
+  a newer `--prefer-online`/POST pin.
+- **A pinned boot prefetch is dropped unless its hash IS the current pin
+  decision**: a pin expired past 24h or replaced since boot must not ride in
+  via the buffered GET — that served the dropped closure with no as-of line
+  and no revalidate, silently past the stale bound.
+- Revocation runbook: named the server-side RAM-cache residual (mutable link
+  + packuments, ≤`EDDY_TTL_SECONDS`) — an ordinary client POST inside the TTL
+  window can re-seed a revoked closure; restart the eddy service to close the
+  window for real takedowns.
+
 ### Fixed (install-tail-latency review round 3, ADR-0216 r3 notes)
 
 - **Trusted-stamp demotion is now PROVEN durable before the first tree write**

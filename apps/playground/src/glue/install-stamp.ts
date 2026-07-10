@@ -325,7 +325,9 @@ function readEffectiveDepsSync(
   return text === null ? null : effectiveDepsFromPackageJsonText(text);
 }
 
-function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
+/** Sync twin of {@link readInstallStamp} — exported for write-site rechecks
+ * that must be ATOMIC with a sync write (no await between read and write). */
+export function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
   const text = readTextSyncOrNull(fs, installStampPath(root));
   if (text === null) return null;
   let parsed: unknown;

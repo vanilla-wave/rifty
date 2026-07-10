@@ -168,21 +168,21 @@ let pinWriteChain: Promise<void> = Promise.resolve();
  * Persist a learned pin (prune expired, evict oldest over
  * {@link LEARNED_PINS_CAP}). A corrupt existing file is replaced, not an
  * error. Writes are serialized (see {@link pinWriteChain}). With
- * `onlyIfCurrentHash` the write is COMPARE-AND-SET: it lands only while the
- * key's entry still holds that hash (read inside the chain slot — atomic vs
- * other writers), else it is skipped and `false` returns. A background
- * revalidate uses this so a slow POST can never roll back a NEWER pin written
- * while it was in flight.
+ * `onlyIfCurrent` the write is COMPARE-AND-SET: it lands only while the key's
+ * entry still holds that hash (`null` = only while ABSENT) — read inside the
+ * chain slot, atomic vs other writers — else it is skipped and `false`
+ * returns. The background revalidate AND the install write-back use this so a
+ * slow POST can never roll back a NEWER pin written while it was in flight.
  */
 export function writeLearnedPin(
   vfs: Vfs,
   requestKey: string,
   closureHash: string,
   now: () => number = Date.now,
-  onlyIfCurrentHash?: string,
+  onlyIfCurrent?: string | null,
 ): Promise<boolean> {
   const run = pinWriteChain.then(() =>
-    writeLearnedPinExclusive(vfs, requestKey, closureHash, now, onlyIfCurrentHash),
+    writeLearnedPinExclusive(vfs, requestKey, closureHash, now, onlyIfCurrent),
   );
   pinWriteChain = run.then(
     () => undefined,
@@ -196,7 +196,7 @@ async function writeLearnedPinExclusive(
   requestKey: string,
   closureHash: string,
   now: () => number,
-  onlyIfCurrentHash?: string,
+  onlyIfCurrent?: string | null,
 ): Promise<boolean> {
   const nowMs = now();
   let file: LearnedPinsFile | null = null;
@@ -207,11 +207,12 @@ async function writeLearnedPinExclusive(
       file = null;
     }
   }
-  if (
-    onlyIfCurrentHash !== undefined &&
-    file?.entries[requestKey]?.closureHash !== onlyIfCurrentHash
-  ) {
-    return false; // superseded while we were resolving — never roll it back
+  if (onlyIfCurrent !== undefined) {
+    const current = file?.entries[requestKey]?.closureHash;
+    const expected = onlyIfCurrent === null ? undefined : onlyIfCurrent;
+    if (current !== expected) {
+      return false; // superseded while we were resolving — never roll it back
+    }
   }
   const entries: Record<string, LearnedPinEntry> = {};
   for (const [key, entry] of Object.entries(file?.entries ?? {})) {

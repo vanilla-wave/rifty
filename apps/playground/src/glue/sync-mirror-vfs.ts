@@ -8,7 +8,7 @@
  * `fs.readFileSync` sees them.
  */
 import type { Vfs, VfsDirent, VfsStat } from '@riftydev/vfs';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -21,11 +21,13 @@ export class SyncMirrorVfs implements Vfs {
     return dec.decode(syncMirror().readFileBytesSync(normalizePath(path)));
   }
   async writeFile(path: string, data: Uint8Array | string): Promise<void> {
-    const np = normalizePath(path);
-    const parent = dirname(np);
-    syncMirror().mkdirSync(parent, { recursive: true });
+    // No auto-mkdir — Node `fs.writeFile` ENOENTs on a missing parent, and so
+    // do the sibling Vfs impls (MemoryVfs, OpfsVfs): a lenient twin here let a
+    // deleted tree be silently resurrected by a deferred write that was
+    // proven no-mkdir only against the strict MemoryVfs (sibling-drift).
+    // Callers own their mkdir (the npm-client linker already does).
     const bytes = typeof data === 'string' ? enc.encode(data) : data;
-    syncMirror().writeFileSync(np, bytes);
+    syncMirror().writeFileSync(normalizePath(path), bytes);
   }
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     syncMirror().mkdirSync(normalizePath(path), { recursive: options?.recursive ?? false });

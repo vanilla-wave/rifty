@@ -220,6 +220,16 @@ same hash on the next POST.
    long a client keeps *requesting* the old hash without consulting the
    server; the revocation makes any such request miss.
 
+6. **Server cache residual (RAM-only, ≤ `EDDY_TTL_SECONDS`, default 1800s):**
+   the mutable dep-set link and shared packument caches may still hold
+   pre-revocation upstream metadata — an ORDINARY client POST inside that
+   window can re-resolve the revoked closure from the cached packuments and
+   re-seed it, even after this runbook ran (step (c)'s `prefer:"online"` only
+   fixes the runbook's own POST). For a real takedown, close the window:
+   restart the eddy service (the caches are RAM-only — a restart empties
+   them), or accept up to one TTL of possible re-seeding before the fresh
+   upstream metadata wins; then re-run steps 1–3.
+
 Verified live 2026-07-10 (throwaway closure `left-pad@1.3.0` + `is-odd@3.0.1`,
 hash `sha256-sKf7LT1+mOeYnTm0d0gjuNsoKg+K/QSnWalgHxuIvT0=`): POST 200
 `x-eddy-store-durable: 1` → CDN GET 200 `immutable` → bucket delete →

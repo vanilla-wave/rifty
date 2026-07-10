@@ -38,6 +38,7 @@ import {
   isStampedTreeDamage,
   readEffectiveDeps,
   readInstallStamp,
+  readInstallStampSync,
   reportHasFailure,
 } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
@@ -345,6 +346,12 @@ function scheduleStampDurabilityCheck(
       return;
     }
     if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
+    // SYNC recheck AT the write: pendingPromotionStillCurrent's async read
+    // can resolve, then a command-site demote (a pending stamp with no
+    // promotionId) lands before this continuation runs — the stale read must
+    // not promote over it. Sync read + sync write = atomic in-realm.
+    const atWrite = readInstallStampSync(opts.fsSync, opts.root);
+    if (atWrite?.durability !== 'pending' || atWrite.promotionId !== promotionId) return;
     writeInstallStampForDepsSync(opts, deps, packages);
     const promoted = await flush();
     if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
