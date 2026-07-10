@@ -52,22 +52,38 @@ indefinitely.
      `durability:"pending"` (never satisfies reuse) — a reload during the
      install OR its background drain re-arrives instead of trusting a
      half-replaced tree; a failed install leaves it pending (the tree may be
-     part-mutated — the old stamp must not resurrect);
-   - each install bumps a per-tree GENERATION (module scope, cross-terminal);
-     a background sequence writes its trusted stamp only while its generation
-     is current — a newer install cancels the older sequence's stamp instead
-     of racing it. Deliberately NOT an await-chain over the DRAIN: chaining
-     would park every later install behind a wedged durability layer
-     (unbounded-wait class). The FOREGROUND install phases (tree writes) DO
-     serialize per tree — visible, user-interruptible work only;
+     part-mutated — the old stamp must not resurrect). A demote that REVOKES
+     a trusted stamp is PROVEN durable before the first tree write (r3;
+     ADR-0194 r17 revoke-proof class): flush + full-ledger stamp-path check →
+     durable-rm fallback → loud install ABORT — an unpersisted demote leaves
+     OPFS trusting the old stamp over a torn mutation. Fresh/pending trees
+     have nothing to revoke, so the fast path stays await-free (the exit path
+     is background regardless — the proof sits at install START);
+   - each install bumps a per-tree GENERATION — per (vfs, cwd), cross-terminal
+     within one VFS; keying by path string alone false-shares across VFS
+     instances (r3) —; a background sequence writes its trusted stamp only
+     while its generation is current — a newer install cancels the older
+     sequence's stamp instead of racing it. ALL stamp writes (pending demote,
+     deferred trusted) serialize on a per-tree chain of bounded VFS writes,
+     and the trusted slot re-checks the generation SYNCHRONOUSLY inside the
+     chain (r3: the gen/vanish checks sat awaits away from the write — an
+     older sequence could overwrite a newer install's pending stamp).
+     Deliberately NOT an await-chain over the DRAIN: chaining would park
+     every later install behind a wedged durability layer (unbounded-wait
+     class). The FOREGROUND install phases (tree writes) DO serialize per
+     tree — visible, user-interruptible work only;
    - the deferred writer skips its trusted stamp when the tree dir vanished
      meanwhile (`npm install && rm -rf node_modules` must not resurrect
-     trust into an empty dir). Non-npm PARTIAL mutations of a stamped tree
-     remain the pre-existing class owned by
+     trust into an empty dir) and never mkdirs (r3: a deletion completing
+     after the check now fails the write ENOENT — loud skip, not a
+     resurrected dir holding only a stamp). Non-npm PARTIAL mutations of a
+     stamped tree remain the pre-existing class owned by
      `playground/install-stamp-invalidation` — unchanged by this ADR;
-   - the trusted stamp attests the INSTALL-TIME deps + slug snapshot, never a
-     post-drain re-read (an edit or preset switch inside the drain window must
-     not leak into a trusted stamp).
+   - the trusted stamp attests the INSTALL-TIME deps + slug snapshot — slug
+     sampled at mutation START (r3: sampling after installFn let a preset
+     switch mid-install re-key the old tree under the new slug), never a
+     post-drain re-read (an edit or preset switch inside the install or drain
+     window must not leak into a trusted stamp).
 3. **Accepted UX delta** (the epic's explicit call): a reload landing inside
    the ~0.5–2s background window may cost a re-install (for a from-scratch
    preset boot line, the clean-start wrapper re-seeds the preset
@@ -94,7 +110,10 @@ indefinitely.
    forever, voiding the bound): the fire-and-forget write-back now fires only
    for `resolvedVia:'post'` adoptions, and the stale revalidate refreshes
    (same hash) or replaces (new hash — only with the `x-eddy-store-durable`
-   proof, mirroring the installer's learnable gate) the pin.
+   proof, mirroring the installer's learnable gate) the pin. The revalidate's
+   write is COMPARE-AND-SET against the served stale hash (r3): a slow
+   background POST landing after a newer POST/`--prefer-online` re-learn is
+   `'superseded'` — observed, no write, never a rollback.
 6. **npm-client public API** (cross-package, recorded here):
    `InstallResult.resolvedAt` (validated ISO stamp of the adopted bundle),
    `InstallResult.resolvedVia: 'get'|'post'` (request-kind provenance — a
@@ -110,7 +129,11 @@ indefinitely.
 
 - The install prompt returns ~0.5s earlier and a `&&`-chained dev server
   starts immediately; repeat installs of a ≤24h-old dep set ride the
-  browser-HTTP-cached GET at replay speed with one background POST.
+  browser-HTTP-cached GET at replay speed with one background POST — in trees
+  WITHOUT a covering lockfile (fresh project/sandbox of a known dep set): a
+  covering lockfile takes the zero-network replay fast path and never
+  consults eddy (`hasLockfileFastPath`), which is faster still. Same-tree
+  repeats are lockfile replays; the SWR pin serves the fresh-tree case.
 - A tab killed (or reloaded) before the background drain settles costs a
   re-install on next boot — bounded, visible, self-healing; never a torn tree
   behind a trusted stamp. The pre-existing mid-install torn-window

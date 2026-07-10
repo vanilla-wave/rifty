@@ -167,16 +167,27 @@ let pinWriteChain: Promise<void> = Promise.resolve();
 /**
  * Persist a learned pin (prune expired, evict oldest over
  * {@link LEARNED_PINS_CAP}). A corrupt existing file is replaced, not an
- * error. Writes are serialized (see {@link pinWriteChain}).
+ * error. Writes are serialized (see {@link pinWriteChain}). With
+ * `onlyIfCurrentHash` the write is COMPARE-AND-SET: it lands only while the
+ * key's entry still holds that hash (read inside the chain slot — atomic vs
+ * other writers), else it is skipped and `false` returns. A background
+ * revalidate uses this so a slow POST can never roll back a NEWER pin written
+ * while it was in flight.
  */
 export function writeLearnedPin(
   vfs: Vfs,
   requestKey: string,
   closureHash: string,
   now: () => number = Date.now,
-): Promise<void> {
-  const run = pinWriteChain.then(() => writeLearnedPinExclusive(vfs, requestKey, closureHash, now));
-  pinWriteChain = run.catch(() => {});
+  onlyIfCurrentHash?: string,
+): Promise<boolean> {
+  const run = pinWriteChain.then(() =>
+    writeLearnedPinExclusive(vfs, requestKey, closureHash, now, onlyIfCurrentHash),
+  );
+  pinWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
   return run;
 }
 
@@ -185,7 +196,8 @@ async function writeLearnedPinExclusive(
   requestKey: string,
   closureHash: string,
   now: () => number,
-): Promise<void> {
+  onlyIfCurrentHash?: string,
+): Promise<boolean> {
   const nowMs = now();
   let file: LearnedPinsFile | null = null;
   if (await vfs.exists(LEARNED_PINS_PATH)) {
@@ -194,6 +206,12 @@ async function writeLearnedPinExclusive(
     } catch {
       file = null;
     }
+  }
+  if (
+    onlyIfCurrentHash !== undefined &&
+    file?.entries[requestKey]?.closureHash !== onlyIfCurrentHash
+  ) {
+    return false; // superseded while we were resolving — never roll it back
   }
   const entries: Record<string, LearnedPinEntry> = {};
   for (const [key, entry] of Object.entries(file?.entries ?? {})) {
@@ -216,6 +234,7 @@ async function writeLearnedPinExclusive(
   const next: LearnedPinsFile = { version: 1, entries };
   await vfs.mkdir('/.rifty', { recursive: true });
   await vfs.writeFile(LEARNED_PINS_PATH, `${JSON.stringify(next, null, 2)}\n`);
+  return true;
 }
 
 export interface RevalidateLearnedPinOptions {
@@ -237,13 +256,16 @@ export interface RevalidateLearnedPinOptions {
  * re-vouched for it); different → the pin is REPLACED so the next install
  * rides the new hash's GET (the OLD bundle may sit in the browser HTTP cache —
  * harmless: the pin points elsewhere, so it is simply never requested again;
- * no purge needed). Throws on any resolver failure — the pin file is written
- * only after a successful compare, so an abandoned/failed revalidate leaves
- * it byte-intact (retried on the next stale install).
+ * no purge needed). The write is compare-and-set against the served stale
+ * hash: a NEWER pin landing while this POST was in flight (a `--prefer-online`
+ * or POST re-learn) wins — `'superseded'`, no write. Throws on any resolver
+ * failure — the pin file is written only after a successful compare, so an
+ * abandoned/failed revalidate leaves it byte-intact (retried on the next
+ * stale install).
  */
 export async function revalidateLearnedPin(
   opts: RevalidateLearnedPinOptions,
-): Promise<'refreshed' | 'replaced'> {
+): Promise<'refreshed' | 'replaced' | 'superseded'> {
   const summary = await resolveEddyClosure({
     resolverUrl: opts.resolverUrl,
     request: opts.request,
@@ -260,6 +282,13 @@ export async function revalidateLearnedPin(
     );
   }
   const requestKey = canonicalEddyRequestKey(opts.request);
-  await writeLearnedPin(opts.vfs, requestKey, summary.closureHash, opts.now ?? Date.now);
+  const wrote = await writeLearnedPin(
+    opts.vfs,
+    requestKey,
+    summary.closureHash,
+    opts.now ?? Date.now,
+    opts.staleClosureHash,
+  );
+  if (!wrote) return 'superseded';
   return summary.closureHash === opts.staleClosureHash ? 'refreshed' : 'replaced';
 }

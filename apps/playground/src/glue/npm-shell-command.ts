@@ -48,7 +48,10 @@ import {
   installStampPath,
   installTreeDir,
   isStampedTreeDamage,
+  readInstallStamp,
   reportHasFailure,
+  stampTrusted,
+  writeDeferredTrustedStamp,
   writeInstallStamp,
 } from './install-stamp.ts';
 
@@ -427,44 +430,76 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'prefer-onli
 }
 
 /**
- * Per-TREE install generation (module scope — two terminals share it): each
- * install bumps its root's generation at mutation start; a background
- * durability sequence may write its TRUSTED stamp only while its generation
- * is still current. A newer install therefore cancels the older sequence's
- * stamp instead of racing it — stamp #N can never land over install #N+1's
- * half-replaced tree (same stale-promoter guard as the boot path's
- * `promotionId`, ADR-0187). Deliberately NOT an await-chain: waiting on the
- * previous drain would park the next install forever behind a wedged
- * durability layer (unbounded-wait class).
+ * Per-TREE install coordination state. A TREE is (vfs, cwd) — the same path
+ * string on two different VFS instances is two unrelated trees (two projects,
+ * two test harnesses) and must never share a mutex or a generation, or
+ * genuinely concurrent installs silently serialize (false sharing). Within one
+ * VFS the state is cross-terminal by design (two terminals, one tree).
+ *
+ * - `generation`: each install bumps it at mutation start; a background
+ *   durability sequence may write its TRUSTED stamp only while its generation
+ *   is still current — a newer install cancels the older sequence's stamp
+ *   instead of racing it (same stale-promoter guard as the boot path's
+ *   `promotionId`, ADR-0187). Deliberately NOT an await-chain: waiting on the
+ *   previous drain would park the next install forever behind a wedged
+ *   durability layer (unbounded-wait class).
+ * - `phase`: foreground-phase mutex — pending-demote → installFn's tree writes
+ *   → background scheduling — of two terminals must not interleave on one
+ *   tree. Only the foreground phase is chained (visible, user-interruptible
+ *   work); the background drain is NOT (see `generation`).
+ * - `stampWrites`: ALL stamp writes for this tree (pending demote, deferred
+ *   trusted) serialize here, so chain order — not wall-clock luck — decides
+ *   the final stamp; the deferred trusted write re-checks the generation
+ *   SYNCHRONOUSLY inside its slot, closing the check→write TOCTOU (an older
+ *   sequence can never overwrite a newer install's pending stamp). Tasks are
+ *   bounded VFS writes ONLY — never a drain (a wedged flush must not park
+ *   later installs or stamp writes).
  */
-const installGenerations = new Map<string, number>();
+interface TreeInstallState {
+  generation: number;
+  phase: Promise<void>;
+  stampWrites: Promise<void>;
+}
 
-/**
- * Per-TREE foreground-phase mutex (module scope, cross-terminal): the INSTALL
- * phase — pending-demote → installFn's tree writes → background scheduling —
- * of two terminals must not interleave on one tree, or an older install's
- * writes keep landing under the newer install's trusted stamp. Only the
- * foreground phase is chained (visible, user-interruptible work); the
- * background drain is NOT — a wedged durability layer must not park later
- * installs (see installGenerations).
- */
-const installPhases = new Map<string, Promise<void>>();
+const installStates = new WeakMap<Vfs, Map<string, TreeInstallState>>();
+
+function installStateFor(vfs: Vfs, cwd: string): TreeInstallState {
+  let byCwd = installStates.get(vfs);
+  if (!byCwd) {
+    byCwd = new Map();
+    installStates.set(vfs, byCwd);
+  }
+  let state = byCwd.get(cwd);
+  if (!state) {
+    state = { generation: 0, phase: Promise.resolve(), stampWrites: Promise.resolve() };
+    byCwd.set(cwd, state);
+  }
+  return state;
+}
+
+/** Enqueue one bounded stamp write on the tree's chain (see
+ * `TreeInstallState.stampWrites`). Rejections propagate to the caller; the
+ * chain itself never wedges on them. */
+function chainStampWrite<T>(state: TreeInstallState, task: () => Promise<T>): Promise<T> {
+  const run = state.stampWrites.then(task);
+  state.stampWrites = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 async function runInstall(
   specs: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
 ): Promise<number> {
-  const previous = installPhases.get(ctx.cwd) ?? Promise.resolve();
-  const run = previous.then(() => runInstallExclusive(specs, ctx, deps));
-  const tail = run.then(
+  const state = installStateFor(deps.vfs, ctx.cwd);
+  const run = state.phase.then(() => runInstallExclusive(specs, ctx, deps));
+  state.phase = run.then(
     () => undefined,
     () => undefined,
   );
-  installPhases.set(ctx.cwd, tail);
-  void tail.finally(() => {
-    if (installPhases.get(ctx.cwd) === tail) installPhases.delete(ctx.cwd);
-  });
   return run;
 }
 
@@ -526,9 +561,16 @@ async function runInstallExclusive(
 
   // Claim the tree: any in-flight background sequence of an OLDER install
   // loses its right to write a trusted stamp the moment this generation is
-  // bumped (see installGenerations).
-  const generation = (installGenerations.get(ctx.cwd) ?? 0) + 1;
-  installGenerations.set(ctx.cwd, generation);
+  // bumped (see TreeInstallState).
+  const state = installStateFor(deps.vfs, ctx.cwd);
+  state.generation += 1;
+  const generation = state.generation;
+
+  // The INSTALL-TIME project identity: sampled at mutation start, never after
+  // installFn — a preset switch during the install must not re-key this
+  // install's stamp under the NEW slug (two presets can share a dep set; the
+  // slug is exactly what keeps them from reusing each other's tree).
+  const stampSlug = deps.projectSlug?.() ?? '';
 
   // Demote any TRUSTED stamp to PENDING before the first tree mutation —
   // the boot path's pending-first pattern (ADR-0187) applied to the command
@@ -536,7 +578,40 @@ async function runInstallExclusive(
   // an untrusted marker and re-arrive, never trust a half-replaced tree. A
   // failed install leaves it pending (self-heal: the tree may be part-
   // mutated, the old stamp must not resurrect). No-op without package.json.
-  await writeInstallStamp(deps.vfs, ctx.cwd, 0, deps.projectSlug?.() ?? '', 'pending');
+  // On the stamp chain: the demote must land AFTER any in-flight older
+  // sequence's trusted write, never under it.
+  const priorStamp = await readInstallStamp(deps.vfs, ctx.cwd);
+  await chainStampWrite(state, () => writeInstallStamp(deps.vfs, ctx.cwd, 0, stampSlug, 'pending'));
+  // A demote that revokes a TRUSTED stamp must be PROVEN durable before the
+  // first tree write (r17 class: a revocation that never reached disk is a
+  // lie) — else OPFS keeps the old trusted stamp while the tree mutates, and
+  // a reload after a torn mutation trusts it. The proof costs one drain, paid
+  // ONLY here (fresh/pending trees have nothing to revoke; the queue is
+  // normally idle after boot). Fallback ladder: demote persisted → proceed;
+  // failed → durable RM of the stamp; even that failing → ABORT before any
+  // mutation (tree intact, attestation still true — the only honest state
+  // left).
+  if (priorStamp && stampTrusted(priorStamp) && deps.flush) {
+    const stampPath = installStampPath(ctx.cwd);
+    const failedToPersist = (report: PersistFailureReport | undefined): boolean =>
+      report !== undefined && reportHasFailure(report, (p) => p === stampPath);
+    try {
+      if (failedToPersist(await deps.flush())) {
+        await chainStampWrite(state, () => deps.vfs.rm(stampPath, { force: true }));
+        if (failedToPersist(await deps.flush())) {
+          ctx.stderr.write(
+            'npm: install aborted: the previous install stamp could not be demoted or removed durably — installing now could let a reload trust a torn tree; check browser storage (quota) and retry\n',
+          );
+          return 1;
+        }
+      }
+    } catch (err) {
+      ctx.stderr.write(
+        `npm: install aborted: durability check failed (${(err as Error).message}) — cannot prove the previous install stamp was demoted\n`,
+      );
+      return 1;
+    }
+  }
 
   const packageJsonPath = `${ctx.cwd}/package.json`;
   const hadPackageJson = await deps.vfs.exists(packageJsonPath);
@@ -624,7 +699,6 @@ async function runInstallExclusive(
       ...devDependencies,
       ...pkg.optionalDependencies,
     };
-    const stampSlug = deps.projectSlug?.() ?? '';
     void stampInstalledTree(
       deps,
       ctx,
@@ -798,17 +872,32 @@ async function stampInstalledTree(
   // A NEWER install claimed this tree while the drain ran: its pending stamp
   // is already down and only ITS sequence may promote — writing this stale
   // trusted stamp would attest a tree the newer install is replacing. Not a
-  // failure (the newer install owns stamping now), so no warning.
-  if (installGenerations.get(cwd) !== generation) return;
+  // failure (the newer install owns stamping now), so no warning. (Cheap
+  // early-exit; the LOAD-BEARING check is the sync re-check inside the chain
+  // slot below.)
+  const state = installStateFor(deps.vfs, cwd);
+  if (state.generation !== generation) return;
   // The tree itself vanished while the drain ran (`npm install && rm -rf
-  // node_modules`): pre-background the chained rm removed the fresh stamp
-  // WITH the tree — the deferred writer must not resurrect a trusted stamp
-  // into an empty dir. The user deleted it; no stamp is the honest state.
+  // node_modules`): the deferred writer must not resurrect a trusted stamp
+  // into an empty dir. The user deleted it; no stamp is the honest state. A
+  // deletion completing AFTER this read is caught by the write itself — the
+  // no-mkdir writer fails ENOENT on the vanished parent (loud, below).
   if (!(await deps.vfs.exists(installTreeDir(cwd)))) return;
   try {
-    // The INSTALL-TIME snapshot, never a re-read: package.json/slug may have
-    // moved while the drain ran, and the stamp attests what WAS installed.
-    await writeInstallStamp(deps.vfs, cwd, packages, stampSlug, undefined, undefined, stampDeps);
+    const written = await chainStampWrite(state, async () => {
+      // Re-checked SYNCHRONOUSLY in the chain slot — no await between this
+      // read and the write dispatch. A newer install bumps the generation
+      // BEFORE enqueueing its pending demote on this same chain, so passing
+      // here proves that demote (if any) lands AFTER this write, never under
+      // it.
+      if (state.generation !== generation) return false;
+      // The INSTALL-TIME snapshot, never a re-read: package.json/slug may
+      // have moved while the drain ran, and the stamp attests what WAS
+      // installed.
+      await writeDeferredTrustedStamp(deps.vfs, cwd, packages, stampSlug, stampDeps);
+      return true;
+    });
+    if (!written) return;
   } catch (err) {
     // Terminal, not console: the user's reload behavior changes (next boot
     // re-installs) — that must be visible where the install ran.

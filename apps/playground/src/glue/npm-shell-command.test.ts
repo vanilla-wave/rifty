@@ -27,7 +27,7 @@ import {
   eddyRequestFromPackageJson,
 } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
-import { MemoryVfs } from '@riftydev/vfs';
+import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type InstallFn,
@@ -1798,6 +1798,43 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     });
   });
 
+  it('a preset switch DURING installFn cannot re-key the stamp either — the slug is sampled at mutation START', async () => {
+    // Review round 3: the slug was sampled after installFn returned, so a
+    // switch mid-install stamped the OLD install under the NEW slug — with two
+    // presets sharing a dep set, the next boot would trust the wrong tree
+    // (exactly what the stamp's slug key exists to prevent).
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    let slug = 'preset-a';
+    const install: InstallFn = async () => {
+      slug = 'preset-b'; // the active preset changes while the install runs
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        projectSlug: () => slug,
+        flush: async () => ({ failures: [], total: 0 }),
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(exitCode).toBe(0);
+
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
+        durability?: string;
+        slug: string;
+      };
+      expect(stamp.durability).toBeUndefined();
+      expect(stamp.slug).toBe('preset-a'); // the slug the install STARTED under
+    });
+  });
+
   it('a package.json edit DURING the install cannot leak into the trusted stamp — the snapshot is what installFn was fed', async () => {
     // Review round 2: reading package.json after installFn still left the
     // whole install duration open; the stamp must attest the request maps the
@@ -1857,6 +1894,262 @@ describe('npm-shell-command — background durability (install exit stops awaiti
 
     expect(await vfs.exists(STAMP)).toBe(false); // no stamp resurrected into an empty tree
     expect(await vfs.exists('/proj/node_modules')).toBe(false); // …and no phantom dir either
+  });
+
+  /** Delegate to a MemoryVfs but intercept `exists(interceptPath)` — the
+   * deterministic lever for the vanish-check→write window. The hook OWNS the
+   * answer (it gets the real read and may park, or mutate the tree and return
+   * a stale answer). Methods are bound to the target so MemoryVfs #private
+   * fields survive the Proxy. */
+  function vfsWithExistsHook(
+    inner: MemoryVfs,
+    interceptPath: string,
+    hook: (read: () => Promise<boolean>) => Promise<boolean>,
+  ): Vfs {
+    return new Proxy(inner, {
+      get(target, prop, receiver) {
+        if (prop === 'exists') {
+          return async (p: string): Promise<boolean> => {
+            if (p === interceptPath) return hook(() => target.exists(p));
+            return target.exists(p);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    }) as unknown as Vfs;
+  }
+
+  it('an OLDER sequence never overwrites a NEWER install’s PENDING stamp — the generation is re-checked AT the write, not before the awaits', async () => {
+    // Review round 3: the generation check, the vanish check, and the stamp
+    // write were separated by awaits; install #2's pending demote could land
+    // in that window and be overwritten by #1's stale TRUSTED stamp — a reload
+    // during #2 (same dep set) would then trust a half-replaced tree.
+    const inner = new MemoryVfs();
+    await inner.mkdir('/proj/node_modules', { recursive: true });
+    let sequenceParked!: () => void;
+    const parked = new Promise<void>((r) => {
+      sequenceParked = r;
+    });
+    let releaseSequence!: () => void;
+    const sequenceGate = new Promise<void>((r) => {
+      releaseSequence = r;
+    });
+    let gateArmed = true; // only #1's vanish check parks; later calls pass through
+    const vfs = vfsWithExistsHook(inner, '/proj/node_modules', async (read) => {
+      if (gateArmed) {
+        gateArmed = false;
+        sequenceParked();
+        await sequenceGate;
+      }
+      return read();
+    });
+    let releaseSecondInstall!: () => void;
+    const secondInstallGate = new Promise<void>((r) => {
+      releaseSecondInstall = r;
+    });
+    let installCalls = 0;
+    const install: InstallFn = async () => {
+      installCalls += 1;
+      if (installCalls === 2) await secondInstallGate; // #2 parked mid-tree-write
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({ failures: [], total: 0 }),
+      }),
+    );
+
+    const first = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(first.exitCode).toBe(0);
+    await parked; // #1's sequence passed its generation check, parked pre-write
+
+    // Install #2, SAME dep set (the dangerous case: deps match, so a stale
+    // trusted stamp would satisfy the next boot over #2's half-written tree).
+    const secondRun = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(async () => {
+      const stamp = JSON.parse(await inner.readFileText(STAMP)) as { durability?: string };
+      expect(stamp.durability).toBe('pending'); // #2 demoted before its tree writes
+    });
+
+    // #1's parked sequence resumes — it must SKIP, never promote over #2's pending.
+    releaseSequence();
+    await new Promise((r) => setTimeout(r, 20));
+    const after = JSON.parse(await inner.readFileText(STAMP)) as { durability?: string };
+    expect(after.durability).toBe('pending');
+
+    releaseSecondInstall();
+    const second = await secondRun;
+    expect(second.exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect((await trustedStamp(inner))?.deps).toEqual({ lodash: '^4.17.0' });
+    });
+  });
+
+  it('a tree deleted AFTER the vanish check is not resurrected — the deferred write must not mkdir, it fails loudly instead', async () => {
+    // Review round 3: writeInstallStamp mkdirs node_modules, so an rm -rf
+    // completing inside the exists→write window was silently UNDONE — a
+    // trusted stamp re-created over an otherwise-empty tree.
+    const inner = new MemoryVfs();
+    await inner.mkdir('/proj/node_modules', { recursive: true });
+    let rmOnce = true; // the tree vanishes right after #1's vanish check reads it
+    const vfs = vfsWithExistsHook(inner, '/proj/node_modules', async (read) => {
+      const present = await read();
+      if (present && rmOnce) {
+        rmOnce = false;
+        await inner.rm('/proj/node_modules', { recursive: true, force: true });
+      }
+      return present; // the STALE answer — rm completed inside the window
+    });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({ failures: [], total: 0 }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(exitCode).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(await inner.exists('/proj/node_modules')).toBe(false); // never resurrected
+    expect(await inner.exists(STAMP)).toBe(false);
+    // …and the skipped stamp is LOUD, not silent (the write failed with the
+    // parent gone — the user's reload behavior changes, the terminal says so).
+    expect(rec.stderr.join('')).toContain('install stamp write failed');
+  });
+
+  const TRUSTED_SEED = `${JSON.stringify(
+    { version: 1, slug: '', deps: { lodash: '^4.17.0' }, packages: 2 },
+    null,
+    2,
+  )}\n`;
+
+  async function seedTrustedProject(vfs: MemoryVfs): Promise<void> {
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', version: '0.0.0', dependencies: { lodash: '^4.17.0' } }, null, 2)}\n`,
+    );
+    await vfs.writeFile(STAMP, TRUSTED_SEED);
+  }
+
+  it('demoting a TRUSTED stamp is PROVEN durable before any tree mutation — an unpersistable demote ABORTS the install loudly', async () => {
+    // Review round 3 (r17 class: a revocation that never reached disk is a
+    // lie): if the pending demote fails to persist AND tree writes then fail
+    // too, OPFS keeps the OLD trusted stamp over a torn tree — the next boot
+    // trusts it. When even the rm fallback won't persist, the only honest
+    // move is to abort BEFORE the first mutation: tree intact, stamp true.
+    const vfs = new MemoryVfs();
+    await seedTrustedProject(vfs);
+    let installCalled = false;
+    const install: InstallFn = async () => {
+      installCalled = true;
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [{ path: STAMP, op: 'write' as const, message: 'QuotaExceededError' }],
+          total: 1,
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(1);
+    expect(installCalled).toBe(false); // aborted BEFORE any tree mutation
+    expect(rec.stderr.join('')).toContain('install aborted');
+    // package.json untouched — nothing was mutated.
+    const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies).toEqual({ lodash: '^4.17.0' });
+  });
+
+  it('an unpersistable demote falls back to a durable RM of the stamp — the install proceeds once the revocation is proven', async () => {
+    const vfs = new MemoryVfs();
+    await seedTrustedProject(vfs);
+    let flushCalls = 0;
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushCalls += 1;
+          // #1: the pending demote write failed to persist; #2 (after the rm
+          // fallback): the ledger healed — the stamp path is gone from disk.
+          if (flushCalls === 1) {
+            return {
+              failures: [{ path: STAMP, op: 'write' as const, message: 'QuotaExceededError' }],
+              total: 1,
+            };
+          }
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    // The background sequence still lands the trusted stamp for THIS install.
+    await vi.waitFor(async () => {
+      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0' });
+    });
+  });
+
+  it('no TRUSTED stamp on the tree → no foreground durability proof — the fast path stays await-free', async () => {
+    // The demote-proof flush exists to revoke a trusted attestation; a tree
+    // that never had one (fresh project, pending-only) has nothing to revoke —
+    // adding a foreground drain there would tax every cold install for
+    // nothing.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    let flushCallsBeforeInstall = 0;
+    let flushCalls = 0;
+    const install: InstallFn = async () => {
+      flushCallsBeforeInstall = flushCalls;
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          flushCalls += 1;
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(flushCallsBeforeInstall).toBe(0); // no foreground drain on the fast path
   });
 
   it('the INSTALL PHASE of two terminals serializes per tree — an older install cannot keep writing under a newer trusted stamp', async () => {

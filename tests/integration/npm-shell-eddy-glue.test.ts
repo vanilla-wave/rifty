@@ -270,6 +270,10 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     // Fault row (eddy-stale-pin-revalidate): two projects, one profile pin
     // store, racing fire-and-forget write-backs. The file must stay valid
     // JSON holding the canonical key → correct hash; both installs succeed.
+    // The overlap assert keeps the row honest: the per-tree install mutex is
+    // keyed by (vfs, cwd) — two DIFFERENT trees that happen to share a path
+    // string must run concurrently, or this test silently serializes and
+    // proves nothing about racing write-backs.
     const profileVfs = new MemoryVfs();
     await seedProject(profileVfs);
     const vfsB = new MemoryVfs();
@@ -279,11 +283,28 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
       set: (key: string, hash: string) => writeLearnedPin(profileVfs, key, hash),
       revalidate: async () => {},
     };
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const overlapProbedInstall: typeof install = async (...args: Parameters<typeof install>) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        return await install(...args);
+      } finally {
+        inFlight -= 1;
+      }
+    };
     const shellFor = (vfs: MemoryVfs): Shell => {
       const shell = new Shell({ cwd: '/proj' });
       shell.registerCommand(
         'npm',
-        createNpmShellCommand({ vfs, registry: makeRegistry(), resolverUrl: eddyUrl, learnedPins }),
+        createNpmShellCommand({
+          vfs,
+          registry: makeRegistry(),
+          resolverUrl: eddyUrl,
+          learnedPins,
+          install: overlapProbedInstall,
+        }),
       );
       return shell;
     };
@@ -295,6 +316,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
 
     expect(a.exitCode).toBe(0);
     expect(b.exitCode).toBe(0);
+    expect(maxInFlight).toBe(2); // genuinely concurrent — not phase-lock serialized
     const requestKey = canonicalEddyRequestKey({ dependencies: DEPS, optionalDependencies: {} });
     await vi.waitFor(async () => {
       expect((await readLearnedPin(profileVfs, requestKey))?.closureHash).toBe(

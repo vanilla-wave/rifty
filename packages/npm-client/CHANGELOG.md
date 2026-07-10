@@ -16,10 +16,11 @@
 - **`InstallResult.resolvedAt` + `InstallResult.resolvedVia`**: eddy-sourced
   installs expose the adopted bundle's validated `manifest.asOf.resolvedAt`
   (the stale-pin honesty line reports the SERVED resolution's age, not the
-  pin file's) and the attempt provenance (`'prefetch' | 'get' | 'post'`) —
-  hash equality cannot distinguish a cache serve from a POST that recomputed
-  the same closure, and the playground's pin/`as-of` policy hangs off the
-  difference. `EDDY_STORE_DURABLE_HEADER` moved to `eddy-request.ts` and is
+  pin file's) and the attempt provenance (`'get' | 'post'` — the underlying
+  REQUEST KIND: a consumed prefetch reports the kind it rode, pinned GET or
+  unpinned POST) — hash equality cannot distinguish a cache serve from a POST
+  that recomputed the same closure, and the playground's pin/`as-of` policy
+  hangs off the difference. `EDDY_STORE_DURABLE_HEADER` moved to `eddy-request.ts` and is
   exported from the barrel — one wire-protocol home; the eddy server now
   imports it instead of duplicating the literal (no cross-package string
   drift, same rationale as `MANIFEST_FILE`).

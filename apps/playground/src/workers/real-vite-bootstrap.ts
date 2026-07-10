@@ -813,7 +813,9 @@ async function bootShellOwner(opts: {
       // refreshes it via a manifest-only POST (backlog eddy-stale-pin-revalidate).
       learnedPins: {
         get: (key) => readLearnedPin(vfs, key),
-        set: (key, hash) => writeLearnedPin(vfs, key, hash),
+        set: async (key, hash) => {
+          await writeLearnedPin(vfs, key, hash); // unconditional learn — always written
+        },
         revalidate: async (_key, request, servedHash) => {
           const resolverUrl = getResolverUrl();
           // Unreachable while pins are eddy-only (no resolver → no pin served);

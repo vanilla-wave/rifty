@@ -197,6 +197,25 @@ export async function writeInstallStamp(
 }
 
 /**
+ * The DEFERRED trusted-stamp write (command-site background sequence): unlike
+ * {@link writeInstallStamp} it never mkdirs — re-creating `node_modules` here
+ * would resurrect a tree the user deleted while the drain ran
+ * (`npm install && rm -rf node_modules`), leaving a trusted stamp over an
+ * otherwise-empty dir. A parent vanished inside the caller's check→write
+ * window fails the write loudly (ENOENT) instead.
+ */
+export async function writeDeferredTrustedStamp(
+  vfs: Vfs,
+  root: string,
+  packages: number,
+  slug: string,
+  deps: Record<string, string>,
+): Promise<void> {
+  const stamp: InstallStamp = { version: 1, slug, deps, packages };
+  await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
+}
+
+/**
  * Rewrite an existing stamp's `slug` in place (ADR-0165): a Save MOVES the
  * scratch tree to `/projects/<id>/`, so its node_modules is now project <id>'s —
  * re-key the stamp so a later `installStampSatisfied(root, <id>)` reuses it. The

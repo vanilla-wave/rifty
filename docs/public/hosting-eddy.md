@@ -195,9 +195,17 @@ same hash on the next POST.
    # (b) CDN: must no longer serve the old bytes
    curl -sS -o /dev/null -D- "https://eddy-cdn.rifty.dev/bundle/<percent-encoded-hash>"
    #     expect: 404 (bucket miss), NOT 200-with-immutable
-   # (c) client fallback re-seeds: a fresh POST of the dep set must still 200
+   # (c) client fallback re-seeds AGAINST CURRENT UPSTREAM: `prefer:"online"`
+   #     is REQUIRED — within the mutable-tier TTL (default 1800s) a plain
+   #     POST re-serves the server's CACHED resolution and re-PUTs the very
+   #     closure just revoked, without ever consulting upstream.
    curl -fsS -D- -X POST https://eddy.rifty.dev \
-     -d '{"dependencies":{...the affected dep set...}}' -o /dev/null
+     -d '{"dependencies":{...the affected dep set...},"prefer":"online"}' -o /dev/null
+   #     expect: 200 + `x-eddy-store-durable: 1` when the deps still resolve
+   #     (same hash if upstream is unchanged, a new hash if the bad version is
+   #     gone), OR a loud resolve decline when an EXACT pinned version was
+   #     removed upstream — that decline is the revocation WORKING (clients
+   #     get the honest error, nothing re-seeds), not a runbook failure.
    ```
 
 4. **Client behavior** (already tested in-tree, no operator action): clients
@@ -218,7 +226,10 @@ hash `sha256-sKf7LT1+mOeYnTm0d0gjuNsoKg+K/QSnWalgHxuIvT0=`): POST 200
 pre-purge CDN GET **200 cache-status HIT** off a stale edge (proof the ordered
 verify catches a skipped purge) → purge → origin GET 404 `no-store`, CDN GET
 404 (ex-HIT edge included) → re-POST 200 durable, same hash (deps resolved
-identically upstream — the re-seed note above in action).
+identically upstream — the re-seed note above in action). Step (c) re-run with
+`prefer:"online"`: 200 durable, same hash, `x-eddy-resolved-at` of the stored
+artifact (the recompute consulted upstream, landed the same closure, and the
+byte-stable immutable tier serves the stored bytes for it).
 
 ## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
 

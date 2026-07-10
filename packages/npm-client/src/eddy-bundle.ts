@@ -74,15 +74,22 @@ export const LOCKFILE_FILE = 'package-lock.json';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
 
-/** ISO-8601 shape + parseable — `Date.parse` alone accepts junk like
- * `"July 10"`; the manifest's `asOf.resolvedAt` honesty stamp must render a
- * real timestamp or be dropped, never junk on the terminal. */
+/** ISO-8601 shape + parseable + calendar-valid — `Date.parse` alone accepts
+ * junk like `"July 10"` AND silently rolls impossible dates over
+ * (`2026-02-30` → March 2); the manifest's `asOf.resolvedAt` honesty stamp
+ * must render a real timestamp or be dropped, never junk on the terminal. */
 export function isIsoDateString(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) &&
-    !Number.isNaN(Date.parse(value))
-  );
+  if (typeof value !== 'string') return false;
+  const shape = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}/.exec(value);
+  if (!shape || Number.isNaN(Date.parse(value))) return false;
+  // Out-of-range TIME fields already fail Date.parse (NaN); the literal
+  // month/day need their own check against the rollover.
+  const year = Number(shape[1]);
+  const month = Number(shape[2]);
+  const day = Number(shape[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  // `Date.UTC(y, month, 0)` = day 0 of the NEXT month = the last day of `month`.
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 /** `width-1` octal digits (zero-padded, low bits kept) + a NUL terminator. */

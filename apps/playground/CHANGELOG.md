@@ -40,6 +40,41 @@
   unchanged; revocation safety net: §Revocation runbook in
   `docs/public/hosting-eddy.md`.
 
+### Fixed (install-tail-latency review round 3, ADR-0216 r3 notes)
+
+- **Trusted-stamp demotion is now PROVEN durable before the first tree write**
+  (r17 revoke-proof class): flush + full-ledger stamp-path check after the
+  pending demote; unpersistable → durable-rm fallback → still failing → the
+  install ABORTS loudly before mutating (previously OPFS could keep the OLD
+  trusted stamp while tree writes failed — a same-dep-set reload trusted the
+  torn tree). Fresh/pending trees skip the proof — the fast path stays
+  await-free.
+- **Stamp-write TOCTOU closed**: all stamp writes for a tree (pending demote,
+  deferred trusted) serialize on a per-tree chain and the deferred trusted
+  write re-checks the generation SYNCHRONOUSLY in its chain slot (the checks
+  sat awaits away from the write — an older background sequence could
+  overwrite a newer install's pending stamp). The deferred writer also no
+  longer mkdirs: a `rm -rf node_modules` completing inside the check→write
+  window now fails the write loudly instead of resurrecting the dir.
+- **Install coordination state keyed by (vfs, cwd)**, not the path string
+  alone — two trees sharing a path on different VFS instances no longer
+  false-share the phase mutex/generation (it silently serialized the
+  concurrency fault test).
+- **Stamp slug sampled at install START**: a preset switch during `installFn`
+  can no longer re-key the old install's tree under the new slug (two presets
+  sharing a dep set could reuse each other's tree through that hole).
+- **Learned-pin revalidate is compare-and-set**: a slow background revalidate
+  landing after a newer POST/`--prefer-online` re-learn no longer rolls the
+  pin back (`'superseded'` — no write).
+- **`resolvedAt` validation rejects calendar-impossible dates**
+  (npm-client `isIsoDateString`): `Date.parse` silently rolls `2026-02-30`
+  over to March 2 — the as-of honesty line no longer prints a timestamp that
+  never existed.
+- Revocation runbook re-seed step now requires `prefer:"online"` (a plain
+  POST within the mutable-tier TTL re-serves the server's cached resolution —
+  re-seeding the revoked closure without consulting upstream) and names a
+  loud resolve decline as a VALID outcome when the version is truly gone.
+
 ### Fixed
 
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder

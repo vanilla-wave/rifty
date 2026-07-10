@@ -310,6 +310,46 @@ describe('revalidateLearnedPin — background manifest-only POST refresh', () =>
     });
   });
 
+  it('a SLOW revalidate cannot roll back a NEWER pin — the write is compare-and-set against the served stale hash', async () => {
+    // Review round 3: the revalidate wrote unconditionally, so a user's
+    // explicit `--prefer-online` (or any POST re-learn) landing DURING the
+    // slow background POST was overwritten by the older resolution — the pin
+    // regressed and self-renewed for another fresh window.
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000; // stale — a revalidate starts
+
+    let releaseResolver!: () => void;
+    const resolverGate = new Promise<void>((r) => {
+      releaseResolver = r;
+    });
+    const revalidate = revalidateLearnedPin({
+      vfs,
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      staleClosureHash: HASH,
+      fetchImpl: async () => {
+        await resolverGate; // the background POST is slow
+        return bundleResponse(HASH);
+      },
+      now: () => nowMs,
+    });
+
+    // While it's in flight, a newer install re-learns the pin (e.g. a
+    // --prefer-online POST resolved a NEWER closure).
+    await writeLearnedPin(vfs, requestKey, 'sha256-NEWER=', () => nowMs);
+
+    releaseResolver();
+    const outcome = await revalidate;
+
+    expect(outcome).toBe('superseded'); // observed, honest — and NO write
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
+      closureHash: 'sha256-NEWER=',
+      stale: false,
+    });
+  });
+
   it('a DIFFERENT closure WITHOUT the durable-store proof keeps the old pin and throws — never a pin to an object that may not exist', async () => {
     // Mirrors the installer's learnable gate (ADR-0194): a POST-computed hash
     // is pin-worthy only when the server proved the immutable store held it.

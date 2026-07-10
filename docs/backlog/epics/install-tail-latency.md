@@ -34,8 +34,11 @@ Deviations are explicit, bounded, converging — never silent.
 
 A developer opens the Express preset (or writes `package.json` with
 `express@^4` + `eslint@^9`), runs `npm install` → eddy pinned GET installs it.
-They return after 30+ minutes (or reload next day) and run `npm install` again:
-it completes at replay speed from the learned pin, prints
+Returning to the SAME tree, a repeat `npm install` rides the covering
+lockfile's zero-network replay (faster still — eddy never consulted). The SWR
+pin serves the FRESH-TREE repeat: 30+ minutes later (≤24h) they re-create the
+preset / open a new sandbox with the same dep set — no lockfile yet — and
+`npm install` completes at replay speed from the learned pin, prints
 `eddy cached resolution (as-of <ISO>), refreshing in background`, and a
 background revalidate updates the pin. `vite` (chained or run next) starts
 without waiting for the OPFS drain. Closing the tab before the background drain
