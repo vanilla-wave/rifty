@@ -42,5 +42,6 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 - [ ] implementation alligned with project goal
 - [ ] `pnpm pr:check` pass
 - [ ] touches cache/persistence/network/concurrency → `## Fault matrix` rows covered by fault tests; `rifty-review-loop` converged (0 blockers) before handover — mergeability = gates, not agent opinion
+- [ ] shipped capability carries its acceptance proof (e2e/parity) in the same PR — proof is not backlogable
 - [ ] `CHANGELOG.md` in affected packages
 - [ ] ADR for IRREVERSIBLE / backlog for provisional

@@ -31,3 +31,5 @@ A fault test injects one axis at one boundary and asserts the honest outcome. Co
 ## Class-kill
 
 Second instance of an axis at the same boundary = structural fix — one chokepoint API / one validation boundary / a gate — never another point fix. Precedent: `unbounded-read` survived #107 R5→R17 as four sibling point-fix helpers until `drainBodyBounded` consolidated the class. New axis found in review → add its row here first, then fix.
+
+Corollaries (#125): a bespoke reimplementation of a reference mechanism IS a class — parity kill = copy the mechanism (or pin the full contract matrix), never another sampled row. Fixes birth faults — new state a fix introduces gets the axis pass in the same round.

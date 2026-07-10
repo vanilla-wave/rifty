@@ -12,9 +12,9 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 ## Steps
 
 1. **Root cause.** Read the whole error/finding. Reproduce deterministically. Trace to where the bad value is BORN, not where it crashed. Multi-layer path (page→owner→worker→OPFS, client→server→store) → instrument each boundary, run once, let evidence pick the layer — no fixes from guessing.
-2. **Class, not instance.** Name the axis — `docs/process/fault-classes.md`; new axis → add its row first. Sweep ALL siblings: grep the failing pattern repo-wide AND enumerate the sibling operations of the failing one (rm ↔ rename/mkdir/write-through; GET ↔ POST/HEAD; sync ↔ async twin; boot ↔ reload ↔ switch). Second instance of the axis at this boundary → structural kill: ONE chokepoint API / ONE validation boundary / a gate. Never twin helper #4.
+2. **Class, not instance.** Name the axis — `docs/process/fault-classes.md`; new axis → add its row first. Sweep ALL siblings: grep the failing pattern repo-wide AND enumerate the sibling operations of the failing one (rm ↔ rename/mkdir/write-through; GET ↔ POST/HEAD; sync ↔ async twin; boot ↔ reload ↔ switch). Second instance of the axis at this boundary → structural kill: ONE chokepoint API / ONE validation boundary / a gate. Never twin helper #4. Fixes birth faults too: new state the fix introduces (multi-step write, cache, retry) gets the same axis pass in the same round.
 3. **RED first.** Failing parity/regression/fault test before the fix. Fault findings assert the honest outcome (fallback / degraded / loud throw — never a silent lie). Never edit a test to make code pass; an existing test contradicting the fix = the CONTRACT changed — renegotiate it explicitly in the PR, don't re-aim the assert quietly.
-4. **Fix once.** One change, no drive-by refactors. Prefer melting twin helpers into the chokepoint over adding another wrapper.
+4. **Fix once.** One change, no drive-by refactors. Prefer melting twin helpers into the chokepoint over adding another wrapper. Behavior-vs-reference finding (Node, esbuild, git, …) → replicate the reference's MECHANISM, not the sampled observables — a bespoke reimplementation keeps generating divergences one review round at a time. Mechanism uncopyable → pin the full contract matrix in the parity case, not the reviewer's rows.
 5. **Prove.** RED→GREEN. Revert-check EVERY new guard: revert the fix, the test must fail (false guards are the norm — one rifty feature shipped ~8 of them; beware caches masking the revert). Fast gate on touched code. Verify the COMMITTED tree, not the worktree (a batched `git add` drops files silently).
 6. **Bounded pragmatism — loudly.** Structural kill genuinely too big now → bound-fix every instance the sweep found NOW with the existing mechanism, file the backlog item for the kill, and say so in the PR. Silent partial fix = defect; recorded partial fix = process.
 
@@ -33,5 +33,6 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 | "CI green = done" | Green ≠ class closed. Where are the siblings? |
 | "I'll consolidate later" (silently) | Silent later = never. Loud later = backlog item + PR note. |
 | "the reviewer is nitpicking" | #107's 19 rounds were real bugs. |
+| "matches the reference on every tested row" | Rows are samples. Copy the mechanism or pin the full matrix. |
 
 Claude also has `superpowers:systematic-debugging` (four-phase background); this file is self-contained for tools without it (codex).
