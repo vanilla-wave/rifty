@@ -74,6 +74,17 @@ export const LOCKFILE_FILE = 'package-lock.json';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
 
+/** ISO-8601 shape + parseable — `Date.parse` alone accepts junk like
+ * `"July 10"`; the manifest's `asOf.resolvedAt` honesty stamp must render a
+ * real timestamp or be dropped, never junk on the terminal. */
+export function isIsoDateString(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
 /** `width-1` octal digits (zero-padded, low bits kept) + a NUL terminator. */
 function octalField(value: number, width: number): string {
   const digits = value

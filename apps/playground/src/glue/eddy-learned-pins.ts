@@ -158,16 +158,33 @@ export function learnedPinForPackageJsonSync(
   return readLearnedPinSync(fs, canonicalEddyRequestKey(request), now);
 }
 
+/** Serializes {@link writeLearnedPin}'s read-modify-write: the fire-and-forget
+ * install write-back and a background revalidate can overlap, and an
+ * unserialized RMW loses whichever key read the file first. One chain per
+ * realm — the store is one file. */
+let pinWriteChain: Promise<void> = Promise.resolve();
+
 /**
  * Persist a learned pin (prune expired, evict oldest over
  * {@link LEARNED_PINS_CAP}). A corrupt existing file is replaced, not an
- * error.
+ * error. Writes are serialized (see {@link pinWriteChain}).
  */
-export async function writeLearnedPin(
+export function writeLearnedPin(
   vfs: Vfs,
   requestKey: string,
   closureHash: string,
   now: () => number = Date.now,
+): Promise<void> {
+  const run = pinWriteChain.then(() => writeLearnedPinExclusive(vfs, requestKey, closureHash, now));
+  pinWriteChain = run.catch(() => {});
+  return run;
+}
+
+async function writeLearnedPinExclusive(
+  vfs: Vfs,
+  requestKey: string,
+  closureHash: string,
+  now: () => number,
 ): Promise<void> {
   const nowMs = now();
   let file: LearnedPinsFile | null = null;

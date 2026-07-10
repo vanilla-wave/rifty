@@ -18,7 +18,12 @@ import {
   drainBodyBounded,
   streamTarEntries,
 } from './eddy-bundle-stream.ts';
-import { EDDY_BUNDLE_FORMAT, type EddyBundleManifestV1, MANIFEST_FILE } from './eddy-bundle.ts';
+import {
+  EDDY_BUNDLE_FORMAT,
+  type EddyBundleManifestV1,
+  MANIFEST_FILE,
+  isIsoDateString,
+} from './eddy-bundle.ts';
 import { EDDY_STORE_DURABLE_HEADER, type EddyRequestBody } from './eddy-request.ts';
 
 export interface ResolveEddyClosureOptions {
@@ -94,8 +99,7 @@ export async function resolveEddyClosure(
     if (
       typeof closureHash !== 'string' ||
       closureHash.length === 0 ||
-      typeof resolvedAt !== 'string' ||
-      Number.isNaN(Date.parse(resolvedAt))
+      !isIsoDateString(resolvedAt)
     ) {
       throw new Error('malformed EddyBundleV1 manifest: missing asOf.closureHash/resolvedAt');
     }

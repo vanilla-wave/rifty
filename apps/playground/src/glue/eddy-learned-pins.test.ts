@@ -149,6 +149,43 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
   });
 });
 
+describe('concurrent pin writes', () => {
+  it('two overlapping writeLearnedPin calls both survive — the store serializes its read-modify-write', async () => {
+    // Review round 2: the write-back and a background revalidate can overlap;
+    // an unserialized RMW loses whichever key read the file first.
+    const { vfs } = createMemoryFs();
+    let gateFirstRead!: () => void;
+    const firstReadGate = new Promise<void>((r) => {
+      gateFirstRead = r;
+    });
+    let reads = 0;
+    const slowVfs = new Proxy(vfs, {
+      get(target, prop, receiver) {
+        if (prop === 'readFileText') {
+          return async (path: string) => {
+            reads++;
+            if (reads === 1) await firstReadGate; // first RMW parks on its read
+            return target.readFileText(path);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    }) as typeof vfs;
+    await writeLearnedPin(vfs, 'seed', 'sha256-seed'); // file exists → RMW reads it
+
+    const w1 = writeLearnedPin(slowVfs, 'key-1', 'sha256-1');
+    const w2 = writeLearnedPin(slowVfs, 'key-2', 'sha256-2');
+    await new Promise((r) => setTimeout(r, 10));
+    gateFirstRead();
+    await Promise.all([w1, w2]);
+
+    expect((await readLearnedPin(vfs, 'key-1'))?.closureHash).toBe('sha256-1');
+    expect((await readLearnedPin(vfs, 'key-2'))?.closureHash).toBe('sha256-2');
+    expect((await readLearnedPin(vfs, 'seed'))?.closureHash).toBe('sha256-seed');
+  });
+});
+
 describe('stale window — serve-stale-while-revalidate inside a hard 24h bound', () => {
   it('fresh (≤ TTL) reads back stale:false; past the TTL but ≤ 24h reads back stale:true (still served)', async () => {
     const { vfs, fsSync } = createMemoryFs();

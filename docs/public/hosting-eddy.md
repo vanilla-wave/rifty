@@ -187,11 +187,13 @@ same hash on the next POST.
    or targeted the wrong (raw vs encoded) path:
 
    ```bash
+   # Verify with GET, not HEAD (curl -I): an edge may cache/route the two
+   # differently, and the client only ever GETs.
    # (a) origin: the store miss must be an UNCACHEABLE 404
-   curl -sSI "https://eddy-origin.rifty.dev/bundle/<percent-encoded-hash>"
+   curl -sS -o /dev/null -D- "https://eddy-origin.rifty.dev/bundle/<percent-encoded-hash>"
    #     expect: HTTP/2 404 + cache-control: no-store
    # (b) CDN: must no longer serve the old bytes
-   curl -sSI "https://eddy-cdn.rifty.dev/bundle/<percent-encoded-hash>"
+   curl -sS -o /dev/null -D- "https://eddy-cdn.rifty.dev/bundle/<percent-encoded-hash>"
    #     expect: 404 (bucket miss), NOT 200-with-immutable
    # (c) client fallback re-seeds: a fresh POST of the dep set must still 200
    curl -fsS -D- -X POST https://eddy.rifty.dev \

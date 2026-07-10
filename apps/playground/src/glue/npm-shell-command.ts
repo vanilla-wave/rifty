@@ -46,8 +46,8 @@ import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import {
   installStampPath,
+  installTreeDir,
   isStampedTreeDamage,
-  readEffectiveDeps,
   reportHasFailure,
   writeInstallStamp,
 } from './install-stamp.ts';
@@ -414,11 +414,15 @@ function quoteShellWord(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-/** Classify a leading-`-` install flag: which dep map it targets (or global). */
-function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'unknown' {
+/** Classify a leading-`-` install flag: which dep map it targets (or global),
+ *  or the freshness escape hatch. */
+function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'prefer-online' | 'unknown' {
   if (flag === '-D' || flag === '--save-dev') return 'dev';
   if (flag === '-S' || flag === '--save' || flag === '-E' || flag === '--save-exact') return 'prod';
   if (flag === '-g' || flag === '--global') return 'global';
+  // The stale-window escape hatch (ADR-0216): forces a fresh server-side
+  // recompute AND bypasses pins/prefetch client-side (installer semantics).
+  if (flag === '--prefer-online') return 'prefer-online';
   return 'unknown';
 }
 
@@ -435,7 +439,36 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'unknown' {
  */
 const installGenerations = new Map<string, number>();
 
+/**
+ * Per-TREE foreground-phase mutex (module scope, cross-terminal): the INSTALL
+ * phase — pending-demote → installFn's tree writes → background scheduling —
+ * of two terminals must not interleave on one tree, or an older install's
+ * writes keep landing under the newer install's trusted stamp. Only the
+ * foreground phase is chained (visible, user-interruptible work); the
+ * background drain is NOT — a wedged durability layer must not park later
+ * installs (see installGenerations).
+ */
+const installPhases = new Map<string, Promise<void>>();
+
 async function runInstall(
+  specs: string[],
+  ctx: CommandContext,
+  deps: NpmShellCommandDeps,
+): Promise<number> {
+  const previous = installPhases.get(ctx.cwd) ?? Promise.resolve();
+  const run = previous.then(() => runInstallExclusive(specs, ctx, deps));
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  installPhases.set(ctx.cwd, tail);
+  void tail.finally(() => {
+    if (installPhases.get(ctx.cwd) === tail) installPhases.delete(ctx.cwd);
+  });
+  return run;
+}
+
+async function runInstallExclusive(
   specs: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
@@ -443,6 +476,7 @@ async function runInstall(
   // Partition argv into save-flags vs package specs; the flags pick the target
   // dep map. `-g` is a directed loud throw (no global store in the sandbox).
   let target: 'dependencies' | 'devDependencies' = 'dependencies';
+  let prefer: 'online' | undefined;
   const pkgSpecs: string[] = [];
   for (const spec of specs) {
     if (spec.startsWith('-')) {
@@ -454,6 +488,7 @@ async function runInstall(
         return 1;
       }
       if (kind === 'dev') target = 'devDependencies';
+      else if (kind === 'prefer-online') prefer = 'online';
       else if (kind === 'unknown') {
         ctx.stderr.write(`npm: flag '${spec}' not supported (M9 scope)\n`);
         return 1;
@@ -558,6 +593,7 @@ async function runInstall(
       cwd: ctx.cwd,
       registry: deps.registry,
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
+      ...(prefer ? { prefer } : {}),
       ...(resolverClosureHash ? { resolverClosureHash } : {}),
       ...(deps.resolverBundleBaseUrl ? { resolverBundleBaseUrl: deps.resolverBundleBaseUrl } : {}),
       ...(resolverPrefetch ? { resolverPrefetch } : {}),
@@ -574,15 +610,20 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    // Background (backlog install-stamp-background-flush, ADR'd): the drain →
-    // gate → stamp → stamp-drain sequence runs unchanged but the command does
-    // NOT await it — the prompt returns (a `&&`-chained dev server starts)
-    // while OPFS durability settles behind it. Dirty-drain/stamp warnings
-    // arrive asynchronously (accepted: honesty stays loud, latency does not
-    // pay for it). Deps + slug are SNAPSHOTTED NOW: the deferred stamp must
-    // attest what THIS install produced — a package.json edit or preset
-    // switch inside the drain window must not leak into a trusted stamp.
-    const stampDeps = await readEffectiveDeps(deps.vfs, ctx.cwd);
+    // Background (ADR-0216): the drain → gate → stamp → stamp-drain sequence
+    // runs unchanged but the command does NOT await it — the prompt returns
+    // (a `&&`-chained dev server starts) while OPFS durability settles behind
+    // it. Dirty-drain/stamp warnings arrive asynchronously (accepted: honesty
+    // stays loud, latency does not pay for it). The deferred stamp attests
+    // the request maps THIS install was fed (the same merge
+    // `readEffectiveDeps` computes) — never a re-read: a package.json edit
+    // DURING the install or the drain, or a preset switch, must not leak into
+    // a trusted stamp.
+    const stampDeps: Record<string, string> = {
+      ...dependencies,
+      ...devDependencies,
+      ...pkg.optionalDependencies,
+    };
     const stampSlug = deps.projectSlug?.() ?? '';
     void stampInstalledTree(
       deps,
@@ -721,7 +762,7 @@ async function stampInstalledTree(
   ctx: CommandContext,
   cwd: string,
   packages: number,
-  stampDeps: Record<string, string> | null,
+  stampDeps: Record<string, string>,
   stampSlug: string,
   generation: number,
 ): Promise<void> {
@@ -759,10 +800,14 @@ async function stampInstalledTree(
   // trusted stamp would attest a tree the newer install is replacing. Not a
   // failure (the newer install owns stamping now), so no warning.
   if (installGenerations.get(cwd) !== generation) return;
+  // The tree itself vanished while the drain ran (`npm install && rm -rf
+  // node_modules`): pre-background the chained rm removed the fresh stamp
+  // WITH the tree — the deferred writer must not resurrect a trusted stamp
+  // into an empty dir. The user deleted it; no stamp is the honest state.
+  if (!(await deps.vfs.exists(installTreeDir(cwd)))) return;
   try {
     // The INSTALL-TIME snapshot, never a re-read: package.json/slug may have
     // moved while the drain ran, and the stamp attests what WAS installed.
-    if (!stampDeps) return;
     await writeInstallStamp(deps.vfs, cwd, packages, stampSlug, undefined, undefined, stampDeps);
   } catch (err) {
     // Terminal, not console: the user's reload behavior changes (next boot

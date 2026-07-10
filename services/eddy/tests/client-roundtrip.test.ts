@@ -581,9 +581,32 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       });
       expect(result.source).toBe('eddy');
       expect(requests).toBe(1);
+      // An UNPINNED prefetch is a POST resolve under the hood — its adoption
+      // must carry 'post' provenance or the profile never learns a pin from
+      // the boot-prefetch path (the primary cold-install flow).
+      expect(result.resolvedVia).toBe('post');
     } finally {
       await closeServer(raw.server);
     }
+  });
+
+  it('resolverPrefetch against the REAL server: an unpinned prefetch adoption is learnable AND post-provenanced', async () => {
+    const vfs = new MemoryVfs();
+    await writePackageJson(vfs, DEPS);
+    const prefetch = startEddyPrefetch({
+      resolverUrl: eddyUrl,
+      request: { dependencies: DEPS, optionalDependencies: {} },
+    });
+    const result = await install({
+      vfs,
+      cwd: '/app',
+      registry: makeRegistry().registry,
+      resolverUrl: eddyUrl,
+      resolverPrefetch: prefetch,
+    });
+    expect(result.source).toBe('eddy');
+    expect(result.resolvedVia).toBe('post'); // POST under the hood — server-vouched
+    expect(result.closureHash).toBeDefined(); // durable-header gate passed → learnable
   });
 
   it('resolverPrefetch: an already-bounded slow buffered response is not raced by the direct header timeout', async () => {

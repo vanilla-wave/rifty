@@ -56,8 +56,15 @@ indefinitely.
    - each install bumps a per-tree GENERATION (module scope, cross-terminal);
      a background sequence writes its trusted stamp only while its generation
      is current — a newer install cancels the older sequence's stamp instead
-     of racing it. Deliberately NOT an await-chain: chaining would park every
-     later install behind a wedged durability layer (unbounded-wait class);
+     of racing it. Deliberately NOT an await-chain over the DRAIN: chaining
+     would park every later install behind a wedged durability layer
+     (unbounded-wait class). The FOREGROUND install phases (tree writes) DO
+     serialize per tree — visible, user-interruptible work only;
+   - the deferred writer skips its trusted stamp when the tree dir vanished
+     meanwhile (`npm install && rm -rf node_modules` must not resurrect
+     trust into an empty dir). Non-npm PARTIAL mutations of a stamped tree
+     remain the pre-existing class owned by
+     `playground/install-stamp-invalidation` — unchanged by this ADR;
    - the trusted stamp attests the INSTALL-TIME deps + slug snapshot, never a
      post-drain re-read (an edit or preset switch inside the drain window must
      not leak into a trusted stamp).
@@ -71,7 +78,8 @@ indefinitely.
    Measured install→vite-ready (eddy path, local, n=5 median):
    3429ms → 3072ms.
 4. **Learned-pin SWR** (extends ADR-0194 §8; freshness semantics change is
-   recorded HERE): ≤1800s fresh (unchanged); 1800s–24h STALE — still served
+   recorded HERE): age < 1800s fresh (unchanged); 1800s ≤ age < 24h STALE
+   (boundaries exact as coded) — still served
    via the pinned GET (install AND boot prefetch) with a terminal honesty line
    `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in
    background` (`resolvedAt` = the SERVED manifest's validated stamp) and ONE
@@ -89,9 +97,11 @@ indefinitely.
    proof, mirroring the installer's learnable gate) the pin.
 6. **npm-client public API** (cross-package, recorded here):
    `InstallResult.resolvedAt` (validated ISO stamp of the adopted bundle),
-   `InstallResult.resolvedVia: 'prefetch'|'get'|'post'` (attempt provenance —
-   hash equality cannot distinguish a cache serve from a POST that recomputed
-   the same closure), and `resolveEddyClosure()` (manifest-only POST resolve
+   `InstallResult.resolvedVia: 'get'|'post'` (request-kind provenance — a
+   prefetch counts as its underlying request, so an unpinned boot prefetch
+   still teaches a pin; hash equality cannot distinguish a cache serve from a
+   POST that recomputed the same closure), and `resolveEddyClosure()`
+   (manifest-only POST resolve
    summary: `{closureHash, resolvedAt, storeDurable}`).
    `EDDY_STORE_DURABLE_HEADER` moves to `eddy-request.ts` (one wire-protocol
    home, two consumers).
