@@ -164,6 +164,9 @@ jobs:
       NETLIFY_LANDING_SITE_NAME: ${{ vars.NETLIFY_LANDING_SITE_NAME || 'rifty-landing' }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       VITE_RIFTY_PLAYGROUND_URL: ${{ vars.VITE_RIFTY_PLAYGROUND_URL || 'https://play.rifty.dev/' }}
+      VITE_RIFTY_REPOSITORY_URL: https://github.com/${{ github.repository }}
+      VITE_RIFTY_SDK_DOCS_URL: https://github.com/${{ github.repository }}/tree/main/packages/rifty#readme
+      VITE_RIFTY_SITE_URL: ${{ vars.VITE_RIFTY_SITE_URL || 'https://rifty.dev/' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -192,6 +195,10 @@ jobs:
       - name: Build landing
         run: pnpm --filter @riftydev/landing build
 
+      - name: Keep landing PR previews out of search indexes
+        if: github.event_name == 'pull_request'
+        run: pnpm exec tsx apps/landing/tools/preview-noindex.ts apps/landing/dist/_headers
+
       - name: Deploy landing PR preview
         if: github.event_name == 'pull_request'
         run: |
@@ -211,7 +218,40 @@ jobs:
           LANDING_URL: https://landing-pr-${{ github.event.pull_request.number }}--${{ env.NETLIFY_LANDING_SITE_NAME }}.netlify.app
         run: |
           set -euo pipefail
-          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable Node-compatible runtime")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
+          node <<'NODE'
+          const url = process.env.LANDING_URL;
+          (async () => {
+            const shell = await fetch(url);
+            const html = await shell.text();
+            const robots = shell.headers
+              .get('x-robots-tag')
+              ?.split(',')
+              .map((token) => token.trim().toLowerCase()) ?? [];
+            if (
+              !shell.ok ||
+              !html.includes('data-rifty-static-shell') ||
+              !robots.includes('noindex') ||
+              !robots.includes('nofollow')
+            ) {
+              throw new Error(
+                `landing preview smoke failed: status=${shell.status} robots=${robots.join(',')}`,
+              );
+            }
+
+            const image = await fetch(new URL('/og-image.png', url));
+            const bytes = Buffer.from(await image.arrayBuffer());
+            if (
+              !image.ok ||
+              image.headers.get('content-type')?.split(';')[0] !== 'image/png' ||
+              bytes.subarray(1, 4).toString('ascii') !== 'PNG'
+            ) {
+              throw new Error(`landing preview image smoke failed: ${image.status}`);
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
 
       - name: Deploy landing production
         if: github.event_name == 'push'
@@ -231,4 +271,29 @@ jobs:
         run: |
           set -euo pipefail
           export LANDING_URL="https://${NETLIFY_LANDING_SITE_NAME}.netlify.app"
-          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable Node-compatible runtime")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
+          node <<'NODE'
+          const url = process.env.LANDING_URL;
+          (async () => {
+            const shell = await fetch(url);
+            const html = await shell.text();
+            const robots = shell.headers.get('x-robots-tag');
+            if (!shell.ok || !html.includes('data-rifty-static-shell') || robots !== null) {
+              throw new Error(
+                `landing production smoke failed: status=${shell.status} robots=${robots}`,
+              );
+            }
+
+            const image = await fetch(new URL('/og-image.png', url));
+            const bytes = Buffer.from(await image.arrayBuffer());
+            if (
+              !image.ok ||
+              image.headers.get('content-type')?.split(';')[0] !== 'image/png' ||
+              bytes.subarray(1, 4).toString('ascii') !== 'PNG'
+            ) {
+              throw new Error(`landing production image smoke failed: ${image.status}`);
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE

@@ -130,7 +130,7 @@ function buildCallout(): HTMLElement {
   const callout = document.createElement('div');
   callout.className = 'qs-callout';
 
-  const titleRow = document.createElement('div');
+  const titleRow = document.createElement('h3');
   titleRow.className = 'qs-callout-title';
   const warnIcon = document.createElement('span');
   warnIcon.className = 'qs-callout-icon';
@@ -168,7 +168,7 @@ function buildLeafCard(): HTMLElement {
   const card = document.createElement('div');
   card.className = 'qs-leaf-card';
 
-  const heading = document.createElement('div');
+  const heading = document.createElement('h3');
   heading.className = 'qs-leaf-heading';
   heading.textContent = 'also fine on its own:';
 

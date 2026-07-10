@@ -104,7 +104,7 @@ const SCN_CHIPS: { id: ScnState; label: string }[] = [
 
 const OVERVIEW_CAPTION =
   'The full runtime graph. Hover a module to see its links, drag to rearrange — ' +
-  'or pick a scenario to watch a request flow through it.';
+  'or pick a scenario to follow its narrated steps and the structural modules connecting them.';
 
 function clonePos(src: Record<NodeId, Pos>): Record<NodeId, Pos> {
   const out = {} as Record<NodeId, Pos>;
@@ -160,8 +160,18 @@ export function mountExplorer(root: HTMLElement): () => void {
   const scnPathCache = new Map<ScenarioId, SegmentPath[]>();
 
   // drag/pan transient state
-  let drag: { board: Board; id: NodeId; x: number; y: number; moved: boolean } | null = null;
+  let drag: {
+    board: Board;
+    id: NodeId;
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    moved: boolean;
+  } | null = null;
   let pan: { board: Board; x: number; y: number } | null = null;
+  let suppressNodeClick: NodeId | null = null;
+  let suppressNodeClickTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ---- derive ----
   const isOverview = (): boolean => scn === 'none';
@@ -471,6 +481,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     card.type = 'button';
     card.className = 'exp-lane-card';
     card.setAttribute('data-lane-node', id);
+    card.setAttribute('aria-pressed', 'false');
     card.style.setProperty('--rc', rc);
     card.innerHTML =
       `<span class="exp-node-ico" style="color:${rc}; background:rgb(from ${rc} r g b / 0.12)">` +
@@ -657,11 +668,12 @@ export function mountExplorer(root: HTMLElement): () => void {
       const el = board.nodeEls.get(id);
       if (!el) continue;
       const rich = RICH_NODES.has(id);
+      el.setAttribute('aria-pressed', String(inspect === id));
       el.style.boxShadow = 'none';
       el.style.animation = '';
       let bg = '';
       let bd = '';
-      let op = '1';
+      let dim = false;
       if (hover !== null) {
         if (id === hover) {
           bg = 'rgb(from var(--ac) r g b / 0.16)';
@@ -670,7 +682,7 @@ export function mountExplorer(root: HTMLElement): () => void {
         } else if (neighbours?.has(id)) {
           bd = 'rgb(from var(--ac) r g b / 0.5)';
         } else {
-          op = '0.28';
+          dim = true;
         }
       } else if (id === ps.curNode) {
         bg = 'rgb(from var(--ac) r g b / 0.18)';
@@ -687,9 +699,9 @@ export function mountExplorer(root: HTMLElement): () => void {
         bg = 'rgb(from var(--ac) r g b / 0.035)';
         bd = 'rgb(from var(--ac) r g b / 0.34)';
       } else {
-        op = ps.overview ? '1' : '0.26';
+        dim = !ps.overview;
       }
-      el.style.opacity = op;
+      el.classList.toggle('exp-node-dim', dim);
       if (!rich) el.style.background = bg;
       // left border stays the realm color; recolor the other three sides.
       el.style.borderTopColor = bd;
@@ -714,8 +726,14 @@ export function mountExplorer(root: HTMLElement): () => void {
   }
 
   // ---- inspector ----
+  function renderActiveInspector(inspectorEl: HTMLElement): void {
+    const active = hover ?? inspect;
+    renderInspector(inspectorEl, active);
+    if (active === null) inspectorEl.replaceChildren();
+  }
+
   function updateInspectorFor(board: Board): void {
-    renderInspector(board.inspectorEl, hover ?? inspect);
+    renderActiveInspector(board.inspectorEl);
   }
 
   // ---- per-board full render ----
@@ -746,6 +764,7 @@ export function mountExplorer(root: HTMLElement): () => void {
       const id = card.dataset.laneNode;
       if (id === undefined || !(id in NODES)) continue;
       const nid = id as NodeId;
+      card.setAttribute('aria-pressed', String(inspect === nid));
       card.classList.remove('exp-lc-cur', 'exp-lc-touched', 'exp-lc-dim', 'exp-lc-part');
       if (hover !== null) {
         if (nid === hover) card.classList.add('exp-lc-cur');
@@ -762,7 +781,7 @@ export function mountExplorer(root: HTMLElement): () => void {
       }
     }
     // Inspector mirrors the graph views: hover wins over the pinned node.
-    renderInspector(realms.inspectorEl, hover ?? inspect);
+    renderActiveInspector(realms.inspectorEl);
     // Restore remembered scroll (set after display:'' so the element is laid out).
     realms.lanes.scrollLeft = realmsScroll.scrollLeft;
     realms.lanes.scrollTop = realmsScroll.scrollTop;
@@ -891,6 +910,12 @@ export function mountExplorer(root: HTMLElement): () => void {
     return null;
   }
 
+  function clearSuppressedNodeClick(): void {
+    if (suppressNodeClickTimer !== null) clearTimeout(suppressNodeClickTimer);
+    suppressNodeClickTimer = null;
+    suppressNodeClick = null;
+  }
+
   function onNodeEnter(board: Board, id: NodeId): void {
     if (drag || pan) return;
     if (board.impl !== impl) return;
@@ -909,9 +934,14 @@ export function mountExplorer(root: HTMLElement): () => void {
   }
 
   function onNodeClick(board: Board, id: NodeId): void {
-    if (drag?.moved) return;
+    if (suppressNodeClick === id) {
+      clearSuppressedNodeClick();
+      return;
+    }
+    clearSuppressedNodeClick();
     // toggle the pin: click a pinned node again to release it.
     inspect = inspect === id ? null : id;
+    styleBoardNodes(board);
     updateInspectorFor(board);
   }
 
@@ -935,7 +965,16 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   function beginDrag(board: Board, id: NodeId, el: HTMLElement, e: PointerEvent): void {
     e.stopPropagation();
-    drag = { board, id, x: e.clientX, y: e.clientY, moved: false };
+    clearSuppressedNodeClick();
+    drag = {
+      board,
+      id,
+      startX: e.clientX,
+      startY: e.clientY,
+      x: e.clientX,
+      y: e.clientY,
+      moved: false,
+    };
     el.classList.add('exp-grabbing');
   }
 
@@ -945,6 +984,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     // click on empty canvas dismisses a pinned inspector.
     if (inspect !== null && hover === null) {
       inspect = null;
+      styleBoardNodes(board);
       updateInspectorFor(board);
     }
   }
@@ -955,7 +995,11 @@ export function mountExplorer(root: HTMLElement): () => void {
       const s = view[board.impl].scale;
       const dx = (e.clientX - drag.x) / s;
       const dy = (e.clientY - drag.y) / s;
-      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) drag.moved = true;
+      const totalDx = (e.clientX - drag.startX) / s;
+      const totalDy = (e.clientY - drag.startY) / s;
+      if (Math.abs(totalDx) > DRAG_THRESHOLD || Math.abs(totalDy) > DRAG_THRESHOLD) {
+        drag.moved = true;
+      }
       drag.x = e.clientX;
       drag.y = e.clientY;
       const p = board.pos[drag.id];
@@ -973,10 +1017,15 @@ export function mountExplorer(root: HTMLElement): () => void {
     }
   }
 
-  function onPointerUp(): void {
+  function endPointerInteraction(suppressClick: boolean): void {
+    clearSuppressedNodeClick();
     if (drag) {
       const el = drag.board.nodeEls.get(drag.id);
       if (el) el.classList.remove('exp-grabbing');
+      if (suppressClick && drag.moved) {
+        suppressNodeClick = drag.id;
+        suppressNodeClickTimer = setTimeout(clearSuppressedNodeClick, 0);
+      }
     }
     if (pan) pan.board.viewport.classList.remove('exp-grabbing');
     drag = null;
@@ -984,8 +1033,10 @@ export function mountExplorer(root: HTMLElement): () => void {
   }
 
   window.addEventListener('pointermove', onPointerMove);
+  const onPointerUp = (): void => endPointerInteraction(true);
+  const onPointerCancel = (): void => endPointerInteraction(false);
   window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('pointercancel', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
 
   // ---- initial paint ----
   layoutBoard(boards[1]);
@@ -1014,11 +1065,12 @@ export function mountExplorer(root: HTMLElement): () => void {
   // ---- cleanup ----
   return () => {
     stopPlay();
+    clearSuppressedNodeClick();
     cancelAnimationFrame(rafId);
     clearTimeout(remeasureTimer);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
-    window.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
     window.removeEventListener('resize', onResize);
   };
 }

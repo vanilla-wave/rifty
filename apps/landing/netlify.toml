@@ -2,7 +2,7 @@
 #
 # Built from the monorepo ROOT so the pnpm workspace resolves. Deliberately does
 # NOT set COOP/COEP — those belong to the playground site (play.rifty.dev) only;
-# the marketing page loads Google Fonts and needs no SharedArrayBuffer.
+# the marketing page uses self-hosted fonts and needs no SharedArrayBuffer.
 #
 # Security headers + redirects live in public/_headers and public/_redirects so
 # Vite copies them into dist/.

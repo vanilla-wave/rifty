@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(1010 100) rotate(135) scale(560 440)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c7f05a" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#15171d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="774" y1="126" x2="1074" y2="498" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1d2027"/>
+      <stop offset="1" stop-color="#101218"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#15171d"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <g transform="translate(72 68)">
+    <rect x="4" y="4" width="27" height="27" rx="6" transform="rotate(45 17.5 17.5)" fill="#c7f05a"/>
+    <text x="50" y="27" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="650">rifty</text>
+  </g>
+  <text x="72" y="190" fill="#c7f05a" font-family="Roboto Mono, Menlo, monospace" font-size="19" font-weight="600" letter-spacing="2.5">OPEN RUNTIME · SELF-HOSTABLE</text>
+  <text x="72" y="282" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="64" font-weight="650" letter-spacing="-3.2">Node, npm, and</text>
+  <text x="72" y="356" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="64" font-weight="650" letter-spacing="-3.2">a dev server —</text>
+  <text x="72" y="430" fill="#c7f05a" font-family="Inter, Arial, sans-serif" font-size="64" font-weight="650" letter-spacing="-3.2">inside a browser tab.</text>
+  <text x="72" y="504" fill="#ffffff" fill-opacity="0.58" font-family="Inter, Arial, sans-serif" font-size="23">Node-compatible runtime + WASI runner for Chromium</text>
+  <g transform="translate(828 144)">
+    <rect width="298" height="338" rx="18" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <circle cx="25" cy="25" r="5" fill="#ffffff" fill-opacity="0.2"/>
+    <circle cx="43" cy="25" r="5" fill="#ffffff" fill-opacity="0.2"/>
+    <circle cx="61" cy="25" r="5" fill="#ffffff" fill-opacity="0.2"/>
+    <text x="23" y="83" fill="#ffffff" fill-opacity="0.38" font-family="Roboto Mono, Menlo, monospace" font-size="14">$ npm run dev</text>
+    <text x="23" y="122" fill="#c7f05a" font-family="Roboto Mono, Menlo, monospace" font-size="14">✓ runtime ready</text>
+    <text x="23" y="153" fill="#ffffff" fill-opacity="0.66" font-family="Roboto Mono, Menlo, monospace" font-size="14">Local: http://localhost:5173</text>
+    <rect x="23" y="187" width="252" height="1" fill="#ffffff" fill-opacity="0.1"/>
+    <text x="23" y="232" fill="#ffffff" fill-opacity="0.38" font-family="Roboto Mono, Menlo, monospace" font-size="14">node · npm · wasi</text>
+    <rect x="23" y="263" width="158" height="44" rx="7" fill="#c7f05a"/>
+    <text x="43" y="290" fill="#15170b" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700">RUN IN BROWSER</text>
+  </g>
+  <rect x="0" y="624" width="1200" height="6" fill="#c7f05a"/>
+</svg>

@@ -74,6 +74,10 @@ export function startTerminalLog(el: HTMLElement): void {
   el.style.setProperty('--hero-term-row-count', String(BOOT_SCRIPT.length + 1));
 
   const cursorRow = makeCursorRow();
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.replaceChildren(...BOOT_SCRIPT.map(makeLine), cursorRow);
+    return;
+  }
 
   const runOnce = (): void => {
     // All handles from the previous pass have fired; retain only the live pass.

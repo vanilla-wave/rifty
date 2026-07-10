@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- SEO/share hardening: compact title + description, WebSite JSON-LD, robots/sitemap, complete
+  Open Graph/Twitter card with a branded 1200×630 PNG, Apple touch icon, and an indexable static
+  shell that remains useful when client JS fails. Manual Netlify PR aliases now emit
+  `X-Robots-Tag: noindex, nofollow`; production smoke guards against leaking that header.
+- Faster first load: self-hosted Inter/Roboto Mono remove the render-blocking Google origin; the
+  below-fold explorer is a reserved, near-viewport dynamic chunk; the Chromium-only build drops the
+  modulepreload polyfill. Same-profile mobile Lighthouse: performance 85→100, FCP 3.1→1.5 s,
+  LCP 3.1→1.5 s, initial DOM 921→363, third-party bytes 83.31→0 kB; initial JS gzip
+  17.83→8.08 kB.
+- UX/accessibility repair: semantic main/footer/h3 + skip link, WCAG-AA muted text, reduced-motion
+  terminal, truthful structural-scenario wording, keyboard-operable graph nodes, drag no longer
+  pins a node, clipboard errors recover, and all mobile navigation exits close the drawer.
 - Review polish: the animated hero terminal reserves its final row viewport instead of shifting the
   whole hero as lines appear; restored `How it works` → architecture as the secondary CTA; balanced
   preset-card footer spacing around an explicit divider. `Run something real` now opens the
