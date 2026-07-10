@@ -227,6 +227,10 @@ export class IncomingMessage extends Readable {
   declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
+  /** Push-source: `pipeBodyStream` feeds the buffer on its own schedule; Node's
+   *  `http.IncomingMessage` defines `_read` too (the loud `Readable` base would
+   *  otherwise destroy the message on first read). */
+  override _read(): void {}
   constructor(request: Request | IncomingMessageInit) {
     super({ objectMode: false });
     const init = isIncomingMessageInit(request)
@@ -266,6 +270,8 @@ export class IncomingMessageFromFetch extends Readable {
   declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
+  /** Push-source over `response.body` — same no-op `_read` contract as above. */
+  override _read(): void {}
   constructor(response: Response) {
     super({ objectMode: false });
     this.statusCode = response.status;

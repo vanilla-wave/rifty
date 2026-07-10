@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Fixed (PR #125 round-3 fix pass)
+
+- **esbuild fs facade: honest `fsync`.** Dirty fd bytes flush to the VFS mirror
+  on `fsync` (was: fd-validated no-op success — a durability lie); mirror
+  failure = the caller's errno. One flush boundary for fsync + close. Fault
+  tests (`provenance-lie`/`quota-perm-fail`/`torn-state` rows in ADR-0192):
+  esbuild-host.test.ts "fault: flush honesty".
+- **esbuild write normalization is now plugin-invisible.** A rifty writer
+  plugin (registered first) lands `write:true` outputs on the VFS and strips
+  `outputFiles` BEFORE user `onEnd` hooks; a Proxy masks
+  `initialOptions.write`/`plugins` to the caller's shape (mutations flow
+  through). Kills the recorded ADR-0192 "plugin-visible flip" divergence;
+  probed on real esbuild 0.28.0 + real-wasm browser spec.
+- **Legacy persisted roots get the template `vite.config.js` policy back.**
+  The fresh-root seeding heuristic treated a pre-seeding workspace like a user
+  deletion: reloaded pre-PR vite8 roots booted with HMR ON (unproven socket,
+  ADR-0161), vite7 roots with dep-discovery ON. One provenance gate
+  (`claimTemplateViteConfigSeed`): seed when no `vite.config.*` AND no marker
+  (`.rifty/vite-config.seeded`, written on seed) — migrates legacy roots,
+  still never shadows a user config, still respects deletion (marker present).
+- **`NAPI_RS_FORCE_WASI`: a user-set value wins** over the platform default in
+  `.bin` child env (was clobbered after `...req.env`).
+
 ### Fixed (PR #125 review blockers)
 
 - **Retired the dead vite CLI CAC grammar** (~105 lines + probe matrix): its
@@ -23,15 +46,15 @@
   now reaches the real host instead of dying on "host bridge missing".
   Real-wasm proof (no fakeLib): `tests/browser-unit/esbuild-host-real-wasm.spec.ts`
   initializes the actual 0.28.0 service over a Memory VFS in Chromium.
-  Plugin-visible `write:false` flip recorded as a bounded divergence in
-  ADR-0192 §Consequences.
+  (The plugin-visible `write:false` flip recorded here as a bounded divergence
+  was killed in the round-3 fix pass above — the surface is normalized.)
 
 - **Template `vite.config.js` no longer shadows a user's config or resurrects
   after deletion.** `VITE_CONFIG_FILENAMES` now matches Vite's
   `DEFAULT_CONFIG_FILES` VERBATIM (js → mjs → ts → …; the previous ts-first
   order was Vite-divergent), and every seed site delegates the config-slot
-  decision to ONE gate (`shouldSeedTemplateViteConfig`): seed only into a
-  fresh root AND only when no `vite.config.*` variant exists. Before: an
+  decision to ONE gate (now `claimTemplateViteConfigSeed` — the round-3 pass
+  replaced its fresh-root heuristic with the provenance marker). Before: an
   upgraded workspace holding only `vite.config.ts` silently got the template
   `.js` seeded next to it — and Vite loads `.js` FIRST, so the user's
   aliases/plugins stopped applying; a deleted seeded config (the documented

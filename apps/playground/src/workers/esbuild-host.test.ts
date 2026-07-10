@@ -13,6 +13,7 @@ import {
   type WasmExecFs,
   createEsbuildHost,
   createWasmExecFs,
+  writeOutputFiles,
 } from './esbuild-host.ts';
 
 const enc = new TextEncoder();
@@ -455,6 +456,247 @@ describe('createEsbuildHost — lazy single init + browser-lib write normalizati
     expect(lib.stop).toHaveBeenCalledTimes(1);
     await host.transform('x');
     expect(initialize).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Fault tier — fs facade persistence boundary (fault classes: provenance-lie ×
+// fsync, quota-perm-fail × flush, torn-state × multi-output write).
+describe('createWasmExecFs — fault: flush honesty', () => {
+  it('fsync flushes dirty bytes to the mirror BEFORE close (fsync success is not a durability lie)', async () => {
+    const fs = memoryMirror();
+    fs.mkdirSync('/workspace', { recursive: true });
+    const facade = createWasmExecFs(() => fs);
+    const { O_WRONLY, O_CREAT, O_TRUNC } = facade.constants;
+    const fd = await call<number>((cb) =>
+      facade.open('/workspace/out.txt', O_WRONLY | O_CREAT | O_TRUNC, 0o644, cb),
+    );
+    await call((cb) => facade.write(fd, enc.encode('data'), 0, 4, null, cb));
+    await call((cb) => facade.fsync(fd, cb));
+    // Crash-before-close scenario: fsynced bytes must already be in the mirror.
+    expect(dec.decode(fs.readFileBytesSync('/workspace/out.txt'))).toBe('data');
+    await call((cb) => facade.close(fd, cb));
+  });
+
+  it('fsync surfaces a mirror write failure instead of claiming success', async () => {
+    const real = memoryMirror();
+    real.mkdirSync('/workspace', { recursive: true });
+    let failWrites = false;
+    const mirror = new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'writeFileSync' && failWrites) {
+          return () => {
+            throw Object.assign(new Error('disk quota exceeded'), { code: 'EDQUOT' });
+          };
+        }
+        // Bind to the target: FsSync methods use #private state — a proxy
+        // receiver would detach them.
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as FsSync;
+    const facade = createWasmExecFs(() => mirror);
+    const { O_WRONLY, O_CREAT, O_TRUNC } = facade.constants;
+    const fd = await call<number>((cb) =>
+      facade.open('/workspace/out.txt', O_WRONLY | O_CREAT | O_TRUNC, 0o644, cb),
+    );
+    await call((cb) => facade.write(fd, enc.encode('data'), 0, 4, null, cb));
+    failWrites = true;
+    await expect(call((cb) => facade.fsync(fd, cb))).rejects.toThrow('disk quota exceeded');
+  });
+
+  it('writeOutputFiles: a mid-list write failure is LOUD — torn output surfaces, never a silent success', () => {
+    const real = memoryMirror();
+    let writes = 0;
+    const mirror = new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'writeFileSync') {
+          return (path: string, data: Uint8Array) => {
+            writes += 1;
+            if (writes === 2) throw Object.assign(new Error('quota'), { code: 'EDQUOT' });
+            real.writeFileSync(path, data);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as FsSync;
+    expect(() =>
+      writeOutputFiles(mirror, [
+        outputFile('/o/a.js', '1'),
+        outputFile('/o/b.js', '2'),
+        outputFile('/o/c.js', '3'),
+      ]),
+    ).toThrow('quota');
+    expect(real.existsSync('/o/a.js')).toBe(true); // torn — but the caller SAW the throw
+    expect(real.existsSync('/o/c.js')).toBe(false); // stopped at the fault, no blind continue
+  });
+});
+
+// Plugin-visible write surface: the bridge's write:false rewrite must be
+// invisible to user plugins (provenance-lie kill — a plugin reading
+// initialOptions.write or expecting written files in onEnd saw the rewrite).
+type ProbeBuild = {
+  initialOptions: Record<string, unknown>;
+  onEnd: (cb: (result: Record<string, unknown>) => unknown) => void;
+};
+type ProbePlugin = { name: string; setup: (build: ProbeBuild) => unknown };
+
+function pluginRunningBuild(resultOf: () => Record<string, unknown>) {
+  // Executes plugins the way esbuild does: setup at build start (initialOptions
+  // = the live options object), onEnd hooks in registration order against the
+  // SHARED result object (mutations propagate to the resolved value).
+  return vi.fn().mockImplementation(async (opts: { plugins?: ProbePlugin[] }) => {
+    const onEnds: Array<(r: Record<string, unknown>) => unknown> = [];
+    for (const p of opts.plugins ?? []) {
+      await p.setup({
+        initialOptions: opts as unknown as Record<string, unknown>,
+        onEnd: (cb) => onEnds.push(cb),
+      });
+    }
+    const result = resultOf();
+    for (const cb of onEnds) await cb(result);
+    return result;
+  });
+}
+
+describe('createEsbuildHost — plugin-visible write:true surface stays native', () => {
+  it('a user plugin observes the CALLER write shape in initialOptions, not the bridge rewrite', async () => {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const seen: unknown[] = [];
+    const probe: ProbePlugin = {
+      name: 'probe',
+      setup(b) {
+        seen.push(b.initialOptions.write, 'write' in b.initialOptions);
+      },
+    };
+
+    await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      write: true,
+      plugins: [probe as never],
+    });
+    expect(seen).toEqual([true, true]);
+
+    seen.length = 0;
+    await host.build({ entryPoints: ['a'], outdir: '/out', plugins: [probe as never] });
+    expect(seen).toEqual([undefined, false]); // omitted stays omitted
+
+    // …while the SERVICE really ran write:false underneath (browser lib would throw).
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ write: false }));
+  });
+
+  it('user onEnd hooks run AFTER outputs land on the VFS and see a native write:true result shape', async () => {
+    const fs = memoryMirror();
+    const build = pluginRunningBuild(() => ({
+      errors: [],
+      warnings: [],
+      outputFiles: [outputFile('/out/a.js', 'x')],
+    }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const observed: Record<string, unknown> = {};
+    const probe: ProbePlugin = {
+      name: 'probe',
+      setup(b) {
+        b.onEnd((r) => {
+          observed.fileOnDisk = fs.existsSync('/out/a.js');
+          observed.hasOutputFiles = 'outputFiles' in r;
+        });
+      },
+    };
+
+    const result = await host.build({
+      entryPoints: ['a'],
+      outdir: '/out',
+      plugins: [probe as never],
+    });
+    expect(observed).toEqual({ fileOnDisk: true, hasOutputFiles: false });
+    expect(result).not.toHaveProperty('outputFiles');
+    expect(dec.decode(fs.readFileBytesSync('/out/a.js'))).toBe('x');
+  });
+
+  it('plugin mutations of initialOptions flow through to the real build options', async () => {
+    const build = pluginRunningBuild(() => ({ errors: [], warnings: [], outputFiles: [] }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+    const mutator: ProbePlugin = {
+      name: 'mutate',
+      setup(b) {
+        b.initialOptions.define = { X: '1' };
+      },
+    };
+
+    await host.build({ entryPoints: ['a'], outdir: '/out', plugins: [mutator as never] });
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ define: { X: '1' } }));
+  });
+
+  it('build({write:false}) with plugins passes through untouched — no injected writer, raw plugin refs', async () => {
+    const build = pluginRunningBuild(() => ({ errors: [], warnings: [], outputFiles: [] }));
+    const { lib } = fakeLib({ build } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: memoryMirror });
+    const probe: ProbePlugin = { name: 'p', setup: () => {} };
+
+    await host.build({ entryPoints: ['a'], write: false, plugins: [probe as never] });
+    const passed = (build.mock.calls.at(-1) as [{ plugins?: unknown[] }])[0];
+    expect(passed.plugins).toHaveLength(1);
+    expect(passed.plugins?.[0]).toBe(probe);
+  });
+
+  it('context(): user onEnd hooks see rebuilt outputs on the VFS per rebuild, native result shape', async () => {
+    const fs = memoryMirror();
+    const context = vi.fn().mockImplementation(async (opts: { plugins?: ProbePlugin[] }) => {
+      const onEnds: Array<(r: Record<string, unknown>) => unknown> = [];
+      for (const p of opts.plugins ?? []) {
+        await p.setup({
+          initialOptions: opts as unknown as Record<string, unknown>,
+          onEnd: (cb) => onEnds.push(cb),
+        });
+      }
+      return {
+        rebuild: async () => {
+          const r: Record<string, unknown> = {
+            errors: [],
+            warnings: [],
+            outputFiles: [outputFile('/deps/c.js', 'y')],
+          };
+          for (const cb of onEnds) await cb(r);
+          return r;
+        },
+        watch: vi.fn(),
+        serve: vi.fn(),
+        cancel: vi.fn(),
+        dispose: vi.fn(),
+      };
+    });
+    const { lib } = fakeLib({ context } as unknown as Partial<EsbuildWasmLib>);
+    const host = createEsbuildHost({ lib, wasmUrl: '/w', mirror: () => fs });
+    const observed: Record<string, unknown> = {};
+    const probe: ProbePlugin = {
+      name: 'probe',
+      setup(b) {
+        b.onEnd((r) => {
+          observed.fileOnDisk = fs.existsSync('/deps/c.js');
+          observed.hasOutputFiles = 'outputFiles' in r;
+        });
+      },
+    };
+
+    const ctx = await host.context({
+      entryPoints: ['a'],
+      outdir: '/deps',
+      plugins: [probe as never],
+    });
+    const result = await ctx.rebuild();
+    expect(observed).toEqual({ fileOnDisk: true, hasOutputFiles: false });
+    expect(result).not.toHaveProperty('outputFiles');
   });
 });
 

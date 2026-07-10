@@ -46,6 +46,21 @@ describe('buildChildSpawnSpec', () => {
     expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBe('blob:node-entry-2');
   });
 
+  it('a user-set NAPI_RS_FORCE_WASI survives into the spawn env (Node parity: user env wins)', () => {
+    const spec = buildChildSpawnSpec(
+      {
+        shimPath: '/w/node_modules/.bin/vite',
+        args: [],
+        env: { NAPI_RS_FORCE_WASI: '0' },
+        cwd: '/w',
+        isTTY: false,
+      },
+      'blob:x',
+    );
+    // '1' is only the platform default; real Node never clobbers explicit user env.
+    expect(spec.env.NAPI_RS_FORCE_WASI).toBe('0');
+  });
+
   it('omits the worker URLs for non-recursive bins but still forces WASI', () => {
     const spec = buildChildSpawnSpec(
       { shimPath: '/w/.bin/eslint', args: [], env: {}, cwd: '/w', isTTY: false },

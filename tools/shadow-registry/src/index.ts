@@ -85,26 +85,46 @@ function hostEsbuild() {
   return host;
 }
 
-let initializeCalled = false;
+let initializeWasCalled = false;
 let initializePromise = null;
-async function initialize(options = {}) {
-  // Node esbuild parity: browser-only options are rejected and a second call
-  // throws; the actual service start is owned by the host bridge.
-  if (options.wasmURL || options.wasmModule || options.worker !== undefined) {
-    throw new Error('The "wasmURL", "wasmModule" and "worker" options only work in esbuild-wasm');
+// Node esbuild parity — mirrors real main.js validateInitializeOptions +
+// initialize() exactly: same check order (types, unknown keys, TRUTHY
+// browser-only rejects — worker:false is accepted), same messages, SYNC
+// throws. Actual service start is owned by the host bridge.
+function validateInitializeOptions(options) {
+  if (options.wasmURL !== undefined && typeof options.wasmURL !== 'string' && !(options.wasmURL instanceof URL)) {
+    throw new Error('"wasmURL" must be a string or a URL');
   }
-  if (initializeCalled || initializePromise) {
+  if (options.wasmModule !== undefined && !(options.wasmModule instanceof WebAssembly.Module)) {
+    throw new Error('"wasmModule" must be a WebAssembly.Module');
+  }
+  if (options.worker !== undefined && typeof options.worker !== 'boolean') {
+    throw new Error('"worker" must be a boolean');
+  }
+  for (const key in options) {
+    if (key !== 'wasmURL' && key !== 'wasmModule' && key !== 'worker') {
+      throw new Error('Invalid option in initialize() call: ' + JSON.stringify(key));
+    }
+  }
+}
+function initialize(options) {
+  options = options || {};
+  validateInitializeOptions(options);
+  if (options.wasmURL) throw new Error('The "wasmURL" option only works in the browser');
+  if (options.wasmModule) throw new Error('The "wasmModule" option only works in the browser');
+  if (options.worker) throw new Error('The "worker" option only works in the browser');
+  if (initializeWasCalled || initializePromise) {
     throw new Error('Cannot call "initialize" more than once');
   }
-  initializePromise = hostEsbuild().initialize();
-  try {
-    await initializePromise;
-    initializeCalled = true;
-  } catch (err) {
-    initializePromise = null;
-    throw err;
-  }
-  initializePromise = null;
+  initializePromise = (async () => {
+    try {
+      await hostEsbuild().initialize();
+      initializeWasCalled = true;
+    } finally {
+      initializePromise = null;
+    }
+  })();
+  return initializePromise;
 }
 
 function transform(input, options) {
@@ -128,7 +148,15 @@ function analyzeMetafile(metafile, options) {
 }
 
 function stop() {
-  return hostEsbuild().stop();
+  // Real-Node parity: stop() re-permits initialize() (main.js stopService sets
+  // initializeWasCalled = false; the service respawns on the next API call).
+  // MUST NOT stop the host: the esbuild-wasm service is shared realm-wide
+  // (vite's own transforms ride it), while in real Node each process owns its
+  // own child service — one consumer's stop() never kills another's. Reset the
+  // local gate only; observable guest behavior matches real Node.
+  initializeWasCalled = false;
+  initializePromise = null;
+  return Promise.resolve();
 }
 
 function transformSync(_input, _options) {

@@ -11,6 +11,7 @@
 
 import { EventEmitter } from '../event-emitter.ts';
 import { getDefaultHighWaterMark } from './default-highwatermark.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 import { chunkSize } from './readable.ts';
 
 export interface WritableOptions {
@@ -138,8 +139,16 @@ export class Writable extends EventEmitter {
     this.finalImpl = opts.final;
   }
 
-  _write(_chunk: unknown, _encoding: string, cb: (err?: Error | null) => void): void {
-    cb();
+  /** Node's base `_write`: delegate a single chunk to `_writev` when only the
+   *  batched hook exists; otherwise LOUD (ERR_METHOD_NOT_IMPLEMENTED) — the
+   *  old silent `cb()` ACKed chunks nothing ever processed. */
+  _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void {
+    const writev = this.resolveWritev();
+    if (writev) {
+      writev.call(this, [{ chunk, encoding }], cb);
+      return;
+    }
+    throw methodNotImplementedError('_write()');
   }
 
   /**
@@ -252,6 +261,13 @@ export class Writable extends EventEmitter {
         if (this.listenerCount('error') > 0) this.emit('error', err);
       });
       return false;
+    }
+    // Node's writeOrBuffer reaches the base `_write` synchronously on an
+    // uncorked write — a bare stream throws OUT OF write() (sync), it does not
+    // buffer-and-crash later. While corked, Node defers the throw to the
+    // uncork() flush; the sync drain there hits the loud base the same way.
+    if (state.corked === 0 && !this.hasRealWrite() && !this.resolveWritev()) {
+      throw methodNotImplementedError('_write()');
     }
     state.buffered.push({ chunk, encoding, cb: cbFinal });
     state.length += state.objectMode ? 1 : chunkSize(chunk);

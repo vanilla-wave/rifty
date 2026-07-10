@@ -237,11 +237,15 @@ describe('runtime dispatch + seeding (behavioral)', () => {
   });
 });
 
-describe('template vite.config.js seeding (config slot, Vite resolution order)', () => {
+describe('template vite.config.js seeding (config slot, marker provenance)', () => {
   // Vite resolves js -> mjs -> ts -> cjs -> mts -> cts: seeding our .js next to
   // a user's .ts would silently take over config loading. And a reload heal
   // seed must not resurrect a deleted config — deleting it is the documented
   // opt-out into stock Vite behavior (vite-template-dep-optimizer-policy).
+  // Provenance = <root>/.rifty/vite-config.seeded marker, NOT root freshness:
+  // a persisted pre-marker workspace must still receive the seeded policy.
+  const markerPath = (root: string) => `${root}/.rifty/vite-config.seeded`;
+
   async function bootViteExpectImportFailure(root: string): Promise<void> {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5177, root);
     const sinks = makeSinks();
@@ -259,7 +263,7 @@ describe('template vite.config.js seeding (config slot, Vite resolution order)',
     ).rejects.toThrow(/vite/); // no installed vite in this realm — seeding already ran
   }
 
-  it('does not shadow an existing user vite.config.ts with the template .js', async () => {
+  it('does not shadow an existing user vite.config.ts with the template .js (and claims no marker)', async () => {
     const root = '/bu-devboot/config-slot-ts';
     const fs = syncMirror();
     fs.mkdirSync(root, { recursive: true });
@@ -270,22 +274,51 @@ describe('template vite.config.js seeding (config slot, Vite resolution order)',
     await bootViteExpectImportFailure(root);
     expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
     expect(fs.existsSync(`${root}/vite.config.ts`)).toBe(true);
+    // No marker: nothing was seeded, so a later config removal by the user
+    // returns the root to the seedable state, not to "deletion respected".
+    expect(fs.existsSync(markerPath(root))).toBe(false);
   });
 
-  it('does not resurrect a deleted seeded vite.config.js on an existing root', async () => {
+  it('does not resurrect a deleted seeded vite.config.js (deletion recorded by the marker)', async () => {
+    // Contract renegotiated (PR-125 torn-state fix): deletion-respect used to
+    // ride the freshRoot heuristic (existing root -> never seed), which also
+    // starved persisted PRE-seeding workspaces of the template policy forever.
+    // The carrier is now the .rifty/vite-config.seeded marker: this test runs
+    // the REAL lifecycle (fresh seed writes the marker -> user deletes the
+    // config -> reboot must respect the deletion and keep the marker).
     const root = '/bu-devboot/config-slot-deleted';
     const fs = syncMirror();
-    fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(`${root}/src.keep`, enc.encode('')); // existing (non-fresh) root
+    await bootViteExpectImportFailure(root); // fresh root: seeds config + marker
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(true);
+    fs.rmSync(`${root}/vite.config.js`, {}); // the documented opt-out
     await bootViteExpectImportFailure(root);
     expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
+    expect(fs.existsSync(markerPath(root))).toBe(true);
   });
 
-  it('seeds the template vite.config.js into a fresh root', async () => {
+  it('seeds the template vite.config.js into a fresh root and writes the provenance marker', async () => {
     const root = '/bu-devboot/config-slot-fresh';
     const fs = syncMirror();
     await bootViteExpectImportFailure(root);
     expect(fs.existsSync(`${root}/vite.config.js`)).toBe(true);
+    expect(JSON.parse(dec.decode(fs.readFileBytesSync(markerPath(root))))).toEqual({
+      file: 'vite.config.js',
+      template: 'vite',
+    });
+  });
+
+  it('migrates a legacy persisted root (exists, no config, no marker): seeds config + marker', async () => {
+    // Pre-PR-125 workspaces persisted BEFORE template-seeded configs existed:
+    // the root exists but never got the visible policy the retired wrapper used
+    // to force every boot (vite8 HMR off, vite7 dep-discovery off). Absent
+    // marker = never seeded -> seed now; the old freshRoot gate skipped these.
+    const root = '/bu-devboot/config-slot-legacy';
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(`${root}/src.keep`, enc.encode('')); // existing (non-fresh) root
+    await bootViteExpectImportFailure(root);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(true);
+    expect(fs.existsSync(markerPath(root))).toBe(true);
   });
 });
 

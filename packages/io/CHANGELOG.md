@@ -4,6 +4,20 @@
 
 ### Fixed
 
+- **Bare streams are LOUD; subclass prototype methods dispatch — real Node
+  semantics** (parity case `stream/bare-stream-contract`, probed on Node v24).
+  A stream with no implementation used to be a silent stub: bare `Readable`
+  stalled forever (no-op base `_read`), bare `Writable`/`Duplex`/`Transform`
+  ACKed or identity-passed chunks nothing processed. Now: bare `Readable.read()`
+  destroys with `ERR_METHOD_NOT_IMPLEMENTED` ('error' event), bare
+  `Writable`/`Duplex`/`Transform` `write()` throws it SYNCHRONOUSLY, direct
+  `_read`/`_write` calls throw. Subclass PROTOTYPE `_write`/`_final`/`_writev`
+  (Duplex) and `_transform`/`_flush` (Transform) are now dispatched — the old
+  own-property probe missed prototype methods, silently dropping chunks.
+  `_flush(cb(err, data))` pushes the flush-produced chunk (was ignored).
+  `Transform.prototype._read` exists like Node's (push-fed readable side);
+  push-sources (`Readable.fromWeb`, `http.IncomingMessage`) define explicit
+  no-op `_read`s.
 - **`Readable` `_read` return value is now IGNORED — real Node semantics**
   (parity case `stream/readable-async-read-contract`, probed on Node v24).
   `reading` is cleared ONLY by `push()` (Node's `readableAddChunk`), so an
@@ -29,7 +43,8 @@
   `preview.local` (ADR-0189 D3, backlog net/preview-websocket-bridge): guest servers see
   the Host a REAL local dev run would; `Host`-derived consumers keep the original
   preview port and protocol-level `server.host` forcing can retire. Vite
-  `allowedHosts` still has a separate recorded hang before that force can retire.
+  `allowedHosts` force is retired in the same release — its recorded hang was
+  refuted (rifty `node:net` lacked `isIP`; fixed with parity coverage).
   `PREVIEW_LOCAL_HOST` stays exported for the explicit `setupHmrBridge`/devMode
   legacy path. Addressing change → SW_ROUTING_VERSION bump (`@riftydev/service-worker`).
 

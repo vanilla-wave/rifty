@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **esbuild shim lifecycle = real Node esbuild** (live oracle test against real
+  `esbuild@0.28.0`): `initialize` validates options like `validateInitializeOptions`
+  (type checks, unknown-key reject, TRUTHY per-option browser-only throws with
+  real messages — `{worker:false}` is accepted) and throws SYNC like Node;
+  `stop()` resets the initialize gate (`initialize(); stop(); initialize()` is
+  legal) and never stops the shared host service — in real Node each process
+  owns its service child, so a guest `stop()` must not kill vite's transformer;
+  observable guest behavior is identical (post-stop API calls keep working).
 - Failed esbuild host initialization no longer consumes the shim's one-shot
   `initialize()` latch; a later retry can start the real host, while concurrent
   or post-success second calls still throw like Node esbuild.

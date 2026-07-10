@@ -53,6 +53,8 @@ ADR-0044 D4 noted the swc switch shipped no code. This reversal *does* ship code
 - **A 19.2 MB binary is checked in.** Accepted: price of an offline, reproducible, build-time-vendored toolchain. Pinned by SHA-512 integrity in the fetch script; marked `binary` in `.gitattributes`.
 - **Shadow-binding targets esbuild's CLI transform surface, not its JS API.** Vite's `transform()` (TS/JSX → JS) maps onto `esbuild --loader=ts` over stdin. Dep-prebundle bundling (esbuild's `build()`) is not wired — a future need must run through `runWasi` too or throw `NotImplementedError('shadow-registry.esbuild.<feature>')` (no fake output).
 
+Correction (2026-07-10, ADR-0192): the "future `build()` must run through `runWasi` too or throw" clause is superseded — the guest esbuild JS API (`transform`/`build`/`context`) now delegates to the host esbuild-wasm bridge (the WASI `--service` protocol is upstream-unsupported and deadlocks at real payload sizes). This ADR's `@esbuild/wasi-preview1` vendoring and its WASI forcing-consumer role (CLI conformance) are unchanged.
+
 ## Consequences
 
 - New build-time script `tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs` vendors `esbuild.wasm` to `tools/shadow-registry/vendor/esbuild-wasi-preview1/`.

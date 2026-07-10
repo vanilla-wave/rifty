@@ -3,16 +3,16 @@ area: playground
 status: ready
 title: Clickable WASI preset — real esbuild.wasm guest over the shared VFS
 created: 2026-06-28
-why: WASI (a real compiled esbuild.wasm guest sharing files with node:fs) is rifty's one uncontested capability, but it's internal to the esbuild transform — no user-facing "run a WASI guest" surface exists for the article to point at
-user_story: As a developer evaluating rifty's WASI claim, I want to click a preset and watch a file written by node:fs get read+rewritten by esbuild.wasm as a WASI guest, but today there is no WASI preset and the esbuild path uses a stdin/stdout transform that never touches a VFS file.
+why: WASI (a real compiled esbuild.wasm guest sharing files with node:fs) is rifty's one uncontested capability, but no user-facing "run a WASI guest" surface exists for the article to point at — and since ADR-0192 moved the guest esbuild JS API to host esbuild-wasm, the WASI binary is exercised only by its CLI-conformance surface
+user_story: As a developer evaluating rifty's WASI claim, I want to click a preset and watch a file written by node:fs get read+rewritten by esbuild.wasm as a WASI guest, but today there is no WASI preset and the CLI-conformance transform (`transformWithEsbuild`) uses a stdin/stdout pipe that never touches a VFS file.
 epic: wasi-in-browser-showcase
 sources: [docs/public/compat/wasi.md]
-code: [apps/playground/src/presets.ts, apps/playground/src/workers/esbuild-wasi-transform.ts, packages/runtime-wasi/src/syscalls/path.ts]
+code: [apps/playground/src/presets.ts, tools/shadow-registry/src/esbuild-transform.ts, packages/runtime-wasi/src/syscalls/path.ts]
 ---
 
 ## Context
 
-`presets.ts` ships 7 presets, none WASI-facing. `path_open` + `fd_read`/`fd_write`/`fd_pread`/`fd_pwrite` are implemented (`packages/runtime-wasi/src/syscalls/path.ts`, `fd.ts`), and `esbuild-wasi-transform.ts` mounts a workspace preopen — BUT it feeds source via stdin and reads via stdout (transform mode), so no shipped path demonstrates a real `path_open` file round-trip. `docs/public/compat/wasi.md`: 25 implemented / 8 partial (incl `path_open` ⚠️) / 13 honest `E_NOSYS`.
+`presets.ts` ships 7 presets, none WASI-facing. `path_open` + `fd_read`/`fd_write`/`fd_pread`/`fd_pwrite` are implemented (`packages/runtime-wasi/src/syscalls/path.ts`, `fd.ts`), and `transformWithEsbuild` (`tools/shadow-registry/src/esbuild-transform.ts`) mounts a workspace preopen — BUT it feeds source via stdin and reads via stdout (transform mode), so no shipped path demonstrates a real `path_open` file round-trip; ADR-0192 even moved the vite JS API off WASI entirely (host esbuild-wasm). `docs/public/compat/wasi.md`: 25 implemented / 8 partial (incl `path_open` ⚠️) / 13 honest `E_NOSYS`.
 
 ## Acceptance
 

@@ -117,7 +117,7 @@ import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
-import { isViteConfigSlotPath, shouldSeedTemplateViteConfig } from './vite-config-guard.ts';
+import { claimTemplateViteConfigSeed, isViteConfigSlotPath } from './vite-config-guard.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -167,13 +167,14 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
 }
 
-function seedProject(cfg: BootstrapConfig): void {
+function seedProject(cfg: BootstrapConfig, templateId: string): void {
   const fs = syncMirror();
-  const freshRoot = !fs.existsSync(cfg.root);
   // Config-slot gate: never shadow a user's vite.config.* and never resurrect
-  // a deleted seeded config on a returning root (shouldSeedTemplateViteConfig).
-  const seedViteConfig = shouldSeedTemplateViteConfig(cfg.root, (p) => fs.existsSync(p), {
-    freshRoot,
+  // a deleted seeded config — marker-provenance, not root freshness
+  // (claimTemplateViteConfigSeed; a legacy pre-marker root seeds + migrates).
+  const seedViteConfig = claimTemplateViteConfigSeed(cfg.root, fs, {
+    id: templateId,
+    seedFiles: cfg.seedFiles,
   });
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
@@ -434,7 +435,7 @@ async function bootShellOwner(opts: {
   if (hiddenEmptyBoot) {
     syncMirror().mkdirSync(cfg.root, { recursive: true });
   } else {
-    seedProject(cfg);
+    seedProject(cfg, spec.id);
     if (freshRoot) seedStarterBaseline(starter, cfg.root);
     // Instant presets: pre-seed node_modules from the baked snapshot into the
     // owner store NOW, before any dev line (the full fs is already present);

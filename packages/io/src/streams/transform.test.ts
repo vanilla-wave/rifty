@@ -65,11 +65,19 @@ describe('Transform subclassing', () => {
 
 describe('Duplex.write routes to the writable side', () => {
   it('writes via Duplex go to the writable side, not the readable buffer', async () => {
-    const d = new Duplex({ objectMode: true });
-    // Per ADR-0034, `writableSide` is `readonly` and there's no need to reach
-    // in to override the write impl — instead, the Duplex's writable side is
-    // a real `Writable` with its own default no-op `_write`. We assert the
-    // protocol-level guarantee that writes don't echo onto the readable half.
+    // Contract renegotiated (bare-stream loudness): the old assertion rode the
+    // silent no-op `_write` base, which now throws like Node
+    // (bare-stream-not-implemented.test.ts). A real write impl keeps this
+    // test's actual subject — writes never echo onto the readable half.
+    const sink: unknown[] = [];
+    const d = new Duplex({
+      objectMode: true,
+      read(): void {}, // the 'data' listener pulls — a bare read side would destroy (Node too)
+      write(chunk, _enc, cb): void {
+        sink.push(chunk);
+        cb();
+      },
+    });
     const dataSeen: unknown[] = [];
     d.on('data', (c) => dataSeen.push(c));
     d.write('one');
@@ -78,6 +86,7 @@ describe('Duplex.write routes to the writable side', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(dataSeen).toEqual([]); // not echoed to the readable side
+    expect(sink).toEqual(['one', 'two']); // landed on the writable side
   });
 
   it('Duplex with a writable impl invokes it for write()', async () => {

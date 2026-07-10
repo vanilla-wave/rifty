@@ -411,7 +411,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vfs
 
-  tools/shadow-registry: {}
+  tools/shadow-registry:
+    devDependencies:
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
 
 packages:
 

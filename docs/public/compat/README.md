@@ -19,6 +19,7 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed `typescript-eslint`)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground `vite` command through the installed `.bin` CLI (ADR-0174)
+- [esbuild-js-api.md](./esbuild-js-api.md) — guest `esbuild` JS API via the host `esbuild-wasm` bridge (ADR-0192)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal `node <file>` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@riftydev/runtime-wasi`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

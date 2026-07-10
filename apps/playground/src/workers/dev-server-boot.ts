@@ -24,7 +24,7 @@ import type {
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildBridge } from './esbuild-host.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
-import { isViteConfigSlotPath, shouldSeedTemplateViteConfig } from './vite-config-guard.ts';
+import { claimTemplateViteConfigSeed, isViteConfigSlotPath } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 
@@ -155,7 +155,7 @@ export async function bootDevServer(opts: {
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
-  const { cfg, port, root, publishSnapshot, log } = opts;
+  const { cfg, port, root, spec, publishSnapshot, log } = opts;
 
   // Seed the template's package.json + files IF ABSENT — never overwrite. A
   // force-overwrite here discarded the user's `npm install` additions on every
@@ -166,12 +166,12 @@ export async function bootDevServer(opts: {
   // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
   function seedTemplateFiles(opts: { nodeModulesOnly: boolean }): void {
-    // Config-slot gate (shouldSeedTemplateViteConfig): computed BEFORE mkdir so
-    // "fresh root" is observable.
-    const freshRoot = !seedFs.existsSync(root);
-    const seedViteConfig = shouldSeedTemplateViteConfig(root, (p) => seedFs.existsSync(p), {
-      freshRoot,
-    });
+    // Config-slot gate (claimTemplateViteConfigSeed): marker-provenance, not
+    // root freshness — a granted claim already recorded the marker, so the
+    // loop below MUST write the slot file (it is absent by the claim's rule).
+    const seedViteConfig =
+      !opts.nodeModulesOnly &&
+      claimTemplateViteConfigSeed(root, seedFs, { id: spec.id, seedFiles: cfg.seedFiles });
     seedFs.mkdirSync(root, { recursive: true });
     if (!opts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
       seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));

@@ -41,8 +41,10 @@ export function buildChildSpawnSpec(
       // rifty has no native bindings by construction: force Rolldown's napi-rs
       // loader onto its `@rolldown/binding-wasm32-wasi` path and make a failed
       // load LOUD (else it is swallowed as a generic "Cannot find native
-      // binding"). Mirrors owner-child-dev-server.ts.
-      NAPI_RS_FORCE_WASI: '1',
+      // binding"). Mirrors owner-child-dev-server.ts (whose env is fully
+      // rifty-built — no user env reaches it). '1' is only the platform
+      // default: a user-set value wins, as real Node never clobbers explicit env.
+      NAPI_RS_FORCE_WASI: req.env.NAPI_RS_FORCE_WASI ?? '1',
       // Forward the recursive worker URLs so a foreground `.bin/vite@8` child can
       // spawn Rolldown's WASI pthread pool via kernel.spawnWorker — else the pool
       // falls back to same-realm and the dev server hangs past readiness (backlog

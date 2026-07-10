@@ -15,6 +15,10 @@ export interface RealEsbuildReport {
   readonly buildHasOutputFiles: boolean;
   readonly noOutfileWroteNothing: boolean;
   readonly noOutfileHasOutputFiles: boolean;
+  readonly pluginSawWrite: unknown;
+  readonly pluginOnEndFileOnDisk: boolean;
+  readonly pluginOnEndHasOutputFiles: boolean;
+  readonly pluginBuildHasOutputFiles: boolean;
 }
 
 export async function runRealEsbuildChecks(): Promise<RealEsbuildReport> {
@@ -39,6 +43,34 @@ export async function runRealEsbuildChecks(): Promise<RealEsbuildReport> {
   const noOut = await host.build({ entryPoints: ['/proj/src/in.js'], bundle: false });
   const after = fs.readdirSync('/proj').length + fs.readdirSync('/').length;
 
+  // Plugin-visible write surface against the REAL service: initialOptions
+  // reads the caller's write:true, onEnd sees the file already in the VFS and
+  // a native result shape (no outputFiles).
+  let pluginSawWrite: unknown = 'unset';
+  let pluginOnEndFileOnDisk = false;
+  let pluginOnEndHasOutputFiles = true;
+  const pluginBuild = await host.build({
+    entryPoints: ['src/in.js'],
+    outdir: 'plugout',
+    bundle: false,
+    write: true,
+    plugins: [
+      {
+        name: 'probe',
+        setup(b: {
+          initialOptions: Record<string, unknown>;
+          onEnd(cb: (r: Record<string, unknown>) => void): void;
+        }) {
+          pluginSawWrite = b.initialOptions.write;
+          b.onEnd((r) => {
+            pluginOnEndFileOnDisk = fs.existsSync('/proj/plugout/in.js');
+            pluginOnEndHasOutputFiles = 'outputFiles' in r;
+          });
+        },
+      },
+    ],
+  });
+
   return {
     version: host.version,
     transformed,
@@ -46,5 +78,9 @@ export async function runRealEsbuildChecks(): Promise<RealEsbuildReport> {
     buildHasOutputFiles: 'outputFiles' in built,
     noOutfileWroteNothing: before === after,
     noOutfileHasOutputFiles: 'outputFiles' in noOut,
+    pluginSawWrite,
+    pluginOnEndFileOnDisk,
+    pluginOnEndHasOutputFiles,
+    pluginBuildHasOutputFiles: 'outputFiles' in pluginBuild,
   };
 }

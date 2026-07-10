@@ -14,8 +14,9 @@
  * field any cast can pass through.
  */
 
+import { methodNotImplementedError } from './method-not-implemented.ts';
 import { Readable, type ReadableOptions } from './readable.ts';
-import { Writable, type WritableOptions, type WritableState } from './writable.ts';
+import { Writable, type WritableOptions, type WritableState, type WriteChunk } from './writable.ts';
 
 type WriteOverride = (
   this: Duplex,
@@ -26,19 +27,37 @@ type WriteOverride = (
 
 type FinalOverride = (this: Duplex, cb: (err?: Error | null) => void) => void;
 
-function ownFunction(target: object, name: '_write' | '_final'): unknown {
-  if (!Object.prototype.hasOwnProperty.call(target, name)) return undefined;
+type WritevOverride = (
+  this: Duplex,
+  chunks: WriteChunk[],
+  cb: (err?: Error | null) => void,
+) => void;
+
+/**
+ * PROTOTYPE-CHAIN lookup, not `hasOwnProperty`: Node dispatches subclass
+ * prototype methods (`class X extends Duplex { _write() {…} }`), and the old
+ * own-property probe silently missed them — chunks were ACKed by the default
+ * `cb()` and dropped. `Duplex`/`Transform` define none of these themselves
+ * (the loud `Transform.prototype._transform` base is filtered by its caller),
+ * so any function found is a real subclass/instance implementation.
+ */
+function streamMethod(target: object, name: '_write' | '_final' | '_writev'): unknown {
   return (target as Record<string, unknown>)[name];
 }
 
-export function ownWriteOverride(target: Duplex): WriteOverride | null {
-  const value = ownFunction(target, '_write');
+export function resolveWriteOverride(target: Duplex): WriteOverride | null {
+  const value = streamMethod(target, '_write');
   return typeof value === 'function' ? (value as WriteOverride) : null;
 }
 
-export function ownFinalOverride(target: Duplex): FinalOverride | null {
-  const value = ownFunction(target, '_final');
+export function resolveFinalOverride(target: Duplex): FinalOverride | null {
+  const value = streamMethod(target, '_final');
   return typeof value === 'function' ? (value as FinalOverride) : null;
+}
+
+export function resolveWritevOverride(target: Duplex): WritevOverride | null {
+  const value = streamMethod(target, '_writev');
+  return typeof value === 'function' ? (value as WritevOverride) : null;
 }
 
 /**
@@ -81,6 +100,9 @@ export class Duplex extends Readable {
   readonly writableSide: Writable;
   /** Node's `allowHalfOpen` — see {@link DuplexOptions}. */
   readonly allowHalfOpen: boolean;
+  /** True when the DEFAULT writable side got no write/writev option — bareness
+   *  then hinges on subclass `_write`/`_writev`, checked at write() time. */
+  private readonly defaultWritableBare: boolean;
 
   constructor(opts: DuplexOptions = {}) {
     super(opts);
@@ -90,12 +112,21 @@ export class Duplex extends Readable {
     const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
     const writeOpt = opts.write;
     const finalOpt = opts.final;
+    this.defaultWritableBare = !factory && !writeOpt && !opts.writev;
     this.writableSide = factory
       ? factory(opts, this)
       : new Writable({
           ...opts,
+          // Subclass prototype `_writev` is a real batched impl (Node dispatch).
+          writev:
+            opts.writev ??
+            (resolveWritevOverride(this)
+              ? (chunks, cb): void => {
+                  resolveWritevOverride(this)?.call(this, chunks, cb);
+                }
+              : undefined),
           write: (chunk, encoding, cb): void => {
-            const override = ownWriteOverride(this);
+            const override = resolveWriteOverride(this);
             if (override) {
               override.call(this, chunk, encoding, cb);
               return;
@@ -104,10 +135,17 @@ export class Duplex extends Readable {
               writeOpt.call(this.writableSide, chunk, encoding, cb);
               return;
             }
-            cb();
+            const writev = resolveWritevOverride(this);
+            if (writev) {
+              // Node's base `_write`: a single chunk delegates to `_writev`.
+              writev.call(this, [{ chunk, encoding }], cb);
+              return;
+            }
+            // Corked-flush backstop; the sync path throws in write() already.
+            throw methodNotImplementedError('_write()');
           },
           final: (cb): void => {
-            const override = ownFinalOverride(this);
+            const override = resolveFinalOverride(this);
             if (override) {
               override.call(this, cb);
               return;
@@ -176,11 +214,25 @@ export class Duplex extends Readable {
    * Forward writes to the embedded writable side. Per Node, `Duplex.write` is a
    * single prototype function — subclasses can `super.write(chunk, ...)`.
    */
+  /**
+   * Bare-stream guard, virtual so `Transform` reports `_transform()` instead:
+   * Node's writeOrBuffer throws ERR_METHOD_NOT_IMPLEMENTED SYNCHRONOUSLY out
+   * of `write()` when no implementation exists — the embedded side's deferred
+   * drain would otherwise crash uncatchably a microtask later.
+   */
+  protected writeEntryError(): Error | null {
+    if (!this.defaultWritableBare) return null;
+    if (resolveWriteOverride(this) || resolveWritevOverride(this)) return null;
+    return methodNotImplementedError('_write()');
+  }
+
   write(
     chunk: unknown,
     encoding?: string | ((err?: Error | null) => void),
     cb?: (err?: Error | null) => void,
   ): boolean {
+    const bareErr = this.writeEntryError();
+    if (bareErr) throw bareErr;
     return this.writableSide.write(chunk, encoding, cb);
   }
 

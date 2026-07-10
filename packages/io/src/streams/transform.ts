@@ -2,7 +2,9 @@
  * Node-compatible `node:stream.Transform` — owned by `@riftydev/io` per ADR-0012.
  *
  * Per ADR-0034, `write`/`end` live on the prototype — no per-instance rebinding.
- * If no `transform` option is given, chunks pass through unchanged.
+ * The implementation resolves like Node: subclass `_write` > the `transform`
+ * option > subclass prototype `_transform` > the LOUD base (`_transform()` is
+ * not implemented — a bare Transform throws, never a silent identity).
  *
  * Writable-side impls are wired via the Symbol-keyed
  * {@link INTERNAL_WRITABLE_SIDE} hook on `Duplex`, avoiding instance-method
@@ -14,23 +16,44 @@ import {
   Duplex,
   type DuplexInternalOptions,
   INTERNAL_WRITABLE_SIDE,
-  ownFinalOverride,
-  ownWriteOverride,
+  resolveFinalOverride,
+  resolveWriteOverride,
 } from './duplex.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 import type { ReadableOptions } from './readable.ts';
 import { Writable, type WritableOptions } from './writable.ts';
 
+type TransformCallback = (err?: Error | null, value?: unknown) => void;
+
 export interface TransformOptions extends ReadableOptions, WritableOptions {
-  transform?(
-    this: Transform,
-    chunk: unknown,
-    encoding: string,
-    cb: (err?: Error | null, value?: unknown) => void,
-  ): void;
-  flush?(this: Transform, cb: (err?: Error | null) => void): void;
+  transform?(this: Transform, chunk: unknown, encoding: string, cb: TransformCallback): void;
+  /** Node shape: `cb(err, data)` — a flush-produced `data` chunk is pushed. */
+  flush?(this: Transform, cb: TransformCallback): void;
+}
+
+/** Subclass prototype `_transform`, filtered against the loud base. */
+function resolveTransformOverride(
+  t: Transform,
+): ((this: Transform, chunk: unknown, encoding: string, cb: TransformCallback) => void) | null {
+  const value = t._transform;
+  return value !== Transform.prototype._transform ? value : null;
+}
+
+/** Subclass prototype `_flush` (no base — any function is an implementation). */
+function resolveFlushOverride(
+  t: Transform,
+): ((this: Transform, cb: TransformCallback) => void) | null {
+  const value = (t as { _flush?: unknown })._flush;
+  return typeof value === 'function'
+    ? (value as (this: Transform, cb: TransformCallback) => void)
+    : null;
 }
 
 export class Transform extends Duplex {
+  /** True when the ctor received a `transform` option (instance impl, Node's
+   *  `this._transform = options.transform`). */
+  private readonly hasTransformOption: boolean;
+
   constructor(opts: TransformOptions = {}) {
     const transformImpl = opts.transform;
     const flushImpl = opts.flush;
@@ -51,13 +74,14 @@ export class Transform extends Duplex {
               cb(new Error('Transform stream not yet bound — internal invariant violated'));
               return;
             }
-            const override = ownWriteOverride(t);
+            const override = resolveWriteOverride(t);
             if (override) {
               override.call(t, chunk, encoding, cb);
               return;
             }
-            if (transformImpl) {
-              transformImpl.call(t, chunk, encoding, (err, value) => {
+            const transform = transformImpl ?? resolveTransformOverride(t);
+            if (transform) {
+              transform.call(t, chunk, encoding, (err, value) => {
                 if (err) {
                   cb(err);
                   return;
@@ -67,9 +91,9 @@ export class Transform extends Duplex {
               });
               return;
             }
-            // Identity-default: echo to readable side.
-            t.push(chunk);
-            cb();
+            // Corked-flush backstop; the sync path throws in write() already
+            // (writeEntryError) — Node's bare Transform is LOUD, not identity.
+            throw methodNotImplementedError('_transform()');
           },
           final(cb): void {
             const t = transformRef.instance ?? (owner as Transform);
@@ -77,7 +101,7 @@ export class Transform extends Duplex {
               cb(new Error('Transform stream not yet bound — internal invariant violated'));
               return;
             }
-            const override = ownFinalOverride(t);
+            const override = resolveFinalOverride(t);
             if (override) {
               override.call(t, cb);
               return;
@@ -86,10 +110,16 @@ export class Transform extends Duplex {
               t.push(null);
               cb();
             };
-            if (flushImpl) {
-              flushImpl.call(t, (err) => {
-                if (err) cb(err);
-                else finalize();
+            const flush = flushImpl ?? resolveFlushOverride(t);
+            if (flush) {
+              flush.call(t, (err, value) => {
+                if (err) {
+                  cb(err);
+                  return;
+                }
+                // Node's `_flush(cb(err, data))`: a produced chunk is pushed.
+                if (value !== undefined && value !== null) t.push(value);
+                finalize();
               });
               return;
             }
@@ -99,5 +129,23 @@ export class Transform extends Duplex {
     };
     super(superOpts);
     transformRef.instance = this;
+    this.hasTransformOption = typeof transformImpl === 'function';
+  }
+
+  /** Node's loud base: a bare Transform reports `_transform()`, sync from `write()`. */
+  _transform(_chunk: unknown, _encoding: string, _cb: TransformCallback): void {
+    throw methodNotImplementedError('_transform()');
+  }
+
+  /** Node defines `Transform.prototype._read` — the readable side is fed by
+   *  the transform callback (push), never pulled; without this the loud
+   *  `Readable` base would destroy every Transform on first read. */
+  override _read(): void {}
+
+  protected override writeEntryError(): Error | null {
+    if (resolveWriteOverride(this)) return null;
+    if (this.hasTransformOption) return null;
+    if (resolveTransformOverride(this)) return null;
+    return methodNotImplementedError('_transform()');
   }
 }

@@ -8,7 +8,7 @@ user_story: As a dev wanting to run a Go-WASM binary built for `js/wasm` (`gojs.
 sources: [ADR-0044 D3, ADR-0047 D3, TASKS Follow-ups, REVIEW_ACTIONS A-008]
 ---
 ## Context
-`esbuild-wasm` (0.21.5/0.25.0/0.28.0) targets Go's `js/wasm` ABI (`gojs.runtime.*` / `gojs.syscall/js.*`), NOT WASIp1. But esbuild no longer needs a gojs bridge — rifty runs the separate `@esbuild/wasi-preview1` WASIp1 build on the existing shim (ADR-0047 reverses ADR-0044's premise). So the multi-week Go-runtime bridge is currently moot.
+`esbuild-wasm` (0.21.5/0.25.0/0.28.0) targets Go's `js/wasm` ABI (`gojs.runtime.*` / `gojs.syscall/js.*`), NOT WASIp1. But esbuild needs no rifty gojs bridge either way: the CLI runs the separate `@esbuild/wasi-preview1` WASIp1 build on the existing shim (ADR-0047), and the JS API runs official `esbuild-wasm` via its own embedded `wasm_exec` glue in the host realm (ADR-0192). So the multi-week Go-runtime bridge is currently moot — it matters only for a BARE gojs guest without embedded glue.
 ## Options / Next
 The bridge (`@riftydev/runtime-go-wasm`: full `syscall/js` handle protocol, `wasm_exec.js`-equivalent host shim, GC + goroutine scheduling) only matters if some *other* gojs guest with no WASIp1 build appears. Blocks nothing today. Pick up when a real Go-WASM guest shows up; multi-week design.
 ## Reversibility

@@ -30,6 +30,12 @@ test.describe('esbuild host over the real wasm service', () => {
       buildHasOutputFiles: false,
       noOutfileWroteNothing: true,
       noOutfileHasOutputFiles: false,
+      // Plugin boundary stays native: caller's write shape, files on the VFS
+      // before user onEnd, no outputFiles anywhere plugin-visible.
+      pluginSawWrite: true,
+      pluginOnEndFileOnDisk: true,
+      pluginOnEndHasOutputFiles: false,
+      pluginBuildHasOutputFiles: false,
     });
   });
 });

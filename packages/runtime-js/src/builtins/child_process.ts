@@ -124,8 +124,11 @@ class ChildProcess extends EventEmitter {
     this.handle = handle;
     this.pid = handle.pid;
     this.ipcEnabled = ipcEnabled;
-    this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
-    this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
+    // Push-sources (worker messages push chunks); Node's child stdio are
+    // Sockets with a real `_read` — an explicit no-op keeps the loud
+    // ERR_METHOD_NOT_IMPLEMENTED base for genuinely bare streams only.
+    this.stdout = streams?.stdout ?? new Readable({ objectMode: false, read(): void {} });
+    this.stderr = streams?.stderr ?? new Readable({ objectMode: false, read(): void {} });
     this.stdin = streams?.stdin ?? new InRealmStdinUnsupported();
     // Surface kernel-tracked exit/close so existing `.on('close', …)` consumers
     // keep working.

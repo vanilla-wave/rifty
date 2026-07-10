@@ -32,6 +32,7 @@ import type {
   BuildOptions,
   BuildResult,
   OutputFile,
+  Plugin,
   TransformOptions,
   TransformResult,
 } from 'esbuild-wasm/esm/browser.js';
@@ -416,15 +417,11 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
       const file = trackedFile(fd, callback);
       if (file === null) return;
       fds.delete(fd);
-      if (file.dirty) {
-        try {
-          const fs = mirror();
-          fs.mkdirSync(dirname(file.path), { recursive: true });
-          fs.writeFileSync(file.path, file.bytes);
-        } catch (err) {
-          fail(callback, toFsError(err, file.path));
-          return;
-        }
+      try {
+        flushDirty(file);
+      } catch (err) {
+        fail(callback, toFsError(err, file.path));
+        return;
       }
       ok(callback);
     },
@@ -582,10 +579,30 @@ export function createWasmExecFs(mirror: () => FsSync): WasmExecFs {
         fail(callback, toFsError(err, np));
       }
     },
+    // Honest fsync: dirty bytes reach the mirror NOW (crash-before-close must
+    // not lose fsynced data) and a mirror failure is the caller's errno — a
+    // no-op `ok` here was a durability lie (provenance-lie × fsync).
     fsync(fd, callback): void {
-      requireFd(fd, callback);
+      const file = trackedFile(fd, callback);
+      if (file === null) return;
+      try {
+        flushDirty(file);
+      } catch (err) {
+        fail(callback, toFsError(err, file.path));
+        return;
+      }
+      ok(callback);
     },
   };
+
+  /** One flush boundary for fsync + close; clears `dirty` only on success. */
+  function flushDirty(file: OpenFile): void {
+    if (!file.dirty) return;
+    const fs = mirror();
+    fs.mkdirSync(dirname(file.path), { recursive: true });
+    fs.writeFileSync(file.path, file.bytes);
+    file.dirty = false;
+  }
 
   function writeAt(file: OpenFile, chunk: Uint8Array, pos: number): void {
     if (pos + chunk.length > file.bytes.length) {
@@ -633,6 +650,90 @@ function withoutOutputFiles(result: BuildResult): BuildResult {
   return rest as BuildResult;
 }
 
+/**
+ * Plugin-visible write normalization: the service runs `write:false`, but user
+ * plugins must see the NATIVE `write:true` surface — `initialOptions.write` as
+ * the caller passed it (reads masked, mutations flow through), files already
+ * on the VFS when their `onEnd` runs (a rifty writer plugin registered FIRST
+ * writes + strips `outputFiles` from the shared result object), and no
+ * `outputFiles` in the resolved result. Without this the rewrite was
+ * plugin-observable (provenance-lie at the plugin boundary, ADR-0192).
+ * Pluginless builds skip the machinery — the post-build pass is unobservable.
+ * Probed on real esbuild 0.28.0 (2026-07-10): onEnd hooks run in registration
+ * order, initialOptions IS the live options object, result mutations (incl.
+ * delete) propagate to later hooks and the resolved value.
+ */
+function normalizedWriteBuildOptions(opts: BuildOptions, mirror: () => FsSync): BuildOptions {
+  const plugins = opts.plugins ?? [];
+  const requestedWrite = { present: 'write' in opts, value: opts.write };
+  const normalized: BuildOptions = { ...opts, write: false };
+  if (plugins.length === 0) return normalized;
+  const optionsMask = new Proxy(normalized as Record<string | symbol, unknown>, {
+    // 'plugins' reads back the USER's array — natively a plugin never sees the
+    // injected writer or the masked wrappers.
+    get: (t, p, r) =>
+      p === 'write' ? requestedWrite.value : p === 'plugins' ? plugins : Reflect.get(t, p, r),
+    has: (t, p) => (p === 'write' ? requestedWrite.present : Reflect.has(t, p)),
+    set: (t, p, v, r) => {
+      if (p === 'write') {
+        requestedWrite.present = true;
+        requestedWrite.value = v as boolean;
+        return true;
+      }
+      return Reflect.set(t, p, v, r);
+    },
+    deleteProperty: (t, p) => {
+      if (p === 'write') {
+        requestedWrite.present = false;
+        requestedWrite.value = undefined;
+        return true;
+      }
+      return Reflect.deleteProperty(t, p);
+    },
+    ownKeys: (t) => {
+      const keys = Reflect.ownKeys(t);
+      return requestedWrite.present ? keys : keys.filter((k) => k !== 'write');
+    },
+    getOwnPropertyDescriptor: (t, p) => {
+      if (p === 'write') {
+        return requestedWrite.present
+          ? { configurable: true, enumerable: true, writable: true, value: requestedWrite.value }
+          : undefined;
+      }
+      return Reflect.getOwnPropertyDescriptor(t, p);
+    },
+  }) as BuildOptions;
+  const writer: Plugin = {
+    name: 'rifty-write-normalizer',
+    setup(build) {
+      // Registered FIRST → this onEnd runs before every user onEnd: outputs
+      // are on the VFS and outputFiles gone by the time user hooks observe.
+      build.onEnd((result) => {
+        writeOutputFiles(mirror(), result.outputFiles);
+        // Key must be GONE ('outputFiles' in result === false, native shape) —
+        // an `undefined` assignment would leave it visible.
+        Reflect.deleteProperty(result, 'outputFiles');
+      });
+    },
+  };
+  const masked = plugins.map(
+    (p): Plugin => ({
+      name: p.name,
+      setup: (build) =>
+        p.setup(
+          new Proxy(build, {
+            get: (t, prop, r) =>
+              prop === 'initialOptions' ? optionsMask : Reflect.get(t, prop, r),
+          }),
+        ),
+    }),
+  );
+  // Mutate IN PLACE: plugin setup mutations of initialOptions (via the mask)
+  // must land on the object the service receives, not a stale copy.
+  normalized.plugins = [writer, ...masked];
+  return normalized;
+}
+
 export function createEsbuildHost(deps: {
   readonly lib: EsbuildWasmLib;
   readonly wasmUrl: string;
@@ -668,7 +769,9 @@ export function createEsbuildHost(deps: {
       await ensureInitialized();
       const opts = withGuestWorkingDir(options);
       if (opts.write === false) return lib.build(opts);
-      const result = await lib.build({ ...opts, write: false });
+      const hasPlugins = (opts.plugins?.length ?? 0) > 0;
+      const result = await lib.build(normalizedWriteBuildOptions(opts, mirror));
+      if (hasPlugins) return result; // the writer plugin already wrote + stripped
       writeOutputFiles(mirror(), result.outputFiles);
       return withoutOutputFiles(result);
     },
@@ -676,10 +779,12 @@ export function createEsbuildHost(deps: {
       await ensureInitialized();
       const opts = withGuestWorkingDir(options);
       if (opts.write === false) return lib.context(opts);
-      const ctx = await lib.context({ ...opts, write: false });
+      const hasPlugins = (opts.plugins?.length ?? 0) > 0;
+      const ctx = await lib.context(normalizedWriteBuildOptions(opts, mirror));
       return {
         rebuild: async () => {
           const result = await ctx.rebuild();
+          if (hasPlugins) return result; // per-rebuild writer plugin handled it
           writeOutputFiles(mirror(), result.outputFiles);
           return withoutOutputFiles(result);
         },

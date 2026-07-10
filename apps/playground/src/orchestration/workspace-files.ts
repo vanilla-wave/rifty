@@ -96,8 +96,8 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
       if (path === rootPackageJsonPath) continue;
       // Reload re-seed must not resurrect a deleted template vite.config.js /
       // shadow a user's vite.config.* (deletion = the documented opt-out; the
-      // owner's fresh-root seed owns the config-slot decision —
-      // shouldSeedTemplateViteConfig in vite-config-guard.ts).
+      // owner's marker-provenance seed owns the config-slot decision —
+      // claimTemplateViteConfigSeed in vite-config-guard.ts).
       if (ifAbsent && isViteConfigSlotPath(path, root)) continue;
       await deps.currentOwner().writeFrameAcked({
         type: 'write',

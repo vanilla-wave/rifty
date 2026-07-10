@@ -25,6 +25,7 @@
 import { Buffer } from '../buffer.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import { getDefaultHighWaterMark } from './default-highwatermark.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -404,7 +405,13 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     });
   }
 
-  _read(_size: number): void {}
+  /** Node parity: a bare `Readable` is loud — `read()` destroys the stream
+   *  with this error (via the `maybeRead` sync-throw path), a direct `_read`
+   *  call throws. Push-source subclasses override with an explicit no-op
+   *  (Node's `http.IncomingMessage` defines `_read` the same way). */
+  _read(_size: number): void {
+    throw methodNotImplementedError('_read()');
+  }
 
   get readable(): boolean {
     return (
@@ -636,8 +643,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   private resolveRead(): ReadOverride | undefined {
-    if (this.readImpl) return this.readImpl;
-    return this._read !== Readable.prototype._read ? this._read : undefined;
+    // Always an implementation: the ctor option, a subclass `_read` (prototype
+    // dispatch), or the loud base (Node's ERR_METHOD_NOT_IMPLEMENTED throw —
+    // maybeRead's catch turns it into destroy+'error', exactly Node's path).
+    return this.readImpl ?? this._read;
   }
 
   /**
@@ -1311,14 +1320,18 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         'Readable.fromWeb: the "readableStream" argument must be a ReadableStream',
       );
     }
+    // Push-source: the pump loop below feeds the buffer (demand-gated via
+    // waitForReadableDemand); an explicit no-op `read` keeps the loud
+    // ERR_METHOD_NOT_IMPLEMENTED base for genuinely bare streams only.
+    const pushSourceOpts = { ...options, read(): void {} };
     if (options.signal?.aborted) {
-      const r = new Readable(options);
+      const r = new Readable(pushSourceOpts);
       queueMicrotask(() => r.destroy(abortError()));
       return r;
     }
 
     const reader = stream.getReader();
-    const r = new Readable(options);
+    const r = new Readable(pushSourceOpts);
     let closed = false;
 
     // Abort→destroy wiring shared with `stream.addAbortSignal` (its `'close'`/

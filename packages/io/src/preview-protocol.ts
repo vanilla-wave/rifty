@@ -35,8 +35,9 @@ export const PREVIEW_LOCAL_HOST = 'preview.local';
  * The host is `localhost:<port>` — exactly what a real local dev run puts in
  * `Host` — so host-derived consumers (`@hono/node-server`) keep the original
  * preview port and generic host allow-lists can be retired at the protocol
- * layer. Vite's `allowedHosts` force still has a separate recorded hang before
- * it can retire. Scheme is hard-coded `http://`: the request never leaves the
+ * layer. The Vite `allowedHosts` force is retired too (PR #125: the recorded
+ * blocked-host hang was refuted — rifty `node:net` lacked `isIP`, fixed with
+ * parity coverage). Scheme is hard-coded `http://`: the request never leaves the
  * page realm, so there is nothing to negotiate over TLS. Addressing change =
  * SW_ROUTING_VERSION bump.
  */

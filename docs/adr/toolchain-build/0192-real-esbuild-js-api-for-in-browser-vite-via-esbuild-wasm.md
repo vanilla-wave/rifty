@@ -81,14 +81,23 @@ pinned by esbuild-host.test.ts + the shadow-registry exact-pin range).
 - If a future guest tool pins a different esbuild version with breaking API
   drift, the single-host-instance model needs revisiting (per-version
   instances) — record then, not now.
-- **Recorded divergence — plugin-visible `write` flip.** esbuild-wasm rejects
-  `write: true` in browsers, so the host runs the service with `write: false`
-  and writes `outputFiles` to the VFS itself (result stripped — the OUTER
-  observable shape matches native `write: true`; native no-outfile builds
-  write nothing, so the service's literal `<stdout>` entry is dropped; a
-  relative outdir resolves via an injected `absWorkingDir` = guest cwd,
-  probed against real esbuild 0.28.0). What canNOT be normalized: a plugin's
-  `onEnd` callback runs INSIDE the service and observes
-  `initialOptions.write === false` + in-memory `outputFiles` where native
-  would show `write: true` + files on disk. Bounded, inherent to the browser
-  build of esbuild; revisit only if a real guest plugin breaks on it.
+- **Write normalization is plugin-invisible (corrected 2026-07-10).**
+  esbuild-wasm rejects `write: true` in browsers, so the host runs the service
+  with `write: false` and normalizes the WHOLE observable surface to native
+  `write: true`: result stripped of `outputFiles`; native no-outfile builds
+  write nothing (the service's literal `<stdout>` entry is dropped); relative
+  outdir resolves via injected `absWorkingDir` = guest cwd; and the PLUGIN
+  boundary — a rifty writer plugin registered first lands outputs on the VFS
+  and strips `outputFiles` from the shared result BEFORE any user `onEnd`,
+  while a Proxy masks `initialOptions.write`/`plugins` to the caller's shape
+  (mutations flow through). Probed on real esbuild 0.28.0: onEnd order =
+  registration order, `initialOptions` is the live options object, result
+  mutations propagate. The earlier "plugin-visible flip, revisit if a plugin
+  breaks" wait-for-the-lie stance is superseded by this normalization
+  (esbuild-host.test.ts plugin suite + browser-unit real-wasm spec).
+- **Fault matrix (fs facade + output writes)**: `provenance-lie` × fsync →
+  dirty bytes flush to the mirror, mirror failure = caller's errno (was a
+  no-op success); `quota-perm-fail` × flush → loud errno, never a silent ok;
+  `torn-state` × multi-output write → mid-list failure throws (torn output
+  visible, no blind continue). Fault tests: esbuild-host.test.ts "fault:
+  flush honesty".
