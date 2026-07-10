@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`resolveEddyClosure`** (stale-pin SWR primitive, backlog
+  `playground/eddy-stale-pin-revalidate`): POST the canonical request and read
+  the response ONLY up to the manifest member (early-cancel via
+  `streamTarEntries` — the tarball tail never downloads), returning
+  `{ closureHash, resolvedAt }`. Bounded on every phase through the ADR-0201
+  chokepoint (header wait, decline-body drain, body no-progress); throws on
+  decline/HTTP error/stall/malformed manifest. No wire-protocol change.
+- **`InstallResult.resolvedAt`**: eddy-sourced installs expose the adopted
+  bundle's `manifest.asOf.resolvedAt` so the playground's stale-pin honesty
+  line reports the SERVED resolution's age, not the pin file's.
+
 ### Fixed
 
 - **Standard-path registry fetches are stall-bounded.** `RegistryClient`

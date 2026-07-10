@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Changed (install-tail-latency)
+
+- **Install exit stops awaiting the OPFS durability drain** (backlog
+  `playground/install-stamp-background-flush`): the drain → full-ledger gate →
+  stamp → stamp-drain sequence (ADR-0187 Corrected, order and gate semantics
+  intact) now runs in background after `npm install` returns, so a
+  `&&`-chained dev server starts immediately. Dirty-drain/stamp warnings still
+  print, asynchronously. A later install serializes behind the in-flight
+  sequence (stamp #N lands before install #N+1's tree writes); a tab killed
+  mid-drain leaves no stamp → next boot re-installs, never a torn stamped
+  tree. Measured install→vite-ready (eddy path, real-vite preset, local, n=5
+  median): 3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the
+  full ~490ms profiled drain does not all land on this marker).
+- **Learned pins serve-stale-while-revalidate inside a hard 24h bound**
+  (backlog `playground/eddy-stale-pin-revalidate`): a pin older than the 30min
+  fresh TTL but ≤ 24h now still rides the immutable pinned GET (install AND
+  boot prefetch); the terminal prints
+  `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in background`
+  (`resolvedAt` = the SERVED bundle manifest's stamp) and ONE background
+  manifest-only POST revalidate refreshes the pin (same closure → savedAt
+  refresh; new closure → pin replaced). Beyond 24h the pin drops (foreground
+  POST as before). The immediate write-back is skipped on a stale serve —
+  refreshing `savedAt` without consulting the server would self-renew the pin
+  past the 24h bound. Deliberate npm deviation recorded in the backlog item's
+  Parity section; `prefer:'online'` bypass unchanged; revocation safety net:
+  §Revocation runbook in `docs/public/hosting-eddy.md`.
+
 ### Fixed
 
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder

@@ -34,6 +34,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import {
   type EddyPrefetchHandle,
+  type EddyRequestBody,
   type InstallOptions,
   type InstallResult,
   type RegistryClient,
@@ -104,11 +105,33 @@ export interface NpmShellCommandDeps {
    *  the post-merge key and PREFERRED over the coarse template env pin (a learned
    *  pin matches the EXACT dep set, the env pin only the pristine preset); written
    *  fire-and-forget after a successful eddy install so the NEXT identical dep set
-   *  is a cacheable GET. Inert without `resolverUrl`. */
+   *  is a cacheable GET. A STALE lookup (SWR window, backlog
+   *  eddy-stale-pin-revalidate) is still served but obligates the `as-of`
+   *  honesty line + one background `revalidate` — and SKIPS the immediate
+   *  write-back (refreshing `savedAt` without consulting the server would
+   *  self-renew the pin past its hard 24h bound forever). Inert without
+   *  `resolverUrl`. */
   readonly learnedPins?: {
-    get(requestKey: string): Promise<string | undefined>;
+    get(requestKey: string): Promise<LearnedPinLookup | undefined>;
     set(requestKey: string, closureHash: string): Promise<void>;
+    /** Background revalidate of a STALE pin that was just served: POST the
+     *  same canonical request, compare closure hashes, refresh/replace the
+     *  pin. Rejection = one async terminal warning; the pin stays untouched
+     *  and the next stale install retries. */
+    revalidate(
+      requestKey: string,
+      request: EddyRequestBody,
+      servedClosureHash: string,
+    ): Promise<void>;
   };
+}
+
+/** One learned-pin lookup: `stale` = past the fresh TTL but inside the hard
+ *  stale bound (see `eddy-learned-pins.ts`); structural on purpose — the seam
+ *  stays stubbable without importing the pin store. */
+export interface LearnedPinLookup {
+  readonly closureHash: string;
+  readonly stale: boolean;
 }
 
 interface ProjectPackageJson {
@@ -513,12 +536,12 @@ async function runInstall(
   // coverage-cancelled GET before POST). Env pin stays the fallback that seeds the
   // FIRST install of a set (no learned pin yet). This keeps the ADR-0194 promise:
   // a repeat of the same dep set — modified or not — rides a cacheable learned GET.
-  const requestKey = deps.resolverUrl ? await installRequestKey(deps.vfs, packageJsonPath) : null;
+  const eddyRequest = deps.resolverUrl ? await installEddyRequest(deps.vfs, packageJsonPath) : null;
   const learnedPin =
-    requestKey && deps.learnedPins
-      ? await deps.learnedPins.get(requestKey).catch(() => undefined)
+    eddyRequest && deps.learnedPins
+      ? await deps.learnedPins.get(eddyRequest.key).catch(() => undefined)
       : undefined;
-  const resolverClosureHash = learnedPin ?? envPin;
+  const resolverClosureHash = learnedPin?.closureHash ?? envPin;
   try {
     const result = await installFn({
       vfs: deps.vfs,
@@ -553,13 +576,38 @@ async function runInstall(
       // (every later install would rethrow it) — still loud, never silent.
       console.warn(`npm: install durability sequence failed: ${(err as Error).message}`);
     });
-    // Fire-and-forget write-back: the pin is an optimization, never worth
-    // blocking or failing the install line over.
-    if (result.source === 'eddy' && result.closureHash && requestKey && deps.learnedPins) {
+    // A STALE pin actually served this install (SWR): the tree came from a
+    // ≤24h-old cached resolution — say so loudly (`as-of` = the SERVED
+    // manifest's resolvedAt, never the pin file's age) and refresh in
+    // background via ONE manifest-only POST. The ordinary write-back is
+    // SKIPPED here: rewriting savedAt on serve would self-renew the pin past
+    // the 24h bound without ever consulting the server.
+    const stalePinServed =
+      learnedPin?.stale === true &&
+      result.source === 'eddy' &&
+      result.closureHash === learnedPin.closureHash;
+    if (stalePinServed && eddyRequest && deps.learnedPins) {
+      const { learnedPins } = deps;
+      const servedHash = learnedPin.closureHash;
+      ctx.stdout.write(
+        `npm: eddy cached resolution (as-of ${result.resolvedAt ?? 'unknown'}), refreshing in background\n`,
+      );
+      void Promise.resolve()
+        .then(() => learnedPins.revalidate(eddyRequest.key, eddyRequest.body, servedHash))
+        .catch((err) => {
+          // Async by design (the prompt already returned); the pin is
+          // untouched — the next stale install retries the refresh.
+          ctx.stderr.write(
+            `npm: WARNING: eddy pin refresh failed (${(err as Error).message}) — retrying on the next install\n`,
+          );
+        });
+    } else if (result.source === 'eddy' && result.closureHash && eddyRequest && deps.learnedPins) {
+      // Fire-and-forget write-back: the pin is an optimization, never worth
+      // blocking or failing the install line over.
       const { learnedPins } = deps;
       const closureHash = result.closureHash;
       void Promise.resolve()
-        .then(() => learnedPins.set(requestKey, closureHash))
+        .then(() => learnedPins.set(eddyRequest.key, closureHash))
         .catch((err) => {
           console.warn(`npm: learned pin write failed: ${(err as Error).message}`);
         });
@@ -591,12 +639,15 @@ function hasRootLifecycleScript(scripts: Record<string, string>): boolean {
 }
 
 /**
- * The canonical eddy request key for the package.json ON DISK (post-merge).
- * `null` when the file is missing or a shape the installer would reject — then
- * no pin can be looked up or learned (the install itself surfaces any loud
- * error).
+ * The canonical eddy request (body + key) for the package.json ON DISK
+ * (post-merge). `null` when the file is missing or a shape the installer would
+ * reject — then no pin can be looked up, learned, or revalidated (the install
+ * itself surfaces any loud error).
  */
-async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<string | null> {
+async function installEddyRequest(
+  vfs: Vfs,
+  packageJsonPath: string,
+): Promise<{ key: string; body: EddyRequestBody } | null> {
   if (!(await vfs.exists(packageJsonPath))) return null;
   let text: string;
   try {
@@ -605,7 +656,7 @@ async function installRequestKey(vfs: Vfs, packageJsonPath: string): Promise<str
     return null;
   }
   const body = eddyRequestFromPackageJson(text);
-  return body ? canonicalEddyRequestKey(body) : null;
+  return body ? { key: canonicalEddyRequestKey(body), body } : null;
 }
 
 /** One terminal-readable line for a dirty drain: first failure + count. */

@@ -348,6 +348,10 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     });
     expect(fast.source).toBe('eddy');
     expect(fast.closureHash).toBe(manifest.asOf.closureHash);
+    // The served bundle's as-of stamp rides out too (stale-pin honesty line:
+    // `as-of <resolvedAt>` must come from the SERVED manifest, not pin age).
+    expect(typeof fast.resolvedAt).toBe('string');
+    expect(Number.isNaN(Date.parse(fast.resolvedAt as string))).toBe(false);
 
     // Standard install (resolver off) — no hash, key for learned pins staying
     // eddy-only.
@@ -355,6 +359,7 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     await writePackageJson(stdVfs, DEPS);
     const std = await install({ vfs: stdVfs, cwd: '/app', registry: makeRegistry().registry });
     expect(std.closureHash).toBeUndefined();
+    expect(std.resolvedAt).toBeUndefined();
 
     // Fallback (resolver unreachable) — standard install, no hash.
     const fbVfs = new MemoryVfs();

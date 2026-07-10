@@ -18,6 +18,12 @@ import {
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  LEARNED_PIN_TTL_MS,
+  readLearnedPin,
+  revalidateLearnedPin,
+  writeLearnedPin,
+} from '../../apps/playground/src/glue/eddy-learned-pins.ts';
 import { createNpmShellCommand } from '../../apps/playground/src/glue/npm-shell-command.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
@@ -90,19 +96,23 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
           set: async (key, hash) => {
             pins.push({ key, hash });
           },
+          revalidate: async () => {},
         },
       }),
     );
 
     const { exitCode, out } = await runShell(shell, 'npm install');
-    await new Promise((r) => setTimeout(r, 0)); // fire-and-forget pin write-back
 
     expect(exitCode).toBe(0);
     expect(out).toContain('via eddy (fast)');
     // Real tree + lockfile, not a stub's empty result.
     expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
     expect(await vfs.exists('/proj/package-lock.json')).toBe(true);
-    // Stamp over the REAL package count, keyed on the owner slug.
+    // Stamp over the REAL package count, keyed on the owner slug. The
+    // durability sequence runs in background — wait for it.
+    await vi.waitFor(async () => {
+      expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+    });
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { slug: string; packages: number };
@@ -128,10 +138,14 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     });
     const pinStore = new Map<string, string>();
     const learnedPins = {
-      get: async (key: string) => pinStore.get(key),
+      get: async (key: string) => {
+        const hash = pinStore.get(key);
+        return hash === undefined ? undefined : { closureHash: hash, stale: false };
+      },
       set: async (key: string, hash: string) => {
         pinStore.set(key, hash);
       },
+      revalidate: async () => {},
     };
 
     const vfs1 = new MemoryVfs();
@@ -173,6 +187,122 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     expect(methods.filter((m) => m === 'POST')).toEqual([]); // …with ZERO POSTs
   });
 
+  it('stale-pin SWR end-to-end: a 31-min pin rides the GET with the as-of line, the REAL revalidate refreshes it, the next install observes a fresh pin', async () => {
+    // The eddy-stale-pin-revalidate acceptance over a REAL server + REAL pin
+    // store (no seam stubs): teach → age past the fresh TTL → stale serve
+    // (honesty line, zero POST during install) → background manifest-only
+    // POST revalidate → the pin reads back fresh; a later install stays
+    // silent and rides the GET again.
+    const profileVfs = new MemoryVfs(); // one profile: the pin store lives here
+    await seedProject(profileVfs);
+    const requestKey = canonicalEddyRequestKey({ dependencies: DEPS, optionalDependencies: {} });
+    const learnedPins = {
+      get: (key: string) => readLearnedPin(profileVfs, key),
+      set: (key: string, hash: string) => writeLearnedPin(profileVfs, key, hash),
+      revalidate: async (_key: string, request: never, servedHash: string) => {
+        await revalidateLearnedPin({
+          vfs: profileVfs,
+          resolverUrl: eddyUrl,
+          request,
+          staleClosureHash: servedHash,
+        });
+      },
+    };
+    const makeShell = (vfs: MemoryVfs): Shell => {
+      const shell = new Shell({ cwd: '/proj' });
+      shell.registerCommand(
+        'npm',
+        createNpmShellCommand({ vfs, registry: makeRegistry(), resolverUrl: eddyUrl, learnedPins }),
+      );
+      return shell;
+    };
+
+    // Teach: the first install POSTs, seeds the store, learns the pin.
+    const first = await runShell(makeShell(profileVfs), 'npm install');
+    expect(first.exitCode).toBe(0);
+    await vi.waitFor(async () => {
+      expect(await readLearnedPin(profileVfs, requestKey)).toBeDefined();
+    });
+    const taught = await readLearnedPin(profileVfs, requestKey);
+
+    // Age the pin past the fresh TTL (31 min) — inside the stale window.
+    await writeLearnedPin(
+      profileVfs,
+      requestKey,
+      (taught as { closureHash: string }).closureHash,
+      () => Date.now() - (LEARNED_PIN_TTL_MS + 60_000),
+    );
+
+    const methods: string[] = [];
+    eddy.raw.on('request', (req) => {
+      methods.push(req.method ?? '');
+    });
+    const vfs2 = new MemoryVfs();
+    await seedProject(vfs2);
+    const second = await runShell(makeShell(vfs2), 'npm install');
+    expect(second.exitCode).toBe(0);
+    expect(second.out).toContain('via eddy (fast)');
+    expect(second.out).toMatch(
+      /npm: eddy cached resolution \(as-of .+\), refreshing in background/,
+    );
+    // The install itself rode the cacheable GET (stale-served, no foreground POST)…
+    expect(methods[0]).toBe('GET');
+    // …and the background revalidate refreshes the pin via ONE POST.
+    await vi.waitFor(async () => {
+      expect(await readLearnedPin(profileVfs, requestKey)).toEqual({
+        closureHash: (taught as { closureHash: string }).closureHash,
+        stale: false,
+      });
+    });
+    expect(methods).toContain('POST');
+
+    // The next install observes the refreshed pin: silent, GET-only.
+    methods.length = 0;
+    const vfs3 = new MemoryVfs();
+    await seedProject(vfs3);
+    const third = await runShell(makeShell(vfs3), 'npm install');
+    expect(third.exitCode).toBe(0);
+    expect(third.out).not.toContain('eddy cached resolution');
+    expect(methods.filter((m) => m === 'POST')).toEqual([]);
+  });
+
+  it('concurrent installs of the SAME dep set: last-writer-wins on the pin file, both installs correct', async () => {
+    // Fault row (eddy-stale-pin-revalidate): two projects, one profile pin
+    // store, racing fire-and-forget write-backs. The file must stay valid
+    // JSON holding the canonical key → correct hash; both installs succeed.
+    const profileVfs = new MemoryVfs();
+    await seedProject(profileVfs);
+    const vfsB = new MemoryVfs();
+    await seedProject(vfsB);
+    const learnedPins = {
+      get: (key: string) => readLearnedPin(profileVfs, key),
+      set: (key: string, hash: string) => writeLearnedPin(profileVfs, key, hash),
+      revalidate: async () => {},
+    };
+    const shellFor = (vfs: MemoryVfs): Shell => {
+      const shell = new Shell({ cwd: '/proj' });
+      shell.registerCommand(
+        'npm',
+        createNpmShellCommand({ vfs, registry: makeRegistry(), resolverUrl: eddyUrl, learnedPins }),
+      );
+      return shell;
+    };
+
+    const [a, b] = await Promise.all([
+      runShell(shellFor(profileVfs), 'npm install'),
+      runShell(shellFor(vfsB), 'npm install'),
+    ]);
+
+    expect(a.exitCode).toBe(0);
+    expect(b.exitCode).toBe(0);
+    const requestKey = canonicalEddyRequestKey({ dependencies: DEPS, optionalDependencies: {} });
+    await vi.waitFor(async () => {
+      expect((await readLearnedPin(profileVfs, requestKey))?.closureHash).toBe(
+        await expectedClosureHash(),
+      );
+    });
+  });
+
   it('standard path (no resolverUrl): real install, stamp written, pins never touched', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
@@ -189,6 +319,9 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
             return undefined;
           },
           set: async () => {
+            pinCalls++;
+          },
+          revalidate: async () => {
             pinCalls++;
           },
         },

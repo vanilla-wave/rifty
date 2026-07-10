@@ -7,9 +7,14 @@
  *
  * Storage: profile-wide `/.rifty/eddy-learned-pins.json` on the owner VFS
  * (dot-dir precedent: `VfsTarballCache`; `ScopedVfs` deliberately leaves
- * `/.rifty` unscoped). TTL = the server's mutable-tier DEFAULT (1800s) — the
- * client does NOT track a deploy's custom `EDDY_TTL_SECONDS`; a pin outliving
- * the server link degrades to a verified 404 → POST which re-learns.
+ * `/.rifty` unscoped). Freshness is serve-stale-while-revalidate (backlog
+ * eddy-stale-pin-revalidate): ≤ {@link LEARNED_PIN_TTL_MS} the pin is FRESH
+ * (pinned GET, nothing else); past it but ≤ {@link STALE_PIN_MAX_AGE_MS} it is
+ * STALE — still served (the content-addressed GET stays valid indefinitely,
+ * proven byte-stable live) while the caller prints an `as-of` honesty line
+ * and {@link revalidateLearnedPin} refreshes in background; beyond 24h the
+ * pin is dropped (foreground POST exactly as pre-SWR). A pin outliving the
+ * server link degrades to a verified 404 → POST which re-learns.
  * Corrupt/wrong-shape file reads as absent, never an error. A stale pin is
  * harmless either way: the installer's verification gates (coverage,
  * integrity) already degrade it to POST.
@@ -18,14 +23,31 @@
  * async gate starves behind the owner boot loop — measured double-POST,
  * ADR-0195).
  */
-import { canonicalEddyRequestKey, eddyRequestFromPackageJson } from '@riftydev/npm-client';
+import {
+  type EddyRequestBody,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
+  resolveEddyClosure,
+} from '@riftydev/npm-client';
 import type { Vfs } from '@riftydev/vfs';
 
 export const LEARNED_PINS_PATH = '/.rifty/eddy-learned-pins.json';
 /** = eddy's mutable-tier DEFAULT (`EDDY_TTL_SECONDS` unset); deliberately not
- * synced to a custom deploy value — expiry only re-POSTs. */
+ * synced to a custom deploy value — past it the pin turns STALE, not dead. */
 export const LEARNED_PIN_TTL_MS = 1800 * 1000;
+/** Hard stale bound — user-approved 2026-07-10 (epic install-tail-latency):
+ * bounds the npm-unpublish/security-pull exposure the stale window extends
+ * (operator safety net: the bundle revocation runbook). Beyond it the pin is
+ * dropped and install re-resolves in the foreground. */
+export const STALE_PIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const LEARNED_PINS_CAP = 64;
+
+/** A served pin: `stale` = past the fresh TTL but inside the 24h bound —
+ * the caller owes an `as-of` line + a background revalidate. */
+export interface LearnedPin {
+  readonly closureHash: string;
+  readonly stale: boolean;
+}
 
 interface LearnedPinEntry {
   readonly closureHash: string;
@@ -75,19 +97,20 @@ function pinFrom(
   file: LearnedPinsFile | null,
   requestKey: string,
   nowMs: number,
-): string | undefined {
+): LearnedPin | undefined {
   const entry = file?.entries[requestKey];
   if (!entry) return undefined;
   if (entry.savedAt > nowMs) return undefined;
-  if (nowMs - entry.savedAt >= LEARNED_PIN_TTL_MS) return undefined;
-  return entry.closureHash;
+  const age = nowMs - entry.savedAt;
+  if (age >= STALE_PIN_MAX_AGE_MS) return undefined;
+  return { closureHash: entry.closureHash, stale: age >= LEARNED_PIN_TTL_MS };
 }
 
 export async function readLearnedPin(
   vfs: Vfs,
   requestKey: string,
   now: () => number = Date.now,
-): Promise<string | undefined> {
+): Promise<LearnedPin | undefined> {
   if (!(await vfs.exists(LEARNED_PINS_PATH))) return undefined;
   let text: string;
   try {
@@ -100,7 +123,10 @@ export async function readLearnedPin(
 
 const pinsDecoder = new TextDecoder('utf-8');
 
-/** Sync twin of {@link readLearnedPin} for the owner-boot prefetch gate. */
+/** Sync twin of {@link readLearnedPin} for the owner-boot prefetch gate.
+ * Serves fresh AND stale pins (a stale boot prefetch rides the pinned GET
+ * too); the hash alone suffices — the install command re-reads the pin async
+ * and owns the stale honesty line + revalidate. */
 export function readLearnedPinSync(
   fs: LearnedPinsSyncFs,
   requestKey: string,
@@ -113,7 +139,7 @@ export function readLearnedPinSync(
   } catch {
     return undefined;
   }
-  return pinFrom(parseFile(text), requestKey, now());
+  return pinFrom(parseFile(text), requestKey, now())?.closureHash;
 }
 
 /**
@@ -154,7 +180,9 @@ export async function writeLearnedPin(
   }
   const entries: Record<string, LearnedPinEntry> = {};
   for (const [key, entry] of Object.entries(file?.entries ?? {})) {
-    if (entry.savedAt <= nowMs && nowMs - entry.savedAt < LEARNED_PIN_TTL_MS) {
+    // Prune at the HARD bound only: a stale sibling is still servable (SWR) —
+    // an unrelated write must not shrink another request's stale window.
+    if (entry.savedAt <= nowMs && nowMs - entry.savedAt < STALE_PIN_MAX_AGE_MS) {
       entries[key] = entry;
     }
   }
@@ -171,4 +199,38 @@ export async function writeLearnedPin(
   const next: LearnedPinsFile = { version: 1, entries };
   await vfs.mkdir('/.rifty', { recursive: true });
   await vfs.writeFile(LEARNED_PINS_PATH, `${JSON.stringify(next, null, 2)}\n`);
+}
+
+export interface RevalidateLearnedPinOptions {
+  readonly vfs: Vfs;
+  readonly resolverUrl: string;
+  readonly request: EddyRequestBody;
+  /** The stale hash that was just served — the compare baseline. */
+  readonly staleClosureHash: string;
+  /** Test seam; defaults to the global fetch. */
+  readonly fetchImpl?: typeof fetch;
+  readonly now?: () => number;
+}
+
+/**
+ * Background revalidate for a STALE pin that was just served (SWR): a plain
+ * POST resolve read only up to the manifest member (`resolveEddyClosure` —
+ * bounded, early-cancel, no bundle download), then a hash compare. Identical
+ * closure → the pin's `savedAt` refreshes (fresh again — the server itself
+ * re-vouched for it); different → the pin is REPLACED so the next install
+ * rides the new hash's GET. Throws on any resolver failure — the pin file is
+ * written only after a successful compare, so an abandoned/failed revalidate
+ * leaves it byte-intact (retried on the next stale install).
+ */
+export async function revalidateLearnedPin(
+  opts: RevalidateLearnedPinOptions,
+): Promise<'refreshed' | 'replaced'> {
+  const summary = await resolveEddyClosure({
+    resolverUrl: opts.resolverUrl,
+    request: opts.request,
+    ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+  });
+  const requestKey = canonicalEddyRequestKey(opts.request);
+  await writeLearnedPin(opts.vfs, requestKey, summary.closureHash, opts.now ?? Date.now);
+  return summary.closureHash === opts.staleClosureHash ? 'refreshed' : 'replaced';
 }

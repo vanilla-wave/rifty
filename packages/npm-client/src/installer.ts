@@ -213,6 +213,13 @@ export interface InstallResult {
    * POST whose server proved the immutable store is durable.
    */
   closureHash?: string;
+  /**
+   * The adopted bundle's `manifest.asOf.resolvedAt` (ISO-8601) — when eddy
+   * resolved this closure. Present on every eddy-sourced install; feeds the
+   * stale-pin honesty line (`as-of <resolvedAt>`), which must report the
+   * SERVED resolution's age, not the pin file's.
+   */
+  resolvedAt?: string;
 }
 
 /**
@@ -331,6 +338,7 @@ export async function install(
   // clobbering it with the resolver's root metadata.
   let source: 'eddy' | 'standard' = 'standard';
   let eddyClosureHash: string | undefined;
+  let eddyResolvedAt: string | undefined;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
@@ -345,6 +353,7 @@ export async function install(
     if (staged !== null) {
       source = 'eddy';
       eddyClosureHash = staged.closureHash;
+      eddyResolvedAt = staged.resolvedAt;
       existingLockfile = staged.lockfile;
     }
   }
@@ -384,6 +393,7 @@ export async function install(
     conflicts: [],
     source,
     ...(eddyClosureHash === undefined ? {} : { closureHash: eddyClosureHash }),
+    ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
   };
 }
 
@@ -625,7 +635,7 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<{ closureHash?: string; lockfile: Lockfile } | null> {
+): Promise<{ closureHash?: string; resolvedAt?: string; lockfile: Lockfile } | null> {
   const url = opts.resolverUrl;
   if (!url) return null;
 
@@ -732,6 +742,7 @@ async function tryEddyFastPath(
       if (typeof outcome !== 'string') {
         return {
           ...(outcome.closureHash === undefined ? {} : { closureHash: outcome.closureHash }),
+          ...(outcome.resolvedAt === undefined ? {} : { resolvedAt: outcome.resolvedAt }),
           lockfile: outcome.lockfile,
         };
       }
@@ -778,7 +789,9 @@ async function consumeEddyResponse(
   opts: InstallOptions,
   tarballCache: TarballCache,
   expectedClosureHash?: string,
-): Promise<{ adopted: true; closureHash?: string; lockfile: Lockfile } | string> {
+): Promise<
+  { adopted: true; closureHash?: string; resolvedAt?: string; lockfile: Lockfile } | string
+> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
@@ -927,9 +940,14 @@ async function consumeEddyResponse(
   const canLearnClosureHash =
     expectedClosureHash !== undefined || response.headers.get(EDDY_STORE_DURABLE_HEADER) === '1';
   const closureHash = canLearnClosureHash ? manifest.asOf.closureHash : undefined;
+  // The served bundle's as-of stamp: the stale-pin honesty line reports THIS
+  // (the resolution's age), never the pin file's savedAt.
+  const resolvedAt =
+    typeof manifest.asOf.resolvedAt === 'string' ? manifest.asOf.resolvedAt : undefined;
   return {
     adopted: true,
     ...(closureHash === undefined ? {} : { closureHash }),
+    ...(resolvedAt === undefined ? {} : { resolvedAt }),
     lockfile,
   };
 }

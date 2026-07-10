@@ -28,6 +28,11 @@ export {
   type StartEddyPrefetchOptions,
 } from './eddy-prefetch.ts';
 export {
+  resolveEddyClosure,
+  type EddyClosureSummary,
+  type ResolveEddyClosureOptions,
+} from './eddy-revalidate.ts';
+export {
   bundleUrlFor,
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,

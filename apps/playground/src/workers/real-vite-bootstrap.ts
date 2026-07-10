@@ -44,6 +44,7 @@ import type { BinWorkerHandle } from '../glue/bin-executor.ts';
 import {
   learnedPinForPackageJsonSync,
   readLearnedPin,
+  revalidateLearnedPin,
   writeLearnedPin,
 } from '../glue/eddy-learned-pins.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
@@ -808,9 +809,18 @@ async function bootShellOwner(opts: {
       resolverBundleBaseUrl: getEddyBundleBaseUrl(),
       resolverPrefetch: () => installPrefetch,
       // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
+      // A stale lookup (≤24h, SWR) is served with the as-of line; `revalidate`
+      // refreshes it via a manifest-only POST (backlog eddy-stale-pin-revalidate).
       learnedPins: {
         get: (key) => readLearnedPin(vfs, key),
         set: (key, hash) => writeLearnedPin(vfs, key, hash),
+        revalidate: async (_key, request, servedHash) => {
+          const resolverUrl = getResolverUrl();
+          // Unreachable while pins are eddy-only (no resolver → no pin served);
+          // loud, not silent, if that invariant ever breaks.
+          if (!resolverUrl) throw new Error('eddy resolver is not configured');
+          await revalidateLearnedPin({ vfs, resolverUrl, request, staleClosureHash: servedHash });
+        },
       },
     });
     shell.registerCommand('npm', async (args, ctx) => {

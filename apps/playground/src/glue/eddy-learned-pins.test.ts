@@ -1,12 +1,20 @@
-import { canonicalEddyRequestKey, eddyRequestFromPackageJson } from '@riftydev/npm-client';
+import {
+  type EddyBundleManifestV1,
+  canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
+  packEddyBundle,
+} from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import {
   LEARNED_PINS_CAP,
   LEARNED_PINS_PATH,
+  LEARNED_PIN_TTL_MS,
+  STALE_PIN_MAX_AGE_MS,
   learnedPinForPackageJsonSync,
   readLearnedPin,
   readLearnedPinSync,
+  revalidateLearnedPin,
   writeLearnedPin,
 } from './eddy-learned-pins.ts';
 
@@ -18,20 +26,23 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
     const { vfs, fsSync } = createMemoryFs();
     expect(await readLearnedPin(vfs, KEY)).toBeUndefined();
     await writeLearnedPin(vfs, KEY, HASH);
-    expect(await readLearnedPin(vfs, KEY)).toBe(HASH);
+    expect(await readLearnedPin(vfs, KEY)).toEqual({ closureHash: HASH, stale: false });
     expect(readLearnedPinSync(fsSync, KEY)).toBe(HASH);
     expect(await readLearnedPin(vfs, 'other-key')).toBeUndefined();
   });
 
-  it('expires entries after the TTL (= server mutable default — a pin must not outlive the link it mirrors)', async () => {
+  it('the fresh TTL (= server mutable default) is the fresh→stale boundary, not a drop', async () => {
     const { vfs, fsSync } = createMemoryFs();
     let nowMs = 1_000_000;
     await writeLearnedPin(vfs, KEY, HASH, () => nowMs);
     nowMs += 1799_000;
-    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toBe(HASH);
-    nowMs += 2_000; // past 1800s
-    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toBeUndefined();
-    expect(readLearnedPinSync(fsSync, KEY, () => nowMs)).toBeUndefined();
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({
+      closureHash: HASH,
+      stale: false,
+    });
+    nowMs += 2_000; // past 1800s — SWR: served stale, not dropped
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({ closureHash: HASH, stale: true });
+    expect(readLearnedPinSync(fsSync, KEY, () => nowMs)).toBe(HASH);
   });
 
   it('caps stored entries, evicting the oldest', async () => {
@@ -42,8 +53,8 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
       await writeLearnedPin(vfs, `key-${i}`, `sha256-${i}`, () => nowMs);
     }
     expect(await readLearnedPin(vfs, 'key-0', () => nowMs)).toBeUndefined(); // oldest evicted
-    expect(await readLearnedPin(vfs, 'key-1', () => nowMs)).toBe('sha256-1');
-    expect(await readLearnedPin(vfs, `key-${LEARNED_PINS_CAP}`, () => nowMs)).toBe(
+    expect((await readLearnedPin(vfs, 'key-1', () => nowMs))?.closureHash).toBe('sha256-1');
+    expect((await readLearnedPin(vfs, `key-${LEARNED_PINS_CAP}`, () => nowMs))?.closureHash).toBe(
       `sha256-${LEARNED_PINS_CAP}`,
     );
   });
@@ -54,8 +65,11 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
     await writeLearnedPin(vfs, KEY, 'sha256-old', () => nowMs);
     nowMs += 1_000_000;
     await writeLearnedPin(vfs, KEY, 'sha256-new', () => nowMs);
-    nowMs += 1_500_000; // old stamp would be expired, new one is not
-    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toBe('sha256-new');
+    nowMs += 1_500_000; // old stamp would be stale by now, the new one is fresh
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({
+      closureHash: 'sha256-new',
+      stale: false,
+    });
   });
 
   it('a corrupt or wrong-shape file reads as absent (never an error) and a write recovers it', async () => {
@@ -67,7 +81,7 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
       expect(readLearnedPinSync(fsSync, KEY)).toBeUndefined();
     }
     await writeLearnedPin(vfs, KEY, HASH);
-    expect(await readLearnedPin(vfs, KEY)).toBe(HASH);
+    expect((await readLearnedPin(vfs, KEY))?.closureHash).toBe(HASH);
   });
 
   it('ignores non-string / wrong-shape entries inside an otherwise valid file', async () => {
@@ -98,7 +112,21 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
 
     await writeLearnedPin(vfs, KEY, HASH, () => 1000);
     expect(await readLearnedPin(vfs, 'future', () => 1000)).toBeUndefined();
-    expect(await readLearnedPin(vfs, KEY, () => 1000)).toBe(HASH);
+    expect((await readLearnedPin(vfs, KEY, () => 1000))?.closureHash).toBe(HASH);
+  });
+
+  it('learnedPinForPackageJsonSync serves a STALE pin too — boot prefetch rides the pinned GET across the stale window', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    const packageJson = JSON.stringify({ name: 'app', dependencies: { express: '^5.1.0' } });
+    const request = eddyRequestFromPackageJson(packageJson);
+    expect(request).not.toBeNull();
+    if (!request) return;
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, canonicalEddyRequestKey(request), HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000; // 31 min old — stale, still served
+    expect(learnedPinForPackageJsonSync(fsSync, packageJson, () => nowMs)).toBe(HASH);
+    nowMs += STALE_PIN_MAX_AGE_MS; // beyond 24h — hard expired
+    expect(learnedPinForPackageJsonSync(fsSync, packageJson, () => nowMs)).toBeUndefined();
   });
 
   it('learnedPinForPackageJsonSync keys on the canonical eddy request of the package.json text', async () => {
@@ -118,5 +146,184 @@ describe('eddy learned pins (ADR-0194 §8)', () => {
     expect(learnedPinForPackageJsonSync(fsSync, mutated)).toBeUndefined();
     // Malformed package.json → absent, never a throw (prefetch path).
     expect(learnedPinForPackageJsonSync(fsSync, '{oops')).toBeUndefined();
+  });
+});
+
+describe('stale window — serve-stale-while-revalidate inside a hard 24h bound', () => {
+  it('fresh (≤ TTL) reads back stale:false; past the TTL but ≤ 24h reads back stale:true (still served)', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, KEY, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS - 1_000;
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({
+      closureHash: HASH,
+      stale: false,
+    });
+    nowMs += 61_000; // 31 min old — the old hard drop, now the stale window
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({ closureHash: HASH, stale: true });
+    expect(readLearnedPinSync(fsSync, KEY, () => nowMs)).toBe(HASH);
+  });
+
+  it('past 24h the pin is dropped — hard expire, foreground POST exactly as before the stale window', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, KEY, HASH, () => nowMs);
+    nowMs += STALE_PIN_MAX_AGE_MS - 1_000;
+    expect((await readLearnedPin(vfs, KEY, () => nowMs))?.closureHash).toBe(HASH);
+    nowMs += 2_000; // beyond the hard bound
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toBeUndefined();
+    expect(readLearnedPinSync(fsSync, KEY, () => nowMs)).toBeUndefined();
+  });
+
+  it('an unrelated write PRESERVES stale siblings (prune only beyond 24h) — a write must not shrink the stale window', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, KEY, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000; // KEY is now stale
+    await writeLearnedPin(vfs, 'key-b', 'sha256-b', () => nowMs);
+    expect(await readLearnedPin(vfs, KEY, () => nowMs)).toEqual({ closureHash: HASH, stale: true });
+    nowMs += STALE_PIN_MAX_AGE_MS; // KEY beyond 24h
+    await writeLearnedPin(vfs, 'key-c', 'sha256-c', () => nowMs);
+    const text = await vfs.readFileText(LEARNED_PINS_PATH);
+    expect(text).not.toContain(HASH); // hard-expired entries do get pruned
+  });
+});
+
+describe('revalidateLearnedPin — background manifest-only POST refresh', () => {
+  const REQUEST = { dependencies: { debug: '^4.4.1' }, optionalDependencies: {} };
+  const requestKey = canonicalEddyRequestKey(REQUEST);
+
+  function manifestFor(closureHash: string): EddyBundleManifestV1 {
+    return {
+      format: 'EddyBundleV1',
+      npmClientVersion: '0.0.0-test',
+      asOf: {
+        resolvedAt: '2026-07-10T12:00:00.000Z',
+        registry: 'https://registry.example',
+        closureHash,
+      },
+      tarballs: [
+        {
+          file: 'tarballs/debug-4.4.1.tgz',
+          name: 'debug',
+          version: '4.4.1',
+          integrity: 'sha512-x',
+        },
+      ],
+    };
+  }
+
+  function bundleResponse(closureHash: string): Response {
+    const bytes = packEddyBundle({
+      manifest: manifestFor(closureHash),
+      lockfileText: JSON.stringify({ lockfileVersion: 3, packages: {} }),
+      tarballs: [
+        { entry: manifestFor(closureHash).tarballs[0] as never, bytes: new Uint8Array(2048) },
+      ],
+    });
+    return new Response(new Uint8Array(bytes), { status: 200 });
+  }
+
+  it('identical closure → savedAt refreshed: the pin reads back FRESH again', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000; // stale
+
+    const outcome = await revalidateLearnedPin({
+      vfs,
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      staleClosureHash: HASH,
+      fetchImpl: async () => bundleResponse(HASH),
+      now: () => nowMs,
+    });
+
+    expect(outcome).toBe('refreshed');
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
+      closureHash: HASH,
+      stale: false,
+    });
+  });
+
+  it('different closure → the pin is REPLACED with the new hash', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000;
+
+    const outcome = await revalidateLearnedPin({
+      vfs,
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      staleClosureHash: HASH,
+      fetchImpl: async () => bundleResponse('sha256-NEW='),
+      now: () => nowMs,
+    });
+
+    expect(outcome).toBe('replaced');
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
+      closureHash: 'sha256-NEW=',
+      stale: false,
+    });
+  });
+
+  it('resolver failure (typed decline / network) → THROWS and the pin file is untouched', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    const before = await vfs.readFileText(LEARNED_PINS_PATH);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000;
+
+    await expect(
+      revalidateLearnedPin({
+        vfs,
+        resolverUrl: 'http://eddy.test',
+        request: REQUEST,
+        staleClosureHash: HASH,
+        fetchImpl: async () =>
+          new Response(JSON.stringify({ feature: 'workspace' }), {
+            status: 422,
+            headers: { 'content-type': 'application/json' },
+          }),
+        now: () => nowMs,
+      }),
+    ).rejects.toThrow(/resolver declined/);
+    expect(await vfs.readFileText(LEARNED_PINS_PATH)).toBe(before);
+
+    await expect(
+      revalidateLearnedPin({
+        vfs,
+        resolverUrl: 'http://eddy.test',
+        request: REQUEST,
+        staleClosureHash: HASH,
+        fetchImpl: async () => {
+          throw new Error('network down');
+        },
+        now: () => nowMs,
+      }),
+    ).rejects.toThrow(/network down/);
+    expect(await vfs.readFileText(LEARNED_PINS_PATH)).toBe(before);
+  });
+
+  it('a revalidate abandoned mid-flight (tab closed) leaves the pin file intact — the write happens only after the compare', async () => {
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    const before = await vfs.readFileText(LEARNED_PINS_PATH);
+    nowMs += LEARNED_PIN_TTL_MS + 60_000;
+
+    // The fetch never settles — the revalidate promise is simply abandoned.
+    void revalidateLearnedPin({
+      vfs,
+      resolverUrl: 'http://eddy.test',
+      request: REQUEST,
+      staleClosureHash: HASH,
+      fetchImpl: () => new Promise<Response>(() => {}),
+      now: () => nowMs,
+    }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(await vfs.readFileText(LEARNED_PINS_PATH)).toBe(before); // no partial JSON, no torn write
   });
 });

@@ -1686,6 +1686,202 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
   });
 });
 
+describe('npm-shell-command — stale learned pin (SWR: as-of line + background revalidate)', () => {
+  async function projVfs(): Promise<MemoryVfs> {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'demo', version: '0.0.0', dependencies: { debug: '^4.4.1' } }, null, 2)}\n`,
+    );
+    return vfs;
+  }
+  const KEY = (() => {
+    const body = eddyRequestFromPackageJson(JSON.stringify({ dependencies: { debug: '^4.4.1' } }));
+    if (!body) throw new Error('test setup');
+    return canonicalEddyRequestKey(body);
+  })();
+  const STALE_HASH = 'sha256-stale/pin=';
+  const RESOLVED_AT = '2026-07-09T08:00:00.000Z';
+
+  function eddyResult(closureHash: string): InstallResult {
+    return {
+      ...singletonResult('debug', '4.4.1'),
+      source: 'eddy',
+      closureHash,
+      resolvedAt: RESOLVED_AT,
+    };
+  }
+
+  function makeSeams(pin: { closureHash: string; stale: boolean } | undefined) {
+    const sets: Array<{ key: string; hash: string }> = [];
+    const revalidations: Array<{ key: string; body: unknown; hash: string }> = [];
+    let revalidateImpl: () => Promise<void> = async () => {};
+    return {
+      sets,
+      revalidations,
+      failRevalidate(message: string): void {
+        revalidateImpl = async () => {
+          throw new Error(message);
+        };
+      },
+      learnedPins: {
+        get: async () => pin,
+        set: async (key: string, hash: string) => {
+          sets.push({ key, hash });
+        },
+        revalidate: (key: string, body: unknown, hash: string) => {
+          revalidations.push({ key, body, hash });
+          return revalidateImpl();
+        },
+      },
+    };
+  }
+
+  it('a STALE pin served by eddy prints the as-of honesty line and fires ONE background revalidate — no immediate savedAt refresh', async () => {
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: true });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => eddyResult(STALE_HASH),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).toContain(
+      `npm: eddy cached resolution (as-of ${RESOLVED_AT}), refreshing in background`,
+    );
+    await vi.waitFor(() => {
+      expect(seams.revalidations).toHaveLength(1);
+    });
+    expect(seams.revalidations[0]?.key).toBe(KEY);
+    expect(seams.revalidations[0]?.hash).toBe(STALE_HASH);
+    // The request body rides along so the revalidate POSTs the same canonical set.
+    expect(canonicalEddyRequestKey(seams.revalidations[0]?.body as never)).toBe(KEY);
+    // The immediate write-back is SKIPPED for a stale serve: refreshing savedAt
+    // without consulting the server would self-renew the pin past the 24h bound
+    // forever. Only the revalidate outcome may extend its life.
+    expect(seams.sets).toEqual([]);
+  });
+
+  it('a FRESH pin keeps the existing behavior — no line, no revalidate, fire-and-forget refresh write-back', async () => {
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: false });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => eddyResult(STALE_HASH),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).not.toContain('eddy cached resolution');
+    await vi.waitFor(() => {
+      expect(seams.sets).toEqual([{ key: KEY, hash: STALE_HASH }]);
+    });
+    expect(seams.revalidations).toEqual([]);
+  });
+
+  it('a stale pin whose GET fell back to POST (different served hash) re-learns via set — no as-of line, no revalidate', async () => {
+    // Fault row: revoked/evicted bundle → the pinned GET 404s, the attempt
+    // pipeline POSTs, the fresh closure is adopted. The install is NOT a
+    // cached resolution, so no honesty line; the ordinary write-back replaces
+    // the pin (`pin replaced on learn`).
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: true });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => eddyResult('sha256-fresh/post='),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).not.toContain('eddy cached resolution');
+    await vi.waitFor(() => {
+      expect(seams.sets).toEqual([{ key: KEY, hash: 'sha256-fresh/post=' }]);
+    });
+    expect(seams.revalidations).toEqual([]);
+  });
+
+  it('a stale pin with a STANDARD fallback install stays silent — no line, no revalidate, no write-back', async () => {
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: true });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(rec.stdout.join('')).not.toContain('eddy cached resolution');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(seams.sets).toEqual([]);
+    expect(seams.revalidations).toEqual([]);
+  });
+
+  it('a failing revalidate warns asynchronously and never affects the install exit', async () => {
+    const vfs = await projVfs();
+    const seams = makeSeams({ closureHash: STALE_HASH, stale: true });
+    seams.failRevalidate('resolver declined (workspace)');
+    const shell = new Shell({ cwd: '/proj' });
+    const rec: Recorded = { stdout: [], stderr: [] };
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        resolverUrl: 'http://eddy.test',
+        learnedPins: seams.learnedPins,
+        install: async () => eddyResult(STALE_HASH),
+      }),
+    );
+
+    const r = await shell.run('npm install', {
+      onChunk: (chunk, stream) => {
+        rec[stream].push(chunk);
+      },
+    });
+
+    expect(r.exitCode).toBe(0);
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('eddy pin refresh failed');
+    });
+    expect(rec.stderr.join('')).toContain('resolver declined (workspace)');
+    expect(seams.sets).toEqual([]); // pin untouched — retried on the next install
+  });
+});
+
 describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
   async function projVfs(deps: Record<string, string> = { debug: '^4.4.1' }): Promise<MemoryVfs> {
     const vfs = new MemoryVfs();
@@ -1720,9 +1916,10 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
         learnedPins: {
           get: async (key) => {
             getKeys.push(key);
-            return 'sha256-learned';
+            return { closureHash: 'sha256-learned', stale: false };
           },
           set: async () => {},
+          revalidate: async () => {},
         },
         install: async (arg1) => {
           seenPin = (arg1 as InstallOptions).resolverClosureHash;
@@ -1753,9 +1950,10 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
         learnedPins: {
           get: async (key) => {
             getKeys.push(key);
-            return 'sha256-learned';
+            return { closureHash: 'sha256-learned', stale: false };
           },
           set: async () => {},
+          revalidate: async () => {},
         },
         install: async (arg1) => {
           seenPin = (arg1 as InstallOptions).resolverClosureHash;
@@ -1786,6 +1984,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
         learnedPins: {
           get: async () => undefined, // first install of this set — nothing learned
           set: async () => {},
+          revalidate: async () => {},
         },
         install: async (arg1) => {
           seenPin = (arg1 as InstallOptions).resolverClosureHash;
@@ -1814,6 +2013,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
           set: async (key, hash) => {
             sets.push({ key, hash });
           },
+          revalidate: async () => {},
         },
         install: async () => ({
           ...singletonResult('kleur', '4.1.5'),
@@ -1849,6 +2049,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
           set: async () => {
             sets++;
           },
+          revalidate: async () => {},
         },
         install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
       }),
@@ -1878,6 +2079,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
           set: async () => {
             throw new Error('opfs exploded');
           },
+          revalidate: async () => {},
         },
         install: async () => ({
           ...singletonResult('debug', '4.4.1'),
@@ -1907,9 +2109,10 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
         learnedPins: {
           get: async () => {
             gets++;
-            return 'sha256-learned';
+            return { closureHash: 'sha256-learned', stale: false };
           },
           set: async () => {},
+          revalidate: async () => {},
         },
         install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
       }),
