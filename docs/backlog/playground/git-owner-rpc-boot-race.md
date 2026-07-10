@@ -23,6 +23,17 @@ timeout fires, so the warning never surfaces; slow boots show it in traces
 (observed while diagnosing the PR-125 scm e2e blocker — git1/git2 never arrive
 at the owner, git3+ are served instantly).
 
+CI evidence 2026-07-10 (run 29104475688, heavy lane, `2ca526c0`):
+`project-management.spec.ts` "starter git baseline" hung 90s at
+`waitForWorkspaceOwner` twice — trace console ends at
+`[scm] read failed git owner RPC request git1-689ix5 timeout after 15000ms`
+after "pty server ready" (same drop, this time fatal to the boot wait).
+Aftermath on retry #2: the reused scratch OPFS held the interrupted attempt's
+TORN root — `package-lock.json` read back empty (`JSON.parse('')`
+SyntaxError in the spec) — the boot trusted a torn workspace (`torn-state` ×
+interrupted-install × scratch reuse); cover it in this item's fix or split if
+the stamp/ledger boundary owns it.
+
 ## Why it matters
 
 The SCM panel's first status/branch read waits 15s for nothing on any boot
