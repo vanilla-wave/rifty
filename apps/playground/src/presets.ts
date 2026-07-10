@@ -1,11 +1,13 @@
 import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { IconName } from './components/icons.tsx';
+import { EMPTY_LIFECYCLE_BASELINE_ID } from './glue/empty-lifecycle-baseline.ts';
 import { MONO_FONT_STACK } from './glue/fonts.ts';
 import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
+import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
@@ -63,20 +65,12 @@ export interface Preset {
 
 const PROJECT_FILES_SOURCE = `import project from './project.json';
 import { describeProject, formatFileList } from './project-summary.js';
-
-function ensureStyle() {
-  const styleId = 'rifty-project-files-style';
-  const style = document.getElementById(styleId) ?? document.createElement('style');
-  style.id = styleId;
-  style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
-  document.head.append(style);
-}
+import './workspace.css';
 
 export function render() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Missing #app root');
 
-  ensureStyle();
   const fileItems = formatFileList(project.files)
     .map((file) => '<li><code>' + file.path + '</code><span>' + file.reason + '</span></li>')
     .join('');
@@ -335,7 +329,7 @@ const PROJECT_FILES_PRESET: Preset = {
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
   glyph: { text: 'JS', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
-  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json'],
+  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json', 'src/workspace.css'],
   files: [
     { path: 'src/main.js', content: PROJECT_FILES_SOURCE },
     { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
@@ -575,6 +569,21 @@ const MARKDOWN_SSG_PRESET: Preset = {
   ],
 };
 
+/** Internal lifecycle descriptor for an adopted empty scratch; never rendered in the gallery. */
+export const EMPTY_LIFECYCLE_DESCRIPTOR: Preset = Object.freeze({
+  id: EMPTY_LIFECYCLE_BASELINE_ID,
+  label: 'Empty project',
+  category: 'Files + modules',
+  icon: 'file',
+  mode: 'real-vite',
+  setup: 'instant',
+  templateId: HIDDEN_EMPTY_TEMPLATE.id,
+  blurb: 'An empty in-browser project.',
+  glyph: { text: '∅', color: 'rgba(255,255,255,0.55)' },
+  files: Object.freeze([]),
+  openFiles: Object.freeze([]),
+});
+
 export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
@@ -605,6 +614,7 @@ export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
  * preset-switch restart.
  */
 export function presetBootLines(preset: Preset, root: string): readonly string[] {
+  if (preset.id === EMPTY_LIFECYCLE_DESCRIPTOR.id) return [];
   const spec = preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
   const dev = terminalDevLine(spec, root);
   // instant: node_modules is pre-seeded from the baked snapshot (owner-seed), so the
@@ -627,6 +637,7 @@ export function restoreBootLines(
   preset: Preset,
   root: string,
 ): readonly string[] {
+  if (preset.id === EMPTY_LIFECYCLE_DESCRIPTOR.id) return [];
   if (!devCommand) return presetBootLines(preset, root);
   return [devCommand.cwd === root ? devCommand.line : `cd ${devCommand.cwd} && ${devCommand.line}`];
 }

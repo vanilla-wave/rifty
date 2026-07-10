@@ -1,7 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
+import {
+  devServerOwnsPortsLocally,
+  resolveDevServerChildConfig,
+} from './dev-server-child-config.ts';
 
 describe('resolveDevServerChildConfig', () => {
+  it('keeps local port tracking off for a nodemon app child, on for direct/Vite servers', () => {
+    const env = {
+      RIFTY_RFV_SLUG: 'x',
+      RIFTY_RFV_SETUP: 'from-scratch',
+      RIFTY_RFV_ROOT: '/workspace',
+      RIFTY_DEV_PORT: '3210',
+    };
+    expect(
+      devServerOwnsPortsLocally(
+        resolveDevServerChildConfig({ ...env, RIFTY_RFV_TEMPLATE: 'express-sqlite' }).spec,
+      ),
+    ).toBe(false);
+    expect(
+      devServerOwnsPortsLocally(
+        resolveDevServerChildConfig({ ...env, RIFTY_RFV_TEMPLATE: 'socket-lab' }).spec,
+      ),
+    ).toBe(true);
+    expect(
+      devServerOwnsPortsLocally(
+        resolveDevServerChildConfig({ ...env, RIFTY_RFV_TEMPLATE: 'vite' }).spec,
+      ),
+    ).toBe(true);
+  });
+
   it('resolves spec/cfg/port/root/slug/fromScratch from the spawn env', () => {
     const r = resolveDevServerChildConfig({
       RIFTY_RFV_TEMPLATE: 'vite',

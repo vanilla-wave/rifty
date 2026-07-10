@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hero terminal now reports Node v24, matching the runtime identity and the Node 24 parity gate.
 - Favicon still invisible: the SVG comment carried CSS-var token names (`--deep`, `--ac`), and a
   literal `--` inside an XML comment is illegal — browsers parse SVG as strict XML and reject the
   whole document ("Double hyphen within comment"), so the asset served 200 `image/svg+xml` yet the

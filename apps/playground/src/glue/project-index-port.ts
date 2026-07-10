@@ -12,6 +12,7 @@ import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.t
 import {
   type IndexFs,
   type ProjectIndex,
+  adoptHiddenEmptyScratch,
   cleanupCommittedScratchSource,
   commitScratchProjectSave,
   loadIndex,
@@ -20,7 +21,7 @@ import {
   rootForId,
   writeIndex,
 } from './project-index.ts';
-import { seedFilesForStarter, starterById } from './starter.ts';
+import { seedFilesForBaseline } from './starter.ts';
 
 export function projectIndexChannelUrl(key: OwnerBridgeKey): string {
   return ownerBridgeChannelUrl('project-index', key);
@@ -39,6 +40,9 @@ type IndexAckFrame = {
   readonly index: ProjectIndex;
 };
 type IndexOp = { readonly opId?: string };
+type IndexActivateHiddenEmptyFrame = IndexOp & {
+  readonly type: 'index-activate-hidden-empty';
+};
 type IndexDeleteFrame = IndexOp & { readonly type: 'index-delete'; readonly projectId: string };
 /**
  * Durable scratch→project Save (ADR-0165 §7): owner commits the scratch as a
@@ -112,6 +116,7 @@ type IndexMarkScratchDirtyFrame = IndexOp & {
   readonly starter: string;
 };
 type IndexMutationFrame =
+  | IndexActivateHiddenEmptyFrame
   | IndexDeleteFrame
   | IndexSaveFrame
   | IndexRenameFrame
@@ -126,6 +131,12 @@ type IndexFrame =
   | IndexAppliedFrame
   | IndexAckFrame
   | IndexMutationFrame;
+
+/** Owner service: callable teardown plus direct same-realm mutation signal. */
+export interface ProjectIndexOwnerPort {
+  (): void;
+  markActiveScratchDirty(): void;
+}
 
 /**
  * Owner side: replies to a page request + serves the durable on-disk
@@ -152,7 +163,7 @@ export function serveProjectIndex(
   flush?: () => Promise<unknown>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
-): () => void {
+): ProjectIndexOwnerPort {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const publish = (): ProjectIndex => {
     const index = loadIndex(fs, base);
@@ -204,6 +215,13 @@ export function serveProjectIndex(
     writeIndex(fs, base, { ...index, activeId, projects }); // commit FIRST
     fs.rmSync(rootForId(projectId), { recursive: true, force: true }); // then drop the tree
     void flushThenPublish(opId); // durable on disk, then every page mirror reconciles
+  };
+  // First-run launcher dismiss: adopt the REAL pre-pick /scratch tree as the
+  // hidden empty Starter. Existing scratch/project state wins inside the index
+  // module, so this operation is safe even if a persisted index beat the page.
+  const activateHiddenEmpty = (opId?: string): void => {
+    adoptHiddenEmptyScratch(fs, base, loadIndex(fs, base));
+    void flushThenPublish(opId);
   };
   // ADR-0165 §7 durable Save: convert the active scratch into a named project
   // (copy /scratch → /projects/<id>, flip+persist the index LAST), then delete
@@ -271,7 +289,7 @@ export function serveProjectIndex(
     const root = rootForId('scratch');
     if (index.scratch) {
       // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
-      resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
+      resetScratchToStarter(fs, seedFilesForBaseline(starter, root));
       writeIndex(fs, base, {
         ...index,
         scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
@@ -291,7 +309,7 @@ export function serveProjectIndex(
     const target = index.projects.find((p) => p.id === projectId);
     const root = rootForId(projectId);
     if (target) {
-      resetProjectToStarter(fs, projectId, seedFilesForStarter(starterById(target.starter), root));
+      resetProjectToStarter(fs, projectId, seedFilesForBaseline(target.starter, root));
       const projects = index.projects.map((p) =>
         p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
       );
@@ -322,7 +340,7 @@ export function serveProjectIndex(
       void flushThenPublish(opId);
       return;
     }
-    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
+    resetScratchToStarter(fs, seedFilesForBaseline(starter, root));
     writeIndex(fs, base, {
       ...index,
       activeId: 'scratch',
@@ -344,20 +362,33 @@ export function serveProjectIndex(
     writeIndex(fs, base, { ...index, activeId });
     void flushThenPublish(opId);
   };
-  const markScratchDirty = (starter: string, opId?: string): void => {
+  const markScratchDirty = (starter: string | undefined, opId?: string): void => {
     const index = loadIndex(fs, base);
-    if (index.activeId === 'scratch' && (index.scratch !== null || fs.existsSync('/scratch'))) {
-      const scratch = index.scratch ?? { starter, dirty: false, editedAt: 'no edits yet' };
+    if (
+      index.activeId === 'scratch' &&
+      (index.scratch !== null || (starter !== undefined && fs.existsSync('/scratch')))
+    ) {
+      const scratch =
+        index.scratch ??
+        (starter === undefined ? null : { starter, dirty: false, editedAt: 'no edits yet' });
+      if (scratch === null) return;
+      if (scratch.dirty) {
+        if (opId !== undefined) void flushThenPublish(opId);
+        return;
+      }
       writeIndex(fs, base, {
         ...index,
         scratch: { ...scratch, dirty: true, editedAt: new Date().toISOString() },
       });
+      void flushThenPublish(opId);
+      return;
     }
-    void flushThenPublish(opId);
+    if (opId !== undefined) void flushThenPublish(opId);
   };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
     if (frame.type === 'index-req') publish();
+    else if (frame.type === 'index-activate-hidden-empty') activateHiddenEmpty(frame.opId);
     else if (frame.type === 'index-delete') deleteTree(frame.projectId, frame.opId);
     else if (frame.type === 'index-save')
       saveScratch(frame.id, frame.name, frame.starter, frame.opId);
@@ -373,12 +404,19 @@ export function serveProjectIndex(
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
   let torn = false;
-  return (): void => {
-    if (torn) return;
-    torn = true;
-    channel.removeEventListener('message', onMessage as unknown as EventListener);
-    channel.close();
-  };
+  return Object.assign(
+    (): void => {
+      if (torn) return;
+      torn = true;
+      channel.removeEventListener('message', onMessage as unknown as EventListener);
+      channel.close();
+    },
+    {
+      markActiveScratchDirty(): void {
+        markScratchDirty(undefined);
+      },
+    },
+  );
 }
 
 const INDEX_ACK_TIMEOUT_MS = 90_000;
@@ -662,6 +700,19 @@ export function newScratchIndex(
       preserveDirtySameStarter: opts.preserveDirtySameStarter,
     } satisfies IndexNewScratchFrame,
     (index) => index.activeId === 'scratch' && index.scratch?.starter === starter,
+  );
+}
+
+/**
+ * Page side: adopt the existing first-run `/scratch` tree as the internal
+ * hidden-empty Scratch. The returned index is authoritative: a persisted
+ * project or an already-established Scratch wins unchanged.
+ */
+export function activateHiddenEmptyScratch(key: OwnerBridgeKey): Promise<ProjectIndex> {
+  return postIndexMutation(
+    key,
+    { type: 'index-activate-hidden-empty' } satisfies IndexActivateHiddenEmptyFrame,
+    (index) => index.activeId !== 'scratch' || index.scratch !== null,
   );
 }
 

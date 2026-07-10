@@ -87,6 +87,8 @@ interface NodeProjectSpecBase extends ProjectSpecBase {
 /** Template whose worker runs the entry as a long-running Node server program. */
 export interface NodeServerProjectSpec extends NodeProjectSpecBase {
   readonly runtime: 'node-server';
+  /** Real development runner. Omitted means direct `node`; curated servers use installed nodemon. */
+  readonly devRunner?: 'nodemon';
 }
 
 /** Template whose worker runs the entry once and surfaces output in the terminal. */
@@ -135,6 +137,13 @@ export type BootstrapConfig =
   | NodeServerBootstrapConfig
   | NodeCliBootstrapConfig;
 
+const NODEMON_DEV_FLAGS = ['--legacy-watch', '--no-stdin', '--no-update-notifier'] as const;
+
+/** Accepted ADR-0202 nodemon invocation shared by package scripts and worker boot. */
+export function nodemonDevArguments(entryPath: string): readonly string[] {
+  return [...NODEMON_DEV_FLAGS, entryPath.replace(/^\/+/, '')];
+}
+
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
  * HTML always agrees with the declared entry without escaping the routed
@@ -161,7 +170,11 @@ function buildIndexHtml(title: string, entryRelativePath: string): string {
  */
 export function devScriptCommand(spec: ProjectSpec): string {
   if (spec.runtime === 'vite') return 'vite';
-  return `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
+  const entry = spec.entry.relativePath.replace(/^\/+/, '');
+  if (spec.runtime === 'node-server' && spec.devRunner === 'nodemon') {
+    return ['nodemon', ...nodemonDevArguments(entry)].join(' ');
+  }
+  return `node ${entry}`;
 }
 
 /**
@@ -192,14 +205,16 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 }
 
 /**
- * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
- * dev-server command, so `npm run <any>` here boots the dev server — the single
- * source the page realm uses to recognise `npm run <script>` dev lines (ADR-0146:
- * npm runs in the owner, but the lifecycle-owning dev line is intercepted page-side).
+ * package.json `scripts` for a spec. Vite's `dev`/`vite` aliases share its dev
+ * command. Node templates keep `start` on direct `node`; only `dev` may select a
+ * development supervisor such as nodemon. The page recognises each emitted
+ * script through this same source (ADR-0146).
  */
 export function projectScripts(spec: ProjectSpec): Record<string, string> {
   const body = devScriptCommand(spec);
-  return spec.runtime === 'vite' ? { dev: body, vite: body } : { dev: body, start: body };
+  if (spec.runtime === 'vite') return { dev: body, vite: body };
+  const start = `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
+  return { dev: body, start };
 }
 
 const GIT_INIT_CONFIG = `[core]

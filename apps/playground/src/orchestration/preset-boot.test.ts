@@ -132,6 +132,15 @@ function pickOpts(h: Harness, over: Partial<Parameters<PresetBoot['pickStarter']
 }
 
 describe('preset dev-server boot (fresh session)', () => {
+  it('treats an empty boot sequence as a serverless workspace', async () => {
+    const { h, boot } = setup();
+
+    await boot.runPreset(VITE_PRESET, undefined, []);
+
+    expect(h.log).toEqual(['reinitTs']);
+    expect(boot.transitioning()).toBe(false);
+  });
+
   it('claims a picked session BEFORE the owner dev-config, reserves, greets, boots and re-inits TS', async () => {
     const { h, boot } = setup();
     await boot.runPreset(VITE_PRESET);
@@ -176,6 +185,18 @@ describe('preset dev-server boot (fresh session)', () => {
 });
 
 describe('preset dev-server boot (restart in place, ADR-0148)', () => {
+  it('stops a running server when the restored workspace has no boot sequence', async () => {
+    const { h, boot } = setup((h) => {
+      h.running = true;
+      h.devSessionId = 't7';
+    });
+
+    await boot.runPreset(VITE_PRESET, undefined, []);
+
+    expect(h.log).toEqual(['stop:t7', 'reinitTs']);
+    expect(boot.transitioning()).toBe(false);
+  });
+
   it('stops the lifecycle-owned session, re-boots it under the SAME captured generation', async () => {
     const { h, boot } = setup((h) => {
       h.running = true;

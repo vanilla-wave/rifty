@@ -39,6 +39,19 @@ describe('ProjectsTab', () => {
     expect(html).not.toContain('Node API scratch');
   });
 
+  it('hides the internal hidden-empty scratch like an absent project-list entry', () => {
+    const html = renderToString(() =>
+      ProjectsTab({
+        ...baseProps,
+        scratch: { starter: 'hidden-empty', dirty: false, editedAt: 'no edits yet' },
+      }),
+    );
+    expect(html).not.toContain('rf-scratch');
+    expect(html).not.toContain('Save as project');
+    expect(html).toContain('SAVED PROJECTS ·');
+    expect(html).toContain('>1<');
+  });
+
   it('offers a hard browser sandbox reset from the Projects list', () => {
     const html = renderToString(() => ProjectsTab(baseProps));
     expect(html).toContain('data-action="reset-browser-sandbox"');

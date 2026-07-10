@@ -19,6 +19,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
+import { resolveNodeEntryPath } from '../internal/node-entry-path.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import { type ModuleLoader, createModuleLoader } from '../module-loader/loader.ts';
 import { __setCreateRequireImpl } from './module.ts';
@@ -118,7 +119,7 @@ export function parseBinLauncherTarget(source: string): string | null {
 
 export interface RunNodeEntryOptions {
   readonly vfs: FsSync;
-  /** Absolute VFS path: a `.bin` launcher shim when `bin`, else a Node script. */
+  /** VFS path: a `.bin` launcher shim when `bin`, else a Node script. */
   readonly entryPath: string;
   readonly cwd: string;
   /** `entryPath` is a `node_modules/.bin/<name>` launcher — run its target. */
@@ -145,24 +146,25 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
   registerCreateRequire(loader);
+  const entryPath = resolveNodeEntryPath(opts.cwd, opts.entryPath);
   try {
     if (opts.bin) {
-      const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
+      const shim = utf8.decode(opts.vfs.readFileBytesSync(entryPath));
       const target = parseBinLauncherTarget(shim);
       if (target === null) {
         // Loud, never a silent no-op: the shell resolved a shim we can't launch.
         throw new NotImplementedError(
           'runtime-js.bin-launcher',
-          `unrecognized node_modules/.bin launcher shim: ${opts.entryPath}`,
+          `unrecognized node_modules/.bin launcher shim: ${entryPath}`,
         );
       }
       // Resolve the launcher target against the shim's own path, then run it.
-      const ns = await loader.import(target, opts.entryPath);
+      const ns = await loader.import(target, entryPath);
       const pending = exportedPromise(ns);
       if (pending) await pending;
       return;
     }
-    await loader.import(opts.entryPath, opts.entryPath);
+    await loader.import(entryPath, entryPath);
   } catch (err) {
     // A missing entry (`node ./nope.js`) or an uncaught nested-require miss
     // surfaces real Node's `Error: Cannot find module … { code, requireStack }`

@@ -14,6 +14,16 @@ import { FS_METHODS, type FsStatShape, base64ToBytes } from './fs-rpc-protocol.t
 
 export type VfsAccessor = () => FsSync;
 
+// Capability belongs to a dispatcher instance, not to this module globally:
+// tests and hosts replace the kernel singleton, and a new dispatcher must not
+// inherit permission to spawn remote-FS children from the old one.
+const fsServingDispatchers = new WeakSet<SyncRpcDispatcher>();
+
+/** Whether `dispatcher` has the complete runtime-js fs.* relay installed. */
+export function hasRuntimeJsFsHandlers(dispatcher: SyncRpcDispatcher): boolean {
+  return fsServingDispatchers.has(dispatcher);
+}
+
 type Req = Record<string, unknown>;
 const str = (r: Req, k: string): string => {
   const v = r[k];
@@ -115,4 +125,8 @@ export function installRuntimeJsFsHandlers(
     getVfs().cpSync(str(r, 'src'), str(r, 'dst'), { recursive: r.recursive === true });
     return null;
   });
+
+  // Mark only after every handler registered: a partial install is not a
+  // truthful remote-FS capability for a nested worker.
+  fsServingDispatchers.add(dispatcher);
 }

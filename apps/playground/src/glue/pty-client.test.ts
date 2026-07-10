@@ -43,6 +43,29 @@ describe('pty-client', () => {
     expect(client.snapshot('s1')).toMatchObject({ cwd: '/x', env: { A: '1' } });
   });
 
+  it('carries boot origin to the owner while ordinary runs default to user', () => {
+    const { client, sent } = harness();
+    void client.exec('s1', 'npm install', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      origin: 'boot',
+      onChunk: () => {},
+    });
+    void client.exec('s2', 'pwd', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+
+    const execs = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    expect(execs.map((frame) => frame.origin)).toEqual(['boot', 'user']);
+  });
+
   it('routes chunk to the matching run only (rid correlation)', async () => {
     const { client, sent } = harness();
     const aChunks: string[] = [];

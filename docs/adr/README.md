@@ -25,7 +25,6 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes |
 | 0019 | `cwd` lives in `kernel.ProcessRecord` |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
-| 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
 
 ### runtime-js
@@ -57,6 +56,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
+| 0211 | Node-default JSON serialization over MessagePort child-process IPC |
 
 ### runtime-wasi
 
@@ -230,6 +230,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
 | 0133 | 0163 | prod npm-registry proxy moved from Netlify Function to Yandex Cloud streaming Compute proxy; context grafted |
 | 0044 | 0047 | esbuild WASI |
+| 0045 | 0211 | MessagePort transport retained; child-process serialization moved to the runtime Node-default JSON codec; clone failures no longer disconnect |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
@@ -255,6 +256,7 @@ superseded.
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
 | 0165 Starter bundle shape | 0165 note 2026-06-29 | preset `source` overlay removed; `files[]` is the ordinary file bundle and must include the template entry |
+| 0165 first-run choice / Starter-only baseline clauses | 0165 note 2026-07-09 | dismissed chooser adopts a durable empty lifecycle baseline; it is not a gallery/Projects row and boots no dev server |
 | 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
 | 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
@@ -270,6 +272,7 @@ superseded.
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |
+| 0130 no-restart-on-edit follow-up | 0202 / note 2026-07-09 | Express, Hono, and Koa now run real nodemon over remote-FS app Workers; the node-server template runtime decision remains active |
 | 0137 backlog path / follow-up status | 0137 note 2026-06-23 | shell `.bin` execution backlog file retired after owner-worker child path + non-dev `npm run` routing landed; `execSync` node-entry residual remains separate |
 | 0143 pre-ADR backlog reference | 0143 note 2026-06-23 | pre-ADR analysis backlog file retired after shell `.bin` transport closure; ADR-0143 remains the historical record |
 | 0144 owner CLI in-realm phrase | 0144 note 2026-06-23 | `.bin` commands now run in supervised child workers over owner remote-fs; `execSync` node-entry residual remains separate |

@@ -42,8 +42,8 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
     count: 90,
-    digest: '8480af0492f8',
-    why: 'App.tsx unrenderable in node (xterm import); residual = negative architectural invariants + one binding pin per wiring surface, including no app-eval editor warm; behavior heirs in orchestration/*.test.ts + glue tests + e2e',
+    digest: '61f499f21f1a',
+    why: 'App.tsx unrenderable in node (xterm import); residual = negative architectural/affordance invariants + one binding pin per wiring surface, including no app-eval editor warm; behavior heirs in orchestration/*.test.ts + glue tests + e2e',
   },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',

@@ -1,3 +1,4 @@
+import { Readable, Writable } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installNodeProcessShim } from './install-process.ts';
@@ -66,6 +67,14 @@ describe('installNodeProcessShim stdin', () => {
     stdin.port2.postMessage(new Uint8Array([0x68, 0x69]));
 
     await expect(chunk).resolves.toEqual(new Uint8Array([0x68, 0x69]));
+  });
+
+  it('is a real Readable whose passive unpipe cleanup accepts a child stdin', () => {
+    const process = installNodeProcessShim(spec());
+    const childStdin = new Writable();
+
+    expect(process.stdin).toBeInstanceOf(Readable);
+    expect(process.stdin.unpipe(childStdin)).toBe(process.stdin);
   });
 
   it('delivers stdin posted before a data listener attaches', async () => {

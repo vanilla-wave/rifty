@@ -104,6 +104,8 @@ export function FileExplorer(props: {
   mutations?: FileExplorerMutations;
   root: string;
   visible: boolean;
+  /** A snapshot for `root` has arrived; distinguishes loading from truly empty. */
+  loaded?: boolean;
   activePath?: string;
   gitStatus?: ReadonlyMap<string, string>;
   /** When in real-vite mode, enables lazy node_modules browsing (ADR-0080): an
@@ -997,7 +999,11 @@ export function FileExplorer(props: {
         </Show>
 
         <Show when={rows().length === 0}>
-          <p class="rf-explorer__empty">Loading the workspace from the owner…</p>
+          <p class="rf-explorer__empty">
+            {props.loaded
+              ? 'No files yet — create a file or folder.'
+              : 'Loading the workspace from the owner…'}
+          </p>
         </Show>
       </div>
     </div>

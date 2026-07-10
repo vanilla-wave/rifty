@@ -1,5 +1,5 @@
 /**
- * Conformance test for ADR-0045 — fork-mode IPC over the kernel-allocated
+ * Conformance test for ADR-0211 — fork-mode IPC over the kernel-allocated
  * parent↔child `MessagePort` pair on the SAB-Worker path.
  *
  * The parent forks a worker child; the child's `process.on('message', …)`
@@ -15,7 +15,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { isSabIpcSupported } from '../../../packages/kernel/src/index.ts';
-import { fork, spawn } from '../../../packages/runtime-js/src/builtins/child_process.ts';
+import { fork } from '../../../packages/runtime-js/src/builtins/child_process.ts';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
 
@@ -23,7 +23,7 @@ afterEach(() => resetSyncMirror());
 
 const sabReady = isSabIpcSupported();
 
-describe.skipIf(!sabReady)('child_process.fork — Worker-backed IPC (ADR-0045)', () => {
+describe.skipIf(!sabReady)('child_process.fork — Worker-backed IPC (ADR-0211)', () => {
   it('parent.send → child receives → child.send → parent receives (round-trip)', async () => {
     // The child installs a `'message'` listener that echoes each
     // incoming payload back wrapped under an `echo` key.
@@ -94,13 +94,14 @@ await new Promise((r) => setTimeout(r, 100));
 `,
     );
 
-    const child = spawn('node', ['/observe-disconnect.js'], { __fork: true } as never);
+    const child = fork('/observe-disconnect.js', [], { silent: true });
     let parentDisconnects = 0;
     child.on('disconnect', () => {
       parentDisconnects++;
     });
 
     let stdoutText = '';
+    if (child.stdout === null) throw new Error('silent fork must expose a stdout pipe');
     child.stdout.on('data', (c) => {
       stdoutText += typeof c === 'string' ? c : new TextDecoder().decode(c as Uint8Array);
     });

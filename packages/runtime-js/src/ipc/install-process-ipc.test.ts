@@ -34,7 +34,7 @@ afterEach(() => {
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10));
 
-describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
+describe('installNodeProcessShim fork-IPC (ADR-0211)', () => {
   it('exposes parent ipc:message frames as process "message" events', async () => {
     const ipc = new MessageChannel();
     const process = installNodeProcessShim({
@@ -89,5 +89,44 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     });
     await drained;
     expect(seen).toEqual([1, 2, 3]);
+  });
+
+  it('JSON-serializes public process.send payloads without poisoning the IPC channel', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const frames: unknown[] = [];
+    ipc.port2.onmessage = (event) => frames.push(event.data);
+    ipc.port2.start();
+
+    expect(process.send?.({ keep: 1, drop() {} })).toBe(true);
+    expect(process.send?.({ after: true })).toBe(true);
+    await tick();
+
+    expect(frames).toEqual([
+      { kind: 'ipc:message', payload: { keep: 1 } },
+      { kind: 'ipc:message', payload: { after: true } },
+    ]);
+  });
+
+  it('a circular process.send payload throws but leaves the next send connected', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const frames: unknown[] = [];
+    ipc.port2.onmessage = (event) => frames.push(event.data);
+    ipc.port2.start();
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+
+    expect(() => process.send?.(circular)).toThrow(/circular/i);
+    expect(process.send?.({ after: true })).toBe(true);
+    await tick();
+
+    expect(frames).toEqual([{ kind: 'ipc:message', payload: { after: true } }]);
   });
 });

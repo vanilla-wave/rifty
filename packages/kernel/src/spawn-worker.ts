@@ -151,7 +151,7 @@ export function spawnKernelWorker(
   const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
   const { sab, ring } = createSabRing({ payloadCapacity });
 
-  // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
+  // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0211).
   // Kernel-side keeps the `port1`s; `port2`s ship to the worker.
   const stdoutCh = new MessageChannel();
   const stderrCh = new MessageChannel();

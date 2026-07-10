@@ -36,6 +36,8 @@ describe('resolveProjectSpec', () => {
     expect(spec.runtime).toBe('node-server');
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('express');
+    expect(spec.devRunner).toBe('nodemon');
+    expect(spec.devDependencies).toEqual({ nodemon: '3.1.14' });
     expect(spec.entry.relativePath).toBe('/src/main.js');
     // server entry talks to the builtin DB and a real npm express
     expect(spec.entry.content).toContain("from 'node:sqlite'");
@@ -81,6 +83,8 @@ describe('resolveProjectSpec', () => {
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('hono');
     expect(spec.install).toHaveProperty('@hono/node-server');
+    expect(spec.devRunner).toBe('nodemon');
+    expect(spec.devDependencies).toEqual({ nodemon: '3.1.14' });
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'hono'");
     expect(spec.entry.content).toContain("from '@hono/node-server'");
@@ -98,6 +102,8 @@ describe('resolveProjectSpec', () => {
     if (spec.runtime !== 'node-server') throw new Error('unreachable');
     expect(spec.install).toHaveProperty('koa');
     expect(spec.install).toHaveProperty('@koa/router');
+    expect(spec.devRunner).toBe('nodemon');
+    expect(spec.devDependencies).toEqual({ nodemon: '3.1.14' });
     expect(spec.entry.relativePath).toBe('/src/main.js');
     expect(spec.entry.content).toContain("from 'koa'");
     expect(spec.entry.content).toContain("from '@koa/router'");

@@ -108,6 +108,16 @@ describe('ProcessManager — cwd inheritance (ADR-0019)', () => {
   });
 });
 
+describe('ProcessManager — PID allocation', () => {
+  it('same-realm child never reuses an externally supplied parent PID', () => {
+    const pm = new ProcessManager();
+    const child = pm.spawn('child', async () => {}, 2);
+
+    expect(child.ppid).toBe(2);
+    expect(child.pid).not.toBe(child.ppid);
+  });
+});
+
 /** Wait one microtask so the post-`exit` cleanup queued by the manager runs. */
 const flushMicrotasks = (): Promise<void> => new Promise((r) => queueMicrotask(r));
 
@@ -180,6 +190,23 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     clearKernelWorkerUrl();
     clearKernelDispatcher();
     factoryWorker = undefined;
+  });
+
+  it('worker-backed child never reuses an externally supplied parent PID', () => {
+    const pm = new ProcessManager();
+    const child = pm.spawnWorker(
+      'node',
+      {
+        entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/external-parent.js' },
+        argv: ['rifty', '/tmp/external-parent.js'],
+        env: {},
+        cwd: '/workspace',
+      },
+      2,
+    );
+
+    expect(child.ppid).toBe(2);
+    expect(child.pid).not.toBe(child.ppid);
   });
 
   it('10 worker-backed children exited leave list() empty', async () => {

@@ -158,7 +158,7 @@ test.describe('M0 — Foundation', () => {
     );
   });
 
-  test('first-run hidden empty project has a real shell but no files before a starter pick', async ({
+  test('closing first-run adopts a durable honest empty project without listing it', async ({
     page,
   }) => {
     await page.goto('/');
@@ -173,13 +173,55 @@ test.describe('M0 — Foundation', () => {
     await expect(
       page.locator('[role="tree"][aria-label="Workspace files"] [role="treeitem"]'),
     ).toHaveCount(0);
-    await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.locator('[data-testid="editor"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.rf-explorer__empty')).toHaveText(
+      'No files yet — create a file or folder.',
+    );
+    await expect(page.locator('[data-action="open-launcher"]')).toContainText('Empty project');
+    await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveCount(0);
+    await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'stopped', {
+      timeout: 30_000,
+    });
 
     const marker = `hidden-empty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    await runTerminalLine(page, `pwd && echo ${marker}`);
+    await runTerminalLine(
+      page,
+      `pwd && echo ${marker} > /scratch/note.txt && cat /scratch/note.txt`,
+    );
     await expectTerminalContains(page, marker, 30_000);
     await expectTerminalContains(page, /\/scratch/u);
     await expect.poll(() => terminalBuffer(page)).not.toContain('Choose a project before');
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/note.txt'), { timeout: 30_000 })
+      .toContain(marker);
+
+    await page.reload();
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/note.txt'), { timeout: 30_000 })
+      .toContain(marker);
+
+    await page.locator('[data-action="open-launcher"]').click();
+    const projectsTab = page.getByRole('button', { name: /^Projects/ });
+    await projectsTab.click();
+    await expect(projectsTab.locator('.rf-launcher__count')).toHaveText('0');
+    await expect(page.locator('.rf-scratch')).toHaveCount(0);
+    await expect(page.locator('[data-action="save-scratch"]')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.locator('[data-preset="project-files"]').click();
+    const discardDialog = page.locator('.rf-dialog[role="dialog"]');
+    await expect(discardDialog).toContainText('Discard unsaved scratch');
+    await discardDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect
+      .poll(() => readWorkspaceText(page, '/scratch/note.txt'), { timeout: 30_000 })
+      .toContain(marker);
   });
 
   test('crossOriginIsolated is enabled', async ({ page }) => {

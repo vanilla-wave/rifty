@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js/builtins/process-identity';
 import { describe, expect, it } from 'vitest';
 
 const INDEX = 'apps/landing/index.html';
@@ -10,6 +11,7 @@ const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
 const NAV = 'apps/landing/src/sections/nav.ts';
 const HERO = 'apps/landing/src/sections/hero.ts';
+const TERMINAL_LOG = 'apps/landing/src/terminal-log.ts';
 const FAVICON = 'apps/landing/public/favicon.svg';
 
 // Bodies between every <!-- … --> in an XML/SVG document (open-ended last comment included).
@@ -76,6 +78,13 @@ describe('landing static site', () => {
     expect(hero).toContain('https://play.rifty.dev/');
     const nav = readFileSync(NAV, 'utf8');
     expect(nav).toContain('https://github.com/vanilla-wave/rifty');
+  });
+
+  it('advertises the same Node major as the parity-target runtime', () => {
+    const terminalLog = readFileSync(TERMINAL_LOG, 'utf8');
+    const nodeMajor = NODE_PROCESS_IDENTITY.versions.node.split('.')[0];
+    expect(terminalLog).toContain(`runtime-js · node v${nodeMajor} compatible`);
+    expect(terminalLog).not.toContain('node v22 compatible');
   });
 
   it('keeps landing headers separate from playground cross-origin isolation', () => {

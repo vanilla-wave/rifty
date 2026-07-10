@@ -3,10 +3,10 @@
  *
  * Backed by the kernel `ProcessManager` per ADR-0012 — `pid`, `exitCode`,
  * `signalCode`, and the per-process `cwd` are owned by the `ProcessHandle`
- * returned from `globalProcessManager.spawn(...)`. We don't actually spawn an
- * OS process (this is a browser runtime); "spawning a node script" runs the
- * script's source through our loader inside a logical child process tracked
- * by the manager. The script-eval helper lives in `./child_process-exec.ts`.
+ * returned from `globalProcessManager.spawn(...)`. We don't spawn an OS
+ * process: an isolated runtime uses a node-entry Worker; environments without
+ * that route use ADR-0011's logical same-realm child. Both are manager-tracked.
+ * The same-realm script helper lives in `./child_process-exec.ts`.
  *
  * The synchronous behavior (`execSync`) stays in-realm; actual SAB-Atomics
  * sync IPC is ADR-0011's scope.
@@ -24,9 +24,19 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
+import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import { hasRuntimeJsFsHandlers } from '../ipc/fs-handlers.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';
+import {
+  type SpawnStdio,
+  activeProcessStdio,
+  forwardChildOutputStdio,
+  forwardWorkerStdio,
+  resolveWorkerStdio,
+  spawnWorkerChild,
+} from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 
@@ -59,8 +69,13 @@ export function ensureExecSyncHandlerInstalled(): void {
 interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
+  stdio?: SpawnStdio;
+  /** `fork()` only: truthy selects pipes; default inherits fd 0/1/2. */
+  silent?: boolean;
   /** Internal flag set by `fork()` to enable IPC. */
   __fork?: boolean;
+  /** Node supports advanced serialization; rifty keeps that gap loud. */
+  serialization?: 'json' | 'advanced';
 }
 
 interface ExecOptions extends SpawnOptions {
@@ -94,14 +109,14 @@ class InRealmStdinUnsupported extends Writable {
 class ChildProcess extends EventEmitter {
   /** Allocated by `ProcessManager` — PID space is unified across the runtime. */
   readonly pid: number;
-  readonly stdout: Readable;
-  readonly stderr: Readable;
+  readonly stdout: Readable | null;
+  readonly stderr: Readable | null;
   /**
-   * Write-side of the child's stdin. SAB-Worker path: `handle.stdin()` posts
-   * each chunk to the worker's stdin `MessagePort`. In-realm fallback: an
-   * {@link InRealmStdinUnsupported} that throws (no worker to route to).
+   * Write-side of a piped child stdin. Redirected/inherited fd 0 is `null`;
+   * otherwise the Worker path posts to the stdin MessagePort and the in-realm
+   * fallback exposes {@link InRealmStdinUnsupported} as its loud gap.
    */
-  readonly stdin: Writable;
+  readonly stdin: Writable | null;
   killed = false;
   // Mutable so {@link disconnect} can flip it off on the same-realm path,
   // which has no separate channel to close — the gate is the whole story.
@@ -114,19 +129,26 @@ class ChildProcess extends EventEmitter {
   constructor(
     handle: ProcessHandle,
     ipcEnabled: boolean,
-    /** Optional pre-allocated stdio (Worker-backed path writes into them so the
-     * parent can listen before the worker's first `postMessage` lands, and
-     * supplies `stdin` from `handle.stdin()`). In-realm fallback leaves these
-     * unset and gets an {@link InRealmStdinUnsupported} throwing on write/end. */
-    streams?: { stdout?: Readable; stderr?: Readable; stdin?: Writable },
+    /** Optional pre-allocated raw pipes plus their Node-visible exposure plan. */
+    streams?: {
+      stdout: Readable;
+      stderr: Readable;
+      stdin: Writable;
+      expose: { stdin: boolean; stdout: boolean; stderr: boolean };
+    },
   ) {
     super();
     this.handle = handle;
     this.pid = handle.pid;
     this.ipcEnabled = ipcEnabled;
-    this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
-    this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
-    this.stdin = streams?.stdin ?? new InRealmStdinUnsupported();
+    // Kernel stdio is push-driven by process frames; the empty read hook is
+    // the real producer contract, not a bare Readable missing its `_read`.
+    const stdout = streams?.stdout ?? new Readable({ objectMode: false, read() {} });
+    const stderr = streams?.stderr ?? new Readable({ objectMode: false, read() {} });
+    const stdin = streams?.stdin ?? new InRealmStdinUnsupported();
+    this.stdout = streams?.expose.stdout === false ? null : stdout;
+    this.stderr = streams?.expose.stderr === false ? null : stderr;
+    this.stdin = streams?.expose.stdin === false ? null : stdin;
     // Surface kernel-tracked exit/close so existing `.on('close', …)` consumers
     // keep working.
     handle.on('exit', (code, signal) => {
@@ -135,7 +157,7 @@ class ChildProcess extends EventEmitter {
     handle.on('close', (code, signal) => {
       this.emit('close', code, signal);
     });
-    // ADR-0045: mirror fork-IPC events from the WorkerProcessHandle (`'message'`
+    // ADR-0211: mirror fork-IPC events from the WorkerProcessHandle (`'message'`
     // for `ipc:message` frames, `'disconnect'` on teardown) so Node-shape
     // `child.on('message', …)` consumers keep working.
     if (handle.kind === 'worker') {
@@ -143,6 +165,7 @@ class ChildProcess extends EventEmitter {
         this.emit('message', msg);
       });
       handle.on('disconnect', () => {
+        this.ipcEnabled = false;
         this.emit('disconnect');
       });
     }
@@ -161,22 +184,23 @@ class ChildProcess extends EventEmitter {
 
   /**
    * Send an IPC message to the child (Node `subprocess.send` parity). SAB-Worker
-   * path (ADR-0045): posts over the parent↔child IPC port → worker-side
+   * path (ADR-0211): JSON-shapes then posts over parent↔child IPC → worker-side
    * `process.on('message', …)`. In-realm fallback: emits on `inboundIpc`, which
    * the script's `__process.onMessage(...)` subscribes to. Returns `false` when
    * IPC is disabled (not `fork()`ed) or the handle already disconnected.
    */
   send(message: unknown): boolean {
     if (!this.ipcEnabled) return false;
+    const serialized = serializeNodeIpcMessage(message);
     if (this.handle.kind === 'worker') {
-      return this.handle.send(message);
+      return this.handle.send(serialized);
     }
-    this.inboundIpc.emit('childMessage', message);
+    this.inboundIpc.emit('childMessage', serialized);
     return true;
   }
 
   /**
-   * Disconnect the IPC channel (ADR-0045 / Node parity). SAB-Worker path closes
+   * Disconnect the IPC channel (ADR-0211 / Node parity). SAB-Worker path closes
    * the parent↔child port (worker observes `'disconnect'` on its `process`
    * shim). In-realm fallback has no separate channel — disabling further sends
    * is sufficient.
@@ -201,9 +225,9 @@ class ChildProcess extends EventEmitter {
 }
 
 /**
- * Runs a JS source file through our module loader as a "child". Recognised
- * command: `'node'` with `args[0]` a VFS script path; any other command emits
- * an error next tick (matches Node's missing-executable behaviour).
+ * Runs a command as a manager-tracked child. `node <VFS path>` uses a Worker
+ * when available and the same-realm loader otherwise. The virtual `ps` subset
+ * stays same-realm; unknown executables emit ENOENT on the next turn.
  *
  * Kernel allocates the PID and tracks lifecycle; `execScript` drives eval inside
  * the spawn handler. To honour non-{0,1} exit codes (ENOENT-127,
@@ -211,34 +235,69 @@ class ChildProcess extends EventEmitter {
  * — `ProcessManager` only sets `exitCode` if still `null` at handler completion.
  */
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  // The generic worker-backed spawn never wired RIFTY_REMOTE_FS, so a spawned
-  // worker reads its OWN empty mirror, not the parent/owner store (only the
-  // owner `.bin` executor wires it — ADR-0150). Reachable solely from a realm
-  // with the kernel + node-entry worker URLs (owner/page); fail LOUD there
-  // instead of silently spawning an ENOENT child. The supervised-child realm
-  // (URLs unset) falls through to the working same-realm path below, which reads
-  // the installed remote mirror.
-  // TODO(backlog: runtime-js/generic-spawn-worker-remote-fs)
-  if (
+  if (opts.serialization === 'advanced') {
+    throw new NotImplementedError(
+      'child_process.serialization.advanced',
+      "Node's advanced IPC serializer is not implemented; use the default JSON serialization",
+    );
+  }
+  const workerRouteAvailable =
     command === 'node' &&
     args[0] !== undefined &&
     isSabIpcSupported() &&
     getKernelWorkerUrl() !== null &&
-    getNodeEntryWorkerUrl() !== null
-  ) {
-    throw new NotImplementedError(
-      'child_process.spawn[worker]',
-      'generic worker-backed spawn cannot yet read the parent/owner filesystem ' +
-        '(RIFTY_REMOTE_FS unwired for the generic path, ADR-0150) — wire the remote ' +
-        'sync-FS before routing `node <script>` to a worker child',
-    );
+    getNodeEntryWorkerUrl() !== null;
+  if (workerRouteAvailable) {
+    if (!hasRuntimeJsFsHandlers(getKernelDispatcher())) {
+      throw new NotImplementedError(
+        'child_process.spawn[worker]',
+        'generic worker-backed spawn requires fs.* handlers on the current kernel dispatcher ' +
+          'before it can truthfully read the parent/owner filesystem (ADR-0202)',
+      );
+    }
+    return spawnViaWorker(command, args, opts);
   }
   // ADR-0011 fallback: kept for non-isolated test environments, the supervised
   // child realm, and non-`node` commands that need ENOENT.
   return spawnViaSameRealm(command, args, opts);
 }
 
+function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
+  // Validate before allocating a PID/Worker. An unsupported-but-valid Node
+  // stdio mode is a loud capability gap, never a half-spawned child whose
+  // requested destination was silently ignored.
+  const stdio = resolveWorkerStdio(
+    opts.stdio,
+    activeProcessStdio(),
+    opts.__fork ?? false,
+    Boolean(opts.silent),
+  );
+  const handle = spawnWorkerChild({ command, args, opts });
+  if (handle.kind !== 'worker') {
+    throw new Error(
+      `spawnViaWorker: expected a Worker-backed handle from spawnWorkerChild, got kind=${handle.kind}`,
+    );
+  }
+  const child = new ChildProcess(handle, stdio.ipc, {
+    stdout: handle.stdout(),
+    stderr: handle.stderr(),
+    stdin: handle.stdin(),
+    expose: stdio.expose,
+  });
+  forwardWorkerStdio(handle, stdio);
+  return child;
+}
+
 function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions): ChildProcess {
+  const stdio = resolveWorkerStdio(
+    opts.stdio,
+    activeProcessStdio(),
+    opts.__fork ?? false,
+    Boolean(opts.silent),
+  );
+  const stdout = new Readable({ objectMode: false, read() {} });
+  const stderr = new Readable({ objectMode: false, read() {} });
+  const stdin = new InRealmStdinUnsupported();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
   // microtask without an extra `await` boundary, which would delay the script
@@ -260,8 +319,8 @@ function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions):
         io,
         ownHandle,
         inboundIpc: child.inboundIpc,
-        stdoutPush: (c) => child.stdout.push(c),
-        stderrPush: (c) => child.stderr.push(c),
+        stdoutPush: (c) => stdout.push(c),
+        stderrPush: (c) => stderr.push(c),
         outboundMessages: child,
       });
     },
@@ -270,8 +329,21 @@ function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions):
   );
 
   wiring.handle = handle;
-  const child = new ChildProcess(handle, opts.__fork ?? false);
+  const child = new ChildProcess(handle, stdio.ipc, {
+    stdout,
+    stderr,
+    stdin,
+    expose: stdio.expose,
+  });
   wiring.child = child;
+  forwardChildOutputStdio(
+    {
+      stdout: () => stdout,
+      stderr: () => stderr,
+      once: (event, listener) => handle.once(event, listener),
+    },
+    stdio,
+  );
   return child;
 }
 
@@ -288,6 +360,9 @@ export function exec(
   const child = spawn(cmdName, tokens.slice(1), opts);
   let stdoutBuf = '';
   let stderrBuf = '';
+  if (child.stdout === null || child.stderr === null) {
+    throw new Error('child_process.exec: default spawn must expose stdout/stderr pipes');
+  }
   child.stdout.on('data', (c) => {
     stdoutBuf += typeof c === 'string' ? c : Buffer.from(c as Uint8Array).toString();
   });
@@ -295,8 +370,13 @@ export function exec(
     stderrBuf += typeof c === 'string' ? c : Buffer.from(c as Uint8Array).toString();
   });
   child.on('close', (code) => {
-    const err = code !== 0 ? Object.assign(new Error(`Command failed: ${cmd}`), { code }) : null;
-    cbFinal(err, stdoutBuf, stderrBuf);
+    // @riftydev/io drains buffered Readable data on a microtask. Node's exec
+    // callback receives the complete output, so run it after that drain rather
+    // than racing the same-realm handle's synchronous close event.
+    queueMicrotask(() => {
+      const err = code !== 0 ? Object.assign(new Error(`Command failed: ${cmd}`), { code }) : null;
+      cbFinal(err, stdoutBuf, stderrBuf);
+    });
   });
   return child;
 }

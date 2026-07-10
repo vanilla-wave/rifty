@@ -32,6 +32,8 @@ export interface ProjectIndexBootDeps {
   hasPresenceHint(): boolean;
   /** Post the durable on-disk delete to the CURRENT owner (read the port at fire time). */
   postDeleteProjectTree(id: string): Promise<unknown>;
+  /** Adopt the real pre-pick `/scratch` tree as an internal hidden-empty Scratch. */
+  activateHiddenEmptyScratch(): Promise<ProjectIndex>;
   /** Open the launcher on the Starters tab (first-run chooser). */
   openLauncherOnStarters(): void;
   closeLauncher(): void;
@@ -85,6 +87,8 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
   const [editorProjectContextReady, setEditorProjectContextReady] = createSignal(false);
   let initialBootDecisionMade = false;
   let autoOpenedFirstRunLauncher = false;
+  let firstRunDismissPending = false;
+  let hiddenActivationInFlight = false;
   let editorWarmRequested = false;
   // §56 durable-delete tracking: posted but not yet confirmed by an owner
   // re-publish — cleared once the published index no longer lists the id.
@@ -98,9 +102,20 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
   }
 
   function closeLauncher(): void {
-    initialBootDecisionMade = true;
+    const dismissesFirstRun = autoOpenedFirstRunLauncher && !editorProjectContextReady();
     autoOpenedFirstRunLauncher = false;
     deps.closeLauncher();
+    if (!dismissesFirstRun) {
+      initialBootDecisionMade = true;
+      return;
+    }
+
+    // The chooser may paint before the owner's first index. Do not invent an
+    // empty scratch yet: wait for the authoritative publish so a persisted
+    // project/scratch can win and restore at its real owner root.
+    firstRunDismissPending = true;
+    const current = untrack(projectIndex);
+    if (current !== null) continueFirstRunDismiss(current);
   }
 
   function warmEditorStack(): void {
@@ -109,7 +124,7 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
     deps.warmEditorStack();
   }
 
-  function onIndexPublished(idx: ProjectIndex): void {
+  function foldIndex(idx: ProjectIndex): void {
     setProjectIndex(idx);
     deps.recordPresenceHint(idx);
     deps.hydrateIndex(idx);
@@ -127,6 +142,53 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
     // A durable delete is CONFIRMED once the published index no longer lists it.
     for (const id of pendingOnDiskDeletes) {
       if (!idx.projects.some((p) => p.id === id)) pendingOnDiskDeletes.delete(id);
+    }
+  }
+
+  function finishFirstRunDismiss(idx: ProjectIndex): void {
+    if (!firstRunDismissPending) return;
+    firstRunDismissPending = false;
+    initialBootDecisionMade = true;
+    deps.restore(idx);
+  }
+
+  function startHiddenEmptyActivation(): void {
+    if (!firstRunDismissPending || hiddenActivationInFlight) return;
+    hiddenActivationInFlight = true;
+    void deps.activateHiddenEmptyScratch().then(
+      (idx) => {
+        hiddenActivationInFlight = false;
+        if (!firstRunDismissPending) return;
+        foldIndex(idx);
+        if (needsProjectChoiceOnBoot(idx)) {
+          firstRunDismissPending = false;
+          console.error('[project-index] hidden-empty activation returned a needs-choice index');
+          openFirstRunLauncher();
+          return;
+        }
+        finishFirstRunDismiss(idx);
+      },
+      (err: unknown) => {
+        hiddenActivationInFlight = false;
+        if (!firstRunDismissPending) return;
+        firstRunDismissPending = false;
+        console.error('[project-index] hidden-empty activation failed', err);
+        openFirstRunLauncher();
+      },
+    );
+  }
+
+  function continueFirstRunDismiss(idx: ProjectIndex): void {
+    if (!firstRunDismissPending) return;
+    if (needsProjectChoiceOnBoot(idx)) startHiddenEmptyActivation();
+    else finishFirstRunDismiss(idx);
+  }
+
+  function onIndexPublished(idx: ProjectIndex): void {
+    foldIndex(idx);
+    if (firstRunDismissPending) {
+      continueFirstRunDismiss(idx);
+      return;
     }
     // ONE-SHOT boot decision: first-run chooser on a needs-choice publish, else
     // close a flashed chooser and restore the persisted active project.
@@ -211,6 +273,8 @@ export function createProjectIndexBoot(deps: ProjectIndexBootDeps): ProjectIndex
     setEditorProjectContextReady,
     markBootDecisionMade: () => {
       initialBootDecisionMade = true;
+      firstRunDismissPending = false;
+      autoOpenedFirstRunLauncher = false;
     },
     closeLauncher,
     openFirstRunLauncher,

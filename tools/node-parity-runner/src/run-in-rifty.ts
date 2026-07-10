@@ -12,6 +12,7 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import {
+  resetRiftyProcessStdinForTest,
   riftyProcess,
   setProcessCwd,
   writeProcessStdin,
@@ -347,6 +348,10 @@ function buildTsTransform(): TransformSourceHook {
 }
 
 export async function runInRifty(testCase: ParityCase): Promise<string> {
+  // Real Node gets a fresh stdin stream in every spawned parity child. This
+  // in-process harness reuses the no-spec process singleton, so recreate stdin
+  // at the same case boundary (decoder + flow + EOF + listeners as one unit).
+  resetRiftyProcessStdinForTest();
   const vfs = new MemoryFsSync();
   const files: Record<string, string> = {};
   if (testCase.setup?.files) {
@@ -471,7 +476,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     }
     if (testCase.stdin) {
       for (const chunk of testCase.stdin) writeProcessStdin(chunk);
-      (riftyProcess.stdin as { emit(event: string): void }).emit('end');
+      riftyProcess.stdin.push(null);
     }
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a
@@ -499,10 +504,6 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     resetSyncMirror();
     resetKeepalive();
     setProcessCwd('/workspace');
-    if (testCase.stdin) {
-      riftyProcess.stdin.removeAllListeners('data');
-      riftyProcess.stdin.setEncoding(null);
-    }
     teardownHttp?.();
     teardownExecSync?.();
     // Restore the vm-engine selection so an opt-in case does not poison the next.

@@ -65,7 +65,7 @@ describe('Transform subclassing', () => {
 
 describe('Duplex.write routes to the writable side', () => {
   it('writes via Duplex go to the writable side, not the readable buffer', async () => {
-    const d = new Duplex({ objectMode: true });
+    const d = new Duplex({ objectMode: true, read() {} });
     // Per ADR-0034, `writableSide` is `readonly` and there's no need to reach
     // in to override the write impl — instead, the Duplex's writable side is
     // a real `Writable` with its own default no-op `_write`. We assert the

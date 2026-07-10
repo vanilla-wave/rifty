@@ -38,6 +38,7 @@ export function rootForId(activeId: ActiveId): string {
 
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, normalizePath } from '@riftydev/vfs';
+import { EMPTY_LIFECYCLE_BASELINE_ID } from './empty-lifecycle-baseline.ts';
 
 /** The sync-VFS surface the index module needs (owner `syncMirror()`). */
 export type IndexFs = Pick<
@@ -114,6 +115,33 @@ export function writeIndex(fs: IndexFs, base: string, index: ProjectIndex): void
   assertActiveIdHasProject(index, path);
   fs.mkdirSync(dirname(path), { recursive: true });
   fs.writeFileSync(path, enc.encode(`${JSON.stringify(index, null, 2)}\n`));
+}
+
+/**
+ * Make the already-live `/scratch` owner a real hidden empty Scratch after the
+ * first-run launcher is dismissed. ADOPT, never re-seed: bytes created through
+ * the real pre-pick shell survive. Existing scratch/project state wins so a
+ * close racing the first owner index can never replace persisted work.
+ */
+export function adoptHiddenEmptyScratch(
+  fs: IndexFs,
+  base: string,
+  index: ProjectIndex,
+): ProjectIndex {
+  if (index.activeId !== 'scratch' || index.scratch !== null) return index;
+
+  fs.mkdirSync('/scratch', { recursive: true });
+  const dirty = fs.readdirSync('/scratch').length > 0;
+  const next: ProjectIndex = {
+    ...index,
+    scratch: {
+      starter: EMPTY_LIFECYCLE_BASELINE_ID,
+      dirty,
+      editedAt: dirty ? new Date().toISOString() : 'no edits yet',
+    },
+  };
+  writeIndex(fs, base, next);
+  return next;
 }
 
 function assertActiveIdHasProject(index: ProjectIndex, path: string): void {

@@ -6,6 +6,12 @@ import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
 afterEach(() => resetSyncMirror());
 
 describe('child_process.fork — IPC', () => {
+  it("keeps serialization:'advanced' loud until Node advanced parity lands", () => {
+    expect(() => fork('/advanced.js', [], { serialization: 'advanced' })).toThrow(
+      /advanced IPC serializer is not implemented/,
+    );
+  });
+
   it('parent receives messages the child sends via process.send', async () => {
     writeFileSync(
       '/c.js',
@@ -32,5 +38,43 @@ describe('child_process.fork — IPC', () => {
     expect(child.send('two')).toBe(true);
     await new Promise((r) => setTimeout(r, 25));
     expect(replies).toEqual(['echo:one', 'echo:two']);
+  });
+
+  it('uses Node default JSON serialization in both directions', async () => {
+    writeFileSync(
+      '/json-ipc.js',
+      `__process.send({ side: 'child', keep: 1, drop() {} });
+       __process.onMessage((m) => __process.send({ side: 'parent', keys: Object.keys(m).sort() }));`,
+    );
+    const child = fork('/json-ipc.js');
+    const messages: unknown[] = [];
+    child.on('message', (m) => messages.push(m));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(child.send({ keep: 1, drop() {} })).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(messages).toEqual([
+      { side: 'child', keep: 1 },
+      { side: 'parent', keys: ['keep'] },
+    ]);
+  });
+
+  it('a circular child.send throws without disconnecting the next valid send', async () => {
+    writeFileSync('/after-invalid.js', '__process.onMessage((m) => __process.send(m));');
+    const child = fork('/after-invalid.js');
+    const replies: unknown[] = [];
+    child.on('message', (m) => replies.push(m));
+    await Promise.resolve();
+    await Promise.resolve();
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+
+    expect(() => child.send(circular)).toThrow(/circular/i);
+    expect(child.send({ after: true })).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(replies).toEqual([{ after: true }]);
   });
 });

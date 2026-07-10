@@ -31,6 +31,11 @@ export interface TransformOptions extends ReadableOptions, WritableOptions {
 }
 
 export class Transform extends Duplex {
+  // Transform's readable half is push-driven by `_transform`; it has a real
+  // producer even when no public `{ read }` option was supplied. Keeping this
+  // on the prototype lets a Transform subclass override `_read` normally.
+  override _read(_size: number): void {}
+
   constructor(opts: TransformOptions = {}) {
     const transformImpl = opts.transform;
     const flushImpl = opts.flush;

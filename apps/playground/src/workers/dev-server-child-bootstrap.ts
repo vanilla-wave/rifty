@@ -3,8 +3,9 @@
  * Supervised dev-server child entry (ADR-0150 P6b) — a kind:'url' worker the
  * OWNER spawns (serve:true) to run the dev server out of the owner thread. It
  * reads+writes the owner store over fs.* sync-RPC (RIFTY_REMOTE_FS=1, like
- * node-entry-bootstrap), owns listen() + serveCrossRealmPreview, and talks to
- * the owner over fork-IPC (rifty:dev-ready/error/snapshot from here; rifty:dev-file-changed in).
+ * node-entry-bootstrap), and talks to the owner over fork-IPC
+ * (rifty:dev-ready/error/snapshot from here; rifty:dev-file-changed in). Vite
+ * owns listen/preview here; nodemon delegates the app server to a nested Worker.
  *
  * NOT here: initBackend()/OPFS (child reads via RPC — single-writer is the owner);
  * the pty server / shell / owner serve-bridges (those stay on the owner).
@@ -29,7 +30,10 @@ import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { isDevServerOwnerMessage } from '../glue/dev-server-ipc.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
-import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
+import {
+  devServerOwnsPortsLocally,
+  resolveDevServerChildConfig,
+} from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
 import {
   type KernelIpc,
@@ -144,27 +148,29 @@ async function bootstrapDevServerChild(): Promise<void> {
     // net-registry change so the owner's pill follows reality. The boot port's
     // bridge is owned by the stop handle (no-op teardown seeded); a NEW port gets
     // its own cross-realm bridge here.
-    const { onRegistryChange, listPorts, serveCrossRealmPreview, dispatchToPort } = await import(
-      '@riftydev/net'
-    );
-    const { watchServedPorts } = await import('./port-watch.ts');
-    watchServedPorts({
-      listPorts,
-      subscribe: (cb) => onRegistryChange(cb),
-      servePreview: (port) =>
-        serveCrossRealmPreview(
-          port,
-          async (request) => dispatchToPort(port, request),
-          c.previewScope === undefined ? {} : { scope: c.previewScope },
-        ),
-      post: (ports) =>
-        send({
-          type: 'rifty:dev-ports',
-          ports,
-          ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
-        }),
-      served: new Map([[handle.port, () => {}]]),
-    });
+    if (devServerOwnsPortsLocally(c.spec)) {
+      const { onRegistryChange, listPorts, serveCrossRealmPreview, dispatchToPort } = await import(
+        '@riftydev/net'
+      );
+      const { watchServedPorts } = await import('./port-watch.ts');
+      watchServedPorts({
+        listPorts,
+        subscribe: (cb) => onRegistryChange(cb),
+        servePreview: (port) =>
+          serveCrossRealmPreview(
+            port,
+            async (request) => dispatchToPort(port, request),
+            c.previewScope === undefined ? {} : { scope: c.previewScope },
+          ),
+        post: (ports) =>
+          send({
+            type: 'rifty:dev-ports',
+            ports,
+            ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
+          }),
+        served: new Map([[handle.port, () => {}]]),
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     proc.stderr.write(`${err instanceof Error && err.stack ? err.stack : message}\n`);

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ScopedFsSync,
   ScopedVfs,
+  type WorkspaceMutation,
   scopeActiveVfsToWorkspace,
   workspaceVfsPrefix,
 } from './scoped-vfs.ts';
@@ -28,6 +29,58 @@ describe('workspace-scoped VFS', () => {
     expect(dec.decode(fsSync.readFileBytesSync('/workspaces/ws_a_b/scratch/main.js'))).toBe(
       'scoped',
     );
+  });
+
+  it('reports successful sync workspace mutations but not reads or semantic no-ops', () => {
+    const { fsSync } = createMemoryFs();
+    const mutations: WorkspaceMutation[] = [];
+    const scoped = new ScopedFsSync(fsSync, workspaceVfsPrefix('observed'), (mutation) =>
+      mutations.push(mutation),
+    );
+
+    scoped.mkdirSync('/scratch', { recursive: true });
+    mutations.length = 0;
+
+    expect(scoped.existsSync('/scratch')).toBe(true);
+    expect(scoped.readdirSync('/scratch')).toEqual([]);
+    expect(scoped.statSync('/scratch').isDirectory).toBe(true);
+    scoped.mkdirSync('/scratch', { recursive: true });
+    scoped.rmSync('/scratch/missing.txt', { force: true });
+    scoped.renameSync('/scratch', '/scratch');
+    expect(() => scoped.writeFileSync('/missing/a.txt', enc.encode('nope'))).toThrow();
+    expect(mutations).toEqual([]);
+
+    scoped.writeFileSync('/scratch/a.txt', enc.encode('a'));
+    scoped.copyFileSync('/scratch/a.txt', '/scratch/b.txt');
+    scoped.renameSync('/scratch/b.txt', '/scratch/c.txt');
+    scoped.rmSync('/scratch/c.txt', {});
+
+    expect(mutations).toEqual([
+      { op: 'write', paths: ['/scratch/a.txt'] },
+      { op: 'copy', paths: ['/scratch/b.txt'] },
+      { op: 'rename', paths: ['/scratch/b.txt', '/scratch/c.txt'] },
+      { op: 'rm', paths: ['/scratch/c.txt'] },
+    ]);
+  });
+
+  it('reports successful async workspace mutations after the backing operation settles', async () => {
+    const { vfs } = createMemoryFs();
+    const mutations: WorkspaceMutation[] = [];
+    const scoped = new ScopedVfs(vfs, workspaceVfsPrefix('observed-async'), (mutation) =>
+      mutations.push(mutation),
+    );
+
+    await scoped.mkdir('/scratch', { recursive: true });
+    mutations.length = 0;
+    await scoped.mkdir('/scratch', { recursive: true });
+    await scoped.rm('/scratch/missing.txt', { force: true });
+    await scoped.writeFile('/scratch/a.txt', 'a');
+    await scoped.rm('/scratch/a.txt');
+
+    expect(mutations).toEqual([
+      { op: 'write', paths: ['/scratch/a.txt'] },
+      { op: 'rm', paths: ['/scratch/a.txt'] },
+    ]);
   });
 
   it('keeps two workspaces isolated while preserving their public paths', async () => {

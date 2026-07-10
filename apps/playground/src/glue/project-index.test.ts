@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { INDEX_PATH, rootForId } from './project-index.ts';
+import { EMPTY_LIFECYCLE_BASELINE_ID } from './empty-lifecycle-baseline.ts';
+import { INDEX_PATH, adoptHiddenEmptyScratch, rootForId } from './project-index.ts';
 
 describe('rootForId (ADR-0165 §2/§4)', () => {
   it("maps 'scratch' to /scratch", () => {
@@ -71,6 +72,53 @@ describe('loadIndex / writeIndex (ADR-0165 §2)', () => {
       enc.encode(JSON.stringify({ activeId: 'p-missing', scratch: null, projects: [] })),
     );
     expect(() => loadIndex(fs, BASE)).toThrow(/activeId.*missing project/i);
+  });
+});
+
+describe('adoptHiddenEmptyScratch', () => {
+  it('adopts the existing /scratch tree without wiping bytes and marks a non-empty tree dirty', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    fs.writeFileSync('/scratch/kept.txt', enc.encode('keep me'));
+
+    const next = adoptHiddenEmptyScratch(fs, BASE, EMPTY);
+
+    expect(next).toMatchObject({
+      activeId: 'scratch',
+      scratch: { starter: EMPTY_LIFECYCLE_BASELINE_ID, dirty: true },
+    });
+    expect(new TextDecoder().decode(fs.readFileBytesSync('/scratch/kept.txt'))).toBe('keep me');
+    expect(loadIndex(fs, BASE)).toEqual(next);
+  });
+
+  it('creates a clean empty root when /scratch is absent', () => {
+    const fs = new MemoryFsSync();
+
+    const next = adoptHiddenEmptyScratch(fs, BASE, EMPTY);
+
+    expect(fs.readdirSync('/scratch')).toEqual([]);
+    expect(next.scratch).toMatchObject({
+      starter: EMPTY_LIFECYCLE_BASELINE_ID,
+      dirty: false,
+    });
+  });
+
+  it('never replaces an existing scratch or a persisted active project', () => {
+    const fs = new MemoryFsSync();
+    const scratch = {
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: true, editedAt: 'x' },
+      projects: [],
+    } as const;
+    expect(adoptHiddenEmptyScratch(fs, BASE, scratch)).toBe(scratch);
+
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    const project = {
+      activeId: 'p-1',
+      scratch: null,
+      projects: [{ id: 'p-1', name: 'Kept', starter: 'project-files', editedAt: 'x' }],
+    } as const;
+    expect(adoptHiddenEmptyScratch(fs, BASE, project)).toBe(project);
   });
 });
 

@@ -14,6 +14,7 @@ import type { Vfs } from '@riftydev/vfs';
 import { PRESETS, type Preset } from '../presets.ts';
 import { resolveBootstrapConfig } from '../templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts';
+import { isEmptyLifecycleBaseline } from './empty-lifecycle-baseline.ts';
 
 /** Launcher gallery group (ADR-0165 §1, design §2b): FRONT-END / SERVER / WASM. */
 export type StarterGroup = 'frontend' | 'server' | 'wasm';
@@ -92,6 +93,12 @@ export function seedFilesForStarter(starter: Starter, root: string): Record<stri
     files[`${root}${rel}`] = f.content;
   }
   return files;
+}
+
+/** Re-derive either a visible Starter bundle or the internal empty baseline. */
+export function seedFilesForBaseline(id: string, root: string): Record<string, string> {
+  if (isEmptyLifecycleBaseline(id)) return {};
+  return seedFilesForStarter(starterById(id), root);
 }
 
 const INITIAL_COMMIT_MESSAGE = 'Initial commit';

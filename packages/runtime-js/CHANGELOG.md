@@ -2,7 +2,50 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0202 remote-FS worker children.** `child_process.spawn('node', …)` and
+  `fork()` now use a real Worker when the spawning dispatcher serves `fs.*`, so
+  the child sees the parent's VFS; incapable realms retain the loud
+  `NotImplementedError`. Worker children inherit env only when `env` is omitted,
+  always enter the listen-or-exit Node lifecycle, and validate `pipe`/`inherit`/
+  stream-target/fork-IPC stdio before spawn; unsupported modes stay loud. The
+  public stdio properties are `null` for inherited/redirected descriptors, and
+  `fork()` defaults to inherit unless `silent:true` requests pipes. The
+  valid but unwired placement of an IPC channel at fd 0–2 stays a directed
+  `NotImplementedError`, never a false invalid-argument error. The
+  bare `ps` returns the truthful empty controlling-terminal selection, while
+  `ps -A -o ppid,pid` reports live records for real nodemon restarts; other
+  `ps` formats fail with a directed `NotImplementedError`.
+
 ### Fixed
+
+- **ADR-0211 Node-default child-process IPC serialization.** Public
+  `ChildProcess.send` / `process.send` now share JSON shaping in both directions:
+  function properties are omitted like Node 24, circular payloads throw without
+  disconnecting the channel, top-level invalid payloads retain Node's
+  `ERR_MISSING_ARGS` / `ERR_INVALID_ARG_TYPE` split, and
+  `serialization: 'advanced'` stays loud.
+
+- **Relative Node child entries resolve against the child cwd.**
+  `spawn('node', ['src/main.js'])`, `fork('src/main.js')`, and direct
+  `runNodeEntry` calls now share one path-resolution boundary; Worker and
+  same-realm children receive the absolute entry as `process.argv[1]` instead
+  of treating a slash-containing relative path as a package specifier.
+
+- **`process.stdin` is a real shared `Readable`.** Kernel children and the host
+  bridge now use `@riftydev/io`'s buffering, decoder, flow, and pipe lifecycle,
+  including passive `unpipe(child.stdin)` cleanup. This lets supervisors such as
+  nodemon exit/restart a child under `--no-stdin` instead of crashing on a
+  Readable-ish EventEmitter.
+
+- **Required/imported CommonJS `module` metadata parity.** CJS/JSON/text loads
+  now own one Node-shaped Module object (`id`/`path`/`filename`/`loaded`/
+  `parent`/`children`/`paths`); fresh, cached, and cyclic `require()` share one
+  parent-link boundary, while failed loads drop their cache record and direct
+  parent edge before retry. This restores real packages such as nodemon that
+  read `module.parent.filename`. Process-main identity and `require.main` are
+  not claimed here. Head-to-head guard: `modules/cjs-module-metadata` (Node 24).
 
 - **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
   - `open(2)` flag×target error lattice pinned WHOLE against real Node

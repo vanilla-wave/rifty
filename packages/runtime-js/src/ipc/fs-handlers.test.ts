@@ -1,6 +1,7 @@
+import { SyncRpcDispatcher } from '@riftydev/kernel';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { installRuntimeJsFsHandlers } from './fs-handlers.ts';
+import { hasRuntimeJsFsHandlers, installRuntimeJsFsHandlers } from './fs-handlers.ts';
 import { FS_METHODS, FS_RPC_CHUNK, bytesToBase64 } from './fs-rpc-protocol.ts';
 
 /** Collect registered handlers into a map by driving a fake dispatcher. */
@@ -14,6 +15,18 @@ function handlersOf(vfs: MemoryFsSync) {
 }
 
 describe('installRuntimeJsFsHandlers', () => {
+  it('marks only the dispatcher whose fs handlers were installed', () => {
+    const serving = new SyncRpcDispatcher();
+    const empty = new SyncRpcDispatcher();
+    expect(hasRuntimeJsFsHandlers(serving)).toBe(false);
+    expect(hasRuntimeJsFsHandlers(empty)).toBe(false);
+
+    installRuntimeJsFsHandlers(serving, () => new MemoryFsSync());
+
+    expect(hasRuntimeJsFsHandlers(serving)).toBe(true);
+    expect(hasRuntimeJsFsHandlers(empty)).toBe(false);
+  });
+
   it('serves stat/exists/write/read round-trip', async () => {
     const vfs = new MemoryFsSync();
     const t = handlersOf(vfs);

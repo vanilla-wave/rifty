@@ -7,6 +7,7 @@
  * Delete (red). New-from-starter dashed tile -> Starters tab.
  */
 import { For, Show } from 'solid-js';
+import { isEmptyLifecycleBaseline } from '../glue/empty-lifecycle-baseline.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, Project, Scratch } from '../glue/project-index.ts';
 import { Icon } from './icons.tsx';
@@ -30,12 +31,14 @@ export function ProjectsTab(props: {
   onResetSandbox(): void;
 }) {
   const scratchActive = (): boolean => props.activeId === 'scratch';
+  const visibleScratch = (): Scratch | null =>
+    props.scratch && !isEmptyLifecycleBaseline(props.scratch.starter) ? props.scratch : null;
   const storeLabel = (): string => (props.storage === 'opfs' ? 'OPFS' : 'memory');
   const storeColor = (): string => (props.storage === 'opfs' ? '#5BD79B' : '#FFCE84');
 
   return (
     <div class="rf-projects">
-      <Show when={props.scratch} keyed>
+      <Show when={visibleScratch()} keyed>
         {(sc) => {
           const g = props.glyphFor(sc.starter);
           return (

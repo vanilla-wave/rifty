@@ -103,6 +103,21 @@
 
 ### Fixed
 
+- **`Readable` dispatches the real subclass `_read()` producer hook.** The
+  constructor's `{ read }` option and a prototype override now meet at the same
+  Node-visible hook (option wins), instead of a private option-only twin that
+  left subclass streams permanently idle. This restores readdirp/chokidar's
+  initial directory scan and makes a bare missing producer fail loudly with
+  Node's `ERR_METHOD_NOT_IMPLEMENTED`. Proven head-to-head against Node v24.
+- **`Readable.prototype.isPaused()` matches Node.** The shared Readable now
+  reports explicit paused state instead of leaving process and package streams
+  without the method.
+- **`EventEmitter` is callable as well as constructable, matching Node.** Legacy
+  constructors using `EventEmitter.call(this)` plus `util.inherits` now share
+  the same prototype/listener implementation as `new EventEmitter()` and modern
+  `class extends EventEmitter`; `instanceof`, constructor identity, mutable
+  `defaultMaxListeners`, and `captureRejectionSymbol` remain intact. Proven
+  head-to-head against Node v24.
 - **Node stream edge parity tightened after PR #102 review.** `Writable.toWeb()`
   and `Duplex.toWeb()` now reject pending web writes/closes with `AbortError`
   when the Node side is destroyed without an explicit error; `Readable.from()`

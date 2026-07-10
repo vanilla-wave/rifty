@@ -13,7 +13,7 @@ const BOOT_SCRIPT: readonly BootLine[] = [
   { p: '  ', t: 'resolving via @riftydev/npm-client', c: 'dim' },
   { p: '  ', t: '+ express@4.21.2  ·  57 pkgs  ·  0 conflicts', c: 'ok' },
   { p: '$ ', t: 'node server.js', c: 'cmd' },
-  { p: '  ', t: 'runtime-js · node v22 compatible', c: 'dim' },
+  { p: '  ', t: 'runtime-js · node v24 compatible', c: 'dim' },
   { p: '  ', t: 'express listening on :3000', c: 'lime' },
   { p: '', t: 'GET /   200   ·   4 ms', c: 'req' },
 ];

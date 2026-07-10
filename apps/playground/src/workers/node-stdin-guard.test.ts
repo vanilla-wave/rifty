@@ -6,7 +6,7 @@ import { installLoudStdin } from './node-stdin-guard.ts';
 
 // Guard the REAL spec-seeded process (makeStdinReader-backed stdin), NOT a
 // synthetic `{ stdin: {} }` — the old test was false-green (it asserted the stub's
-// own throwers, never the real EventEmitter's on/setEncoding/resume/pause).
+// own throwers, never the real Readable's on/setEncoding/resume/pause/unpipe).
 const originalProcess = (globalThis as { process?: unknown }).process;
 afterEach(() => {
   Object.defineProperty(globalThis, 'process', {
@@ -39,6 +39,8 @@ interface LoudStdin {
   read(): unknown;
   resume(): unknown;
   pause(): unknown;
+  isPaused(): boolean;
+  unpipe(dest?: unknown): unknown;
   setEncoding(enc: string): unknown;
   setRawMode(raw: boolean): unknown;
   pipe(dest: unknown): unknown;
@@ -78,5 +80,9 @@ describe('installLoudStdin (real seeded process.stdin)', () => {
     // pause() on an unread stream is a Node no-op a non-reading CLI uses to exit —
     // must NOT throw (else it kills a legit program that never reads stdin).
     expect(() => s.pause()).not.toThrow();
+    expect(s.isPaused()).toBe(true);
+    // Supervisors using `--no-stdin` still run passive cleanup after the child
+    // exits. nodemon calls this exact shape; the guard must leave it available.
+    expect(s.unpipe({})).toBe(s);
   });
 });

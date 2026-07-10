@@ -1,7 +1,7 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
+ * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0211 fork-IPC)
  * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
  * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
  * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
@@ -19,10 +19,12 @@
  */
 import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
+import { Readable } from './stream.ts';
 
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
 // Head cursor instead of shift()-per-item: O(n) drain, not O(n^2) (#27, perf-audit
@@ -168,19 +170,18 @@ function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStd
   return isTTY ? attachTtyControls(stream) : stream;
 }
 
-export interface NodeStdin extends EventEmitter {
+export interface NodeStdin extends Readable {
   isTTY: boolean;
   fd: number;
-  setEncoding(encoding: string | null): void;
-  resume(): void;
-  pause(): void;
 }
 
 /**
- * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel
+ * Build a real `process.stdin` Readable fed by either a kernel
  * stdin MessagePort (spec child) or the host bridge (`writeProcessStdin`, REPL).
- * Returns the stdin + a `push(data)` the host source calls. Pre-listener
- * buffering + utf8 stream-decoding match Node's encoding semantics.
+ * Returns the stdin + a `push(data)` the host source calls. The shared
+ * `@riftydev/io` Readable owns buffering, flow control, pipe/unpipe, and
+ * streaming decoding; keeping those semantics at one chokepoint prevents the
+ * process stream from drifting into a partial Readable lookalike.
  */
 function makeStdinReader(
   port?: MessagePort,
@@ -189,60 +190,14 @@ function makeStdinReader(
   stdin: NodeStdin;
   push(data: string | Uint8Array): void;
 } {
-  const stdin = new EventEmitter() as NodeStdin;
-  let encoding: string | null = null;
-  const pending: Array<string | Uint8Array> = [];
-  let decoder = new TextDecoder();
-
-  const normalize = (data: string | Uint8Array): string | Uint8Array | null => {
-    if (typeof data === 'string') return data;
-    if (encoding && /^utf-?8$/iu.test(encoding)) {
-      const text = decoder.decode(data, { stream: true });
-      return text.length === 0 ? null : text;
-    }
-    return data;
-  };
-  const flush = (): void => {
-    if (stdin.listenerCount('data') === 0) return;
-    while (pending.length > 0) {
-      const chunk = pending.shift();
-      if (chunk !== undefined) stdin.emit('data', chunk);
-    }
-  };
+  const stdin = new Readable({ read() {} }) as NodeStdin;
   const push = (data: string | Uint8Array): void => {
-    const chunk = normalize(data);
-    if (chunk == null) return;
-    if (stdin.listenerCount('data') === 0) {
-      pending.push(chunk);
-      return;
-    }
-    stdin.emit('data', chunk);
+    stdin.push(data);
   };
 
   Object.assign(stdin, {
     isTTY,
     fd: 0,
-    setEncoding(next: string | null) {
-      encoding = next;
-      decoder = new TextDecoder();
-    },
-    resume() {
-      flush();
-    },
-    pause() {},
-  });
-  stdin.on('newListener', (event) => {
-    if (event === 'data') queueMicrotask(flush);
-  });
-  stdin.on('end', () => {
-    if (!encoding || !/^utf-?8$/iu.test(encoding)) return;
-    const tail = decoder.decode();
-    if (tail.length === 0) return;
-    if (stdin.listenerCount('data') === 0) {
-      pending.push(tail);
-      return;
-    }
-    stdin.emit('data', tail);
   });
 
   if (port) {
@@ -253,6 +208,15 @@ function makeStdinReader(
     port.start();
   }
   return { stdin, push };
+}
+
+const stdinPushByProcess = new WeakMap<NodeProcess, (data: string | Uint8Array) => void>();
+
+/** Install one stdin reader + its matching host push bridge as an atomic pair. */
+function installStdinReader(process: NodeProcess, port?: MessagePort, isTTY = false): void {
+  const reader = makeStdinReader(port, isTTY);
+  process.stdin = reader.stdin;
+  stdinPushByProcess.set(process, reader.push);
 }
 
 function envFlag(env: Readonly<Record<string, string | undefined>>, key: string): boolean {
@@ -324,17 +288,16 @@ export class NodeProcess extends EventEmitter {
   }
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
-  stdin: NodeStdin;
+  stdin!: NodeStdin;
   nextTick = nextTick;
 
-  /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
+  /** Fork-IPC (ADR-0211) — present only when seeded with a spec ipc port. */
   send?: (message: unknown) => boolean;
   disconnect?: () => void;
 
-  readonly #stdinPush: (data: string | Uint8Array) => void;
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
-  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
+  // Frames received before any `'message'` listener attaches (ADR-0211) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
   readonly #ipcBacklog: unknown[] = [];
 
@@ -350,9 +313,7 @@ export class NodeProcess extends EventEmitter {
       currentCwd = spec.cwd;
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'));
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'));
-      const reader = makeStdinReader(spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
-      this.stdin = reader.stdin;
-      this.#stdinPush = reader.push;
+      installStdinReader(this, spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
       this.#wireIpc(spec.stdio.ipc);
     } else {
       this.pid = 1;
@@ -375,9 +336,7 @@ export class NodeProcess extends EventEmitter {
         isTTY: false,
         fd: 2,
       };
-      const reader = makeStdinReader();
-      this.stdin = reader.stdin;
-      this.#stdinPush = reader.push;
+      installStdinReader(this);
     }
   }
 
@@ -437,7 +396,9 @@ export class NodeProcess extends EventEmitter {
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
-    this.#stdinPush(data);
+    const push = stdinPushByProcess.get(this);
+    if (!push) throw new Error('process.stdin host bridge is not installed');
+    push(data);
   }
 
   #wireIpc(port: MessagePort): void {
@@ -478,15 +439,14 @@ export class NodeProcess extends EventEmitter {
 
     this.send = (message: unknown): boolean => {
       if (this.#ipcDisconnected) return false;
-      try {
-        const frame: IpcFrame = { kind: 'ipc:message', payload: message };
-        port.postMessage(frame);
-        return true;
-      } catch {
-        // Port may have been detached by the parent — treat as disconnect.
-        this.#tearDownIpc();
-        return false;
-      }
+      // JSON-shape before the raw MessagePort hop. A serialization error is
+      // synchronous and does not poison the still-usable channel (ADR-0211).
+      const frame: IpcFrame = {
+        kind: 'ipc:message',
+        payload: serializeNodeIpcMessage(message),
+      };
+      port.postMessage(frame);
+      return true;
     };
 
     this.disconnect = (): void => {
@@ -517,6 +477,15 @@ export class NodeProcess extends EventEmitter {
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
+
+/**
+ * Test-harness lifecycle boundary for the reused no-spec process singleton.
+ * Recreate the Readable instead of mutating private stream state: decoder,
+ * flowing/paused mode, EOF, buffers, and listeners all begin as one fresh unit.
+ */
+export function resetRiftyProcessStdinForTest(): void {
+  installStdinReader(riftyProcess);
+}
 
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {

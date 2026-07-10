@@ -41,6 +41,7 @@ async function collect(
   child: ReturnType<typeof spawn>,
 ): Promise<{ code: number | null; stderr: string }> {
   let stderr = '';
+  if (child.stderr === null) throw new Error('collect requires piped child stderr');
   child.stderr.on('data', (c) => {
     stderr += typeof c === 'string' ? c : new TextDecoder().decode(c as Uint8Array);
   });
@@ -77,7 +78,9 @@ describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled
     // throw rather than a silent no-op.
     writeFileSync('/ceiling-stdin.js', '');
     const child = spawn('node', ['/ceiling-stdin.js']);
-    expect(() => child.stdin.write('x')).toThrowError(
+    if (child.stdin === null) throw new Error('default spawn must expose a stdin pipe');
+    const stdin = child.stdin;
+    expect(() => stdin.write('x')).toThrowError(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'child.stdin.write',

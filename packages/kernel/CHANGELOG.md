@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **ADR-0211 raw IPC clone failures no longer masquerade as disconnects.**
+  `WorkerProcessHandle.send` lets `DataCloneError` surface synchronously while
+  preserving the MessagePort for a subsequent valid control frame; Node JSON
+  serialization remains owned by runtime-js.
+- **External parent IDs cannot collide with newly allocated child PIDs.**
+  `spawn` and `spawnWorker` now share one allocator that skips the supplied
+  `ppid`, preserving a valid process tree across nested worker realms.
 - **Worker stdout/stderr no longer loses final chunks on natural exit.**
   Worker-backed process exit arrives on the Worker message channel while stdio
   bytes arrive on separate MessagePorts, so a final CLI line could land after

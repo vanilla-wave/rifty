@@ -10,6 +10,7 @@
  * is the lone Starter-layer type it needs (from glue/starter.ts).
  */
 import { Show } from 'solid-js';
+import { isEmptyLifecycleBaseline } from '../glue/empty-lifecycle-baseline.ts';
 import type { ActiveId, Project, Scratch } from '../glue/project-index.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
@@ -40,9 +41,9 @@ export function Launcher(props: {
   onMenuAction(id: string, action: RowAction): void;
   onResetSandbox(): void;
 }) {
-  const count = (): number => props.projects.length + (props.scratch ? 1 : 0);
-  const placeholder = (): string =>
-    props.tab === 'starters' ? 'Search starters' : 'Search projects';
+  const visibleScratch = (): Scratch | null =>
+    props.scratch && !isEmptyLifecycleBaseline(props.scratch.starter) ? props.scratch : null;
+  const count = (): number => props.projects.length + (visibleScratch() ? 1 : 0);
   return (
     <Show when={props.open}>
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop close — the veil is not an interactive control. Keyboard close is the header Close button (a real <button>) + Escape (handled window-level in App, closes dialog → launcher). */}
@@ -78,13 +79,15 @@ export function Launcher(props: {
                 Projects<span class="rf-launcher__count">{count()}</span>
               </button>
             </div>
-            <input
-              class="rf-launcher__search"
-              type="search"
-              placeholder={placeholder()}
-              value={props.q}
-              onInput={(e) => props.onSearch(e.currentTarget.value)}
-            />
+            <Show when={props.tab === 'starters'}>
+              <input
+                class="rf-launcher__search"
+                type="search"
+                placeholder="Search starters"
+                value={props.q}
+                onInput={(e) => props.onSearch(e.currentTarget.value)}
+              />
+            </Show>
             <button
               type="button"
               class="rf-launcher__close"
@@ -99,7 +102,7 @@ export function Launcher(props: {
             fallback={
               <ProjectsTab
                 projects={props.projects}
-                scratch={props.scratch}
+                scratch={visibleScratch()}
                 activeId={props.activeId}
                 storage={props.storage}
                 menuFor={props.menuFor}

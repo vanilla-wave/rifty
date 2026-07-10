@@ -351,7 +351,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   readonly _readableState: ReadableState;
-  private readImpl?: (this: Readable, size: number) => void;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
   private encodingState: EncodingState | null = null;
   /**
@@ -380,7 +379,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       disturbed: false,
       flowScheduled: false,
     };
-    this.readImpl = opts.read;
+    // Node installs the constructor option onto the SAME observable `_read`
+    // hook subclasses override. Keeping it in a private twin makes prototype
+    // producers (readdirp's stream, among others) permanently invisible.
+    if (opts.read) this._read = opts.read;
     // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
     if (opts.encoding) this.setEncoding(opts.encoding);
     this.on('newListener', (event) => {
@@ -394,21 +396,23 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
           if (this._readableState.buffer.length > 0 && !this._readableState.endEmitted) {
             this.emit('readable');
           }
-          if (
-            !this._readableState.ended &&
-            !this._readableState.reading &&
-            this.readImpl !== undefined
-          ) {
-            this._readableState.reading = true;
-            try {
-              this.readImpl.call(this, this._readableState.highWaterMark);
-            } finally {
-              this._readableState.reading = false;
-            }
-          }
+          this.maybeRead(this._readableState.highWaterMark);
         });
       }
     });
+  }
+
+  /**
+   * Producer hook overridden by subclasses or replaced by the constructor's
+   * `{ read() {} }` option. A bare Readable has no producer and fails with the
+   * same loud Node error when demand reaches it.
+   */
+  _read(_size: number): void {
+    const err = new Error('The _read() method is not implemented') as Error & {
+      code: string;
+    };
+    err.code = 'ERR_METHOD_NOT_IMPLEMENTED';
+    throw err;
   }
 
   get readable(): boolean {
@@ -611,11 +615,13 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   private maybeRead(hint?: number): void {
     const state = this._readableState;
-    if (state.ended || state.reading || !this.readImpl || state.destroyed) return;
+    if (state.ended || state.reading || state.destroyed) return;
     const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
     state.reading = true;
     try {
-      this.readImpl.call(this, size);
+      this._read(size);
+    } catch (err) {
+      this.destroy(err instanceof Error ? err : new Error(String(err)));
     } finally {
       state.reading = false;
     }
@@ -651,13 +657,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     }
     this.finishIfDone();
-    if (
-      state.flowing &&
-      this.readImpl &&
-      !state.ended &&
-      state.length < state.highWaterMark &&
-      !state.reading
-    ) {
+    if (state.flowing && !state.ended && state.length < state.highWaterMark && !state.reading) {
       this.maybeRead();
       // If `_read` enqueued synchronously, drain again on the next tick.
       if (state.buffer.length > 0 && state.flowing) this.scheduleFlow();
@@ -687,6 +687,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     state.flowing = false;
     this.emit('pause');
     return this;
+  }
+
+  /** Whether the stream was explicitly paused (`Readable.prototype.isPaused`). */
+  isPaused(): boolean {
+    return this._readableState.flowing === false;
   }
 
   /**
@@ -992,7 +997,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     });
     // Install a `_read` so a paused-mode consumer's `read()` resumes the legacy
     // source (Node's wrap installs a `_read` that calls `stream.resume()`).
-    this.readImpl = (): void => {
+    this._read = (): void => {
       resumeLegacy();
     };
     stream.on('data', onData);
@@ -1292,14 +1297,21 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         'Readable.fromWeb: the "readableStream" argument must be a ReadableStream',
       );
     }
+    // This adapter is push-driven by the WHATWG reader below. Declare that
+    // producer explicitly so ordinary demand never falls through to the bare
+    // Readable's loud missing-_read error. A caller-supplied hook still wins.
+    const readableOptions: ReadableFromWebOptions = {
+      ...options,
+      read: options.read ?? (() => {}),
+    };
     if (options.signal?.aborted) {
-      const r = new Readable(options);
+      const r = new Readable(readableOptions);
       queueMicrotask(() => r.destroy(abortError()));
       return r;
     }
 
     const reader = stream.getReader();
-    const r = new Readable(options);
+    const r = new Readable(readableOptions);
     let closed = false;
 
     // Abort→destroy wiring shared with `stream.addAbortSignal` (its `'close'`/

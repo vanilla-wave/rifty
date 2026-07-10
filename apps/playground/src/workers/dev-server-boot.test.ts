@@ -87,7 +87,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  // bootNodeServer routes the global console into the run log (Node parity:
+  // The node-server runner routes the global console into the run log (Node parity:
   // console.log IS stdout) — restore the test runner's console + PORT.
   globalThis.console = realConsole;
   // Reflect (not `delete`, noDelete; not `= undefined` — env coerces it to 'undefined').

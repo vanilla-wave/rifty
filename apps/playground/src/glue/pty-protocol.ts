@@ -1,6 +1,7 @@
 // pty channel frame protocol (ADR-0146). Carried as kernel fork-IPC payload
 // { type:'rifty:pty', frame } alongside rifty:vfs-write. Structured-clone-safe only.
 export type PtyStream = 'stdout' | 'stderr';
+export type PtyRunOrigin = 'user' | 'boot';
 
 export type PtyOpen = {
   type: 'pty:open';
@@ -18,6 +19,8 @@ export type PtyExec = {
   cols: number;
   rows: number;
   isTTY: boolean;
+  /** Boot lines establish the Starter baseline; user lines can dirty Scratch. */
+  origin?: PtyRunOrigin;
 };
 export type PtyStdin = { type: 'pty:stdin'; sid: string; rid: string; data: Uint8Array };
 export type PtyStdinEof = { type: 'pty:stdin-eof'; sid: string; rid: string };

@@ -8,8 +8,10 @@
  * `process.exit(N)`) — see `child_process.ts` for the outer wrapper.
  */
 
-import { Buffer, type EventEmitter } from '@riftydev/io';
-import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
+import { Buffer, type EventEmitter, NotImplementedError } from '@riftydev/io';
+import { type ProcessHandle, type ProcessIO, globalProcessManager } from '@riftydev/kernel';
+import { resolveNodeEntryPath } from '../internal/node-entry-path.ts';
+import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface ExecScriptArgs {
@@ -51,19 +53,55 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     a.ownHandle.emit('close', exitCode, null);
   };
 
+  if (a.command === 'ps' && a.args.length === 0) {
+    // Default `ps` selects processes associated with this terminal. The
+    // virtual ProcessManager does not track controlling terminals, so the
+    // truthful default selection is empty; do not invent TTY or CPU-time data.
+    writeStdout(' PID TTY          TIME CMD\n');
+    closeStreams();
+    return;
+  }
+
+  const isPpidPidTable =
+    a.command === 'ps' &&
+    a.args.length === 3 &&
+    a.args[0] === '-A' &&
+    a.args[1] === '-o' &&
+    a.args[2] === 'ppid,pid';
+  if (isPpidPidTable) {
+    const rows = globalProcessManager
+      .list()
+      .map((handle) => `${String(handle.ppid).padStart(5)} ${String(handle.pid).padStart(5)}`);
+    writeStdout(` PPID   PID\n${rows.length > 0 ? `${rows.join('\n')}\n` : ''}`);
+    closeStreams();
+    return;
+  }
+
+  if (a.command === 'ps') {
+    const error = new NotImplementedError(
+      'child_process.ps-format',
+      "supported forms are bare 'ps' and 'ps -A -o ppid,pid'",
+    );
+    writeStderr(`${error.name}: ${error.message}\n`);
+    closeStreams();
+    finish(1);
+    return;
+  }
+
   if (a.command !== 'node') {
     writeStderr(`spawn ${a.command} ENOENT\n`);
     closeStreams();
     finish(127);
     return;
   }
-  const scriptPath = a.args[0];
-  if (!scriptPath) {
+  const entryArg = a.args[0];
+  if (!entryArg) {
     writeStderr('node: missing script\n');
     closeStreams();
     finish(1);
     return;
   }
+  const scriptPath = resolveNodeEntryPath(a.ownHandle.cwd, entryArg);
 
   try {
     const source = syncMirror().readFileBytesSync(scriptPath);
@@ -95,7 +133,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     };
     if (a.opts.__fork) {
       childProcess.send = (msg) => {
-        a.outboundMessages.emit('message', msg);
+        a.outboundMessages.emit('message', serializeNodeIpcMessage(msg));
         return true;
       };
       const onMessage = (cb: (msg: unknown) => void) => {

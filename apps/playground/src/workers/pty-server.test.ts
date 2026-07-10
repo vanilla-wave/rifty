@@ -53,6 +53,69 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit' && exit.code).toBe(0);
   });
 
+  it('brackets each run with its boot/user origin, settling even when the command fails', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const lifecycle: string[] = [];
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onRunStart: ({ sid, rid, origin }) => lifecycle.push(`start:${sid}:${rid}:${origin}`),
+      onRunSettled: ({ sid, rid, origin, mayOutlivePty }) =>
+        lifecycle.push(`settled:${sid}:${rid}:${origin}:${mayOutlivePty}`),
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'boot',
+      line: 'npm definitely-not-a-command',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      origin: 'boot',
+    });
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'user',
+      line: 'pwd',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    expect(lifecycle).toEqual([
+      'start:s1:boot:boot',
+      'settled:s1:boot:boot:false',
+      'start:s1:user:user',
+      'settled:s1:user:user:false',
+    ]);
+  });
+
+  it('classifies a trailing background job as able to outlive pty:exit', async () => {
+    const settled: boolean[] = [];
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onRunSettled: ({ mayOutlivePty }) => settled.push(mayOutlivePty),
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'background',
+      line: 'sleep 0 &',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      origin: 'user',
+    });
+
+    expect(settled).toEqual([true]);
+  });
+
   it('pty:exit carries cwd mutated by cd', async () => {
     const { server, out } = harness();
     server.handleFrame({ type: 'pty:open', sid: 's1' });

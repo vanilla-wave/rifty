@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { PRESETS, type Preset } from '../presets.ts';
 import { EXPRESS_SQLITE_SERVER_SOURCE } from '../templates/express-sqlite.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
+import { EMPTY_LIFECYCLE_BASELINE_ID } from './empty-lifecycle-baseline.ts';
 import {
   GROUP_FOR_CATEGORY,
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
   groupForPreset,
+  seedFilesForBaseline,
   seedFilesForStarter,
   starterById,
   starterFromPreset,
@@ -97,12 +99,21 @@ describe('starterById', () => {
   it('THROWS on an unknown starter (no silent fallback — ADR-0078)', () => {
     expect(() => starterById('nope')).toThrow(/unknown starter/i);
   });
+
+  it('keeps the empty lifecycle baseline outside the Starter registry', () => {
+    expect(PRESETS.some((preset) => preset.id === EMPTY_LIFECYCLE_BASELINE_ID)).toBe(false);
+    expect(() => starterById(EMPTY_LIFECYCLE_BASELINE_ID)).toThrow(/unknown starter/i);
+  });
 });
 
 // Canonical signature per Cross-Phase Reconciliation A: seedFilesForStarter(starter, root)
 // — re-derives the FULL template seed (index.html/package.json/entry/extraFiles)
 // for `root`, with the Preset files[] overlaid under root.
 describe('seedFilesForStarter (starter, root)', () => {
+  it('re-derives the internal empty lifecycle baseline without inventing a Starter', () => {
+    expect(seedFilesForBaseline(EMPTY_LIFECYCLE_BASELINE_ID, '/scratch')).toEqual({});
+  });
+
   it('initializes every Starter root as a git repository', () => {
     for (const preset of PRESETS) {
       const files = seedFilesForStarter(starterById(preset.id), '/scratch');
@@ -268,7 +279,15 @@ describe('seedFilesForStarter (starter, root)', () => {
     // package.json declares the node-server dev script
     const nodePkg = files['/projects/p1/package.json'];
     expect(nodePkg).toBeTypeOf('string');
-    expect(JSON.parse(nodePkg ?? '').scripts.dev).toContain('node ');
+    const parsed = JSON.parse(nodePkg ?? '') as {
+      scripts: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    expect(parsed.scripts.dev).toBe(
+      'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+    );
+    expect(parsed.scripts.start).toBe('node src/main.js');
+    expect(parsed.devDependencies).toEqual({ nodemon: '3.1.14' });
     // a worker-seeded extra file (public asset) lands under the root
     expect(files['/projects/p1/public/index.html']).toBeTypeOf('string');
     // NO index.html seeded at root for node-server (it would shadow the server)

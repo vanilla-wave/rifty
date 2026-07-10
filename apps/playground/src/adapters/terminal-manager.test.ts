@@ -176,13 +176,17 @@ describe('createTerminalManager (pty port client)', () => {
     const writer = makeWriter();
     manager.attachWriter(session.id, writer.write);
 
-    const run = manager.runLine(session.id, 'echo hi', { cols: 100, rows: 30 });
+    const run = manager.runLine(session.id, 'echo hi', {
+      cols: 100,
+      rows: 30,
+      origin: 'boot',
+    });
     await waitForExecs(fake.execs, 1);
 
     expect(fake.execs).toHaveLength(1);
     const call = fake.execs[0]!;
     expect(call).toMatchObject({ sid: session.id, line: 'echo hi' });
-    expect(call.opts).toMatchObject({ cols: 100, rows: 30, isTTY: true });
+    expect(call.opts).toMatchObject({ cols: 100, rows: 30, isTTY: true, origin: 'boot' });
     expect(manager.snapshot(session.id).status).toBe('running');
 
     call.opts.onChunk('hi\n', 'stdout');

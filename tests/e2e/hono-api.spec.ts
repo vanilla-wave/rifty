@@ -3,13 +3,21 @@
  * handlers and JSON body parsing through the SW preview bridge.
  */
 import { expect, test } from '@playwright/test';
-import { capturePageProblems, expectTerminalContains, selectPreset } from './helpers/playground.ts';
+import {
+  capturePageProblems,
+  expectTerminalContains,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  selectPreset,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3321;
 
 test.describe('Hono API template through the SW preview bridge', () => {
   test('preset boots Hono; API and client both round-trip', async ({ page }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(300_000);
     const problems = capturePageProblems(page);
     await page.goto('/');
 
@@ -21,7 +29,7 @@ test.describe('Hono API template through the SW preview bridge', () => {
 
     await expectTerminalContains(
       page,
-      '[real-vite/worker] starting server /scratch/src/main.js on port 3321',
+      '[real-vite/worker] starting nodemon for /scratch/src/main.js on port 3321',
       150_000,
     );
     await expectTerminalContains(page, 'npm: + hono@', 120_000);
@@ -111,6 +119,35 @@ test.describe('Hono API template through the SW preview bridge', () => {
     });
 
     await expectTerminalContains(page, '[hono] INSERT message #', 10_000);
+
+    const restartMarker = `hono-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(
+      page,
+      `echo "console.log('${restartMarker}')" >> /scratch/src/main.js`,
+    );
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect
+      .poll(async () => (await fetchMessages()).count, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(2);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // A project switch must tear down both nodemon and its app Worker. The
+    // helper accepts the dirty-scratch dialog caused by the source edit; once
+    // Project Files owns /scratch, Hono's old preview route stays down.
+    await pickStarter(page, 'project-files');
+    await expect
+      .poll(async () => (await fetchMessages()).ok, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(false);
     problems.assertNoViteImportErrors();
   });
 });

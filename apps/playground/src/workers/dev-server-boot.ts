@@ -11,18 +11,14 @@
  * IMPORTANT: NO top-level side effects (only declarations + `const enc`).
  * `registerNetBuiltins`/`registerSqliteBuiltin` stay in the ENTRY modules, never here.
  */
-import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
-import { Console } from '@riftydev/runtime-js/builtins/console';
+import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { type PersistFailureReport, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import type {
-  BootstrapConfig,
-  NodeServerBootstrapConfig,
-  ProjectSpec,
-} from '../templates/project-spec.ts';
+import type { BootstrapConfig, ProjectSpec } from '../templates/project-spec.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
+import { createNodeServerRunner } from './node-server-runner.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
@@ -74,82 +70,12 @@ export async function flushSyncMirror(): Promise<PersistFailureReport | undefine
 // No shim glue here (ADR-0188): the esbuild/rollup/lightningcss internals shims
 // are written by the npm-client installer into the actual installed dirs.
 
-type Loader = ReturnType<typeof createModuleLoader>;
-
 /**
- * Wait for the entry to register `port` with the net registry (its
- * `listen(port)` call). Event-sourced from the registry's register events (a
- * top-level `await` in the entry may defer the listen past the import's
- * resolution); the timeout is the only timer.
- */
-async function waitForListeningPort(port: number, timeoutMs: number): Promise<void> {
-  if (listPorts().includes(port)) return;
-  let unsubscribe: () => void = () => {};
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      unsubscribe = onRegistryChange((changed, action) => {
-        if (action === 'register' && changed === port) resolve();
-      });
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
-            ),
-          ),
-        timeoutMs,
-      );
-      // A listen() that landed between the head check and the subscription.
-      if (listPorts().includes(port)) resolve();
-    });
-  } finally {
-    unsubscribe();
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-/**
- * Node-server tail: run the ENTRY as the server program and wait for its
- * `listen(port)`. `node:sqlite` needs NO eager bring-up here — the builtin
- * self-initializes at first require via the realm's sync wasm provider
- * (glue/sqlite-wasm-provider.ts).
- */
-async function bootNodeServer(
-  cfg: NodeServerBootstrapConfig,
-  loader: Loader,
-  log: (chunk: string) => void,
-): Promise<void> {
-  // Node parity: console.log IS stdout. Route the server program's console into
-  // the dev-run's terminal stream (ADR-0148/0150 P6b: the dev server runs in a
-  // supervised child; its boot AND async request logs land in the playground
-  // terminal via `log` = this child's stdout port → the active `npm run dev`
-  // run's `ctx.stdout`, live for the whole run — not the worker devtools).
-  const termWriter = {
-    write(chunk: string): boolean {
-      log(chunk);
-      return true;
-    },
-  };
-  (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
-
-  log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
-  await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
-  await waitForListeningPort(cfg.port, 10_000);
-  log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);
-}
-
-/**
- * Boot the co-resident dev server (ADR-0148) INSIDE the workspace owner: run
- * the idempotent dependency-arrival (against THIS realm's tree — the one the
- * shell installs into, so vite sees terminal-installed deps), build the module
- * loader, start vite / the node server, and register the preview + HMR bridges.
- * Returns a stop handle (`server.close()` + bridge disposal) so Ctrl-C stops the
- * dev server WITHOUT killing the owner. `log` streams progress to the session.
- *
- * node-server stop is best-effort: the entry IS the server (an ESM module,
- * evaluated once), so stop tears the preview bridges but the program keeps
- * running — a graceful server stop is deferred (the ADR-0144 model is hard-kill today).
+ * Boot inside the supervised dev-server child: prepare the shared tree, start
+ * Vite or the configured node-server command, and register preview/HMR bridges.
+ * Direct node-server commands run in this realm; nodemon supervises its app in
+ * a nested Worker. The returned handle stops the active server process and its
+ * bridges, so Ctrl-C can terminate the whole dev session. `log` streams output.
  */
 export async function bootDevServer(opts: {
   readonly cfg: BootstrapConfig;
@@ -239,8 +165,15 @@ export async function bootDevServer(opts: {
     throw new Error('[real-vite/worker] node-cli templates run through the owner node executor');
   }
 
+  let appChildOwnsPreviewBridge = false;
   if (cfg.runtime === 'node-server') {
-    await bootNodeServer(cfg, loader, log);
+    if (opts.spec.runtime !== 'node-server') {
+      throw new Error(`[real-vite/worker] config/spec runtime mismatch for ${opts.spec.id}`);
+    }
+    const run = await createNodeServerRunner({
+      importEntry: (entryPath, fromPath) => loader.import(entryPath, fromPath),
+    })({ cfg, spec: opts.spec, log });
+    appChildOwnsPreviewBridge = run.appChildOwnsPreviewBridge;
     publishSnapshot();
   }
 
@@ -305,12 +238,18 @@ export async function bootDevServer(opts: {
   // `pty:dev-server{running,port}` frame (ADR-0148) — the SW-direct route is
   // page-anchored (mountPlaygroundPreviewBridge). `setupPreviewBridge` no-ops in
   // any worker realm, so it is NOT called here (ADR-0150 corrected).
-  const tearPreviewBridge = serveCrossRealmPreview(
-    port,
-    async (request) => dispatchToPort(port, request),
-    opts.previewScope === undefined ? {} : { scope: opts.previewScope },
+  const tearPreviewBridge = appChildOwnsPreviewBridge
+    ? () => {}
+    : serveCrossRealmPreview(
+        port,
+        async (request) => dispatchToPort(port, request),
+        opts.previewScope === undefined ? {} : { scope: opts.previewScope },
+      );
+  log(
+    appChildOwnsPreviewBridge
+      ? '[real-vite/worker] preview bridge owned by nodemon app child\n'
+      : '[real-vite/worker] preview bridge ready\n',
   );
-  log('[real-vite/worker] preview bridge ready\n');
 
   return {
     port,

@@ -44,6 +44,26 @@ describe('Launcher', () => {
     expect(html).toContain('rf-launcher__count');
     expect(html).toContain('>2<'); // 1 project + 1 scratch
   });
+  it('does not count or render the internal hidden-empty scratch', () => {
+    const html = renderToString(() =>
+      Launcher({
+        ...base,
+        scratch: { starter: 'hidden-empty', dirty: false, editedAt: 'no edits yet' },
+      }),
+    );
+    expect(html).toContain('>1<');
+    expect(html).not.toContain('Save as project');
+    expect(html).not.toContain('rf-scratch');
+  });
+  it('offers search only for the Starters gallery', () => {
+    const projects = renderToString(() => Launcher(base));
+    expect(projects).not.toContain('type="search"');
+    expect(projects).not.toContain('Search projects');
+
+    const starters = renderToString(() => Launcher({ ...base, tab: 'starters' }));
+    expect(starters).toContain('type="search"');
+    expect(starters).toContain('Search starters');
+  });
   it('renders nothing when closed', () => {
     expect(renderToString(() => Launcher({ ...base, open: false }))).not.toContain(
       'data-testid="launcher"',

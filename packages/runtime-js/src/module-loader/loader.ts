@@ -8,7 +8,7 @@ import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { wrapCjsAsEsmNamespace } from './interop.ts';
-import { ModuleRegistry } from './registry.ts';
+import { type CjsModule, ModuleRegistry } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
@@ -153,26 +153,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
-    loadSync(id: string): Record<string, unknown> {
-      if (id.startsWith('node:')) {
-        return loadBuiltinOrThrow(id);
+    loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown> {
+      if (resolved.kind === 'builtin') {
+        return loadBuiltinOrThrow(resolved.id);
       }
-      const cached = registry.get(id);
-      if (cached && cached.state === 'loaded') return cached.exports;
-      if (cached && cached.state === 'loading' && cached.kind !== 'esm') {
-        return cached.cjsModule?.exports ?? cached.exports;
-      }
-      const resolved = readResolvedById(id);
       if (resolved.kind === 'esm') {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
-          id,
+          resolved.id,
           'Synchronous require() of ESM is not supported.',
         );
       }
-      return executeCjs(resolved, {
-        ...deps,
-      });
+      return executeCjs(resolved, { ...deps }, parent);
     },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
@@ -207,11 +199,11 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
         return executeEsm(resolved, { ...deps });
       }
       if (resolved.kind === 'json') {
-        const cjsExports = executeCjs(resolved, { ...deps });
+        const cjsExports = deps.loadSync(resolved);
         return wrapCjsAsEsmNamespace(cjsExports);
       }
       // CJS imported from ESM — wrap exports as an ESM-shaped namespace.
-      const cjsExports = executeCjs(resolved, { ...deps });
+      const cjsExports = deps.loadSync(resolved);
       return wrapCjsAsEsmNamespace(cjsExports);
     },
   };
@@ -236,7 +228,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
           from,
         );
       }
-      return deps.loadSync(resolved.id);
+      return deps.loadSync(resolved);
     }) as LoaderRequire;
     req.resolve = (specifier: string): string =>
       resolver.resolve(specifier, { fromFile: from, esm: false }).id;
@@ -266,7 +258,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
           `require() of ES Module ${resolved.id} is not supported. Use import() instead.`,
         );
       }
-      return executeCjs(resolved, { ...deps });
+      return deps.loadSync(resolved);
     },
     async import(specifier, from = cwd) {
       keepaliveRef();

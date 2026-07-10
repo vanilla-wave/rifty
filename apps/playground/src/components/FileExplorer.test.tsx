@@ -68,7 +68,48 @@ const mutations = {
   writeFiles: () => Promise.resolve(),
 };
 
+const emptyVfs = {
+  ...vfs,
+  existsSync: (path: string) => path === '/empty',
+  readdirSync: (path: string) => {
+    if (path !== '/empty') throw new Error(`ENOENT ${path}`);
+    return [];
+  },
+  statSync: (path: string) => {
+    if (path !== '/empty') throw new Error(`ENOENT ${path}`);
+    return { isFile: false, isDirectory: true, size: 0 };
+  },
+};
+
 describe('FileExplorer owner-routed file manager affordances', () => {
+  it('distinguishes a not-yet-loaded tree from a loaded empty workspace', () => {
+    const loading = renderToString(() =>
+      FileExplorer({
+        vfs: emptyVfs,
+        mutations,
+        root: '/empty',
+        visible: true,
+        loaded: false,
+        onOpenFile: () => {},
+      }),
+    );
+    expect(loading).toContain('Loading the workspace from the owner…');
+    expect(loading).not.toContain('No files yet');
+
+    const empty = renderToString(() =>
+      FileExplorer({
+        vfs: emptyVfs,
+        mutations,
+        root: '/empty',
+        visible: true,
+        loaded: true,
+        onOpenFile: () => {},
+      }),
+    );
+    expect(empty).toContain('No files yet — create a file or folder.');
+    expect(empty).not.toContain('Loading the workspace from the owner…');
+  });
+
   it('renders owner-mode create and row mutation controls without exposing snapshot writes', () => {
     const html = renderToString(() =>
       FileExplorer({

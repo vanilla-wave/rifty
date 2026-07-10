@@ -76,8 +76,7 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import {
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
-  seedFilesForStarter,
-  starterById,
+  seedFilesForBaseline,
 } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
@@ -117,6 +116,7 @@ import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
+import { type ScratchDirtyTracker, createScratchDirtyTracker } from './scratch-dirty-tracker.ts';
 import { binNameOf, createPreviewScope, withViteCliArgs, withViteCliEnv } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
@@ -196,7 +196,7 @@ function seedProject(cfg: BootstrapConfig): void {
 
 function seedStarterBaseline(starter: string, root: string): void {
   const fs = syncMirror();
-  for (const [path, content] of Object.entries(seedFilesForStarter(starterById(starter), root))) {
+  for (const [path, content] of Object.entries(seedFilesForBaseline(starter, root))) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
@@ -327,6 +327,8 @@ async function bootShellOwner(opts: {
   readonly devServerWorkerUrl: string;
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
   readonly tsLspWorkerUrl: string;
+  /** Owner VFS mutation provenance → durable scratch dirty bridge. */
+  readonly scratchDirtyTracker: ScratchDirtyTracker;
 }): Promise<void> {
   const {
     cfg,
@@ -339,6 +341,7 @@ async function bootShellOwner(opts: {
     starterGeneratedBaselinePending,
     hiddenEmptyBoot,
     fromScratch,
+    scratchDirtyTracker,
   } = opts;
 
   // The persistent owner is spawned once with the deep-link/default template; a
@@ -919,6 +922,8 @@ async function bootShellOwner(opts: {
   const server = createPtyServer({
     send,
     makeShell,
+    onRunStart: (run) => scratchDirtyTracker.startRun(run),
+    onRunSettled: (run) => scratchDirtyTracker.settleRun(run),
     onDevServerReq: () => previews.publishDev(),
     // ADR-0155: answer a page subscribe by re-emitting the full preview-port set.
     onPreviewReq: () => previews.publish(),
@@ -1106,6 +1111,7 @@ async function bootShellOwner(opts: {
       await ensureStarterInitialCommit(ownerGitVfs(), root);
     },
   );
+  scratchDirtyTracker.bind(() => tearIndexBridge.markActiveScratchDirty());
   kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port });
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
@@ -1183,14 +1189,24 @@ async function bootstrap(): Promise<void> {
   // OpfsFsSync is supported, and a non-isolated host never spawns the owner.
   // Degrade to memory on a surprise OPFS failure rather than bricking boot (mirrors
   // boot.ts). seedProject is idempotent (`if !exists`) → the persisted tree stands.
+  const scratchDirtyTracker = createScratchDirtyTracker();
+  const workspaceId = env.RIFTY_WORKSPACE_ID ?? 'default';
+  let backend: 'opfs' | 'memory' = 'memory';
+  let backendError: unknown;
   try {
-    const backend = await initBackend();
-    const prefix = scopeActiveVfsToWorkspace(env.RIFTY_WORKSPACE_ID ?? 'default');
-    log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
+    backend = await initBackend();
   } catch (err) {
+    backendError = err;
+  }
+  // Scope whichever backend is active exactly once. A scoping failure is not an
+  // OPFS capability failure and stays loud instead of being retried/misreported.
+  const prefix = scopeActiveVfsToWorkspace(workspaceId, scratchDirtyTracker.onWorkspaceMutation);
+  if (backendError === undefined) {
+    log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
+  } else {
     log(
-      `[shell-owner/worker] OPFS init failed, using in-memory (no persistence): ${
-        err instanceof Error ? err.message : String(err)
+      `[shell-owner/worker] OPFS init failed, using in-memory (no persistence) (${prefix}): ${
+        backendError instanceof Error ? backendError.message : String(backendError)
       }\n`,
     );
   }
@@ -1242,6 +1258,7 @@ async function bootstrap(): Promise<void> {
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
     tsLspWorkerUrl,
+    scratchDirtyTracker,
   });
 }
 

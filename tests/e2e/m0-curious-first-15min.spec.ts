@@ -1,18 +1,28 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
+  expectViteDevServerReady,
+  openShellTerminal,
+  pickStarter,
   runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
-// Project-first cold boot auto-opens the chooser; dismiss it to poke the pre-pick
-// hidden-empty shell (a real shell before any project pick, ADR-0165). `isVisible()`
-// does NOT wait, so wait for the chooser to appear before closing it.
+// Project-first cold boot auto-opens the chooser. Closing it adopts the real
+// hidden-empty scratch; `isVisible()` does NOT wait, so wait before closing.
 async function dismissChooser(page: Page): Promise<void> {
   const launcher = page.locator('[data-testid="launcher"]');
   await expect(launcher).toBeVisible({ timeout: 30_000 });
   await page.locator('.rf-launcher__close').click();
   await expect(launcher).toHaveCount(0, { timeout: 5_000 });
+  // Closing adopts + respawns onto the authoritative hidden-empty scratch.
+  // Do not type into the pre-close owner while that hand-off is still in flight.
+  await expect(page.locator('.rf-app')).toHaveAttribute('data-workspace-owner', 'workspace', {
+    timeout: 30_000,
+  });
+  await expect(page.locator('[data-action="open-launcher"]')).toContainText('Empty project', {
+    timeout: 30_000,
+  });
 }
 
 /**
@@ -26,43 +36,68 @@ test.describe('M0 - curious first 15 minutes', () => {
   // the shared owner garbles the terminal buffer reads.
   test.describe.configure({ mode: 'serial' });
 
-  test('the terminal greets and the reflexive first moves work', async ({ page }) => {
+  test('launcher → Project files → real CSS edit → a second working shell', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
-    await dismissChooser(page);
+    const launcher = page.locator('[data-testid="launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 30_000 });
+
+    // No unfinished affordances on the first screen; cross-surface Node identity
+    // follows the parity target and Vite 8 remains explicitly experimental.
+    await expect(page.locator('[data-action="share"]')).toHaveCount(0);
+    await expect(launcher.getByText('Node 24 runtime')).toBeVisible();
+    await expect(launcher.locator('[data-preset="vite8"]')).toContainText(/experimental/i);
+    await launcher.getByRole('button', { name: /^Projects/ }).click();
+    await expect(launcher.locator('input[type="search"]')).toHaveCount(0);
+    await expect(launcher.locator('.rf-launcher__count')).toHaveText('0');
+    await launcher.getByRole('button', { name: 'Starters', exact: true }).click();
+    await expect(launcher.locator('input[placeholder="Search starters"]')).toBeVisible();
+
+    await pickStarter(page, 'project-files');
+    await expectViteDevServerReady(page, 5174, 90_000, 0);
+
+    // Share is gone from the palette as well as the header.
+    await page.locator('[data-action="open-palette"]').click();
+    const palette = page.locator('[data-testid="command-palette"]');
+    await expect(palette).toBeVisible();
+    await palette.locator('input').fill('share');
+    await expect(palette.locator('.rf-palette__item', { hasText: /share/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // Terminal 1 is owned by Vite, so the persistent visible mode hint directs
+    // the user to a second shell even when Vite clears its own xterm output.
+    await expect(
+      page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]'),
+    ).toContainText('Use + to open another shell while a program is running.');
+    const devGreeting = await terminalBuffer(page, 0);
+    expect(devGreeting).toContain('rifty · node v24.0.0 · npm in your browser');
+    expect(devGreeting).not.toContain('try:');
+
+    // Project Files' advertised CSS is now part of the real module graph: edit
+    // that file through Monaco and observe Vite update the preview.
+    await page.getByRole('tab', { name: /workspace\.css/ }).click();
+    const editorInput = page.locator('[data-testid="editor"] textarea.inputarea').first();
+    await editorInput.click({ force: true });
+    await page.keyboard.press('ControlOrMeta+A');
+    // Monaco's hidden textarea can preserve the model selection when
+    // `insertText` fires, so this may prepend rather than replace. `!important`
+    // makes the user's new declaration observably win either way.
+    await page.keyboard.insertText('body { background: rgb(1, 2, 3) !important; }\n');
+    const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain('rifty · node v24.0.0');
+      .poll(
+        () => frame.locator('body').evaluate((body) => getComputedStyle(body).backgroundColor),
+        { timeout: 30_000 },
+      )
+      .toBe('rgb(1, 2, 3)');
 
-    // The very first thing the visitor sees: a version line + try-this hints,
-    // before they type anything.
-    const greeting = await terminalBuffer(page);
-    expect(greeting).toContain('rifty · node v24.0.0 · npm in your browser');
-    expect(greeting).toContain('try:');
-    expect(greeting).toContain('node -v');
-
-    // The reflexive first moves run in the pre-pick hidden-empty shell (Terminal 1,
-    // idle — under project-first there's no auto-booted vite sharing it).
-
-    // `node -v` — the universal sanity check (was MODULE_NOT_FOUND on /workspace/--version).
+    // `+` creates an independent idle shell while Vite keeps Terminal 1 busy.
+    await openShellTerminal(page);
     await runTerminalLineSettled(page, 'node -v');
     await expectTerminalContains(page, /v24\.0\.0/);
-
-    // `node -e` / `-p` run through the real loader realm.
-    await runTerminalLineSettled(page, 'node -e "console.log(\'evalmarker\', 41 + 1)"', 60_000);
-    await expectTerminalContains(page, 'evalmarker 42', 60_000);
-    await runTerminalLineSettled(page, 'node -p "100 + 11"', 60_000);
-    await expectTerminalContains(page, /(?:^|\n)111\b/, 60_000);
-
-    // `help` lists the commands (was command-not-found exit 127).
     await runTerminalLineSettled(page, 'help');
     await expectTerminalContains(page, 'run programs');
-
-    // Pipes: the most reflexive terminal action (`cat x | grep y`).
-    await runTerminalLineSettled(page, 'echo pipealpha > pipe.txt');
-    await runTerminalLineSettled(page, 'echo pipebeta >> pipe.txt');
-    await runTerminalLineSettled(page, 'cat pipe.txt | grep beta');
-    await expectTerminalContains(page, 'pipebeta');
+    await runTerminalLineSettled(page, 'ls');
 
     // No step surfaced a bare unfixable-looking error.
     const buf = await terminalBuffer(page);

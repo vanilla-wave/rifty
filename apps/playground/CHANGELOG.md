@@ -2,8 +2,24 @@
 
 ## [Unreleased]
 
+### Changed
+
+- First-run surfaces now expose only complete paths: Project Files imports its
+  editable CSS, Share and Projects search are hidden, the terminal points to
+  the `+` shell action, and the runtime badge follows the Node 24 parity target.
+- Closing the first-run chooser adopts a durable, truly empty scratch workspace
+  without listing it as a saved project; reload restores its files without
+  booting or waiting for a nonexistent dev server. Terminal-side file mutations,
+  including delayed background jobs, now persist the scratch dirty guard;
+  read-only and Starter boot runs do not.
+- Express, Hono, and Koa pin and run real `nodemon@3.1.14`; source edits restart
+  the app Worker on the same port instead of leaving the first import running.
+
 ### Fixed
 
+- Nodemon's fork-aware event proxy no longer poisons the dev-child lifecycle
+  channel: public Node IPC is JSON-shaped while internal typed control frames
+  keep the raw structured-clone transport (ADR-0211), so preview reaches LIVE.
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder
   `App.tsx` orphaned in the PR #113 merge (biome `noUnusedVariables` failed
   every `pr:check` on a clean main).

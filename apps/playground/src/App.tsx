@@ -46,12 +46,12 @@ import type { EditorApi, EditorDocumentEvent } from './components/editor-host-co
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
-import { copyToClipboard } from './glue/clipboard.ts';
 import {
   degradedBannerVisible,
   saveAffordance,
   storageModeFromBoot,
 } from './glue/degraded-storage.ts';
+import { isEmptyLifecycleBaseline } from './glue/empty-lifecycle-baseline.ts';
 import { readChildren } from './glue/file-tree.ts';
 import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';
 import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';
@@ -64,6 +64,7 @@ import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import { hasPersistedProjectHint, recordProjectPresenceHint } from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
+  activateHiddenEmptyScratch,
   bridgeProjectIndex,
   deleteProjectTree,
   markScratchDirtyIndex,
@@ -82,10 +83,13 @@ import {
 } from './glue/realVite.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
+import { type StarterGroup, seedFilesForBaseline } from './glue/starter.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
-import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
+import {
+  TERMINAL_SECOND_SHELL_HINT,
+  terminalWelcomeBanner,
+} from './glue/terminal-welcome-banner.ts';
 import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import {
@@ -112,6 +116,7 @@ import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
 import {
   DEFAULT_PRESET,
+  EMPTY_LIFECYCLE_DESCRIPTOR,
   PRESETS,
   type Preset,
   presetBootLines,
@@ -363,6 +368,7 @@ export function App(props: AppProps) {
   // worker's VFS is a separate realm the page can't read directly, so it
   // publishes its tree (sans node_modules) over a BroadcastChannel; applied here.
   const snapshotFs = new SnapshotFs(activeRoot());
+  const [snapshotReadyRoot, setSnapshotReadyRoot] = createSignal<string | null>(null);
 
   let editorApi: EditorApi | undefined;
   // Reactive mirror so the LS-wiring effect (ADR-0166 P1.9b) reacts when the
@@ -401,15 +407,6 @@ export function App(props: AppProps) {
     flashToast(message, 'error');
   }
 
-  async function share(): Promise<void> {
-    const url = globalThis.location?.href ?? '';
-    const copied = await copyToClipboard(url);
-    // The link encodes none of the user's edits (real share-by-link is the M13
-    // item) — the toast must not imply the project travels with it.
-    if (copied) flashToast('Link copied — opens this playground', 'success');
-    else flashToast('Could not copy the link to the clipboard', 'error');
-  }
-
   function workspaceArchiveBlocked(): boolean {
     return presetBoot.transitioning() || devServer.status() !== 'stopped';
   }
@@ -438,6 +435,7 @@ export function App(props: AppProps) {
           starter: activeStarterId(),
           starterGeneratedBaselinePending,
           setup: presetForId(activeStarterId()).setup,
+          hiddenEmptyBoot: isEmptyLifecycleBaseline(activeStarterId()),
           onLog: (line) => console.info(line),
         })
       : createUnavailableOwner();
@@ -578,6 +576,7 @@ export function App(props: AppProps) {
         slug,
         starter: activeStarterId(),
         setup: presetForId(activeStarterId()).setup,
+        hiddenEmptyBoot: isEmptyLifecycleBaseline(activeStarterId()),
         onLog: (line) => console.info(line),
       }),
     rebindTerminal: (owner) => manager.rebindOwner(owner),
@@ -648,6 +647,7 @@ export function App(props: AppProps) {
     hasPresenceHint: () => hasPersistedProjectHint(globalThis.localStorage),
     // Read the port at fire time — an owner respawn (switch) moves the live channel.
     postDeleteProjectTree: (id) => deleteProjectTree(workspaceOwner().snapshotPort, id),
+    activateHiddenEmptyScratch: () => activateHiddenEmptyScratch(workspaceOwner().snapshotPort),
     openLauncherOnStarters: () => {
       store.setLauncherTab('starters');
       store.openLauncher();
@@ -955,7 +955,7 @@ export function App(props: AppProps) {
       const write = terminalWriters.get(id);
       for (const line of lines) {
         write?.(`$ ${line}\n`, 'stdout');
-        const exitCode = await dispatchLine(id, line, dims);
+        const exitCode = await dispatchLine(id, line, { ...dims, origin: 'boot' });
         if (exitCode !== 0) break;
       }
     } catch (err) {
@@ -986,14 +986,17 @@ export function App(props: AppProps) {
   // explorer reflects the owner tree (where `npm install` lands) before AND after
   // any vite run. Subscribed once at setup (no signal dependency), torn on unmount.
   createEffect(() => {
-    const unsubscribe = subscribeVfsSnapshot(workspaceOwner().snapshotPort, (frame) => {
+    const owner = workspaceOwner();
+    setSnapshotReadyRoot(null);
+    const unsubscribe = subscribeVfsSnapshot(owner.snapshotPort, (frame) => {
       snapshotFs.update(frame);
+      setSnapshotReadyRoot(frame.root);
       setNodeModulesPresent(frame.nodeModulesPresent);
     });
     // Readiness handshake (ADR-0146 owner republishes its snapshot): ask the owner to publish now — covers
     // the case where the owner came up before this subscription (its startup
     // publish would have been missed), replacing the owner-side retry-storm.
-    requestVfsSnapshot(workspaceOwner().snapshotPort);
+    requestVfsSnapshot(owner.snapshotPort);
     onCleanup(unsubscribe);
   });
 
@@ -1574,6 +1577,9 @@ export function App(props: AppProps) {
   const activeName = createMemo((): string => {
     const id = store.activeId();
     if (id === 'scratch') {
+      if (isEmptyLifecycleBaseline(store.scratch()?.starter)) {
+        return EMPTY_LIFECYCLE_DESCRIPTOR.label;
+      }
       return store.scratch() ? scratchDisplayName(activeGlyph().label) : 'Choose project';
     }
     return store.projects().find((p) => p.id === id)?.name ?? `Missing project (${id})`;
@@ -1600,6 +1606,7 @@ export function App(props: AppProps) {
   // sync snapshot holds project-file content, the async read-port covers the rest.
 
   function presetForId(id: string): Preset {
+    if (isEmptyLifecycleBaseline(id)) return EMPTY_LIFECYCLE_DESCRIPTOR;
     return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
   }
 
@@ -1618,8 +1625,8 @@ export function App(props: AppProps) {
 
   function starterSnapshotEntries(preset: Preset, root: string): VfsSnapshotEntry[] {
     const dirs = new Set<string>();
-    const files = Object.entries(seedFilesForStarter(starterById(preset.id), root)).sort(
-      ([left], [right]) => left.localeCompare(right),
+    const files = Object.entries(seedFilesForBaseline(preset.id, root)).sort(([left], [right]) =>
+      left.localeCompare(right),
     );
     for (const [path] of files) {
       let slash = path.lastIndexOf('/');
@@ -1645,6 +1652,7 @@ export function App(props: AppProps) {
       entries: starterSnapshotEntries(preset, activeRoot()),
       nodeModulesPresent: false,
     });
+    setSnapshotReadyRoot(activeRoot());
   }
 
   function reinitializeTsForPickedPreset(): void {
@@ -2035,13 +2043,6 @@ export function App(props: AppProps) {
       });
     }
     items.push({
-      id: 'act:share',
-      section: 'Commands',
-      label: 'Copy share link',
-      icon: 'copy',
-      run: () => void share(),
-    });
-    items.push({
       id: 'act:export-workspace',
       section: 'Commands',
       label: 'Download workspace archive',
@@ -2170,7 +2171,7 @@ export function App(props: AppProps) {
 
   const terminalModeHint = (): TerminalModeHint => ({
     label: 'Shell',
-    detail: `Commands run in ${activeRoot()}; running programs own stdin.`,
+    detail: `Commands run in ${activeRoot()}; ${TERMINAL_SECOND_SHELL_HINT}`,
   });
   // Mount the preview when the dev server is up/starting OR any node server
   // registered a port (ADR-0155 §3 / ADR-0157 review C1): a `node server.js` with
@@ -2244,10 +2245,6 @@ export function App(props: AppProps) {
         >
           <Icon name="github" size={16} />
         </a>
-        <button type="button" class="rf-share" data-action="share" onClick={() => void share()}>
-          <Icon name="users" size={13} />
-          Share
-        </button>
       </header>
 
       <Show when={capabilities.sufficient} fallback={<CapabilitiesPanel check={capabilities} />}>
@@ -2291,6 +2288,7 @@ export function App(props: AppProps) {
                   vfs={snapshotFs}
                   mutations={explorerMutations}
                   root={activeRoot()}
+                  loaded={snapshotReadyRoot() === activeRoot()}
                   nodeModules={nodeModulesProp()}
                   visible={!layout.sidebarCollapsed()}
                   activePath={activeFilePath()}

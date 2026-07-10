@@ -1,5 +1,18 @@
 import type { ModuleKind } from './resolver.ts';
 
+/** Node-visible metadata object passed to each CommonJS wrapper. */
+export interface CjsModule {
+  id: string;
+  path: string;
+  exports: Record<string, unknown>;
+  filename: string;
+  loaded: boolean;
+  /** First CommonJS parent; absent for a module loaded from a non-CJS entry. */
+  parent?: CjsModule | null;
+  children: CjsModule[];
+  paths: string[];
+}
+
 /**
  * Module registry record. `exports` is shared: CJS modules write to it as a
  * plain object; ESM modules expose it as a `null`-prototype object whose getters
@@ -13,7 +26,7 @@ export interface ModuleRecord {
   /** Mutable slot table for ESM live bindings — `exports` getters read from here. */
   slots: Record<string, unknown>;
   /** For CJS modules, the `module` object passed to the factory. */
-  cjsModule?: { exports: Record<string, unknown> };
+  cjsModule?: CjsModule;
 }
 
 export class ModuleRegistry {

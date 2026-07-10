@@ -386,13 +386,13 @@ A real client-server app: \`express@4\` installed from npm inside a Web Worker,
 serving a static client from the VFS and a JSON API backed by \`node:sqlite\` —
 rifty's DatabaseSync over SQLite compiled to WebAssembly.
 
-- \`src/main.js\` — the server. Edit it, then re-run the dev script from the
-  terminal to restart.
+- \`src/main.js\` — the server. Real nodemon watches it and restarts the app
+  Worker after an edit.
 - \`public/\` — the client the server serves with \`express.static\`.
 - The preview iframe talks to the server through the Service Worker: every
   fetch crosses iframe -> SW -> Worker -> Express -> sqlite.wasm and back.
 
-The database lives in WASM memory: restarting the server resets the rows
+The database lives in WASM memory: a nodemon restart resets the rows
 (OPFS-backed persistence is a tracked follow-up).
 `;
 
@@ -401,6 +401,8 @@ export const EXPRESS_SQLITE_TEMPLATE: NodeServerProjectSpec = {
   displayName: 'Express + SQLite',
   runtime: 'node-server',
   install: { express: '^4.19.0' },
+  devDependencies: { nodemon: '3.1.14' },
+  devRunner: 'nodemon',
   entry: { relativePath: '/src/main.js', content: EXPRESS_SQLITE_SERVER_SOURCE },
   defaultPort: 3210,
   estimatedBootSeconds: 15,

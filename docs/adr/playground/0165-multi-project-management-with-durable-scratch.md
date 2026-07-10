@@ -2,9 +2,47 @@
 
 Status: Accepted
 Date: 2026-06
-Corrected: 2026-06-29
+Corrected: 2026-06-29, 2026-07-09
 
-> TL;DR: Two user entities over the single owner — **Starter** (=today's `Preset`, immutable gallery bundle) and **Project** (named, autosaved, in OPFS) — plus one unnamed **Scratch** draft. On-disk: `/scratch` + `/projects/<id>/` + a project index. Exactly one active root/dev-server. **Switching tears down and respawns the owner** with a new `RIFTY_RFV_ROOT` (the env is spawn-time-only — there is no live re-point). Save CONVERTS scratch→project (tree move, index-pointer flipped last). Reset re-seeds scratch from its Starter bundle (baseline = the registry definition, re-derived, not stored). `ProjectSpec` stays internal plumbing.
+> TL;DR: Two user entities over the single owner — **Starter** (=today's `Preset`, immutable gallery bundle) and **Project** (named, autosaved, in OPFS) — plus one unnamed **Scratch** draft. On-disk: `/scratch` + `/projects/<id>/` + a project index. Exactly one active root/dev-server. **Switching tears down and respawns the owner** with a new `RIFTY_RFV_ROOT` (the env is spawn-time-only — there is no live re-point). Save CONVERTS scratch→project (tree move, index-pointer flipped last). Reset re-derives the scratch baseline: a visible Starter bundle, or the internal empty lifecycle baseline adopted when the first-run chooser is dismissed. `ProjectSpec` stays internal plumbing.
+
+## Correction (2026-07-09): dismissed chooser adopts an empty lifecycle baseline
+
+ADR-0165 stays active; only §1/§6's assumption that every reset baseline is a
+user-facing Starter bundle with an entry file is corrected. The canonical term
+for the exception is **empty lifecycle baseline**: an internal zero-project-file
+baseline used by a real Scratch when the first-run chooser is dismissed. It is
+not a Starter, Preset, Project, or null/ephemeral UI state. A private
+preset-shaped/template-shaped descriptor may satisfy runtime interfaces, but it
+does not enter the Starter registry and does not create a third user entity.
+
+Invariants:
+
+- Dismissal waits for the authoritative index. Only a genuine needs-choice
+  index adopts `/scratch`; a persisted Scratch or active Project wins unchanged.
+- Adoption never seeds or clears `/scratch`. Existing bytes survive and make the
+  adopted Scratch dirty immediately; an absent root becomes a durable clean
+  empty Scratch. Later owner writes use the same dirty protection as any Scratch.
+- The baseline and its unnamed Scratch never render in the Starters gallery or
+  the Projects list/count, including project-list actions such as Save. Picking
+  a visible Starter replaces it with the ordinary visible Scratch lifecycle.
+- Reset derives zero project files: no invented entry, package, README, or
+  default Starter. The workspace owner remains real for shell/file/persistence
+  operations, but restore/adoption starts no dev-server command or preview.
+- Visible Starters are unchanged: each remains a user-facing Preset and its
+  complete bundle still includes the template entry path.
+
+Rejected alternatives:
+
+- Auto-pick or seed the default visible Starter — dismissal is not selection and
+  would invent files the user did not choose.
+- Keep `scratch:null` behind a closed chooser — bytes would exist outside the
+  durable index/dirty guard, so a later Starter pick could silently erase them.
+- Publish a hidden Starter/Project row — makes internal lifecycle state a third
+  user entity and violates the requested empty Projects list.
+- Replace ADR-0165 wholesale — layout, switch, save, migration, degradation, and
+  single-gallery decisions are unchanged; a successor would duplicate active
+  context and create drift for one coupled §1/§6 correction.
 
 ## Context
 
@@ -18,7 +56,7 @@ Load-bearing code constraints (verified, not assumed):
 
 ## Decision
 
-1. **Two user entities + internal runtime (corrected 2026-06-29).** **Starter** = today's `Preset` (immutable bundle: id/label/category/icon/glyph+color/setup/templateId/files[]/openFiles[] + baked snapshot) — the user-facing gallery item. `files[]` is the complete ordinary file bundle for editor-openable preset content and MUST include the template entry path; `openFiles[]` is only the initial tab order. **Project** = `{id, name, starter, editedAt}`, named, autosaved, in OPFS. **Scratch** = `{starter, dirty, editedAt} | null`, at most one, the current unnamed draft. `ProjectSpec` (vite / node-server) stays INTERNAL plumbing, not a UI entity; only `templateId` crosses the realm boundary (env), each realm re-resolves via `resolveProjectSpec` (throws on unknown — ADR-0078, no silent fallback).
+1. **Two user entities + internal runtime (corrected 2026-06-29/2026-07-09).** **Starter** = today's `Preset` (immutable bundle: id/label/category/icon/glyph+color/setup/templateId/files[]/openFiles[] + baked snapshot) — the user-facing gallery item. `files[]` is the complete ordinary file bundle for editor-openable preset content and MUST include the template entry path; `openFiles[]` is only the initial tab order. **Project** = `{id, name, starter, editedAt}`, named, autosaved, in OPFS. **Scratch** = `{starter, dirty, editedAt} | null`, at most one, the current unnamed draft. The empty lifecycle baseline correction above is the sole non-Starter baseline; its reserved internal identifier may occupy the persisted `starter` slot without making it a gallery Starter. `ProjectSpec` (vite / node-server) stays INTERNAL plumbing, not a UI entity; only `templateId` crosses the realm boundary (env), each realm re-resolves via `resolveProjectSpec` (throws on unknown — ADR-0078, no silent fallback).
 
 2. **On-disk OPFS layout** evolves from single `/workspace` to: `/scratch/<tree>` (active unnamed draft) + `/projects/<id>/<tree>` (named) + a **project index** file (`[{id,name,starter,editedAt}]` + `scratch` pointer + `activeId`). The active root is derived state `rootForId(activeId)` = `/scratch` or `/projects/<id>/`. The `WORKSPACE='/workspace'` constant is DELETED.
 
@@ -28,7 +66,7 @@ Load-bearing code constraints (verified, not assumed):
 
 5. **Install-stamp key becomes project-scoped** (evolves ADR-0135 §4 clause): `slug = projectId` (or `'scratch'`), not `template.id`. Two projects from the same Starter share `templateId` but MUST NOT share `node_modules` (slug-only key would reuse project-A's tree for project-B → wrong deps / `EBROKENLOCK`). The `devServer.boot` cleanup (`real-vite-bootstrap.ts:197`) must fire on **root/projectId change**, not only `templateId` change. Baked snapshots stay **template-keyed** (a shared Starter artifact, restored into each per-project root with `replace:true`). node_modules stays in-place per project, no purge on switch (local disk + baked snapshots are rifty's edge-cache equivalent); disk growth → quota/GC backlog.
 
-6. **Baseline = the Starter bundle, re-derived (not stored).** The immutable baseline for reset is the built-in Starter's registry definition, looked up by `starter` id — NO extra per-project OPFS artifact, survives reload, can't drift. Tracked conceptually only for the active scratch. **Reset** = one-shot WHOLE-workspace re-seed from that bundle (equivalent to re-picking the Starter), NOT a continuous diff and NOT auto-promote (both rejected in session). Per-file revert needs source provenance → backlog (`per-file-revert-to-starter`, extends `template-edit-provenance-reset`). The same bundle artifact later serves "export project as Starter" (M13).
+6. **Baseline is re-derived, not stored (corrected 2026-07-09).** For a visible Starter, the immutable reset baseline is its built-in registry bundle, looked up by `starter` id — NO extra per-project OPFS artifact, survives reload, can't drift. For the empty lifecycle baseline, the same lookup derives zero project files. Tracked conceptually only for the active scratch. **Reset** = one-shot WHOLE-workspace re-seed from that baseline (equivalent to re-picking a visible Starter, or clearing back to a truly empty workspace), NOT a continuous diff and NOT auto-promote (both rejected in session). Per-file revert needs source provenance → backlog (`per-file-revert-to-starter`, extends `template-edit-provenance-reset`). A visible Starter bundle later serves "export project as Starter" (M13); the empty lifecycle baseline is not exportable as a Starter.
 
 7. **Save = CONVERT, atomic-safe.** Scratch → named project is a tree MOVE (`/scratch` → `/projects/<newid>/`), scratch=null, push to index, `activeId=newId`. OPFS has no cross-dir atomic rename in the sync mirror, so ordering is **copy → flip index pointer LAST → delete source**, with a boot-time recovery check for a half-move (a `/projects/<id>/` present but un-indexed, or a `scratch` pointer to a moved tree, is reconciled, never silently lost). Named projects **autosave** (no Save button, no dirty state, subtle toast); cadence → backlog (`autosave-throttle-policy`). Name-on-save = dialog, default = Starter's project name, `+N` on collision.
 

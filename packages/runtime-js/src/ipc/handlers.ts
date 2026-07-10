@@ -19,7 +19,7 @@
  */
 
 import type { SyncRpcDispatcher } from '@riftydev/kernel';
-import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { resolveNodeEntryPath } from '../internal/node-entry-path.ts';
 import { type NodeEntryRunner, makeRecursiveRunner } from './recursive-runner.ts';
 
 /** Argument shape the runtime-js `execSync` shim writes into the request. */
@@ -89,7 +89,7 @@ export function installRuntimeJsExecSyncHandler(
     // as a PACKAGE specifier (Node-faithful), so `execSync('node build.js')` must
     // resolve it to `<cwd>/build.js` before the runner — exactly Node's `argv[1]`.
     const rawArg = tokens[1] ?? '';
-    const scriptPath = normalizePath(isAbsolute(rawArg) ? rawArg : joinPath(cwd, rawArg));
+    const scriptPath = resolveNodeEntryPath(cwd, rawArg);
     // ENOENT pre-check ONLY: a missing script surfaces a proper ENOENT here
     // rather than as an opaque child loader miss. The bytes are discarded — the
     // runner re-reads the source through the module loader (ADR-0137: shebang

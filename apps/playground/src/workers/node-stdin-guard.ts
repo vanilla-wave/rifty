@@ -3,7 +3,7 @@
  * Fidelity rule).
  *
  * The pre-entry seam gives the child ONE spec-seeded `process` whose `process.stdin`
- * is a real EventEmitter fed by its stdin MessagePort (`makeStdinReader`), but the
+ * is a real Readable fed by its stdin MessagePort (`makeStdinReader`), but the
  * owner's node executor does NOT yet forward the terminal session's stdin to that
  * port. Without this guard a program doing `process.stdin.on('data', …)` / `readline`
  * / `setRawMode` would HANG silently waiting for input that never arrives — a silent
@@ -18,7 +18,7 @@
  * the `'data'` AND `'readable'` events, the two consume idioms; `'end'`/`'close'`/
  * defensive listeners stay live), read/pipe/[Symbol.asyncIterator], and the
  * flow/encoding controls resume/setEncoding/setRawMode (the real reader implements
- * them as working no-ops/flushers — they would otherwise APPEAR to work).
+ * the first two — they would otherwise APPEAR to work).
  *
  * `pause()` is deliberately NOT loud: in Node `process.stdin` starts paused and a
  * defensive `process.stdin.pause()` on an unread stream is a no-op that lets the
@@ -92,7 +92,7 @@ export function installLoudStdin(proc: ProcessWithStdin): void {
   }
 
   // Readable + flow/encoding consume surface: always loud (the real reader's
-  // resume=flush / pause/setEncoding no-ops would otherwise silently "succeed").
+  // resume/setEncoding would otherwise silently "succeed").
   for (const method of ALWAYS_LOUD) {
     (stdin as Record<string, unknown>)[method] = loud;
   }

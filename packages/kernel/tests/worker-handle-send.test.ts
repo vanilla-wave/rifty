@@ -1,9 +1,9 @@
 /**
- * ADR-0045 — Worker-process IPC: parent↔child `MessagePort` pair with
+ * ADR-0211 — Worker-process IPC: parent↔child `MessagePort` pair with
  * `send` / `disconnect` / `'message'` / `'disconnect'` surface on the
  * Worker-backed {@link WorkerProcessHandle}.
  *
- * Before ADR-0045 this file was a negative-type guard: it asserted that
+ * Before fork IPC landed this file was a negative-type guard: it asserted that
  * the Worker-backed handle did NOT carry `send`, with an `@ts-expect-error`
  * that would flip the test on the day fork-IPC landed. That day is today.
  *
@@ -52,7 +52,7 @@ class FakeWorker implements WorkerLike {
   }
 }
 
-describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
+describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
   let factoryWorker: FakeWorker | undefined;
 
   beforeEach(() => {
@@ -111,6 +111,27 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.disconnect();
     expect(disconnectEvents).toBe(1);
     expect(handle.send({ a: 2 })).toBe(false);
+
+    handle.kill('SIGTERM');
+  });
+
+  it('a structured-clone failure throws without disconnecting the raw transport', () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    let disconnects = 0;
+    handle.on('disconnect', () => {
+      disconnects++;
+    });
+
+    expect(() => handle.send({ uncloneable() {} })).toThrow(/clone/i);
+    expect(disconnects).toBe(0);
+    expect(handle.send({ after: true })).toBe(true);
 
     handle.kill('SIGTERM');
   });

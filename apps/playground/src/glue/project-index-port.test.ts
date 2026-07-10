@@ -1,6 +1,7 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  activateHiddenEmptyScratch,
   markScratchDirtyIndex,
   newScratchIndex,
   renameProjectIndex,
@@ -171,6 +172,36 @@ describe('project-index bridge (ADR-0165 realm split)', () => {
       tearOwner();
       tearOwner();
     }).not.toThrow();
+  });
+});
+
+describe('hidden-empty scratch activation', () => {
+  it('adopts existing /scratch bytes without re-seeding or wiping them', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    fs.writeFileSync('/scratch/kept.txt', new TextEncoder().encode('keep me'));
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    const index = await activateHiddenEmptyScratch(PORT);
+
+    expect(index).toMatchObject({
+      activeId: 'scratch',
+      scratch: { starter: 'hidden-empty', dirty: true },
+    });
+    expect(new TextDecoder().decode(fs.readFileBytesSync('/scratch/kept.txt'))).toBe('keep me');
+    tearOwner();
+  });
+
+  it('lets a persisted active project win instead of replacing it with hidden scratch', async () => {
+    const fs = ownerFs();
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    const index = await activateHiddenEmptyScratch(PORT);
+
+    expect(index.activeId).toBe('p-1');
+    expect(index.scratch).toBeNull();
+    expect(index.projects).toHaveLength(1);
+    tearOwner();
   });
 });
 
@@ -473,6 +504,32 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
 
     dispose();
     tearOwner();
+  });
+
+  it('owner-side scratch dirty signal persists + publishes without reseeding terminal-written bytes', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    fs.writeFileSync('/scratch/note.txt', enc.encode('from terminal'));
+    writeIndex(fs, '/', {
+      activeId: 'scratch',
+      scratch: { starter: 'hidden-empty', dirty: false, editedAt: 'no edits yet' },
+      projects: [],
+    });
+    const ownerPort = serveProjectIndex(PORT, fs, '/');
+    const received: ProjectIndex[] = [];
+    const { dispose } = subscribeProjectIndex(PORT, (index) => received.push(index));
+    await Promise.resolve();
+
+    ownerPort.markActiveScratchDirty();
+    await vi.waitFor(() =>
+      expect(received.at(-1)?.scratch).toMatchObject({ starter: 'hidden-empty', dirty: true }),
+    );
+
+    expect(readUtf8(fs, '/scratch/note.txt')).toBe('from terminal');
+    expect(loadIndex(fs, '/').scratch).toMatchObject({ starter: 'hidden-empty', dirty: true });
+
+    dispose();
+    ownerPort();
   });
 
   it('index-mark-scratch-dirty synthesizes the scratch entry when the tree exists but the index is cold-empty', async () => {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
+import { HONO_API_TEMPLATE } from './hono-api.ts';
+import { KOA_API_TEMPLATE } from './koa-api.ts';
 import {
   type NodeCliProjectSpec,
   type NodeServerProjectSpec,
@@ -218,6 +221,32 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
     expect(pkg.scripts).toEqual({ dev: 'node src/main.js', start: 'node src/main.js' });
     expect(pkg.dependencies).toEqual(NODE_FIXTURE.install);
     expect(pkg.type).toBe('module');
+  });
+
+  it.each([
+    ['Express', EXPRESS_SQLITE_TEMPLATE],
+    ['Hono', HONO_API_TEMPLATE],
+    ['Koa', KOA_API_TEMPLATE],
+  ])('%s runs the pinned real nodemon CLI for dev and plain node for start', (_name, spec) => {
+    const pkg = JSON.parse(buildProjectPackageJson(spec).json) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(pkg.devDependencies).toEqual({ nodemon: '3.1.14' });
+    expect(pkg.scripts.dev).toBe(
+      'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+    );
+    expect(pkg.scripts.start).toBe('node src/main.js');
+  });
+
+  it('keeps ordinary node-server templates on direct node execution', () => {
+    const pkg = JSON.parse(buildProjectPackageJson(NODE_FIXTURE).json) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    expect(pkg.scripts).toEqual({ dev: 'node src/main.js', start: 'node src/main.js' });
+    expect(pkg.devDependencies).toBeUndefined();
   });
 
   it('carries the runtime discriminant + sqlite flag for the worker branch', () => {

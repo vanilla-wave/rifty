@@ -44,7 +44,7 @@ export type ProcessHandleKind = 'same-realm' | 'worker';
 /**
  * Wire frame for the fork-mode IPC channel between
  * {@link WorkerProcessHandle} and the worker-side `process` shim
- * (ADR-0045). Both directions share the vocabulary so either peer can post
+ * (ADR-0211). Both directions share the vocabulary so either peer can post
  * either kind. No version field — parent and child are built together.
  */
 export type IpcFrame =
@@ -54,7 +54,7 @@ export type IpcFrame =
 /**
  * Fields common to both spawn branches. Each variant carries its own `send`
  * signature: same-realm routes through an in-realm `EventEmitter`,
- * Worker-backed through a `MessagePort` pair (ADR-0045). Callers narrow on
+ * Worker-backed through a `MessagePort` pair (ADR-0211). Callers narrow on
  * `handle.kind` first.
  */
 interface ProcessHandleBase extends EventEmitter {
@@ -84,7 +84,7 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
 
 /**
  * Worker-backed `spawnWorker(...)` handle — `ports` is always present.
- * Carries fork-mode IPC (ADR-0045) over the dedicated parent↔child
+ * Carries raw fork-mode IPC (ADR-0211) over the dedicated parent↔child
  * `MessagePort` pair: {@link send} posts a frame to the worker, the worker's
  * reciprocal `process.send` surfaces as a `'message'` event here, and
  * {@link disconnect} closes the channel.
@@ -117,15 +117,15 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
    */
   stdin(): Writable;
   /**
-   * Send an IPC message to the worker child (ADR-0045). Returns `false`
+   * Send a raw IPC message to the worker child (ADR-0211). Returns `false`
    * after `disconnect()` or worker exit (matches Node's `subprocess.send`
-   * behaviour); `true` when the message is posted. Structured-clone
-   * failures surface asynchronously as `'messageerror'` on the handle —
-   * they do NOT downgrade the return value to `false`.
+   * behaviour); `true` when the message is posted. A structured-clone failure
+   * throws synchronously without disconnecting the channel (ADR-0211); the
+   * next cloneable send can still return `true`.
    */
   send(message: unknown): boolean;
   /**
-   * Close the IPC channel (ADR-0045). Idempotent. Posts an `ipc:disconnect`
+   * Close the IPC channel (ADR-0211). Idempotent. Posts an `ipc:disconnect`
    * frame to the worker, closes the parent-side IPC port, and emits
    * `'disconnect'` on this handle. Subsequent `send` calls return `false`.
    * Called automatically on worker exit (natural or terminate).
@@ -169,13 +169,18 @@ export class ProcessManager {
   private nextPid = 2; // PID 1 is reserved for the main worker.
   private readonly table: Map<number, ProcessRecord> = new Map();
 
+  private allocatePid(ppid: number): number {
+    if (this.nextPid === ppid) this.nextPid += 1;
+    return this.nextPid++;
+  }
+
   spawn(
     command: string,
     handler: (io: ProcessIO) => unknown | Promise<unknown>,
     ppid = 1,
     options: SpawnOptions = {},
   ): ProcessHandle {
-    const pid = this.nextPid++;
+    const pid = this.allocatePid(ppid);
     const parentToChild = new EventEmitter();
     const childToParent = new EventEmitter();
     const abortController = new AbortController();
@@ -299,7 +304,7 @@ export class ProcessManager {
 
     // Allocate PID from the same counter `spawn` uses so the PID space
     // stays unified across same-realm and Worker-backed children.
-    const pid = this.nextPid++;
+    const pid = this.allocatePid(ppid);
 
     const spawnResult = spawnKernelWorker({ ...spec, cwd: initialCwd }, { pid, ppid });
 
@@ -334,7 +339,7 @@ export class ProcessManager {
       #stderrReadable: Readable | null = null;
       #stdinWritable: Writable | null = null;
 
-      // ADR-0045: parent-side IPC port lifecycle. `#ipcStarted` flips on the
+      // ADR-0211: parent-side IPC port lifecycle. `#ipcStarted` flips on the
       // first `onmessage` wiring; `#ipcDisconnected` blocks `send` /
       // `disconnect` from posting after teardown.
       #ipcStarted = false;
@@ -400,22 +405,14 @@ export class ProcessManager {
         }
       }
       send(message: unknown): boolean {
-        // Node's `subprocess.send` returns `false` once the channel is closed.
-        // Structured-clone failures bubble out as 'messageerror' on the worker
-        // side, not via this return value.
+        // Raw kernel transport (ADR-0211): Node JSON shaping lives in
+        // runtime-js. Clone failure throws without disconnecting this channel.
         if (this.#ipcDisconnected || this.exitCode !== null || this.signalCode !== null) {
           return false;
         }
-        try {
-          const frame: IpcFrame = { kind: 'ipc:message', payload: message };
-          ports.ipc.postMessage(frame);
-          return true;
-        } catch {
-          // postMessage throws synchronously if the port was disentangled
-          // (peer closed it). Treat as disconnect, return a stable `false`.
-          this._tearDownIpc();
-          return false;
-        }
+        const frame: IpcFrame = { kind: 'ipc:message', payload: message };
+        ports.ipc.postMessage(frame);
+        return true;
       }
       disconnect(): void {
         if (this.#ipcDisconnected) return;

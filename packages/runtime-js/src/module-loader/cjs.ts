@@ -1,11 +1,11 @@
 import { NotImplementedError } from '@riftydev/io';
-import { dirname } from '@riftydev/vfs';
+import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
-import type { ModuleRegistry } from './registry.ts';
+import type { CjsModule, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
@@ -39,7 +39,7 @@ export interface CjsLoaderDeps {
    * CJS can only loadSync if the dep is itself CJS/JSON; importing ESM from
    * CJS requires `import()` (per Node).
    */
-  loadSync(id: string): Record<string, unknown>;
+  loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown>;
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
@@ -1751,118 +1751,195 @@ function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteC
   }
 }
 
-export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
+function moduleLookupPaths(filename: string): string[] {
+  const paths: string[] = [];
+  let current = dirname(filename);
+  for (;;) {
+    const candidate =
+      basename(current) === 'node_modules' ? current : joinPath(current, 'node_modules');
+    if (paths.at(-1) !== candidate) paths.push(candidate);
+    if (current === '/') return paths;
+    current = dirname(current);
+  }
+}
+
+const cjsParents = new WeakMap<CjsModule, CjsModule | null | undefined>();
+
+class CjsModuleObject implements CjsModule {
+  id: string;
+  path: string;
+  exports: Record<string, unknown>;
+  filename: string;
+  loaded: boolean;
+  children: CjsModule[];
+  paths: string[];
+
+  constructor(id: string, parent?: CjsModule | null) {
+    // Assignment order matches Object.keys(new NodeModule()). `parent` lives on
+    // the shared prototype, as Node's non-enumerable deprecated accessor does.
+    this.id = id;
+    this.path = dirname(id);
+    this.exports = {};
+    this.filename = id;
+    this.loaded = false;
+    this.children = [];
+    this.paths = moduleLookupPaths(id);
+    cjsParents.set(this, parent);
+  }
+
+  get parent(): CjsModule | null | undefined {
+    return cjsParents.get(this);
+  }
+
+  set parent(value: CjsModule | null | undefined) {
+    cjsParents.set(this, value);
+  }
+}
+
+const parentDescriptor = Object.getOwnPropertyDescriptor(CjsModuleObject.prototype, 'parent');
+if (parentDescriptor !== undefined) {
+  Object.defineProperty(CjsModuleObject.prototype, 'parent', {
+    ...parentDescriptor,
+    configurable: false,
+  });
+}
+
+function createCjsModule(id: string, parent?: CjsModule | null): CjsModule {
+  return new CjsModuleObject(id, parent);
+}
+
+/** One parent→child graph boundary for fresh, cached, and cyclic requires. */
+function attachCjsChild(parent: CjsModule | undefined, child: CjsModule): void {
+  if (parent !== undefined && !parent.children.includes(child)) parent.children.push(child);
+}
+
+function detachFailedCjsChild(parent: CjsModule | undefined, child: CjsModule): void {
+  if (parent === undefined) return;
+  const index = parent.children.indexOf(child);
+  if (index !== -1) parent.children.splice(index, 1);
+}
+
+export function executeCjs(
+  resolved: ResolvedModule,
+  deps: CjsLoaderDeps,
+  parent?: CjsModule,
+): Record<string, unknown> {
   // Guard BEFORE touching the registry so repeated require() calls throw
   // idempotently, not return a stale loading record (ADR-0052 D1 alt-C).
   if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
 
   const { registry } = deps;
   const existing = registry.get(resolved.id);
-  if (existing && existing.state === 'loaded') return existing.exports;
-  // Cycle: re-entry mid-execution — hand back the half-populated exports so
-  // the cyclic dep sees what's been set so far.
-  if (existing && existing.state === 'loading') {
-    return existing.cjsModule?.exports ?? existing.exports;
+  if (existing && (existing.state === 'loaded' || existing.state === 'loading')) {
+    const cached = existing.cjsModule;
+    if (cached === undefined) {
+      throw new Error(`CJS registry invariant: ${resolved.id} has no module object`);
+    }
+    // Node links cached modules into every requiring parent's children while
+    // preserving the first module.parent. This branch also handles cycles.
+    attachCjsChild(parent, cached);
+    return cached.exports;
   }
-  const record = existing ?? registry.getOrCreate(resolved.id, 'cjs');
+  if (existing?.state === 'errored') registry.invalidate(resolved.id);
+  const record = registry.getOrCreate(resolved.id, 'cjs');
 
-  if (resolved.kind === 'json') {
-    record.exports = JSON.parse(resolved.source) as Record<string, unknown>;
-    record.cjsModule = { exports: record.exports };
-    record.state = 'loaded';
-    return record.exports;
-  }
-
-  if (resolved.kind === 'text') {
-    // Text-asset import (ADR-0067): the module value IS the raw file contents.
-    // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
-    // routes here, then `wrapCjsAsEsmNamespace` maps the non-object export to
-    // `default`.
-    record.exports = resolved.source as unknown as Record<string, unknown>;
-    record.cjsModule = { exports: record.exports };
-    record.state = 'loaded';
-    return record.exports;
-  }
-
-  // Expose the half-populated exports so a CJS cycle re-entering via require()
-  // during this module's execution sees it.
-  const moduleObject: { exports: Record<string, unknown> } = { exports: Object.create(null) };
+  // Register and link before evaluating the body. A recursive require sees
+  // this exact object with loaded=false and the current partial exports.
+  const moduleObject = createCjsModule(resolved.id, parent);
   record.cjsModule = moduleObject;
   record.exports = moduleObject.exports;
+  record.state = 'loading';
+  attachCjsChild(parent, moduleObject);
 
-  const require = (specifier: string): unknown => {
-    const dep = deps.resolve(specifier, resolved.id, false);
-    if (dep.kind === 'esm') {
+  try {
+    if (resolved.kind === 'json') {
+      moduleObject.exports = JSON.parse(resolved.source) as Record<string, unknown>;
+      record.exports = moduleObject.exports;
+      moduleObject.loaded = true;
+      record.state = 'loaded';
+      return moduleObject.exports;
+    }
+
+    if (resolved.kind === 'text') {
+      // Text-asset import (ADR-0067): the module value IS the raw file contents.
+      moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
+      record.exports = moduleObject.exports;
+      moduleObject.loaded = true;
+      record.state = 'loaded';
+      return moduleObject.exports;
+    }
+
+    const require = (specifier: string): unknown => {
+      const dep = deps.resolve(specifier, resolved.id, false);
+      if (dep.kind === 'esm') {
+        throw new ModuleLoadError(
+          'UNSUPPORTED_PROTOCOL',
+          specifier,
+          `require() of ES Module ${dep.id} from ${resolved.id} is not supported. Use dynamic import() instead.`,
+          resolved.id,
+        );
+      }
+      return deps.loadSync(dep, moduleObject);
+    };
+    require.resolve = (specifier: string): string => deps.resolve(specifier, resolved.id, false).id;
+
+    const __filename = resolved.id;
+    const __dirname = dirname(resolved.id);
+    const dynamicImport = async (specifier: unknown): Promise<Record<string, unknown>> => {
+      keepaliveRef();
+      try {
+        const dep = deps.resolve(toDynamicImportSpecifier(specifier), resolved.id, true);
+        return await deps.loadAsync(dep.id);
+      } finally {
+        keepaliveUnref();
+      }
+    };
+
+    type CjsFactory = (
+      module: CjsModule,
+      exports: Record<string, unknown>,
+      require: (s: string) => unknown,
+      __filename: string,
+      __dirname: string,
+      __riftyDynamicImport: (s: unknown) => Promise<Record<string, unknown>>,
+      __riftyFunction: FunctionConstructor,
+    ) => void;
+    let fn: CjsFactory;
+    const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
+    const dynamicImportHelperName = uniqueHelperName(resolved.source, '__riftyDynamicImport');
+    const functionHelperName = uniqueHelperName(
+      resolved.source,
+      '__riftyFunction',
+      new Set([dynamicImportHelperName]),
+    );
+    const source = rewriteCjsFunctionConstructorReferences(
+      rewriteDynamicImports(resolved.source, resolved.id, dynamicImportHelperName),
+      resolved.id,
+      functionHelperName,
+    );
+    try {
+      fn = new Function(
+        'module',
+        'exports',
+        'require',
+        '__filename',
+        '__dirname',
+        dynamicImportHelperName,
+        functionHelperName,
+        `${source}\n//# sourceURL=${resolved.id}`,
+      ) as CjsFactory;
+    } catch (err) {
+      // `new Function` SyntaxError has no file context — surface a directed error
+      // naming the module and offending line (mirrors the ESM path in esm.ts).
+      const msg = (err as Error).message ?? String(err);
       throw new ModuleLoadError(
-        'UNSUPPORTED_PROTOCOL',
-        specifier,
-        `require() of ES Module ${dep.id} from ${resolved.id} is not supported. Use dynamic import() instead.`,
+        'SYNTAX_ERROR',
+        resolved.id,
+        `Failed to compile CJS module ${resolved.id}: ${msg}${snippetForSource(resolved.source, (err as Error).stack ?? '')}`,
         resolved.id,
       );
     }
-    return deps.loadSync(dep.id);
-  };
-  require.resolve = (specifier: string): string => deps.resolve(specifier, resolved.id, false).id;
 
-  const __filename = resolved.id;
-  const __dirname = dirname(resolved.id);
-  const dynamicImport = async (specifier: unknown): Promise<Record<string, unknown>> => {
-    keepaliveRef();
-    try {
-      const dep = deps.resolve(toDynamicImportSpecifier(specifier), resolved.id, true);
-      return await deps.loadAsync(dep.id);
-    } finally {
-      keepaliveUnref();
-    }
-  };
-
-  type CjsFactory = (
-    module: { exports: Record<string, unknown> },
-    exports: Record<string, unknown>,
-    require: (s: string) => unknown,
-    __filename: string,
-    __dirname: string,
-    __riftyDynamicImport: (s: unknown) => Promise<Record<string, unknown>>,
-    __riftyFunction: FunctionConstructor,
-  ) => void;
-  let fn: CjsFactory;
-  const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
-  const dynamicImportHelperName = uniqueHelperName(resolved.source, '__riftyDynamicImport');
-  const functionHelperName = uniqueHelperName(
-    resolved.source,
-    '__riftyFunction',
-    new Set([dynamicImportHelperName]),
-  );
-  const source = rewriteCjsFunctionConstructorReferences(
-    rewriteDynamicImports(resolved.source, resolved.id, dynamicImportHelperName),
-    resolved.id,
-    functionHelperName,
-  );
-  try {
-    fn = new Function(
-      'module',
-      'exports',
-      'require',
-      '__filename',
-      '__dirname',
-      dynamicImportHelperName,
-      functionHelperName,
-      `${source}\n//# sourceURL=${resolved.id}`,
-    ) as CjsFactory;
-  } catch (err) {
-    // `new Function` SyntaxError has no file context — surface a directed error
-    // naming the module and offending line (mirrors the ESM path in esm.ts).
-    record.state = 'errored';
-    const msg = (err as Error).message ?? String(err);
-    throw new ModuleLoadError(
-      'SYNTAX_ERROR',
-      resolved.id,
-      `Failed to compile CJS module ${resolved.id}: ${msg}${snippetForSource(resolved.source, (err as Error).stack ?? '')}`,
-      resolved.id,
-    );
-  }
-
-  try {
     fn.call(
       moduleObject.exports,
       moduleObject,
@@ -1873,15 +1950,20 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
       dynamicImport,
       routedConstructors.Function,
     );
+
+    // Exports may have been reassigned (`module.exports = ...`); re-point.
+    record.exports = moduleObject.exports;
+    moduleObject.loaded = true;
+    record.state = 'loaded';
+    return moduleObject.exports;
   } catch (err) {
+    // Node removes a failed module from both cache and its direct parent's
+    // children so a retry creates and links one fresh Module object.
     record.state = 'errored';
+    detachFailedCjsChild(parent, moduleObject);
+    registry.invalidate(resolved.id);
     throw err;
   }
-
-  // Exports may have been reassigned (`module.exports = ...`); re-point.
-  record.exports = moduleObject.exports;
-  record.state = 'loaded';
-  return moduleObject.exports;
 }
 
 function toDynamicImportSpecifier(specifier: unknown): string {

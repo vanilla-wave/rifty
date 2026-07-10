@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORY_ORDER,
   DEFAULT_PRESET,
+  EMPTY_LIFECYCLE_DESCRIPTOR,
   PRESETS,
   type Preset,
   presetBootLines,
@@ -31,6 +32,18 @@ function presetFileContent(preset: Preset, path: string): string {
 }
 
 describe('playground presets', () => {
+  it('keeps the honest empty lifecycle preset internal and gives it no boot command', () => {
+    expect(EMPTY_LIFECYCLE_DESCRIPTOR.id).toBe('hidden-empty');
+    expect(EMPTY_LIFECYCLE_DESCRIPTOR.files).toEqual([]);
+    expect(EMPTY_LIFECYCLE_DESCRIPTOR.openFiles).toEqual([]);
+    expect(PRESETS).not.toContain(EMPTY_LIFECYCLE_DESCRIPTOR);
+    expect(PRESETS.some((preset) => preset.id === EMPTY_LIFECYCLE_DESCRIPTOR.id)).toBe(false);
+    expect(presetBootLines(EMPTY_LIFECYCLE_DESCRIPTOR, '/scratch')).toEqual([]);
+    expect(
+      restoreBootLines({ line: 'vite', cwd: '/scratch' }, EMPTY_LIFECYCLE_DESCRIPTOR, '/scratch'),
+    ).toEqual([]);
+  });
+
   it('offers file-oriented project examples alongside the full real npm project demo', () => {
     expect(PRESETS.length).toBeGreaterThanOrEqual(3);
     const filePresets = PRESETS.filter((preset) => preset.category === 'Files + modules');
@@ -48,9 +61,16 @@ describe('playground presets', () => {
     expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).toContain(
       "from './project-summary.js'",
     );
+    expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).toContain(
+      "import './workspace.css'",
+    );
+    expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).not.toContain(
+      'ensureStyle',
+    );
     expect(projectFiles && presetFileContent(projectFiles, 'src/main.js')).not.toContain(
       '@vite-ignore',
     );
+    expect(projectFiles?.openFiles).toContain('src/workspace.css');
     const nodeWorker = PRESETS.find((preset) => preset.id === 'node-worker');
     expect(nodeWorker && presetFileContent(nodeWorker, 'src/main.js')).toContain("new URL('src/");
     expect(nodeWorker && presetFileContent(nodeWorker, 'src/main.js')).toContain('await import(');

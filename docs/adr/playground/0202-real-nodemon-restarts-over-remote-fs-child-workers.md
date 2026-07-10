@@ -25,12 +25,16 @@ server lifetime, stdio inheritance, and deterministic teardown on restart.
 3. Generic `spawn('node', …)` / `fork()` uses a node-entry Worker only when the
    current kernel dispatcher is registered as an `fs.*` relay. The child gets
    `RIFTY_REMOTE_FS=1`; a server-capable fork also gets `RIFTY_NODE_SERVE=1`.
-   Realms without that capability retain the loud `NotImplementedError`.
+   When that Worker route is available but the dispatcher lacks the relay, the
+   call throws `NotImplementedError`. Environments without a Worker route keep
+   ADR-0011's truthful same-realm fallback over the local VFS mirror.
 4. Worker-child stdout/stderr honor writable `stdio` targets, so nodemon's
-   inherited streams reach the terminal. The browser process table implements
-   the `ps -A -o ppid,pid` subset from real kernel records; this lets
-   `pstree.remy` observe that the direct app worker has no descendants instead
-   of installing an always-empty fake shim.
+   inherited streams reach the terminal. Redirected/inherited descriptors are
+   `null` on the public `ChildProcess`; pipes stay exposed. `fork()` defaults to
+   inherited fd 0/1/2 and `silent:true` selects pipes, matching Node. The
+   browser process table implements bare `ps` as a truthful empty terminal
+   selection and `ps -A -o ppid,pid` from live kernel records; this lets
+   `pstree.remy` observe the direct app worker without an empty descendant shim.
 5. Killing the app terminates its Worker realm. The realm owns its net registry
    and preview responder, so the port is released before nodemon starts the next
    child. Rapid edits converge through nodemon's own watcher/debounce behavior.
@@ -42,7 +46,8 @@ server lifetime, stdio inheritance, and deterministic teardown on restart.
 - A node child sees the same VFS as its parent while preserving the
   single-OPFS-writer invariant through the existing synchronous relay.
 - `child_process` gains only the process-listing command subset required by the
-  installed tool; unsupported commands remain loud ENOENT.
+  installed tool. Unsupported `ps` formats throw a directed
+  `NotImplementedError`; unknown executables retain ENOENT/127.
 - From-scratch server starters install one additional dependency tree and take
   longer on first boot.
 - This does not claim shell-process groups, arbitrary OS commands, or generic

@@ -20,6 +20,11 @@ export interface DevServerChildConfig {
   readonly previewScope?: string;
 }
 
+/** Nodemon's app is a nested Worker and owns its own net registry/preview bridge. */
+export function devServerOwnsPortsLocally(spec: ProjectSpec): boolean {
+  return !(spec.runtime === 'node-server' && spec.devRunner === 'nodemon');
+}
+
 function required(env: Record<string, string | undefined>, key: string): string {
   const v = env[key];
   if (typeof v !== 'string' || v === '') {

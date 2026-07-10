@@ -578,32 +578,6 @@ body {
   padding: 2px 6px;
 }
 
-/* — share button — */
-.rf-share {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 14px;
-  background: var(--rf-accent);
-  border: none;
-  border-radius: var(--rf-r);
-  color: var(--rf-accent-ink);
-  font: 500 13px / 18px var(--rf-font-sans);
-  cursor: pointer;
-  transition: background 0.15s var(--rf-ease), transform 0.08s var(--rf-ease);
-}
-.rf-share:hover {
-  background: var(--rf-accent-hover);
-}
-.rf-share:active {
-  transform: scale(0.96);
-}
-.rf-share:focus-visible {
-  outline: 2px solid var(--rf-accent-hover);
-  outline-offset: 2px;
-}
-
 /* ====================================================================== */
 /* Buttons                                                                 */
 /* ====================================================================== */

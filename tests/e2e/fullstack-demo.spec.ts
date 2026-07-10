@@ -11,13 +11,19 @@
  * generous polls, network required.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains, pickStarter } from './helpers/playground.ts';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3210;
 
 test.describe('Fullstack demo — Express + node:sqlite through the SW preview bridge', () => {
   test('preset boots the server; API and client both round-trip', async ({ page }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(420_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
     page.on('console', (msg) => {
       if (msg.type() === 'error') console.log('[console.error]', msg.text());
@@ -39,6 +45,7 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // (ADR-0148).
     await expectTerminalContains(page, 'npm run dev', 150_000);
     await expectTerminalContains(page, 'npm: + express@', 120_000);
+    await expectTerminalContains(page, '[nodemon] starting `node src/main.js`', 45_000);
 
     // Express + engine boot behind a live npm install — poll the API route.
     // The predicate demands PARSEABLE JSON: a transient 200 from a non-SW
@@ -72,11 +79,20 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       .poll(
         async () => {
           const probe = await fetchTodos();
-          return probe.ok && probe.status === 200 && probe.count >= 3;
+          if (probe.ok && probe.status === 200 && probe.count >= 3) return 'ready';
+          const terminal = await terminalBuffer(page, 0);
+          const nodemonStart = terminal.lastIndexOf('[nodemon] starting');
+          return JSON.stringify({
+            ok: probe.ok,
+            status: probe.status,
+            count: probe.count,
+            body: probe.body.slice(0, 200),
+            terminalTail: terminal.slice(nodemonStart >= 0 ? nodemonStart : -5_000),
+          });
         },
         { timeout: 180_000, intervals: [1_000, 2_000, 4_000] },
       )
-      .toBe(true);
+      .toBe('ready');
 
     const seeded = JSON.parse((await fetchTodos()).body) as { id: number; title: string }[];
     expect(seeded.length).toBeGreaterThanOrEqual(3);
@@ -136,5 +152,79 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
 
     // The write made it into the terminal as a db log line.
     await expectTerminalContains(page, '[db] INSERT todos #', 10_000);
+
+    // Real nodemon watches the owner VFS, kills the app Worker, and starts a
+    // fresh module realm on the same port. A unique top-level marker proves the
+    // edited source ran; SQLite returning to three rows proves old memory died.
+    const restartMarker = `express-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(
+      page,
+      `echo "console.log('${restartMarker}')" >> /scratch/src/main.js`,
+    );
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect
+      .poll(async () => (await fetchTodos()).count, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // Two writes inside nodemon's debounce window may coalesce or restart more
+    // than once; the contract is convergence on the final bytes, on the same
+    // port, with no stale app process holding the socket.
+    const rapidMarker = `express-rapid-${Date.now()}`;
+    const restartCountBeforeRapid = (await terminalBuffer(page, 0)).split(
+      '[nodemon] restarting due to changes',
+    ).length;
+    await runTerminalLineSettled(
+      page,
+      `echo "console.log('rapid-intermediate')" >> /scratch/src/main.js && echo "console.log('${rapidMarker}')" >> /scratch/src/main.js`,
+    );
+    await expect
+      .poll(
+        async () =>
+          (await terminalBuffer(page, 0)).split('[nodemon] restarting due to changes').length,
+        { timeout: 45_000 },
+      )
+      .toBeGreaterThan(restartCountBeforeRapid);
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(rapidMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+
+    // stderr inheritance + crash recovery: a real syntax error reaches the dev
+    // terminal, nodemon stays alive, and replacing the bad line starts a fresh
+    // app Worker without manual rerun.
+    await runTerminalLineSettled(page, `echo 'const = ;' >> /scratch/src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('Failed to parse ESM source');
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] app crashed - waiting for file changes before starting');
+
+    const recoveryMarker = `express-recovered-${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `head -n -1 /scratch/src/main.js > /scratch/src/main.fixed && echo "console.log('${recoveryMarker}')" >> /scratch/src/main.fixed && mv /scratch/src/main.fixed /scratch/src/main.js`,
+    );
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(recoveryMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // Ctrl-C owns the whole watcher/app lifecycle: once the dev terminal is
+    // stopped, the old preview route cannot keep serving or resurrect itself.
+    await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect
+      .poll(async () => (await fetchTodos()).ok, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(false);
   });
 });

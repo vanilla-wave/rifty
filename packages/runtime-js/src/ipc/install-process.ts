@@ -3,7 +3,7 @@
  *
  * Builds the unified {@link NodeProcess} (`../builtins/process.ts`) from the
  * kernel's {@link KernelProcessSpec} — pid/ppid/argv/env/cwd + stdio
- * MessagePorts + ADR-0045 fork-IPC — and installs it on `globalThis.process`.
+ * MessagePorts + ADR-0211 fork-IPC — and installs it on `globalThis.process`.
  * `installNodeRuntime` is the pre-entry hook: it builds the process AND, gated
  * to Node workers, runs the rich extras (`patchPromiseForNextTick` for nextTick
  * ordering + `globalThis.Buffer` + `globalThis.global`). WASI workers skip
@@ -40,7 +40,7 @@ import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-com
  * The `process` shim installed for kernel-spawned children. Alias of the unified
  * {@link NodeProcess} (ADR-0157) — kept as a named export for the public
  * `./install-process` subpath. `@riftydev/runtime-wasi`'s worker entry expects
- * the structural contract (pid/ppid/argv/env/cwd/stdout/stderr/exit + ADR-0045
+ * the structural contract (pid/ppid/argv/env/cwd/stdout/stderr/exit + ADR-0211
  * fork-IPC `send`/`disconnect`/`on`).
  */
 export type NodeProcessShim = NodeProcess;

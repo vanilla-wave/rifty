@@ -84,7 +84,11 @@ async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null
   return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
 }
 
-async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
+async function waitDurableScratch(
+  page: Page,
+  starter?: string,
+  expectedDirty = false,
+): Promise<void> {
   await expect
     .poll(
       async () => {
@@ -97,7 +101,7 @@ async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
       },
       { timeout: OPFS_POLL },
     )
-    .toBe('scratch:clean');
+    .toBe(`scratch:${expectedDirty ? 'dirty' : 'clean'}`);
 }
 
 async function projectIdFromDurableIndex(page: Page, name: string): Promise<string> {
@@ -109,8 +113,8 @@ async function projectIdFromDurableIndex(page: Page, name: string): Promise<stri
   return readId();
 }
 
-async function saveScratchAs(page: Page, name: string): Promise<string> {
-  await waitDurableScratch(page);
+async function saveScratchAs(page: Page, name: string, expectedDirty = false): Promise<string> {
+  await waitDurableScratch(page, undefined, expectedDirty);
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -283,7 +287,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // the stray moves into /projects/<id>/stray.txt.
     await newShell(page);
     await runTerminalLineSettled(page, 'echo stray-edit > /scratch/stray.txt');
-    const id = await saveScratchAs(page, projName);
+    const id = await saveScratchAs(page, projName, true);
     expect(id).not.toBe('');
     await expect
       .poll(() => readProjectFile(page, id, 'stray.txt'), { timeout: OPFS_POLL })

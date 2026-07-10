@@ -217,7 +217,22 @@ function waitForReadableDemand(target: Readable): Promise<void> {
   });
 }
 
-export class IncomingMessage extends Readable {
+/**
+ * Both HTTP message variants are actively fed by `pipeBodyStream`. Their
+ * `_read` hook is therefore a real no-op producer signal: the fetch reader is
+ * already pumping and pauses itself when `push()` reaches the high-water mark.
+ * Centralising it here keeps both server requests and client responses off a
+ * bare Readable's honest `ERR_METHOD_NOT_IMPLEMENTED` path.
+ */
+abstract class PushDrivenIncomingMessage extends Readable {
+  constructor() {
+    super({ objectMode: false });
+  }
+
+  override _read(_size: number): void {}
+}
+
+export class IncomingMessage extends PushDrivenIncomingMessage {
   method: string;
   url: string;
   complete = false;
@@ -228,7 +243,7 @@ export class IncomingMessage extends Readable {
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(request: Request | IncomingMessageInit) {
-    super({ objectMode: false });
+    super();
     const init = isIncomingMessageInit(request)
       ? request
       : {
@@ -258,7 +273,7 @@ export class IncomingMessage extends Readable {
   }
 }
 
-export class IncomingMessageFromFetch extends Readable {
+export class IncomingMessageFromFetch extends PushDrivenIncomingMessage {
   statusCode: number;
   statusMessage: string;
   complete = false;
@@ -267,7 +282,7 @@ export class IncomingMessageFromFetch extends Readable {
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(response: Response) {
-    super({ objectMode: false });
+    super();
     this.statusCode = response.status;
     this.statusMessage = response.statusText;
     defineLazyHeaders(this, response.headers);

@@ -1,56 +1,61 @@
 import { describe, expect, it } from 'vitest';
-import { riftyProcess, writeProcessStdin } from './process.ts';
+import { NodeProcess } from './process.ts';
 
 describe('process.stdin host bridge', () => {
-  it('emits string stdin chunks to listeners', () => {
+  it('emits string stdin chunks to listeners', async () => {
+    const process = new NodeProcess();
     const chunks: unknown[] = [];
-    riftyProcess.stdin.once('data', (chunk) => chunks.push(chunk));
+    process.stdin.once('data', (chunk) => chunks.push(chunk));
 
-    writeProcessStdin('hello\n');
+    process.pushStdin('hello\n');
+    await Promise.resolve();
 
     expect(chunks).toEqual(['hello\n']);
   });
 
-  it('emits byte chunks unless an encoding is set', () => {
+  it('emits byte chunks unless an encoding is set', async () => {
+    const process = new NodeProcess();
     const chunks: unknown[] = [];
-    riftyProcess.stdin.setEncoding(null);
-    riftyProcess.stdin.once('data', (chunk) => chunks.push(chunk));
+    process.stdin.once('data', (chunk) => chunks.push(chunk));
 
     const bytes = new Uint8Array([0x68, 0x69]);
-    writeProcessStdin(bytes);
+    process.pushStdin(bytes);
+    await Promise.resolve();
 
     expect(chunks).toEqual([bytes]);
   });
 
-  it('decodes byte chunks when utf8 encoding is requested', () => {
+  it('decodes byte chunks when utf8 encoding is requested', async () => {
+    const process = new NodeProcess();
     const chunks: unknown[] = [];
-    riftyProcess.stdin.setEncoding('utf8');
-    riftyProcess.stdin.once('data', (chunk) => chunks.push(chunk));
+    process.stdin.setEncoding('utf8');
+    process.stdin.once('data', (chunk) => chunks.push(chunk));
 
-    writeProcessStdin(new Uint8Array([0xe2, 0x9c, 0x93]));
+    process.pushStdin(new Uint8Array([0xe2, 0x9c, 0x93]));
+    await Promise.resolve();
 
     expect(chunks).toEqual(['✓']);
-    riftyProcess.stdin.setEncoding(null);
   });
 
-  it('decodes utf8 split across stdin chunks', () => {
+  it('decodes utf8 split across stdin chunks', async () => {
+    const process = new NodeProcess();
     const chunks: unknown[] = [];
-    riftyProcess.stdin.setEncoding('utf8');
-    riftyProcess.stdin.on('data', (chunk) => chunks.push(chunk));
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => chunks.push(chunk));
 
-    writeProcessStdin(new Uint8Array([0xe2, 0x82]));
-    writeProcessStdin(new Uint8Array([0xac]));
+    process.pushStdin(new Uint8Array([0xe2, 0x82]));
+    process.pushStdin(new Uint8Array([0xac]));
+    await Promise.resolve();
 
     expect(chunks).toEqual(['€']);
-    riftyProcess.stdin.removeAllListeners('data');
-    riftyProcess.stdin.setEncoding(null);
   });
 
   it('buffers stdin until a data listener is attached', async () => {
+    const process = new NodeProcess();
     const chunks: unknown[] = [];
 
-    writeProcessStdin('early');
-    riftyProcess.stdin.once('data', (chunk) => chunks.push(chunk));
+    process.pushStdin('early');
+    process.stdin.once('data', (chunk) => chunks.push(chunk));
     await Promise.resolve();
 
     expect(chunks).toEqual(['early']);

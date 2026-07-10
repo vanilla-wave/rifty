@@ -18,6 +18,11 @@ const SCRATCH_DRAFT: ProjectIndex = {
   scratch: { starter: 'react', dirty: true, editedAt: 'x' },
   projects: [],
 };
+const HIDDEN_EMPTY: ProjectIndex = {
+  activeId: 'scratch',
+  scratch: { starter: 'hidden-empty', dirty: false, editedAt: 'no edits yet' },
+  projects: [],
+};
 function projIdx(...ids: string[]): ProjectIndex {
   return {
     activeId: ids[0] ?? 'scratch',
@@ -71,6 +76,8 @@ class Harness {
   warmedEditor = 0;
   restored: ProjectIndex[] = [];
   deepPicks: string[] = [];
+  hiddenActivations = 0;
+  activateHiddenImpl: () => Promise<ProjectIndex> = async () => HIDDEN_EMPTY;
   fallbackMs = 30;
 
   boot(): ProjectIndexBoot {
@@ -80,6 +87,10 @@ class Harness {
       hasPresenceHint: () => this.presenceHint,
       postDeleteProjectTree: async (id) => {
         this.deletesPosted.push(id);
+      },
+      activateHiddenEmptyScratch: () => {
+        this.hiddenActivations += 1;
+        return this.activateHiddenImpl();
       },
       openLauncherOnStarters: () => {
         this.openedStarters += 1;
@@ -190,12 +201,57 @@ describe('one-shot boot decision (project-first, ADR-0165)', () => {
     expect(h.restored).toEqual([SCRATCH_DRAFT]);
   });
 
-  it('closing the launcher IS the boot decision — no restore on the next publish', () => {
+  it('closing the first-run launcher activates + restores an honest hidden-empty scratch', async () => {
     const { h, boot, mirror } = setup();
+    mirror.publish(NEEDS_CHOICE);
+    boot.closeLauncher();
+    await tick();
+    expect(h.closedLauncher).toBe(1);
+    expect(h.hiddenActivations).toBe(1);
+    expect(h.restored).toEqual([HIDDEN_EMPTY]);
+    expect(boot.editorProjectContextReady()).toBe(true);
+    expect(h.resetEditor).toBe(1);
+  });
+
+  it('close before the first index defers activation so a persisted project wins', async () => {
+    const { h, boot, mirror } = setup();
+    h.presenceHint = false;
+    boot.startBootPolicy(undefined);
+
     boot.closeLauncher();
     expect(h.closedLauncher).toBe(1);
+    expect(h.hiddenActivations).toBe(0);
+
+    const persisted = projIdx('p1');
+    mirror.publish(persisted);
+    await tick();
+
+    expect(h.hiddenActivations).toBe(0);
+    expect(h.restored).toEqual([persisted]);
+  });
+
+  it('close before a needs-choice publish activates only after that authoritative publish', async () => {
+    const { h, boot, mirror } = setup();
+    h.presenceHint = false;
+    boot.startBootPolicy(undefined);
+    boot.closeLauncher();
+
+    mirror.publish(NEEDS_CHOICE);
+    await tick();
+
+    expect(h.openedStarters).toBe(1); // initial instant open only; close stays closed
+    expect(h.hiddenActivations).toBe(1);
+    expect(h.restored).toEqual([HIDDEN_EMPTY]);
+  });
+
+  it('closing an ordinary launcher over a ready project never activates hidden scratch', () => {
+    const { h, boot, mirror } = setup();
     mirror.publish(projIdx('p1'));
-    expect(h.restored).toEqual([]);
+
+    boot.closeLauncher();
+
+    expect(h.closedLauncher).toBe(1);
+    expect(h.hiddenActivations).toBe(0);
   });
 });
 
@@ -285,6 +341,7 @@ describe('eventually-consistent on-disk delete (ADR-0165 §56)', () => {
       recordPresenceHint: () => {},
       hasPresenceHint: () => true,
       postDeleteProjectTree: () => Promise.reject(new Error('owner gone')),
+      activateHiddenEmptyScratch: async () => HIDDEN_EMPTY,
       openLauncherOnStarters: () => {},
       closeLauncher: () => {},
       resetEditorInitialFiles: () => {},

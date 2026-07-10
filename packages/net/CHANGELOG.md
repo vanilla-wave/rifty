@@ -62,6 +62,12 @@
 
 ### Fixed
 
+- **HTTP `IncomingMessage` variants declare their shared push-driven `_read`
+  producer.** Server requests and fetch-backed client responses are already fed
+  by the bounded body-stream pump; both now inherit one explicit no-op pull hook
+  instead of falling through to a bare `Readable`'s honest
+  `ERR_METHOD_NOT_IMPLEMENTED` error as soon as Express or another consumer
+  attaches a body listener.
 - **Loopback HTTP/HTTPS fidelity tightened after PR #102 review.** `https.request('http://…')`
   now throws `ERR_INVALID_PROTOCOL` instead of silently rewriting plaintext to
   TLS, `https.request(new URL(...))` preserves the URL host/path, and IPv4-mapped

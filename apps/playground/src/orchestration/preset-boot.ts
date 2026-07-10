@@ -153,6 +153,17 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
   ): Promise<void> {
     try {
       setTransitioning(true);
+      const bootLines = bootLinesOverride ?? deps.bootLines(preset);
+      // An empty sequence is an explicit serverless-workspace contract. Do not
+      // reserve a terminal or wait for a port that can never exist; if this
+      // replaces a running preset, stop its lifecycle-owned session first.
+      if (bootLines.length === 0) {
+        if (deps.devServer.lifecycleRunning()) {
+          await deps.devServer.stopSession(deps.devServer.sessionId());
+        }
+        deps.reinitializeTs();
+        return;
+      }
       // The caller already painted the starter UI and established the owner tree
       // (establishScratch/seedWorkspace). Re-seeding here can erase edits made
       // during the boot window.
@@ -193,7 +204,7 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
       deps.freshConsole(session.id); // fresh console + greeting
       const generation = deps.devServer.nextGeneration();
       deps.devServer.beginBoot(session.id);
-      void deps.runBootSequence(session.id, bootLinesOverride ?? deps.bootLines(preset));
+      void deps.runBootSequence(session.id, bootLines);
       const booted = await deps.devServer.waitForPresetBoot(
         session.id,
         generation,

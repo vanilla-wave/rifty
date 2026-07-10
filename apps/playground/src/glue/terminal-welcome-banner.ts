@@ -12,6 +12,8 @@ const ANSI_GREY = '\x1b[90m';
 const ANSI_DIM = '\x1b[2m';
 const ANSI_RESET = '\x1b[0m';
 
+export const TERMINAL_SECOND_SHELL_HINT = 'Use + to open another shell while a program is running.';
+
 export const terminalWelcomeBanner: string =
   `${ANSI_GREY}rifty · node ${NODE_PROCESS_IDENTITY.version} · npm in your browser${ANSI_RESET}\r\n` +
-  `${ANSI_DIM}try:  node -v   ·   npm install chalk   ·   help${ANSI_RESET}`;
+  `${ANSI_DIM}${TERMINAL_SECOND_SHELL_HINT}${ANSI_RESET}`;

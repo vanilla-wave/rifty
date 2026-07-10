@@ -198,14 +198,15 @@ describe('App terminal startup wiring', () => {
   });
 });
 
-describe('UI affordance honesty — Export button + Share toast (frictionless-first-poke)', () => {
+describe('UI affordance honesty — only complete actions are exposed (frictionless-first-poke)', () => {
   it('wires the status-bar Export button to the real archive download', () => {
     expect(source).toContain('onExport={() => void files.downloadArchive()}');
   });
 
-  it('the Share toast does not imply the user edits travel with the link', () => {
-    // share() copies only location.href — the copy must not claim more.
-    expect(source).toContain("flashToast('Link copied — opens this playground', 'success')");
+  it('keeps the incomplete Share flow out of every App entry point', () => {
+    expect(source).not.toMatch(
+      /async function share|id: 'act:share'|label: 'Copy share link'|data-action="share"/,
+    );
   });
 });
 

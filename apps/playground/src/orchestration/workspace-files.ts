@@ -10,7 +10,7 @@
  * the behavioral-test seam (ADR-0197 §4).
  */
 import { basename } from '@riftydev/vfs';
-import { seedFilesForStarter, starterById } from '../glue/starter.ts';
+import { seedFilesForBaseline } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
 import type { FileReadOwnerLike, OwnerFileReader } from './owner-file-read.ts';
 
@@ -87,9 +87,7 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
   async function seedOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = deps.activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
-    for (const [path, content] of Object.entries(
-      seedFilesForStarter(starterById(preset.id), root),
-    )) {
+    for (const [path, content] of Object.entries(seedFilesForBaseline(preset.id, root))) {
       // package.json is install-owned after boot; rewriting it here drops
       // npm-installed deps on reload while the owner/index reset already seeds it.
       if (path === rootPackageJsonPath) continue;

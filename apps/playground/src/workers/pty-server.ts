@@ -15,7 +15,13 @@
  */
 
 import type { Shell, StdinReader } from '@riftydev/shell';
-import type { OwnerToPageFrame, PageToOwnerFrame, PtyStream } from '../glue/pty-protocol.ts';
+import type {
+  OwnerToPageFrame,
+  PageToOwnerFrame,
+  PtyRunOrigin,
+  PtyStream,
+} from '../glue/pty-protocol.ts';
+import { ptyRunMayOutliveExit } from './pty-run-lifetime.ts';
 
 /**
  * Async stdin pipe fed by `pty:stdin` frames; `read()` resolves a queued chunk,
@@ -103,6 +109,14 @@ export interface PtyServerDeps {
    * rejection fails the run loudly (exit 1 + error) and the command never runs.
    */
   readonly beforeRun?: (emit: (chunk: string, stream: PtyStream) => void) => void | Promise<void>;
+  /** Brackets the command itself (after the dependency gate), preserving origin. */
+  readonly onRunStart?: (run: { sid: string; rid: string; origin: PtyRunOrigin }) => void;
+  readonly onRunSettled?: (run: {
+    sid: string;
+    rid: string;
+    origin: PtyRunOrigin;
+    mayOutlivePty: boolean;
+  }) => void;
 }
 
 export interface PtyServer {
@@ -164,6 +178,9 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     session.runs.set(frame.rid, run);
     let code = 0;
     let error: string | undefined;
+    const origin = frame.origin ?? 'user';
+    let commandStarted = false;
+    let mayOutlivePty = false;
     try {
       // A blank line is a shell no-op — nothing it runs needs deps, so it skips
       // the gate (instant prompt, no restore-progress noise on empty Enter).
@@ -190,6 +207,8 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         // stopped the run before it started — never invoke the command.
         code = 130;
       } else {
+        commandStarted = true;
+        deps.onRunStart?.({ sid, rid: frame.rid, origin });
         const result = await session.shell.run(frame.line, {
           onChunk: (chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream),
           signal: run.controller.signal,
@@ -199,11 +218,17 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
           stdin: run.stdin,
         });
         code = result.exitCode;
+        // Classify only after a non-throwing run. Unsupported background forms
+        // never launched work and must not create a proactive dirty guard.
+        mayOutlivePty = ptyRunMayOutliveExit(frame.line, session.shell.envSnapshot());
       }
     } catch (err) {
       code = 1;
       error = err instanceof Error ? err.message : String(err);
     } finally {
+      if (commandStarted) {
+        deps.onRunSettled?.({ sid, rid: frame.rid, origin, mayOutlivePty });
+      }
       session.runs.delete(frame.rid);
       run.stdin.close();
     }

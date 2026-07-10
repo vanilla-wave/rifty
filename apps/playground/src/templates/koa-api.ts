@@ -311,7 +311,7 @@ A small Koa server running as a node-server template.
 - \`/api/notes/:id\` — router params.
 - \`/api/notes\` — JSON POST flow through Koa's Node request stream.
 
-The data is in memory. Re-run the dev script to restart the server.
+The data is in memory. Real nodemon restarts the app Worker after source edits.
 `;
 
 export const KOA_API_TEMPLATE: NodeServerProjectSpec = {
@@ -319,6 +319,8 @@ export const KOA_API_TEMPLATE: NodeServerProjectSpec = {
   displayName: 'Koa API',
   runtime: 'node-server',
   install: { koa: '^2.15.0', '@koa/router': '^12.0.0' },
+  devDependencies: { nodemon: '3.1.14' },
+  devRunner: 'nodemon',
   entry: { relativePath: '/src/main.js', content: KOA_API_SERVER_SOURCE },
   defaultPort: 3332,
   estimatedBootSeconds: 15,

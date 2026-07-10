@@ -3,16 +3,17 @@
  * Fork-IPC handle accessor for worker realms (ADR-0157).
  *
  * Under ADR-0157 the kernel pre-entry seam installs ONE spec-seeded rich
- * `process` (correct stdout/stderr/env + ADR-0045 fork-IPC `send`/`on`) before
+ * `process` (correct stdout/stderr/env + ADR-0211 fork-IPC `send`/`on`) before
  * any bootstrap runs — there is no longer a `globalThis.process` swap to undo.
- * So this no longer installs anything: it just reads the fork-IPC `send`/`on`
- * surface off the already-installed `globalThis.process` and returns it as the
- * `KernelIpc` handle the owner + dev-server bootstraps post page frames over.
+ * So this no longer installs anything: inbound `onMessage` uses the seeded
+ * `globalThis.process`, while outbound internal control bypasses public
+ * process.send JSON and posts raw frames through the published kernel spec.
  *
  * Name kept (callers: real-vite-bootstrap, dev-server-child-bootstrap) — the
  * swap-then-re-patch dance it used to perform is gone.
  */
 
+import { type IpcFrame, readKernelProcessSpec } from '@riftydev/kernel';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 
 export interface ProcStdio {
@@ -25,7 +26,7 @@ export interface ProcStdio {
 
 export interface KernelIpc {
   onMessage?(handler: (message: unknown) => void): void;
-  /** Fork-IPC send back to the page (ADR-0045); absent when no IPC channel. */
+  /** Raw fork-IPC send back to the page (ADR-0211); absent without a kernel channel. */
   send?(message: unknown): void;
 }
 
@@ -61,16 +62,20 @@ export function installBundleLocalBuffer(): void {
 
 export function installRuntimeGlobals(): KernelIpc {
   const proc = globalThis.process as unknown as ProcStdio | undefined;
+  const rawIpc = readKernelProcessSpec()?.stdio.ipc;
   const onMessage =
     typeof proc?.on === 'function'
       ? (handler: (message: unknown) => void) => {
           proc.on?.('message', handler);
         }
       : undefined;
+  // Internal lifecycle frames may carry Uint8Array. Bypass public
+  // process.send's Node-default JSON codec while retaining the same raw kernel
+  // MessagePort transport (ADR-0211).
   const send =
-    typeof proc?.send === 'function'
+    rawIpc !== undefined
       ? (message: unknown) => {
-          proc.send?.(message);
+          rawIpc.postMessage({ kind: 'ipc:message', payload: message } satisfies IpcFrame);
         }
       : undefined;
   return { onMessage, send };

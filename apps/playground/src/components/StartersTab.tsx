@@ -11,15 +11,17 @@
  * straight from `Preset[]` and derives its launcher group via
  * `GROUP_FOR_CATEGORY[preset.category]` — never a deep-copied display Starter.
  */
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js/builtins/process-identity';
 import { For, Show } from 'solid-js';
 import { type StarterGroup, groupForPreset } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
 import { Icon } from './icons.tsx';
 
 const FALLBACK_GLYPH_COLOR = 'rgba(255,255,255,0.7)';
+const NODE_RUNTIME_NOTE = `Node ${NODE_PROCESS_IDENTITY.versions.node.split('.')[0]} runtime`;
 const GROUPS: ReadonlyArray<{ id: StarterGroup; label: string; note: string }> = [
   { id: 'frontend', label: 'FRONT-END', note: 'Vite dev server' },
-  { id: 'server', label: 'SERVER', note: 'Node 22 runtime' },
+  { id: 'server', label: 'SERVER', note: NODE_RUNTIME_NOTE },
   { id: 'wasm', label: 'WASM', note: 'WASI preview1' },
 ];
 const CATS: ReadonlyArray<{ id: 'all' | StarterGroup; label: string }> = [

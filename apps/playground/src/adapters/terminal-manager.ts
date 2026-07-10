@@ -15,6 +15,7 @@
  * session so `writeStdin`/`stop` route to the in-flight run.
  */
 import type { TerminalRawInput } from '@riftydev/terminal';
+import type { PtyRunOrigin } from '../glue/pty-protocol.ts';
 import type { WorkspaceOwnerHandle } from '../glue/realVite.ts';
 
 export type TerminalStatus = 'idle' | 'running';
@@ -31,6 +32,8 @@ export interface TerminalSessionSnapshot {
 export interface TerminalRunDimensions {
   readonly cols?: number;
   readonly rows?: number;
+  /** Programmatic Starter boot vs a user-entered command (scratch dirty provenance). */
+  readonly origin?: PtyRunOrigin;
 }
 
 export type TerminalWriter = (chunk: string, stream?: 'stdout' | 'stderr') => void;
@@ -179,6 +182,7 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
         cols: dims?.cols ?? 80,
         rows: dims?.rows ?? 24,
         isTTY: true,
+        origin: dims?.origin ?? 'user',
         onChunk: (chunk, stream) => {
           write(session, chunk, stream);
         },

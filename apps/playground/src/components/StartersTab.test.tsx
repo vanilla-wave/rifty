@@ -1,3 +1,4 @@
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js/builtins/process-identity';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it } from 'vitest';
 import { PRESETS } from '../presets.ts';
@@ -27,6 +28,13 @@ describe('StartersTab — the moved gallery (ADR-0079)', () => {
 
   it('groups by category with a FRONT-END header', () => {
     expect(renderToString(() => StartersTab(props))).toContain('FRONT-END');
+  });
+
+  it('labels server starters with the parity-target Node major', () => {
+    const html = renderToString(() => StartersTab({ ...props, cat: 'server' }));
+    const nodeMajor = NODE_PROCESS_IDENTITY.versions.node.split('.')[0];
+    expect(html).toContain(`Node ${nodeMajor} runtime`);
+    expect(html).not.toContain('Node 22 runtime');
   });
 
   it('hides a starter that does not match the search query', () => {

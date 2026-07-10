@@ -16,6 +16,7 @@ import type {
   PageToOwnerFrame,
   PtyDevServer,
   PtyPreview,
+  PtyRunOrigin,
   PtyStream,
 } from './pty-protocol.ts';
 
@@ -30,6 +31,7 @@ export interface ExecOptions {
   readonly cols: number;
   readonly rows: number;
   readonly isTTY: boolean;
+  readonly origin?: PtyRunOrigin;
   readonly onChunk: (chunk: string, stream: PtyStream) => void;
   /**
    * Fired with the run's `rid` immediately after the `pty:exec` frame is sent,
@@ -173,6 +175,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
             cols: opts.cols,
             rows: opts.rows,
             isTTY: opts.isTTY,
+            origin: opts.origin ?? 'user',
           });
         } catch (err) {
           runs.delete(rid);

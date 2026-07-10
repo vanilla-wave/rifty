@@ -1,6 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter, once } from './event-emitter.ts';
 
+describe('EventEmitter construction surface', () => {
+  it('supports legacy call initialisation on an inherited prototype', () => {
+    const bus = Object.create(EventEmitter.prototype) as EventEmitter;
+
+    expect(EventEmitter.call(bus)).toBeUndefined();
+    expect(bus).toBeInstanceOf(EventEmitter);
+
+    const seen: unknown[] = [];
+    bus.on('message', (value) => seen.push(value));
+    expect(bus.emit('message', 42)).toBe(true);
+    expect(seen).toEqual([42]);
+  });
+
+  it('preserves modern subclass, constructor, and static-default behavior', () => {
+    class Bus extends EventEmitter {}
+
+    const originalMax = EventEmitter.defaultMaxListeners;
+    try {
+      EventEmitter.defaultMaxListeners = 3;
+      const bus = new Bus();
+      expect(bus).toBeInstanceOf(Bus);
+      expect(bus).toBeInstanceOf(EventEmitter);
+      expect(EventEmitter.prototype.constructor).toBe(EventEmitter);
+      expect(bus.getMaxListeners()).toBe(3);
+      expect(typeof EventEmitter.captureRejectionSymbol).toBe('symbol');
+    } finally {
+      EventEmitter.defaultMaxListeners = originalMax;
+    }
+  });
+});
+
 describe('EventEmitter.listeners vs rawListeners', () => {
   it('listeners() returns unwrapped originals for once()', () => {
     const ee = new EventEmitter();

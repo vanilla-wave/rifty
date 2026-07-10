@@ -6,9 +6,9 @@
  * bytes are routed via the kernel-side `bindPortAsWritable(ports.stdin)`
  * `Writable` into the child realm's stdin `MessagePort`. The child reads
  * the chunks off `globalThis.__riftyProcessSpec__.stdio.stdin` (the
- * kernel-published process spec — runtime-js's `process.stdin` shim is a
- * bare EventEmitter today and does NOT auto-wire stdin; that's a separate
- * follow-up) and echoes them back through `process.stdout`.
+ * kernel-published process spec) and echoes them through `process.stdout`.
+ * Runtime-js now wires the same port into its real Readable `process.stdin`;
+ * this lower-level probe keeps the transport contract isolated.
  *
  * Skips outside an SAB-capable environment — Vitest's plain Node runner
  * has no `crossOriginIsolated` so `isSabIpcSupported()` is `false`. The

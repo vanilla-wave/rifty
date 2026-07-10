@@ -67,7 +67,9 @@ async function openProjects(page: Page): Promise<void> {
 
 /** Save the active scratch as a named project via the launcher Projects tab. */
 async function saveScratchAs(page: Page, name: string): Promise<string> {
-  await waitDurableScratch(page);
+  // Both callers write a marker first; the owner must durably protect those
+  // bytes as dirty before Save moves the tree into /projects/<id>.
+  await waitDurableScratch(page, undefined, true);
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -105,7 +107,11 @@ async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null
   return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
 }
 
-async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
+async function waitDurableScratch(
+  page: Page,
+  starter?: string,
+  expectedDirty = false,
+): Promise<void> {
   await expect
     .poll(
       async () => {
@@ -118,7 +124,7 @@ async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
       },
       { timeout: OPFS_POLL },
     )
-    .toBe('scratch:clean');
+    .toBe(`scratch:${expectedDirty ? 'dirty' : 'clean'}`);
 }
 
 /**
