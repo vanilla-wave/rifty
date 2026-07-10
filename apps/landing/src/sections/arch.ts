@@ -18,7 +18,7 @@ export function renderArch(): HTMLElement {
   head.className = 'arch-head';
   const index = document.createElement('span');
   index.className = 'arch-index';
-  index.textContent = '02';
+  index.textContent = '03';
   const label = document.createElement('h2');
   label.className = 'arch-label';
   label.textContent = 'How it actually works';

@@ -10,6 +10,8 @@ const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
 const NAV = 'apps/landing/src/sections/nav.ts';
 const HERO = 'apps/landing/src/sections/hero.ts';
+const DEMOS = 'apps/landing/src/sections/demos.ts';
+const PLAYGROUND_URL = 'apps/landing/src/playground-url.ts';
 const FAVICON = 'apps/landing/public/favicon.svg';
 
 // Bodies between every <!-- … --> in an XML/SVG document (open-ended last comment included).
@@ -67,13 +69,22 @@ describe('landing static site', () => {
     expect(svg).toContain('#c7f05a'); // lime diamond
   });
 
-  it('keeps a playground and GitHub exit', () => {
-    // /play → live playground (its own origin) survives as a redirect…
+  it('keeps self-hostable preset playground and GitHub exits', () => {
     const redirects = readFileSync(REDIRECTS, 'utf8');
-    expect(redirects).toContain('https://play.rifty.dev/');
-    // …the hero primary CTA opens the playground; the nav links out to the repo.
+    expect(redirects).not.toContain('https://play.rifty.dev/');
+    // The hero exits directly to the playground through the same env-configured,
+    // same-origin-by-default seam used by the preset cards.
     const hero = readFileSync(HERO, 'utf8');
-    expect(hero).toContain('https://play.rifty.dev/');
+    expect(hero).toContain('buildPlaygroundHref');
+    expect(hero).not.toContain("primary.href = '#demos'");
+    const demos = readFileSync(DEMOS, 'utf8');
+    expect(demos).toContain('VITE_RIFTY_PLAYGROUND_URL');
+    expect(demos).not.toContain('https://play.rifty.dev/');
+    expect(existsSync(PLAYGROUND_URL)).toBe(true);
+    const playgroundUrl = readFileSync(PLAYGROUND_URL, 'utf8');
+    expect(playgroundUrl).not.toContain('SELF_HOSTED_PLAYGROUND_ROUTE');
+    expect(playgroundUrl).toContain('must be configured');
+    expect(playgroundUrl).toContain("searchParams.set('autorun', '1')");
     const nav = readFileSync(NAV, 'utf8');
     expect(nav).toContain('https://github.com/vanilla-wave/rifty');
   });
@@ -101,6 +112,7 @@ describe('landing static site', () => {
     expect(workflow).toContain('deploy-landing:');
     expect(workflow).toContain('NETLIFY_LANDING_SITE_ID:');
     expect(workflow).toContain('NETLIFY_LANDING_SITE_NAME:');
+    expect(workflow).toContain('VITE_RIFTY_PLAYGROUND_URL:');
     expect(workflow).toContain('--filter="@riftydev/landing"');
     // Vite build output, not the raw source dir.
     expect(workflow).toContain('--dir="$GITHUB_WORKSPACE/apps/landing/dist"');

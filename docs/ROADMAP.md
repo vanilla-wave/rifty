@@ -134,4 +134,5 @@ artifact intentionally reusable for export-as-Starter — only the launcher/stat
 ship disabled with a `soon` pill until here. Maps to M12's AI-agent sandbox contract (a shared
 project IS an agent stand).
 open:
-- `docs/backlog/distribution/export-project-as-starter-m13` — project bundle → Starter / share-by-link / import; reuses the ADR-0165 baseline artifact. Links `create-rifty-template`.
+- `docs/backlog/epics/from-intent-to-running-project` — outcome-first launcher plus local/Git project ingress and an explicit install/run plan.
+- `docs/backlog/distribution/export-project-as-starter-m13` — project bundle → Starter / share-by-link; reuses the ADR-0165 baseline artifact. Links `create-rifty-template`.

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Review polish: the animated hero terminal reserves its final row viewport instead of shifting the
+  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA; balanced
+  preset-card footer spacing around an explicit divider. `Run something real` now opens the
+  configured playground directly instead of scrolling to the preset cards.
+- Repositioned the landing around Rifty's real wedge: open, MIT, self-hostable browser runtime
+  infrastructure. Hero code now uses only the public `Sandbox` API (`runtime.eval`, `fs`, events),
+  and four "Run something real" cards deep-link into proven Vite 7, Express + SQLite, CLI, and
+  Markdown SSG presets. Their playground base is the required `VITE_RIFTY_PLAYGROUND_URL`, so
+  self-hosters explicitly choose their own origin or mount instead of receiving a false local
+  fallback. Added an accessible mobile nav drawer, one-column mobile content, and a mobile-first
+  Realms architecture view; browser regressions cover exact API copy, preset links, and zero
+  page-level overflow at 390/360 px.
 - Favicon still invisible: the SVG comment carried CSS-var token names (`--deep`, `--ac`), and a
   literal `--` inside an XML comment is illegal — browsers parse SVG as strict XML and reject the
   whole document ("Double hyphen within comment"), so the asset served 200 `image/svg+xml` yet the

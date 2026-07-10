@@ -76,3 +76,9 @@
   --maxw: 1200px;
   --gutter: 32px;
 }
+
+@media (max-width: 600px) {
+  :root {
+    --gutter: 16px;
+  }
+}
