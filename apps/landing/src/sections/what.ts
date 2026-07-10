@@ -50,7 +50,7 @@ function makeCell(feature: Feature): HTMLElement {
   const tile = document.createElement('div');
   tile.className = 'what-tile';
   tile.innerHTML = icon(feature.icon, 17);
-  const title = document.createElement('div');
+  const title = document.createElement('h3');
   title.className = 'what-title';
   title.textContent = feature.title;
   const body = document.createElement('div');

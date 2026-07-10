@@ -1,5 +1,5 @@
-// Authoritative architecture-graph data. Ported VERBATIM from the design handoff
-// (docs/landing/handoff/Rifty Architecture.dc.html). Do not paraphrase values.
+// Authoritative live architecture-graph data. Layout originates in the design
+// handoff; runtime copy follows the current public contracts.
 
 export type Realm = 'page' | 'worker' | 'sw' | 'iframe' | 'ext';
 export type Compat = 'ok' | 'warn' | 'no';
@@ -285,7 +285,10 @@ export const SCN: Record<ScenarioId, Scenario> = {
       { node: 'vfs', t: 'Bring up the VFS — OPFS storage, non-fatally falling back to memory' },
       { node: 'sw', t: 'Register the service worker (skippable; a failure is non-fatal)' },
       { node: 'kernel', t: 'Spawn the runtime worker over SharedArrayBuffer + Atomics' },
-      { node: 'runtimejs', t: 'The worker posts ready → a live RuntimeController is returned' },
+      {
+        node: 'runtimejs',
+        t: 'createSandbox() returns a Sandbox; Sandbox.runtime emits ready when the worker boots',
+      },
     ],
   },
   npm: {

@@ -1,5 +1,5 @@
 /* keyframes — defined here (hero owns the pulsing dots + terminal cursor) */
-@keyframes rfPulse {
+@keyframes rfHeroPulse {
   0%,
   100% {
     opacity: 1;
@@ -59,7 +59,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--ac);
-  animation: rfPulse 2s ease-in-out infinite;
+  animation: rfHeroPulse 2s ease-in-out infinite;
 }
 
 .hero-h1 {
@@ -196,7 +196,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--ac);
-  animation: rfPulse 2s ease-in-out infinite;
+  animation: rfHeroPulse 2s ease-in-out infinite;
 }
 
 .hero-code {
@@ -275,14 +275,14 @@
 }
 
 .hero-term-prompt {
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--t5);
 }
 
 .hero-term-cmd {
   color: #e8eaf0;
 }
 .hero-term-dim {
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--t5);
 }
 .hero-term-ok {
   color: #8fd98f;
@@ -370,5 +370,13 @@
 
   .hero-meta-slash {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-eyebrow-dot,
+  .hero-live-dot,
+  .hero-term-cursor {
+    animation: none;
   }
 }

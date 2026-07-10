@@ -1,8 +1,6 @@
-// Landing entry. Wires the design tokens + base reset, mounts every section into
-// #app in document order, then mounts the interactive explorer into the
-// #explorer-root container rendered by the arch section.
+// Landing entry. Replaces the static fallback once every client-rendered
+// landmark is ready, then loads the below-fold explorer near the viewport.
 
-import { mountExplorer } from './explorer/explorer';
 import { renderArch } from './sections/arch';
 import { renderCtaFooter } from './sections/cta-footer';
 import { renderDemos } from './sections/demos';
@@ -18,22 +16,55 @@ if (!app) {
   throw new Error('landing: #app container missing from index.html');
 }
 
-app.append(
-  renderNav(),
-  renderHero(),
-  renderDemos(),
-  renderWhat(),
-  renderArch(),
-  renderQuickStart(),
-  renderCtaFooter(),
-);
+const skipLink = document.createElement('a');
+skipLink.className = 'skip-link';
+skipLink.href = '#main-content';
+skipLink.textContent = 'Skip to main content';
 
-const root = document.getElementById('explorer-root');
-if (root) {
-  // mountExplorer returns a disposer (removes window listeners + clears timers).
-  // The landing is a single static page so we never tear down here, but exposing
-  // the disposer keeps the widget re-mount/SPA-safe and documents the contract.
-  const disposeExplorer = mountExplorer(root);
-  (window as Window & { __riftyDisposeExplorer?: () => void }).__riftyDisposeExplorer =
-    disposeExplorer;
+const main = document.createElement('main');
+main.id = 'main-content';
+main.append(renderHero(), renderDemos(), renderWhat(), renderArch(), renderQuickStart());
+
+const page = document.createDocumentFragment();
+page.append(skipLink, renderNav(), main, renderCtaFooter());
+app.replaceChildren(page);
+
+const explorerRootCandidate = document.getElementById('explorer-root');
+if (!explorerRootCandidate) {
+  throw new Error('landing: #explorer-root missing from architecture section');
+}
+const explorerRoot = explorerRootCandidate;
+
+let explorerLoad: Promise<void> | undefined;
+
+function mountExplorerOnce(): void {
+  if (explorerLoad) return;
+
+  explorerLoad = import('./explorer/explorer').then(({ mountExplorer }) => {
+    const disposeExplorer = mountExplorer(explorerRoot);
+    (window as Window & { __riftyDisposeExplorer?: () => void }).__riftyDisposeExplorer =
+      disposeExplorer;
+  });
+
+  explorerLoad.catch((cause: unknown) => {
+    queueMicrotask(() => {
+      throw new Error('landing: architecture explorer failed to load', { cause });
+    });
+  });
+}
+
+const observer = new IntersectionObserver(
+  (entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    mountExplorerOnce();
+  },
+  { rootMargin: '600px 0px' },
+);
+observer.observe(explorerRoot);
+
+if (window.location.hash === '#arch') {
+  document.getElementById('arch')?.scrollIntoView();
+  observer.disconnect();
+  mountExplorerOnce();
 }

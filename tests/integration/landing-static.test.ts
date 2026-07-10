@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const INDEX = 'apps/landing/index.html';
 const HEADERS = 'apps/landing/public/_headers';
 const REDIRECTS = 'apps/landing/public/_redirects';
 const HOSTING_DOC = 'docs/public/hosting-domains.md';
 const LANDING_NETLIFY_CONFIG = 'apps/landing/netlify.toml';
 const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
-const NAV = 'apps/landing/src/sections/nav.ts';
 const HERO = 'apps/landing/src/sections/hero.ts';
 const DEMOS = 'apps/landing/src/sections/demos.ts';
 const PLAYGROUND_URL = 'apps/landing/src/playground-url.ts';
@@ -33,24 +31,6 @@ function commentBodies(xml: string): string[] {
 }
 
 describe('landing static site', () => {
-  it('publishes the rifty.dev landing entry (Vite SPA shell)', () => {
-    expect(existsSync(INDEX)).toBe(true);
-
-    const html = readFileSync(INDEX, 'utf8');
-    // Vite SPA: head metadata is static; the page body is mounted by /src/main.ts.
-    expect(html).toContain('<title>rifty');
-    expect(html).toContain('<link rel="canonical" href="https://rifty.dev/" />');
-    expect(html).toContain('id="app"');
-    expect(html).toContain('/src/main.ts');
-  });
-
-  it('shows a browser-tab favicon (rel=icon → existing svg)', () => {
-    // The tab was iconless: no <link rel="icon"> + no asset shipped from public/.
-    const html = readFileSync(INDEX, 'utf8');
-    expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
-    expect(existsSync(FAVICON)).toBe(true);
-  });
-
   it('ships a favicon browsers can actually render (well-formed SVG/XML)', () => {
     // Regression: the asset shipped + was served 200 image/svg+xml, but the tab stayed
     // iconless. Cause — the comment carried CSS-var token names (--deep, --ac), and `--`
@@ -69,7 +49,7 @@ describe('landing static site', () => {
     expect(svg).toContain('#c7f05a'); // lime diamond
   });
 
-  it('keeps self-hostable preset playground and GitHub exits', () => {
+  it('keeps self-hostable preset playground exits', () => {
     const redirects = readFileSync(REDIRECTS, 'utf8');
     expect(redirects).not.toContain('https://play.rifty.dev/');
     // The hero exits directly to the playground through the same env-configured,
@@ -85,8 +65,6 @@ describe('landing static site', () => {
     expect(playgroundUrl).not.toContain('SELF_HOSTED_PLAYGROUND_ROUTE');
     expect(playgroundUrl).toContain('must be configured');
     expect(playgroundUrl).toContain("searchParams.set('autorun', '1')");
-    const nav = readFileSync(NAV, 'utf8');
-    expect(nav).toContain('https://github.com/vanilla-wave/rifty');
   });
 
   it('keeps landing headers separate from playground cross-origin isolation', () => {

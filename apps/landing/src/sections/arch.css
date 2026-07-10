@@ -37,3 +37,13 @@
 .arch-intro-em {
   color: rgba(255, 255, 255, 0.85);
 }
+
+#explorer-root {
+  min-height: 946px;
+}
+
+@media (max-width: 600px) {
+  #explorer-root {
+    min-height: 1040px;
+  }
+}
