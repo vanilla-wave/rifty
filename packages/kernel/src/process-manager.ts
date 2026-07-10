@@ -264,17 +264,29 @@ export class ProcessManager {
     const manager = this;
 
     queueMicrotask(async () => {
+      // `spawn()` is queued so callers can wire the returned handle first. A
+      // synchronous kill in that window is terminal: never run user code from
+      // a process whose record/listeners were already reaped.
+      if (abortController.signal.aborted) return;
       let exitCode = 0;
       try {
         await handler(io);
       } catch (err) {
+        // A kill racing an async handler owns the terminal outcome. Do not
+        // publish post-kill stderr or a second natural exit from late settle.
+        if (abortController.signal.aborted) return;
         exitCode = 1;
         childToParent.emit(
           'stderr',
           err instanceof Error ? `${err.stack ?? err.message}\n` : String(err),
         );
       }
-      if (record.handle.exitCode !== null) return;
+      if (
+        abortController.signal.aborted ||
+        record.handle.exitCode !== null ||
+        record.handle.signalCode !== null
+      )
+        return;
       record.handle.exitCode = exitCode;
       record.handle.emit('exit', exitCode, null);
       record.handle.emit('close', exitCode, null);

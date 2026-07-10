@@ -8,6 +8,10 @@
   Worker specs declare forwarded stdin/runtime IPC; one physical channel
   demultiplexes structured-clone control from runtime `ipc:*`, logical
   disconnect leaves control alive, and stdin carries explicit data/EOF frames.
+- **A same-realm process killed before its queued start no longer runs user code.**
+  `ProcessManager` now treats the abort/signal outcome as terminal before and
+  after the async handler, preventing post-kill timers, stderr, or a second
+  natural exit from an already reaped child.
 - **ADR-0211 raw IPC clone failures no longer masquerade as disconnects.**
   `WorkerProcessHandle.send` lets `DataCloneError` surface synchronously while
   preserving the MessagePort for a subsequent valid runtime-IPC frame; Node JSON

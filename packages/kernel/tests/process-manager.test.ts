@@ -5,7 +5,7 @@
  * listeners so a long-lived host (the playground) doesn't accumulate.
  */
 import { once } from '@riftydev/io';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CWD, ProcessManager } from '../src/process-manager.ts';
 import {
   type WorkerLike,
@@ -122,6 +122,20 @@ describe('ProcessManager — PID allocation', () => {
 const flushMicrotasks = (): Promise<void> => new Promise((r) => queueMicrotask(r));
 
 describe('ProcessManager — table cleanup on exit (no leaked records)', () => {
+  it('does not start a same-realm handler killed before its queued launch', async () => {
+    const pm = new ProcessManager();
+    const handler = vi.fn(async () => {});
+    const handle = pm.spawn('cancel-before-start', handler);
+
+    expect(handle.kill('SIGTERM')).toBe(true);
+    await flushMicrotasks();
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(handle.exitCode).toBeNull();
+    expect(handle.signalCode).toBe('SIGTERM');
+    expect(pm.get(handle.pid)).toBeNull();
+  });
+
   it('same-realm: 10 spawned-and-exited children leave list() empty', async () => {
     const pm = new ProcessManager();
     const handles = [];

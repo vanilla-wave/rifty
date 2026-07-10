@@ -30,6 +30,7 @@ function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
     argv: ['rifty', '/srv.js', '--port', '4000'],
     env,
     cwd: '/workspace/app',
+    capabilities: { stdin: 'unavailable', runtimeIpc: false },
     stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
   } as unknown as WorkerSpawnSpec;
 }
