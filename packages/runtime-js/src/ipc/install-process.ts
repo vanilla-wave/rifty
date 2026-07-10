@@ -2,8 +2,9 @@
  * Node-shape `process` install for kernel-spawned Workers (ADR-0039, ADR-0157).
  *
  * Builds the unified {@link NodeProcess} (`../builtins/process.ts`) from the
- * kernel's {@link KernelProcessSpec} — pid/ppid/argv/env/cwd + stdio
- * MessagePorts + ADR-0211 fork-IPC — and installs it on `globalThis.process`.
+ * kernel's {@link KernelProcessSpec} — identity, capabilities, and stdio ports —
+ * and installs it on `globalThis.process`. Runtime IPC is capability-gated;
+ * internal Worker control never becomes public `process.send` (ADR-0217).
  * `installNodeRuntime` is the pre-entry hook: it builds the process AND, gated
  * to Node workers, runs the rich extras (`patchPromiseForNextTick` for nextTick
  * ordering + `globalThis.Buffer` + `globalThis.global`). WASI workers skip
@@ -40,8 +41,7 @@ import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-com
  * The `process` shim installed for kernel-spawned children. Alias of the unified
  * {@link NodeProcess} (ADR-0157) — kept as a named export for the public
  * `./install-process` subpath. `@riftydev/runtime-wasi`'s worker entry expects
- * the structural contract (pid/ppid/argv/env/cwd/stdout/stderr/exit + ADR-0211
- * fork-IPC `send`/`disconnect`/`on`).
+ * the structural identity/stdio/exit contract; runtime IPC is optional.
  */
 export type NodeProcessShim = NodeProcess;
 
@@ -91,6 +91,7 @@ export function installNodeRuntime(spec: WorkerSpawnSpec): void {
       argv: spec.argv,
       env: spec.env,
       cwd: spec.cwd,
+      capabilities: spec.capabilities,
       stdio: spec.stdio,
     },
     {

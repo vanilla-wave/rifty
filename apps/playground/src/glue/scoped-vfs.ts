@@ -12,11 +12,14 @@ import {
 import { setSyncMirror } from '@riftydev/vfs/internal';
 
 export type WorkspaceMutationOp = 'write' | 'mkdir' | 'rm' | 'utimes' | 'copy' | 'rename';
+export type WorkspaceMutationIntent = 'protect' | 'baseline';
 
 /** Successful owner-store mutation, expressed in public (unscoped) paths. */
 export interface WorkspaceMutation {
   readonly op: WorkspaceMutationOp;
   readonly paths: readonly string[];
+  /** Unknown callers are protected; only owner-controlled re-seeds use baseline. */
+  readonly intent?: WorkspaceMutationIntent;
 }
 
 export type WorkspaceMutationObserver = (mutation: WorkspaceMutation) => void;
@@ -52,7 +55,12 @@ export class ScopedFsSync implements FsSync {
     },
     private readonly prefix: string,
     private readonly onMutation?: WorkspaceMutationObserver,
+    private readonly intent: WorkspaceMutationIntent = 'protect',
   ) {}
+
+  private mutated(op: WorkspaceMutationOp, paths: readonly string[]): void {
+    this.onMutation?.({ op, paths, intent: this.intent });
+  }
 
   private map(path: string): string {
     return scopePath(this.prefix, path);
@@ -66,7 +74,7 @@ export class ScopedFsSync implements FsSync {
   }
   writeFileSync(path: string, data: Uint8Array): void {
     this.inner.writeFileSync(this.map(path), data);
-    this.onMutation?.({ op: 'write', paths: [normalizePath(path)] });
+    this.mutated('write', [normalizePath(path)]);
   }
   readdirSync(path: string): readonly VfsDirent[] {
     return this.inner.readdirSync(this.map(path));
@@ -75,13 +83,13 @@ export class ScopedFsSync implements FsSync {
     const mapped = this.map(path);
     const existed = this.inner.existsSync(mapped);
     this.inner.mkdirSync(mapped, options);
-    if (!existed) this.onMutation?.({ op: 'mkdir', paths: [normalizePath(path)] });
+    if (!existed) this.mutated('mkdir', [normalizePath(path)]);
   }
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
     const mapped = this.map(path);
     const existed = this.inner.existsSync(mapped);
     this.inner.rmSync(mapped, options);
-    if (existed) this.onMutation?.({ op: 'rm', paths: [normalizePath(path)] });
+    if (existed) this.mutated('rm', [normalizePath(path)]);
   }
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
     return this.inner.statSync(this.map(path));
@@ -93,25 +101,22 @@ export class ScopedFsSync implements FsSync {
   }
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
     this.inner.utimes(this.map(path), atimeMs, mtimeMs);
-    this.onMutation?.({ op: 'utimes', paths: [normalizePath(path)] });
+    this.mutated('utimes', [normalizePath(path)]);
   }
   copyFileSync(src: string, dst: string): void {
     this.inner.copyFileSync(this.map(src), this.map(dst));
-    this.onMutation?.({ op: 'copy', paths: [normalizePath(dst)] });
+    this.mutated('copy', [normalizePath(dst)]);
   }
   cpSync(src: string, dst: string, options?: { recursive?: boolean }): void {
     this.inner.cpSync(this.map(src), this.map(dst), options);
-    this.onMutation?.({ op: 'copy', paths: [normalizePath(dst)] });
+    this.mutated('copy', [normalizePath(dst)]);
   }
   renameSync(src: string, dst: string): void {
     const mappedSrc = this.map(src);
     const mappedDst = this.map(dst);
     this.inner.renameSync(mappedSrc, mappedDst);
     if (mappedSrc !== mappedDst) {
-      this.onMutation?.({
-        op: 'rename',
-        paths: [normalizePath(src), normalizePath(dst)],
-      });
+      this.mutated('rename', [normalizePath(src), normalizePath(dst)]);
     }
   }
   loadFixture(files: Readonly<Record<string, string>>): void {
@@ -120,7 +125,7 @@ export class ScopedFsSync implements FsSync {
     if (this.inner.loadFixture) {
       this.inner.loadFixture(mapped);
       for (const path of Object.keys(files)) {
-        this.onMutation?.({ op: 'write', paths: [normalizePath(path)] });
+        this.mutated('write', [normalizePath(path)]);
       }
       return;
     }
@@ -128,7 +133,7 @@ export class ScopedFsSync implements FsSync {
     for (const [path, content] of Object.entries(mapped)) {
       this.inner.mkdirSync(dirname(path), { recursive: true });
       this.inner.writeFileSync(path, enc.encode(content));
-      this.onMutation?.({ op: 'write', paths: [unscopePath(this.prefix, path)] });
+      this.mutated('write', [unscopePath(this.prefix, path)]);
     }
   }
   async flush(): Promise<PersistFailureReport | undefined> {
@@ -156,7 +161,12 @@ export class ScopedVfs implements Vfs {
     private readonly inner: Vfs,
     private readonly prefix: string,
     private readonly onMutation?: WorkspaceMutationObserver,
+    private readonly intent: WorkspaceMutationIntent = 'protect',
   ) {}
+
+  private mutated(op: WorkspaceMutationOp, paths: readonly string[]): void {
+    this.onMutation?.({ op, paths, intent: this.intent });
+  }
 
   private map(path: string): string {
     return scopePath(this.prefix, path);
@@ -170,7 +180,7 @@ export class ScopedVfs implements Vfs {
   }
   async writeFile(path: string, data: Uint8Array | string): Promise<void> {
     await this.inner.writeFile(this.map(path), data);
-    this.onMutation?.({ op: 'write', paths: [normalizePath(path)] });
+    this.mutated('write', [normalizePath(path)]);
   }
   readdir(path: string): Promise<readonly VfsDirent[]> {
     return this.inner.readdir(this.map(path));
@@ -179,13 +189,13 @@ export class ScopedVfs implements Vfs {
     const mapped = this.map(path);
     const existed = await this.inner.exists(mapped);
     await this.inner.mkdir(mapped, options);
-    if (!existed) this.onMutation?.({ op: 'mkdir', paths: [normalizePath(path)] });
+    if (!existed) this.mutated('mkdir', [normalizePath(path)]);
   }
   async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
     const mapped = this.map(path);
     const existed = await this.inner.exists(mapped);
     await this.inner.rm(mapped, options);
-    if (existed) this.onMutation?.({ op: 'rm', paths: [normalizePath(path)] });
+    if (existed) this.mutated('rm', [normalizePath(path)]);
   }
   stat(path: string): Promise<VfsStat> {
     return this.inner.stat(this.map(path));
@@ -195,7 +205,7 @@ export class ScopedVfs implements Vfs {
   }
   async utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void> {
     await this.inner.utimes(this.map(path), atimeMs, mtimeMs);
-    this.onMutation?.({ op: 'utimes', paths: [normalizePath(path)] });
+    this.mutated('utimes', [normalizePath(path)]);
   }
   openReadable(
     path: string,
@@ -205,15 +215,25 @@ export class ScopedVfs implements Vfs {
   }
 }
 
+export interface WorkspaceVfsScope {
+  readonly prefix: string;
+  /** Explicit adapter for owner-controlled starter/reset baseline mutations. */
+  readonly baselineSync: ScopedFsSync;
+}
+
 export function scopeActiveVfsToWorkspace(
   workspaceId: string,
   onMutation?: WorkspaceMutationObserver,
-): string {
+): WorkspaceVfsScope {
   const prefix = workspaceVfsPrefix(workspaceId);
-  const scopedSync = new ScopedFsSync(syncMirror(), prefix, onMutation);
+  const innerSync = syncMirror();
+  const scopedSync = new ScopedFsSync(innerSync, prefix, onMutation, 'protect');
+  const baselineSync = new ScopedFsSync(innerSync, prefix, onMutation, 'baseline');
   const activeAsync = asyncVfs();
-  const scopedAsync = activeAsync ? new ScopedVfs(activeAsync, prefix, onMutation) : undefined;
+  const scopedAsync = activeAsync
+    ? new ScopedVfs(activeAsync, prefix, onMutation, 'protect')
+    : undefined;
   setSyncMirror(scopedSync, scopedAsync ? { async: scopedAsync } : {});
   scopedSync.mkdirSync('/', { recursive: true });
-  return prefix;
+  return { prefix, baselineSync };
 }

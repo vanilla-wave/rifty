@@ -6,7 +6,7 @@
  * `kill(pid, signal)` emits `exit`/`close`.
  *
  * Per-PID records are swept from `table` after `exit` fires, and the internal
- * stdio/IPC emitters are stripped of listeners, so a long-lived host (the
+ * stdio/channel emitters are stripped of listeners, so a long-lived host (the
  * playground) doesn't accumulate deceased records or per-spawn listener stacks.
  * The handle object survives so callers can still read `handle.exitCode`.
  *
@@ -42,20 +42,24 @@ export interface ProcessIO {
 export type ProcessHandleKind = 'same-realm' | 'worker';
 
 /**
- * Wire frame for the fork-mode IPC channel between
- * {@link WorkerProcessHandle} and the worker-side `process` shim
- * (ADR-0211). Both directions share the vocabulary so either peer can post
- * either kind. No version field — parent and child are built together.
+ * Frames multiplexed over one Worker channel (ADR-0217). Control stays internal;
+ * `ipc:*` belongs to a capability-gated higher-runtime lane. No version field —
+ * parent and child are built together.
  */
 export type IpcFrame =
+  | { readonly kind: 'control:message'; readonly payload: unknown }
   | { readonly kind: 'ipc:message'; readonly payload: unknown }
   | { readonly kind: 'ipc:disconnect' };
 
+export type WorkerStdinFrame =
+  | { readonly kind: 'stdin:data'; readonly data: string | Uint8Array }
+  | { readonly kind: 'stdin:end' };
+
 /**
  * Fields common to both spawn branches. Each variant carries its own `send`
- * signature: same-realm routes through an in-realm `EventEmitter`,
- * Worker-backed through a `MessagePort` pair (ADR-0211). Callers narrow on
- * `handle.kind` first.
+ * signature: same-realm routes through an in-realm `EventEmitter`; Worker-backed
+ * handles route control and runtime IPC through one framed channel. Callers
+ * narrow on `handle.kind` first.
  */
 interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
@@ -84,10 +88,9 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
 
 /**
  * Worker-backed `spawnWorker(...)` handle — `ports` is always present.
- * Carries raw fork-mode IPC (ADR-0211) over the dedicated parent↔child
- * `MessagePort` pair: {@link send} posts a frame to the worker, the worker's
- * reciprocal `process.send` surfaces as a `'message'` event here, and
- * {@link disconnect} closes the channel.
+ * Carries internal structured-clone control plus logical runtime IPC over one
+ * physical MessagePort (ADR-0217). `sendControl`/`'control'` never surface as
+ * runtime process IPC; `send`/`'message'` and `disconnect` own that runtime lane.
  *
  * Stdio accessors (`stdout` / `stderr` / `stdin`) wrap the underlying
  * `MessagePort` triple as `@riftydev/io` streams — the supported surface for
@@ -97,7 +100,7 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
 export interface WorkerProcessHandle extends ProcessHandleBase {
   readonly kind: 'worker';
   /**
-   * @deprecated Prefer `stdout()` / `stderr()` / `stdin()`. The raw triple
+   * @deprecated Prefer `stdout()` / `stderr()` / `stdin()`. The raw ports
    * is kept for an interim release to unblock M11's `WasiProcessHandle`
    * dispatch experiments; remove when no consumer reaches for it directly.
    */
@@ -111,13 +114,15 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
   /** Read-side of the worker's stderr. Same shape as {@link stdout}. */
   stderr(): Readable;
   /**
-   * Write-side of the worker's stdin. `write(chunk)` posts `chunk` to the
-   * worker's stdin port; `end()` closes the port. Same instance is returned
-   * on repeated calls.
+   * Write-side of the worker's stdin. `write(chunk)` posts `stdin:data`;
+   * `end()` posts `stdin:end` before closing the local port. Same instance is
+   * returned on repeated calls.
    */
   stdin(): Writable;
+  /** Structured-clone internal control; never surfaces as runtime process IPC. */
+  sendControl(message: unknown): boolean;
   /**
-   * Send a raw IPC message to the worker child (ADR-0211). Returns `false`
+   * Send a raw runtime-IPC message to the worker child (ADR-0211). Returns `false`
    * after `disconnect()` or worker exit (matches Node's `subprocess.send`
    * behaviour); `true` when the message is posted. A structured-clone failure
    * throws synchronously without disconnecting the channel (ADR-0211); the
@@ -125,10 +130,9 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
    */
   send(message: unknown): boolean;
   /**
-   * Close the IPC channel (ADR-0211). Idempotent. Posts an `ipc:disconnect`
-   * frame to the worker, closes the parent-side IPC port, and emits
-   * `'disconnect'` on this handle. Subsequent `send` calls return `false`.
-   * Called automatically on worker exit (natural or terminate).
+   * Disconnect the logical runtime-IPC lane (ADR-0217). Idempotent. Posts an
+   * `ipc:disconnect` frame and emits `'disconnect'`; internal control remains
+   * usable until worker exit. Subsequent `send` calls return `false`.
    */
   disconnect(): void;
 }
@@ -339,11 +343,9 @@ export class ProcessManager {
       #stderrReadable: Readable | null = null;
       #stdinWritable: Writable | null = null;
 
-      // ADR-0211: parent-side IPC port lifecycle. `#ipcStarted` flips on the
-      // first `onmessage` wiring; `#ipcDisconnected` blocks `send` /
-      // `disconnect` from posting after teardown.
-      #ipcStarted = false;
-      #ipcDisconnected = false;
+      #channelStarted = false;
+      #channelClosed = false;
+      #ipcDisconnected = !spawnResult.spec.capabilities.runtimeIpc;
 
       get cwd(): string {
         return record.cwd;
@@ -364,37 +366,39 @@ export class ProcessManager {
         return this.#stdinWritable;
       }
       /**
-       * Internal: start the parent-side IPC port and bind the `onmessage`
-       * dispatcher to surface `'message'` and `'disconnect'` events. Called
-       * once at construction time; idempotent.
+       * Start the parent-side channel demultiplexer for internal control and
+       * runtime IPC. Called once at construction time; idempotent.
        */
-      _startIpc(): void {
-        if (this.#ipcStarted) return;
-        this.#ipcStarted = true;
+      _startChannels(): void {
+        if (this.#channelStarted) return;
+        this.#channelStarted = true;
         ports.ipc.onmessage = (ev: MessageEvent) => {
           const frame = ev.data as IpcFrame | undefined;
           if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
-          if (frame.kind === 'ipc:message') {
+          if (frame.kind === 'control:message') {
+            this.emit('control', frame.payload);
+          } else if (frame.kind === 'ipc:message' && !this.#ipcDisconnected) {
             this.emit('message', frame.payload);
           } else if (frame.kind === 'ipc:disconnect') {
-            this._tearDownIpc();
+            this._disconnectRuntimeIpc();
           }
         };
         ports.ipc.start();
       }
-      /**
-       * Internal: tear down the parent-side IPC port. Idempotent — second
-       * call is a no-op. Closes the port, emits `'disconnect'` exactly once.
-       */
-      _tearDownIpc(): void {
+      _disconnectRuntimeIpc(): void {
         if (this.#ipcDisconnected) return;
         this.#ipcDisconnected = true;
+        this.emit('disconnect');
+      }
+      _closeChannels(): void {
+        if (this.#channelClosed) return;
+        this.#channelClosed = true;
+        this._disconnectRuntimeIpc();
         try {
           ports.ipc.close();
         } catch {
           /* peer may have closed already */
         }
-        this.emit('disconnect');
       }
       /** Internal: push EOF on the read-side streams; called once on exit. */
       _signalEof(): void {
@@ -405,12 +409,23 @@ export class ProcessManager {
         }
       }
       send(message: unknown): boolean {
-        // Raw kernel transport (ADR-0211): Node JSON shaping lives in
-        // runtime-js. Clone failure throws without disconnecting this channel.
-        if (this.#ipcDisconnected || this.exitCode !== null || this.signalCode !== null) {
+        // Runtime-IPC transport: Node JSON shaping lives in runtime-js. Clone
+        // failure throws without disconnecting either logical lane.
+        if (
+          this.#channelClosed ||
+          this.#ipcDisconnected ||
+          this.exitCode !== null ||
+          this.signalCode !== null
+        ) {
           return false;
         }
         const frame: IpcFrame = { kind: 'ipc:message', payload: message };
+        ports.ipc.postMessage(frame);
+        return true;
+      }
+      sendControl(message: unknown): boolean {
+        if (this.#channelClosed || this.exitCode !== null || this.signalCode !== null) return false;
+        const frame: IpcFrame = { kind: 'control:message', payload: message };
         ports.ipc.postMessage(frame);
         return true;
       }
@@ -422,7 +437,7 @@ export class ProcessManager {
         } catch {
           /* peer may have closed already */
         }
-        this._tearDownIpc();
+        this._disconnectRuntimeIpc();
       }
       kill(signal = 'SIGTERM'): boolean {
         if (this.exitCode !== null) return false;
@@ -431,7 +446,7 @@ export class ProcessManager {
         this.signalCode = signal;
         this.exitCode = null;
         this._signalEof();
-        this._tearDownIpc();
+        this._closeChannels();
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
         manager.finalize(pid, this, [record.parentToChild]);
@@ -443,10 +458,9 @@ export class ProcessManager {
     record.handle = handle;
     this.table.set(pid, record);
 
-    // Start the IPC port AFTER `record.handle` is wired, so any synchronous
-    // `'message'` / `'disconnect'` dispatch sees a fully-constructed
-    // handle. The IPC port is otherwise inert (no auto-start).
-    handle._startIpc();
+    // Start the multiplexed channel AFTER `record.handle` is wired, so any
+    // synchronous control/runtime dispatch sees a fully-constructed handle.
+    handle._startChannels();
 
     spawnResult.onExit((code) => {
       if (handle.exitCode !== null || handle.signalCode !== null) return;
@@ -454,7 +468,7 @@ export class ProcessManager {
         if (handle.exitCode !== null || handle.signalCode !== null) return;
         handle.exitCode = code;
         handle._signalEof();
-        handle._tearDownIpc();
+        handle._closeChannels();
         handle.emit('exit', code, null);
         handle.emit('close', code, null);
         manager.finalize(pid, handle, [record.parentToChild]);
@@ -526,14 +540,14 @@ function bindPortAsWritable(port: MessagePort): Writable {
   return new Writable({
     write(chunk, _encoding, cb) {
       try {
-        if (chunk instanceof Uint8Array) {
-          port.postMessage(chunk);
-        } else if (typeof chunk === 'string') {
-          port.postMessage(new TextEncoder().encode(chunk));
-        } else {
-          // Object-mode payloads pass through verbatim.
-          port.postMessage(chunk);
-        }
+        const data =
+          chunk instanceof Uint8Array
+            ? chunk
+            : typeof chunk === 'string'
+              ? new TextEncoder().encode(chunk)
+              : null;
+        if (data === null) throw new TypeError('worker stdin accepts only string or Uint8Array');
+        port.postMessage({ kind: 'stdin:data', data } satisfies WorkerStdinFrame);
         cb();
       } catch (err) {
         cb(err instanceof Error ? err : new Error(String(err)));
@@ -541,6 +555,7 @@ function bindPortAsWritable(port: MessagePort): Writable {
     },
     final(cb) {
       try {
+        port.postMessage({ kind: 'stdin:end' } satisfies WorkerStdinFrame);
         port.close();
         cb();
       } catch (err) {

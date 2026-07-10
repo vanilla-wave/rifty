@@ -9,9 +9,11 @@
  * `tests/conformance/builtins/worker_threads.test.ts`.
  */
 import {
+  KERNEL_PROCESS_SPEC_KEY,
   type ProcessHandle,
   type SpawnWorkerSpec,
   globalProcessManager,
+  publishKernelProcessSpec,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,9 +32,7 @@ import '../module-loader/loader.ts';
 let warnSpy: ReturnType<typeof vi.spyOn>;
 type Coi = { crossOriginIsolated?: boolean };
 type WorkerProcessHandle = Extract<ProcessHandle, { kind: 'worker' }>;
-type ProcessWithWorkerIpc = NodeJS.Process & {
-  send?: (message: unknown) => unknown;
-};
+type ProcessWithWorkerIpc = NodeJS.Process;
 
 beforeEach(() => {
   _resetFallbackWarnState();
@@ -237,28 +237,36 @@ globalThis.onmessage = ({ data }) => {
     expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
   });
 
-  it('exposes parentPort and workerData inside a kernel-backed worker child', () => {
+  it('exposes parentPort and workerData inside a kernel-backed worker child', async () => {
     const proc = globalThis.process as ProcessWithWorkerIpc;
-    const originalSend = proc.send;
-    const originalOn = proc.on;
     const sent: unknown[] = [];
-    let capturedMessageHandler: ((message: unknown) => void) | undefined;
+    const stdout = new MessageChannel();
+    const stderr = new MessageChannel();
+    const stdin = new MessageChannel();
+    const control = new MessageChannel();
+    publishKernelProcessSpec({
+      pid: 77,
+      ppid: 1,
+      argv: ['rifty', 'worker'],
+      env: {},
+      cwd: '/workspace',
+      capabilities: { stdin: 'unavailable', runtimeIpc: false },
+      stdio: {
+        stdout: stdout.port1,
+        stderr: stderr.port1,
+        stdin: stdin.port1,
+        ipc: control.port1,
+      },
+    });
+    control.port2.onmessage = (event) => {
+      const frame = event.data as { kind?: unknown; payload?: unknown };
+      if (frame.kind === 'control:message') sent.push(frame.payload);
+    };
+    control.port2.start();
 
     proc.env.RIFTY_WORKER_THREADS = '1';
     proc.env.RIFTY_WORKER_THREAD_ID = '77';
     proc.env.RIFTY_WORKER_DATA_JSON = '{"mode":"rolldown"}';
-    proc.send = (message: unknown) => {
-      sent.push(message);
-      return true;
-    };
-    proc.on = ((event: string | symbol, handler: (...args: unknown[]) => void) => {
-      if (event === 'message') {
-        capturedMessageHandler = handler as (message: unknown) => void;
-        return proc;
-      }
-      return originalOn.call(proc, event, handler as never);
-    }) as NodeJS.Process['on'];
-
     try {
       _resetFallbackWarnState();
       const wt = workerThreadsModule as {
@@ -276,7 +284,8 @@ globalThis.onmessage = ({ data }) => {
       expect(wt.threadId).toBe(77);
       expect(wt.workerData).toEqual({ mode: 'rolldown' });
       wt.parentPort.postMessage({ from: 'child' });
-      capturedMessageHandler?.({ from: 'parent' });
+      control.port2.postMessage({ kind: 'control:message', payload: { from: 'parent' } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(sent).toEqual([{ from: 'child' }]);
       expect(received).toEqual([{ from: 'parent' }]);
@@ -284,8 +293,7 @@ globalThis.onmessage = ({ data }) => {
       proc.env.RIFTY_WORKER_THREADS = undefined;
       proc.env.RIFTY_WORKER_THREAD_ID = undefined;
       proc.env.RIFTY_WORKER_DATA_JSON = undefined;
-      proc.send = originalSend;
-      proc.on = originalOn;
+      Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
       _resetFallbackWarnState();
     }
   });
@@ -371,6 +379,9 @@ function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
       return stdin as unknown as ReturnType<WorkerProcessHandle['stdin']>;
     },
     send(message: unknown): boolean {
+      return true;
+    },
+    sendControl(message: unknown): boolean {
       sent.push(message);
       return true;
     },

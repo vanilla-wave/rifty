@@ -725,7 +725,7 @@ describe('createServiceEndpoint', () => {
   });
 
   it('a frame arriving while ts:init is still in flight WAITS for it (no "before ts:init" race)', async () => {
-    // The fork-IPC pump dispatches each frame independently; `ts:init` is async
+    // The control pump dispatches each frame independently; `ts:init` is async
     // (it awaits the std-lib load), so an open/query frame the page sends right
     // after init lands at the endpoint while the service is still building. It
     // MUST queue behind the in-flight init (the page never re-sends), not fail.

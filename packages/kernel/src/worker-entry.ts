@@ -11,14 +11,14 @@
  *   3. Publishes the sync-call shim via {@link publishKernelSyncApi}.
  *   4. Publishes a typed {@link KernelProcessSpec} via
  *      {@link publishKernelProcessSpec} (ADR-0039) — a runtime-agnostic
- *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. Kernel does NOT
+ *      snapshot of `{pid, ppid, argv, env, cwd, capabilities, stdio}`. Kernel does NOT
  *      install a Node-shape `globalThis.process`; that lives in
  *      `@riftydev/runtime-js`.
  *   5. Invokes the optional pre-entry hook ({@link setKernelPreEntryHook}).
  *      Node-style hosts use it to install the Node `process` global from
  *      runtime-js before user code runs.
  *   6. Runs the entry (eval'd source or a dynamic `import(url)`).
- *   7. Posts `{ type: 'exit', code }` and closes the stdio ports.
+ *   7. Posts `{ type: 'exit', code }` and closes the worker ports.
  *
  * The exit code follows Node:
  *   - normal completion / promise resolution → 0
@@ -30,8 +30,7 @@
  *   - Node-API installation — runtime-js owns it (ADR-0039).
  *   - Sync syscall servicing — registered by higher layers via
  *     `dispatcher.register('method', handler)`.
- *   - Stdin support — `spec.stdio.stdin` is reserved for ADR-0011 phase 2
- *     follow-ups.
+ *   - Node stream policy — kernel frames stdin data/EOF; runtime-js owns shape.
  */
 
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from './ipc/sab-ring.ts';
@@ -40,6 +39,7 @@ import {
   KERNEL_SYNC_CALL_KEY,
   type KernelProcessSpec,
   type KernelSyncCall,
+  type WorkerProcessCapabilities,
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from './shared-globals.ts';
@@ -50,15 +50,12 @@ import {
 export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
 /**
- * Stdio + IPC channels passed to the worker. Each is a transferred
- * MessagePort.
+ * Kernel-owned channels passed to the worker. Each is a transferred MessagePort.
  *
- * `ipc` carries the fork-mode IPC channel (ADR-0211) — raw kernel
- * `{ kind: 'ipc:message', payload }` and `{ kind: 'ipc:disconnect' }`
- * frames between the parent's `WorkerProcessHandle.send` and the child realm;
- * runtime-js applies Node's JSON codec at its public process boundary. `stdio`
- * is preserved for ABI continuity; conceptually it's now the wider
- * "kernel-owned ports" struct.
+ * `ipc` multiplexes structured-clone `control:message` frames and the logical
+ * runtime `ipc:*` lane (ADR-0217). Runtime-js applies Node's JSON codec only at
+ * its public process boundary. `stdio` remains as the ABI name for this wider
+ * port struct.
  */
 export interface WorkerStdioPorts {
   readonly stdout: MessagePort;
@@ -74,7 +71,7 @@ export type WorkerEntryDescriptor =
 
 /**
  * Bootstrap payload sent from `kernel.spawn` to a fresh kernel Worker.
- * Transferable fields (`syncRing`, the three `stdio` ports) MUST appear in
+ * Transferable fields (`syncRing`, the four `stdio` ports) MUST appear in
  * the parent's `postMessage` transfer list.
  */
 export interface WorkerSpawnSpec {
@@ -82,6 +79,7 @@ export interface WorkerSpawnSpec {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
+  readonly capabilities: WorkerProcessCapabilities;
   readonly stdio: WorkerStdioPorts;
   readonly syncRing: SharedArrayBuffer;
   /**
@@ -211,6 +209,7 @@ function publishProcessSpec(spec: WorkerSpawnSpec): void {
     argv: spec.argv,
     env: spec.env,
     cwd: spec.cwd,
+    capabilities: spec.capabilities,
     stdio: spec.stdio,
   };
   publishKernelProcessSpec(out);
@@ -248,10 +247,9 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
 }
 
 function closePorts(ports: WorkerStdioPorts): void {
-  // Closing stdout/stderr lets the parent's consumer observe EOF. stdin is
-  // closed here for symmetry. `ipc` (ADR-0211) is closed last so any
-  // disconnect frame the runtime-js installer posted during teardown has
-  // already left the realm.
+  // Closing stdout/stderr lets the parent observe EOF. stdin closes for
+  // symmetry. The multiplexed channel closes last so queued control/runtime
+  // frames can leave first.
   try {
     ports.stdout.close();
   } catch {

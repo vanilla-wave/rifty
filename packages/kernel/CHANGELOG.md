@@ -4,9 +4,13 @@
 
 ### Fixed
 
+- **ADR-0217 separates Worker control, runtime IPC, and stdin capabilities.**
+  Worker specs declare forwarded stdin/runtime IPC; one physical channel
+  demultiplexes structured-clone control from runtime `ipc:*`, logical
+  disconnect leaves control alive, and stdin carries explicit data/EOF frames.
 - **ADR-0211 raw IPC clone failures no longer masquerade as disconnects.**
   `WorkerProcessHandle.send` lets `DataCloneError` surface synchronously while
-  preserving the MessagePort for a subsequent valid control frame; Node JSON
+  preserving the MessagePort for a subsequent valid runtime-IPC frame; Node JSON
   serialization remains owned by runtime-js.
 - **External parent IDs cannot collide with newly allocated child PIDs.**
   `spawn` and `spawnWorker` now share one allocator that skips the supplied

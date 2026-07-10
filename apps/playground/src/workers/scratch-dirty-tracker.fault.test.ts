@@ -17,7 +17,7 @@ describe('scratch dirty tracker fault matrix', () => {
     expect(markScratchDirty).toHaveBeenCalledTimes(1);
 
     tracker.onWorkspaceMutation({ op: 'write', paths: ['/scratch/delayed.txt'] });
-    expect(markScratchDirty).toHaveBeenCalledTimes(1);
+    expect(markScratchDirty).toHaveBeenCalledTimes(2);
   });
 
   it('concurrent-same-key: protects scratch when a boot write overlaps a user run', () => {
@@ -40,6 +40,6 @@ describe('scratch dirty tracker fault matrix', () => {
       mayOutlivePty: false,
     });
     tracker.onWorkspaceMutation({ op: 'write', paths: ['/scratch/node_modules/pkg/index.js'] });
-    expect(markScratchDirty).toHaveBeenCalledTimes(1);
+    expect(markScratchDirty).toHaveBeenCalledTimes(2);
   });
 });

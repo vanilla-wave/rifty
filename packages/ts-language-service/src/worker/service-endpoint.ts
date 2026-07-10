@@ -1,7 +1,7 @@
 /**
  * Protocol endpoint (ADR-0166): the PURE core that maps a worker protocol
  * request frame → response frame against a {@link TsLanguageService}. No worker
- * globals, no kernel side effects — `entry.ts` wires this to the real fork-IPC
+ * globals, no kernel side effects — `entry.ts` wires this to kernel control
  * port + sync-RPC `call`, while tests drive it directly over a fake `call`.
  *
  * Lifecycle: the first `ts:init` frame builds the service (async — the engine
@@ -9,7 +9,7 @@
  * the overlay (`open`/`update`/`close`/`invalidate`) or query diagnostics
  * (`getSemantic`/`getSyntactic`/`getConfigFile`).
  *
- * Init serialization (the fork-IPC pump dispatches every frame independently —
+ * Init serialization (the control pump dispatches every frame independently —
  * it does NOT await one before the next): a frame that arrives while `ts:init`
  * is still building the service QUEUES behind the in-flight build by awaiting
  * the shared `servicePromise`, then runs. The page never re-sends, so racing a

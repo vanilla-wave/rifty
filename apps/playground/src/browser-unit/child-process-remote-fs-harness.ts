@@ -8,9 +8,14 @@ interface ChildProbeResult {
   readonly spawnTarget: string;
   readonly spawnStderr: string;
   readonly spawnStdioShape: string;
+  readonly spawnIpcShape: string;
+  readonly stdinCode: number | null;
+  readonly stdinOutput: string;
+  readonly stdinStderr: string;
   readonly forkCode: number | null;
   readonly forkReply: unknown;
   readonly forkStdioShape: string;
+  readonly forkIpcShape: string;
 }
 
 function chunkText(chunk: unknown): string {
@@ -21,6 +26,21 @@ function stdioShape(child: ReturnType<typeof spawn>): string {
   return [child.stdin, child.stdout, child.stderr]
     .map((stream) => (stream === null ? 'null' : 'pipe'))
     .join(',');
+}
+
+function ipcShape(child: ReturnType<typeof spawn>): string {
+  const candidate = child as ReturnType<typeof spawn> & {
+    readonly connected?: unknown;
+    readonly channel?: unknown;
+    readonly send?: unknown;
+    readonly disconnect?: unknown;
+  };
+  return [
+    typeof candidate.send,
+    typeof candidate.disconnect,
+    String(candidate.connected),
+    typeof candidate.channel,
+  ].join(',');
 }
 
 function waitForClose(child: ReturnType<typeof spawn>, timeoutMs = 15_000): Promise<number | null> {
@@ -72,7 +92,27 @@ export async function runRemoteFsChildProcessProbe(): Promise<ChildProbeResult> 
     ],
   });
   const spawnStdioShape = stdioShape(spawned);
+  const spawnIpcShape = ipcShape(spawned);
   const spawnCode = await waitForClose(spawned);
+
+  fsSync.writeFileSync(
+    '/project/stdin.mjs',
+    enc.encode(
+      `process.stdin.setEncoding('utf8');\nlet input = '';\nprocess.stdin.on('data', (chunk) => { input += chunk; });\nprocess.stdin.on('end', () => process.stdout.write('STDIN=' + input + ';SEND=' + typeof process.send + ';DISCONNECT=' + typeof process.disconnect + ';CONNECTED=' + String(process.connected) + ';CHANNEL=' + typeof process.channel + '\\n'));\n`,
+    ),
+  );
+  let stdinOutput = '';
+  let stdinStderr = '';
+  const stdinChild = spawn('node', ['/project/stdin.mjs'], { cwd: '/project' });
+  stdinChild.stdout?.on('data', (chunk) => {
+    stdinOutput += chunkText(chunk);
+  });
+  stdinChild.stderr?.on('data', (chunk) => {
+    stdinStderr += chunkText(chunk);
+  });
+  stdinChild.stdin?.write('hello');
+  stdinChild.stdin?.end();
+  const stdinCode = await waitForClose(stdinChild);
 
   fsSync.writeFileSync(
     '/project/ipc.mjs',
@@ -82,6 +122,7 @@ export async function runRemoteFsChildProcessProbe(): Promise<ChildProbeResult> 
   );
   const forked = fork('/project/ipc.mjs', [], { cwd: '/project' });
   const forkStdioShape = stdioShape(forked);
+  const forkIpcShape = ipcShape(forked);
   const forkReply = await new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('fork IPC reply timed out')), 10_000);
     forked.on('message', (message) => {
@@ -97,8 +138,13 @@ export async function runRemoteFsChildProcessProbe(): Promise<ChildProbeResult> 
     spawnTarget,
     spawnStderr,
     spawnStdioShape,
+    spawnIpcShape,
+    stdinCode,
+    stdinOutput,
+    stdinStderr,
     forkCode,
     forkReply,
     forkStdioShape,
+    forkIpcShape,
   };
 }

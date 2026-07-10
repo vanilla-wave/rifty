@@ -35,6 +35,7 @@ function specWith(env: Record<string, string>): KernelProcessSpec {
     argv: ['wasi-guest'],
     env,
     cwd: '/',
+    capabilities: { stdin: 'unavailable', runtimeIpc: false },
     stdio: {
       stdout: new MessageChannel().port1,
       stderr: new MessageChannel().port1,

@@ -6,8 +6,10 @@ export type {
   ProcessIO,
   SameRealmProcessHandle,
   SpawnOptions,
+  WorkerStdinFrame,
   WorkerProcessHandle,
 } from './process-manager.ts';
+export { readWorkerControlChannel, type WorkerControlChannel } from './process-channels.ts';
 
 // ADR-0011 phase 1 — SAB sync-IPC primitives.
 export {
@@ -90,6 +92,8 @@ export {
   type KernelProcessStdioPorts,
   type KernelSyncApi,
   type KernelSyncCall,
+  DEFAULT_WORKER_PROCESS_CAPABILITIES,
+  type WorkerProcessCapabilities,
   publishKernelProcessSpec,
   publishKernelSyncApi,
   readKernelProcessSpec,

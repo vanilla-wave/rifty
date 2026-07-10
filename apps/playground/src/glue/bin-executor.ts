@@ -25,16 +25,16 @@ export interface BinReadable {
 
 /**
  * Worker handle surface the executor needs (subset of `WorkerProcessHandle`).
- * `on('message')` is part of the shared `ForegroundChildHandle` contract (the
- * real handle has it); a bin child never sends messages, so the driver never
+ * `on('control')` is part of the shared `ForegroundChildHandle` contract; a bin
+ * child normally sends no control, so the driver never
  * subscribes — it is declared only to satisfy the shared type.
  */
 export interface BinWorkerHandle {
   stdout(): BinReadable;
   stderr(): BinReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
-  on(event: 'message', listener: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
+  on(event: 'control', listener: (message: unknown) => void): unknown;
+  sendControl?(message: unknown): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -55,7 +55,7 @@ export interface BinExecutorDeps {
   readonly onStart?: (req: BinSpawnRequest, ctx: CommandContext) => void;
   /** Optional child handle hook for owners that need to send control messages. */
   readonly onSpawn?: (req: BinSpawnRequest, handle: BinWorkerHandle, ctx: CommandContext) => void;
-  /** Optional child→owner IPC hook (e.g. listened ports from server-capable bins). */
+  /** Optional child→owner control hook (e.g. listened ports from server-capable bins). */
   readonly onMessage?: (req: BinSpawnRequest, message: unknown, ctx: CommandContext) => void;
   /** Optional exit hook (runs before the executor promise resolves). */
   readonly onExit?: (req: BinSpawnRequest, ctx: CommandContext) => void;
@@ -73,7 +73,7 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     // never a silent 0. Foreground machinery (decode + stream + Ctrl+C kill/mute
     // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
     // the owner `node <file>` executor via run-foreground-child. Server-capable
-    // bins can also surface child IPC through the optional hooks.
+    // bins can also surface child control through the optional hooks.
     const req: BinSpawnRequest = {
       shimPath: binPath,
       args,

@@ -65,8 +65,8 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
   });
 
   it('forwards owner file-change messages into the active Vite CLI server', () => {
-    // residual source pin: proc.on('message') → __riftyActiveViteServer →
-    // invalidateViteModule is fork-IPC wiring on the kernel process shim; node
+    // residual source pin: kernel control → __riftyActiveViteServer →
+    // invalidateViteModule; node
     // has no such realm. The handle publication itself is behavioral in
     // vite-cli-prep.test.ts; invalidation in real-vite-invalidation.test.ts.
     expect(source).toContain('rifty:vite-file-change');

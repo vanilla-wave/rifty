@@ -60,6 +60,19 @@ describe('child_process.spawn', () => {
     expect(code).toBe(127);
     expect(err).toMatch(/ENOENT/);
   });
+
+  it('plain spawn omits IPC-only own properties', async () => {
+    writeFileSync('/plain.js', '');
+    const child = spawn('node', ['/plain.js']);
+
+    expect(Object.hasOwn(child, 'send')).toBe(false);
+    expect(Object.hasOwn(child, 'disconnect')).toBe(false);
+    expect(Object.hasOwn(child, 'channel')).toBe(false);
+    expect(Object.hasOwn(child, 'connected')).toBe(true);
+    expect(child.connected).toBe(false);
+
+    await new Promise<void>((resolve) => child.on('close', () => resolve()));
+  });
 });
 
 describe('child_process.exec', () => {
@@ -86,6 +99,31 @@ describe('child_process.fork', () => {
     const child = fork('/c.js');
     expect(typeof child.send).toBe('function');
     expect(typeof child.kill).toBe('function');
+  });
+
+  it('keeps child.channel ref/unref loud without exposing the raw control port', () => {
+    writeFileSync('/channel.js', '');
+    const child = fork('/channel.js');
+    const channel = child.channel;
+    if (channel === null || channel === undefined) throw new Error('fork must expose channel');
+
+    expect(Object.hasOwn(child, 'send')).toBe(true);
+    expect(Object.hasOwn(child, 'disconnect')).toBe(true);
+    expect(Object.hasOwn(child, 'channel')).toBe(true);
+    expect(Object.hasOwn(child, 'connected')).toBe(true);
+
+    expect(() => channel.ref()).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'child_process.channel.ref',
+      }) as unknown as Error,
+    );
+    expect(() => channel.unref()).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'child_process.channel.unref',
+      }) as unknown as Error,
+    );
   });
 });
 

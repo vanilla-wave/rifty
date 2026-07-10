@@ -39,7 +39,7 @@ import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
-import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
+import { type FsSync, dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinWorkerHandle } from '../glue/bin-executor.ts';
 import {
   learnedPinForPackageJsonSync,
@@ -303,7 +303,7 @@ function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
  * (the tree the install writes) — one store, no two-owners gap. The dev server
  * starts on demand (`vite` / `npm run <script>`), blocks its run until Ctrl-C,
  * and stops via `server.close()` WITHOUT killing the owner. The realm stays alive
- * on `serve:true` via its IPC channel + served bridges.
+ * on `serve:true` via its active control channel + served bridges.
  */
 async function bootShellOwner(opts: {
   readonly cfg: BootstrapConfig;
@@ -329,6 +329,8 @@ async function bootShellOwner(opts: {
   readonly tsLspWorkerUrl: string;
   /** Owner VFS mutation provenance → durable scratch dirty bridge. */
   readonly scratchDirtyTracker: ScratchDirtyTracker;
+  /** Explicit adapter for owner-controlled starter/reset baseline mutations. */
+  readonly baselineFs: FsSync;
 }): Promise<void> {
   const {
     cfg,
@@ -342,6 +344,7 @@ async function bootShellOwner(opts: {
     hiddenEmptyBoot,
     fromScratch,
     scratchDirtyTracker,
+    baselineFs,
   } = opts;
 
   // The persistent owner is spawned once with the deep-link/default template; a
@@ -629,7 +632,7 @@ async function bootShellOwner(opts: {
     for (const path of paths) {
       devServer.notifyFileChanged(path);
       for (const child of liveBinChildren) {
-        child.send?.({ type: 'rifty:vite-file-change', path });
+        child.sendControl?.({ type: 'rifty:vite-file-change', path });
       }
     }
   };
@@ -963,8 +966,8 @@ async function bootShellOwner(opts: {
 
   // ADR-0166 P1.9a — TS language-service child + page↔LS relay. There is no
   // direct page→grandchild channel, so page↔LS `rifty:ts-lsp` frames flow:
-  //   page →(page↔owner fork-IPC)→ owner → lsChild.send →(owner↔LS fork-IPC)→ LS
-  //   LS →process.send→ owner → kernelIpc.send →(owner↔page fork-IPC)→ page
+  //   page → owner control → lsChild.sendControl → LS control
+  //   LS control → owner → kernelIpc.send → page control
   // The LS child is spawned lazily on the FIRST inbound request (the page only
   // talks to it once the editor opens a file), reading the owner store over fs.*
   // sync-RPC (RIFTY_REMOTE_FS=1) — exactly the dev-server child's spawn shape.
@@ -986,7 +989,7 @@ async function bootShellOwner(opts: {
       throw new Error(`ts-lsp child: expected worker handle, got ${h.kind}`);
     }
     // LS child → owner → page: forward only RESPONSE envelopes back to the page.
-    h.on('message', (response: unknown) => {
+    h.on('control', (response: unknown) => {
       if (isTsResponseMessage(response)) kernelIpc.send?.(stampTsLspOwner(response, port));
     });
     // A crashed LS child must not leave the page hanging: drop the handle so the
@@ -1005,7 +1008,7 @@ async function bootShellOwner(opts: {
   function relayTsLspRequest(message: unknown): void {
     if (lsChild === null) lsChild = spawnTsLspChild();
     // Pass the envelope through untouched (id preserved end-to-end).
-    lsChild.send(message);
+    lsChild.sendControl(message);
   }
 
   kernelIpc.onMessage?.((message) => {
@@ -1102,13 +1105,13 @@ async function bootShellOwner(opts: {
   // and schedules rifty-git status refresh together.
   const tearIndexBridge = serveProjectIndex(
     port,
-    syncMirror(),
+    baselineFs,
     '/',
     flushSyncMirror,
     publishOwnerState,
     async (root) => {
       markStarterGeneratedBaselinePending(root);
-      await ensureStarterInitialCommit(ownerGitVfs(), root);
+      await ensureStarterInitialCommit(new SyncMirrorVfs(() => baselineFs), root);
     },
   );
   scratchDirtyTracker.bind(() => tearIndexBridge.markActiveScratchDirty());
@@ -1200,7 +1203,11 @@ async function bootstrap(): Promise<void> {
   }
   // Scope whichever backend is active exactly once. A scoping failure is not an
   // OPFS capability failure and stays loud instead of being retried/misreported.
-  const prefix = scopeActiveVfsToWorkspace(workspaceId, scratchDirtyTracker.onWorkspaceMutation);
+  const workspaceScope = scopeActiveVfsToWorkspace(
+    workspaceId,
+    scratchDirtyTracker.onWorkspaceMutation,
+  );
+  const { prefix } = workspaceScope;
   if (backendError === undefined) {
     log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
   } else {
@@ -1259,6 +1266,7 @@ async function bootstrap(): Promise<void> {
     devServerWorkerUrl,
     tsLspWorkerUrl,
     scratchDirtyTracker,
+    baselineFs: workspaceScope.baselineSync,
   });
 }
 

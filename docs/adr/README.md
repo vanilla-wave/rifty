@@ -25,7 +25,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes |
 | 0019 | `cwd` lives in `kernel.ProcessRecord` |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
+| 0045 | Worker-process IPC over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
+| 0217 | Separate worker control, runtime IPC, and stdin capability |
 
 ### runtime-js
 
@@ -57,6 +59,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
 | 0211 | Node-default JSON serialization over MessagePort child-process IPC |
+| 0220 | Node-compatible callable EventEmitter and observable process stream surface |
 
 ### runtime-wasi
 
@@ -230,7 +233,6 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
 | 0133 | 0163 | prod npm-registry proxy moved from Netlify Function to Yandex Cloud streaming Compute proxy; context grafted |
 | 0044 | 0047 | esbuild WASI |
-| 0045 | 0211 | MessagePort transport retained; child-process serialization moved to the runtime Node-default JSON codec; clone failures no longer disconnect |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
@@ -249,8 +251,11 @@ superseded.
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
+| 0034 EventEmitter/Readable observable public surface | 0220 / note 2026-07-10 | EventEmitter is callable + constructable; constructor `read` and subclass `_read` share one producer hook; `isPaused` is public |
 | 0036 `synthesizePreviewUrl(path)` host clause | 0189 / note 2026-07-04 | SW preview HTTP routing now synthesizes `localhost[:port]`; `PREVIEW_LOCAL_HOST=preview.local` remains for explicit legacy HMR bridge paths |
 | 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
+| 0045 child-process serialization / clone-failure clauses | 0211 / note 2026-07-10 | runtime-js JSON-shapes Node IPC; serialization/clone failure is synchronous and does not disconnect |
+| 0045 port-implies-IPC / whole-port disconnect clauses | 0217 / note 2026-07-10 | worker capabilities split structured-clone control from optional runtime IPC; runtime disconnect preserves control; channel ref/unref stays loud; stdin data/EOF are framed |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
@@ -263,6 +268,7 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0157 stdin EventEmitter / port-implies-process.send clauses | 0217 / 0220 / note 2026-07-10 | `NodeProcess.stdin` is the shared Readable; explicit capabilities select forwarded vs unavailable stdin and optional public runtime IPC |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 | 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
 | 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |

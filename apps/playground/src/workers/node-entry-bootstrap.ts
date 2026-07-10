@@ -30,7 +30,7 @@
  * write, over RPC.
  */
 
-import { readKernelSyncApi } from '@riftydev/kernel';
+import { readKernelProcessSpec, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
@@ -49,9 +49,10 @@ import {
   viteCliModeFromEnv,
   viteCliPrepareOptionsFromEnv,
 } from './vite-cli-prep.ts';
-import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+import { installBundleLocalBuffer, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+const control = installRuntimeGlobals();
 const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
@@ -102,7 +103,7 @@ function isViteFileChangeMessage(message: unknown): message is ViteFileChangeMes
 }
 
 function installViteFileChangeBridge(): void {
-  proc.on?.('message', (message: unknown) => {
+  control.onMessage?.((message: unknown) => {
     if (!isViteFileChangeMessage(message)) return;
     const server = globalThis.__riftyActiveViteServer;
     if (server) invalidateViteModule(server, message.path);
@@ -133,7 +134,7 @@ const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
 // preventDefault) — never silently swallowed either way.
 //
 // `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
-// correct argv/cwd/stdin + fork-IPC `send`. No swap, so `installLoudStdin(proc)` and
+// correct argv/cwd/stdin + capability-gated runtime IPC. No swap, so `installLoudStdin(proc)` and
 // `proc.cwd()` act on the SAME object user code reads. The else-branch (.bin/execSync)
 // already has Buffer + nextTick from the gated pre-entry install; the RIFTY_NODE_SERVE
 // branch additionally registers net builtins + the stdin guard (not needed there).
@@ -147,7 +148,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
   // ADR-0157 §4): make the consume surface throw loudly instead of hanging on
   // input that never arrives (Fidelity — no silent divergence).
   // backlog/kernel/worker-per-process-residuals + terminal/raw-stdin-deferred-items.
-  installLoudStdin(proc);
+  if (readKernelProcessSpec()?.capabilities.stdin !== 'forwarded') installLoudStdin(proc);
   await runNodeProgramLifecycle({
     runEntry: () =>
       runNodeEntry({
@@ -166,7 +167,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
         previewScope === undefined ? {} : { scope: previewScope },
       ),
     postListening: (ports) =>
-      proc.send?.({
+      control.send?.({
         type: 'rifty:node-listening',
         ports,
         ...(previewScope === undefined ? {} : { previewScope }),

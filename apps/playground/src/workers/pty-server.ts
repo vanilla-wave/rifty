@@ -5,7 +5,7 @@
  * against it. Streams stdout/stderr back as `pty:chunk` frames, then a single
  * `pty:exit` (carrying the post-run cwd/env so the page's prompt cache stays
  * truthful). `send`/`makeShell` are injected so this is unit-testable without a
- * Worker — the bootstrap wires `send` to the kernel fork-IPC channel and
+ * Worker — the bootstrap wires `send` to kernel control and
  * `makeShell` to a Shell built with the owner's npm builtin + in-realm execBin.
  *
  * Frame ordering is guaranteed by the single channel: each `onChunk` synchronously
@@ -77,7 +77,7 @@ export interface ShellSeed {
 }
 
 export interface PtyServerDeps {
-  /** Wired to the kernel fork-IPC channel by the bootstrap. */
+  /** Wired to kernel control by the bootstrap. */
   readonly send: (frame: OwnerToPageFrame) => void;
   /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
   readonly makeShell: (seed: ShellSeed | undefined, sid: string) => Shell;

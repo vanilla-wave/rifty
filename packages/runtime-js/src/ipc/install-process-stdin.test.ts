@@ -19,6 +19,7 @@ function spec(): KernelProcessSpec {
     argv: ['node', '/entry.js'],
     env: {},
     cwd: '/workspace',
+    capabilities: { stdin: 'forwarded', runtimeIpc: false },
     stdio: {
       stdout: stdout.port1,
       stderr: stderr.port1,
@@ -67,6 +68,28 @@ describe('installNodeProcessShim stdin', () => {
     stdin.port2.postMessage(new Uint8Array([0x68, 0x69]));
 
     await expect(chunk).resolves.toEqual(new Uint8Array([0x68, 0x69]));
+  });
+
+  it('maps the framed Worker stdin protocol to data followed by one EOF', async () => {
+    const stdin = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, stdin: stdin.port1 },
+    });
+    const chunks: unknown[] = [];
+    let ends = 0;
+    process.stdin.on('data', (chunk) => chunks.push(chunk));
+    process.stdin.on('end', () => {
+      ends += 1;
+    });
+
+    stdin.port2.postMessage({ kind: 'stdin:data', data: new Uint8Array([0x6f, 0x6b]) });
+    stdin.port2.postMessage({ kind: 'stdin:end' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(chunks).toEqual([new Uint8Array([0x6f, 0x6b])]);
+    expect(ends).toBe(1);
+    expect(process.stdin.readableEnded).toBe(true);
   });
 
   it('is a real Readable whose passive unpipe cleanup accepts a child stdin', () => {

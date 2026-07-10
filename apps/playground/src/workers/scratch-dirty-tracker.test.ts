@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { createScratchDirtyTracker } from './scratch-dirty-tracker.ts';
 
 describe('scratch dirty tracker', () => {
-  it('marks only a user-run mutation under /scratch', () => {
+  it('treats owner-ready as the baseline boundary and protects every later scratch write', () => {
     const markScratchDirty = vi.fn();
     const tracker = createScratchDirtyTracker();
-    tracker.bind(markScratchDirty);
 
+    // Baseline construction happens before the owner publishes ready/binds the
+    // durable index. Those writes belong to the selected Starter, not the user.
     tracker.startRun({ sid: 'terminal-1', rid: 'boot', origin: 'boot' });
     tracker.onWorkspaceMutation({ op: 'write', paths: ['/scratch/package-lock.json'] });
     tracker.settleRun({
@@ -16,6 +17,8 @@ describe('scratch dirty tracker', () => {
       mayOutlivePty: true,
     });
     expect(markScratchDirty).not.toHaveBeenCalled();
+
+    tracker.bind(markScratchDirty);
 
     tracker.startRun({ sid: 'terminal-1', rid: 'read', origin: 'user' });
     tracker.settleRun({
@@ -37,7 +40,7 @@ describe('scratch dirty tracker', () => {
     expect(markScratchDirty).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores profile metadata, named projects, and mutations after the user run settled', () => {
+  it('ignores other roots but protects scratch mutations after the originating run settled', () => {
     const markScratchDirty = vi.fn();
     const tracker = createScratchDirtyTracker();
     tracker.bind(markScratchDirty);
@@ -53,6 +56,6 @@ describe('scratch dirty tracker', () => {
     });
     tracker.onWorkspaceMutation({ op: 'write', paths: ['/scratch/late.txt'] });
 
-    expect(markScratchDirty).not.toHaveBeenCalled();
+    expect(markScratchDirty).toHaveBeenCalledTimes(1);
   });
 });

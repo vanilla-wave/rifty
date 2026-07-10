@@ -67,7 +67,7 @@ vi.mock('../workers/real-vite-bootstrap.ts?worker&url', () => ({ default: 'boot.
 class FakeWorker extends EventEmitter {
   readonly kind = 'worker' as const;
   alive = true;
-  /** Simulate a refused (but not dead) IPC channel: send() returns false. */
+  /** Simulate refused (but not dead) kernel control: sendControl() returns false. */
   refuseSends = false;
   readonly sent: unknown[] = [];
   #stdout = new EventEmitter();
@@ -78,7 +78,7 @@ class FakeWorker extends EventEmitter {
   stderr(): EventEmitter {
     return this.#stderr;
   }
-  send(message: unknown): boolean {
+  sendControl(message: unknown): boolean {
     if (!this.alive || this.refuseSends) return false;
     this.sent.push(message);
     return true;

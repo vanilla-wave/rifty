@@ -15,6 +15,7 @@ function spec(): KernelProcessSpec {
     argv: ['node', '/entry.js'],
     env: {},
     cwd: '/workspace',
+    capabilities: { stdin: 'forwarded', runtimeIpc: true },
     stdio: {
       stdout: stdout.port1,
       stderr: stderr.port1,
@@ -35,6 +36,62 @@ afterEach(() => {
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe('installNodeProcessShim fork-IPC (ADR-0211)', () => {
+  it('does not publish Node IPC when the Worker capability is control-only', () => {
+    const process = installNodeProcessShim({
+      ...spec(),
+      capabilities: { stdin: 'forwarded', runtimeIpc: false },
+    } as KernelProcessSpec);
+
+    expect(process.send).toBeUndefined();
+    expect(process.disconnect).toBeUndefined();
+    expect(process.connected).toBeUndefined();
+    expect(process.channel).toBeUndefined();
+    expect(Object.hasOwn(process, 'send')).toBe(false);
+    expect(Object.hasOwn(process, 'disconnect')).toBe(false);
+    expect(Object.hasOwn(process, 'connected')).toBe(false);
+    expect(Object.hasOwn(process, 'channel')).toBe(false);
+  });
+
+  it('keeps the Node IPC facade after disconnect with a null channel', () => {
+    const process = installNodeProcessShim(spec());
+    let disconnects = 0;
+    process.on('disconnect', () => {
+      disconnects += 1;
+    });
+
+    process.disconnect?.();
+
+    expect(typeof process.send).toBe('function');
+    expect(typeof process.disconnect).toBe('function');
+    expect(process.connected).toBe(false);
+    expect(process.channel).toBeNull();
+    expect(Object.hasOwn(process, 'send')).toBe(true);
+    expect(Object.hasOwn(process, 'disconnect')).toBe(true);
+    expect(Object.hasOwn(process, 'connected')).toBe(true);
+    expect(Object.hasOwn(process, 'channel')).toBe(true);
+    expect(process.send?.({ late: true })).toBe(false);
+    process.disconnect?.();
+    expect(disconnects).toBe(1);
+  });
+
+  it('keeps process.channel ref/unref loud without exposing the raw control port', () => {
+    const process = installNodeProcessShim(spec());
+    const channel = process.channel as { ref(): unknown; unref(): unknown };
+
+    expect(() => channel.ref()).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'process.channel.ref',
+      }) as unknown as Error,
+    );
+    expect(() => channel.unref()).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'process.channel.unref',
+      }) as unknown as Error,
+    );
+  });
+
   it('exposes parent ipc:message frames as process "message" events', async () => {
     const ipc = new MessageChannel();
     const process = installNodeProcessShim({

@@ -47,13 +47,17 @@ unchanged loader, so it adds no duplicate parity case.
 | `node:sqlite` (`DatabaseSync`) in a bare `node <file>` | ✅ | Registered for every `node <file>` run; the sql.js engine comes up SYNCHRONOUSLY at the first `require('node:sqlite')` via the realm-installed wasm-bytes provider (no preset flag, no eager 30 s boot — preset-deglue epic) |
 | A bare node server reachable from ANOTHER child (loopback) | ❌ | Reachable via `/preview/<port>/` only; cross-realm HTTP loopback is `backlog/net/cross-realm-http-loopback` |
 
-## `child_process` Worker children (ADR-0202)
+## `child_process` Worker children (ADR-0202/0211/0217)
 
 | Feature | Status | Notes |
 |---|---|---|
-| `spawn('node', …)` / `fork()` over the parent's VFS | ✅ | A realm with installed runtime `fs.*` handlers creates a remote-FS Worker child; argv, env, cwd, exit, kill, IPC, and server lifetime use kernel process contracts |
-| Worker `stdio` targets and public stream shape | ✅ | Explicit/inherited targets receive real bytes and expose `null`; pipes expose streams. `fork()` defaults to inherit, while `silent:true` pipes fd 0/1/2 |
+| `spawn('node', …)` / `fork()` over the parent's VFS | ✅ | A realm with installed runtime `fs.*` handlers creates a remote-FS Worker child; argv, env, cwd, exit, kill, and server lifetime use kernel process contracts |
+| Plain `spawn` vs fork IPC shape | ✅ | A plain-spawn parent `ChildProcess` omits `send`/`disconnect`/`channel` and reports `connected:false`; its child `process` omits all four IPC fields. `fork()` enables Node JSON-shaped `send`/`message`/`disconnect` plus truthful channel presence. Internal control remains structured-cloned and independent |
+| IPC channel `ref()` / `unref()` lifecycle control | ❌ | `process.channel` and `subprocess.channel` expose no raw `MessagePort`; their methods throw `NotImplementedError('process.channel.ref')`, `NotImplementedError('process.channel.unref')`, `NotImplementedError('child_process.channel.ref')`, or `NotImplementedError('child_process.channel.unref')` until Node lifecycle parity is implemented |
+| Worker `stdio` supported subset + public stream shape | ✅ | `'pipe'`, `'inherit'`, and readable/writable stream targets receive real bytes; forwarded descriptors expose `null`, pipes expose streams. Piped stdin forwards data and EOF. `fork()` defaults to inherit, while `silent:true` pipes fd 0/1/2 |
+| Worker `stdio` valid but unwired modes | ❌ | Shorthand/array `'ignore'` and `'overlapped'`, numeric descriptors, plain-spawn `'ipc'`, and non-IPC fd 3+ entries loudly throw `NotImplementedError('child_process.spawn.stdio')`; they are never accepted and discarded |
 | Worker IPC channel placed at fd 0, 1, or 2 | ❌ | Node accepts a sole `ipc` entry at any fd; rifty loudly throws `NotImplementedError('child_process.spawn.stdio')` until non-fd3 kernel IPC mapping exists |
+| `fork(..., { serialization: 'advanced' })` | ❌ | Default/`'json'` IPC is supported. Node advanced serialization loudly throws `NotImplementedError('child_process.serialization.advanced')`; structured clone is not mislabeled as advanced mode |
 | Worker route whose realm lacks an `fs.*` relay | ❌ | Throws `NotImplementedError('child_process.spawn[worker]')` before creating an empty-mirror child; environments without a Worker route retain ADR-0011's local-mirror fallback |
 | Bare `ps` / `ps -A -o ppid,pid` | ✅ | Bare default selection is header-only because virtual processes have no controlling-terminal metadata; `-A` reports live ProcessManager PPID/PID records for real nodemon's descendant check |
 | Other native executables / process-table formats | ❌ | Known `ps` with an unsupported format throws `NotImplementedError('child_process.ps-format')`; unknown executables retain ENOENT/127 |

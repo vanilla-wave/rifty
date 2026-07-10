@@ -1,4 +1,4 @@
-// pty channel frame protocol (ADR-0146). Carried as kernel fork-IPC payload
+// pty channel frame protocol (ADR-0146/0217). Carried as kernel control payload
 // { type:'rifty:pty', frame } alongside rifty:vfs-write. Structured-clone-safe only.
 export type PtyStream = 'stdout' | 'stderr';
 export type PtyRunOrigin = 'user' | 'boot';
@@ -124,7 +124,7 @@ export type OwnerToPageFrame =
   | PtyDevConfigReady;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
 
-/** kernel fork-IPC envelope discriminator (sits beside 'rifty:vfs-write'). */
+/** Kernel-control envelope discriminator (sits beside 'rifty:vfs-write'). */
 export const PTY_IPC_TYPE = 'rifty:pty' as const;
 export type PtyIpcMessage = { type: typeof PTY_IPC_TYPE; frame: PtyFrame };
 export function isPtyIpcMessage(m: unknown): m is PtyIpcMessage {

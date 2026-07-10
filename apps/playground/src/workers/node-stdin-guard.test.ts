@@ -24,6 +24,7 @@ function realSeededProcess(): { stdin: unknown } {
     argv: ['node', '/entry.js'],
     env: {},
     cwd: '/workspace',
+    capabilities: { stdin: 'unavailable', runtimeIpc: false },
     stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
   };
   return installNodeProcessShim(spec) as unknown as { stdin: unknown };

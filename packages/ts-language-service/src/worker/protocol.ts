@@ -1,7 +1,7 @@
 /**
  * Worker protocol for the TS language service (ADR-0166). A
- * discriminated-union request/response frame set carried over the kernel
- * fork-IPC channel (page ⇄ serve-worker), modelled on
+ * discriminated-union request/response frame set carried over kernel control
+ * (page ⇄ serve-worker), modelled on
  * `apps/playground/src/glue/pty-protocol.ts`. Pure types/constants — NO side
  * effects, NO worker globals (this module is import-safe for types alone).
  *
@@ -857,7 +857,7 @@ export type TsResponse =
   | TsPreparePasteEditsResponse
   | TsErrorResponse;
 
-/** kernel fork-IPC envelope discriminator (sits beside `rifty:vfs-write`/`rifty:pty`). */
+/** Kernel-control envelope discriminator (beside `rifty:vfs-write`/`rifty:pty`). */
 export const TS_IPC_TYPE = 'rifty:ts-lsp' as const;
 
 /** Page→worker request envelope. */

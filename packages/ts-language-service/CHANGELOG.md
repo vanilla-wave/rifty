@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **TS-LS worker traffic uses kernel control (ADR-0217).** Requests and
+  responses no longer depend on or expose public `process.send`.
 - **Workspace compiler located via Node resolution semantics.** The compiler
   entry now resolves through rifty's module resolver (package.json
   `exports`/`main`, node_modules walk-up, Node-parity-tested vs

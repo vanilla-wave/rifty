@@ -56,10 +56,10 @@ describe('workspace-scoped VFS', () => {
     scoped.rmSync('/scratch/c.txt', {});
 
     expect(mutations).toEqual([
-      { op: 'write', paths: ['/scratch/a.txt'] },
-      { op: 'copy', paths: ['/scratch/b.txt'] },
-      { op: 'rename', paths: ['/scratch/b.txt', '/scratch/c.txt'] },
-      { op: 'rm', paths: ['/scratch/c.txt'] },
+      { op: 'write', paths: ['/scratch/a.txt'], intent: 'protect' },
+      { op: 'copy', paths: ['/scratch/b.txt'], intent: 'protect' },
+      { op: 'rename', paths: ['/scratch/b.txt', '/scratch/c.txt'], intent: 'protect' },
+      { op: 'rm', paths: ['/scratch/c.txt'], intent: 'protect' },
     ]);
   });
 
@@ -78,8 +78,27 @@ describe('workspace-scoped VFS', () => {
     await scoped.rm('/scratch/a.txt');
 
     expect(mutations).toEqual([
-      { op: 'write', paths: ['/scratch/a.txt'] },
-      { op: 'rm', paths: ['/scratch/a.txt'] },
+      { op: 'write', paths: ['/scratch/a.txt'], intent: 'protect' },
+      { op: 'rm', paths: ['/scratch/a.txt'], intent: 'protect' },
+    ]);
+  });
+
+  it('carries explicit baseline intent without ambient suppression', () => {
+    const { fsSync } = createMemoryFs();
+    const mutations: WorkspaceMutation[] = [];
+    const baseline = new ScopedFsSync(
+      fsSync,
+      workspaceVfsPrefix('baseline'),
+      (mutation) => mutations.push(mutation),
+      'baseline',
+    );
+
+    baseline.mkdirSync('/scratch', { recursive: true });
+    baseline.writeFileSync('/scratch/main.js', enc.encode('starter'));
+
+    expect(mutations).toEqual([
+      { op: 'mkdir', paths: ['/scratch'], intent: 'baseline' },
+      { op: 'write', paths: ['/scratch/main.js'], intent: 'baseline' },
     ]);
   });
 
@@ -118,7 +137,7 @@ describe('workspace-scoped VFS', () => {
     const { vfs, fsSync } = createMemoryFs();
     setSyncMirror(fsSync, { async: vfs });
 
-    expect(scopeActiveVfsToWorkspace('active')).toBe('/workspaces/active');
+    expect(scopeActiveVfsToWorkspace('active').prefix).toBe('/workspaces/active');
     syncMirror().mkdirSync('/scratch', { recursive: true });
     syncMirror().writeFileSync('/scratch/marker.txt', enc.encode('active'));
 

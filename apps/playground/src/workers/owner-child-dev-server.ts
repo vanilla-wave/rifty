@@ -82,8 +82,8 @@ export interface DevServerChildHandle {
   stdout(): DevReadable;
   stderr(): DevReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
-  on(event: 'message', listener: (message: unknown) => void): unknown;
-  send(message: unknown): unknown;
+  on(event: 'control', listener: (message: unknown) => void): unknown;
+  sendControl(message: unknown): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -174,7 +174,7 @@ export function createOwnerChildDevServer(
           port,
           ...(previewScope === undefined ? {} : { previewScope }),
           onFileChanged(path: string) {
-            handle.send({ type: 'rifty:dev-file-changed', path });
+            handle.sendControl({ type: 'rifty:dev-file-changed', path });
           },
           async stop() {
             outputClosed = true;
@@ -190,7 +190,7 @@ export function createOwnerChildDevServer(
           },
         });
 
-        handle.on('message', (message: unknown) => {
+        handle.on('control', (message: unknown) => {
           if (!isDevServerChildMessage(message)) return;
           const m = message as DevServerChildMessage;
           if (m.type === 'rifty:dev-ready') {

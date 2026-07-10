@@ -1,8 +1,9 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0211 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
+ * Spec-seeded (identity + capabilities + stdio ports) AND mutable
+ * (chdir/nextTick/hrtime/uptime/exitCode). Runtime IPC exists only when declared
+ * by the Worker contract (ADR-0217). Built once: the kernel
  * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
  * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
  * `riftyProcess`. No post-spawn `globalThis.process` swap.
@@ -17,8 +18,9 @@
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
-import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
+import type { IpcFrame, KernelProcessSpec, WorkerStdinFrame } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { type NodeIpcChannel, createNodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
@@ -191,7 +193,9 @@ function makeStdinReader(
   push(data: string | Uint8Array): void;
 } {
   const stdin = new Readable({ read() {} }) as NodeStdin;
+  let ended = false;
   const push = (data: string | Uint8Array): void => {
+    if (ended) return;
     stdin.push(data);
   };
 
@@ -203,7 +207,16 @@ function makeStdinReader(
   if (port) {
     port.onmessage = (ev: MessageEvent): void => {
       const data = ev.data;
-      if (typeof data === 'string' || data instanceof Uint8Array) push(data);
+      const frame = data as WorkerStdinFrame | undefined;
+      if (frame?.kind === 'stdin:data') push(frame.data);
+      else if (frame?.kind === 'stdin:end') {
+        if (ended) return;
+        ended = true;
+        stdin.push(null);
+      } else if (typeof data === 'string' || data instanceof Uint8Array) {
+        // Legacy host writers remain accepted; kernel parents use framed data.
+        push(data);
+      }
     };
     port.start();
   }
@@ -291,11 +304,12 @@ export class NodeProcess extends EventEmitter {
   stdin!: NodeStdin;
   nextTick = nextTick;
 
-  /** Fork-IPC (ADR-0211) — present only when seeded with a spec ipc port. */
-  send?: (message: unknown) => boolean;
-  disconnect?: () => void;
+  /** Runtime IPC (ADR-0211/0217) — own properties only when capability-enabled. */
+  declare send?: (message: unknown) => boolean;
+  declare disconnect?: () => void;
+  declare connected?: boolean;
+  declare channel?: NodeIpcChannel | null;
 
-  #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   // Frames received before any `'message'` listener attaches (ADR-0211) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
@@ -314,7 +328,7 @@ export class NodeProcess extends EventEmitter {
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'));
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'));
       installStdinReader(this, spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
-      this.#wireIpc(spec.stdio.ipc);
+      if (spec.capabilities.runtimeIpc) this.#wireIpc(spec.stdio.ipc);
     } else {
       this.pid = 1;
       this.ppid = 0;
@@ -402,7 +416,8 @@ export class NodeProcess extends EventEmitter {
   }
 
   #wireIpc(port: MessagePort): void {
-    this.#ipcPort = port;
+    this.connected = true;
+    this.channel = createNodeIpcChannel('process');
     // Browsers auto-start a port only with `addEventListener('message')`; using
     // `onmessage = …` requires an explicit `start()` (called below).
     port.onmessage = (ev: MessageEvent): void => {
@@ -463,11 +478,8 @@ export class NodeProcess extends EventEmitter {
   #tearDownIpc(): void {
     if (this.#ipcDisconnected) return;
     this.#ipcDisconnected = true;
-    try {
-      this.#ipcPort?.close();
-    } catch {
-      /* peer may have closed */
-    }
+    this.connected = false;
+    this.channel = null;
     this.emit('disconnect');
   }
 }

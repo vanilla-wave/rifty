@@ -33,6 +33,7 @@ import {
   normalizePath,
   syncMirror,
 } from '@riftydev/vfs';
+import { requireDurableFlush } from './durable-flush.ts';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /**
@@ -184,24 +185,7 @@ export interface VfsFlushHandlerOptions {
  */
 export async function handleVfsFlushRequest(opts: VfsFlushHandlerOptions): Promise<void> {
   try {
-    const report = await opts.flush();
-    const total = report?.total ?? 0;
-    if (total > 0) {
-      const sample = (report?.failures ?? [])
-        .slice(0, 3)
-        .map((f) => `${f.op} ${f.path}: ${f.message}`)
-        .join('; ');
-      opts.send({
-        type: 'rifty:vfs-flush-ack',
-        opId: opts.opId,
-        ok: false,
-        error: {
-          name: 'PersistFailureError',
-          message: `OPFS write-through drained with ${total} unhealed persist failure(s): ${sample}`,
-        },
-      });
-      return;
-    }
+    await requireDurableFlush(opts.flush);
     opts.send({ type: 'rifty:vfs-flush-ack', opId: opts.opId, ok: true });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));

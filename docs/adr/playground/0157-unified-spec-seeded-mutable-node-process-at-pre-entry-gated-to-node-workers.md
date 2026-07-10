@@ -2,6 +2,16 @@
 
 Status: Accepted (2026-06-20)
 Date: 2026-06
+Corrected: 2026-07-10
+
+> Correction (2026-07-10, ADR-0217/0220): the unified `NodeProcess` remains,
+> but its stdin is the shared real `Readable`, not a bare/Readable-like
+> `EventEmitter`. Worker specs now declare forwarded vs unavailable stdin;
+> only the unavailable terminal path installs the loud consume guard. The
+> no-spec singleton also exposes a host-only atomic stdin reset for the
+> in-process parity harness. Port presence no longer implies public Node IPC;
+> ADR-0217's runtime-IPC capability controls that surface. All other pre-entry,
+> mutability, and no-swap decisions remain active.
 
 > TL;DR: ONE `NodeProcess` class — spec-seeded AND mutable — installed once at the kernel pre-entry seam, gated to Node workers (rich = +`Buffer`+nextTick-Promise-patch; WASI = skip). Kills the post-spawn `globalThis.process` swap (`installRuntimeGlobals`→`installProcessGlobals`) so argv/cwd/stdin are faithful **by construction**, not by re-copy.
 

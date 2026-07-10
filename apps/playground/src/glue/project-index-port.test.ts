@@ -1,3 +1,4 @@
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -101,6 +102,60 @@ function ownerFs(): MemoryFsSync {
 }
 
 describe('project-index bridge (ADR-0165 realm split)', () => {
+  it('quota-perm-fail: hidden-empty activation rejects an unhealed durability ledger', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    const report: PersistFailureReport = {
+      failures: [{ path: '/.rifty/projects.json', op: 'write', message: 'quota exceeded' }],
+      total: 1,
+      anyFailure: (predicate) => predicate('/.rifty/projects.json'),
+    };
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => report);
+
+    await expect(activateHiddenEmptyScratch(PORT)).rejects.toThrow(
+      /1 unhealed persist failure.*quota exceeded/i,
+    );
+
+    tearOwner();
+  });
+
+  it('quota-perm-fail: a throwing flush rejects through the correlated index error immediately', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      throw new Error('OPFS root unavailable');
+    });
+
+    await expect(activateHiddenEmptyScratch(PORT)).rejects.toThrow('OPFS root unavailable');
+
+    tearOwner();
+  });
+
+  it('quota-perm-fail: an owner-local durability failure without an op id is logged loudly', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/scratch', { recursive: true });
+    writeIndex(fs, '/', {
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
+      projects: [],
+    });
+    const error = new Error('OPFS owner flush unavailable');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const owner = serveProjectIndex(PORT, fs, '/', async () => {
+      throw error;
+    });
+
+    try {
+      owner.markActiveScratchDirty();
+      await vi.waitFor(() =>
+        expect(log).toHaveBeenCalledWith('[project-index] durability flush failed', error),
+      );
+    } finally {
+      owner();
+      log.mockRestore();
+    }
+  });
+
   it('a page subscriber pulls the owner index (pull, not spray)', async () => {
     const fs = ownerFs();
     const tearOwner = serveProjectIndex(PORT, fs, '/');
@@ -298,10 +353,10 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const fs = scratchOwnerFs('alpha-slow-flush');
     let releaseFlush!: () => void;
     let flushStarted = 0;
-    const flush = (): Promise<void> => {
+    const flush = (): Promise<undefined> => {
       flushStarted++;
-      return new Promise<void>((resolve) => {
-        releaseFlush = resolve;
+      return new Promise<undefined>((resolve) => {
+        releaseFlush = () => resolve(undefined);
       });
     };
     const tearOwner = serveProjectIndex(PORT, fs, '/', flush);
@@ -323,6 +378,38 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     releaseFlush();
     await phases.durable;
     expect(durableSettled).toBe(true);
+
+    tearOwner();
+  });
+
+  it('quota-perm-fail: index-save may apply in memory but its durable phase rejects a dirty ledger', async () => {
+    const fs = scratchOwnerFs('alpha-dirty-flush');
+    const report: PersistFailureReport = {
+      failures: [
+        {
+          path: '/projects/p-alpha-dirty/marker.txt',
+          op: 'write',
+          message: 'quota exceeded',
+        },
+      ],
+      total: 1,
+      anyFailure: (predicate) => predicate('/projects/p-alpha-dirty/marker.txt'),
+    };
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => report);
+
+    const phases = saveProjectIndexPhases(PORT, 'p-alpha-dirty', 'Alpha Dirty', 'project-files');
+    const durable = expect(phases.durable).rejects.toMatchObject({
+      name: 'PersistFailureError',
+      message: expect.stringMatching(/1 unhealed persist failure.*quota exceeded/i),
+    });
+
+    await expect(phases.applied).resolves.toMatchObject({
+      activeId: 'p-alpha-dirty',
+      projects: [{ id: 'p-alpha-dirty', name: 'Alpha Dirty', starter: 'project-files' }],
+    });
+    await durable;
+    await nextTimer();
+    expect(fs.existsSync('/scratch')).toBe(true); // Failed durability never starts cleanup.
 
     tearOwner();
   });

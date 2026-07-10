@@ -1,5 +1,5 @@
 /**
- * Fork-IPC contract between the workspace owner and the supervised dev-server
+ * Kernel-control contract between the workspace owner and the supervised dev-server
  * child (ADR-0150 P6b). The dev server runs in a child realm that owns listen();
  * these are the only owner↔child control frames (fs.* rides the sync-RPC ring;
  * stdio rides the kernel stdio ports). `stop` is not a frame — the owner kills

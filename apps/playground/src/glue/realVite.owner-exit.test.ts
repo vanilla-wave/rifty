@@ -61,7 +61,7 @@ vi.mock('../workers/real-vite-bootstrap.ts?worker&url', () => ({ default: 'boot.
 /** Minimal faithful stand-in for the kernel `WorkerProcessHandle`. */
 class FakeWorker extends EventEmitter {
   readonly kind = 'worker' as const;
-  /** Flips to false once exited — mirrors Node `subprocess.send` post-close. */
+  /** Flips to false once exited — mirrors kernel `sendControl` post-close. */
   alive = true;
   readonly sent: unknown[] = [];
   #stdout = new EventEmitter();
@@ -72,7 +72,7 @@ class FakeWorker extends EventEmitter {
   stderr(): EventEmitter {
     return this.#stderr;
   }
-  send(message: unknown): boolean {
+  sendControl(message: unknown): boolean {
     if (!this.alive) return false;
     this.sent.push(message);
     return true;
@@ -124,7 +124,7 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
       ),
     ).toBe(false);
 
-    fakeWorker.emit('message', {
+    fakeWorker.emit('control', {
       type: 'rifty:workspace-owner-ready',
       port: handle.snapshotPort,
     });
@@ -263,7 +263,7 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     await Promise.resolve();
     expect(resolved).toBe(false);
 
-    fakeWorker.emit('message', { type: 'rifty:vfs-write-ack', opId: writeIpc.opId, ok: true });
+    fakeWorker.emit('control', { type: 'rifty:vfs-write-ack', opId: writeIpc.opId, ok: true });
     await acked;
     expect(resolved).toBe(true);
   });
@@ -287,7 +287,7 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     expect(writeIpc).toBeDefined();
     if (!writeIpc) throw new Error('expected acked vfs write frame');
 
-    fakeWorker.emit('message', {
+    fakeWorker.emit('control', {
       type: 'rifty:vfs-write-ack',
       opId: writeIpc.opId,
       ok: false,

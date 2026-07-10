@@ -2,7 +2,7 @@
 
 /**
  * THIN, side-effectful boot for the TS language-service `serve` worker
- * (ADR-0166, ADR-0150, ADR-0045). The kernel spawns this as a `kind:'url'`,
+ * (ADR-0166, ADR-0150, ADR-0217). The kernel spawns this as a `kind:'url'`,
  * `serve:true` worker; the playground (next task) imports it via
  * `new URL('./entry.ts', import.meta.url)` and proves it by e2e (worker
  * globals / `spawnKernelWorker` are browser-only, so this module carries NO
@@ -14,11 +14,8 @@
  *      (`readKernelSyncApi().call`) — reads the authoritative VFS in the store
  *      owner over the existing `fs.*` sync-RPC seam (NOT a parallel channel).
  *   2. The pure {@link createServiceEndpoint}.
- *   3. The page-facing fork-IPC channel (ADR-0045): `globalThis.process.on(
- *      'message', …)` for inbound {@link TsRequest} envelopes, `process.send(…)`
- *      for {@link TsResponse} envelopes. This is the same `send`/`on` primitive
- *      the playground's KernelIpc wraps — read off the spec-seeded `process` the
- *      kernel pre-entry hook installed (ADR-0157), so no kernel-internal swap.
+ *   3. The structured-clone kernel control channel for inbound {@link TsRequest}
+ *      and outbound {@link TsResponse} envelopes. Public process IPC stays absent.
  *
  * By the time this evaluates, the kernel worker-entry has published the
  * sync-call shim and the pre-entry hook installed `globalThis.process`. The
@@ -32,37 +29,35 @@
  * {@link bootTsLanguageServiceWorker} explicitly).
  */
 
-import { readKernelSyncApi } from '@riftydev/kernel';
+import { readKernelSyncApi, readWorkerControlChannel } from '@riftydev/kernel';
 import { createRpcFsSync } from './host-fs-rpc.ts';
 import { TS_IPC_TYPE, type TsResponseMessage, isTsRequestMessage } from './protocol.ts';
 import { createServiceEndpoint } from './service-endpoint.ts';
 
-/** Minimal fork-IPC surface read off the kernel-installed `globalThis.process`. */
-interface ForkIpcProcess {
+/** Worker process subset used only for captured stdout logging. */
+interface WorkerProcess {
   readonly stdout?: { write?: (chunk: string) => void };
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
 }
 
 let booted = false;
 
-function getForkIpcProcess(): ForkIpcProcess | undefined {
-  return (globalThis as unknown as { process?: ForkIpcProcess }).process;
+function getWorkerProcess(): WorkerProcess | undefined {
+  return (globalThis as unknown as { process?: WorkerProcess }).process;
 }
 
 /** Worker-side log line — routed through `process.stdout` (console is not captured). */
-function log(proc: ForkIpcProcess | undefined, line: string): void {
+function log(proc: WorkerProcess | undefined, line: string): void {
   proc?.stdout?.write?.(`[ts-lsp] ${line}\n`);
 }
 
 /**
- * Wire the endpoint to the fork-IPC channel and return a disposer-free boot
+ * Wire the endpoint to kernel control and return a disposer-free boot
  * result. Exported so a host (or a future integration harness) can boot
  * explicitly; the bottom-of-module auto-boot calls it in a real Worker realm.
  *
  * Throws if no kernel sync API is published (a hard misconfiguration — this
- * worker can only serve over the owner's VFS, never a stub) or if the
- * fork-IPC `process` surface is absent.
+ * worker can only serve over the owner's VFS, never a stub) or if kernel
+ * control is absent.
  */
 export function bootTsLanguageServiceWorker(): void {
   if (booted) return;
@@ -72,10 +67,9 @@ export function bootTsLanguageServiceWorker(): void {
       'ts-lsp worker: no kernel sync call published — cannot reach the owner store over fs.* RPC',
     );
   }
-  const proc = getForkIpcProcess();
-  if (typeof proc?.on !== 'function' || typeof proc.send !== 'function') {
-    throw new Error('ts-lsp worker: fork-IPC channel (process.send/on) unavailable');
-  }
+  const proc = getWorkerProcess();
+  const control = readWorkerControlChannel();
+  if (control === null) throw new Error('ts-lsp worker: kernel control channel unavailable');
   booted = true;
 
   const endpoint = createServiceEndpoint({
@@ -88,10 +82,10 @@ export function bootTsLanguageServiceWorker(): void {
   });
 
   const send = (message: TsResponseMessage): void => {
-    proc.send?.(message);
+    control.send(message);
   };
 
-  proc.on('message', (message: unknown) => {
+  control.onMessage((message: unknown) => {
     if (!isTsRequestMessage(message)) return;
     const { request } = message;
     // Each request is independently dispatched and answered; errors come back as

@@ -2,7 +2,7 @@
  * Node-compatible `node:worker_threads` (subset).
  *
  * In SAB/COI-capable playground realms, `Worker` spawns a real kernel-backed
- * node-entry worker process and routes `parentPort` over fork IPC. Plain
+ * node-entry worker process and routes `parentPort` over kernel control. Plain
  * vitest/Node realms keep a loud same-realm fallback for conformance and API
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
@@ -14,6 +14,7 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  readWorkerControlChannel,
 } from '@riftydev/kernel';
 import { type FsSync, dirname } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
@@ -141,7 +142,7 @@ export class Worker extends EventEmitter {
         this.emit('online');
         handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emit('stderr', chunk));
-        handle.on('message', (msg) => this.emitWorkerMessage(msg));
+        handle.on('control', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
       }
       handle.on('exit', (code) => {
@@ -221,7 +222,7 @@ export class Worker extends EventEmitter {
 
   postMessage(msg: unknown): void {
     if (this.workerHandle?.kind === 'worker') {
-      this.workerHandle.send(msg);
+      this.workerHandle.sendControl(msg);
       return;
     }
     const context = this.sameRealmContext;
@@ -267,7 +268,7 @@ export class Worker extends EventEmitter {
 
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
     while (this.pendingParentMessages.length > 0) {
-      handle.send(this.pendingParentMessages.shift());
+      handle.sendControl(this.pendingParentMessages.shift());
     }
   }
 
@@ -470,8 +471,6 @@ function withSameRealmWorkerContextSync<T>(context: WorkerThreadContext, fn: () 
 
 interface ProcessWithWorkerIpc {
   env?: Record<string, string | undefined>;
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
 }
 
 function readProcessWorkerContext(): WorkerThreadContext | null {
@@ -481,21 +480,22 @@ function readProcessWorkerContext(): WorkerThreadContext | null {
     cachedProcessWorkerContext = null;
     return null;
   }
+  const control = readWorkerControlChannel();
+  if (control === null) {
+    throw new NotImplementedError(
+      'worker_threads.parentPort.postMessage',
+      'kernel process control channel is not available',
+    );
+  }
   const parentPort = createWorkerPort((msg) => {
-    if (typeof proc.send !== 'function') {
-      throw new NotImplementedError(
-        'worker_threads.parentPort.postMessage',
-        'kernel process IPC is not available',
-      );
-    }
-    proc.send(msg);
+    control.send(msg);
   });
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(proc.env.RIFTY_WORKER_DATA_JSON),
     threadId: Number(proc.env.RIFTY_WORKER_THREAD_ID ?? 1),
   };
-  proc.on?.('message', (msg) => {
+  control.onMessage((msg) => {
     withSameRealmWorkerContextSync(context, () => deliverToPort(parentPort, msg));
   });
   cachedProcessWorkerContext = context;

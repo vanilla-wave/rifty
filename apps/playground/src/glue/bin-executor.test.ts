@@ -72,7 +72,7 @@ function makeFakeSpawn(): {
     }),
     on: (event, listener) => {
       if (event === 'exit') onExit = listener as (code?: unknown) => void;
-      if (event === 'message') onMessage = listener as (message: unknown) => void;
+      if (event === 'control') onMessage = listener as (message: unknown) => void;
     },
     kill: (signal) => {
       killed = signal ?? 'SIGTERM';

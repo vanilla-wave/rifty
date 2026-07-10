@@ -2,6 +2,16 @@
 
 Status: Accepted
 Date: 2026-05-26
+Corrected: 2026-07-10
+
+> Correction (2026-07-10, ADR-0220): the Node stream contract includes the
+> observable subclass producer hook and paused-state query. Constructor
+> `{ read }` and prototype `_read(size)` now meet at one hook; demand on a bare
+> `Readable` raises `ERR_METHOD_NOT_IMPLEMENTED`; `isPaused()` reports explicit
+> pause state. The shared `EventEmitter` is one callable-and-constructable
+> function so legacy `EventEmitter.call(this)` and modern subclassing retain one
+> prototype/listener implementation. The remaining ADR-0034 decisions stay
+> active.
 
 > TL;DR: `@riftydev/io` restores Node's stream contract in one PR: `removeListener` meta-event, honest `read(n)`, real `Writable.destroy`, prototype `Duplex`/`Transform`, `pipeline` upstream-destroy
 

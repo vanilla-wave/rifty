@@ -3,9 +3,10 @@
 Status: Accepted
 Date: 2026-07
 
-> Supersedes removed ADR-0045. The dedicated `MessagePort` remains the raw
-> Worker transport; `child_process` owns Node's default JSON serialization at
-> the runtime boundary, while internal control and `worker_threads` keep honest
+> Corrects ADR-0045's child-process serialization and clone-failure clauses.
+> The dedicated `MessagePort` remains the raw Worker transport;
+> `child_process` owns Node's default JSON serialization at the runtime
+> boundary, while internal control and `worker_threads` keep honest
 > structured-clone semantics. A serialization failure never disconnects IPC.
 
 ## Context
@@ -59,6 +60,8 @@ channel after failure would still reject a real tool path that Node accepts.
    `NodeProcess.send` codec. This preserves structured-cloned `Uint8Array`
    terminal/VFS frames without weakening child-process parity. `worker_threads`
    also keeps structured-clone semantics through its own `parentPort` adapter.
+   ADR-0217 subsequently names that logical lane `control:message` and gates the
+   public runtime-IPC lane independently.
 5. **Serialization failure does not mean disconnect.** JSON serialization fails
    before posting; raw structured clone may throw `DataCloneError`. Both surface
    loudly and leave the channel usable. Only the existing explicit disconnect,
@@ -80,5 +83,6 @@ channel after failure would still reject a real tool path that Node accepts.
 - RED coverage is three-tiered: Node parity for function-property omission;
   an IPC fault test where an unserializable send is followed by a successful
   send on the same channel; and the real Chromium nodemon preview/restart e2e.
-- The old ADR-0045 transport remains source-compatible, but its serialization
-  and clone-failure clauses are replaced by this decision.
+- ADR-0045 remains active: its dedicated transport decision is unchanged, while
+  its child-process serialization and clone-failure clauses are corrected by
+  this decision. ADR-0217 separately corrects capability/lane ownership.

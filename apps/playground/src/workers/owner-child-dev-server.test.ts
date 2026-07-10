@@ -65,7 +65,7 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
   stderr() {
     return this.#err;
   }
-  send(m: unknown) {
+  sendControl(m: unknown) {
     this.sent.push(m);
     return true;
   }
@@ -82,7 +82,7 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
     this.#out.emit('data', s);
   }
   emitMessage(m: unknown) {
-    this.emit('message', m);
+    this.emit('control', m);
   }
   /** Simulate a post-ready child crash: mark exited + emit. */
   emitExit(code?: unknown) {

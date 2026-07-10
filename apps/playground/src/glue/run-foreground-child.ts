@@ -10,7 +10,7 @@
  * drivers drifting (ADR-0155 §1 recorded the duplication) and gives the bin
  * executor the pre-abort ordering its inline copy lacked.
  *
- * A server child's child→owner messages (`rifty:node-listening`) are wired via
+ * A server child's child→owner control frames (`rifty:node-listening`) are wired via
  * `onMessage`; a plain run-to-completion bin child omits it. NOT a fit for the
  * dev-server child (it resolves on a `rifty:dev-ready` MESSAGE, not exit, and
  * returns a handle, not a number) — that keeps its own driver.
@@ -24,19 +24,19 @@ export interface ForegroundReadable {
 
 /**
  * The foreground child surface the driver needs — a subset of
- * `WorkerProcessHandle`. `on('message')` is consulted only when `onMessage` is
- * passed (a server child); a run-to-completion bin child never sends messages.
+ * `WorkerProcessHandle`. `on('control')` is consulted only when `onMessage` is
+ * passed (a server child); a run-to-completion bin child sends no control.
  */
 export interface ForegroundChildHandle {
   stdout(): ForegroundReadable;
   stderr(): ForegroundReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
-  on(event: 'message', listener: (message: unknown) => void): unknown;
+  on(event: 'control', listener: (message: unknown) => void): unknown;
   kill(signal?: string): unknown;
 }
 
 export interface ForegroundChildOpts {
-  /** Server-child hook: every child→owner `'message'` (e.g. `rifty:node-listening`). */
+  /** Server-child hook: every child→owner control frame (e.g. `rifty:node-listening`). */
   readonly onMessage?: (message: unknown) => void;
   /** Run once on exit, BEFORE the promise resolves (e.g. preview-registry remove). */
   readonly onExit?: () => void;
@@ -76,7 +76,7 @@ export function runForegroundChild(
     };
     handle.stdout().on('data', (c) => stream(c, ctx.stdout));
     handle.stderr().on('data', (c) => stream(c, ctx.stderr));
-    if (opts.onMessage) handle.on('message', opts.onMessage);
+    if (opts.onMessage) handle.on('control', opts.onMessage);
 
     const signal = ctx.signal;
     const onAbort = (): void => {

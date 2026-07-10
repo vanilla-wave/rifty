@@ -70,6 +70,26 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
     factoryWorker = undefined;
   });
 
+  it('keeps default internal control available without claiming runtime IPC', () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('owner', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/owner.js' },
+      argv: ['rifty', '/tmp/owner.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    let disconnects = 0;
+    handle.on('disconnect', () => {
+      disconnects++;
+    });
+
+    expect(handle.send({ public: true })).toBe(false);
+    expect(handle.sendControl({ internal: true })).toBe(true);
+    handle.kill('SIGTERM');
+    expect(disconnects).toBe(0);
+  });
+
   it('exposes send and disconnect on the worker-backed handle', () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
@@ -77,6 +97,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
       argv: ['rifty', '/tmp/x.js'],
       env: {},
       cwd: '/workspace',
+      capabilities: { runtimeIpc: true },
     });
     expect(handle.kind).toBe('worker');
     if (handle.kind === 'worker') {
@@ -97,6 +118,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
       argv: ['rifty', '/tmp/x.js'],
       env: {},
       cwd: '/workspace',
+      capabilities: { runtimeIpc: true },
     });
     if (handle.kind !== 'worker') throw new Error('expected worker handle');
 
@@ -122,6 +144,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
       argv: ['rifty', '/tmp/x.js'],
       env: {},
       cwd: '/workspace',
+      capabilities: { runtimeIpc: true },
     });
     if (handle.kind !== 'worker') throw new Error('expected worker handle');
     let disconnects = 0;
@@ -143,6 +166,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
       argv: ['rifty', '/tmp/x.js'],
       env: {},
       cwd: '/workspace',
+      capabilities: { runtimeIpc: true },
     });
     if (handle.kind !== 'worker') throw new Error('expected worker handle');
 
@@ -168,6 +192,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0211)', () => {
       argv: ['rifty', '/tmp/x.js'],
       env: {},
       cwd: '/workspace',
+      capabilities: { runtimeIpc: true },
     });
     if (handle.kind !== 'worker') throw new Error('expected worker handle');
 

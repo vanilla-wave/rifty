@@ -20,6 +20,7 @@ function spec(): KernelProcessSpec {
     argv: ['node', '/entry.js'],
     env: {},
     cwd: '/workspace',
+    capabilities: { stdin: 'unavailable', runtimeIpc: false },
     stdio: {
       stdout: stdout.port1,
       stderr: stderr.port1,

@@ -380,6 +380,7 @@ export function buildWorkerChildSpec(
       argv: ['rifty', entryPath, ...args.args.slice(1)],
       env,
       cwd,
+      capabilities: { stdin: 'forwarded', runtimeIpc: args.opts.__fork === true },
       serve: true,
     },
   };

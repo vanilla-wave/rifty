@@ -9,14 +9,19 @@
   the `+` shell action, and the runtime badge follows the Node 24 parity target.
 - Closing the first-run chooser adopts a durable, truly empty scratch workspace
   without listing it as a saved project; reload restores its files without
-  booting or waiting for a nonexistent dev server. Terminal-side file mutations,
-  including delayed background jobs, now persist the scratch dirty guard;
-  read-only and Starter boot runs do not.
+  booting or waiting for a nonexistent dev server. Every successful Scratch VFS
+  mutation now persists the dirty guard by default, including Explorer, archive,
+  terminal, and child-process writes; only explicitly tagged Starter/reset
+  baseline mutations stay clean, and read-only operations do not mark dirty.
 - Express, Hono, and Koa pin and run real `nodemon@3.1.14`; source edits restart
   the app Worker on the same port instead of leaving the first import running.
 
 ### Fixed
 
+- Project-index operations now acknowledge durability only after a clean OPFS
+  failure ledger; quota/permission and thrown flush failures return a correlated
+  error instead of publishing durable success, while owner-local failures log
+  loudly and a failed Save never begins stale-Scratch cleanup.
 - Nodemon's fork-aware event proxy no longer poisons the dev-child lifecycle
   channel: public Node IPC is JSON-shaped while internal typed control frames
   keep the raw structured-clone transport (ADR-0211), so preview reaches LIVE.

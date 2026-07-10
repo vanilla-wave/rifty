@@ -1,7 +1,7 @@
 /**
  * Owner-realm `node <file>` child driver (ADR-0155). Foreground run like the bin
  * executor (stream stdout/stderr, Ctrl-C kill→mute, resolve on exit code) PLUS
- * the dev-server child's fork-IPC: a server child posts `rifty:node-listening`
+ * server control: a child posts `rifty:node-listening`
  * which the owner forwards into the preview registry. Spawn injected (real
  * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
  */
@@ -47,8 +47,8 @@ export interface NodeChildHandle {
   stdout(): NodeReadable;
   stderr(): NodeReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
-  on(event: 'message', listener: (message: unknown) => void): unknown;
-  send(message: unknown): unknown;
+  on(event: 'control', listener: (message: unknown) => void): unknown;
+  sendControl(message: unknown): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -73,8 +73,8 @@ export function createOwnerChildNodeExecutor(
       throw new Error(`owner-child-node-executor: expected worker, got ${h.kind}`);
     // After the kind guard TS narrows to WorkerProcessHandle, which structurally
     // satisfies NodeChildHandle: stdout()/stderr() are Readable; on(event,listener)
-    // (wide EventEmitter sig) covers the narrowed 'exit'/'message' overloads;
-    // send()/kill() return values are assignable to `unknown`. No cast needed
+    // covers the narrowed 'exit'/'control' overloads; kill() returns a value
+    // assignable to `unknown`. No cast needed
     // (mirrors owner-child-bin-executor).
     return h;
   },

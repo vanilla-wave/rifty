@@ -20,6 +20,12 @@
 
 ### Fixed
 
+- **Worker child stdin and IPC follow Node capability shape (ADR-0217).** Generic
+  Worker children receive stdin data and EOF; non-IPC processes omit the IPC
+  facade; forked processes retain `send`/`disconnect` after disconnect with
+  `connected=false` and `channel=null`; internal control never surfaces as
+  public process IPC. `channel.ref()` / `unref()` stay directed loud gaps rather
+  than exposing the shared kernel control port.
 - **ADR-0211 Node-default child-process IPC serialization.** Public
   `ChildProcess.send` / `process.send` now share JSON shaping in both directions:
   function properties are omitted like Node 24, circular payloads throw without

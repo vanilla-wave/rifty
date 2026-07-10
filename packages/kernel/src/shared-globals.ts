@@ -32,12 +32,11 @@ export interface KernelSyncApi {
 }
 
 /**
- * Stdio + IPC port shape the kernel hands to the higher layer. Identical to
+ * Worker port shape the kernel hands to the higher layer. Identical to
  * {@link WorkerStdioPorts} in `./worker-entry.ts`; redeclared here to keep
- * `shared-globals.ts` import-free of the worker bootstrap module. `ipc`
- * (ADR-0211) carries the fork-mode IPC channel — runtime-js's
- * `installNodeProcessShim` wraps it to expose Node-style `process.send` /
- * `process.on('message', …)` / `process.disconnect()`.
+ * `shared-globals.ts` import-free of the worker bootstrap module. `ipc` is one
+ * physical channel with separate structured-clone control and capability-gated
+ * runtime-IPC lanes (ADR-0217).
  */
 export interface KernelProcessStdioPorts {
   readonly stdout: MessagePort;
@@ -45,6 +44,18 @@ export interface KernelProcessStdioPorts {
   readonly stdin: MessagePort;
   readonly ipc: MessagePort;
 }
+
+export interface WorkerProcessCapabilities {
+  /** Whether the parent has a real data/EOF source connected to stdin. */
+  readonly stdin: 'forwarded' | 'unavailable';
+  /** Whether the higher runtime may expose the runtime-IPC lane. */
+  readonly runtimeIpc: boolean;
+}
+
+export const DEFAULT_WORKER_PROCESS_CAPABILITIES: WorkerProcessCapabilities = {
+  stdin: 'unavailable',
+  runtimeIpc: false,
+};
 
 /**
  * Typed snapshot of the kernel-owned identity for a spawned process
@@ -63,6 +74,7 @@ export interface KernelProcessSpec {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
+  readonly capabilities: WorkerProcessCapabilities;
   readonly stdio: KernelProcessStdioPorts;
 }
 

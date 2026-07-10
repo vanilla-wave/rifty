@@ -24,6 +24,7 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
+import { type NodeIpcChannel, createNodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { hasRuntimeJsFsHandlers } from '../ipc/fs-handlers.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
@@ -113,14 +114,15 @@ class ChildProcess extends EventEmitter {
   readonly stderr: Readable | null;
   /**
    * Write-side of a piped child stdin. Redirected/inherited fd 0 is `null`;
-   * otherwise the Worker path posts to the stdin MessagePort and the in-realm
-   * fallback exposes {@link InRealmStdinUnsupported} as its loud gap.
+   * otherwise the Worker path posts framed data/EOF to the stdin MessagePort;
+   * the in-realm fallback exposes {@link InRealmStdinUnsupported} as its loud gap.
    */
   readonly stdin: Writable | null;
   killed = false;
-  // Mutable so {@link disconnect} can flip it off on the same-realm path,
-  // which has no separate channel to close — the gate is the whole story.
-  private ipcEnabled: boolean;
+  declare send?: (message: unknown) => boolean;
+  declare disconnect?: () => void;
+  connected = false;
+  declare channel?: NodeIpcChannel | null;
   private readonly handle: ProcessHandle;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
@@ -140,7 +142,6 @@ class ChildProcess extends EventEmitter {
     super();
     this.handle = handle;
     this.pid = handle.pid;
-    this.ipcEnabled = ipcEnabled;
     // Kernel stdio is push-driven by process frames; the empty read hook is
     // the real producer contract, not a bare Readable missing its `_read`.
     const stdout = streams?.stdout ?? new Readable({ objectMode: false, read() {} });
@@ -157,17 +158,34 @@ class ChildProcess extends EventEmitter {
     handle.on('close', (code, signal) => {
       this.emit('close', code, signal);
     });
-    // ADR-0211: mirror fork-IPC events from the WorkerProcessHandle (`'message'`
-    // for `ipc:message` frames, `'disconnect'` on teardown) so Node-shape
-    // `child.on('message', …)` consumers keep working.
-    if (handle.kind === 'worker') {
-      handle.on('message', (msg) => {
-        this.emit('message', msg);
-      });
-      handle.on('disconnect', () => {
-        this.ipcEnabled = false;
+    if (ipcEnabled) {
+      this.connected = true;
+      this.channel = createNodeIpcChannel('child_process');
+      this.send = (message: unknown): boolean => {
+        if (!this.connected) return false;
+        const serialized = serializeNodeIpcMessage(message);
+        if (this.handle.kind === 'worker') return this.handle.send(serialized);
+        this.inboundIpc.emit('childMessage', serialized);
+        return true;
+      };
+      this.disconnect = (): void => {
+        if (!this.connected) return;
+        if (this.handle.kind === 'worker') {
+          this.handle.disconnect();
+          return;
+        }
+        this.connected = false;
+        this.channel = null;
         this.emit('disconnect');
-      });
+      };
+      if (handle.kind === 'worker') {
+        handle.on('message', (msg) => this.emit('message', msg));
+        handle.on('disconnect', () => {
+          this.connected = false;
+          this.channel = null;
+          this.emit('disconnect');
+        });
+      }
     }
   }
 
@@ -180,41 +198,6 @@ class ChildProcess extends EventEmitter {
   /** Per-ADR-0019: cwd is owned by the kernel record. */
   get cwd(): string {
     return this.handle.cwd;
-  }
-
-  /**
-   * Send an IPC message to the child (Node `subprocess.send` parity). SAB-Worker
-   * path (ADR-0211): JSON-shapes then posts over parent↔child IPC → worker-side
-   * `process.on('message', …)`. In-realm fallback: emits on `inboundIpc`, which
-   * the script's `__process.onMessage(...)` subscribes to. Returns `false` when
-   * IPC is disabled (not `fork()`ed) or the handle already disconnected.
-   */
-  send(message: unknown): boolean {
-    if (!this.ipcEnabled) return false;
-    const serialized = serializeNodeIpcMessage(message);
-    if (this.handle.kind === 'worker') {
-      return this.handle.send(serialized);
-    }
-    this.inboundIpc.emit('childMessage', serialized);
-    return true;
-  }
-
-  /**
-   * Disconnect the IPC channel (ADR-0211 / Node parity). SAB-Worker path closes
-   * the parent↔child port (worker observes `'disconnect'` on its `process`
-   * shim). In-realm fallback has no separate channel — disabling further sends
-   * is sufficient.
-   */
-  disconnect(): void {
-    if (this.handle.kind === 'worker') {
-      this.handle.disconnect();
-      return;
-    }
-    // In-realm: no channel to close — flip the gate and emit for listeners.
-    if (this.ipcEnabled) {
-      this.ipcEnabled = false;
-      this.emit('disconnect');
-    }
   }
 
   kill(signal = 'SIGTERM'): boolean {
@@ -385,8 +368,9 @@ export function fork(
   modulePath: string,
   args: string[] = [],
   opts: SpawnOptions = {},
-): ChildProcess {
-  return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
+): ChildProcess & Required<Pick<ChildProcess, 'send' | 'disconnect'>> {
+  return spawn('node', [modulePath, ...args], { ...opts, __fork: true }) as ChildProcess &
+    Required<Pick<ChildProcess, 'send' | 'disconnect'>>;
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback

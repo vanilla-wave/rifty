@@ -16,6 +16,10 @@ import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import {
+  DEFAULT_WORKER_PROCESS_CAPABILITIES,
+  type WorkerProcessCapabilities,
+} from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -42,6 +46,8 @@ export interface SpawnWorkerSpec {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
+  /** Runtime-visible channel capabilities; internal control is always present. */
+  readonly capabilities?: Partial<WorkerProcessCapabilities>;
   /**
    * Optional per-direction SAB ring payload capacity (ADR-0084 #19). Both the
    * allocated `syncRing` and the child-side attach derive from this single
@@ -151,7 +157,7 @@ export function spawnKernelWorker(
   const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
   const { sab, ring } = createSabRing({ payloadCapacity });
 
-  // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0211).
+  // Four MessageChannels: three for stdio, one for control + runtime IPC (ADR-0217).
   // Kernel-side keeps the `port1`s; `port2`s ship to the worker.
   const stdoutCh = new MessageChannel();
   const stderrCh = new MessageChannel();
@@ -177,6 +183,7 @@ export function spawnKernelWorker(
     argv: spec.argv,
     env: spec.env,
     cwd: spec.cwd,
+    capabilities: { ...DEFAULT_WORKER_PROCESS_CAPABILITIES, ...spec.capabilities },
     stdio: childPorts,
     syncRing: sab,
     payloadCapacity,

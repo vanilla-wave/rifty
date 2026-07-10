@@ -30,16 +30,17 @@ function touchesScratch(paths: readonly string[]): boolean {
 
 /**
  * Owner-side bridge from real VFS mutations to ADR-0165 scratch protection.
- * Programmatic boot runs are baseline construction; user runs are edits. The
- * VFS observer is below every shell/fs operation, so no command-name allowlist
- * can drift (`echo`, `mkdir`, `mv`, and child `node:fs` share this path).
- * Concurrent runs share one VFS without async-context identity: while any user
- * run is open, a `/scratch` mutation is conservatively protected. This can add
- * a discard prompt during overlap; the alternative can silently wipe bytes.
+ * The VFS observer is below every shell/fs operation, so no command-name
+ * allowlist can drift (`echo`, `mkdir`, `mv`, Explorer, and child `node:fs`
+ * share this path). Owner-controlled starter/reset adapters carry explicit
+ * `baseline` intent; every unknown/default mutation is conservatively protected.
+ * This avoids ambient async suppression, where a baseline task overlapping a
+ * user write could silently erase that write's provenance.
  * A user `cmd &` is a one-way protection boundary: mark dirty at foreground
  * settle, before detached work can mutate later or a Starter pick can wipe the
- * tree. Boot-origin background work remains baseline construction and is not
- * marked. The extra dirty for a no-op background job is intentional.
+ * tree. A boot-origin background run is not marked merely for outliving its
+ * PTY, but any later mutation still defaults to protect unless it uses an
+ * explicit baseline adapter. The extra dirty for a no-op user job is intentional.
  */
 export function createScratchDirtyTracker(): ScratchDirtyTracker {
   const userRuns = new Set<string>();
@@ -59,7 +60,7 @@ export function createScratchDirtyTracker(): ScratchDirtyTracker {
       }
     },
     onWorkspaceMutation(mutation): void {
-      if (userRuns.size === 0 || !touchesScratch(mutation.paths)) return;
+      if (mutation.intent === 'baseline' || !touchesScratch(mutation.paths)) return;
       markActiveScratchDirty?.();
     },
   };

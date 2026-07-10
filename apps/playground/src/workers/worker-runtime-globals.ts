@@ -1,32 +1,23 @@
 // apps/playground/src/workers/worker-runtime-globals.ts
 /**
- * Fork-IPC handle accessor for worker realms (ADR-0157).
+ * Internal control-channel accessor for worker realms (ADR-0217).
  *
  * Under ADR-0157 the kernel pre-entry seam installs ONE spec-seeded rich
- * `process` (correct stdout/stderr/env + ADR-0211 fork-IPC `send`/`on`) before
+ * `process` before
  * any bootstrap runs — there is no longer a `globalThis.process` swap to undo.
- * So this no longer installs anything: inbound `onMessage` uses the seeded
- * `globalThis.process`, while outbound internal control bypasses public
- * process.send JSON and posts raw frames through the published kernel spec.
+ * This no longer installs anything: both directions use the kernel control lane,
+ * never public runtime IPC or its Node JSON codec.
  *
  * Name kept (callers: real-vite-bootstrap, dev-server-child-bootstrap) — the
  * swap-then-re-patch dance it used to perform is gone.
  */
 
-import { type IpcFrame, readKernelProcessSpec } from '@riftydev/kernel';
+import { readWorkerControlChannel } from '@riftydev/kernel';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
-
-export interface ProcStdio {
-  stdout?: { write?: unknown };
-  stderr?: { write?: unknown };
-  env?: Record<string, string | undefined>;
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
-}
 
 export interface KernelIpc {
   onMessage?(handler: (message: unknown) => void): void;
-  /** Raw fork-IPC send back to the page (ADR-0211); absent without a kernel channel. */
+  /** Structured-clone control send; absent without a kernel channel. */
   send?(message: unknown): void;
 }
 
@@ -61,22 +52,12 @@ export function installBundleLocalBuffer(): void {
 }
 
 export function installRuntimeGlobals(): KernelIpc {
-  const proc = globalThis.process as unknown as ProcStdio | undefined;
-  const rawIpc = readKernelProcessSpec()?.stdio.ipc;
-  const onMessage =
-    typeof proc?.on === 'function'
-      ? (handler: (message: unknown) => void) => {
-          proc.on?.('message', handler);
-        }
-      : undefined;
-  // Internal lifecycle frames may carry Uint8Array. Bypass public
-  // process.send's Node-default JSON codec while retaining the same raw kernel
-  // MessagePort transport (ADR-0211).
-  const send =
-    rawIpc !== undefined
-      ? (message: unknown) => {
-          rawIpc.postMessage({ kind: 'ipc:message', payload: message } satisfies IpcFrame);
-        }
-      : undefined;
+  const control = readWorkerControlChannel();
+  const onMessage = control
+    ? (handler: (message: unknown) => void) => {
+        control.onMessage(handler);
+      }
+    : undefined;
+  const send = control ? (message: unknown) => control.send(message) : undefined;
   return { onMessage, send };
 }

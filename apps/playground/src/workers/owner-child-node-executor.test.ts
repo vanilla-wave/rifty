@@ -18,7 +18,7 @@ function fakeHandle() {
       listeners[ev] = list;
       list.push(cb);
     },
-    send: vi.fn(),
+    sendControl: vi.fn(),
     // Real WorkerHandle.kill() emits 'exit' synchronously — mirror that so the
     // executor's pre-abort listener ordering is exercised.
     kill: vi.fn((_signal?: string) => {
@@ -77,7 +77,7 @@ describe('owner-child-node-executor', () => {
     const ctx = makeCtx({ stdout: { write: (s: string) => stdout.push(s) } });
     const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening, onExit });
     fake.out(new TextEncoder().encode('hi\n'));
-    fake.emit('message', { type: 'rifty:node-listening', ports: [3000] });
+    fake.emit('control', { type: 'rifty:node-listening', ports: [3000] });
     fake.emit('exit', 0);
     expect(await p).toBe(0);
     expect(stdout.join('')).toBe('hi\n');
@@ -94,7 +94,7 @@ describe('owner-child-node-executor', () => {
       onListening,
       onExit: () => {},
     });
-    fake.emit('message', {
+    fake.emit('control', {
       type: 'rifty:node-listening',
       ports: [3000],
       previewScope: 'node-run-scope',

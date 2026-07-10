@@ -3,8 +3,8 @@
  * translates terminal-manager calls into `pty:*` page→owner frames over an
  * injected `send`, and correlates owner→page frames back to per-run callbacks
  * by `rid`. Pure — no Worker/kernel coupling; the realVite glue wires `send` to
- * `handle.send({ type: PTY_IPC_TYPE, frame })` and feeds `onFrame` from
- * `handle.on('message')`.
+ * `handle.sendControl({ type: PTY_IPC_TYPE, frame })` and feeds `onFrame` from
+ * `handle.on('control')`.
  *
  * `exec` resolves the exit code once `pty:exit` arrives; chunks stream to the
  * per-run `onChunk` in arrival order (single channel ⇒ ordered, `seq` carried
@@ -67,7 +67,7 @@ type SessionState = {
 };
 
 export interface PtyClientDeps {
-  /** Posts a page→owner frame over the kernel IPC channel (wired by realVite). */
+  /** Posts a page→owner frame over kernel control (wired by realVite). */
   send: (frame: PageToOwnerFrame) => void;
   /** Owner→page dev-server state (ADR-0148 co-resident dev server); the page derives its LIVE pill + preview port. */
   onDevServer?: (frame: PtyDevServer) => void;
@@ -105,7 +105,7 @@ export interface PtyClient {
   }): Promise<void>;
   /** Cached cwd/env for a session (from the last `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
-  /** Feed an owner→page frame (from `handle.on('message')`). */
+  /** Feed an owner→page frame (from `handle.on('control')`). */
   onFrame(frame: OwnerToPageFrame): void;
   /**
    * Owner died — settle EVERY waiter so no caller hangs: in-flight runs resolve

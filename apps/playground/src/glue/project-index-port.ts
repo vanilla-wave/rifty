@@ -8,6 +8,8 @@
  * `channelNameFor` is borrowed from `@riftydev/net`.
  */
 import { channelNameFor } from '@riftydev/net';
+import type { PersistFailureReport } from '@riftydev/vfs';
+import { requireDurableFlush } from './durable-flush.ts';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 import {
   type IndexFs,
@@ -38,6 +40,11 @@ type IndexAckFrame = {
   readonly type: 'index-ack';
   readonly opId: string;
   readonly index: ProjectIndex;
+};
+type IndexErrorFrame = {
+  readonly type: 'index-error';
+  readonly opId: string;
+  readonly error: { readonly name: string; readonly message: string };
 };
 type IndexOp = { readonly opId?: string };
 type IndexActivateHiddenEmptyFrame = IndexOp & {
@@ -130,6 +137,7 @@ type IndexFrame =
   | IndexReplyFrame
   | IndexAppliedFrame
   | IndexAckFrame
+  | IndexErrorFrame
   | IndexMutationFrame;
 
 /** Owner service: callable teardown plus direct same-realm mutation signal. */
@@ -159,8 +167,7 @@ export function serveProjectIndex(
   key: OwnerBridgeKey,
   fs: IndexFs,
   base: string,
-  // Ordering-only drain: the persist report (ADR-0187 Corrected) is ignored.
-  flush?: () => Promise<unknown>,
+  flush?: () => Promise<PersistFailureReport | undefined>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
 ): ProjectIndexOwnerPort {
@@ -180,19 +187,43 @@ export function serveProjectIndex(
     if (opId)
       channel.postMessage({ type: 'index-applied', opId, index } satisfies IndexAppliedFrame);
   };
-  // Drain the OPFS write-through after a tree mutation, then publish. Errors
-  // surface loud (rejected promise → owner worker-entry → stderr), never swallowed.
-  const flushThenPublish = async (opId?: string): Promise<void> => {
-    if (flush) await flush();
-    ack(opId, publish());
+  const nack = (opId: string | undefined, cause: unknown): void => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    if (!opId) {
+      console.error('[project-index] durability flush failed', error);
+      return;
+    }
+    channel.postMessage({
+      type: 'index-error',
+      opId,
+      error: { name: error.name, message: error.message },
+    } satisfies IndexErrorFrame);
+  };
+  // A correlated ACK means the FULL persistence ledger is clean. A dirty or
+  // throwing drain gets an immediate correlated NACK, never a false success.
+  const flushThenPublish = async (opId?: string): Promise<boolean> => {
+    try {
+      if (flush) await requireDurableFlush(flush);
+      ack(opId, publish());
+      return true;
+    } catch (err) {
+      nack(opId, err);
+      return false;
+    }
   };
   // As flushThenPublish, plus a snapshot republish for an IN-PLACE re-seed so the
   // live page reflects the restored files (reset only — save/delete/new-scratch
   // mutate the active root's identity, not its content in place).
-  const flushRefreshPublish = async (opId?: string): Promise<void> => {
-    if (flush) await flush();
-    refresh?.();
-    ack(opId, publish());
+  const flushRefreshPublish = async (opId?: string): Promise<boolean> => {
+    try {
+      if (flush) await requireDurableFlush(flush);
+      refresh?.();
+      ack(opId, publish());
+      return true;
+    } catch (err) {
+      nack(opId, err);
+      return false;
+    }
   };
   // ADR-0165 §56 durable delete: flip the index (drop the entry) → THEN rm the
   // tree — the COMMIT-FIRST ordering, the inverse of the dangerous one. A crash
@@ -233,12 +264,9 @@ export function serveProjectIndex(
   const cleanupScratchAfterCommittedSave = (): void => {
     setTimeout(() => {
       cleanupCommittedScratchSource(fs, loadIndex(fs, base));
-      const cleanupFlush = flush?.();
-      if (cleanupFlush) {
-        void cleanupFlush.catch((err: unknown) =>
-          console.error('[project-index] committed scratch cleanup flush failed', err),
-        );
-      }
+      void requireDurableFlush(flush).catch((err: unknown) =>
+        console.error('[project-index] committed scratch cleanup flush failed', err),
+      );
     }, 0);
   };
   const saveScratch = (id: string, name: string, starter: string, opId?: string): void => {
@@ -255,8 +283,7 @@ export function serveProjectIndex(
         const committed = publish();
         applied(opId, committed);
         void (async (): Promise<void> => {
-          await flushThenPublish(opId);
-          cleanupScratchAfterCommittedSave();
+          if (await flushThenPublish(opId)) cleanupScratchAfterCommittedSave();
         })();
         return;
       }
@@ -268,8 +295,9 @@ export function serveProjectIndex(
     const committed = publish(); // sync commit applied; durability ack still waits for flush below
     applied(opId, committed);
     void (async (): Promise<void> => {
-      await flushThenPublish(opId); // saved project + index durable before a switch respawns
-      cleanupScratchAfterCommittedSave(); // recoverable stale source, do not block Save ack
+      if (await flushThenPublish(opId)) {
+        cleanupScratchAfterCommittedSave(); // recoverable stale source, do not block Save ack
+      }
     })();
   };
   // ADR-0165 §9 rename: load → rename that project's `name` → persist → publish.
@@ -430,7 +458,6 @@ function postIndexMutation(
   key: OwnerBridgeKey,
   frame: IndexMutationFrame,
   match: (index: ProjectIndex) => boolean = () => true,
-  opts: { readonly resolveOnReply?: boolean } = {},
 ): Promise<ProjectIndex> {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const opId = indexOpId();
@@ -448,11 +475,16 @@ function postIndexMutation(
   const promise = new Promise<ProjectIndex>((resolve, reject) => {
     onMessage = (event: MessageEvent): void => {
       const reply = event.data as IndexFrame;
-      if (reply.type === 'index-ack' && reply.opId !== opId) return;
-      if (reply.type !== 'index-ack' && reply.type !== 'index-reply') return;
-      if (reply.type === 'index-reply' && opts.resolveOnReply === false) return;
+      if (reply.type === 'index-error') {
+        if (reply.opId !== opId) return;
+        cleanup();
+        const error = new Error(reply.error.message);
+        error.name = reply.error.name;
+        reject(error);
+        return;
+      }
+      if (reply.type !== 'index-ack' || reply.opId !== opId) return;
       if (!match(reply.index)) {
-        if (reply.type === 'index-reply') return;
         cleanup();
         reject(new Error(`project index ${frame.type} ack did not match committed state`));
         return;
@@ -520,8 +552,26 @@ function postIndexMutationPhases(
 
   const onMessage = (event: MessageEvent): void => {
     const reply = event.data as IndexFrame;
-    if (reply.type !== 'index-applied' && reply.type !== 'index-ack') return;
+    if (
+      reply.type !== 'index-applied' &&
+      reply.type !== 'index-ack' &&
+      reply.type !== 'index-error'
+    )
+      return;
     if (reply.opId !== opId) return;
+    if (reply.type === 'index-error') {
+      const err = new Error(reply.error.message);
+      err.name = reply.error.name;
+      if (!appliedSettled) {
+        settleApplied();
+        rejectApplied(err);
+      }
+      if (!durableSettled) {
+        settleDurable();
+        rejectDurable(err);
+      }
+      return;
+    }
     if (!match(reply.index)) {
       const err = new Error(`project index ${frame.type} ack did not match committed state`);
       if (!appliedSettled) {

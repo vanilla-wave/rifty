@@ -3,7 +3,7 @@
  * Supervised dev-server child entry (ADR-0150 P6b) — a kind:'url' worker the
  * OWNER spawns (serve:true) to run the dev server out of the owner thread. It
  * reads+writes the owner store over fs.* sync-RPC (RIFTY_REMOTE_FS=1, like
- * node-entry-bootstrap), and talks to the owner over fork-IPC
+ * node-entry-bootstrap), and talks to the owner over kernel control
  * (rifty:dev-ready/error/snapshot from here; rifty:dev-file-changed in). Vite
  * owns listen/preview here; nodemon delegates the app server to a nested Worker.
  *

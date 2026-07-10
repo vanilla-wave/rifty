@@ -107,7 +107,7 @@ export function wirePreviewBridge(
  *
  * The owner hosts the realm-resident `Shell` instances keyed by session id AND
  * the co-resident dev server (ADR-0148); this handle is the PAGE pty client
- * surface (`createPtyClient`) wired to the kernel fork-IPC channel. `close()`
+ * surface (`createPtyClient`) wired to kernel control. `close()`
  * kills the worker; `closed` settles on exit.
  */
 export interface WorkspaceOwnerHandle {
@@ -290,7 +290,7 @@ function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwn
  *
  * The worker runs `real-vite-bootstrap` with `RIFTY_OWNER_MODE='shell'`: it
  * builds the realm-resident `Shell` factory (owner npm + in-realm bin) and a
- * `createPtyServer` wired to the same kernel IPC channel this handle posts on.
+ * `createPtyServer` wired to the same kernel-control lane this handle posts on.
  * Frames travel as `{ type: PTY_IPC_TYPE, frame }`; this side filters owner→page
  * envelopes via `isPtyIpcMessage` and feeds `client.onFrame`. On worker exit
  * `client.disconnect()` resolves any in-flight `exec` nonzero so the terminal
@@ -363,8 +363,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_TS_LSP_WORKER_URL: tsLspWorkerUrl,
       },
       cwd: root,
-      // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
-      // entry; the open IPC channel keeps the shells resident until close().
+      // ADR-0144: long-lived owner — `serve:true` keeps the realm resident past
+      // bootstrap until the page closes the worker.
       serve: true,
     },
     /* ppid */ 1,
@@ -412,7 +412,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   };
   const client = createPtyClient({
     send: (frame) => {
-      worker.send({ type: PTY_IPC_TYPE, frame });
+      worker.sendControl({ type: PTY_IPC_TYPE, frame });
     },
     onDevServer: (frame) => {
       for (const cb of devServerListeners) cb(frame);
@@ -440,7 +440,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     if (text) log(text);
   });
 
-  worker.on('message', (message: unknown) => {
+  worker.on('control', (message: unknown) => {
     if (isWorkspaceOwnerReadyMessage(message) && Object.is(message.port, snapshotPort)) {
       settleReady();
       return;
@@ -529,7 +529,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       key: snapshotPort,
       frame,
       exited,
-      sendIpc: (message) => worker.send(message),
+      sendIpc: (message) => worker.sendControl(message),
       fallback: sendVfsWrite,
     });
   };
@@ -548,7 +548,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         reject(new Error(`owner VFS write ack timed out (${opId})`));
       }, VFS_WRITE_ACK_TIMEOUT_MS);
       pendingVfsWrites.set(opId, { resolve, reject, timer });
-      if (!worker.send({ type: 'rifty:vfs-write', opId, frame })) {
+      if (!worker.sendControl({ type: 'rifty:vfs-write', opId, frame })) {
         pendingVfsWrites.delete(opId);
         clearTimeout(timer);
         reject(new Error(`owner VFS write send failed (${opId})`));
@@ -568,7 +568,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         reject(new Error(`owner VFS flush ack timed out (${opId})`));
       }, VFS_FLUSH_ACK_TIMEOUT_MS);
       pendingVfsWrites.set(opId, { resolve, reject, timer });
-      if (!worker.send({ type: 'rifty:vfs-flush', opId })) {
+      if (!worker.sendControl({ type: 'rifty:vfs-flush', opId })) {
         pendingVfsWrites.delete(opId);
         clearTimeout(timer);
         reject(new Error(`owner VFS flush send failed (${opId})`));
@@ -644,7 +644,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       if (exited) return;
       void ready.then(
         () => {
-          if (!exited) worker.send(stampTsLspOwner(message, snapshotPort));
+          if (!exited) worker.sendControl(stampTsLspOwner(message, snapshotPort));
         },
         () => {},
       );
