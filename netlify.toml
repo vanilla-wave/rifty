@@ -29,6 +29,13 @@
   # playground seam (glue/resolver-config.ts) reads it → from-scratch presets
   # install via eddy with auto-fallback. Local dev leaves it unset (eddy OFF).
   VITE_RIFTY_RESOLVER_URL = "https://eddy.rifty.dev"
+  # The workspace build includes the landing package even though this Netlify
+  # site publishes only playground/dist. Keep its required public URL contract
+  # explicit so the shared build cannot emit false SEO or navigation links.
+  VITE_RIFTY_SITE_URL = "https://rifty.dev/"
+  VITE_RIFTY_REPOSITORY_URL = "https://github.com/vanilla-wave/rifty"
+  VITE_RIFTY_SDK_DOCS_URL = "https://github.com/vanilla-wave/rifty/tree/main/packages/rifty#readme"
+  VITE_RIFTY_PLAYGROUND_URL = "https://play.rifty.dev/"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
 [[headers]]

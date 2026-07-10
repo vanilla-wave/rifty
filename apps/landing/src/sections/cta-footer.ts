@@ -1,8 +1,6 @@
 import { logoMark } from '../icons';
+import { repositoryUrl, sdkDocsUrl } from '../landing-config';
 import './cta-footer.css';
-
-const GITHUB_URL = 'https://github.com/vanilla-wave/rifty';
-const SDK_DOCS_URL = `${GITHUB_URL}/tree/main/packages/rifty#readme`;
 
 function buildPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -28,11 +26,11 @@ function buildPanel(): HTMLElement {
   row.className = 'cta-buttons';
   const primary = document.createElement('a');
   primary.className = 'cta-btn cta-btn-primary';
-  primary.href = SDK_DOCS_URL;
+  primary.href = sdkDocsUrl;
   primary.textContent = 'Read SDK docs';
   const secondary = document.createElement('a');
   secondary.className = 'cta-btn cta-btn-secondary';
-  secondary.href = GITHUB_URL;
+  secondary.href = repositoryUrl;
   secondary.textContent = 'View on GitHub';
   row.append(primary, secondary);
 
@@ -62,8 +60,8 @@ function buildFooter(): HTMLElement {
 
 /** Accent CTA panel + footer row. */
 export function renderCtaFooter(): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'cta';
-  section.append(buildPanel(), buildFooter());
-  return section;
+  const footer = document.createElement('footer');
+  footer.className = 'cta';
+  footer.append(buildPanel(), buildFooter());
+  return footer;
 }

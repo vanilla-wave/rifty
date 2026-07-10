@@ -27,7 +27,7 @@ const SURF: Record<ScenarioId, Surface> = {
       'app.<span style="color:var(--syn-fn)">listen</span>(<span style="color:var(--syn-num)">3000</span>)',
     pv:
       '<div style="font-weight:700; font-size:14px;">It works.</div>' +
-      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">Served by Express · in this tab</div>',
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">Served by Express · in this tab</div>',
   },
   vite: {
     file: 'main.js',
@@ -38,7 +38,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '  <span style="color:var(--syn-kw)">return</span> <span style="color:var(--syn-str)">`Counter: ${count}`</span>\n}',
     pv:
       '<div style="font-weight:700; font-size:14px;">Counter: 3</div>' +
-      '<div style="font-size:9.5px; color:#16a34a; margin-top:3px;">● HMR applied · state kept</div>',
+      '<div style="font-size:9.5px; color:#15803d; margin-top:3px;">● HMR applied · state kept</div>',
   },
   wasi: {
     file: 'build.sh',
@@ -48,7 +48,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '<span style="color:#8FD98F">✓</span> built 41ms <span style="color:var(--syn-com)">(WASI)</span>',
     pv:
       '<div style="font-weight:700; font-size:13px;">out.js · 18 kb</div>' +
-      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">esbuild.wasm bundled in-tab</div>',
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">esbuild.wasm bundled in-tab</div>',
   },
   boot: {
     file: 'sandbox.js',
@@ -57,8 +57,8 @@ const SURF: Record<ScenarioId, Surface> = {
       '  <span style="color:var(--syn-fn)">createSandbox</span>({\n' +
       '    workerUrl,\n    serviceWorkerUrl })',
     pv:
-      '<div style="font-size:12px; color:#9ca3af;">localhost:3000</div>' +
-      '<div style="font-size:9.5px; color:#cbd5e1; margin-top:3px;">runtime ready — start a server</div>',
+      '<div style="font-size:12px; color:#374151;">createSandbox()</div>' +
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">Sandbox returned · runtime boots asynchronously</div>',
   },
   npm: {
     file: 'package.json',
@@ -67,7 +67,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '    <span style="color:var(--syn-str)">"express"</span>: <span style="color:var(--syn-str)">"^4"</span>\n  } }',
     pv:
       '<div style="font-size:12px; color:#15171D; font-weight:600;">node_modules/</div>' +
-      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">Dependencies linked to the VFS</div>',
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">Dependencies linked to the VFS</div>',
   },
   sync: {
     file: 'app.js',
@@ -78,7 +78,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '<span style="color:var(--syn-com)">// blocks via SAB</span>',
     pv:
       '<div style="font-weight:700; font-size:13px;">It works.</div>' +
-      '<div style="font-size:9.5px; color:#6b7280; margin-top:3px;">sync fs over SharedArrayBuffer</div>',
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">sync fs over SharedArrayBuffer</div>',
   },
 };
 
@@ -113,6 +113,10 @@ export function createNodeEl(id: NodeId, handlers: NodeHandlers): HTMLDivElement
   const el = document.createElement('div');
   el.className = 'exp-node';
   el.setAttribute('data-node', id);
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('aria-label', meta.label);
+  el.setAttribute('aria-pressed', 'false');
   el.style.setProperty('--rc', rc);
 
   if (RICH_NODES.has(id)) {
@@ -128,6 +132,12 @@ export function createNodeEl(id: NodeId, handlers: NodeHandlers): HTMLDivElement
   el.addEventListener('pointerenter', () => handlers.onEnter(id));
   el.addEventListener('pointerleave', () => handlers.onLeave(id));
   el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlers.onClick(id);
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.repeat || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
     e.stopPropagation();
     handlers.onClick(id);
   });

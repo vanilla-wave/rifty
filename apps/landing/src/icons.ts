@@ -14,16 +14,6 @@ const ICONS = {
   // quickstart warning callout (Rifty.dc.html L183): COI required.
   'warning-triangle':
     '<path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />',
-  // explorer "Whole schema" chip (Rifty Architecture.dc.html L50).
-  grid: '<rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />',
-  // explorer zoom-in control.
-  plus: '<path d="M12 5v14M5 12h14" />',
-  // explorer zoom-out control.
-  minus: '<path d="M5 12h14" />',
-  // explorer Reset view control.
-  reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />',
-  // quickstart boot.ts file-tab document icon.
-  file: '<path d="M14 3v5h5" /><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />',
   // mono terminal prompt glyph (Rifty.dc.html L166: boot.ts tab marker).
   'terminal-dot': '<path d="M4 17l6-6-6-6M12 19h8" />',
   // "What you get" feature tiles (Rifty.dc.html buildFeatures, single-path glyphs):

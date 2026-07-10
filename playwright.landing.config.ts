@@ -21,6 +21,9 @@ export default defineConfig({
     cwd: './apps/landing',
     env: {
       VITE_RIFTY_PLAYGROUND_URL: 'https://play.example.test/',
+      VITE_RIFTY_REPOSITORY_URL: 'https://forge.example.test/org/rifty',
+      VITE_RIFTY_SDK_DOCS_URL: 'https://docs.example.test/rifty-sdk',
+      VITE_RIFTY_SITE_URL: 'https://site.example.test/',
     },
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
