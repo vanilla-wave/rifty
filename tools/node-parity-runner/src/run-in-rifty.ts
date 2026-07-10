@@ -6,7 +6,9 @@
  * leak into the runner itself. Behaviours that depend on rifty's promise/
  * nextTick patches are covered by the conformance suite, which can install
  * the patches in a controlled `beforeAll`/`afterAll` scope. The parity runner
- * focuses on module-shape semantics: `node:path`, `node:buffer`, `node:util`,
+ * does temporarily mirror the Worker's tracked timer globals so detached timer
+ * chains participate in the real keepalive drain. It otherwise focuses on
+ * module-shape semantics: `node:path`, `node:buffer`, `node:util`,
  * `node:querystring`, `node:events`, `node:url`, etc.
  *
  * Console is replaced for the duration of the case, then restored.
@@ -17,6 +19,7 @@ import {
   setProcessCwd,
   writeProcessStdin,
 } from '@riftydev/runtime-js/builtins/process';
+import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
@@ -66,6 +69,32 @@ declare global {
   var __riftyHttpRequest:
     | ((port: number, path: string, init?: RequestInit) => Promise<RiftyHttpResponse>)
     | undefined;
+}
+
+const TIMER_GLOBAL_KEYS = [
+  'setTimeout',
+  'clearTimeout',
+  'setInterval',
+  'clearInterval',
+  'setImmediate',
+  'clearImmediate',
+] as const;
+
+/** Mirror worker bootstrap timers for one case, then restore the harness realm exactly. */
+function installCaseTimerGlobals(): () => void {
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const previous = TIMER_GLOBAL_KEYS.map((key) => ({
+    key,
+    own: Object.hasOwn(globals, key),
+    value: globals[key],
+  }));
+  installTimerGlobals();
+  return () => {
+    for (const { key, own, value } of previous) {
+      if (own) globals[key] = value;
+      else Reflect.deleteProperty(globals, key);
+    }
+  };
 }
 
 /**
@@ -446,6 +475,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   // explicit override — must not leak into the next case. Snapshot here, restore
   // in `finally`. Default stays rewrite for every case that does not opt in.
   const priorVmEngineGlobal = (globalThis as Record<string, unknown>).__RIFTY_VM_ENGINE;
+  const restoreTimerGlobals = installCaseTimerGlobals();
 
   const captured: string[] = [];
   const writeStdout = (...args: unknown[]) => {
@@ -478,6 +508,9 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
       for (const chunk of testCase.stdin) writeProcessStdin(chunk);
       riftyProcess.stdin.push(null);
     }
+    // Mirror the real Worker lifecycle: global timers installed by bootstrap
+    // hold the keepalive refcount until every scheduled callback has fired.
+    await awaitDrain({ capMs: 1000 });
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a
       // microtask) and prints from the awaited `__riftyHttpRequest` round-trip.
@@ -488,12 +521,6 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
         prev = captured.length;
         await new Promise((r) => setTimeout(r, 5));
       }
-    } else {
-      // Drain keepalive-backed runtime work before restoring console capture.
-      // Then keep the legacy host-timer grace for parity cases that call the
-      // harness realm's global setTimeout/setImmediate directly.
-      await awaitDrain({ capMs: 1000 });
-      await new Promise((r) => setTimeout(r, 25));
     }
   } finally {
     console.log = original.log;
@@ -501,6 +528,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     console.debug = original.debug;
     console.warn = original.warn;
     console.error = original.error;
+    restoreTimerGlobals();
     resetSyncMirror();
     resetKeepalive();
     setProcessCwd('/workspace');

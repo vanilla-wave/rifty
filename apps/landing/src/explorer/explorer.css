@@ -3,7 +3,7 @@
    chrome + fixed dock are never rendered, so no rules for them here. */
 
 /* ---- keyframes ---- */
-@keyframes rfPulse {
+@keyframes rfExplorerPulse {
   0%,
   100% {
     opacity: 1;
@@ -75,7 +75,7 @@
 .exp-view-num {
   font-family: var(--font-mono);
   font-size: 11px;
-  opacity: 0.5;
+  color: var(--t5);
 }
 .exp-view-btn-on {
   background: var(--ac);
@@ -84,7 +84,7 @@
   border-color: var(--ac);
 }
 .exp-view-btn-on .exp-view-num {
-  opacity: 0.7;
+  color: inherit;
 }
 
 /* ---- scenario player bar ---- */
@@ -143,7 +143,7 @@
 }
 .exp-chip-dot-play {
   background: var(--ac);
-  animation: rfPulse 1.1s ease-in-out infinite;
+  animation: rfExplorerPulse 1.1s ease-in-out infinite;
 }
 .exp-chip-on {
   background: rgb(from var(--ac) r g b / 0.16);
@@ -227,7 +227,7 @@
   font-size: 9.5px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--t5);
 }
 .exp-legend-item {
   display: flex;
@@ -339,8 +339,7 @@
   border-radius: 9px;
   cursor: grab;
   user-select: none;
-  transition: border-color 0.15s linear, background 0.15s linear, opacity 0.15s linear, box-shadow
-    0.15s linear;
+  transition: border-color 0.15s linear, background 0.15s linear, box-shadow 0.15s linear;
 }
 .exp-node.exp-grabbing {
   cursor: grabbing;
@@ -377,8 +376,20 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.03em;
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--t5);
   line-height: 1.1;
+}
+
+.exp-node-dim {
+  border-color: var(--bd);
+  border-left-color: rgb(from var(--rc) r g b / 0.35);
+}
+.exp-node-dim .exp-node-ico {
+  opacity: 0.35;
+}
+.exp-node-dim .exp-node-label,
+.exp-node-dim .exp-node-kind {
+  color: var(--t5);
 }
 
 /* rich nodes */
@@ -602,8 +613,9 @@
   font-weight: 500;
   color: var(--t1);
   cursor: pointer;
-  transition: border-color 0.2s linear, background 0.2s linear, opacity 0.2s linear, box-shadow 0.2s
-    linear;
+  width: 100%;
+  text-align: left;
+  transition: border-color 0.2s linear, background 0.2s linear, box-shadow 0.2s linear;
 }
 .exp-lane-card-label {
   font-size: 12.5px;
@@ -624,10 +636,93 @@
   border-color: rgb(from var(--ac) r g b / 0.34);
 }
 .exp-lc-dim {
-  opacity: 0.28;
+  background: transparent;
+  border-color: var(--bd);
+  border-left-color: rgb(from var(--rc) r g b / 0.35);
+}
+.exp-lc-dim .exp-node-ico {
+  opacity: 0.35;
+}
+.exp-lc-dim .exp-lane-card-label {
+  color: var(--t5);
 }
 
 /* realms inspector — floats bottom-left of the realms container (.exp-realms is
    position:relative), same as the graph views' viewport inspector. Inherits
    left/bottom/pointer-events:none from .exp-inspector, so it never blocks
    lane-card hover or lane scrolling underneath. */
+
+@media (max-width: 600px) {
+  .exp-switcher {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .exp-switcher-label {
+    grid-column: 1 / -1;
+    padding-right: 0;
+  }
+
+  .exp-view-btn {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 8px;
+    justify-content: center;
+  }
+
+  .exp-bar-row {
+    padding: 10px;
+  }
+
+  .exp-bar-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .exp-bar-label,
+  .exp-bar-divider,
+  .exp-chip {
+    flex: none;
+  }
+
+  .exp-chip {
+    min-height: 44px;
+  }
+
+  .exp-legend {
+    align-items: center;
+  }
+
+  .exp-hint {
+    display: none;
+  }
+
+  .exp-reset-btn {
+    height: 44px;
+  }
+
+  .exp-viewport {
+    /* buildBoard owns a desktop inline height; mobile deliberately overrides it. */
+    height: min(520px, 70svh) !important;
+    touch-action: pan-y;
+  }
+
+  .exp-lanes {
+    grid-template-columns: 1fr;
+    max-height: min(70svh, 620px);
+    overflow-y: auto;
+    gap: 10px;
+  }
+
+  .exp-lane {
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .exp-lane-card {
+    min-width: 0;
+    min-height: 44px;
+  }
+}

@@ -14,14 +14,14 @@ const c: ParityCase = {
   code: `
     const http = require('node:http');
 
-    const PORT = 4210;
     const server = http.createServer({}, (req, res) => {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('options-listener:' + req.url);
     });
 
-    server.listen({ port: PORT }, async () => {
-      const r = await __riftyHttpRequest(PORT, '/probe');
+    server.listen({ port: 0 }, async () => {
+      const port = server.address().port;
+      const r = await __riftyHttpRequest(port, '/probe');
       console.log('status:' + r.status);
       console.log('content-type:' + r.contentType);
       console.log('body:' + r.body);

@@ -2,7 +2,7 @@ import './arch.css';
 
 const INTRO_HEAD = 'An interactive map of the runtime. Pick a scenario — ';
 const INTRO_TAIL =
-  ', an Express server, Vite HMR, a WASI build — and watch the request flow across the real package graph. Drag nodes, switch to the realm view, or inspect any module.';
+  ', an Express server, Vite HMR, a WASI build — and follow its narrated steps plus the structural modules linking them in the package graph. Drag nodes, switch to the realm view, or inspect any module.';
 
 /**
  * "How it actually works" — section chrome + intro + an empty explorer-root
@@ -18,7 +18,7 @@ export function renderArch(): HTMLElement {
   head.className = 'arch-head';
   const index = document.createElement('span');
   index.className = 'arch-index';
-  index.textContent = '02';
+  index.textContent = '03';
   const label = document.createElement('h2');
   label.className = 'arch-label';
   label.textContent = 'How it actually works';

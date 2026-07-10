@@ -9,6 +9,10 @@ html {
   scroll-behavior: smooth;
 }
 
+section[id] {
+  scroll-margin-top: 76px;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -31,6 +35,28 @@ button {
   cursor: pointer;
 }
 
+:where(a, button, [role="button"][tabindex]):focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: var(--r-btn);
+  background: var(--ac);
+  color: var(--ac-ink);
+  font-weight: 600;
+  transform: translateY(calc(-100% - 12px));
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 ::selection {
   background: rgb(from var(--ac) r g b / 0.25);
   color: #fff;
@@ -42,4 +68,21 @@ button {
   margin: 0 auto;
   padding-left: var(--gutter);
   padding-right: var(--gutter);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

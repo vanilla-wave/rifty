@@ -55,14 +55,25 @@ function buildCodeCard(): HTMLElement {
   body.append(blankLine());
   body.append(
     codeLine([
-      ['if', 'syn-kw'],
-      [' (!', 'syn-punc'],
+      ['const', 'syn-kw'],
+      [' caps ', ''],
+      ['= ', 'syn-punc'],
       ['checkCapabilities', 'syn-fn'],
-      ['().sufficient) ', 'syn-punc'],
-      ['return', 'syn-kw'],
-      [' ', ''],
-      ['showUnsupportedNotice', 'syn-fn'],
       ['()', 'syn-punc'],
+    ]),
+  );
+  body.append(
+    codeLine([
+      ['if', 'syn-kw'],
+      [' (!caps.sufficient || !caps.capabilities.crossOriginIsolated)', 'syn-punc'],
+    ]),
+  );
+  body.append(
+    codeLine([
+      ['  throw', 'syn-kw'],
+      [' new ', 'syn-punc'],
+      ['Error', 'syn-fn'],
+      ['(caps.summary)', 'syn-punc'],
     ]),
   );
   body.append(blankLine());
@@ -119,7 +130,7 @@ function buildCallout(): HTMLElement {
   const callout = document.createElement('div');
   callout.className = 'qs-callout';
 
-  const titleRow = document.createElement('div');
+  const titleRow = document.createElement('h3');
   titleRow.className = 'qs-callout-title';
   const warnIcon = document.createElement('span');
   warnIcon.className = 'qs-callout-icon';
@@ -157,7 +168,7 @@ function buildLeafCard(): HTMLElement {
   const card = document.createElement('div');
   card.className = 'qs-leaf-card';
 
-  const heading = document.createElement('div');
+  const heading = document.createElement('h3');
   heading.className = 'qs-leaf-heading';
   heading.textContent = 'also fine on its own:';
 
@@ -193,7 +204,7 @@ export function renderQuickStart(): HTMLElement {
   head.className = 'qs-head';
   const index = document.createElement('span');
   index.className = 'qs-index';
-  index.textContent = '03';
+  index.textContent = '04';
   const label = document.createElement('h2');
   label.className = 'qs-label';
   label.textContent = 'Quick start';

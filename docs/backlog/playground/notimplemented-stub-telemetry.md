@@ -1,18 +1,23 @@
 ---
 area: playground
 status: draft
-title: NotImplementedError hit telemetry (dev console/statusbar counter of stubs real consumers touch)
+title: Structured NotImplemented and divergence capture at rifty boundaries
 created: 2026-06-12
-why: cheap; stub-priority is currently guesswork — a hit counter from real playground sessions turns backlog prioritization into data
-user_story: As a playground developer hitting unimplemented features, I want a dev-console/statusbar counter of which `NotImplementedError` `module.method` stubs my session actually touches, but today nothing aggregates the hits so I discover them one crash at a time.
-sources: [ADR-0130, fullstack-demo feedback 2026-06-12]
-code: [packages/io/src/errors.ts, packages/vfs/src/errors.ts, apps/playground/src]
+why: Runtime-js aggregates some structured feature hits, but real playground runs span owner/child/service paths and multiple NotImplementedError classes, so an uncaptured or untrusted boundary would make the compatibility inspector silently incomplete or misclassify user code.
+user_story: As a developer running a real project, I want every surfaced rifty NotImplementedError or known divergence to retain its feature id and classification, but today capture is tied to only part of the runtime topology.
+epic: honest-compatibility-in-the-ide
+sources: [M11, ADR-0130, ADR-0142, fullstack-demo feedback 2026-06-12]
+code: [packages/io/src/errors.ts, packages/vfs/src/errors.ts, packages/ts-language-service/src/service.ts, packages/runtime-js/src/telemetry/divergence-sink.ts, apps/playground/src]
 ---
-## Context
-`NotImplementedError` carries a structured `feature` field (`module.method`) and is thrown across vfs/net/npm-client/shell/runtime-* per the no-silent-stubs rule. Nobody aggregates the hits: the express demo found stubs by crashing into them one at a time. Gotchas: TWO class definitions (`packages/io/src/errors.ts`, `packages/vfs/src/errors.ts`) — match by `error.name === 'NotImplementedError'`, not `instanceof`; throws happen in worker realms, so capture must sit at a boundary the page already sees (worker error/unhandledrejection surface, kernel stdio/console bridge), not in the throwing packages.
 
-## Options / Next
-Counter keyed by `feature`; surface in playground dev console + statusbar badge; optional dump-table command. Capture point fork: (a) boundary capture — parse `name`/`feature` at worker error + console bridge (no cross-package coupling, misses swallowed-and-handled throws); (b) constructor hook (counts everything incl. caught ones, but couples io/vfs to a telemetry sink — dispreferred, reverse-import smell). Provisional pick: (a). Output feeds backlog priority directly: sorted hit-count per feature. Dev-only, no network, no persistence beyond session (or localStorage at most).
+## Context
+
+Rifty's `NotImplementedError` variants carry a structured `feature` field (`module.method`) across io/vfs consumers and the TS language service per the no-silent-stubs rule. Runtime-js has a session sink and worker diagnostic event, but the playground also executes through owner/kernel/shell and TS service-worker paths. `instanceof` cannot cross packages/realms, while arbitrary `name` + `feature` is forgeable by user/dependency code: the throwing rifty producer must brand provenance before serialization, and only that typed envelope may classify a known rifty gap.
+
+Audit owner, node/bin/dev-server child, runtime-controller, install, and TS service endpoint boundaries. Assign one occurrence id at the first authoritative boundary and forward it so repeated owner/child/page observations deduplicate instead of inflating counts. Count only errors that cross an observed failure boundary — constructor hooks would count handled control flow and create reverse coupling. Generic exceptions and third-party lookalikes remain unclassified; a regression test pins that distinction.
+
+This item owns capture/aggregation only. `playground/compatibility-event-bridge` owns delivery to the page; `playground/compatibility-inspector` owns UI. No network collection or cross-user telemetry is implied.
 
 ## Reversibility
-REVERSIBLE — dev-only instrumentation, no public API. Capture-point choice is the provisional call this item records.
+
+REVERSIBLE internal instrumentation. A new shared error brand or cross-package/public telemetry interface needs an ADR before `ready`.

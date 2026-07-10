@@ -3,29 +3,180 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rifty — Node, npm, and a dev server inside a browser tab</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Open Node-compatible runtime for the browser | rifty</title>
     <meta
       name="description"
-      content="A browser-based, Node-compatible runtime and WASI runner. Real require, real npm install, a real dev server — built from scratch for the browser."
+      content="Run Node, npm, dev servers, and WASI binaries inside Chromium with rifty, an open, MIT-licensed, self-hostable runtime."
     />
-    <link rel="canonical" href="https://rifty.dev/" />
-    <meta property="og:title" content="rifty — Node in the browser tab" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#15171d" />
+    <link rel="canonical" href="__RIFTY_SITE_URL__" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="sitemap" href="/sitemap.xml" type="application/xml" />
+
+    <meta property="og:site_name" content="rifty" />
+    <meta property="og:title" content="Open Node-compatible runtime for the browser | rifty" />
     <meta
       property="og:description"
-      content="A browser-based, Node-compatible runtime and WASI runner."
+      content="Node, npm, dev servers, and WASI binaries inside Chromium. Open, MIT-licensed, and self-hostable."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://rifty.dev/" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
+    <meta property="og:url" content="__RIFTY_SITE_URL__" />
+    <meta property="og:image" content="__RIFTY_OG_IMAGE_URL__" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="rifty — Node, npm, and a dev server inside a browser tab"
     />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Open Node-compatible runtime for the browser | rifty" />
+    <meta
+      name="twitter:description"
+      content="Node, npm, dev servers, and WASI binaries inside Chromium. Open, MIT-licensed, and self-hostable."
+    />
+    <meta name="twitter:image" content="__RIFTY_OG_IMAGE_URL__" />
+    <meta
+      name="twitter:image:alt"
+      content="rifty — Node, npm, and a dev server inside a browser tab"
+    />
+
+    <script type="application/ld+json">__RIFTY_STRUCTURED_DATA__</script>
+
+    <style>
+      html {
+        color-scheme: dark;
+        background: #15171d;
+      }
+
+      body {
+        margin: 0;
+        background: #15171d;
+        color: #fff;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .static-shell {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 40px 32px;
+        box-sizing: border-box;
+        background:
+          radial-gradient(circle at 76% 20%, rgba(199, 240, 90, 0.09), transparent 31rem),
+          #15171d;
+      }
+
+      .static-shell-inner {
+        width: min(100%, 72rem);
+      }
+
+      .static-shell-brand,
+      .static-shell-kicker {
+        font-family: "Roboto Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      .static-shell-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .static-shell-mark {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        background: #c7f05a;
+        transform: rotate(45deg);
+      }
+
+      .static-shell-kicker {
+        margin: 88px 0 18px;
+        color: #c7f05a;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .static-shell h1 {
+        max-width: 900px;
+        margin: 0;
+        font-size: clamp(42px, 7vw, 78px);
+        line-height: 1.02;
+        letter-spacing: -0.055em;
+      }
+
+      .static-shell-accent {
+        color: #c7f05a;
+      }
+
+      .static-shell-copy {
+        max-width: 680px;
+        margin: 28px 0 34px;
+        color: rgba(255, 255, 255, 0.65);
+        font-size: clamp(17px, 2vw, 20px);
+        line-height: 1.65;
+      }
+
+      .static-shell-link {
+        display: inline-flex;
+        min-height: 46px;
+        align-items: center;
+        padding: 0 18px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 7px;
+        color: #fff;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .static-shell-link:focus-visible {
+        outline: 2px solid #c7f05a;
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 600px) {
+        .static-shell {
+          padding: 28px 20px;
+        }
+
+        .static-shell-kicker {
+          margin-top: 64px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <main id="main-content" class="static-shell" data-rifty-static-shell>
+        <div class="static-shell-inner">
+          <a class="static-shell-brand" href="__RIFTY_REPOSITORY_URL__">
+            <span class="static-shell-mark" aria-hidden="true"></span>
+            rifty
+          </a>
+          <p class="static-shell-kicker">Open runtime · Self-hostable</p>
+          <h1>
+            Node, npm, and a dev server —
+            <span class="static-shell-accent">inside a browser tab.</span>
+          </h1>
+          <p class="static-shell-copy">
+            An open, MIT-licensed, self-hostable Node-compatible runtime and WASI runner for
+            Chromium. Run tested Express, Vite 7, npm tooling, and real WASI binaries.
+          </p>
+          <a class="static-shell-link" href="__RIFTY_REPOSITORY_URL__">
+            View rifty on GitHub
+          </a>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

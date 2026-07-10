@@ -3,8 +3,8 @@ area: toolchain-build
 status: draft
 title: Feed compat matrices from test results instead of static inventories
 created: 2026-06-13
-why: cli.js holds hand-curated ✅/⚠️/❌ rows and only validates that cited test FILES exist — a row stays ✅ even if its test is skipped or gutted, so claims can silently drift from test outcomes
-user_story: As a rifty maintainer trusting the fs/streams/http compat matrices, I want a row's ✅/⚠️/❌ to derive from its cited tests' actual pass/skip state, but today `compat:generate` only checks the test file exists so a gutted or skipped test still renders ✅.
+why: cli.js holds hand-curated ✅/⚠️/❌ rows for every generated matrix and only validates that cited test FILES exist — a row stays ✅ even if its test is skipped or gutted, so claims can silently drift from test outcomes
+user_story: As a rifty maintainer trusting generated compatibility matrices, I want every row's ✅/⚠️/❌ to derive from its cited tests' actual pass/skip state, but today `compat:generate` only checks the test file exists so a gutted or skipped test still renders ✅.
 epic: webcontainers-alternative-search-slot
 sources: ["PR #26 review", docs/public/compat/README.md]
 code: [tools/compat-matrix-generator/cli.js]
@@ -12,8 +12,8 @@ code: [tools/compat-matrix-generator/cli.js]
 
 ## Context
 
-`pnpm compat:generate` renders `docs/public/compat/{fs,streams,http}.md` from
-static row arrays inside `cli.js`. `validateMatrixSources` checks the cited
+`pnpm compat:generate` renders the fs, streams, http, zlib, ts-language-service,
+and git matrices from static row arrays inside `cli.js`. `validateMatrixSources` checks the cited
 conformance/parity FILES exist, not that they pass or still assert the claimed
 behavior. CLAUDE.md's verification philosophy says the matrix is auto-generated
 from test results; the static skeleton was a deliberate milestone-close

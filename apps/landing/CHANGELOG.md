@@ -2,7 +2,30 @@
 
 ## Unreleased
 
-- Hero terminal now reports Node v24, matching the runtime identity and the Node 24 parity gate.
+- SEO/share hardening: compact title + description, WebSite JSON-LD, robots/sitemap, complete
+  Open Graph/Twitter card with a branded 1200×630 PNG, Apple touch icon, and an indexable static
+  shell that remains useful when client JS fails. Manual Netlify PR aliases now emit
+  `X-Robots-Tag: noindex, nofollow`; production smoke guards against leaking that header.
+- Faster first load: self-hosted Inter/Roboto Mono remove the render-blocking Google origin; the
+  below-fold explorer is a reserved, near-viewport dynamic chunk; the Chromium-only build drops the
+  modulepreload polyfill. Same-profile mobile Lighthouse: performance 85→100, FCP 3.1→1.5 s,
+  LCP 3.1→1.5 s, initial DOM 921→363, third-party bytes 83.31→0 kB; initial JS gzip
+  17.83→8.08 kB.
+- UX/accessibility repair: semantic main/footer/h3 + skip link, WCAG-AA muted text, reduced-motion
+  terminal, truthful structural-scenario wording, keyboard-operable graph nodes, drag no longer
+  pins a node, clipboard errors recover, and all mobile navigation exits close the drawer.
+- Review polish: the animated hero terminal reserves its final row viewport instead of shifting the
+  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA; balanced
+  preset-card footer spacing around an explicit divider. `Run something real` now opens the
+  configured playground directly instead of scrolling to the preset cards.
+- Repositioned the landing around Rifty's real wedge: open, MIT, self-hostable browser runtime
+  infrastructure. Hero code now uses only the public `Sandbox` API (`runtime.eval`, `fs`, events),
+  and four "Run something real" cards deep-link into proven Vite 7, Express + SQLite, CLI, and
+  Markdown SSG presets. Their playground base is the required `VITE_RIFTY_PLAYGROUND_URL`, so
+  self-hosters explicitly choose their own origin or mount instead of receiving a false local
+  fallback. Added an accessible mobile nav drawer, one-column mobile content, and a mobile-first
+  Realms architecture view; browser regressions cover exact API copy, preset links, and zero
+  page-level overflow at 390/360 px.
 - Favicon still invisible: the SVG comment carried CSS-var token names (`--deep`, `--ac`), and a
   literal `--` inside an XML comment is illegal — browsers parse SVG as strict XML and reject the
   whole document ("Double hyphen within comment"), so the asset served 200 `image/svg+xml` yet the
