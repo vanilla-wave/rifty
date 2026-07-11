@@ -44,5 +44,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsup"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "esbuild-wasm": "0.28.0"
   }
 }
