@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Node-compatible `net.isIP`, `net.isIPv4`, and `net.isIPv6`.** Includes IPv6
+  zones and runtime `ToString` coercion, with live-Node parity coverage.
+
 - **Generic preview WebSocket bridge (ADR-0189, backlog net/preview-websocket-bridge, partial).**
   `serveCrossRealmPreview` now injects the `window.WebSocket` bridge script into every
   `text/html` response (marker `data-rifty-ws-bridge`, head-prepend, buffered v1 —
