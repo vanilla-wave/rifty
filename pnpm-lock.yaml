@@ -432,6 +432,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../packages/vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../packages/workbench
 
   tools/compat-matrix-generator: {}
 

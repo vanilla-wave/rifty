@@ -22,10 +22,13 @@ describe('resolveExecSyncOptions', () => {
   it('uses an explicit env as a replacement instead of merging the parent', () => {
     expect(
       resolveExecSyncOptions(
-        { env: { USER_VALUE: 'explicit' } },
+        { env: { USER_VALUE: 'explicit', UNDEFINED_VALUE: undefined } },
         { RIFTY_SQLITE_WASM_URL: 'blob:sqlite', USER_VALUE: 'parent' },
         '/parent',
       ),
-    ).toEqual({ cwd: '/parent', env: { USER_VALUE: 'explicit' } });
+    ).toEqual({
+      cwd: '/parent',
+      env: { USER_VALUE: 'explicit', UNDEFINED_VALUE: 'undefined' },
+    });
   });
 });

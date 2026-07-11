@@ -7,42 +7,50 @@
 
 import { Buffer, NotImplementedError } from '@riftydev/io';
 import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@riftydev/kernel';
+import { NodeProcess, riftyProcess } from './process.ts';
 
 export interface ExecSyncOptions {
   readonly cwd?: string;
-  readonly env?: Record<string, string>;
+  readonly env?: Record<string, string | undefined>;
   readonly encoding?: string;
   readonly maxBuffer?: number;
+}
+
+type ResolvedExecSyncOptions = Omit<ExecSyncOptions, 'cwd' | 'env'> & {
+  readonly cwd: string;
+  readonly env: Record<string, string>;
+};
+
+function snapshotExecEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const snapshot: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    snapshot[key] = value === undefined ? 'undefined' : value;
+  }
+  return snapshot;
 }
 
 /** Node defaults omitted `cwd`/`env` to a snapshot of the calling process context. */
 export function resolveExecSyncOptions(
   opts: ExecSyncOptions | undefined,
-  parentEnv: Readonly<Record<string, string>>,
+  parentEnv: Readonly<Record<string, string | undefined>>,
   parentCwd: string,
-): ExecSyncOptions {
+): ResolvedExecSyncOptions {
+  const { env, cwd, ...rest } = opts ?? {};
   return {
-    ...(opts ?? {}),
-    cwd: opts?.cwd ?? parentCwd,
-    env: { ...(opts?.env ?? parentEnv) },
+    ...rest,
+    cwd: cwd ?? parentCwd,
+    env: snapshotExecEnv(env ?? parentEnv),
   };
 }
 
 function currentProcessContext(): {
   readonly cwd: string;
-  readonly env: Readonly<Record<string, string>>;
+  readonly env: Readonly<Record<string, string | undefined>>;
 } {
-  const process = (
-    globalThis as unknown as {
-      readonly process?: {
-        cwd?(): string;
-        readonly env?: Readonly<Record<string, string>>;
-      };
-    }
-  ).process;
-  if (!process || typeof process.cwd !== 'function' || process.env === undefined) {
-    throw new Error('execSync: kernel Node process context is unavailable');
-  }
+  const live = (globalThis as { readonly process?: unknown }).process;
+  const process = live instanceof NodeProcess ? live : riftyProcess;
   return {
     cwd: process.cwd(),
     env: process.env,
