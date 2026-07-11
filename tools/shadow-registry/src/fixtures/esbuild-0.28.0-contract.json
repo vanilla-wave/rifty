@@ -1,0 +1,1116 @@
+{
+  "schema": 3,
+  "oracle": "esbuild@0.28.0",
+  "version": "0.28.0",
+  "rows": {
+    "module": {
+      "cjsOuterDiffersFromDefault": true,
+      "cjsDefaultSelf": true,
+      "esmDefaultIsCjsOuter": true,
+      "esmNamespaceStable": true,
+      "namedMethodRelations": {
+        "build": {
+          "cjsOuterToDefault": true,
+          "esmNamedToCjs": true,
+          "esmDefaultToCjs": true
+        },
+        "context": {
+          "cjsOuterToDefault": true,
+          "esmNamedToCjs": true,
+          "esmDefaultToCjs": true
+        },
+        "transform": {
+          "cjsOuterToDefault": true,
+          "esmNamedToCjs": true,
+          "esmDefaultToCjs": true
+        },
+        "formatMessages": {
+          "cjsOuterToDefault": true,
+          "esmNamedToCjs": true,
+          "esmDefaultToCjs": true
+        }
+      },
+      "pluginBuildIsCjsDefault": true,
+      "pluginBuildMethodRefsMatch": true,
+      "build": {
+        "ok": true,
+        "value": {
+          "setupCalled": true,
+          "outputContainsMarker": true,
+          "result": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<stdout>",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 89,
+                "hashPresent": true,
+                "text": "\"use strict\";\n(() => {\n  // <root>/identity.ts\n  var identity = \"identity-marker\";\n})();\n",
+                "textSha256": "26d40e068d3c48d7cc381c5975ba1007aa593d3ac5f30bf2f0311be85d2eec0f"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "transform": {
+      "ok": true,
+      "value": {
+        "descriptors": {
+          "warnings": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "Array(0)"
+          },
+          "code": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "string"
+          },
+          "map": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "string"
+          },
+          "mangleCache": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "<undefined>"
+          },
+          "legalComments": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "string"
+          }
+        },
+        "code": "const answer = 42;\n",
+        "codeSha256": "8691f74ea796569734dafffbbcb79088362b52c3cef154aa0d8f32696d2d4737",
+        "map": "{\n  \"version\": 3,\n  \"sources\": [\"contract-input.ts\"],\n  \"sourcesContent\": [\"/*! contract-legal-comment */\\nconst answer: number = 42;\\n\"],\n  \"mappings\": \"AACA,MAAM,SAAiB;\",\n  \"names\": []\n}\n",
+        "mapSha256": "6e55c5270cdf625b21db3986bba98460a2a1fd365ff972c4e70ed32064053e64",
+        "legalComments": "/*! contract-legal-comment */\n",
+        "legalCommentsSha256": "8dcd60f987d02f6f69889e7121009757dc6271233e85a7c5a1c189cbd5468c75",
+        "warnings": [],
+        "mangleCache": "<undefined>"
+      }
+    },
+    "transform-large": {
+      "ok": true,
+      "value": {
+        "descriptors": {
+          "warnings": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "Array(0)"
+          },
+          "code": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "string"
+          },
+          "map": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "string"
+          },
+          "mangleCache": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "<undefined>"
+          },
+          "legalComments": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "<undefined>"
+          }
+        },
+        "inputLength": 1048577,
+        "overThresholdBy": 1,
+        "outputOverThreshold": true,
+        "payloadPreserved": true,
+        "inputSha256": "23f988796054cf0e88a3b7a636ad5fa1598ed4085b717adb8fb4bb61eb3f8b79",
+        "codeLength": 1048592,
+        "codeSha256": "3aeea60f97b2749fb1f592befd891c3986ed889b94c06adf050b2851a4b18c8a",
+        "warnings": [],
+        "mapLength": 0,
+        "mapSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legalComments": "<undefined>"
+      }
+    },
+    "format-messages": {
+      "ok": true,
+      "value": [
+        "▲ [WARNING] contract warning with enough diagnostic detail to make terminal-width wrapping observable instead of accidental\n\n    <root>/vite.config.ts:1:86:\n      1 │ ...ingNameThatPushesTheMarkerPastColumnEighty = contractWarningMarker;\n        ╵                                                 ~~~~~~~~~~~~~~~~~~~~~\n\n  contract note with enough explanatory detail to cross the configured terminal\n  width and require deterministic wrapping\n  located helper note\n\n    <root>/config-helper.ts:1:83:\n      1 │ ...erBindingNameThatAlsoCrossesTheTerminalBoundary = helperNoteMarker;\n        ╵                                                      ~~~~~~~~~~~~~~~~\n\n"
+      ]
+    },
+    "plugin-validation": {
+      "invalidSetupCalled": false,
+      "invalid": {
+        "ok": false,
+        "error": {
+          "name": "Error",
+          "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:540:12: ERROR: [plugin: contract-invalid-plugin] Invalid option on plugin \"contract-invalid-plugin\": \"bogus\"",
+          "errors": [
+            {
+              "detail": {
+                "name": "Error",
+                "message": "Invalid option on plugin \"contract-invalid-plugin\": \"bogus\"",
+                "errors": "<undefined>",
+                "warnings": "<undefined>",
+                "code": "<undefined>"
+              },
+              "id": "",
+              "location": {
+                "column": 12,
+                "file": "<esbuild>/lib/main.js",
+                "length": 0,
+                "line": 540,
+                "lineText": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+                "namespace": "file",
+                "suggestion": ""
+              },
+              "notes": [],
+              "pluginName": "contract-invalid-plugin",
+              "text": "Invalid option on plugin \"contract-invalid-plugin\": \"bogus\""
+            }
+          ],
+          "warnings": [],
+          "code": "<undefined>"
+        }
+      },
+      "valid": {
+        "ok": true,
+        "value": {
+          "setupThis": "undefined",
+          "optionsIdentity": true,
+          "pluginsIdentity": true,
+          "outputContainsMarker": true,
+          "result": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<stdout>",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 89,
+                "hashPresent": true,
+                "text": "\"use strict\";\n(() => {\n  // <root>/identity.ts\n  var identity = \"identity-marker\";\n})();\n",
+                "textSha256": "26d40e068d3c48d7cc381c5975ba1007aa593d3ac5f30bf2f0311be85d2eec0f"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "default-wd": {
+      "setupCalled": true,
+      "initialOptionsIdentity": true,
+      "callerOwnAbsWorkingDirBefore": false,
+      "initialOwnAbsWorkingDir": false,
+      "callerOwnAbsWorkingDirAfter": false,
+      "outcome": {
+        "ok": true,
+        "value": {
+          "result": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "object"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": {
+              "inputs": {
+                "<root>/default-wd-entry.ts": {
+                  "bytes": 51,
+                  "format": "esm",
+                  "imports": []
+                }
+              },
+              "outputs": {
+                "<root>/default-wd-out/default-wd-entry.js": {
+                  "bytes": 57,
+                  "entryPoint": "<root>/default-wd-entry.ts",
+                  "exports": ["marker"],
+                  "imports": [],
+                  "inputs": {
+                    "<root>/default-wd-entry.ts": {
+                      "bytesInOutput": 43
+                    }
+                  }
+                }
+              }
+            },
+            "metafileInputs": ["<root>/default-wd-entry.ts"],
+            "metafileOutputs": ["<root>/default-wd-out/default-wd-entry.js"],
+            "outputFiles": [
+              {
+                "path": "<root>/default-wd-out/default-wd-entry.js",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 57,
+                "hashPresent": true,
+                "text": "\"use strict\";\nexport const marker = \"default-wd-marker\";\n",
+                "textSha256": "25bdf43ded9c72e1dbb5bcef492366f52138c79cda019bc4c6180d0fd3d9d9c7"
+              }
+            ]
+          },
+          "outputPaths": ["<root>/default-wd-out/default-wd-entry.js"],
+          "containsMarker": true,
+          "diskOutputExists": false
+        }
+      }
+    },
+    "config-build": {
+      "trace": [
+        {
+          "event": "setup"
+        },
+        {
+          "event": "resolve",
+          "args": {
+            "importer": "",
+            "kind": "entry-point",
+            "namespace": "file",
+            "path": "<root>/vite.config.ts",
+            "pluginData": "<undefined>",
+            "resolveDir": "<root>",
+            "with": {}
+          }
+        },
+        {
+          "event": "load",
+          "args": {
+            "namespace": "contract",
+            "path": "<root>/vite.config.ts",
+            "pluginData": {
+              "from": "entry"
+            },
+            "suffix": "",
+            "with": {}
+          }
+        },
+        {
+          "event": "resolve",
+          "args": {
+            "importer": "<root>/vite.config.ts",
+            "kind": "import-statement",
+            "namespace": "contract",
+            "path": "./config-helper.ts",
+            "pluginData": "<undefined>",
+            "resolveDir": "<root>",
+            "with": {}
+          }
+        },
+        {
+          "event": "resolve",
+          "args": {
+            "importer": "<root>/vite.config.ts",
+            "kind": "import-statement",
+            "namespace": "contract",
+            "path": "vite",
+            "pluginData": "<undefined>",
+            "resolveDir": "<root>",
+            "with": {}
+          }
+        },
+        {
+          "event": "load",
+          "args": {
+            "namespace": "contract",
+            "path": "<root>/config-helper.ts",
+            "pluginData": {
+              "from": "helper"
+            },
+            "suffix": "",
+            "with": {}
+          }
+        }
+      ],
+      "outcome": {
+        "ok": true,
+        "value": {
+          "result": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "object"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": {
+              "inputs": {
+                "contract:<root>/config-helper.ts": {
+                  "bytes": 46,
+                  "format": "esm",
+                  "imports": []
+                },
+                "contract:<root>/vite.config.ts": {
+                  "bytes": 163,
+                  "format": "esm",
+                  "imports": [
+                    {
+                      "kind": "import-statement",
+                      "original": "./config-helper.ts",
+                      "path": "contract:<root>/config-helper.ts"
+                    },
+                    {
+                      "external": true,
+                      "kind": "import-statement",
+                      "path": "vite"
+                    }
+                  ]
+                }
+              },
+              "outputs": {
+                "<root>/config-output.mjs": {
+                  "bytes": 282,
+                  "entryPoint": "contract:<root>/vite.config.ts",
+                  "exports": ["default"],
+                  "imports": [
+                    {
+                      "external": true,
+                      "kind": "import-statement",
+                      "path": "vite"
+                    }
+                  ],
+                  "inputs": {
+                    "contract:<root>/config-helper.ts": {
+                      "bytesInOutput": 37
+                    },
+                    "contract:<root>/vite.config.ts": {
+                      "bytesInOutput": 129
+                    }
+                  }
+                }
+              }
+            },
+            "metafileInputs": [
+              "contract:<root>/config-helper.ts",
+              "contract:<root>/vite.config.ts"
+            ],
+            "metafileOutputs": ["<root>/config-output.mjs"],
+            "outputFiles": [
+              {
+                "path": "<root>/config-output.mjs",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 282,
+                "hashPresent": true,
+                "text": "// contract:<root>/config-helper.ts\nvar marker = \"config-helper-marker\";\n\n// contract:<root>/vite.config.ts\nimport { defineConfig } from \"vite\";\nvar vite_config_default = defineConfig({ define: { __MARKER__: JSON.stringify(marker) } });\nexport {\n  vite_config_default as default\n};\n",
+                "textSha256": "29267aadea711efcce306a82b5fc68a78cb941a2385090ed4dafb68db534c893"
+              }
+            ]
+          },
+          "containsHelperMarker": true,
+          "keepsViteExternal": true,
+          "diskOutputExists": false
+        }
+      }
+    },
+    "dep-scan": {
+      "trace": [
+        {
+          "event": "setup"
+        },
+        {
+          "event": "resolve",
+          "args": {
+            "importer": "<root>/dep-scan.js",
+            "kind": "import-statement",
+            "namespace": "file",
+            "path": "picocolors",
+            "pluginData": "<undefined>",
+            "resolveDir": "<root>",
+            "with": {}
+          }
+        },
+        {
+          "event": "load",
+          "args": {
+            "namespace": "dep",
+            "path": "picocolors",
+            "pluginData": {
+              "source": "contract"
+            },
+            "suffix": "",
+            "with": {}
+          }
+        }
+      ],
+      "cancelled": true,
+      "disposed": true,
+      "outcome": {
+        "ok": true,
+        "value": {
+          "result": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "object"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": {
+              "inputs": {
+                "<root>/dep-scan.js": {
+                  "bytes": 59,
+                  "format": "esm",
+                  "imports": [
+                    {
+                      "kind": "import-statement",
+                      "original": "picocolors",
+                      "path": "dep:picocolors"
+                    }
+                  ]
+                },
+                "dep:picocolors": {
+                  "bytes": 78,
+                  "format": "cjs",
+                  "imports": []
+                }
+              },
+              "outputs": {
+                "<root>/scan-out/stdin.js": {
+                  "bytes": 1642,
+                  "entryPoint": "<root>/dep-scan.js",
+                  "exports": [],
+                  "imports": [],
+                  "inputs": {
+                    "<root>/dep-scan.js": {
+                      "bytesInOutput": 109
+                    },
+                    "dep:picocolors": {
+                      "bytesInOutput": 178
+                    }
+                  }
+                }
+              }
+            },
+            "metafileInputs": ["<root>/dep-scan.js", "dep:picocolors"],
+            "metafileOutputs": ["<root>/scan-out/stdin.js"],
+            "outputFiles": [
+              {
+                "path": "<root>/scan-out/stdin.js",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 1642,
+                "hashPresent": true,
+                "text": "var __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __commonJS = (cb, mod) => function __require() {\n  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n};\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof from === \"function\") {\n    for (let key of __getOwnPropNames(from))\n      if (!__hasOwnProp.call(to, key) && key !== except)\n        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });\n  }\n  return to;\n};\nvar __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(\n  // If the importer is in node compatibility mode or this is not an ESM\n  // file that has been converted to a CommonJS file using a Babel-\n  // compatible transform (i.e. \"__esModule\" has not been set), then set\n  // \"default\" to the CommonJS \"module.exports\" for node compatibility.\n  isNodeMode || !mod || !mod.__esModule ? __defProp(target, \"default\", { value: mod, enumerable: true }) : target,\n  mod\n));\n\n// dep:picocolors\nvar require_picocolors = __commonJS({\n  \"dep:picocolors\"(exports, module) {\n    module.exports = { green: function green(value) {\n      return \"green:\" + value;\n    } };\n  }\n});\n\n// dep-scan.js\nvar import_picocolors = __toESM(require_picocolors());\nconsole.log(import_picocolors.default.green(\"scan\"));\n",
+                "textSha256": "bb592c3cf292790f14a41dedc1d542947f6ed1276e22429d66208e5b8afc867f"
+              }
+            ]
+          },
+          "outputContainsDependency": true,
+          "diskFiles": []
+        }
+      }
+    },
+    "dep-prebundle": {
+      "trace": [
+        {
+          "event": "setup"
+        },
+        {
+          "event": "resolve",
+          "args": {
+            "importer": "",
+            "kind": "entry-point",
+            "namespace": "",
+            "path": "picocolors",
+            "pluginData": "<undefined>",
+            "resolveDir": "<root>",
+            "with": {}
+          }
+        },
+        {
+          "event": "load",
+          "args": {
+            "namespace": "dep",
+            "path": "picocolors",
+            "pluginData": {
+              "source": "contract"
+            },
+            "suffix": "",
+            "with": {}
+          }
+        },
+        {
+          "event": "onEnd",
+          "disk": {
+            "files": ["<root>/deps/picocolors.js", "<root>/deps/picocolors.js.map"],
+            "jsBytes": 483,
+            "jsContainsDependency": true,
+            "jsText": "var __getOwnPropNames = Object.getOwnPropertyNames;\nvar __commonJS = (cb, mod) => function __require() {\n  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n};\n\n// dep:picocolors\nvar require_picocolors = __commonJS({\n  \"dep:picocolors\"(exports, module) {\n    module.exports = { green: function green(value) {\n      return \"green:\" + value;\n    } };\n  }\n});\nexport default require_picocolors();\n//# sourceMappingURL=picocolors.js.map\n",
+            "jsSha256": "796934b573c054ddb71405c15af498d31d5c37396b08a1457fafd44a81b9fa64",
+            "mapBytes": 287,
+            "mapParseable": true,
+            "mapSources": ["dep:picocolors"],
+            "mapText": "{\n  \"version\": 3,\n  \"sources\": [\"dep:picocolors\"],\n  \"sourcesContent\": [\"module.exports = { green: function green(value) { return \\\"green:\\\" + value } };\"],\n  \"mappings\": \";;;;;;AAAA;AAAA;AAAA,WAAO,UAAU,EAAE,OAAO,SAAS,MAAM,OAAO;AAAE,aAAO,WAAW;AAAA,IAAM,EAAE;AAAA;AAAA;\",\n  \"names\": []\n}\n",
+            "mapSha256": "27a51580e983092be36852bf81c8e3d46d8c87cacbc084507235bbf089b64ed1"
+          }
+        }
+      ],
+      "onEndCalled": true,
+      "onEndDisk": {
+        "files": ["<root>/deps/picocolors.js", "<root>/deps/picocolors.js.map"],
+        "jsBytes": 483,
+        "jsContainsDependency": true,
+        "jsText": "var __getOwnPropNames = Object.getOwnPropertyNames;\nvar __commonJS = (cb, mod) => function __require() {\n  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n};\n\n// dep:picocolors\nvar require_picocolors = __commonJS({\n  \"dep:picocolors\"(exports, module) {\n    module.exports = { green: function green(value) {\n      return \"green:\" + value;\n    } };\n  }\n});\nexport default require_picocolors();\n//# sourceMappingURL=picocolors.js.map\n",
+        "jsSha256": "796934b573c054ddb71405c15af498d31d5c37396b08a1457fafd44a81b9fa64",
+        "mapBytes": 287,
+        "mapParseable": true,
+        "mapSources": ["dep:picocolors"],
+        "mapText": "{\n  \"version\": 3,\n  \"sources\": [\"dep:picocolors\"],\n  \"sourcesContent\": [\"module.exports = { green: function green(value) { return \\\"green:\\\" + value } };\"],\n  \"mappings\": \";;;;;;AAAA;AAAA;AAAA,WAAO,UAAU,EAAE,OAAO,SAAS,MAAM,OAAO;AAAE,aAAO,WAAW;AAAA,IAAM,EAAE;AAAA;AAAA;\",\n  \"names\": []\n}\n",
+        "mapSha256": "27a51580e983092be36852bf81c8e3d46d8c87cacbc084507235bbf089b64ed1"
+      },
+      "onEndResult": {
+        "descriptors": {
+          "errors": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "Array(0)"
+          },
+          "warnings": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "Array(0)"
+          },
+          "outputFiles": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "<undefined>"
+          },
+          "metafile": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "object"
+          },
+          "mangleCache": {
+            "enumerable": true,
+            "configurable": true,
+            "writable": true,
+            "value": "<undefined>"
+          }
+        },
+        "errors": [],
+        "warnings": [],
+        "metafile": {
+          "inputs": {
+            "dep:picocolors": {
+              "bytes": 78,
+              "format": "cjs",
+              "imports": []
+            }
+          },
+          "outputs": {
+            "<root>/deps/picocolors.js": {
+              "bytes": 483,
+              "entryPoint": "dep:picocolors",
+              "exports": ["default"],
+              "imports": [],
+              "inputs": {
+                "dep:picocolors": {
+                  "bytesInOutput": 178
+                }
+              }
+            },
+            "<root>/deps/picocolors.js.map": {
+              "bytes": 287,
+              "exports": [],
+              "imports": [],
+              "inputs": {}
+            }
+          }
+        },
+        "metafileInputs": ["dep:picocolors"],
+        "metafileOutputs": ["<root>/deps/picocolors.js", "<root>/deps/picocolors.js.map"],
+        "outputFiles": []
+      },
+      "disposed": true,
+      "outcome": {
+        "ok": true,
+        "value": {
+          "resolvedResultSameAsOnEnd": true,
+          "disk": {
+            "files": ["<root>/deps/picocolors.js", "<root>/deps/picocolors.js.map"],
+            "jsBytes": 483,
+            "jsContainsDependency": true,
+            "jsText": "var __getOwnPropNames = Object.getOwnPropertyNames;\nvar __commonJS = (cb, mod) => function __require() {\n  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n};\n\n// dep:picocolors\nvar require_picocolors = __commonJS({\n  \"dep:picocolors\"(exports, module) {\n    module.exports = { green: function green(value) {\n      return \"green:\" + value;\n    } };\n  }\n});\nexport default require_picocolors();\n//# sourceMappingURL=picocolors.js.map\n",
+            "jsSha256": "796934b573c054ddb71405c15af498d31d5c37396b08a1457fafd44a81b9fa64",
+            "mapBytes": 287,
+            "mapParseable": true,
+            "mapSources": ["dep:picocolors"],
+            "mapText": "{\n  \"version\": 3,\n  \"sources\": [\"dep:picocolors\"],\n  \"sourcesContent\": [\"module.exports = { green: function green(value) { return \\\"green:\\\" + value } };\"],\n  \"mappings\": \";;;;;;AAAA;AAAA;AAAA,WAAO,UAAU,EAAE,OAAO,SAAS,MAAM,OAAO;AAAE,aAAO,WAAW;AAAA,IAAM,EAAE;AAAA;AAAA;\",\n  \"names\": []\n}\n",
+            "mapSha256": "27a51580e983092be36852bf81c8e3d46d8c87cacbc084507235bbf089b64ed1"
+          }
+        }
+      }
+    },
+    "dep-prebundle-write-failure": {
+      "result": {
+        "trace": [
+          {
+            "event": "setup"
+          },
+          {
+            "event": "resolve",
+            "args": {
+              "importer": "",
+              "kind": "entry-point",
+              "namespace": "",
+              "path": "picocolors",
+              "pluginData": "<undefined>",
+              "resolveDir": "<root>",
+              "with": {}
+            }
+          },
+          {
+            "event": "load",
+            "args": {
+              "namespace": "dep",
+              "path": "picocolors",
+              "pluginData": {
+                "source": "contract"
+              },
+              "suffix": "",
+              "with": {}
+            }
+          },
+          {
+            "event": "onEnd",
+            "disk": {
+              "files": [],
+              "jsBytes": 0,
+              "jsContainsDependency": false,
+              "jsText": "",
+              "jsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "mapBytes": 0,
+              "mapParseable": false,
+              "mapSources": [],
+              "mapText": "",
+              "mapSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        ],
+        "onEndCalled": true,
+        "onEndDisk": {
+          "files": [],
+          "jsBytes": 0,
+          "jsContainsDependency": false,
+          "jsText": "",
+          "jsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "mapBytes": 0,
+          "mapParseable": false,
+          "mapSources": [],
+          "mapText": "",
+          "mapSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "onEndResult": {
+          "descriptors": {
+            "errors": {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "Array(2)"
+            },
+            "warnings": {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "Array(0)"
+            },
+            "outputFiles": {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "<undefined>"
+            },
+            "metafile": {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "object"
+            },
+            "mangleCache": {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "<undefined>"
+            }
+          },
+          "errors": [
+            {
+              "detail": "<undefined>",
+              "id": "",
+              "location": null,
+              "notes": [],
+              "pluginName": "",
+              "text": "Failed to create output directory: mkdir <root>/blocked: not a directory"
+            },
+            {
+              "detail": "<undefined>",
+              "id": "",
+              "location": null,
+              "notes": [],
+              "pluginName": "",
+              "text": "Failed to create output directory: mkdir <root>/blocked: not a directory"
+            }
+          ],
+          "warnings": [],
+          "metafile": {
+            "inputs": {
+              "dep:picocolors": {
+                "bytes": 78,
+                "format": "cjs",
+                "imports": []
+              }
+            },
+            "outputs": {
+              "<root>/blocked/deps/picocolors.js": {
+                "bytes": 483,
+                "entryPoint": "dep:picocolors",
+                "exports": ["default"],
+                "imports": [],
+                "inputs": {
+                  "dep:picocolors": {
+                    "bytesInOutput": 178
+                  }
+                }
+              },
+              "<root>/blocked/deps/picocolors.js.map": {
+                "bytes": 287,
+                "exports": [],
+                "imports": [],
+                "inputs": {}
+              }
+            }
+          },
+          "metafileInputs": ["dep:picocolors"],
+          "metafileOutputs": [
+            "<root>/blocked/deps/picocolors.js",
+            "<root>/blocked/deps/picocolors.js.map"
+          ],
+          "outputFiles": []
+        },
+        "disposed": true,
+        "outcome": {
+          "ok": false,
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 2 errors:\nerror: Failed to create output directory: mkdir <root>/blocked: not a directory\nerror: Failed to create output directory: mkdir <root>/blocked: not a directory",
+            "errors": [
+              {
+                "detail": "<undefined>",
+                "id": "",
+                "location": null,
+                "notes": [],
+                "pluginName": "",
+                "text": "Failed to create output directory: mkdir <root>/blocked: not a directory"
+              },
+              {
+                "detail": "<undefined>",
+                "id": "",
+                "location": null,
+                "notes": [],
+                "pluginName": "",
+                "text": "Failed to create output directory: mkdir <root>/blocked: not a directory"
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        }
+      },
+      "blockerContents": "blocker-marker",
+      "falseOutputMarker": false
+    }
+  }
+}

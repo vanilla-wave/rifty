@@ -71,6 +71,7 @@ const PREVIEW_OPTIONS = {
 } as const;
 
 interface TestGlobals {
+  __rifty?: { esbuild?: unknown };
   __riftyTestCac?: new (action: () => unknown) => { parse(): void };
   __riftyTestPreviewConfig?: (options: typeof PREVIEW_OPTIONS) => Record<string, unknown>;
   __riftyActiveViteServer?: unknown;
@@ -78,6 +79,10 @@ interface TestGlobals {
   __riftyTrackCliPromise?: (promise: PromiseLike<unknown>) => void;
 }
 const g = globalThis as TestGlobals;
+
+function clearEsbuildRuntimeSlot(): void {
+  if (g.__rifty) Reflect.deleteProperty(g.__rifty, 'esbuild');
+}
 
 interface MergedViteConfig {
   readonly base: unknown;
@@ -570,5 +575,30 @@ describe('withViteCliArgs — retired preview forces stay retired (behavioral, P
     const stock = withViteCliEnv('/proj/node_modules/.bin/vite', ['--port', '5174'], ctx);
     expect(stock.env.RIFTY_VITE_CLI_HMR_OFF).toBeUndefined();
     expect(stock.env.RIFTY_VITE_CLI_PORT).toBeUndefined();
+  });
+});
+
+// Keep this fault last: ADR-0226 gives a failed startup no retry lifecycle;
+// the real child Worker terminates, while this unit realm stays alive.
+// Browser Contract+RED proves dev/build/run routing; this faults their one shared branch.
+describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)', () => {
+  it('startup failure rejects the child and leaves the typed runtime slot absent', async () => {
+    bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    const savedFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls += 1;
+      return Promise.reject(new Error('contract injected esbuild startup failure'));
+    };
+    clearEsbuildRuntimeSlot();
+
+    try {
+      await expect(prepareViteCli('/app', 'build')).rejects.toThrow();
+      expect(fetchCalls).toBe(1);
+      expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
+    } finally {
+      globalThis.fetch = savedFetch;
+      clearEsbuildRuntimeSlot();
+    }
   });
 });
