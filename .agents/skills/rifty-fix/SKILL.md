@@ -12,7 +12,7 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 ## Steps
 
 1. **Root cause.** Read the whole error/finding. Reproduce deterministically. Trace to where the bad value is BORN, not where it crashed. Multi-layer path (page→owner→worker→OPFS, client→server→store) → instrument each boundary, run once, let evidence pick the layer — no fixes from guessing.
-2. **Class, not instance.** Name the axis — `docs/process/fault-classes.md`; new axis → add its row first. Sweep ALL siblings: grep the failing pattern repo-wide AND enumerate the sibling operations of the failing one (rm ↔ rename/mkdir/write-through; GET ↔ POST/HEAD; sync ↔ async twin; boot ↔ reload ↔ switch). Second instance of the axis at this boundary → structural kill: ONE chokepoint API / ONE validation boundary / a gate. Never twin helper #4.
+2. **Class, not instance.** Name the axis — `docs/process/fault-classes.md`; new axis → add its row first. Sweep ALL siblings: grep the failing pattern repo-wide AND enumerate the sibling operations of the failing one (rm ↔ rename/mkdir/write-through; GET ↔ POST/HEAD; sync ↔ async twin; boot ↔ reload ↔ switch). Second instance of the axis at this boundary → structural kill: ONE chokepoint API / ONE validation boundary / a gate. Never twin helper #4. Check the KILL HEIGHT: if your "structural" fix is the 3rd+ coordination mechanism around the same file/key, it's a point fix wearing a class costume — the class is "this invariant has no owner" (fault-classes §Class-kill design-stop; PR #131 grew 7 mechanisms before naming the authority).
 3. **RED first.** Failing parity/regression/fault test before the fix. Fault findings assert the honest outcome (fallback / degraded / loud throw — never a silent lie). Never edit a test to make code pass; an existing test contradicting the fix = the CONTRACT changed — renegotiate it explicitly in the PR, don't re-aim the assert quietly.
 4. **Fix once.** One change, no drive-by refactors. Prefer melting twin helpers into the chokepoint over adding another wrapper.
 5. **Prove.** RED→GREEN. Revert-check EVERY new guard: revert the fix, the test must fail (false guards are the norm — one rifty feature shipped ~8 of them; beware caches masking the revert). Fast gate on touched code. Verify the COMMITTED tree, not the worktree (a batched `git add` drops files silently).
@@ -33,5 +33,6 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 | "CI green = done" | Green ≠ class closed. Where are the siblings? |
 | "I'll consolidate later" (silently) | Silent later = never. Loud later = backlog item + PR note. |
 | "the reviewer is nitpicking" | #107's 19 rounds were real bugs. |
+| "each round's findings are NEW, so we're progressing" | New findings every round on the same state = your fixes are growing the surface. Design-stop, not round N+1. |
 
 Claude also has `superpowers:systematic-debugging` (four-phase background); this file is self-contained for tools without it (codex).

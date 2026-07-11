@@ -32,3 +32,5 @@ A fault test injects one axis at one boundary and asserts the honest outcome. Co
 ## Class-kill
 
 Second instance of an axis at the same boundary = structural fix — one chokepoint API / one validation boundary / a gate — never another point fix. Precedent: `unbounded-read` survived #107 R5→R17 as four sibling point-fix helpers until `drainBodyBounded` consolidated the class. New axis found in review → add its row here first, then fix.
+
+Design-stop trigger: **more than TWO coordination mechanisms guarding one file/key** (locks, generations, chains, rechecks, proof ladders…) = the invariant has no owner — STOP adding mechanism #3, consolidate into one authority (single serialized writer). Precedent: PR #131 install stamp grew 7 mechanisms across 5 review rounds before the authority was named (ADR-0216 §audit); the trigger would have fired at round 2. A growing fix-surface across review rounds (each round's fixes feed the next round's findings) is the same signal at process level.

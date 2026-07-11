@@ -36,7 +36,11 @@ code: []
 
 <!-- Required when the item touches cache/persistence/network/concurrency; delete otherwise.
      One row per applicable axis (docs/process/fault-classes.md) × operation → honest outcome
-     (fallback / degraded-but-correct / loud throw). Each row = a fault-test target. -->
+     (fallback / degraded-but-correct / loud throw). Each row = a fault-test target.
+     If the item introduces/touches SHARED MUTABLE STATE (a file, a key, a claim): enumerate
+     ALL its writers and name the SINGLE owner serializing them — rows per known writer-pair
+     are not enough (PR #131: the writer-set invariant was never contracted; 5 review rounds
+     found the interleavings one by one). -->
 
 ## Out of scope
 

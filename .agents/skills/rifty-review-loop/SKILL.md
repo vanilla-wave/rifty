@@ -32,9 +32,10 @@ Drive codex as an external reviewer over a PR branch: **codex reviews → Claude
    - exit 1 → blockers remain. Continue.
 3. **Fix.** For each **blocker**: fix it for real per the `rifty-fix` discipline — root cause + class analysis first (rifty fidelity — no stubs/deferral; failing parity/regression test first when the blocker is a bug). For each **concern**: fix only if clearly correct; otherwise record it (location + why deferred) for the report. Never edit a test just to pass.
 4. **Guard + commit.** Run the fast gate on touched code (typecheck + lint); fix fallout. Commit: one-line message, no `Co-Authored-By` (e.g. `review-loop: <what>`).
-5. **No-progress guard.** If this round's blocker set (location+summary) equals the previous round's, stop — codex isn't converging; report the stuck blockers.
-6. **Class escalation (round 3+).** Entering round 3 with blockers remaining → before fixing, classify ALL rounds' findings per `docs/process/fault-classes.md`: a recurring axis gets a structural kill (chokepoint / validation boundary), not another point fix (AGENTS.md §Fidelity, 3+ rule).
-7. N++ ; if N > 5, stop and report remaining blockers. Else repeat.
+5. **No-progress guard.** Stop and report when EITHER: this round's blocker set (location+summary) equals the previous round's (codex isn't converging), OR the blocker count is not strictly falling across two consecutive rounds while the findings keep landing on the same state/boundary — the fixes are GROWING the review surface (fault-classes §Class-kill design-stop), and round N+1 will not converge.
+6. **Class escalation (round 3+) — STOP AND ASK.** Entering round 3 with blockers remaining → classify ALL rounds' findings per `docs/process/fault-classes.md` FIRST. A recurring axis at one boundary = design defect: report the classification + the structural kill to the USER and ask "point-fix this round or redesign?" — do NOT autonomously continue point-fixing a recurring class past round 3 (PR #131: rounds 3–5 each fixed real bugs while the class stayed alive).
+7. **Delta-scoped rounds (2+).** From round 2 on, the review prompt scopes codex to (a) verifying the previous round's findings are closed and (b) the fix commits' diff — NOT a fresh full-branch re-review (a full re-review of a growing diff finds new material every round by construction). ONE final full-scope round confirms convergence after a round reports 0 blockers on the delta.
+8. N++ ; if N > 5, stop and report remaining blockers. Else repeat.
 
 ## Finish
 - Run the real gate `pnpm pr:check`. If it fails, treat failures as blockers → one more fix round (respecting the cap), then re-run.
