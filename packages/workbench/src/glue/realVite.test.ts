@@ -2,64 +2,40 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectSpec } from '../project-spec.ts';
 import { TEST_PROJECT_CATALOG, TEST_VITE_TEMPLATE } from '../test-project.ts';
-import type { WorkspaceOwnerOptions } from './realVite.ts';
-
-// Behavioral heirs of the retired realVite source greps (epic
-// playground-testable-core). Same seam as realVite.owner-exit.test.ts: mock
-// only the transport boundaries (kernel spawn, net registry, port bridges —
-// node has no Worker; the real factory is covered by tests/browser-unit/) and
-// drive the REAL startWorkspaceOwner / wirePreviewBridge wiring.
+import type { OwnerBridgeKey } from './owner-bridge-key.ts';
+import {
+  type RealViteHost,
+  type RealViteRuntime,
+  type WorkspaceOwnerOptions,
+  type WorkspaceOwnerProcessPort,
+  type WorkspaceOwnerSpawnRequest,
+  type WorkspaceOwnerSpawnResult,
+  createRealViteForTesting,
+} from './realVite.ts';
+import type { WorkspaceArchiveBridge } from './workspace-archive-port.ts';
+import type { WorkspaceFileReadBridge } from './workspace-file-read-port.ts';
 
 const sendVfsWriteSpy = vi.fn();
-const spawnWorker = vi.fn();
-const bridgeCrossRealmPreviewSpy = vi.fn();
-const registerPortSpy = vi.fn();
-const unregisterPortSpy = vi.fn();
-const mountPlaygroundPreviewBridgeSpy = vi.fn();
+const prepareOwnerSpy = vi.fn<(kernelWorkerUrl: string) => void>();
+const spawnOwner = vi.fn<(request: WorkspaceOwnerSpawnRequest) => WorkspaceOwnerSpawnResult>();
+const bridgeCrossRealmPreviewSpy = vi.fn<(port: number, scope?: string) => TestPreviewBridge>();
+const registerPortSpy = vi.fn<(port: number, bridge: TestPreviewBridge) => void>();
+const unregisterPortSpy = vi.fn<(port: number) => void>();
+const mountPlaygroundPreviewBridgeSpy =
+  vi.fn<
+    (
+      bridge: TestPreviewBridge,
+      options: { readonly ownerToken: string; readonly ports: readonly number[] },
+    ) => () => void
+  >();
 const tearSwBridgeSpy = vi.fn();
 const previewDisposeSpy = vi.fn();
 const archiveDisposeSpy = vi.fn();
 const fileReadDisposeSpy = vi.fn();
-const bridgeWorkspaceArchiveSpy = vi.fn();
-const bridgeWorkspaceFileReadsSpy = vi.fn();
+const bridgeWorkspaceArchiveSpy = vi.fn<(key: OwnerBridgeKey) => WorkspaceArchiveBridge>();
+const bridgeWorkspaceFileReadsSpy = vi.fn<(key: OwnerBridgeKey) => WorkspaceFileReadBridge>();
 
-vi.mock('@riftydev/kernel', () => ({
-  globalProcessManager: {
-    spawnWorker: (...args: unknown[]) => spawnWorker(...args),
-  },
-  isSabIpcSupported: () => true,
-  setKernelWorkerUrl: () => {},
-}));
-
-vi.mock('@riftydev/net', () => ({
-  bridgeCrossRealmPreview: (...args: unknown[]) => bridgeCrossRealmPreviewSpy(...args),
-  registerPort: (...args: unknown[]) => registerPortSpy(...args),
-  unregisterPort: (...args: unknown[]) => unregisterPortSpy(...args),
-}));
-
-vi.mock('./vfs-write-port.ts', async () => {
-  const actual = await vi.importActual<typeof import('./vfs-write-port.ts')>('./vfs-write-port.ts');
-  return {
-    ...actual,
-    sendVfsWrite: (...args: unknown[]) => sendVfsWriteSpy(...args),
-  };
-});
-
-vi.mock('./preview-bridge-wiring.ts', () => ({
-  mountPlaygroundPreviewBridge: (...args: unknown[]) => mountPlaygroundPreviewBridgeSpy(...args),
-}));
-
-vi.mock('./workspace-archive-port.ts', () => ({
-  bridgeWorkspaceArchive: (...args: unknown[]) => bridgeWorkspaceArchiveSpy(...args),
-}));
-
-vi.mock('./workspace-file-read-port.ts', () => ({
-  bridgeWorkspaceFileReads: (...args: unknown[]) => bridgeWorkspaceFileReadsSpy(...args),
-}));
-
-/** Minimal faithful stand-in for the kernel `WorkerProcessHandle`. */
-class FakeWorker extends EventEmitter {
-  readonly kind = 'worker' as const;
+class FakeOwnerProcess implements WorkspaceOwnerProcessPort {
   alive = true;
   /** Simulate a refused (but not dead) IPC channel: send() returns false. */
   refuseSends = false;
@@ -67,44 +43,55 @@ class FakeWorker extends EventEmitter {
   readonly sent: unknown[] = [];
   #stdout = new EventEmitter();
   #stderr = new EventEmitter();
-  stdout(): EventEmitter {
-    return this.#stdout;
+  #events = new EventEmitter();
+  onMessage(listener: (message: unknown) => void): void {
+    this.#events.on('message', listener);
   }
-  stderr(): EventEmitter {
-    return this.#stderr;
+  onExit(listener: (code: unknown) => void): void {
+    this.#events.on('exit', listener);
+  }
+  onStdout(listener: (chunk: unknown) => void): void {
+    this.#stdout.on('data', listener);
+  }
+  onStderr(listener: (chunk: unknown) => void): void {
+    this.#stderr.on('data', listener);
   }
   send(message: unknown): boolean {
     if (!this.alive || this.refuseSends) return false;
     this.sent.push(message);
     return true;
   }
-  kill(): boolean {
+  terminate(): boolean {
     this.killCalls += 1;
     return true;
   }
+  emitMessage(message: unknown): void {
+    this.#events.emit('message', message);
+  }
+  die(code: number | null): void {
+    this.alive = false;
+    this.#events.emit('exit', code);
+  }
 }
 
-interface SpawnedWorkerOptions {
-  readonly entry: { readonly kind: string; readonly url: unknown };
-  readonly env: Record<string, string>;
+function spawnedOptions(call = 0): WorkspaceOwnerSpawnRequest {
+  const args = spawnOwner.mock.calls[call];
+  if (!args) throw new Error(`expected spawnOwner call #${call}`);
+  return args[0];
 }
 
-function spawnedOptions(call = 0): SpawnedWorkerOptions {
-  const args = spawnWorker.mock.calls[call] as unknown as
-    | [string, SpawnedWorkerOptions]
-    | undefined;
-  if (!args) throw new Error(`expected spawnWorker call #${call}`);
-  return args[1];
+interface TestPreviewBridge {
+  dispose(): void;
 }
 
-let fakeWorker: FakeWorker;
+let fakeWorker: FakeOwnerProcess;
 let previewBridge: { dispose: typeof previewDisposeSpy };
+let runtime: RealViteRuntime;
 
 beforeEach(() => {
-  vi.resetModules();
   vi.clearAllMocks();
-  fakeWorker = new FakeWorker();
-  spawnWorker.mockImplementation(() => fakeWorker);
+  fakeWorker = new FakeOwnerProcess();
+  spawnOwner.mockImplementation(() => ({ ok: true, process: fakeWorker }));
   previewBridge = { dispose: previewDisposeSpy };
   bridgeCrossRealmPreviewSpy.mockImplementation(() => previewBridge);
   mountPlaygroundPreviewBridgeSpy.mockImplementation(() => tearSwBridgeSpy);
@@ -117,16 +104,24 @@ beforeEach(() => {
     readFileBytes: async () => new Uint8Array(),
     dispose: fileReadDisposeSpy,
   }));
+  const host: RealViteHost<TestPreviewBridge> = {
+    prepareOwner: prepareOwnerSpy,
+    spawnOwner,
+    createArchiveBridge: (key) => bridgeWorkspaceArchiveSpy(key),
+    createFileReadBridge: (key) => bridgeWorkspaceFileReadsSpy(key),
+    sendFallbackWrite: (key, frame) => sendVfsWriteSpy(key, frame),
+    createPreviewBridge: (port, scope) => bridgeCrossRealmPreviewSpy(port, scope),
+    registerPreview: (port, bridge) => registerPortSpy(port, bridge),
+    unregisterPreview: (port) => unregisterPortSpy(port),
+    mountPreview: (bridge, options) => mountPlaygroundPreviewBridgeSpy(bridge, options),
+  };
+  runtime = createRealViteForTesting(host);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
-
-async function importOwner(): Promise<typeof import('./realVite.ts')> {
-  return import('./realVite.ts');
-}
 
 function ownerOptions(overrides: Partial<WorkspaceOwnerOptions> = {}): WorkspaceOwnerOptions {
   return {
@@ -147,8 +142,7 @@ function ownerOptions(overrides: Partial<WorkspaceOwnerOptions> = {}): Workspace
 
 describe('workspace owner page→owner VFS writes (ADR-0146: owner store is the source of truth)', () => {
   it('routes editor writes over kernel worker IPC while the owner channel accepts sends', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
     handle.writeFile('/scratch/src/a.txt', 'hi');
 
@@ -165,8 +159,7 @@ describe('workspace owner page→owner VFS writes (ADR-0146: owner store is the 
   });
 
   it('falls back to the BroadcastChannel writer only when the IPC send is refused', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
     fakeWorker.refuseSends = true;
     handle.writeFile('/scratch/src/a.txt', 'hi');
@@ -182,11 +175,9 @@ describe('workspace owner page→owner VFS writes (ADR-0146: owner store is the 
 
 describe('page-side preview bridge (ADR-0148 / ADR-0150 P6b / ADR-0160)', () => {
   it('registers the cross-realm route keyed by owner token + served port, and tears it down', async () => {
-    const { wirePreviewBridge } = await importOwner();
+    const teardown = runtime.wirePreviewBridge(5199, 'token-abc', '/p/');
 
-    const teardown = wirePreviewBridge(5199, 'token-abc', '/p/');
-
-    expect(bridgeCrossRealmPreviewSpy).toHaveBeenCalledWith(5199, { scope: '/p/' });
+    expect(bridgeCrossRealmPreviewSpy).toHaveBeenCalledWith(5199, '/p/');
     expect(registerPortSpy).toHaveBeenCalledWith(5199, previewBridge);
     expect(mountPlaygroundPreviewBridgeSpy).toHaveBeenCalledWith(previewBridge, {
       ownerToken: 'token-abc',
@@ -210,11 +201,9 @@ describe('page-side preview bridge (ADR-0148 / ADR-0150 P6b / ADR-0160)', () => 
     unregisterPortSpy.mockImplementation(() => {
       throw unregisterError;
     });
-    const { wirePreviewBridge } = await importOwner();
-
     let failure: unknown;
     try {
-      wirePreviewBridge(5199, 'token-abc');
+      runtime.wirePreviewBridge(5199, 'token-abc');
     } catch (error) {
       failure = error;
     }
@@ -237,8 +226,7 @@ describe('page-side preview bridge (ADR-0148 / ADR-0150 P6b / ADR-0160)', () => 
     previewDisposeSpy.mockImplementation(() => {
       throw new Error('preview bridge dispose failed');
     });
-    const { wirePreviewBridge } = await importOwner();
-    const teardown = wirePreviewBridge(5199, 'token-abc');
+    const teardown = runtime.wirePreviewBridge(5199, 'token-abc');
 
     expect(() => teardown()).toThrow(AggregateError);
     expect(tearSwBridgeSpy).toHaveBeenCalledOnce();
@@ -251,9 +239,8 @@ describe('page-side preview bridge (ADR-0148 / ADR-0150 P6b / ADR-0160)', () => 
   });
 
   it('generates the preview owner token page-side, never threading it to the owner env', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const first = startWorkspaceOwner(ownerOptions());
-    const second = startWorkspaceOwner(ownerOptions());
+    const first = runtime.startWorkspaceOwner(ownerOptions());
+    const second = runtime.startWorkspaceOwner(ownerOptions());
 
     expect(first.previewOwnerToken.length).toBeGreaterThan(0);
     // Generated per handle, not a shared constant.
@@ -270,11 +257,14 @@ describe('page-side preview bridge (ADR-0148 / ADR-0150 P6b / ADR-0160)', () => 
 describe('workspace owner spawn contract', () => {
   it('kills an unexpected non-worker spawn result before failing loudly', async () => {
     const kill = vi.fn();
-    spawnWorker.mockReturnValueOnce({ kind: 'process', kill });
-    const { startWorkspaceOwner } = await importOwner();
+    spawnOwner.mockReturnValueOnce({
+      ok: false,
+      actualKind: 'same-realm',
+      terminate: kill,
+    });
 
-    expect(() => startWorkspaceOwner(ownerOptions())).toThrow(/expected 'worker'/);
-    expect(kill).toHaveBeenCalledWith('SIGTERM');
+    expect(() => runtime.startWorkspaceOwner(ownerOptions())).toThrow(/expected 'worker'/);
+    expect(kill).toHaveBeenCalledOnce();
   });
 
   it('rolls back an already-spawned worker when page bridge construction fails', async () => {
@@ -282,9 +272,7 @@ describe('workspace owner spawn contract', () => {
     bridgeWorkspaceFileReadsSpy.mockImplementation(() => {
       throw bridgeError;
     });
-    const { startWorkspaceOwner } = await importOwner();
-
-    expect(() => startWorkspaceOwner(ownerOptions())).toThrow(bridgeError);
+    expect(() => runtime.startWorkspaceOwner(ownerOptions())).toThrow(bridgeError);
     expect(archiveDisposeSpy).toHaveBeenCalledOnce();
     expect(fakeWorker.killCalls).toBe(1);
   });
@@ -296,8 +284,7 @@ describe('workspace owner spawn contract', () => {
     fileReadDisposeSpy.mockImplementation(() => {
       throw new Error('file read dispose failed');
     });
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
     expect(() => handle.close()).toThrow(AggregateError);
     expect(archiveDisposeSpy).toHaveBeenCalledOnce();
@@ -313,10 +300,9 @@ describe('workspace owner spawn contract', () => {
     archiveDisposeSpy.mockImplementation(() => {
       throw new Error('archive exit cleanup failed');
     });
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
-    expect(() => fakeWorker.emit('exit', 137)).not.toThrow();
+    expect(() => fakeWorker.die(137)).not.toThrow();
     await expect(handle.closed).resolves.toBe(137);
     expect(archiveDisposeSpy).toHaveBeenCalledOnce();
     expect(fileReadDisposeSpy).toHaveBeenCalledOnce();
@@ -327,15 +313,14 @@ describe('workspace owner spawn contract', () => {
   });
 
   it('queues generic raw messages until ready and exposes unclaimed owner messages', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     const request = { type: 'host:extension-request', value: 42 };
 
     const sent = handle.sendRawMessage(request);
     await Promise.resolve();
     expect(fakeWorker.sent).not.toContain(request);
 
-    fakeWorker.emit('message', {
+    fakeWorker.emitMessage({
       type: 'rifty:workspace-owner-ready',
       port: handle.snapshotPort,
       backend: 'memory',
@@ -346,17 +331,16 @@ describe('workspace owner spawn contract', () => {
     const received: unknown[] = [];
     const unsubscribe = handle.onRawMessage((message) => received.push(message));
     const response = { type: 'host:extension-response', value: 43 };
-    fakeWorker.emit('message', response);
+    fakeWorker.emitMessage(response);
     expect(received).toEqual([response]);
     unsubscribe();
-    fakeWorker.emit('message', { type: 'host:extension-response', value: 44 });
+    fakeWorker.emitMessage({ type: 'host:extension-response', value: 44 });
     expect(received).toEqual([response]);
   });
 
   it('rejects a generic raw message when the live owner IPC channel refuses the send', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
-    fakeWorker.emit('message', {
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
+    fakeWorker.emitMessage({
       type: 'rifty:workspace-owner-ready',
       port: handle.snapshotPort,
       backend: 'memory',
@@ -369,10 +353,9 @@ describe('workspace owner spawn contract', () => {
   });
 
   it("exposes the template's default port as bare PORT (Node idiom), separate from the bridge key", async () => {
-    const { startWorkspaceOwner } = await importOwner();
     const template: ProjectSpec = { ...TEST_VITE_TEMPLATE, defaultPort: 4321 };
 
-    const handle = startWorkspaceOwner(ownerOptions({ template }));
+    const handle = runtime.startWorkspaceOwner(ownerOptions({ template }));
 
     const env = spawnedOptions(0).env;
     // node-server entries read process.env.PORT to bind their listen port.
@@ -383,9 +366,9 @@ describe('workspace owner spawn contract', () => {
   });
 
   it('hands the kernel the exact host-injected owner worker URL', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    startWorkspaceOwner(ownerOptions());
+    runtime.startWorkspaceOwner(ownerOptions());
 
-    expect(spawnedOptions(0).entry).toEqual({ kind: 'url', url: 'boot.js' });
+    expect(prepareOwnerSpy).toHaveBeenCalledWith('kernel.js');
+    expect(spawnedOptions(0).entryUrl).toBe('boot.js');
   });
 });

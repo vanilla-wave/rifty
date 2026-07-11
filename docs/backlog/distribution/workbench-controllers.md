@@ -25,7 +25,9 @@ Implementation and local acceptance are complete on the workbench branch; the it
 
 ## Parity cases
 
-None — no new Node-API surface; runtime behavior stays in the existing `@riftydev/*` packages. The drift oracle is structural: playground consumes the package (same code paths), moved unit suites stay green, playground e2e lanes stay green.
+- `process/stdin-set-encoding.case.ts`: identical split UTF-8 chunks flow through real Node stdin and the rifty process bridge; both preserve decoder state and emit the same text.
+- `process/tty-resize.case.ts`: real Node runs under an OS PTY (`script` + `stty`) while rifty receives the kernel resize control frame; initial/final dimensions, `getWindowSize()`, stdout/stderr `resize`, and process `SIGWINCH` order must match.
+- Package drift oracle: playground consumes the package (same code paths), moved unit suites stay green, and the real Chromium workbench-session acceptance drives the public controllers end to end.
 
 ## Out of scope
 

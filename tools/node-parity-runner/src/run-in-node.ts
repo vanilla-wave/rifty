@@ -10,6 +10,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type ParityCase, caseCwd } from './types.ts';
 
+// `runInNode` and `runInRifty` execute concurrently. `tty-resize` temporarily
+// installs rifty's process on the shared harness global, so retain the genuine
+// host object before either run starts.
+const HOST_PROCESS = process;
+
 /**
  * Preamble injected ahead of a `kind: 'http'` case so the SAME case `code`
  * runs unchanged in real Node. It defines the request-driver global
@@ -60,8 +65,35 @@ const HTTP_NODE_PREAMBLE = `
 }
 `;
 
+const TTY_RESULT_MARKER = '__RIFTY_TTY_RESULT__';
+
+/**
+ * Preamble for `kind: 'tty-resize'`. `script` gives this process real TTY
+ * descriptors; `stty` is therefore the external terminal driver, not a JS
+ * approximation of Node's resize semantics. Initialising the grid before the
+ * case reads `process.stdout` makes Node's lazy `tty.WriteStream` start at the
+ * same 80x24 seed as the rifty process spec.
+ */
+const TTY_RESIZE_NODE_PREAMBLE = `
+'use strict';
+{
+  const { execFileSync: __execFileSync } = require('node:child_process');
+  const __setTtySize = (cols, rows) => {
+    __execFileSync('stty', ['cols', String(cols), 'rows', String(rows)], {
+      stdio: ['inherit', 'ignore', 'inherit'],
+    });
+  };
+  __setTtySize(80, 24);
+  globalThis.__riftyTtyResize = __setTtySize;
+}
+`;
+
 /** Absolute path to the workspace-vendored `tsx` CLI (the full-TS-transform runner). */
 const TSX_CLI = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
+
+function quotePosixShellArg(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
 
 /**
  * Choose the executable + argv to run a case entry in Node.
@@ -84,7 +116,52 @@ function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] 
   if (testCase.kind === 'ts-esm') {
     return [TSX_CLI, [entry]];
   }
-  return [process.execPath, [entry]];
+  if (testCase.kind === 'tty-resize') {
+    if (testCase.stdin) {
+      throw new Error("ParityCase kind 'tty-resize' does not support injected stdin");
+    }
+    if (HOST_PROCESS.platform === 'linux') {
+      // util-linux `script`: command is one POSIX-shell string. Quote the two
+      // harness-owned paths as arguments; case source never enters the shell.
+      return [
+        'script',
+        [
+          '-q',
+          '-e',
+          '-c',
+          `exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`,
+          '/dev/null',
+        ],
+      ];
+    }
+    if (
+      HOST_PROCESS.platform === 'darwin' ||
+      HOST_PROCESS.platform === 'freebsd' ||
+      HOST_PROCESS.platform === 'openbsd' ||
+      HOST_PROCESS.platform === 'netbsd'
+    ) {
+      // BSD `script`: file first, followed by command argv (no shell quoting).
+      return ['script', ['-q', '/dev/null', HOST_PROCESS.execPath, entry]];
+    }
+    throw new Error(
+      `ParityCase kind 'tty-resize' needs a POSIX script(1)+stty(1) oracle; unsupported platform ${HOST_PROCESS.platform}`,
+    );
+  }
+  return [HOST_PROCESS.execPath, [entry]];
+}
+
+/** Keep only the explicit result record; PTY transcripts may contain CRLF and BSD `script` EOF echo. */
+function extractTtyResult(transcript: string): string {
+  const records = transcript.split(/\r?\n/u).flatMap((line) => {
+    const marker = line.indexOf(TTY_RESULT_MARKER);
+    return marker === -1 ? [] : [line.slice(marker)];
+  });
+  if (records.length !== 1) {
+    throw new Error(
+      `TTY parity case must print exactly one ${TTY_RESULT_MARKER} record; found ${records.length}: ${JSON.stringify(transcript)}`,
+    );
+  }
+  return `${records[0]}\n`;
 }
 
 export async function runInNode(testCase: ParityCase): Promise<string> {
@@ -116,7 +193,11 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     // For the opt-in http mode, prepend the request-driver preamble so the case
     // can call `__riftyHttpRequest` under real Node exactly as it does in rifty.
     const source =
-      testCase.kind === 'http' ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}` : testCase.code;
+      testCase.kind === 'http'
+        ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}`
+        : testCase.kind === 'tty-resize'
+          ? `${TTY_RESIZE_NODE_PREAMBLE}\n${testCase.code}`
+          : testCase.code;
     await writeFile(entry, source, 'utf8');
 
     // `ts-esm`: mark the entry dir as a `type:module` scope so Node parses the
@@ -154,7 +235,13 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
       });
       proc.on('close', (code) => {
         if (code !== 0) reject(new Error(`Node exited ${code}: ${err.trim() || out.trim()}`));
-        else resolve(out);
+        else {
+          try {
+            resolve(testCase.kind === 'tty-resize' ? extractTtyResult(out) : out);
+          } catch (error) {
+            reject(error);
+          }
+        }
       });
       proc.on('error', reject);
       if (testCase.stdin && proc.stdin) {

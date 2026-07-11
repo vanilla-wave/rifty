@@ -13,7 +13,12 @@
  * fallback; this adapter requires `crossOriginIsolated` + SAB IPC (ADR-0011).
  */
 import { globalProcessManager, isSabIpcSupported, setKernelWorkerUrl } from '@riftydev/kernel';
-import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
+import {
+  type CrossRealmPortHandler,
+  bridgeCrossRealmPreview,
+  registerPort,
+  unregisterPort,
+} from '@riftydev/net';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ResolvedWorkbenchAssetUrls, WorkbenchRegistryConfig } from '../config.ts';
 import {
@@ -54,7 +59,10 @@ import {
 } from './vfs-write-port.ts';
 import { type WorkspaceArchiveBridge, bridgeWorkspaceArchive } from './workspace-archive-port.ts';
 import { validateWorkspaceId, validateWorkspaceRoot } from './workspace-boundary.ts';
-import { bridgeWorkspaceFileReads } from './workspace-file-read-port.ts';
+import {
+  type WorkspaceFileReadBridge,
+  bridgeWorkspaceFileReads,
+} from './workspace-file-read-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -62,6 +70,122 @@ const VFS_WRITE_ACK_TIMEOUT_MS = 5_000;
 /** OPFS durability drain can trail a big write burst (post-install trees run
  *  hundreds of ms; quota-pressure retries longer) — give the barrier slack. */
 const VFS_FLUSH_ACK_TIMEOUT_MS = 30_000;
+
+/** Workbench-owned process port; sibling kernel handle details stop at the production adapter. */
+export interface WorkspaceOwnerProcessPort {
+  send(message: unknown): boolean;
+  terminate(): boolean;
+  onMessage(listener: (message: unknown) => void): void;
+  onExit(listener: (code: unknown) => void): void;
+  onStdout(listener: (chunk: unknown) => void): void;
+  onStderr(listener: (chunk: unknown) => void): void;
+}
+
+/** Kernel-independent owner request assembled by the page orchestrator. */
+export interface WorkspaceOwnerSpawnRequest {
+  readonly entryUrl: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly cwd: string;
+}
+
+/** Invalid spawn remains explicit so the orchestrator can roll it back before throwing. */
+export type WorkspaceOwnerSpawnResult =
+  | { readonly ok: true; readonly process: WorkspaceOwnerProcessPort }
+  | {
+      readonly ok: false;
+      readonly actualKind: string;
+      terminate(): boolean;
+    };
+
+export interface RealVitePreviewBridge {
+  dispose(): void;
+}
+
+/**
+ * Internal host seam for browser/process/network effects. Not re-exported by
+ * the package root; public callers use {@link startWorkspaceOwner} and
+ * {@link wirePreviewBridge} backed by the production adapter below.
+ */
+export interface RealViteHost<PreviewBridge extends RealVitePreviewBridge> {
+  prepareOwner(kernelWorkerUrl: string): void;
+  spawnOwner(request: WorkspaceOwnerSpawnRequest): WorkspaceOwnerSpawnResult;
+  createArchiveBridge(key: OwnerBridgeKey): WorkspaceArchiveBridge;
+  createFileReadBridge(key: OwnerBridgeKey): WorkspaceFileReadBridge;
+  sendFallbackWrite(key: OwnerBridgeKey, frame: VfsWriteFrame): void;
+  createPreviewBridge(port: number, previewScope?: string): PreviewBridge;
+  registerPreview(port: number, bridge: PreviewBridge): void;
+  unregisterPreview(port: number): void;
+  mountPreview(
+    bridge: PreviewBridge,
+    options: { readonly ownerToken: string; readonly ports: readonly number[] },
+  ): () => void;
+}
+
+export interface RealViteRuntime {
+  startWorkspaceOwner(options: WorkspaceOwnerOptions): WorkspaceOwnerHandle;
+  wirePreviewBridge(port: number, ownerToken: string, previewScope?: string): () => void;
+}
+
+const PRODUCTION_HOST: RealViteHost<CrossRealmPortHandler> = {
+  prepareOwner(kernelWorkerUrl) {
+    if (!isSabIpcSupported()) {
+      throw new NotImplementedError(
+        'startWorkspaceOwner',
+        'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
+          'or run inside the playground dev server (vite.config.ts ships them).',
+      );
+    }
+    setKernelWorkerUrl(kernelWorkerUrl);
+  },
+  spawnOwner(request) {
+    const handle = globalProcessManager.spawnWorker(
+      'workspace-owner',
+      {
+        entry: { kind: 'url', url: request.entryUrl },
+        argv: ['rifty', 'workspace-owner'],
+        env: request.env,
+        cwd: request.cwd,
+        serve: true,
+      },
+      1,
+      { cwd: request.cwd },
+    );
+    if (handle.kind !== 'worker') {
+      return {
+        ok: false,
+        actualKind: handle.kind,
+        terminate: () => handle.kill('SIGTERM'),
+      };
+    }
+    return {
+      ok: true,
+      process: {
+        send: (message) => handle.send(message),
+        terminate: () => handle.kill('SIGTERM'),
+        onMessage: (listener) => {
+          handle.on('message', listener);
+        },
+        onExit: (listener) => {
+          handle.on('exit', listener);
+        },
+        onStdout: (listener) => {
+          handle.stdout().on('data', listener);
+        },
+        onStderr: (listener) => {
+          handle.stderr().on('data', listener);
+        },
+      },
+    };
+  },
+  createArchiveBridge: (key) => bridgeWorkspaceArchive(key),
+  createFileReadBridge: (key) => bridgeWorkspaceFileReads(key),
+  sendFallbackWrite: (key, frame) => sendVfsWrite(key, frame),
+  createPreviewBridge: (port, previewScope) =>
+    bridgeCrossRealmPreview(port, previewScope === undefined ? {} : { scope: previewScope }),
+  registerPreview: (port, bridge) => registerPort(port, bridge),
+  unregisterPreview: (port) => unregisterPort(port),
+  mountPreview: (bridge, options) => mountPlaygroundPreviewBridge(bridge, options),
+};
 
 function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
@@ -81,7 +205,8 @@ function createPreviewOwnerToken(): string {
  * longer spawned per dev run (it IS the persistent owner), only the page-side
  * route is (un)registered as the dev server starts/stops.
  */
-export function wirePreviewBridge(
+function wirePreviewBridgeWithHost<PreviewBridge extends RealVitePreviewBridge>(
+  host: RealViteHost<PreviewBridge>,
   port: number,
   ownerToken: string,
   previewScope?: string,
@@ -89,26 +214,23 @@ export function wirePreviewBridge(
   // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
   // routes through this handler over BroadcastChannel to the owner's
   // `serveCrossRealmPreview`.
-  const previewBridge = bridgeCrossRealmPreview(
-    port,
-    previewScope === undefined ? {} : { scope: previewScope },
-  );
+  const previewBridge = host.createPreviewBridge(port, previewScope);
   let registrationAttempted = false;
   let tearSwBridge: (() => void) | null = null;
   try {
     registrationAttempted = true;
-    registerPort(port, previewBridge);
+    host.registerPreview(port, previewBridge);
     // ADR-0086: typed handle → SW requests take the struct fast-path.
     // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
     // port to THIS window (multi-window isolation).
-    tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, {
+    tearSwBridge = host.mountPreview(previewBridge, {
       ownerToken,
       ports: [port],
     });
   } catch (error) {
     const primary = errorFrom(error);
     const cleanupErrors = collectCleanupErrors([
-      ...(!registrationAttempted ? [] : [() => unregisterPort(port)]),
+      ...(!registrationAttempted ? [] : [() => host.unregisterPreview(port)]),
       () => previewBridge.dispose(),
     ]);
     if (cleanupErrors.length === 0) throw primary;
@@ -124,7 +246,7 @@ export function wirePreviewBridge(
     if (tornDown) return;
     tornDown = true;
     runCleanupSteps(
-      [() => tearSwBridge?.(), () => unregisterPort(port), () => previewBridge.dispose()],
+      [() => tearSwBridge?.(), () => host.unregisterPreview(port), () => previewBridge.dispose()],
       'preview bridge teardown failed',
     );
   };
@@ -330,7 +452,10 @@ function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwn
  * @throws NotImplementedError when SAB IPC is unavailable — cross-origin
  *   isolation is the gate (ADR-0002 / D-001), same as {@link startRealVite}.
  */
-export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwnerHandle {
+function startWorkspaceOwnerWithHost<PreviewBridge extends RealVitePreviewBridge>(
+  host: RealViteHost<PreviewBridge>,
+  opts: WorkspaceOwnerOptions,
+): WorkspaceOwnerHandle {
   const starterId = opts.starter ?? opts.catalog.defaultStarterId;
   const starterSpec = resolveStarter(opts.catalog, starterId);
   const template = opts.template ?? resolveProjectSpec(opts.catalog, starterSpec.templateId);
@@ -356,83 +481,66 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
     if (opts.onLog) invokeHostCallback(opts.onLog, line);
   };
 
-  if (!isSabIpcSupported()) {
-    throw new NotImplementedError(
-      'startWorkspaceOwner',
-      'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
-        'or run inside the playground dev server (vite.config.ts ships them).',
-    );
-  }
-
-  setKernelWorkerUrl(opts.assets.kernelWorkerUrl);
+  host.prepareOwner(opts.assets.kernelWorkerUrl);
 
   log(`[workspace-owner] spawning shell-mode owner (workspace ${workspaceId})\n`);
 
-  const handle = globalProcessManager.spawnWorker(
-    'workspace-owner',
-    {
-      entry: { kind: 'url', url: opts.assets.ownerWorkerUrl },
-      argv: ['rifty', 'workspace-owner'],
-      env: {
-        RIFTY_OWNER_MODE: 'shell',
-        RIFTY_WORKSPACE_ID: workspaceId,
-        RIFTY_RFV_ROOT: root,
-        RIFTY_RFV_TEMPLATE: template.id,
-        RIFTY_RFV_PROJECT_SPEC: JSON.stringify(template),
-        RIFTY_PROJECT_CATALOG: JSON.stringify(opts.catalog),
-        RIFTY_RFV_SETUP: setup,
-        RIFTY_RFV_SLUG: slug,
-        RIFTY_RFV_STARTER: starter,
-        RIFTY_RFV_STARTER_BASELINE_PENDING: starterGeneratedBaselinePending ? '1' : '0',
-        RIFTY_RFV_HIDDEN_EMPTY_BOOT: hiddenEmptyBoot ? '1' : '0',
-        // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
-        // the page subscribes on `handle.snapshotPort` to read the owner tree.
-        RIFTY_RFV_PORT: String(snapshotPort),
-        // Node idiom for node-server template entries (`process.env.PORT`): the
-        // co-resident dev server listens on the template's default port.
-        PORT: String(template.defaultPort),
-        // ADR-0150: worker URLs the owner needs to recursively spawn each
-        // foreground CLI as a supervised child reading the owner fs over
-        // sync-RPC (kernel realm + node-entry boot).
-        RIFTY_KERNEL_WORKER_URL: opts.assets.kernelWorkerUrl,
-        RIFTY_NODE_ENTRY_WORKER_URL: opts.assets.nodeWorkerUrl,
-        // ADR-0150 P6b — child entry the owner spawns for the dev server.
-        RIFTY_DEV_SERVER_WORKER_URL: opts.assets.devServerWorkerUrl,
-        RIFTY_SQLITE_WASM_URL: opts.assets.sqliteWasmUrl,
-        RIFTY_ESBUILD_WASM_URL: opts.assets.esbuildWasmUrl,
-        RIFTY_REGISTRY_URL: opts.registry.registryUrl,
-        ...(opts.registry.resolverUrl === undefined
-          ? {}
-          : { RIFTY_RESOLVER_URL: opts.registry.resolverUrl }),
-        ...(opts.registry.resolverBundleUrl === undefined
-          ? {}
-          : { RIFTY_RESOLVER_BUNDLE_URL: opts.registry.resolverBundleUrl }),
-        ...(opts.registry.resolverPins === undefined
-          ? {}
-          : { RIFTY_RESOLVER_PINS: JSON.stringify(opts.registry.resolverPins) }),
-      },
-      cwd: root,
-      // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
-      // entry; the open IPC channel keeps the shells resident until close().
-      serve: true,
+  const spawned = host.spawnOwner({
+    entryUrl: opts.assets.ownerWorkerUrl,
+    env: {
+      RIFTY_OWNER_MODE: 'shell',
+      RIFTY_WORKSPACE_ID: workspaceId,
+      RIFTY_RFV_ROOT: root,
+      RIFTY_RFV_TEMPLATE: template.id,
+      RIFTY_RFV_PROJECT_SPEC: JSON.stringify(template),
+      RIFTY_PROJECT_CATALOG: JSON.stringify(opts.catalog),
+      RIFTY_RFV_SETUP: setup,
+      RIFTY_RFV_SLUG: slug,
+      RIFTY_RFV_STARTER: starter,
+      RIFTY_RFV_STARTER_BASELINE_PENDING: starterGeneratedBaselinePending ? '1' : '0',
+      RIFTY_RFV_HIDDEN_EMPTY_BOOT: hiddenEmptyBoot ? '1' : '0',
+      // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
+      // the page subscribes on `handle.snapshotPort` to read the owner tree.
+      RIFTY_RFV_PORT: String(snapshotPort),
+      // Node idiom for node-server template entries (`process.env.PORT`): the
+      // co-resident dev server listens on the template's default port.
+      PORT: String(template.defaultPort),
+      // ADR-0150: worker URLs the owner needs to recursively spawn each
+      // foreground CLI as a supervised child reading the owner fs over
+      // sync-RPC (kernel realm + node-entry boot).
+      RIFTY_KERNEL_WORKER_URL: opts.assets.kernelWorkerUrl,
+      RIFTY_NODE_ENTRY_WORKER_URL: opts.assets.nodeWorkerUrl,
+      // ADR-0150 P6b — child entry the owner spawns for the dev server.
+      RIFTY_DEV_SERVER_WORKER_URL: opts.assets.devServerWorkerUrl,
+      RIFTY_SQLITE_WASM_URL: opts.assets.sqliteWasmUrl,
+      RIFTY_ESBUILD_WASM_URL: opts.assets.esbuildWasmUrl,
+      RIFTY_REGISTRY_URL: opts.registry.registryUrl,
+      ...(opts.registry.resolverUrl === undefined
+        ? {}
+        : { RIFTY_RESOLVER_URL: opts.registry.resolverUrl }),
+      ...(opts.registry.resolverBundleUrl === undefined
+        ? {}
+        : { RIFTY_RESOLVER_BUNDLE_URL: opts.registry.resolverBundleUrl }),
+      ...(opts.registry.resolverPins === undefined
+        ? {}
+        : { RIFTY_RESOLVER_PINS: JSON.stringify(opts.registry.resolverPins) }),
     },
-    /* ppid */ 1,
-    { cwd: root },
-  );
+    cwd: root,
+  });
 
-  if (handle.kind !== 'worker') {
+  if (!spawned.ok) {
     const primary = new NotImplementedError(
       'startWorkspaceOwner',
-      `globalProcessManager.spawnWorker returned kind=${handle.kind}; expected 'worker'`,
+      `globalProcessManager.spawnWorker returned kind=${spawned.actualKind}; expected 'worker'`,
     );
-    const cleanupErrors = collectCleanupErrors([() => handle.kill('SIGTERM')]);
+    const cleanupErrors = collectCleanupErrors([() => spawned.terminate()]);
     if (cleanupErrors.length === 0) throw primary;
     throw new AggregateError(
       [primary, ...cleanupErrors],
       [primary, ...cleanupErrors].map((failure) => failure.message).join('; '),
     );
   }
-  const worker = handle;
+  const worker = spawned.process;
 
   const devServerListeners = new Set<(frame: PtyDevServer) => void>();
   const previewListeners = new Set<(frame: PtyPreview) => void>();
@@ -485,16 +593,16 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
     }
     return typeof chunk === 'string' ? chunk : '';
   };
-  worker.stdout().on('data', (chunk: unknown) => {
+  worker.onStdout((chunk: unknown) => {
     const text = decodeChunk(chunk);
     if (text) log(text);
   });
-  worker.stderr().on('data', (chunk: unknown) => {
+  worker.onStderr((chunk: unknown) => {
     const text = decodeChunk(chunk);
     if (text) log(text);
   });
 
-  worker.on('message', (message: unknown) => {
+  worker.onMessage((message: unknown) => {
     if (isWorkspaceOwnerReadyMessage(message) && Object.is(message.port, snapshotPort)) {
       storageBackend = message.backend;
       settleReady();
@@ -537,17 +645,17 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
   const { archiveBridge, fileReadBridge } = (() => {
     let acquiredArchive: WorkspaceArchiveBridge | null = null;
     try {
-      acquiredArchive = bridgeWorkspaceArchive(snapshotPort);
+      acquiredArchive = host.createArchiveBridge(snapshotPort);
       return {
         archiveBridge: acquiredArchive,
-        fileReadBridge: bridgeWorkspaceFileReads(snapshotPort),
+        fileReadBridge: host.createFileReadBridge(snapshotPort),
       };
     } catch (error) {
       const primary = errorFrom(error);
       const archiveToDispose = acquiredArchive;
       const cleanupErrors = collectCleanupErrors([
         ...(!archiveToDispose ? [] : [() => archiveToDispose.dispose()]),
-        () => handle.kill('SIGTERM'),
+        () => worker.terminate(),
       ]);
       if (cleanupErrors.length === 0) throw primary;
       throw new AggregateError(
@@ -574,7 +682,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
   const closed = new Promise<number | null>((resolve) => {
     resolveClosed = resolve;
   });
-  worker.on('exit', (code?: unknown) => {
+  worker.onExit((code?: unknown) => {
     exited = true;
     const exitCode = typeof code === 'number' ? code : null;
     failReady(new Error(`workspace owner exited before ready (code ${exitCode ?? 'null'})`));
@@ -619,7 +727,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
       frame,
       exited,
       sendIpc: (message) => worker.send(message),
-      fallback: sendVfsWrite,
+      fallback: host.sendFallbackWrite,
     });
   };
   const writeFrameAcked = (frame: VfsWriteFrame): Promise<void> => {
@@ -747,11 +855,38 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwner
         [
           disposePageBridges,
           () => {
-            if (!exited) handle.kill('SIGTERM');
+            if (!exited) worker.terminate();
           },
         ],
         'workspace owner close failed',
       );
     },
   };
+}
+
+/** Internal test seam; deliberately absent from `src/index.ts`. */
+export function createRealViteForTesting<PreviewBridge extends RealVitePreviewBridge>(
+  host: RealViteHost<PreviewBridge>,
+): RealViteRuntime {
+  return {
+    startWorkspaceOwner: (options) => startWorkspaceOwnerWithHost(host, options),
+    wirePreviewBridge: (port, ownerToken, previewScope) =>
+      wirePreviewBridgeWithHost(host, port, ownerToken, previewScope),
+  };
+}
+
+const PRODUCTION_REAL_VITE = createRealViteForTesting(PRODUCTION_HOST);
+
+/** Wire the production page-side preview route. */
+export function wirePreviewBridge(
+  port: number,
+  ownerToken: string,
+  previewScope?: string,
+): () => void {
+  return PRODUCTION_REAL_VITE.wirePreviewBridge(port, ownerToken, previewScope);
+}
+
+/** Spawn the production persistent workspace owner. */
+export function startWorkspaceOwner(opts: WorkspaceOwnerOptions): WorkspaceOwnerHandle {
+  return PRODUCTION_REAL_VITE.startWorkspaceOwner(opts);
 }

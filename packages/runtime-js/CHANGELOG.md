@@ -186,7 +186,8 @@
   `columns`, `rows`, `getWindowSize()`, and stream `resize`; kernel resize
   control frames update both streams before emitting process `SIGWINCH`.
   Initial dimensions come from validated `RIFTY_TTY_COLS`/`RIFTY_TTY_ROWS`
-  with the existing 80×24 fallback, and duplicate dimensions emit no events.
+  with the existing 80×24 fallback, and duplicate dimensions emit no events;
+  `process/tty-resize` pins the sequence against real Node under an OS PTY.
 - **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —
   `require('node:stream').compose(a, b)`, `Duplex.from(src)`, and
   `readable.wrap(legacyStream)` (Node v16, owned by `@riftydev/io`) now resolve.

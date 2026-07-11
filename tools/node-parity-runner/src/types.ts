@@ -80,8 +80,15 @@ export interface ParityCase {
    *   mirror. The Node side runs the genuine `child_process.execSync` (a real
    *   subprocess) with no preamble — so binary stdout must be routed through a
    *   HEX channel (`out.toString('hex')`) to survive the harness's UTF-8 capture.
+   * - `'tty-resize'` — real terminal-resize mode. The Node side runs under an
+   *   OS pseudo-terminal (`script`) and drives its window with `stty`; the rifty
+   *   side installs a spec-seeded `NodeProcess` and drives the same resize via
+   *   its kernel IPC control frame. Both sides expose
+   *   `globalThis.__riftyTtyResize(cols, rows)` to otherwise-identical case code.
+   *   PTY transcript noise is discarded: the case must print one line beginning
+   *   `__RIFTY_TTY_RESULT__`, which becomes the captured stdout.
    */
-  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite' | 'exec-sync';
+  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite' | 'exec-sync' | 'tty-resize';
 }
 
 /**

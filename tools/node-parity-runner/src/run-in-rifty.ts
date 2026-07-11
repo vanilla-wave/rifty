@@ -2,11 +2,13 @@
  * Run case code through the rifty module loader and capture stdout.
  *
  * Scope: the loader is the rifty path under test. We deliberately do NOT
- * monkey-patch global `process` or `Promise.prototype.then` here — that would
- * leak into the runner itself. Behaviours that depend on rifty's promise/
- * nextTick patches are covered by the conformance suite, which can install
- * the patches in a controlled `beforeAll`/`afterAll` scope. The parity runner
- * does temporarily mirror the Worker's tracked timer globals so detached timer
+ * monkey-patch global `process` or `Promise.prototype.then` in default modes —
+ * that would leak into the runner itself. The opt-in `tty-resize` mode installs
+ * a spec-seeded `NodeProcess` for one case and restores the exact global
+ * descriptor in `finally`. Behaviours that depend on rifty's promise/nextTick
+ * patches are covered by the conformance suite, which can install the patches
+ * in a controlled `beforeAll`/`afterAll` scope. The parity runner does
+ * temporarily mirror the Worker's tracked timer globals so detached timer
  * chains participate in the real keepalive drain. It otherwise focuses on
  * module-shape semantics: `node:path`, `node:buffer`, `node:util`,
  * `node:querystring`, `node:events`, `node:url`, etc.
@@ -14,6 +16,8 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import {
+  NodeProcess,
+  getProcessCwd,
   riftyProcess,
   setProcessCwd,
   writeProcessStdin,
@@ -22,6 +26,7 @@ import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
 // `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
 // selection between cases, and `ensureVmEngineReady` preloads the QuickJS WASM
@@ -68,6 +73,8 @@ declare global {
   var __riftyHttpRequest:
     | ((port: number, path: string, init?: RequestInit) => Promise<RiftyHttpResponse>)
     | undefined;
+  /** Injected only by `kind: 'tty-resize'`; restored exactly on teardown. */
+  var __riftyTtyResize: ((cols: number, rows: number) => void) | undefined;
 }
 
 const TIMER_GLOBAL_KEYS = [
@@ -93,6 +100,91 @@ function installCaseTimerGlobals(): () => void {
       if (own) globals[key] = value;
       else Reflect.deleteProperty(globals, key);
     }
+  };
+}
+
+function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  else Reflect.deleteProperty(globalThis, name);
+}
+
+/**
+ * Install the real spec-seeded runtime process used by a kernel Worker, plus a
+ * host resize hook that posts the genuine `ipc:tty-resize` control frame.
+ * Every port and overwritten global is owned here and restored exactly once.
+ */
+function installTtyResizeMode(cwd: string): () => void {
+  const stdout = new MessageChannel();
+  const stderr = new MessageChannel();
+  const stdin = new MessageChannel();
+  const ipc = new MessageChannel();
+  const channels = [stdout, stderr, stdin, ipc] as const;
+  const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const priorResize = Object.getOwnPropertyDescriptor(globalThis, '__riftyTtyResize');
+  let seeded: NodeProcess | undefined;
+
+  const closePorts = (): void => {
+    for (const channel of channels) {
+      channel.port1.close();
+      channel.port2.close();
+    }
+  };
+
+  try {
+    seeded = new NodeProcess({
+      pid: 2,
+      ppid: 1,
+      argv: ['node', '/work/main.js'],
+      env: {
+        RIFTY_STDIN_IS_TTY: '1',
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+        RIFTY_TTY_COLS: '80',
+        RIFTY_TTY_ROWS: '24',
+      },
+      cwd,
+      stdio: {
+        stdout: stdout.port1,
+        stderr: stderr.port1,
+        stdin: stdin.port1,
+        ipc: ipc.port1,
+      },
+    });
+    Object.defineProperty(globalThis, 'process', {
+      value: seeded,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, '__riftyTtyResize', {
+      value: (cols: number, rows: number): void => {
+        ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols, rows });
+      },
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+    refreshRuntimeJsProcessBuiltin();
+  } catch (error) {
+    restoreGlobalDescriptor('process', priorProcess);
+    restoreGlobalDescriptor('__riftyTtyResize', priorResize);
+    refreshRuntimeJsProcessBuiltin();
+    closePorts();
+    throw error;
+  }
+
+  let tornDown = false;
+  return () => {
+    if (tornDown) return;
+    tornDown = true;
+    restoreGlobalDescriptor('process', priorProcess);
+    restoreGlobalDescriptor('__riftyTtyResize', priorResize);
+    refreshRuntimeJsProcessBuiltin();
+    seeded?.removeAllListeners();
+    seeded?.stdout.removeAllListeners();
+    seeded?.stderr.removeAllListeners();
+    seeded?.stdin.removeAllListeners();
+    closePorts();
   };
 }
 
@@ -376,6 +468,11 @@ function buildTsTransform(): TransformSourceHook {
 }
 
 export async function runInRifty(testCase: ParityCase): Promise<string> {
+  // One process-wide registry serves every case; make the current realm the
+  // source of truth before any loader can observe a namespace cached by its
+  // predecessor. `tty-resize` refreshes again after installing its seeded realm.
+  refreshRuntimeJsProcessBuiltin();
+  const priorProcessCwd = getProcessCwd();
   const vfs = new MemoryFsSync();
   const files: Record<string, string> = {};
   if (testCase.setup?.files) {
@@ -491,7 +588,14 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   console.debug = writeStdout;
   console.warn = writeStderr;
   console.error = writeStderr;
+  let teardownTty: (() => void) | null = null;
   try {
+    if (testCase.kind === 'tty-resize') {
+      if (testCase.stdin) {
+        throw new Error("ParityCase kind 'tty-resize' does not support injected stdin");
+      }
+      teardownTty = installTtyResizeMode(cwd);
+    }
     if (testCase.kind === 'ts-esm') {
       await loader.import('./main.ts', '/work/__entry.ts');
     } else if (testCase.kind === 'esm') {
@@ -523,10 +627,11 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     console.debug = original.debug;
     console.warn = original.warn;
     console.error = original.error;
+    teardownTty?.();
     restoreTimerGlobals();
     resetSyncMirror();
     resetKeepalive();
-    setProcessCwd('/workspace');
+    setProcessCwd(priorProcessCwd);
     if (testCase.stdin) {
       riftyProcess.stdin.removeAllListeners('data');
       riftyProcess.stdin.setEncoding(null);

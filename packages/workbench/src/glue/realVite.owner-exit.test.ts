@@ -1,105 +1,88 @@
 import { EventEmitter } from 'node:events';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TEST_PROJECT_CATALOG } from '../test-project.ts';
-import type { WorkspaceOwnerOptions } from './realVite.ts';
+import {
+  type RealViteHost,
+  type RealViteRuntime,
+  type WorkspaceOwnerOptions,
+  type WorkspaceOwnerProcessPort,
+  type WorkspaceOwnerSpawnRequest,
+  type WorkspaceOwnerSpawnResult,
+  createRealViteForTesting,
+} from './realVite.ts';
 
-// Regression heirs of the app-owned suite retired when realVite moved here.
-// Only transport boundaries are faked; every assertion drives the real owner
-// handle lifecycle and write/read acknowledgement logic.
 const sendVfsWriteSpy = vi.fn();
-const readFileBytesSpy = vi.fn();
-const spawnWorker = vi.fn();
+const readFileBytesSpy = vi.fn<(path: string) => Promise<Uint8Array>>();
+const spawnOwner = vi.fn<(request: WorkspaceOwnerSpawnRequest) => WorkspaceOwnerSpawnResult>();
 
-vi.mock('@riftydev/kernel', () => ({
-  globalProcessManager: {
-    spawnWorker: (...args: unknown[]) => spawnWorker(...args),
-  },
-  isSabIpcSupported: () => true,
-  setKernelWorkerUrl: () => {},
-}));
-
-vi.mock('@riftydev/net', () => ({
-  bridgeCrossRealmPreview: () => ({ dispose: () => {} }),
-  registerPort: () => {},
-  unregisterPort: () => {},
-}));
-
-vi.mock('./vfs-write-port.ts', async () => {
-  const actual = await vi.importActual<typeof import('./vfs-write-port.ts')>('./vfs-write-port.ts');
-  return {
-    ...actual,
-    sendVfsWrite: (...args: unknown[]) => sendVfsWriteSpy(...args),
-  };
-});
-
-vi.mock('./workspace-archive-port.ts', () => ({
-  bridgeWorkspaceArchive: () => ({
-    export: async () => '{}',
-    import: async () => {},
-    dispose: () => {},
-  }),
-}));
-
-vi.mock('./workspace-file-read-port.ts', () => ({
-  bridgeWorkspaceFileReads: () => ({
-    readFileBytes: (...args: unknown[]) => readFileBytesSpy(...args),
-    dispose: () => {},
-  }),
-}));
-
-vi.mock('./preview-bridge-wiring.ts', () => ({
-  mountPlaygroundPreviewBridge: () => () => {},
-}));
-
-class FakeWorker extends EventEmitter {
-  readonly kind = 'worker' as const;
+class FakeOwnerProcess implements WorkspaceOwnerProcessPort {
   alive = true;
   readonly sent: unknown[] = [];
   #stdout = new EventEmitter();
   #stderr = new EventEmitter();
+  #events = new EventEmitter();
 
-  stdout(): EventEmitter {
-    return this.#stdout;
+  onMessage(listener: (message: unknown) => void): void {
+    this.#events.on('message', listener);
   }
-
-  stderr(): EventEmitter {
-    return this.#stderr;
+  onExit(listener: (code: unknown) => void): void {
+    this.#events.on('exit', listener);
   }
-
+  onStdout(listener: (chunk: unknown) => void): void {
+    this.#stdout.on('data', listener);
+  }
+  onStderr(listener: (chunk: unknown) => void): void {
+    this.#stderr.on('data', listener);
+  }
   send(message: unknown): boolean {
     if (!this.alive) return false;
     this.sent.push(message);
     return true;
   }
-
-  kill(): boolean {
+  terminate(): boolean {
     return true;
   }
-
+  emitMessage(message: unknown): void {
+    this.#events.emit('message', message);
+  }
   die(code: number | null): void {
     this.alive = false;
-    this.emit('exit', code);
+    this.#events.emit('exit', code);
   }
 }
 
-let fakeWorker: FakeWorker;
+interface TestPreviewBridge {
+  dispose(): void;
+}
+
+let fakeWorker: FakeOwnerProcess;
+let runtime: RealViteRuntime;
 
 beforeEach(() => {
-  vi.resetModules();
-  sendVfsWriteSpy.mockClear();
-  readFileBytesSpy.mockReset();
-  readFileBytesSpy.mockResolvedValue(new Uint8Array([1, 2, 3]));
-  fakeWorker = new FakeWorker();
-  spawnWorker.mockReturnValue(fakeWorker);
-});
-
-afterEach(() => {
   vi.clearAllMocks();
+  readFileBytesSpy.mockResolvedValue(new Uint8Array([1, 2, 3]));
+  fakeWorker = new FakeOwnerProcess();
+  spawnOwner.mockReturnValue({ ok: true, process: fakeWorker });
+  const host: RealViteHost<TestPreviewBridge> = {
+    prepareOwner: () => {},
+    spawnOwner,
+    createArchiveBridge: () => ({
+      export: async () => '{}',
+      import: async () => {},
+      dispose: () => {},
+    }),
+    createFileReadBridge: () => ({
+      readFileBytes: (path) => readFileBytesSpy(path),
+      dispose: () => {},
+    }),
+    sendFallbackWrite: (key, frame) => sendVfsWriteSpy(key, frame),
+    createPreviewBridge: () => ({ dispose: () => {} }),
+    registerPreview: () => {},
+    unregisterPreview: () => {},
+    mountPreview: () => () => {},
+  };
+  runtime = createRealViteForTesting(host);
 });
-
-async function importOwner(): Promise<typeof import('./realVite.ts')> {
-  return import('./realVite.ts');
-}
 
 function ownerOptions(): WorkspaceOwnerOptions {
   return {
@@ -128,8 +111,7 @@ function sentWrite(): { readonly type: string; readonly opId?: string } | undefi
 
 describe('workspace owner death and write acknowledgement', () => {
   it('notifies dev-server listeners with a non-running frame on owner exit', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     const frames: { status: string }[] = [];
     handle.onDevServer((frame) => frames.push(frame));
 
@@ -140,8 +122,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('throws on writeFile after owner exit without falling back to a stale channel', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     fakeWorker.die(137);
 
     expect(() => handle.writeFile('/scratch/a.txt', 'hi')).toThrow(/workspace owner/);
@@ -149,8 +130,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('throws on writeFrame after owner exit without falling back to a stale channel', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     fakeWorker.die(137);
 
     expect(() =>
@@ -164,8 +144,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('rejects readFileBytes after owner exit without reading a stale bridge', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     expect(handle.isAlive()).toBe(true);
     fakeWorker.die(137);
 
@@ -175,9 +154,8 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('rejects generic raw messages after owner exit without sending to the dead worker', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
-    fakeWorker.emit('message', {
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
+    fakeWorker.emitMessage({
       type: 'rifty:workspace-owner-ready',
       port: handle.snapshotPort,
       backend: 'memory',
@@ -192,8 +170,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('sends writeFrame through the live worker', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
     handle.writeFrame({
       type: 'copy',
@@ -206,8 +183,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('reads bytes through the live owner bridge', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
 
     await expect(handle.readFileBytes('/scratch/a.txt')).resolves.toEqual(
       new Uint8Array([1, 2, 3]),
@@ -216,8 +192,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('resolves writeFrameAcked only after the owner ack', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     const acked = handle.writeFrameAcked({
       type: 'mkdir',
       path: '/scratch/acked',
@@ -233,15 +208,14 @@ describe('workspace owner death and write acknowledgement', () => {
     await Promise.resolve();
     expect(resolved).toBe(false);
 
-    fakeWorker.emit('message', { type: 'rifty:vfs-write-ack', opId: write.opId, ok: true });
+    fakeWorker.emitMessage({ type: 'rifty:vfs-write-ack', opId: write.opId, ok: true });
 
     await acked;
     expect(resolved).toBe(true);
   });
 
   it('rejects writeFrameAcked with the owner-side apply error', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     const acked = handle.writeFrameAcked({
       type: 'rename',
       from: '/scratch/a.txt',
@@ -250,7 +224,7 @@ describe('workspace owner death and write acknowledgement', () => {
     const write = sentWrite();
     if (!write?.opId) throw new Error('expected an acked VFS write');
 
-    fakeWorker.emit('message', {
+    fakeWorker.emitMessage({
       type: 'rifty:vfs-write-ack',
       opId: write.opId,
       ok: false,
@@ -261,8 +235,7 @@ describe('workspace owner death and write acknowledgement', () => {
   });
 
   it('rejects in-flight writeFrameAcked calls when the owner exits', async () => {
-    const { startWorkspaceOwner } = await importOwner();
-    const handle = startWorkspaceOwner(ownerOptions());
+    const handle = runtime.startWorkspaceOwner(ownerOptions());
     const acked = handle.writeFrameAcked({
       type: 'copy',
       from: '/scratch/a.txt',

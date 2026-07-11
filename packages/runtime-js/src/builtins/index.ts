@@ -56,6 +56,14 @@ export {
 
 let runtimeJsBuiltinsRegistered = false;
 
+/** Rebind `node:process` to the active realm and evict its cached namespace. */
+export function refreshRuntimeJsProcessBuiltin(): void {
+  registerBuiltin('process', () => {
+    const live = (globalThis as { process?: unknown }).process;
+    return live instanceof NodeProcess ? live : riftyProcess;
+  });
+}
+
 export function ensureRuntimeJsBuiltinsRegistered(): void {
   if (runtimeJsBuiltinsRegistered) return;
   runtimeJsBuiltinsRegistered = true;
@@ -82,10 +90,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   // that is a rifty NodeProcess. In the in-process harness / parity runner
   // `globalThis.process` is the REAL Node process (wrong platform/arch), so fall
   // back to the rifty no-spec singleton there.
-  registerBuiltin('process', () => {
-    const live = (globalThis as { process?: unknown }).process;
-    return live instanceof NodeProcess ? live : riftyProcess;
-  });
+  refreshRuntimeJsProcessBuiltin();
   registerBuiltin('timers', () => timersModule);
   registerBuiltin('timers/promises', () => timersPromises);
   registerBuiltin('fs', () => fsModule);
