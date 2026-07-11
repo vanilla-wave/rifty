@@ -28,6 +28,10 @@
 
 ### Added
 
+- **esbuild 0.28.0 Vite Contract+RED (ADR-0226).** Row-addressable live oracle
+  pins module/plugin identity, transform/diagnostics, config graph, dependency scan,
+  default-write prebundle, and write failure before the VFS runtime implementation;
+  exact upstream browser-client and Go-WASM SHA-256 pins stop source drift.
 - `viteBuildShimFiles` adds a production-build overlay: Rollup's native entry
   delegates to real `@rollup/wasm-node`, and esbuild's async `transform()` is
   bridged to real esbuild-WASI for minify/target/external-map build phases.

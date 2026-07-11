@@ -20,6 +20,9 @@ import { prepareViteCli, viteCliMode, withViteCliArgs, withViteCliEnv } from './
 const dec = new TextDecoder();
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
 const WRAPPER_PATH = '/app/.rifty/vite-cli.config.mjs';
+// Keeps baseline keepalive tests green before and after the Contract+RED mode
+// classifier is implemented: this is CAC's no-action path in both versions.
+const INFORMATIONAL_MODE = viteCliMode(['--version']);
 
 /** Mirrors the CAC runMatchedCommand call shape of real vite dist/node/cli.js —
  * the keepalive patch's needle. Registers the class on globalThis so the test
@@ -71,6 +74,7 @@ const PREVIEW_OPTIONS = {
 } as const;
 
 interface TestGlobals {
+  __rifty?: { esbuild?: unknown };
   __riftyTestCac?: new (action: () => unknown) => { parse(): void };
   __riftyTestPreviewConfig?: (options: typeof PREVIEW_OPTIONS) => Record<string, unknown>;
   __riftyActiveViteServer?: unknown;
@@ -78,6 +82,10 @@ interface TestGlobals {
   __riftyTrackCliPromise?: (promise: PromiseLike<unknown>) => void;
 }
 const g = globalThis as TestGlobals;
+
+function clearEsbuildRuntimeSlot(): void {
+  if (g.__rifty) Reflect.deleteProperty(g.__rifty, 'esbuild');
+}
 
 interface MergedViteConfig {
   readonly base: unknown;
@@ -180,7 +188,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI hands a detached async action promise to the keepalive tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     // prepareViteCli itself wires the tracker global to the runtime keepalive.
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
 
@@ -196,7 +204,7 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('patched CLI leaves synchronous action results untracked and survives an absent tracker', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     runPatchedCli(fsSync);
 
     const tracked: unknown[] = [];
@@ -212,23 +220,23 @@ describe('prepareViteCli — CLI keepalive patch (CAC never awaits async actions
 
   it('a second prepare leaves the patched CLI byte-identical (idempotent, still executable)', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     const once = readText(fsSync, CLI_PATH);
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     expect(readText(fsSync, CLI_PATH)).toBe(once);
     expect(() => runPatchedCli(fsSync)).not.toThrow();
   });
 
   it('loud-throws when the vite CLI drops the runMatchedCommand call shape', async () => {
     bootFs({ [CLI_PATH]: 'export function parse() {}' });
-    await expect(prepareViteCli('/app', 'run')).rejects.toThrow(
+    await expect(prepareViteCli('/app', INFORMATIONAL_MODE)).rejects.toThrow(
       'vite CLI keepalive patch failed: runMatchedCommand call shape not found',
     );
   });
 
   it('tolerates a project without a vite CLI file — no patch write, tracker still wired', async () => {
     const fsSync = bootFs();
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     expect(fsSync.existsSync(CLI_PATH)).toBe(false);
     expect(typeof g.__riftyTrackCliPromise).toBe('function');
   });
@@ -397,7 +405,7 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
 
   it('only dev mode writes the wrapper config', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
     await prepareViteCli('/app', 'build');
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(false);
@@ -405,9 +413,9 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
     expect(fsSync.existsSync(WRAPPER_PATH)).toBe(true);
   });
 
-  it('dev and build install the esbuild transform bridge; run does not need it', async () => {
+  it('dev and build install the legacy transform bridge; the informational path does not', async () => {
     bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCli('/app', 'run');
+    await prepareViteCli('/app', INFORMATIONAL_MODE);
     expect(g.__riftyEsbuildTransform).toBeUndefined();
     await prepareViteCli('/app', 'build');
     expect(typeof g.__riftyEsbuildTransform).toBe('function');
@@ -426,6 +434,21 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
 });
 
 describe('viteCliMode — CAC command matching (every case probed on REAL vite 7.3.6 CLI, 2026-07-07)', () => {
+  const ctx = {
+    cwd: '/proj',
+    env: {},
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  } as unknown as Parameters<typeof withViteCliEnv>[2];
+  const assertMode = (args: readonly string[], expected: string): void => {
+    const label = JSON.stringify(args);
+    expect(viteCliMode(args), `${label} classifier`).toBe(expected);
+    expect(
+      withViteCliEnv('/proj/node_modules/.bin/vite', args, ctx).env.RIFTY_VITE_CLI_MODE,
+      `${label} env`,
+    ).toBe(expected);
+  };
+
   // Real cac semantics: a command matches when the FIRST positional under THAT
   // command's grammar (global + its own booleans) equals its name; any flag the
   // candidate grammar doesn't declare boolean consumes the next non-dash token
@@ -450,7 +473,6 @@ describe('viteCliMode — CAC command matching (every case probed on REAL vite 7
     expect(viteCliMode(['--strictPort', 'preview'])).toBe('preview');
     expect(viteCliMode(['--emptyOutDir', 'build'])).toBe('build');
     expect(viteCliMode(['-w', 'build'])).toBe('build');
-    expect(viteCliMode(['--force', 'optimize'])).toBe('run');
   });
 
   it('flags UNKNOWN to the candidate command eat the would-be subcommand — real vite runs dev', () => {
@@ -480,16 +502,61 @@ describe('viteCliMode — CAC command matching (every case probed on REAL vite 7
     expect(viteCliMode(['preview'])).toBe('preview');
     expect(viteCliMode(['preview', '--port', '4173'])).toBe('preview');
     expect(viteCliMode(['build'])).toBe('build');
-    expect(viteCliMode(['optimize'])).toBe('run');
   });
 
-  it('help/version anywhere short-circuits to run (vite prints and exits)', () => {
-    expect(viteCliMode(['--help'])).toBe('run');
-    expect(viteCliMode(['-h'])).toBe('run');
-    expect(viteCliMode(['--version'])).toBe('run');
-    expect(viteCliMode(['-v'])).toBe('run');
-    expect(viteCliMode(['build', '--help'])).toBe('run');
+  it('keeps existing action and positional routing active in classifier and env', () => {
+    for (const { args, expected } of [
+      { args: ['dev'], expected: 'dev' },
+      { args: ['serve'], expected: 'dev' },
+      { args: ['build'], expected: 'build' },
+      { args: ['preview'], expected: 'preview' },
+      { args: ['info'], expected: 'dev' },
+      { args: ['-l', 'info', 'preview'], expected: 'preview' },
+    ]) {
+      assertMode(args, expected);
+    }
   });
+
+  const actions = [
+    { command: 'dev', mode: 'dev' },
+    { command: 'serve', mode: 'dev' },
+    { command: 'build', mode: 'build' },
+    { command: 'preview', mode: 'preview' },
+    { command: 'optimize', mode: 'optimize' },
+  ] as const;
+  const contractRedCases: Array<{
+    readonly args: readonly string[];
+    readonly expected: string;
+  }> = [
+    { args: ['optimize'], expected: 'optimize' },
+    { args: ['--force', 'optimize'], expected: 'optimize' },
+    { args: ['--help'], expected: 'info' },
+    { args: ['-h'], expected: 'info' },
+    { args: ['--version'], expected: 'info' },
+    { args: ['-v'], expected: 'info' },
+    { args: ['my-app', '--version'], expected: 'info' },
+    { args: ['--port', '5174', '--version'], expected: 'info' },
+  ];
+  for (const { command, mode } of actions) {
+    for (const flag of ['--help', '-h']) {
+      contractRedCases.push(
+        { args: [command, flag], expected: 'info' },
+        { args: [flag, command], expected: 'info' },
+      );
+    }
+    // CAC suppresses version only when no NAMED command matched.
+    for (const flag of ['--version', '-v']) {
+      contractRedCases.push(
+        { args: [command, flag], expected: mode },
+        { args: [flag, command], expected: mode },
+      );
+    }
+  }
+  for (const { args, expected } of contractRedCases) {
+    it.fails(`routes ${JSON.stringify(args)} as ${expected}`, () => {
+      assertMode(args, expected);
+    });
+  }
 });
 
 describe('withViteCliArgs — retired preview forces stay retired (behavioral, PR #112)', () => {
@@ -571,4 +638,32 @@ describe('withViteCliArgs — retired preview forces stay retired (behavioral, P
     expect(stock.env.RIFTY_VITE_CLI_HMR_OFF).toBeUndefined();
     expect(stock.env.RIFTY_VITE_CLI_PORT).toBeUndefined();
   });
+});
+
+// Keep this fault last: ADR-0226 gives a failed startup no retry lifecycle;
+// the real child Worker terminates, while this unit realm stays alive.
+// Browser Contract+RED proves dev/build/preview/optimize routing; this faults their shared branch.
+describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)', () => {
+  it.fails(
+    'startup failure rejects the child and leaves the typed runtime slot absent',
+    async () => {
+      bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+      const savedFetch = globalThis.fetch;
+      let fetchCalls = 0;
+      globalThis.fetch = () => {
+        fetchCalls += 1;
+        return Promise.reject(new Error('contract injected esbuild startup failure'));
+      };
+      clearEsbuildRuntimeSlot();
+
+      try {
+        await expect(prepareViteCli('/app', 'build')).rejects.toThrow();
+        expect(fetchCalls).toBe(1);
+        expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
+      } finally {
+        globalThis.fetch = savedFetch;
+        clearEsbuildRuntimeSlot();
+      }
+    },
+  );
 });

@@ -1,0 +1,1040 @@
+{
+  "schema": 1,
+  "version": "0.28.0",
+  "rows": {
+    "gap-initialize": {
+      "unknown-option": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Invalid option in initialize() call: \"bogus\"",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "worker-type": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "\"worker\" must be a boolean",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "worker-node-only": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "The \"worker\" option only works in the browser",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "valid-worker-false": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": "<undefined>"
+        },
+        "evidence": {
+          "postTransformOk": true
+        }
+      }
+    },
+    "gap-stop": {
+      "valid": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": "<undefined>"
+        },
+        "evidence": {
+          "postTransformOk": true
+        }
+      }
+    },
+    "gap-analyze-metafile": {
+      "unknown-option": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "Invalid option in analyzeMetafile() call: \"bogus\"",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "undefined-metafile": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "TypeError",
+            "message": "Cannot convert undefined or null to object",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "malformed-string": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": ""
+        },
+        "evidence": {}
+      },
+      "valid-object": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": ""
+        },
+        "evidence": {}
+      }
+    },
+    "gap-sync-family": {
+      "build-invalid": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:540:12: ERROR: Invalid option in build() call: \"bogus\"",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "Invalid option in build() call: \"bogus\"",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 12,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 540,
+                  "lineText": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "",
+                "text": "Invalid option in build() call: \"bogus\""
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "build-plugin-invalid": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\nerror: Cannot use plugins in synchronous API calls",
+            "errors": [
+              {
+                "detail": "<undefined>",
+                "id": "",
+                "location": null,
+                "notes": [],
+                "pluginName": "",
+                "text": "Cannot use plugins in synchronous API calls"
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "build-valid": {
+        "outcome": {
+          "phase": "sync-return",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<stdout>",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  }
+                },
+                "bytes": 18,
+                "hashPresent": true,
+                "text": "export default 1;\n",
+                "textSha256": "96909e1dce85ca534fd8881f6c8369a8a87e06df5a4bf81ef44a72db195b0704"
+              }
+            ]
+          }
+        },
+        "evidence": {}
+      },
+      "transform-invalid": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Transform failed with 1 error:\n<esbuild>/lib/main.js:540:12: ERROR: Invalid option in transform() call: \"bogus\"",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "Invalid option in transform() call: \"bogus\"",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 12,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 540,
+                  "lineText": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "",
+                "text": "Invalid option in transform() call: \"bogus\""
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "transform-valid": {
+        "outcome": {
+          "phase": "sync-return",
+          "value": {
+            "code": "const value = 1;\n",
+            "legalComments": "<undefined>",
+            "mangleCache": "<undefined>",
+            "map": "",
+            "warnings": []
+          }
+        },
+        "evidence": {}
+      },
+      "format-messages-invalid": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Invalid option in formatMessages() call: \"bogus\"",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "format-messages-valid": {
+        "outcome": {
+          "phase": "sync-return",
+          "value": []
+        },
+        "evidence": {}
+      },
+      "analyze-options-invalid": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "Error",
+            "message": "Invalid option in analyzeMetafile() call: \"bogus\"",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "analyze-undefined": {
+        "outcome": {
+          "phase": "sync-throw",
+          "error": {
+            "name": "TypeError",
+            "message": "Cannot convert undefined or null to object",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {}
+      },
+      "analyze-malformed-string": {
+        "outcome": {
+          "phase": "sync-return",
+          "value": ""
+        },
+        "evidence": {}
+      },
+      "analyze-valid-object": {
+        "outcome": {
+          "phase": "sync-return",
+          "value": ""
+        },
+        "evidence": {}
+      }
+    },
+    "gap-context-watch": {
+      "invalid": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "\"delay\" must be an integer",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "rebuildAfterGapOk": true,
+          "disposed": true
+        }
+      },
+      "valid": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": "<undefined>"
+        },
+        "evidence": {
+          "rebuildAfterGapOk": true,
+          "disposed": true
+        }
+      }
+    },
+    "gap-context-serve": {
+      "invalid": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "\"port\" must be a valid port number",
+            "errors": "<undefined>",
+            "warnings": "<undefined>",
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "rebuildAfterGapOk": true,
+          "disposed": true
+        }
+      },
+      "valid": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "hosts": ["127.0.0.1"],
+            "portPositive": true
+          }
+        },
+        "evidence": {
+          "rebuildAfterGapOk": true,
+          "disposed": true
+        }
+      }
+    },
+    "gap-build-effective-write": {
+      "invalid-plugin-default-write": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:540:12: ERROR: [plugin: write-policy-invalid-plugin] Invalid option on plugin \"write-policy-invalid-plugin\": \"bogus\"",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "Invalid option on plugin \"write-policy-invalid-plugin\": \"bogus\"",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 12,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 540,
+                  "lineText": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "write-policy-invalid-plugin",
+                "text": "Invalid option on plugin \"write-policy-invalid-plugin\": \"bogus\""
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "setupCalled": false,
+          "diskOutputExists": false
+        }
+      },
+      "invalid-write-type": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:534:29: ERROR: \"write\" must be a boolean",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "\"write\" must be a boolean",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 29,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 534,
+                  "lineText": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "",
+                "text": "\"write\" must be a boolean"
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": "yes",
+          "onEndCalled": false,
+          "diskOutputExists": false
+        }
+      },
+      "omitted": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": []
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": "<undefined>",
+          "onEndCalled": true,
+          "diskOutputExists": true
+        }
+      },
+      "explicit-true": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": []
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": true,
+          "onEndCalled": true,
+          "diskOutputExists": true
+        }
+      },
+      "explicit-false": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<root>/write-policy/explicit-false.js",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 89,
+                "hashPresent": true,
+                "text": "\"use strict\";\n(() => {\n  // <root>/identity.ts\n  var identity = \"identity-marker\";\n})();\n",
+                "textSha256": "26d40e068d3c48d7cc381c5975ba1007aa593d3ac5f30bf2f0311be85d2eec0f"
+              }
+            ]
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": false,
+          "onEndCalled": true,
+          "diskOutputExists": false
+        }
+      },
+      "true-to-false": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<root>/write-policy/true-to-false.js",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 89,
+                "hashPresent": true,
+                "text": "\"use strict\";\n(() => {\n  // <root>/identity.ts\n  var identity = \"identity-marker\";\n})();\n",
+                "textSha256": "26d40e068d3c48d7cc381c5975ba1007aa593d3ac5f30bf2f0311be85d2eec0f"
+              }
+            ]
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": false,
+          "onEndCalled": true,
+          "diskOutputExists": false
+        }
+      },
+      "omitted-to-false": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(1)"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": [
+              {
+                "path": "<root>/write-policy/omitted-to-false.js",
+                "descriptors": {
+                  "path": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "contents": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Uint8Array"
+                  },
+                  "hash": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "string"
+                  },
+                  "text": {
+                    "enumerable": true,
+                    "configurable": true,
+                    "get": "get text",
+                    "set": "<none>"
+                  }
+                },
+                "bytes": 89,
+                "hashPresent": true,
+                "text": "\"use strict\";\n(() => {\n  // <root>/identity.ts\n  var identity = \"identity-marker\";\n})();\n",
+                "textSha256": "26d40e068d3c48d7cc381c5975ba1007aa593d3ac5f30bf2f0311be85d2eec0f"
+              }
+            ]
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": false,
+          "onEndCalled": true,
+          "diskOutputExists": false
+        }
+      },
+      "false-to-invalid": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:534:29: ERROR: \"write\" must be a boolean",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "\"write\" must be a boolean",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 29,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 534,
+                  "lineText": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "",
+                "text": "\"write\" must be a boolean"
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": "yes",
+          "onEndCalled": false,
+          "diskOutputExists": false
+        }
+      },
+      "omitted-to-invalid": {
+        "outcome": {
+          "phase": "async-reject",
+          "error": {
+            "name": "Error",
+            "message": "Build failed with 1 error:\n<esbuild>/lib/main.js:534:29: ERROR: \"write\" must be a boolean",
+            "errors": [
+              {
+                "detail": {
+                  "name": "Error",
+                  "message": "\"write\" must be a boolean",
+                  "errors": "<undefined>",
+                  "warnings": "<undefined>",
+                  "code": "<undefined>"
+                },
+                "id": "",
+                "location": {
+                  "column": 29,
+                  "file": "<esbuild>/lib/main.js",
+                  "length": 0,
+                  "line": 534,
+                  "lineText": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+                  "namespace": "file",
+                  "suggestion": ""
+                },
+                "notes": [],
+                "pluginName": "",
+                "text": "\"write\" must be a boolean"
+              }
+            ],
+            "warnings": [],
+            "code": "<undefined>"
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": "yes",
+          "onEndCalled": false,
+          "diskOutputExists": false
+        }
+      },
+      "false-to-true": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": []
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": true,
+          "onEndCalled": true,
+          "diskOutputExists": true
+        }
+      },
+      "false-delete": {
+        "outcome": {
+          "phase": "async-resolve",
+          "value": {
+            "descriptors": {
+              "errors": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "warnings": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "Array(0)"
+              },
+              "outputFiles": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "metafile": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              },
+              "mangleCache": {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "<undefined>"
+              }
+            },
+            "errors": [],
+            "warnings": [],
+            "metafile": "<undefined>",
+            "metafileInputs": [],
+            "metafileOutputs": [],
+            "outputFiles": []
+          }
+        },
+        "evidence": {
+          "setupCalled": true,
+          "callerWriteAfter": "<undefined>",
+          "onEndCalled": true,
+          "diskOutputExists": true
+        }
+      }
+    }
+  }
+}

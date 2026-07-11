@@ -165,6 +165,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0166 | In-browser TS language service over VFS |
 | 0177 | Workspace TypeScript is required for TS language service |
 | 0196 | Browser-unit test lane is a thin Playwright harness on the playground dev server |
+| 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
 
 ### protocol
 
@@ -251,6 +252,7 @@ superseded.
 | 0036 `synthesizePreviewUrl(path)` host clause | 0189 / note 2026-07-04 | SW preview HTTP routing now synthesizes `localhost[:port]`; `PREVIEW_LOCAL_HOST=preview.local` remains for explicit legacy HMR bridge paths |
 | 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
+| 0047 gojs-moot / JS-build-through-WASI clauses | 0226 | WASI remains the CLI forcing consumer; Vite JS API derives the exact upstream browser CJS client with a guest-VFS environment |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |

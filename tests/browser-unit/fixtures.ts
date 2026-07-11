@@ -16,8 +16,8 @@ interface OwnerExecResult {
 
 export interface BootOwnerOptions {
   readonly workspaceId: string;
-  /** Template to mount ('hidden-empty' default; 'typescript' has real deps + node_modules seeds). */
-  readonly template?: 'hidden-empty' | 'typescript';
+  /** Template to mount (`hidden-empty` default; `vite`/`typescript` carry their real deps). */
+  readonly template?: 'hidden-empty' | 'typescript' | 'vite';
   readonly root?: string;
   readonly slug?: string;
   readonly setup?: 'instant' | 'from-scratch';
@@ -33,10 +33,11 @@ export async function gotoHarness(page: Page): Promise<void> {
 /** Boot a fresh REAL owner (replacing any previous one on this page); resolves on the ready frame. */
 export async function bootOwner(page: Page, opts: BootOwnerOptions): Promise<void> {
   await page.evaluate(async (o) => {
-    const [realVite, hiddenEmpty, typescript] = await Promise.all([
+    const [realVite, hiddenEmpty, typescript, vite] = await Promise.all([
       import('/src/glue/realVite.ts'),
       import('/src/templates/hidden-empty.ts'),
       import('/src/templates/typescript.ts'),
+      import('/src/templates/vite.ts'),
     ]);
     const logs: string[] = [];
     const handle = realVite.startWorkspaceOwner({
@@ -45,7 +46,9 @@ export async function bootOwner(page: Page, opts: BootOwnerOptions): Promise<voi
       template:
         o.template === 'typescript'
           ? typescript.TYPESCRIPT_TEMPLATE
-          : hiddenEmpty.HIDDEN_EMPTY_TEMPLATE,
+          : o.template === 'vite'
+            ? vite.VITE_TEMPLATE
+            : hiddenEmpty.HIDDEN_EMPTY_TEMPLATE,
       slug: o.slug ?? 'scratch',
       setup: o.setup ?? 'instant',
       ...(o.starter === undefined ? {} : { starter: o.starter }),
@@ -61,7 +64,13 @@ export async function bootOwner(page: Page, opts: BootOwnerOptions): Promise<voi
         60_000,
       );
     });
-    await Promise.race([handle.ready, readyTimeout]);
+    try {
+      await Promise.race([handle.ready, readyTimeout]);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; owner logs:\n${logs.slice(-40).join('')}`,
+      );
+    }
     const w = window as unknown as { __buOwner?: unknown; __buLogs?: string[]; __buSid?: string };
     w.__buOwner = handle;
     w.__buLogs = logs;

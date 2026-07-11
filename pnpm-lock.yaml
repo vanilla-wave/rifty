@@ -408,7 +408,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vfs
 
-  tools/shadow-registry: {}
+  tools/shadow-registry:
+    devDependencies:
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      esbuild-wasm:
+        specifier: 0.28.0
+        version: 0.28.0
 
 packages:
 
@@ -1459,6 +1466,11 @@ packages:
   es-object-atoms@1.1.2:
     resolution: {integrity: sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==}
     engines: {node: '>= 0.4'}
+
+  esbuild-wasm@0.28.0:
+    resolution: {integrity: sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   esbuild@0.21.5:
     resolution: {integrity: sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==}
@@ -2895,6 +2907,8 @@ snapshots:
   es-object-atoms@1.1.2:
     dependencies:
       es-errors: 1.3.0
+
+  esbuild-wasm@0.28.0: {}
 
   esbuild@0.21.5:
     optionalDependencies:
