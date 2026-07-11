@@ -28,6 +28,15 @@ const c: ParityCase = {
         if (!state.selfImport) state.selfImport = import('./throwing.cjs');
         throw state.error;
       `,
+      'throwing-getter.cjs': `
+        exports.boom = 1;
+        Object.defineProperty(exports, 'boom', {
+          enumerable: true,
+          get() { throw new Error('getter-boom'); },
+        });
+        const selfImport = import('./throwing-getter.cjs');
+        exports.report = () => selfImport;
+      `,
     },
   },
   code: `
@@ -51,6 +60,7 @@ const c: ParityCase = {
     globalThis.__cjsThrowState = { runs: 0, error: null, selfImport: null };
     const after = require('./after-reassign.cjs');
     const before = require('./before-reassign.cjs');
+    const throwingGetter = require('./throwing-getter.cjs');
     let outerImportError = null;
     const throwingOuterImport = import('./throwing.cjs');
 
@@ -86,6 +96,16 @@ const c: ParityCase = {
             outerImportError = error;
             return { message: error && error.message };
           },
+        ),
+        settleWithin(
+          'throwing-getter',
+          throwingGetter.report(),
+          (namespace) => ({
+            hasBoom: Object.prototype.hasOwnProperty.call(namespace, 'boom'),
+            boomIsUndefined: namespace.boom === undefined,
+            defaultIsRequiredOuter: namespace.default === throwingGetter,
+          }),
+          (error) => ({ message: error && error.message }),
         ),
       ]);
       rows.push(await settleWithin(
