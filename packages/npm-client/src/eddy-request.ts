@@ -86,3 +86,9 @@ function sortRecord(rec: Record<string, string>): Record<string, string> {
 export function bundleUrlFor(resolverUrl: string, closureHash: string): string {
   return `${resolverUrl.replace(/\/+$/, '')}/bundle/${encodeURIComponent(closureHash)}`;
 }
+
+/** Response header eddy sets to `1` when the served bundle was proven durable
+ * in the immutable store — the gate for LEARNING a POST-computed closure hash
+ * as a pin (ADR-0194): a pin must never point at an object the store may not
+ * hold. One constant, both consumers (installer adoption + revalidate). */
+export const EDDY_STORE_DURABLE_HEADER = 'x-eddy-store-durable';

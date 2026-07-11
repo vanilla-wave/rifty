@@ -2,6 +2,152 @@
 
 ## [Unreleased]
 
+### Changed (install-tail-latency, ADR-0216)
+
+- **Install exit stops awaiting the OPFS durability drain** (ADR-0216,
+  supersedes ADR-0187's command-site durable-on-exit clause): the drain →
+  full-ledger gate → stamp → stamp-drain sequence (gate semantics intact) now
+  runs in background after `npm install` returns, so a `&&`-chained dev
+  server starts immediately; dirty-drain/stamp warnings still print,
+  asynchronously. Reloads stay TRUST-safe via the boot path's pending-first
+  pattern applied to the command site: any trusted stamp is demoted to
+  `pending` before the first tree mutation (a mid-install or mid-drain reload
+  re-arrives — this also NARROWS the pre-existing torn-window where a bare
+  re-install's reload could trust the old stamp, and a failed install no
+  longer resurrects it), the trusted stamp attests the INSTALL-TIME deps+slug
+  snapshot, and a per-tree generation guard (cross-terminal) cancels an older
+  sequence's stamp instead of racing it — deliberately no await-chain (a
+  wedged drain must not park later installs). A reload inside the ~0.5–2s
+  window costs a re-install (self-heal), never a torn trusted tree. Measured
+  install→vite-ready (eddy path, real-vite preset, local, n=5 median):
+  3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the full
+  ~490ms profiled drain does not all land on this marker).
+- **Learned pins serve-stale-while-revalidate inside a hard 24h bound**
+  (ADR-0216, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
+  ≤ 24h now still rides the immutable pinned GET (install AND boot prefetch);
+  the terminal prints
+  `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in background`
+  (`resolvedAt` = the SERVED bundle manifest's validated stamp; the line and
+  the revalidate fire only on a real cache serve — `resolvedVia` provenance,
+  not hash equality) and ONE background manifest-only POST revalidate
+  refreshes the pin (same closure → savedAt refresh; new closure → pin
+  replaced only with the `x-eddy-store-durable` proof). Beyond 24h the pin
+  drops (foreground POST as before). `savedAt` now moves ONLY on
+  server-vouched resolutions: the post-install write-back fires only for
+  POST-adopted bundles — a GET/prefetch cache serve never rewrites the pin,
+  so repeat installs cannot self-renew a stale closure past the bound.
+  Deliberate npm deviation recorded in ADR-0216; `prefer:'online'` bypass
+  unchanged; revocation safety net: §Revocation runbook in
+  `docs/public/hosting-eddy.md`.
+
+### Fixed (install-tail-latency review round 5, ADR-0216 r5 notes + audit)
+
+- **Demote+proof ordered BEFORE `prepareInstall`**: a from-scratch clear whose
+  OPFS rm never persisted erased the MIRROR stamp while the durable trusted
+  one survived — the install then skipped the revocation proof and mutated
+  under it. The clean-start also acts only when `ctx.cwd` IS the project root
+  (the phase lock is keyed by cwd; a cd-ed terminal must not clear the root
+  tree under a lock that does not serialize with it).
+- **The stamp unmoved-guard is BYTE-exact** (`lossy-aggregate`, new
+  fault-class row): the flattened dep-map compare let a dependencies↔
+  devDependencies move or an `overrides` edit through with an identical flat
+  map — a trusted stamp for a tree resolved under different inputs. Boot-side
+  flat compare is pre-existing and recorded in
+  `playground/install-stamp-invalidation`.
+- **Pin CAS compares the SERVABLE view**: a hard-expired (>24h) raw entry
+  reads as absent everywhere else, so the foreground relearn's expect-absent
+  write always lost to its stale bytes — the key could never relearn until an
+  unrelated write pruned it.
+- Revocation runbook: env pins (`VITE_RIFTY_EDDY_PINS`) need operator
+  rotation + redeploy after a revocation — no age gate, and a browser-cached
+  pinned GET serves without server contact up to the immutable year (learned
+  pins self-bound at ≤24h). `resolvedVia:'post'` docs corrected to
+  SERVER-VOUCHED (the answer may be eddy's mutable-tier cache ≤TTL; only
+  `prefer:'online'` recomputes).
+- ADR-0216 records the mandatory 3+-round audit: recurring-class table
+  (torn-state ×5 rounds, concurrent-same-key ×3, sibling-drift,
+  lossy-aggregate) + admitted gaps (item-contract writer-set invariant,
+  app-layer Vfs outside the contract suite) + the NOT-delivered stamp-authority
+  chokepoint said loudly.
+
+### Fixed (install-tail-latency review round 4, ADR-0216 r4 notes)
+
+- **`SyncMirrorVfs.writeFile` no longer auto-creates parent directories**
+  (Node `fs.writeFile` parity; sibling-drift kill): the lenient production
+  twin voided the r3 no-mkdir guarantee — a `rm -rf node_modules` completing
+  inside the deferred write window was silently resurrected in production
+  while the strict-MemoryVfs unit test stayed green. Contract test added; the
+  npm-client linker mkdirs explicitly and is unaffected.
+- **From-scratch clean-start moved INSIDE the per-tree install phase lock**
+  (`prepareInstall` seam): the wrapper's clear/reseed ran before the lock, so
+  terminal B could raze the tree under terminal A's exclusive install. A
+  PENDING stamp for this slug with session install activity is recognized as
+  OURS (an install of this realm mid background-durability) — a boot-line
+  re-run inside the drain window no longer resets the user's package.json and
+  forces a cold re-install.
+- **Boot promoter (project-deps) re-checks the stamp SYNCHRONOUSLY at its
+  write**: its async read could resolve, then a command-site demote landed
+  before the continuation ran — the stale read promoted a trusted stamp right
+  over the demote while the install mutated the tree.
+- **Trusted-stamp demotion never silently no-ops**: with package.json absent
+  it falls back to the prior stamp's own dep snapshot (previously the demote
+  no-op'ed and the durability proof passed vacuously over the still-trusted
+  stamp). An ABORTED install now restores the mirror's trusted stamp so a
+  retry re-runs the proof instead of skipping it (mirror/OPFS split).
+- **The deferred trusted stamp lands only if package.json provably did not
+  move since the install-time snapshot** (boot promoter's contract): the real
+  installer re-reads package.json after the eddy pin window, so a mid-install
+  edit could put deps in the tree the snapshot never named — the stamp now
+  skips loudly instead (contract renegotiated from r1's "stamp the snapshot
+  regardless"; next boot re-installs).
+- **Learned-pin write-back is compare-and-set** (the r3 revalidate-CAS
+  sibling the sweep missed): baseline = the pin observed at install start; a
+  slower install adopting an older cached resolution can no longer roll back
+  a newer `--prefer-online`/POST pin.
+- **A pinned boot prefetch is dropped unless its hash IS the current pin
+  decision**: a pin expired past 24h or replaced since boot must not ride in
+  via the buffered GET — that served the dropped closure with no as-of line
+  and no revalidate, silently past the stale bound.
+- Revocation runbook: named the server-side RAM-cache residual (mutable link
+  + packuments, ≤`EDDY_TTL_SECONDS`) — an ordinary client POST inside the TTL
+  window can re-seed a revoked closure; restart the eddy service to close the
+  window for real takedowns.
+
+### Fixed (install-tail-latency review round 3, ADR-0216 r3 notes)
+
+- **Trusted-stamp demotion is now PROVEN durable before the first tree write**
+  (r17 revoke-proof class): flush + full-ledger stamp-path check after the
+  pending demote; unpersistable → durable-rm fallback → still failing → the
+  install ABORTS loudly before mutating (previously OPFS could keep the OLD
+  trusted stamp while tree writes failed — a same-dep-set reload trusted the
+  torn tree). Fresh/pending trees skip the proof — the fast path stays
+  await-free.
+- **Stamp-write TOCTOU closed**: all stamp writes for a tree (pending demote,
+  deferred trusted) serialize on a per-tree chain and the deferred trusted
+  write re-checks the generation SYNCHRONOUSLY in its chain slot (the checks
+  sat awaits away from the write — an older background sequence could
+  overwrite a newer install's pending stamp). The deferred writer also no
+  longer mkdirs: a `rm -rf node_modules` completing inside the check→write
+  window now fails the write loudly instead of resurrecting the dir.
+- **Install coordination state keyed by (vfs, cwd)**, not the path string
+  alone — two trees sharing a path on different VFS instances no longer
+  false-share the phase mutex/generation (it silently serialized the
+  concurrency fault test).
+- **Stamp slug sampled at install START**: a preset switch during `installFn`
+  can no longer re-key the old install's tree under the new slug (two presets
+  sharing a dep set could reuse each other's tree through that hole).
+- **Learned-pin revalidate is compare-and-set**: a slow background revalidate
+  landing after a newer POST/`--prefer-online` re-learn no longer rolls the
+  pin back (`'superseded'` — no write).
+- **`resolvedAt` validation rejects calendar-impossible dates**
+  (npm-client `isIsoDateString`): `Date.parse` silently rolls `2026-02-30`
+  over to March 2 — the as-of honesty line no longer prints a timestamp that
+  never existed.
+- Revocation runbook re-seed step now requires `prefer:"online"` (a plain
+  POST within the mutable-tier TTL re-serves the server's cached resolution —
+  re-seeding the revoked closure without consulting upstream) and names a
+  loud resolve decline as a VALID outcome when the version is truly gone.
+
 ### Fixed
 
 - Lint unbreak carried for red main: removed the unused `fatalDec` decoder

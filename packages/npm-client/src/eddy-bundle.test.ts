@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EDDY_BUNDLE_FORMAT,
   type EddyBundleSource,
+  isIsoDateString,
   packEddyBundle,
   unpackEddyBundle,
 } from './eddy-bundle.ts';
@@ -53,6 +54,32 @@ function sampleContents(): EddyBundleSource {
     ],
   };
 }
+
+describe('isIsoDateString — the resolvedAt honesty-stamp gate', () => {
+  it('accepts real ISO timestamps', () => {
+    expect(isIsoDateString('2026-07-10T16:45:51.504Z')).toBe(true);
+    expect(isIsoDateString('2026-07-10T16:45:51Z')).toBe(true);
+    expect(isIsoDateString('2024-02-29T00:00:00Z')).toBe(true); // leap day
+  });
+
+  it('rejects junk and non-strings', () => {
+    expect(isIsoDateString('July 10')).toBe(false);
+    expect(isIsoDateString('not-a-date')).toBe(false);
+    expect(isIsoDateString(1720627551)).toBe(false);
+    expect(isIsoDateString(undefined)).toBe(false);
+  });
+
+  it('rejects calendar-impossible dates Date.parse silently rolls over', () => {
+    // Review round 3: Date.parse('2026-02-30…') "parses" to March 2 — the
+    // honesty line would print a timestamp that never existed.
+    expect(isIsoDateString('2026-02-30T12:00:00Z')).toBe(false);
+    expect(isIsoDateString('2026-02-29T12:00:00Z')).toBe(false); // not a leap year
+    expect(isIsoDateString('2026-04-31T12:00:00Z')).toBe(false);
+    expect(isIsoDateString('2026-13-01T12:00:00Z')).toBe(false);
+    expect(isIsoDateString('2026-00-10T12:00:00Z')).toBe(false);
+    expect(isIsoDateString('2026-07-00T12:00:00Z')).toBe(false);
+  });
+});
 
 describe('EddyBundleV1 codec', () => {
   it('round-trips manifest, lockfile text, and tarball bytes', () => {

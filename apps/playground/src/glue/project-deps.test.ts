@@ -548,6 +548,76 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
+  it('a command-site demote landing AFTER the promoter’s async read cannot be overwritten — the promote re-checks SYNC at the write', async () => {
+    // Review round 4: pendingPromotionStillCurrent's async stamp read can
+    // resolve, then an `npm install` demote (a pending stamp with NO
+    // promotionId) lands before the promoter's continuation runs — the stale
+    // read then promoted a TRUSTED stamp right over the demote, while the
+    // command's install was mutating the tree.
+    const { vfs, fsSync, logFn } = project();
+    let resolveFlush!: (report: PersistFailureReport) => void;
+    let injectOnce = true;
+    const stampPath = `${ROOT}/node_modules/.rifty-install-stamp.json`;
+    const trapVfs = new Proxy(vfs, {
+      get(target, prop, receiver) {
+        if (prop === 'readFileText') {
+          return async (p: string): Promise<string> => {
+            const text = await target.readFileText(p);
+            if (p === stampPath && injectOnce) {
+              injectOnce = false;
+              // The command-site demote lands right after this read resolves:
+              // a pending stamp WITHOUT a promotionId (npm-shell-command's).
+              fsSync.writeFileSync(
+                stampPath,
+                enc.encode(
+                  `${JSON.stringify(
+                    {
+                      version: 1,
+                      slug: 'project-files',
+                      deps: { vite: '^5.4.0' },
+                      packages: 0,
+                      durability: 'pending',
+                    },
+                    null,
+                    2,
+                  )}\n`,
+                ),
+              );
+            }
+            return text; // the STALE content — read before the demote
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    });
+
+    await ensureProjectDependencies({
+      vfs: trapVfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      log: logFn,
+      flush: () =>
+        new Promise<PersistFailureReport>((resolve) => {
+          resolveFlush = resolve;
+        }),
+    });
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+
+    resolveFlush({ failures: [], total: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The demote survives; the stale promoter must NOT have trusted the tree.
+    const after = await readInstallStamp(vfs, ROOT);
+    expect(after?.durability).toBe('pending');
+    expect(after?.promotionId).toBeUndefined(); // the command's marker, not the promoter's
+    expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
+  });
+
   it('does not promote a pending stamp after package.json deps drift', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let resolveFirstFlush!: (report: PersistFailureReport) => void;

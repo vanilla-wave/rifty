@@ -19,6 +19,7 @@ Apply at any boundary — network, storage/OPFS, cache, worker/process, concurre
 | `observable-order` | validation/check runs before the required protocol/syscall step, hiding its side effects or error priority | PR #115: `readFileSync({ flag:'wx' })` returned `EBADF/read` before open could report `EEXIST/open`; `writeFileSync({ flag:'r' })` skipped `ENOENT/open`; gap-throws (NotImplementedError) before Node-visible errors are the same axis — a gap replaces Node's SUCCESS path, never its error path |
 | `sibling-drift` | one semantic implemented twice (sync/async twin, second backend, bespoke shape) drifts apart | PR #115: `OpfsVfs.mkdir` let an existing dir pass while Memory/OpfsFsSync threw EEXIST; watchFile's bespoke `StatsLike` vs the real `Stats`; `statSync` silently ignored `bigint` while `promises.stat` threw. Kill = shared contract suite (`describe.each` over backends) / one shaping chokepoint |
 | `frozen-assumption` | unverified external behavior pinned by a self-referential test (conformance snapshot with no oracle) | PR #115: write-stream destroy 'error' sequence born wrong inside a green rifty-vs-rifty conformance test (`29828aff`); `cat -A` goldens froze raw high bytes GNU renders as `M-x`. Kill = parity case / real-tool golden, not a rewritten assert |
+| `lossy-aggregate` | an identity/gate/ratchet compares a lossy projection (flattened map, count, truncated sample) of the real input — distinct inputs collide | PR #113 count-ratchet (same-count swap invisible); ADR-0216 r5: the stamp unmoved-guard compared the flattened dep map — a dependencies↔devDependencies move or `overrides` edit changed the installer request with an identical flat map. Kill = compare the exact input (bytes/text/digest), never its aggregate |
 
 ## Honest-outcome contract
 
@@ -31,6 +32,8 @@ A fault test injects one axis at one boundary and asserts the honest outcome. Co
 ## Class-kill
 
 Second instance of an axis at the same boundary = structural fix — one chokepoint API / one validation boundary / a gate — never another point fix. Precedent: `unbounded-read` survived #107 R5→R17 as four sibling point-fix helpers until `drainBodyBounded` consolidated the class. New axis found in review → add its row here first, then fix.
+
+Design-stop trigger: **more than TWO coordination mechanisms guarding one file/key** (locks, generations, chains, rechecks, proof ladders…) = the invariant has no owner — STOP adding mechanism #3, consolidate into one authority (single serialized writer). Precedent: PR #131 install stamp grew 7 mechanisms across 5 review rounds before the authority was named (ADR-0216 §audit); the trigger would have fired at round 2. A growing fix-surface across review rounds (each round's fixes feed the next round's findings) is the same signal at process level — §Review convergence row "Repeat" owns it.
 
 ## Review convergence
 

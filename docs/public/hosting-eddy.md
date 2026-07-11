@@ -141,6 +141,111 @@ curl -fsSI -H 'Origin: https://play.rifty.dev' \
   | grep -Ei 'access-control-allow-origin|cross-origin-resource-policy'
 ```
 
+## Revocation runbook (delete a served bundle)
+
+The immutable tier serves a closure effectively forever (bucket object + CDN
+edge `max-age=31536000, immutable` + browser HTTP caches). When a bundled
+package version is pulled from npm (unpublish, malware takedown), the operator
+revokes the affected bundle(s). The mechanics are already in the code path:
+bucket object gone → store miss → origin `GET /bundle/<hash>` 404 `no-store` →
+pinned client falls back to POST → fresh resolve re-seeds. The steps below are
+ORDERED so the verify step catches a forgotten/mistargeted purge — do not
+reorder.
+
+Note what re-seeding means: eddy re-resolves against the CURRENT upstream
+registry. Revocation is effective when the upstream cause is real (the bad
+version is gone from npm — the fresh resolve produces a DIFFERENT closure);
+deleting a bundle whose deps still resolve identically just re-creates the
+same hash on the next POST.
+
+1. **Delete the bucket object.** The key is `bundle/<closure-hash>` with the
+   hash RAW — a base64 `/` inside the hash stays a literal slash in the object
+   key (the key then contains two slashes); do NOT percent-encode the key:
+
+   ```bash
+   yc storage s3api delete-object --bucket eddy-bundles \
+     --key "bundle/<closure-hash>"
+   ```
+
+2. **Purge the CDN path** on the live resource (`bc8rtmpmtax5opcdex6x`,
+   §CDN tier). The edge caches the URL the CLIENT requests, and the client
+   percent-encodes the hash (`/`→`%2F`, `+`→`%2B`, `=`→`%3D` — `bundleUrlFor`),
+   so purge the ENCODED path:
+
+   ```bash
+   yc cdn cache purge --resource-id bc8rtmpmtax5opcdex6x \
+     --path "/bundle/<percent-encoded-closure-hash>"
+   ```
+
+   The purge API is a HARD requirement of this runbook — there is no silent
+   fallback. If purge is unavailable (provider outage, API change), escalate:
+   re-point the CDN resource to a fresh origin group or replace the resource
+   (new edge cache = empty cache); until then the edge keeps serving the old
+   bytes for up to a year.
+
+3. **Verify, in this order** — step (b) fails loudly if the purge was skipped
+   or targeted the wrong (raw vs encoded) path:
+
+   ```bash
+   # Verify with GET, not HEAD (curl -I): an edge may cache/route the two
+   # differently, and the client only ever GETs.
+   # (a) origin: the store miss must be an UNCACHEABLE 404
+   curl -sS -o /dev/null -D- "https://eddy-origin.rifty.dev/bundle/<percent-encoded-hash>"
+   #     expect: HTTP/2 404 + cache-control: no-store
+   # (b) CDN: must no longer serve the old bytes
+   curl -sS -o /dev/null -D- "https://eddy-cdn.rifty.dev/bundle/<percent-encoded-hash>"
+   #     expect: 404 (bucket miss), NOT 200-with-immutable
+   # (c) client fallback re-seeds AGAINST CURRENT UPSTREAM: `prefer:"online"`
+   #     is REQUIRED — within the mutable-tier TTL (default 1800s) a plain
+   #     POST re-serves the server's CACHED resolution and re-PUTs the very
+   #     closure just revoked, without ever consulting upstream.
+   curl -fsS -D- -X POST https://eddy.rifty.dev \
+     -d '{"dependencies":{...the affected dep set...},"prefer":"online"}' -o /dev/null
+   #     expect: 200 + `x-eddy-store-durable: 1` when the deps still resolve
+   #     (same hash if upstream is unchanged, a new hash if the bad version is
+   #     gone), OR a loud resolve decline when an EXACT pinned version was
+   #     removed upstream — that decline is the revocation WORKING (clients
+   #     get the honest error, nothing re-seeds), not a runbook failure.
+   ```
+
+4. **Client behavior**: clients holding a pin to the revoked hash — env pins,
+   fresh learned pins, and stale-window (≤24h) learned pins alike — get the
+   404 on any GET that REACHES the server, fall back to the foreground POST,
+   install from the fresh resolve, and replace the learned pin on learn (no
+   operator action, tested in-tree). ENV pins are the exception needing
+   operator action: `VITE_RIFTY_EDDY_PINS` has no age gate or revalidation,
+   and a browser that already cached the pinned GET serves it WITHOUT any
+   server contact for up to the immutable year — rotate/remove the affected
+   template pins and redeploy the playground (learned pins self-bound at
+   ≤24h; env pins do not).
+
+5. **Honest residual:** browser HTTP caches may keep serving the revoked
+   bundle to a user who ALREADY downloaded it, until their cache evicts it —
+   this runbook cannot purge browsers. The stale-pin window (≤24h) bounds how
+   long a client keeps *requesting* the old hash without consulting the
+   server; the revocation makes any such request miss.
+
+6. **Server cache residual (RAM-only, ≤ `EDDY_TTL_SECONDS`, default 1800s):**
+   the mutable dep-set link and shared packument caches may still hold
+   pre-revocation upstream metadata — an ORDINARY client POST inside that
+   window can re-resolve the revoked closure from the cached packuments and
+   re-seed it, even after this runbook ran (step (c)'s `prefer:"online"` only
+   fixes the runbook's own POST). For a real takedown, close the window:
+   restart the eddy service (the caches are RAM-only — a restart empties
+   them), or accept up to one TTL of possible re-seeding before the fresh
+   upstream metadata wins; then re-run steps 1–3.
+
+Verified live 2026-07-10 (throwaway closure `left-pad@1.3.0` + `is-odd@3.0.1`,
+hash `sha256-sKf7LT1+mOeYnTm0d0gjuNsoKg+K/QSnWalgHxuIvT0=`): POST 200
+`x-eddy-store-durable: 1` → CDN GET 200 `immutable` → bucket delete →
+pre-purge CDN GET **200 cache-status HIT** off a stale edge (proof the ordered
+verify catches a skipped purge) → purge → origin GET 404 `no-store`, CDN GET
+404 (ex-HIT edge included) → re-POST 200 durable, same hash (deps resolved
+identically upstream — the re-seed note above in action). Step (c) re-run with
+`prefer:"online"`: 200 durable, same hash, `x-eddy-resolved-at` of the stored
+artifact (the recompute consulted upstream, landed the same closure, and the
+byte-stable immutable tier serves the stored bytes for it).
+
 ## Pinned presets (`VITE_RIFTY_EDDY_PINS`)
 
 A playground deploy can pin a preset's resolved closure so its install rides
@@ -166,14 +271,20 @@ simply keep POSTing.
 
 Beyond env pins, the playground LEARNS pins automatically (ADR-0194): after a
 successful eddy install it persists `request-key → closure-hash`
-(`/.rifty/eddy-learned-pins.json`, TTL 1800s = the server's mutable-tier
-DEFAULT — the client does NOT track a deploy's custom `EDDY_TTL_SECONDS`; a
-pin outliving the server link only costs a verified 404 → POST re-seed, never
-a wrong install), so ANY repeat dep set — ad-hoc `npm install` included —
-rides the cacheable GET within the same browser profile (the pins live in the
-profile VFS; a truly fresh profile starts from the template env pins). No operator work; a LEARNED exact-match pin wins over a
-template env pin (which only matches the pristine preset — env pins are the
-fallback that seeds the first install of a set).
+(`/.rifty/eddy-learned-pins.json`), so ANY repeat dep set — ad-hoc
+`npm install` included — rides the cacheable GET within the same browser
+profile (the pins live in the profile VFS; a truly fresh profile starts from
+the template env pins). Freshness is serve-stale-while-revalidate: ≤1800s
+(the server's mutable-tier DEFAULT — the client does NOT track a deploy's
+custom `EDDY_TTL_SECONDS`) the pin is fresh; past that but ≤24h it is STALE —
+still served via the pinned GET while the terminal prints
+`eddy cached resolution (as-of <resolvedAt>), refreshing in background` and a
+background manifest-only POST revalidates it; beyond 24h it drops (foreground
+POST). A pin outliving the server link only costs a verified 404 → POST
+re-seed, never a wrong install; the 24h stale bound's ecosystem exposure is
+bounded by the §Revocation runbook above. No operator work; a LEARNED
+exact-match pin wins over a template env pin (which only matches the pristine
+preset — env pins are the fallback that seeds the first install of a set).
 
 ## Cold-spike knobs
 

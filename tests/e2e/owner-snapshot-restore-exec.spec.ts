@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs } from './helpers/opfs.ts';
+import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
   openShellTerminal,
@@ -66,6 +66,28 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     await expectTerminalContains(page, '< hi >', 20_000);
     expect(await terminalBuffer(page)).toContain('^__^');
 
+    // The durability sequence runs in BACKGROUND after install exit (backlog
+    // install-stamp-background-flush) — this spec's claim is the RESTORED
+    // tree, so wait for its proof IN OPFS, not the in-memory mirror: THIS
+    // install's TRUSTED stamp (deps include cowsay — the boot install's
+    // earlier stamp does not; no pending marker) is written only after the
+    // tree drain reported clean (drain → gate → stamp order), and reading it
+    // from OPFS directly proves its own persist finished too. A terminal
+    // `cat` would race the reload against the stamp's in-flight persist and
+    // silently downgrade this spec to the reinstall/self-heal path.
+    await expect
+      .poll(
+        async () => {
+          const text = await readWorkspaceText(
+            page,
+            '/scratch/node_modules/.rifty-install-stamp.json',
+          );
+          return text.includes('"cowsay"') && !text.includes('"durability"');
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(true);
+
     // TEARDOWN + RESTORE: reload terminates the owner worker; on re-boot the owner
     // wires OPFS (initBackend) and preloads the persisted tree — node_modules + the
     // user file — before serving.
@@ -85,5 +107,30 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     // …and the user file written before teardown is still readable.
     await runTerminalLine(page, 'cat /scratch/data.txt');
     await expectTerminalContains(page, marker, 20_000);
+
+    // FAST RELOAD (backlog install-stamp-background-flush fault row): reload
+    // IMMEDIATELY after install exit, racing the background drain/stamp. The
+    // contract is self-heal — restore either reuses the tree (stamp landed) or
+    // re-installs (no stamp yet); either way the workspace boots and serves,
+    // never a crash or a trusted torn tree. Deliberately NO stamp wait here.
+    await runTerminalLine(page, 'npm install ms');
+    // The terminal buffer does NOT survive the reload above (verified live —
+    // review r4's "stale cowsay summary matches first" concern is refuted):
+    // this fresh buffer's first summary line IS the ms install's own exit.
+    await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
+    await page.reload();
+    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    // The dev server reaching LIVE proves the boot install path completed —
+    // either the stamp landed (tree reused) or the restore re-installed; a
+    // torn trusted tree could not serve the dev server. That IS the fault-row
+    // claim: self-heal, no crash (the ms package itself may legitimately be
+    // re-installed away — the accepted cost of reloading inside the window).
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
+    await openShellTerminal(page);
+    await runTerminalLine(page, `echo fast-reload-${marker}`);
+    await expectTerminalContains(page, `fast-reload-${marker}`, 30_000);
   });
 });

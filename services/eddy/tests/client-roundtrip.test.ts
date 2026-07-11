@@ -348,6 +348,13 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     });
     expect(fast.source).toBe('eddy');
     expect(fast.closureHash).toBe(manifest.asOf.closureHash);
+    // The served bundle's as-of stamp rides out too (stale-pin honesty line:
+    // `as-of <resolvedAt>` must come from the SERVED manifest, not pin age).
+    expect(typeof fast.resolvedAt).toBe('string');
+    expect(Number.isNaN(Date.parse(fast.resolvedAt as string))).toBe(false);
+    // …and the attempt provenance: this install POSTed (no pin) — the pin
+    // policy hangs off this (only a POST re-vouches a resolution's age).
+    expect(fast.resolvedVia).toBe('post');
 
     // Standard install (resolver off) — no hash, key for learned pins staying
     // eddy-only.
@@ -355,6 +362,7 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     await writePackageJson(stdVfs, DEPS);
     const std = await install({ vfs: stdVfs, cwd: '/app', registry: makeRegistry().registry });
     expect(std.closureHash).toBeUndefined();
+    expect(std.resolvedAt).toBeUndefined();
 
     // Fallback (resolver unreachable) — standard install, no hash.
     const fbVfs = new MemoryVfs();
@@ -573,9 +581,32 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       });
       expect(result.source).toBe('eddy');
       expect(requests).toBe(1);
+      // An UNPINNED prefetch is a POST resolve under the hood — its adoption
+      // must carry 'post' provenance or the profile never learns a pin from
+      // the boot-prefetch path (the primary cold-install flow).
+      expect(result.resolvedVia).toBe('post');
     } finally {
       await closeServer(raw.server);
     }
+  });
+
+  it('resolverPrefetch against the REAL server: an unpinned prefetch adoption is learnable AND post-provenanced', async () => {
+    const vfs = new MemoryVfs();
+    await writePackageJson(vfs, DEPS);
+    const prefetch = startEddyPrefetch({
+      resolverUrl: eddyUrl,
+      request: { dependencies: DEPS, optionalDependencies: {} },
+    });
+    const result = await install({
+      vfs,
+      cwd: '/app',
+      registry: makeRegistry().registry,
+      resolverUrl: eddyUrl,
+      resolverPrefetch: prefetch,
+    });
+    expect(result.source).toBe('eddy');
+    expect(result.resolvedVia).toBe('post'); // POST under the hood — server-vouched
+    expect(result.closureHash).toBeDefined(); // durable-header gate passed → learnable
   });
 
   it('resolverPrefetch: an already-bounded slow buffered response is not raced by the direct header timeout', async () => {

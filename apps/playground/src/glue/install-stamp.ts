@@ -164,9 +164,12 @@ export function stampTrusted(stamp: InstallStamp): boolean {
 }
 
 /**
- * Stamp the tree for project `slug` + the CURRENT package.json effective dep
- * set. No-op when package.json is unreadable (nothing to match against later).
- * `slug` defaults to `''` (page-side ad-hoc installs that no boot ever reuses).
+ * Stamp the tree for project `slug` + the package.json effective dep set —
+ * the CURRENT one by default, or `precomputedDeps` when the caller snapshotted
+ * it earlier (the deferred command stamp must attest the INSTALL-TIME set, not
+ * whatever package.json says after the drain). No-op when package.json is
+ * unreadable (nothing to match against later). `slug` defaults to `''`
+ * (page-side ad-hoc installs that no boot ever reuses).
  */
 export async function writeInstallStamp(
   vfs: Vfs,
@@ -175,8 +178,9 @@ export async function writeInstallStamp(
   slug = '',
   durability?: 'pending',
   promotionId?: string,
+  precomputedDeps?: Record<string, string>,
 ): Promise<void> {
-  const deps = await readEffectiveDeps(vfs, root);
+  const deps = precomputedDeps ?? (await readEffectiveDeps(vfs, root));
   if (!deps) return;
   const stamp: InstallStamp = {
     version: 1,
@@ -189,6 +193,25 @@ export async function writeInstallStamp(
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
   await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
+  await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
+}
+
+/**
+ * The DEFERRED trusted-stamp write (command-site background sequence): unlike
+ * {@link writeInstallStamp} it never mkdirs — re-creating `node_modules` here
+ * would resurrect a tree the user deleted while the drain ran
+ * (`npm install && rm -rf node_modules`), leaving a trusted stamp over an
+ * otherwise-empty dir. A parent vanished inside the caller's check→write
+ * window fails the write loudly (ENOENT) instead.
+ */
+export async function writeDeferredTrustedStamp(
+  vfs: Vfs,
+  root: string,
+  packages: number,
+  slug: string,
+  deps: Record<string, string>,
+): Promise<void> {
+  const stamp: InstallStamp = { version: 1, slug, deps, packages };
   await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
 }
 
@@ -302,7 +325,9 @@ function readEffectiveDepsSync(
   return text === null ? null : effectiveDepsFromPackageJsonText(text);
 }
 
-function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
+/** Sync twin of {@link readInstallStamp} — exported for write-site rechecks
+ * that must be ATOMIC with a sync write (no await between read and write). */
+export function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
   const text = readTextSyncOrNull(fs, installStampPath(root));
   if (text === null) return null;
   let parsed: unknown;

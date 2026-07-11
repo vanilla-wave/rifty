@@ -43,9 +43,15 @@ import {
   type EddyBundleTarballEntry,
   LOCKFILE_FILE,
   MANIFEST_FILE,
+  isIsoDateString,
 } from './eddy-bundle.ts';
 import type { EddyPrefetchHandle } from './eddy-prefetch.ts';
-import { type EddyRequestBody, bundleUrlFor, canonicalEddyRequestKey } from './eddy-request.ts';
+import {
+  EDDY_STORE_DURABLE_HEADER,
+  type EddyRequestBody,
+  bundleUrlFor,
+  canonicalEddyRequestKey,
+} from './eddy-request.ts';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,
@@ -213,6 +219,27 @@ export interface InstallResult {
    * POST whose server proved the immutable store is durable.
    */
   closureHash?: string;
+  /**
+   * The adopted bundle's `manifest.asOf.resolvedAt` (ISO-8601, validated —
+   * a malformed stamp is dropped, never surfaced raw) — when eddy resolved
+   * this closure. Feeds the stale-pin honesty line (`as-of <resolvedAt>`),
+   * which must report the SERVED resolution's age, not the pin file's.
+   */
+  resolvedAt?: string;
+  /**
+   * The REQUEST KIND that served the adopted bundle — a prefetch counts as
+   * its underlying request: `'get'` is a CACHE serve of a content-addressed
+   * closure (pinned GET or pinned prefetch); `'post'` is a SERVER-VOUCHED
+   * resolution (direct POST or unpinned prefetch) — the server answered this
+   * request now, though its answer may itself come from eddy's mutable tier
+   * (≤ `EDDY_TTL_SECONDS`); only `prefer:'online'` guarantees a fresh
+   * recompute. The playground's pin policy hangs off this — only a POST
+   * re-vouches a resolution's age (savedAt), and only a cache serve of a
+   * stale pin owes the `as-of` honesty line. Hash equality alone cannot
+   * distinguish the two: a pinned-GET miss whose POST fallback lands the
+   * SAME closure is a server-vouched resolution, not a cache hit.
+   */
+  resolvedVia?: 'get' | 'post';
 }
 
 /**
@@ -331,6 +358,8 @@ export async function install(
   // clobbering it with the resolver's root metadata.
   let source: 'eddy' | 'standard' = 'standard';
   let eddyClosureHash: string | undefined;
+  let eddyResolvedAt: string | undefined;
+  let eddyResolvedVia: 'get' | 'post' | undefined;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
@@ -345,6 +374,8 @@ export async function install(
     if (staged !== null) {
       source = 'eddy';
       eddyClosureHash = staged.closureHash;
+      eddyResolvedAt = staged.resolvedAt;
+      eddyResolvedVia = staged.resolvedVia;
       existingLockfile = staged.lockfile;
     }
   }
@@ -384,6 +415,8 @@ export async function install(
     conflicts: [],
     source,
     ...(eddyClosureHash === undefined ? {} : { closureHash: eddyClosureHash }),
+    ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
+    ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
 }
 
@@ -625,7 +658,12 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<{ closureHash?: string; lockfile: Lockfile } | null> {
+): Promise<{
+  closureHash?: string;
+  resolvedAt?: string;
+  resolvedVia: 'get' | 'post';
+  lockfile: Lockfile;
+} | null> {
   const url = opts.resolverUrl;
   if (!url) return null;
 
@@ -654,16 +692,22 @@ async function tryEddyFastPath(
   // MUST self-report that hash — else the CDN/cache served the wrong object and we
   // decline (defence-in-depth over the origin's own key check). A POST has no
   // pre-known hash (the server computes it), so it carries none.
+  // `via` = the underlying REQUEST KIND, the provenance `InstallResult`
+  // carries: a prefetch is just an early GET (pinned) or POST (unpinned) —
+  // labelling it 'prefetch' would hide that an unpinned boot prefetch is a
+  // server-vouched resolution and the profile would never learn its pin.
   type EddyAttempt =
     | {
         kind: 'prefetch';
-        label: string;
+        label: 'prefetch';
+        via: 'get' | 'post';
         expectedHash?: string;
         response: Promise<Response>;
       }
     | {
         kind: 'fetch';
-        label: string;
+        label: 'get' | 'post';
+        via: 'get' | 'post';
         expectedHash?: string;
         run: (signal: AbortSignal) => Promise<Response>;
       };
@@ -672,6 +716,7 @@ async function tryEddyFastPath(
     attempts.push({
       kind: 'prefetch',
       label: 'prefetch',
+      via: opts.resolverPrefetch?.closureHash ? 'get' : 'post',
       ...(opts.resolverPrefetch?.closureHash
         ? { expectedHash: opts.resolverPrefetch.closureHash }
         : {}),
@@ -690,6 +735,7 @@ async function tryEddyFastPath(
     attempts.push({
       kind: 'fetch',
       label: 'get',
+      via: 'get',
       expectedHash: pin,
       run: (signal) => fetch(bundleUrlFor(bundleBase, pin), { signal }),
     });
@@ -697,6 +743,7 @@ async function tryEddyFastPath(
   attempts.push({
     kind: 'fetch',
     label: 'post',
+    via: 'post',
     run: (signal) => {
       const requestBody: Record<string, unknown> = { ...body };
       if (opts.prefer) requestBody.prefer = opts.prefer;
@@ -732,6 +779,8 @@ async function tryEddyFastPath(
       if (typeof outcome !== 'string') {
         return {
           ...(outcome.closureHash === undefined ? {} : { closureHash: outcome.closureHash }),
+          ...(outcome.resolvedAt === undefined ? {} : { resolvedAt: outcome.resolvedAt }),
+          resolvedVia: attempt.via,
           lockfile: outcome.lockfile,
         };
       }
@@ -744,7 +793,6 @@ async function tryEddyFastPath(
 }
 
 const eddyDecoder = new TextDecoder('utf-8');
-const EDDY_STORE_DURABLE_HEADER = 'x-eddy-store-durable';
 
 async function* bufferedTarEntries(
   bytes: Uint8Array,
@@ -778,7 +826,9 @@ async function consumeEddyResponse(
   opts: InstallOptions,
   tarballCache: TarballCache,
   expectedClosureHash?: string,
-): Promise<{ adopted: true; closureHash?: string; lockfile: Lockfile } | string> {
+): Promise<
+  { adopted: true; closureHash?: string; resolvedAt?: string; lockfile: Lockfile } | string
+> {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
   // 422 as an opaque `HTTP 422` and the `feature` reason is never surfaced.
@@ -927,9 +977,16 @@ async function consumeEddyResponse(
   const canLearnClosureHash =
     expectedClosureHash !== undefined || response.headers.get(EDDY_STORE_DURABLE_HEADER) === '1';
   const closureHash = canLearnClosureHash ? manifest.asOf.closureHash : undefined;
+  // The served bundle's as-of stamp: the stale-pin honesty line reports THIS
+  // (the resolution's age), never the pin file's savedAt. Validated — a
+  // malformed stamp reads as absent (the line then says `unknown`), never a
+  // raw junk string on the terminal.
+  const rawResolvedAt = manifest.asOf.resolvedAt;
+  const resolvedAt = isIsoDateString(rawResolvedAt) ? rawResolvedAt : undefined;
   return {
     adopted: true,
     ...(closureHash === undefined ? {} : { closureHash }),
+    ...(resolvedAt === undefined ? {} : { resolvedAt }),
     lockfile,
   };
 }
