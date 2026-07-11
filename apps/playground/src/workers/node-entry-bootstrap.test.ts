@@ -37,14 +37,28 @@ describe('vite CLI env decoding (seam used by the node-entry bootstrap)', () => 
     ).toEqual({ hmrOff: true, userConfigPath: 'c.mjs' });
   });
 
-  it.fails('accepts exactly the five canonical vite CLI modes and rejects legacy run', () => {
-    for (const mode of ['dev', 'build', 'preview', 'optimize', 'info'] as const) {
+  it('keeps existing canonical vite CLI modes active', () => {
+    for (const mode of ['dev', 'build', 'preview'] as const) {
       expect(viteCliModeFromEnv(mode)).toBe(mode);
     }
-    expect(viteCliModeFromEnv('run')).toBeNull();
+  });
+
+  it('keeps noncanonical vite CLI modes rejected', () => {
     expect(viteCliModeFromEnv('serve')).toBeNull();
     expect(viteCliModeFromEnv('')).toBeNull();
     expect(viteCliModeFromEnv(undefined)).toBeNull();
+  });
+
+  it('accepts optimize as a canonical vite CLI mode', () => {
+    expect(viteCliModeFromEnv('optimize')).toBe('optimize');
+  });
+
+  it('accepts info as the canonical CAC no-action mode', () => {
+    expect(viteCliModeFromEnv('info')).toBe('info');
+  });
+
+  it('rejects the legacy run vite CLI mode', () => {
+    expect(viteCliModeFromEnv('run')).toBeNull();
   });
 });
 

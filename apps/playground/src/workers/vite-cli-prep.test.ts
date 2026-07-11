@@ -434,6 +434,21 @@ describe('prepareViteCli — dev CLI config wrapper (forced options + server han
 });
 
 describe('viteCliMode — CAC command matching (every case probed on REAL vite 7.3.6 CLI, 2026-07-07)', () => {
+  const ctx = {
+    cwd: '/proj',
+    env: {},
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  } as unknown as Parameters<typeof withViteCliEnv>[2];
+  const assertMode = (args: readonly string[], expected: string): void => {
+    const label = JSON.stringify(args);
+    expect(viteCliMode(args), `${label} classifier`).toBe(expected);
+    expect(
+      withViteCliEnv('/proj/node_modules/.bin/vite', args, ctx).env.RIFTY_VITE_CLI_MODE,
+      `${label} env`,
+    ).toBe(expected);
+  };
+
   // Real cac semantics: a command matches when the FIRST positional under THAT
   // command's grammar (global + its own booleans) equals its name; any flag the
   // candidate grammar doesn't declare boolean consumes the next non-dash token
@@ -489,57 +504,59 @@ describe('viteCliMode — CAC command matching (every case probed on REAL vite 7
     expect(viteCliMode(['build'])).toBe('build');
   });
 
-  it.fails('separates action startup from CAC no-action help/version forms', () => {
-    const ctx = {
-      cwd: '/proj',
-      env: {},
-      stdout: { write: () => {} },
-      stderr: { write: () => {} },
-    } as unknown as Parameters<typeof withViteCliEnv>[2];
-    const assertMode = (args: readonly string[], expected: string): void => {
-      const label = JSON.stringify(args);
-      expect.soft(viteCliMode(args), `${label} classifier`).toBe(expected);
-      expect
-        .soft(
-          withViteCliEnv('/proj/node_modules/.bin/vite', args, ctx).env.RIFTY_VITE_CLI_MODE,
-          `${label} env`,
-        )
-        .toBe(expected);
-    };
-    const actions = [
-      { command: 'dev', mode: 'dev' },
-      { command: 'serve', mode: 'dev' },
-      { command: 'build', mode: 'build' },
-      { command: 'preview', mode: 'preview' },
-      { command: 'optimize', mode: 'optimize' },
-    ] as const;
-
-    for (const { command, mode } of actions) {
-      assertMode([command], mode);
-      for (const flag of ['--help', '-h']) {
-        assertMode([command, flag], 'info');
-        assertMode([flag, command], 'info');
-      }
-      // CAC suppresses version only when no NAMED command matched.
-      for (const flag of ['--version', '-v']) {
-        assertMode([command, flag], mode);
-        assertMode([flag, command], mode);
-      }
-    }
-    for (const args of [
-      ['--help'],
-      ['-h'],
-      ['--version'],
-      ['-v'],
-      ['my-app', '--version'],
-      ['--port', '5174', '--version'],
+  it('keeps existing action and positional routing active in classifier and env', () => {
+    for (const { args, expected } of [
+      { args: ['dev'], expected: 'dev' },
+      { args: ['serve'], expected: 'dev' },
+      { args: ['build'], expected: 'build' },
+      { args: ['preview'], expected: 'preview' },
+      { args: ['info'], expected: 'dev' },
+      { args: ['-l', 'info', 'preview'], expected: 'preview' },
     ]) {
-      assertMode(args, 'info');
+      assertMode(args, expected);
     }
-    assertMode(['info'], 'dev');
-    assertMode(['-l', 'info', 'preview'], 'preview');
-    assertMode(['--force', 'optimize'], 'optimize');
   });
+
+  const actions = [
+    { command: 'dev', mode: 'dev' },
+    { command: 'serve', mode: 'dev' },
+    { command: 'build', mode: 'build' },
+    { command: 'preview', mode: 'preview' },
+    { command: 'optimize', mode: 'optimize' },
+  ] as const;
+  const contractRedCases: Array<{
+    readonly args: readonly string[];
+    readonly expected: string;
+  }> = [
+    { args: ['optimize'], expected: 'optimize' },
+    { args: ['--force', 'optimize'], expected: 'optimize' },
+    { args: ['--help'], expected: 'info' },
+    { args: ['-h'], expected: 'info' },
+    { args: ['--version'], expected: 'info' },
+    { args: ['-v'], expected: 'info' },
+    { args: ['my-app', '--version'], expected: 'info' },
+    { args: ['--port', '5174', '--version'], expected: 'info' },
+  ];
+  for (const { command, mode } of actions) {
+    for (const flag of ['--help', '-h']) {
+      contractRedCases.push(
+        { args: [command, flag], expected: 'info' },
+        { args: [flag, command], expected: 'info' },
+      );
+    }
+    // CAC suppresses version only when no NAMED command matched.
+    for (const flag of ['--version', '-v']) {
+      contractRedCases.push(
+        { args: [command, flag], expected: mode },
+        { args: [flag, command], expected: mode },
+      );
+    }
+  }
+  for (const { args, expected } of contractRedCases) {
+    it(`routes ${JSON.stringify(args)} as ${expected}`, () => {
+      assertMode(args, expected);
+    });
+  }
 });
 
 describe('withViteCliArgs — retired preview forces stay retired (behavioral, PR #112)', () => {
