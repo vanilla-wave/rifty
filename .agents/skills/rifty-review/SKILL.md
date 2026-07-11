@@ -13,5 +13,7 @@ Especially interested in:
 - No regressions to existing functionality
 - Feature's user experience matches the real ecosystem
 
+Apply `docs/process/fault-classes.md` §Review convergence. Contract+RED checks the pinned oracle, complete contract, and executable RED proof. Final+GREEN checks the implementation against that frozen contract. Every correctness blocker names its fault class, missing RED proof, and unswept sibling surface. A Final+GREEN blocker means redesign/split, never another point-fix round.
+
 ## Report
 Open with an overall verdict + merge call. Then one section per axis above (in order), each with its own verdict (pass / concern / blocker) — never folded into a flat severity-ranked list, never downgraded to a nit. Cite file:line.

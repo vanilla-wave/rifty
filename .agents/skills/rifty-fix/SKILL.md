@@ -21,7 +21,7 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 ## Escalation
 
 - 3 failed attempts on one bug → the frame is wrong, not the code: stop, `docs/process/decision-workflow.md` (backlog/ADR), no attempt #4.
-- 3+ review rounds on one change → AGENTS.md §Fidelity 3+ rule: classify ALL rounds' findings by axis, kill recurring classes, record which contract/tooling gap let them through.
+- Final+GREEN still has blockers → follow `docs/process/fault-classes.md` §Review convergence: redesign or split; never start a third point-fix review.
 
 ## Red flags
 
