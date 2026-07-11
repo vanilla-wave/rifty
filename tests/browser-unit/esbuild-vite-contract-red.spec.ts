@@ -47,7 +47,7 @@ interface FullEnvelope {
 interface ModuleEnvelope {
   readonly health: {
     readonly token: string;
-    readonly mode: 'build' | 'run';
+    readonly mode: 'build' | 'preview' | 'optimize';
     readonly kind: 'module';
     readonly schema: 3;
     readonly version: string;
@@ -60,13 +60,14 @@ interface ModuleEnvelope {
 interface PublicationEvidence {
   readonly slotPresentBeforeImport: boolean;
   readonly slotEqualsCjsOuter: boolean;
+  readonly legacyBridgeAbsent: boolean;
 }
 
-interface PreviewEnvelope {
+interface InfoEnvelope {
   readonly health: {
     readonly token: string;
-    readonly mode: 'preview';
-    readonly kind: 'preview-no-start';
+    readonly mode: 'info';
+    readonly kind: 'info-no-start';
     readonly schema: 3;
     readonly launcherReached: true;
     readonly runtimeNotPublished: boolean;
@@ -79,12 +80,14 @@ interface ContractPaths {
   readonly dir: string;
   readonly devRunner: string;
   readonly buildRunner: string;
-  readonly runRunner: string;
   readonly previewRunner: string;
+  readonly optimizeRunner: string;
+  readonly infoRunner: string;
   readonly devResult: string;
   readonly buildResult: string;
-  readonly runResult: string;
   readonly previewResult: string;
+  readonly optimizeResult: string;
+  readonly infoResult: string;
 }
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
@@ -121,12 +124,14 @@ function pathsFor(token: string): ContractPaths {
     dir,
     devRunner: `${dir}/dev-full.cjs`,
     buildRunner: `${dir}/build-module.mjs`,
-    runRunner: `${dir}/run-module.mjs`,
-    previewRunner: `${dir}/preview-no-start.cjs`,
+    previewRunner: `${dir}/preview-module.mjs`,
+    optimizeRunner: `${dir}/optimize-module.mjs`,
+    infoRunner: `${dir}/info-no-start.cjs`,
     devResult: `${dir}/dev-full.json`,
     buildResult: `${dir}/build-module.json`,
-    runResult: `${dir}/run-module.json`,
-    previewResult: `${dir}/preview-no-start.json`,
+    previewResult: `${dir}/preview-module.json`,
+    optimizeResult: `${dir}/optimize-module.json`,
+    infoResult: `${dir}/info-no-start.json`,
   };
 }
 
@@ -185,7 +190,11 @@ function devRunner(bundle: string, token: string, paths: ContractPaths): string 
   const policyRoot = `${paths.dir}/dev-policy-workspace`;
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:dev\n`;
   return `${bundle}
-const runtimeBeforeImport = globalThis.__rifty?.esbuild;
+const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeSlotPresentBeforeImport =
+  runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
+const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
+const legacyBridgeAbsentBeforeImport = !Reflect.has(globalThis, '__riftyEsbuildTransform');
 const cjs = require('esbuild');
 module.exports.__promise = (async () => {
   const esm = await import('esbuild');
@@ -221,8 +230,9 @@ module.exports.__promise = (async () => {
         policyRowIds: Object.keys(policy.rows),
       },
       publication: {
-        slotPresentBeforeImport: runtimeBeforeImport !== undefined,
+        slotPresentBeforeImport: runtimeSlotPresentBeforeImport,
         slotEqualsCjsOuter: runtimeBeforeImport === cjs,
+        legacyBridgeAbsent: legacyBridgeAbsentBeforeImport,
       },
       parity,
       policy,
@@ -236,14 +246,18 @@ module.exports.__promise = (async () => {
 function moduleRunner(
   bundle: string,
   token: string,
-  mode: 'build' | 'run',
+  mode: 'build' | 'preview' | 'optimize',
   root: string,
   resultPath: string,
 ): string {
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}\n`;
   return `import { createRequire } from 'node:module';
 ${bundle}
-const runtimeBeforeImport = globalThis.__rifty?.esbuild;
+const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeSlotPresentBeforeImport =
+  runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
+const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
+const legacyBridgeAbsentBeforeImport = !Reflect.has(globalThis, '__riftyEsbuildTransform');
 const esm = await import('esbuild');
 const require = createRequire(import.meta.url);
 const cjs = require('esbuild');
@@ -272,8 +286,9 @@ fs.writeFileSync(
       rowIds: ['module'],
     },
     publication: {
-      slotPresentBeforeImport: runtimeBeforeImport !== undefined,
+      slotPresentBeforeImport: runtimeSlotPresentBeforeImport,
       slotEqualsCjsOuter: runtimeBeforeImport === cjs,
+      legacyBridgeAbsent: legacyBridgeAbsentBeforeImport,
     },
     module: moduleRow,
   }),
@@ -282,18 +297,20 @@ globalThis.process.stdout.write(${JSON.stringify(completion)});
 `;
 }
 
-function previewRunner(token: string, paths: ContractPaths): string {
-  const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:preview\n`;
+function infoRunner(token: string, paths: ContractPaths): string {
+  const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:info\n`;
   return `const fs = require('node:fs');
-const runtimeNotPublished = globalThis.__rifty?.esbuild === undefined;
-const legacyBridgeAbsent = globalThis.__riftyEsbuildTransform === undefined;
+const runtimeRealm = globalThis.__rifty;
+const runtimeNotPublished =
+  runtimeRealm === undefined || !Reflect.has(runtimeRealm, 'esbuild');
+const legacyBridgeAbsent = !Reflect.has(globalThis, '__riftyEsbuildTransform');
 fs.writeFileSync(
-  ${JSON.stringify(paths.previewResult)},
+  ${JSON.stringify(paths.infoResult)},
   JSON.stringify({
     health: {
       token: ${JSON.stringify(token)},
-      mode: 'preview',
-      kind: 'preview-no-start',
+      mode: 'info',
+      kind: 'info-no-start',
       schema: 3,
       launcherReached: true,
       runtimeNotPublished,
@@ -321,8 +338,9 @@ function parseResult<T>(
 async function runContractHarness(page: Page): Promise<{
   readonly dev: FullEnvelope;
   readonly build: ModuleEnvelope;
-  readonly run: ModuleEnvelope;
-  readonly preview: PreviewEnvelope;
+  readonly preview: ModuleEnvelope;
+  readonly optimize: ModuleEnvelope;
+  readonly info: InfoEnvelope;
 }> {
   const token = randomUUID();
   const paths = pathsFor(token);
@@ -338,32 +356,47 @@ async function runContractHarness(page: Page): Promise<{
   );
   await writeOwnerFile(
     page,
-    paths.runRunner,
-    moduleRunner(bundle, token, 'run', `${paths.dir}/run-workspace`, paths.runResult),
+    paths.previewRunner,
+    moduleRunner(bundle, token, 'preview', `${paths.dir}/preview-workspace`, paths.previewResult),
   );
-  await writeOwnerFile(page, paths.previewRunner, previewRunner(token, paths));
+  await writeOwnerFile(
+    page,
+    paths.optimizeRunner,
+    moduleRunner(
+      bundle,
+      token,
+      'optimize',
+      `${paths.dir}/optimize-workspace`,
+      paths.optimizeResult,
+    ),
+  );
+  await writeOwnerFile(page, paths.infoRunner, infoRunner(token, paths));
 
   let dev: Awaited<ReturnType<typeof execLine>>;
   let build: Awaited<ReturnType<typeof execLine>>;
-  let run: Awaited<ReturnType<typeof execLine>>;
   let preview: Awaited<ReturnType<typeof execLine>>;
+  let optimize: Awaited<ReturnType<typeof execLine>>;
+  let info: Awaited<ReturnType<typeof execLine>>;
   try {
     await writeOwnerFile(page, VITE_BIN, launcher(paths.devRunner));
     dev = await execLine(page, 'vite');
     await writeOwnerFile(page, VITE_BIN, launcher(paths.buildRunner));
     build = await execLine(page, 'vite build');
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.runRunner));
-    run = await execLine(page, 'vite optimize --force');
     await writeOwnerFile(page, VITE_BIN, launcher(paths.previewRunner));
     preview = await execLine(page, 'vite preview');
+    await writeOwnerFile(page, VITE_BIN, launcher(paths.optimizeRunner));
+    optimize = await execLine(page, 'vite optimize --force');
+    await writeOwnerFile(page, VITE_BIN, launcher(paths.infoRunner));
+    info = await execLine(page, 'vite --version');
   } finally {
     await writeOwnerFile(page, VITE_BIN, original.text);
   }
 
   const devFile = await readOwnerFile(page, paths.devResult);
   const buildFile = await readOwnerFile(page, paths.buildResult);
-  const runFile = await readOwnerFile(page, paths.runResult);
   const previewFile = await readOwnerFile(page, paths.previewResult);
+  const optimizeFile = await readOwnerFile(page, paths.optimizeResult);
+  const infoFile = await readOwnerFile(page, paths.infoResult);
   const restored = await readOwnerFile(page, VITE_BIN);
   const cleanup = await execLine(page, `rm -rf ${paths.dir}`);
 
@@ -371,8 +404,9 @@ async function runContractHarness(page: Page): Promise<{
   for (const [mode, result] of [
     ['dev', dev],
     ['build', build],
-    ['run', run],
     ['preview', preview],
+    ['optimize', optimize],
+    ['info', info],
   ] as const) {
     expect(result.exit, `${mode}: ${result.out}`).toBe(0);
     expect(result.out).toContain(`RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}`);
@@ -383,8 +417,9 @@ async function runContractHarness(page: Page): Promise<{
 
   const devEnvelope = parseResult<FullEnvelope>(devFile, 'dev full');
   const buildEnvelope = parseResult<ModuleEnvelope>(buildFile, 'build module');
-  const runEnvelope = parseResult<ModuleEnvelope>(runFile, 'run module');
-  const previewEnvelope = parseResult<PreviewEnvelope>(previewFile, 'preview no-start');
+  const previewEnvelope = parseResult<ModuleEnvelope>(previewFile, 'preview module');
+  const optimizeEnvelope = parseResult<ModuleEnvelope>(optimizeFile, 'optimize module');
+  const infoEnvelope = parseResult<InfoEnvelope>(infoFile, 'info no-start');
 
   expect(devEnvelope.health).toEqual({
     token,
@@ -400,6 +435,7 @@ async function runContractHarness(page: Page): Promise<{
   expect(Object.keys(devEnvelope.publication)).toEqual([
     'slotPresentBeforeImport',
     'slotEqualsCjsOuter',
+    'legacyBridgeAbsent',
   ]);
   expect(Object.keys(devEnvelope.policy.rows)).toEqual(ESBUILD_GUEST_POLICY_ROW_IDS);
   for (const rowId of ESBUILD_GUEST_POLICY_ROW_IDS) {
@@ -409,7 +445,8 @@ async function runContractHarness(page: Page): Promise<{
   }
   for (const [mode, envelope] of [
     ['build', buildEnvelope],
-    ['run', runEnvelope],
+    ['preview', previewEnvelope],
+    ['optimize', optimizeEnvelope],
   ] as const) {
     expect(envelope.health).toEqual({
       token,
@@ -422,13 +459,14 @@ async function runContractHarness(page: Page): Promise<{
     expect(Object.keys(envelope.publication)).toEqual([
       'slotPresentBeforeImport',
       'slotEqualsCjsOuter',
+      'legacyBridgeAbsent',
     ]);
     expect(Object.keys(envelope.module)).toEqual(Object.keys(expectedContract.rows.module));
   }
-  expect(previewEnvelope.health).toEqual({
+  expect(infoEnvelope.health).toEqual({
     token,
-    mode: 'preview',
-    kind: 'preview-no-start',
+    mode: 'info',
+    kind: 'info-no-start',
     schema: 3,
     launcherReached: true,
     runtimeNotPublished: true,
@@ -439,8 +477,9 @@ async function runContractHarness(page: Page): Promise<{
   return {
     dev: devEnvelope,
     build: buildEnvelope,
-    run: runEnvelope,
     preview: previewEnvelope,
+    optimize: optimizeEnvelope,
+    info: infoEnvelope,
   };
 }
 
@@ -543,9 +582,8 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
 `,
     );
 
-    test.fail(true, 'Contract+RED: upstream VFS runtime is not implemented yet');
     // Health above proves the real guest loader/CLI Worker/VFS ran every row.
-    // Soft comparisons and Vite acceptance all execute before expected RED closes.
+    // Soft comparisons and Vite acceptance all execute to expose every RED row.
     for (const rowId of ESBUILD_CONTRACT_ROW_IDS) {
       expect
         .soft(contract.dev.parity.rows[rowId], `guest parity ${rowId}`)
@@ -555,19 +593,24 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     for (const [mode, publication] of [
       ['dev', contract.dev.publication],
       ['build', contract.build.publication],
-      ['run', contract.run.publication],
+      ['preview', contract.preview.publication],
+      ['optimize', contract.optimize.publication],
     ] as const) {
       expect.soft(publication, `${mode} runtime published before first import`).toEqual({
         slotPresentBeforeImport: true,
         slotEqualsCjsOuter: true,
+        legacyBridgeAbsent: true,
       });
     }
-    expect
-      .soft(contract.build.module, 'build import-first module')
-      .toEqual(expectedContract.rows.module);
-    expect
-      .soft(contract.run.module, 'run import-first module')
-      .toEqual(expectedContract.rows.module);
+    for (const [mode, envelope] of [
+      ['build', contract.build],
+      ['preview', contract.preview],
+      ['optimize', contract.optimize],
+    ] as const) {
+      expect
+        .soft(envelope.module, `${mode} import-first module`)
+        .toEqual(expectedContract.rows.module);
+    }
 
     const optimize = await execLine(page, 'vite optimize --force');
     const prebundle = await readOwnerFile(page, '/scratch/node_modules/.vite/deps/picocolors.js');

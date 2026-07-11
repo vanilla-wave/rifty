@@ -37,10 +37,11 @@ describe('vite CLI env decoding (seam used by the node-entry bootstrap)', () => 
     ).toEqual({ hmrOff: true, userConfigPath: 'c.mjs' });
   });
 
-  it('accepts exactly the four vite CLI modes', () => {
-    for (const mode of ['dev', 'build', 'preview', 'run'] as const) {
+  it('accepts exactly the five canonical vite CLI modes and rejects legacy run', () => {
+    for (const mode of ['dev', 'build', 'preview', 'optimize', 'info'] as const) {
       expect(viteCliModeFromEnv(mode)).toBe(mode);
     }
+    expect(viteCliModeFromEnv('run')).toBeNull();
     expect(viteCliModeFromEnv('serve')).toBeNull();
     expect(viteCliModeFromEnv('')).toBeNull();
     expect(viteCliModeFromEnv(undefined)).toBeNull();

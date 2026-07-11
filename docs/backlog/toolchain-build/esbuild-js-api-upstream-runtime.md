@@ -12,7 +12,7 @@ code: [tools/shadow-registry/src/index.ts, apps/playground/src/workers/vite-cli-
 
 ## Context
 
-Vite 7.3.6 uses async `transform`/`formatMessages`, config `build({write:false})`, scan `context({write:false})`, and default-write prebundle context. The current shim has transform, one virtual module, and an empty context. PR #125's esbuild-facade production slice copied upstream behavior and repeatedly drifted; its other slices are independent.
+Vite 7.3.6 uses async `transform`/`formatMessages`, config `build({write:false})`, scan `context({write:false})`, and default-write prebundle context. Its dev/build/preview/optimize chunks all import `config.js` → top-level `esbuild`. The current shim has transform, one virtual module, and an empty context. PR #125's esbuild-facade production slice copied upstream behavior and repeatedly drifted; its other slices are independent.
 
 ## User scenario
 
@@ -22,7 +22,7 @@ A Vite 7.3.6 project has `vite.config.ts` importing `./config-helper.ts`; the ap
 
 - Native `esbuild@0.28.0` and Chromium guest match every parity row after normalizing only temp-root paths and stacks.
 - The runtime is generated from hash-pinned upstream browser CJS; only ADR-0226 environment/capability anchors differ. No API facade, `Proxy`, cloned plugin/options, injected writer, result normalizer, or second API object exists.
-- `prepareViteCli` modes `dev|build|run` await startup, then publish the exact CJS outer through the typed realm slot before Vite import; failed startup publishes nothing. The overlay has one CJS body/id.
+- `prepareViteCli` action modes `dev|build|preview|optimize` await one startup branch, then publish the exact CJS outer through the typed realm slot before Vite import; failed startup publishes nothing. `info` (CAC no-action: help always; version only without a named command) never starts or publishes. Named command + version remains its action mode. The overlay has one CJS body/id; the legacy transform bridge is absent.
 - Common CJS interop returns the outer as ESM default and caches one stable namespace per loaded CJS module; all native outer/default/named/`PluginBuild.esbuild` relations hold.
 - Invalid plugin shape rejects before `setup`; supported calls preserve caller option/plugin identity.
 - Context prebundle JS + parseable map exist in guest VFS before user `onEnd`; a file-as-outdir path matches native rejection and creates no output marker.
@@ -39,7 +39,7 @@ A Vite 7.3.6 project has `vite.config.ts` importing `./config-helper.ts`; the ap
 
 | ID | Exact failing-first target |
 |---|---|
-| `runtime-publication` | three fresh `dev|build|run` children prove routing through one mode-independent awaited startup; its injected failure leaves the typed slot absent; overlay resolves one CJS id and returns that exact outer |
+| `runtime-publication` | four fresh `dev|build|preview|optimize` children publish through one awaited branch before first import with no legacy bridge; one fresh `info` child reaches its launcher with neither slot nor bridge; injected failure leaves the slot absent; CAC help/version edges match exact Vite 7.3.6 |
 | `module` | outer !== `.default`; `.default.default` self; ESM default === outer; repeated ESM loads return one namespace; named method refs match; `PluginBuild.esbuild === outer.default` |
 | `plugin-validation` | unknown enumerable plugin key rejects before `setup`; valid plugin sees caller options/plugins by reference |
 | `transform` | TS input, loader/format/sourcemap/legal-comments options, result descriptors and bytes match |
@@ -62,7 +62,7 @@ A Vite 7.3.6 project has `vite.config.ts` importing `./config-helper.ts`; the ap
 | Axis × operation | Honest outcome |
 |---|---|
 | `sibling-drift` × options/plugins/module views | one generated upstream object graph; `module` + `plugin-validation` differential rows |
-| `frozen-assumption` × source/Vite calls | exact source/WASM hashes + live exact-version oracle; generated-output anchors are owned by the pre-implementation provenance gate below |
+| `frozen-assumption` × source/Vite calls | exact source/WASM hashes + live exact-version oracle + baked Vite 7.3.6 action-import/CAC pins; generated-output anchors are owned by the pre-implementation provenance gate below |
 | `lossy-aggregate` × returned/disk outputs | exact canonical metafile shape + normalized SHA-256 for JS, maps, and large transforms; byte counts and marker booleans are secondary evidence only |
 | `observable-order` × capability gates | upstream validation/error priority precedes every named gap |
 | `poisoned-cache` × CJS namespace | module-registry record owns one namespace; coherent invalidation evicts record + namespace together |
@@ -85,5 +85,5 @@ All option-bearing gaps run upstream validation first; valid inputs then throw:
 - ADR-0226 fixes exact upstream source + generated environment/gates; no facade fallback.
 - Before generated-client production code, its provenance/compat slice lands mutation RED for missing/duplicate patch anchors, an emitted-diff allowlist, and request-version gates across fresh/replay + direct/transitive/user-override installs; the source pins here are the input gate, not that later proof.
 - Generated client, startup/slot/overlay, and common CJS interop/cache are independent slices with separate RED proof; final Chromium acceptance joins them on one SHA.
-- One Worker owns one upstream service; `prepareViteCli` solely publishes after init; Worker termination owns teardown.
+- One Worker owns one upstream service; `prepareViteCli` solely publishes after init for four action modes; `info` stays outside startup; Worker termination owns teardown.
 - Config + scan + prebundle stay one item because exact Vite acceptance needs all three; every excluded guest surface is a validation-before-gap contract.

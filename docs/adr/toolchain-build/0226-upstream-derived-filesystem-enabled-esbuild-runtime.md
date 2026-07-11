@@ -11,7 +11,7 @@ The current shim runs real WASI `transform`, one single-module `build({write:fal
 
 PR #125's esbuild-facade production code put `esbuild-wasm` behind copied options/plugins, an injected writer, result normalization, a synthetic `PluginBuild.esbuild`, and another lifecycle. Review found repeated validation, identity, write, result, and stop drift. That production slice is forensic input only; PR #125's Vite CLI, streams, process, persistence, and documentation slices are independent.
 
-Vite 7.3.6 needs upstream async `build`, `context`, `transform`, and `formatMessages`: config bundling with `write:false`; dependency scan with `context().rebuild()` and `write:false`; dependency prebundle with context default-write; context `cancel`/`dispose`.
+Vite 7.3.6 needs upstream async `build`, `context`, `transform`, and `formatMessages`: config bundling with `write:false`; dependency scan with `context().rebuild()` and `write:false`; dependency prebundle with context default-write; context `cancel`/`dispose`. Its dev, build, preview, and optimize action chunks all import `config.js`, which imports `esbuild` at module top level.
 
 ## Decision
 
@@ -30,9 +30,11 @@ Upstream channel, validation, plugin graph/callbacks, results, context rebuild/c
 
 ### D2 — Initialize, then publish one object
 
-For CLI modes `dev`, `build`, and `run`, `prepareViteCli` awaits the generated client's private startup with the realm's wasm, `FsSync`, and cwd. Only success publishes the returned exact CJS outer through a typed `runtime-js` realm slot; failure publishes nothing and fails the child. `preview` does not start this runtime.
+For CLI action modes `dev`, `build`, `preview`, and `optimize`, `prepareViteCli` awaits the generated client's private startup with the realm's wasm, `FsSync`, and cwd. Only success publishes the returned exact CJS outer through a typed `runtime-js` realm slot; failure publishes nothing and fails the child.
 
-All three modes route through one mode-independent startup branch; there are no per-mode initializers. `prepareViteCli` is the slot's sole writer; the installed overlay is read-only. Upstream owns service/context state. Worker termination owns teardown: no host stop, disposer, generation, or retry lifecycle.
+`info` means CAC will not run an action: any `--help`/`-h`, or `--version`/`-v` when no named command matched. A named `dev|serve|build|preview|optimize` plus version remains its action mode. `info` may keep existing CLI preparation but never starts or publishes esbuild.
+
+All four action modes route through one mode-independent startup branch; there are no per-mode initializers. `prepareViteCli` is the slot's sole writer; the installed overlay is read-only. Upstream owns service/context state. Worker termination owns teardown: no host stop, disposer, generation, or retry lifecycle. The legacy `__riftyEsbuildTransform` bridge is absent before the first esbuild import.
 
 ### D3 — One CJS overlay; common interop owns ESM
 
@@ -56,7 +58,7 @@ Invalid arguments/plugins still produce native diagnostics before a gap. Context
 
 ### D5 — Independent slices, joined acceptance
 
-Generated client/environment, startup+slot+overlay, and common CJS interop/cache are separate implementation/review slices with their own RED rows. Final acceptance joins them on one SHA against native `esbuild@0.28.0`, exact Vite 7.3.6, real wasm, Worker, and guest VFS in Chromium. Fakes, source grep, or warnings cannot close it.
+Generated client/environment, startup+slot+overlay, and common CJS interop/cache are separate implementation/review slices with their own RED rows. Final acceptance joins them on one SHA against native `esbuild@0.28.0`, exact Vite 7.3.6, real wasm, Worker, and guest VFS in Chromium. Four fresh action Workers prove publication; one fresh `info` Worker proves no startup. Fakes, source grep, or warnings cannot close it.
 
 ### D6 — Correct ADR-0047 only for the Vite JS API
 
@@ -72,6 +74,7 @@ ADR-0047 remains the WASI-preview1 CLI forcing-consumer decision. Its gojs-moot 
 ## Consequences
 
 - Config graphs, transforms/formatting, and optimizer contexts use upstream semantics over guest VFS.
+- Vite preview receives the same runtime before its top-level esbuild import; no-action CLI invocations do not pay or depend on startup.
 - Source, wasm, shadow version, oracle, and fixtures stay exact-pinned at 0.28.0.
 - D4 surfaces remain `NotImplementedError` + compat ❌; validation-before-gap is contract.
 - No PR #125 esbuild-facade production code is carried forward; independent slices remain separate.
