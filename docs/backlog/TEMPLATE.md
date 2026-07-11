@@ -26,11 +26,19 @@ code: []
 
 ## Acceptance
 
-<Concrete, testable done-definition. An approximation must fail it.>
+<Concrete, testable done-definition + proof command/test path. An approximation must fail it; source grep, fake, or opt-in lane cannot close it.>
+
+## Reference contract
+
+<!-- Required when matching an external/reference implementation; delete otherwise.
+     Pin oracle + version. Name the upstream mechanism reused. Proxy/wrapper semantic copies require an ADR + differential suite. -->
+
+- Oracle: <implementation + exact version>
+- Mechanism: <upstream mechanism reused>
 
 ## Parity cases
 
-<Exact Node behaviors to pin — each a failing-test-first target. Enumerate them; never "plus parity cases".>
+<Exact reference behaviors to pin — each a failing-test-first target, run as the same scenario against oracle and rifty. Include observable identity/reflection/lifecycle/error order. Enumerate them; never "plus parity cases".>
 
 ## Fault matrix
 

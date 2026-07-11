@@ -1,6 +1,6 @@
 # Fault classes — one taxonomy for infra honesty
 
-One vocabulary across the pipeline: refine (`## Fault matrix` in items) → implementation (fault tests) → review (class analysis at round 3+) → fixing (`rifty-fix` skill). Mined from PR #107: 19 review rounds, ~50 findings — almost every round after R5 found a new INSTANCE of an axis already seen, hence §Class-kill.
+One vocabulary across the pipeline: refine (`## Fault matrix` in items) → implementation (fault tests) → review (every correctness blocker classified) → fixing (`rifty-fix` skill). Mined from PR #107: 19 review rounds, ~50 findings — almost every round after R5 found a new INSTANCE of an axis already seen, hence §Class-kill.
 
 ## Axes
 
@@ -33,4 +33,24 @@ A fault test injects one axis at one boundary and asserts the honest outcome. Co
 
 Second instance of an axis at the same boundary = structural fix — one chokepoint API / one validation boundary / a gate — never another point fix. Precedent: `unbounded-read` survived #107 R5→R17 as four sibling point-fix helpers until `drainBodyBounded` consolidated the class. New axis found in review → add its row here first, then fix.
 
-Design-stop trigger: **more than TWO coordination mechanisms guarding one file/key** (locks, generations, chains, rechecks, proof ladders…) = the invariant has no owner — STOP adding mechanism #3, consolidate into one authority (single serialized writer). Precedent: PR #131 install stamp grew 7 mechanisms across 5 review rounds before the authority was named (ADR-0216 §audit); the trigger would have fired at round 2. A growing fix-surface across review rounds (each round's fixes feed the next round's findings) is the same signal at process level.
+Design-stop trigger: **more than TWO coordination mechanisms guarding one file/key** (locks, generations, chains, rechecks, proof ladders…) = the invariant has no owner — STOP adding mechanism #3, consolidate into one authority (single serialized writer). Precedent: PR #131 install stamp grew 7 mechanisms across 5 review rounds before the authority was named (ADR-0216 §audit); the trigger would have fired at round 2. A growing fix-surface across review rounds (each round's fixes feed the next round's findings) is the same signal at process level — §Review convergence row "Repeat" owns it.
+
+## Review convergence
+
+Applies to parity work and changes touching cache, persistence, network, or concurrency.
+
+| Gate | Required evidence |
+|---|---|
+| Contract | Pinned oracle; acceptance/parity cases; observable identity, lifecycle, error order; loud gaps |
+| Review | Each correctness blocker: fault class + RED test + sibling sweep in the PR |
+| Repeat | Same class at one boundary, or a review change adding a state owner → redesign/split |
+| External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
+| Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |
+| CI | Required finite checks pass on one committed SHA |
+| Closure | Observable acceptance proof; never source grep, warning, or opt-in lane |
+
+1. Before implementation, freeze the oracle, acceptance/parity cases, and loud gaps.
+2. Record class, RED test, and sibling sweep directly in the PR; no separate ledger file.
+3. A repeated class or review-born state owner stops point fixes: redesign or split.
+4. Use two review checkpoints only: Contract+RED, then Final+GREEN.
+5. Final requires full checks on one SHA and zero blockers; outcome is merge or redesign, never another point-fix round.
