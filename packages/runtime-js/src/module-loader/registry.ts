@@ -9,11 +9,15 @@ export interface ModuleRecord {
   readonly id: string;
   readonly kind: ModuleKind;
   state: 'loading' | 'loaded' | 'errored';
+  /** Failure from this execution generation; retained for an issued import job. */
+  error?: unknown;
   exports: Record<string, unknown>;
   /** Mutable slot table for ESM live bindings — `exports` getters read from here. */
   slots: Record<string, unknown>;
   /** For CJS modules, the `module` object passed to the factory. */
   cjsModule?: { exports: Record<string, unknown> };
+  /** Lazy ESM view of the final CJS exports. Same lifetime as this record. */
+  cjsNamespace?: Record<string, unknown>;
 }
 
 export class ModuleRegistry {
@@ -65,11 +69,10 @@ export class ModuleRegistry {
    * architecture review, Tier 1 #4 / D-E).
    *
    * WARNING: this is NOT the coherent invalidation seam. It drops ONLY the
-   * executed-module record, leaving the id-keyed transform/AST caches (and the
-   * resolver caches) stale — a subsequent load would re-run a cached transform.
-   * HMR / file-update callers MUST use `ModuleLoader.invalidate(id)` (loader.ts),
-   * which drops all caches in lockstep. Treat this method as a loader-internal
-   * primitive.
+   * execution record, leaving the CJS import job, id-keyed transform/AST caches,
+   * and resolver caches stale. HMR / file-update callers MUST use
+   * `ModuleLoader.invalidate(id)` (loader.ts), which drops all caches in
+   * lockstep. Treat this method as a loader-internal primitive.
    */
   invalidate(id?: string): void {
     if (id === undefined) {

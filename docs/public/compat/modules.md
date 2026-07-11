@@ -30,8 +30,10 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | ESM live bindings (named import + re-export) | ✅ | Via member access into source-module namespace |
 | CJS cycles (half-populated exports visible) | ✅ | |
 | ESM cycles (mutating exports visible) | ✅ | |
-| CJS ↔ ESM interop (ESM importing CJS) | ✅ | `default` + named keys |
+| CJS → ESM outer + namespace identity | ✅ | `default` and `module.exports` are the exact CJS outer; one namespace per loaded record; rifty coherent invalidation replaces record + namespace together. Parity: `modules/cjs-esm-namespace`, `modules/cjs-cycle-import-of-inflight` |
+| CJS → ESM named exports + reflection | ❌ | Values snapshot, but names come from runtime enumerable own keys rather than Node's static analysis, and descriptors are not Module Namespace exotic descriptors; tracked in `backlog/runtime-js/cjs-esm-static-named-exports` |
 | CJS ↔ ESM interop (CJS requiring ESM) | ⚠️ | Throws — use `import()` (Node parity) |
+| `require.cache` module records | ❌ | Cache views are detached/absent; self-import from a failed `require` throws `module-loader.cjs-import-job-failed-require`; `loader.invalidate()` is a stronger rifty HMR contract. Tracked in `backlog/runtime-js/require-cache-module-record-surface` |
 | ESM `import` of `.ts` / `.tsx` | ✅ | Async transform hook runs real esbuild WASI before the AST ESM pass; parity against `tsx` for cross-file TS syntax and standard decorators |
 | tsconfig `paths` aliases | ✅ | Explicit `paths` map (ADR-0066) or `autoDiscoverTsconfigPaths: true` (ADR-0170: nearest `tsconfig.json`, `extends`, JSONC, `baseUrl`) |
 | `require()` of a `.ts`/`.tsx` module (CJS scope) | ❌ | Throws `NotImplementedError('module-loader.ts-via-require')`; the esbuild type-strip is async, so a sync `require()` cannot transform it — load `.ts` as ESM via `import()` under a `type:module` scope (ADR-0052) |
