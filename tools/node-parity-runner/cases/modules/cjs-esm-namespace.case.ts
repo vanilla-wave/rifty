@@ -29,6 +29,11 @@ const c: ParityCase = {
         globalThis.__cjsPrimitiveEvaluations = (globalThis.__cjsPrimitiveEvaluations || 0) + 1;
         module.exports = 17;
       `,
+      'proxy-ownkeys.cjs': `
+        module.exports = new Proxy({ marker: 'proxy-outer' }, {
+          ownKeys() { throw new Error('ownkeys-boom'); },
+        });
+      `,
     },
   },
   code: `
@@ -74,6 +79,21 @@ const c: ParityCase = {
         markerIsOuter: primitiveNamespace['module.exports'] === primitiveOuter,
         evaluatedOnce: globalThis.__cjsPrimitiveEvaluations === 1,
       }));
+
+      const proxyOuter = require('./proxy-ownkeys.cjs');
+      try {
+        const proxyNamespace = await import('./proxy-ownkeys.cjs');
+        console.log('proxy-ownkeys', JSON.stringify({
+          status: 'fulfilled',
+          defaultIsOuter: proxyNamespace.default === proxyOuter,
+          markerIsOuter: proxyNamespace['module.exports'] === proxyOuter,
+        }));
+      } catch (error) {
+        console.log('proxy-ownkeys', JSON.stringify({
+          status: 'rejected',
+          message: error && error.message,
+        }));
+      }
     })().catch((error) => {
       console.log('case-error', error && error.name, error && error.message);
     });
