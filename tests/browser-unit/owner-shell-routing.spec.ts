@@ -1,5 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { bootOwner, execLine, gotoHarness, setDevConfig, writeOwnerFile } from './fixtures.ts';
+import {
+  bootOwner,
+  execLine,
+  flushOwnerDurable,
+  gotoHarness,
+  readOwnerFile,
+  readOwnerProjectIndex,
+  setDevConfig,
+  writeOwnerFile,
+} from './fixtures.ts';
 
 /**
  * Owner shell command routing, behaviorally against the REAL owner worker
@@ -91,4 +100,101 @@ test('instant preset restore gates the run; template node_modules seeds re-asser
   const seeds = await execLine(page, 'ls node_modules/@rifty/example-types');
   expect(seeds.exit).toBe(0);
   expect(seeds.out).toContain('index.d.ts');
+});
+
+test('a user write overlapping delayed baseline restore stays dirty and byte-identical', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-baseline-user-overlap',
+    template: 'typescript',
+    starter: 'typescript-ls',
+    setup: 'from-scratch',
+    hiddenEmptyBoot: false,
+  });
+
+  let announceSnapshotRequest = (): void => {};
+  const snapshotRequested = new Promise<void>((resolve) => {
+    announceSnapshotRequest = resolve;
+  });
+  let releaseSnapshot = (): void => {};
+  const snapshotReleased = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let held = false;
+  await page.route('**/snapshots/typescript-node-modules.json.gz', async (route) => {
+    if (!held) {
+      held = true;
+      announceSnapshotRequest();
+      await snapshotReleased;
+    }
+    await route.continue();
+  });
+
+  await setDevConfig(page, { templateId: 'typescript', slug: 'scratch', setup: 'instant' });
+  await snapshotRequested;
+  try {
+    await writeOwnerFile(page, '/scratch/user-during-restore.txt', 'keep overlap bytes\n');
+    await expect.poll(async () => (await readOwnerProjectIndex(page)).scratch?.dirty).toBe(true);
+  } finally {
+    releaseSnapshot();
+  }
+
+  const ls = await execLine(page, 'ls node_modules/typescript');
+  expect(ls.exit).toBe(0);
+  const userFile = await readOwnerFile(page, '/scratch/user-during-restore.txt');
+  expect(userFile).toMatchObject({ ok: true, text: 'keep overlap bytes\n' });
+  expect((await readOwnerProjectIndex(page)).scratch?.dirty).toBe(true);
+});
+
+test('boot npm carries baseline provenance; a later owner write still protects Scratch', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-boot-npm-provenance',
+    template: 'typescript',
+    starter: 'typescript-ls',
+    setup: 'from-scratch',
+    hiddenEmptyBoot: false,
+  });
+  expect((await readOwnerProjectIndex(page)).scratch?.dirty).toBe(false);
+
+  // The gallery's generated install is part of the Starter baseline. Its
+  // package-lock/node_modules/stamp writes must use the explicit baseline VFS,
+  // including continuations after awaits; a global suppression window would
+  // also hide an overlapping editor write.
+  const install = await execLine(page, 'npm install', 'boot');
+  expect(install.exit).toBe(0);
+  await flushOwnerDurable(page);
+
+  const cleanIndex = await readOwnerProjectIndex(page);
+  expect(cleanIndex.scratch?.dirty).toBe(false);
+
+  // The normal owner bridge remains protect-by-default after the baseline
+  // install; no post-install `dirty=false` cleanup may erase this provenance.
+  await writeOwnerFile(page, '/scratch/user-after-boot.txt', 'keep me\n');
+  await flushOwnerDurable(page);
+  const dirtyIndex = await readOwnerProjectIndex(page);
+  expect(dirtyIndex.scratch?.dirty).toBe(true);
+});
+
+test('read-only terminal git status keeps a clean Scratch clean', async ({ page }) => {
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-terminal-git-read-provenance',
+    template: 'typescript',
+    starter: 'typescript-ls',
+    setup: 'from-scratch',
+    hiddenEmptyBoot: false,
+  });
+  expect((await readOwnerProjectIndex(page)).scratch?.dirty).toBe(false);
+
+  const status = await execLine(page, 'git status --porcelain');
+  expect(status.exit).toBe(0);
+  await flushOwnerDurable(page);
+  expect((await readOwnerProjectIndex(page)).scratch?.dirty).toBe(false);
 });

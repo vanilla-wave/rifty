@@ -55,6 +55,28 @@ describe('git owner RPC bridge', () => {
     await expect(page('git-status-parity').status()).resolves.toEqual(await g.status());
   });
 
+  it('routes read RPCs to housekeeping git and mutations to protected git', async () => {
+    const writer = await seededRepo();
+    const reader = await seededRepo();
+    await writer.vfs.writeFile('/repo/a.txt', 'writer edit\n');
+    await reader.vfs.writeFile('/repo/reader-only.txt', 'reader status\n');
+    teardowns.push(serveGitOwnerRpc('git-split-surfaces', writer.g, reader.g));
+    const c = page('git-split-surfaces');
+
+    await expect(c.status()).resolves.toEqual(await reader.g.status());
+    await c.add('a.txt');
+
+    const writerIndex = await writer.g.show(':a.txt');
+    expect(writerIndex.type).toBe('blob');
+    if (writerIndex.type !== 'blob') throw new Error('expected writer index blob');
+    expect(dec.decode(writerIndex.content)).toBe('writer edit\n');
+
+    const readerIndex = await reader.g.show(':a.txt');
+    expect(readerIndex.type).toBe('blob');
+    if (readerIndex.type !== 'blob') throw new Error('expected reader index blob');
+    expect(dec.decode(readerIndex.content)).toBe('first\n');
+  });
+
   it('returns show(HEAD:path) blob bytes byte-identical to the owner engine', async () => {
     const { g } = await seededRepo();
     serve('git-show-parity', g);

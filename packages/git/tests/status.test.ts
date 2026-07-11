@@ -56,3 +56,30 @@ it('MD is reachable: stage a modification, then delete the file on disk', async 
   await vfs.rm('/repo/a.txt');
   expect(await xyFor(g, 'a.txt')).toBe('MD');
 });
+
+it('status stays read-only when unchanged file stats drift', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const baseFs = vfsToGitFs(vfs);
+  const writes: string[] = [];
+  const fs = {
+    promises: {
+      ...baseFs.promises,
+      async writeFile(path: string, data: Uint8Array | string, opts?: unknown): Promise<void> {
+        writes.push(path);
+        await baseFs.promises.writeFile(path, data, opts);
+      },
+    },
+  };
+  const g = makeGit({ fs, dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/a.txt', 'same bytes\n');
+  await g.add('a.txt');
+  await g.commit({ message: 'first', author: AUTHOR });
+  writes.length = 0;
+
+  const before = await vfs.stat('/repo/a.txt');
+  await vfs.utimes('/repo/a.txt', before.mtime + 10_000, before.mtime + 10_000);
+  expect(await g.status()).toEqual([{ filepath: 'a.txt', status: '111' }]);
+  expect(writes.filter((path) => path.endsWith('/.git/index'))).toEqual([]);
+});

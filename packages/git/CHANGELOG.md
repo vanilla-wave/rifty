@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `status()` is now read-only on stat drift instead of silently refreshing
+  `.git/index`; status results stay identical while mutation provenance remains
+  reserved for explicit Git verbs.
 - **Annotated tag commit-ish peeling is now commit-safe.** `resolveRevision`, `reset`, checkout detach/start-points, and commit reads peel annotated tags to commits before parent walks or ref writes; annotated tags that target non-commit objects are rejected before HEAD can be corrupted. Guards: `revspec-show-log.test.ts`, `checkout.test.ts`.
 - **fs-adapter `readFile` honors the STRING encoding form (`'utf8'`), not just `{ encoding: 'utf8' }` — `.gitignore` is now actually honored.** isomorphic-git's ignore manager reads `.gitignore` via `fs.readFile(path, 'utf8')`; the adapter previously returned raw bytes for that call, so ignore rules never parsed and ignored files (`node_modules`, build output, `*.log`) leaked into `git status`, `git add .`, and `isIgnored`. Now excluded. Guard: `gitignore.test.ts` (RED-checked).
 - **`diff()` detects binary content** (NUL-byte heuristic) and emits a `binary: true` marker (rendered as git's `Binary files … differ`) instead of a lossy UTF-8 line-diff of mojibake. Guard: `diff.test.ts`.

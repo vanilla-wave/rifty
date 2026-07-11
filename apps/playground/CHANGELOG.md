@@ -18,6 +18,9 @@
 
 ### Fixed
 
+- Starter seed, dependency restore/install, deferred stamp promotion, Git amend,
+  and read-only SCM housekeeping now retain explicit baseline VFS provenance;
+  fresh Scratch stays clean while concurrent or later user writes remain protected.
 - Project-index operations now acknowledge durability only after a clean OPFS
   failure ledger; quota/permission and thrown flush failures return a correlated
   error instead of publishing durable success, while owner-local failures log

@@ -603,7 +603,10 @@ export function makeGit(opts: MakeGitOptions): Git {
       await git.remove({ fs, dir, filepath });
     },
     async status() {
-      const matrix = await git.statusMatrix({ fs, dir });
+      // The facade contract is observational. isomorphic-git's default refresh
+      // rewrites `.git/index` when only file stats drift, turning `git status`
+      // into a hidden mutation; explicit add/remove/reset verbs own index writes.
+      const matrix = await git.statusMatrix({ fs, dir, refresh: false });
       return matrix.map(
         ([filepath, head, workdir, stage]): StatusEntry => ({
           filepath,

@@ -161,6 +161,17 @@ function isResponseFrame(frame: GitOwnerFrame): frame is GitOwnerResponseFrame {
   return 'response' in frame;
 }
 
+function isReadOnlyRequest(request: GitOwnerRequest): boolean {
+  return (
+    request.op === 'status' ||
+    request.op === 'diff' ||
+    request.op === 'show' ||
+    request.op === 'log' ||
+    request.op === 'currentBranch' ||
+    request.op === 'listBranches'
+  );
+}
+
 function cloneShowObject(object: ShowObject): ShowObject {
   if (object.type !== 'blob') return object;
   const content = new Uint8Array(object.content.byteLength);
@@ -276,9 +287,14 @@ async function dispatchGitOwnerRequest(
 
 /**
  * Owner side. Serves git RPC requests against the live owner `makeGit` facade.
+ * `readGit` may carry housekeeping provenance; mutations always use `mutationGit`.
  * Returns an idempotent teardown.
  */
-export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
+export function serveGitOwnerRpc(
+  key: OwnerBridgeKey,
+  mutationGit: Git,
+  readGit: Git = mutationGit,
+): () => void {
   const channel = new BroadcastChannel(channelNameFor(gitOwnerChannelUrl(key)));
 
   const onMessage = (event: MessageEvent): void => {
@@ -291,7 +307,10 @@ export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
           response: {
             id: frame.request.id,
             ok: true,
-            result: await dispatchGitOwnerRequest(git, frame.request),
+            result: await dispatchGitOwnerRequest(
+              isReadOnlyRequest(frame.request) ? readGit : mutationGit,
+              frame.request,
+            ),
           },
         } satisfies GitOwnerResponseFrame);
       } catch (err) {

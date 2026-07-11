@@ -5,7 +5,6 @@ import {
   expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
-  selectPreset,
   terminalBuffer,
 } from './helpers/playground.ts';
 
@@ -179,10 +178,17 @@ test.describe('generic dev-server lifecycle — dual-server preset switch', () =
       .poll(() => fetchPreview('/preview/4200/'), { timeout: 90_000, intervals: [1_000, 2_000] })
       .toContain('SECOND-OK');
 
-    // Switch presets while BOTH servers are live. The switch stops the vite dev
-    // SESSION; the node server keeps the derived status 'running' — the stop
-    // wait must settle on ownership moving, not on a global 'stopped'.
-    await selectPreset(page, 'hono-api');
+    // `second.mjs` is a real user write, so the scratch guard must fire before
+    // the switch. Confirm the discard explicitly; then the switch stops the Vite
+    // SESSION while the node server keeps global status 'running'. The stop wait
+    // must settle on ownership moving, not on a global 'stopped'.
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.click('[data-preset="hono-api"]');
+    const dirtyDialog = page.locator('.rf-dialog[role="dialog"]');
+    await expect(dirtyDialog).toContainText('Discard unsaved scratch?');
+    await dirtyDialog.getByRole('button', { name: 'Discard & continue' }).click();
+    await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 90_000 });
     await expect(page.locator('.rf-livepill')).toContainText(':3321', { timeout: 150_000 });
   });
 });

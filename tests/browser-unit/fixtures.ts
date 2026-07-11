@@ -25,6 +25,11 @@ export interface BootOwnerOptions {
   readonly hiddenEmptyBoot?: boolean;
 }
 
+export interface OwnerProjectIndexSnapshot {
+  readonly activeId: string;
+  readonly scratch: { readonly starter: string; readonly dirty: boolean } | null;
+}
+
 export async function gotoHarness(page: Page): Promise<void> {
   await page.goto('/unit-harness.html');
   await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
@@ -78,41 +83,50 @@ export function ownerLogs(page: Page): Promise<string> {
 }
 
 /** Run one shell line in a lazily-opened pty session of the current owner. */
-export function execLine(page: Page, line: string): Promise<OwnerExecResult> {
-  return page.evaluate(async (l) => {
-    const w = window as unknown as {
-      __buOwner?: {
-        openSession(sid: string): Promise<void>;
-        exec(
-          sid: string,
-          line: string,
-          opts: {
-            cols: number;
-            rows: number;
-            isTTY: boolean;
-            onChunk: (chunk: string) => void;
-          },
-        ): Promise<number>;
+export function execLine(
+  page: Page,
+  line: string,
+  origin: 'boot' | 'user' = 'user',
+): Promise<OwnerExecResult> {
+  return page.evaluate(
+    async ({ line: l, origin: runOrigin }) => {
+      const w = window as unknown as {
+        __buOwner?: {
+          openSession(sid: string): Promise<void>;
+          exec(
+            sid: string,
+            line: string,
+            opts: {
+              cols: number;
+              rows: number;
+              isTTY: boolean;
+              origin: 'boot' | 'user';
+              onChunk: (chunk: string) => void;
+            },
+          ): Promise<number>;
+        };
+        __buSid?: string;
       };
-      __buSid?: string;
-    };
-    const handle = w.__buOwner;
-    if (!handle) throw new Error('execLine: no owner booted on this page');
-    if (!w.__buSid) {
-      w.__buSid = `bu-${Date.now().toString(36)}`;
-      await handle.openSession(w.__buSid);
-    }
-    let out = '';
-    const exit = await handle.exec(w.__buSid, l, {
-      cols: 120,
-      rows: 24,
-      isTTY: false,
-      onChunk: (chunk: string) => {
-        out += chunk;
-      },
-    });
-    return { exit, out };
-  }, line);
+      const handle = w.__buOwner;
+      if (!handle) throw new Error('execLine: no owner booted on this page');
+      if (!w.__buSid) {
+        w.__buSid = `bu-${Date.now().toString(36)}`;
+        await handle.openSession(w.__buSid);
+      }
+      let out = '';
+      const exit = await handle.exec(w.__buSid, l, {
+        cols: 120,
+        rows: 24,
+        isTTY: false,
+        origin: runOrigin,
+        onChunk: (chunk: string) => {
+          out += chunk;
+        },
+      });
+      return { exit, out };
+    },
+    { line, origin },
+  );
 }
 
 /** writeFrameAcked a UTF-8 file into the owner tree. */
@@ -163,6 +177,28 @@ export function readOwnerFile(
       return { ok: false, text: '', error: err instanceof Error ? err.message : String(err) };
     }
   }, path);
+}
+
+/** Read the current owner-served project index through its real bridge. */
+export function readOwnerProjectIndex(page: Page): Promise<OwnerProjectIndexSnapshot> {
+  return page.evaluate(async () => {
+    const w = window as unknown as { __buOwner?: { snapshotPort: string | number } };
+    if (!w.__buOwner) throw new Error('readOwnerProjectIndex: no owner booted on this page');
+    const { bridgeProjectIndex } = await import('/src/glue/project-index-port.ts');
+    const mirror = bridgeProjectIndex(w.__buOwner.snapshotPort);
+    try {
+      return await new Promise<OwnerProjectIndexSnapshot>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('project index read timed out')), 10_000);
+        const unsubscribe = mirror.subscribe((index) => {
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(index);
+        });
+      });
+    } finally {
+      mirror.dispose();
+    }
+  });
 }
 
 /** Tell the owner the active preset dev config (pty:dev-config round-trip). */

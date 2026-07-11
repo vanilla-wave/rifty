@@ -115,6 +115,7 @@ import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
+import { createPtyRunProvenanceLedger } from './pty-run-provenance.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type ScratchDirtyTracker, createScratchDirtyTracker } from './scratch-dirty-tracker.ts';
 import { binNameOf, createPreviewScope, withViteCliArgs, withViteCliEnv } from './vite-cli-prep.ts';
@@ -167,8 +168,17 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
 }
 
-function seedProject(cfg: BootstrapConfig): void {
-  const fs = syncMirror();
+interface WorkspaceMutationSurface {
+  readonly fsSync: FsSync;
+  readonly vfs: SyncMirrorVfs;
+}
+
+function workspaceMutationSurface(fsSync: FsSync): WorkspaceMutationSurface {
+  return { fsSync, vfs: new SyncMirrorVfs(() => fsSync) };
+}
+
+function seedProject(cfg: BootstrapConfig, surface: WorkspaceMutationSurface): void {
+  const fs = surface.fsSync;
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
@@ -194,17 +204,17 @@ function seedProject(cfg: BootstrapConfig): void {
   }
 }
 
-function seedStarterBaseline(starter: string, root: string): void {
-  const fs = syncMirror();
+function seedStarterBaseline(
+  starter: string,
+  root: string,
+  surface: WorkspaceMutationSurface,
+): void {
+  const fs = surface.fsSync;
   for (const [path, content] of Object.entries(seedFilesForBaseline(starter, root))) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
   }
-}
-
-function ownerGitVfs(): SyncMirrorVfs {
-  return new SyncMirrorVfs();
 }
 
 /**
@@ -223,11 +233,12 @@ async function restoreInstantDeps(
   cfg: BootstrapConfig,
   templateId: string,
   slug: string,
+  surface: WorkspaceMutationSurface,
 ): Promise<void> {
   if (!cfg.bakedNodeModulesUrl) return;
-  const vfs = new SyncMirrorVfs();
+  const { vfs } = surface;
   if (await installStampSatisfiedForPackageJson(vfs, cfg.root, slug, cfg.packageJson)) return;
-  const fs = syncMirror();
+  const fs = surface.fsSync;
   fs.rmSync(`${cfg.root}/node_modules`, { recursive: true, force: true });
   fs.rmSync(`${cfg.root}/package-lock.json`, { force: true });
   fs.rmSync(`${cfg.root}/package.json`, { force: true });
@@ -262,8 +273,11 @@ function isFullInstall(args: readonly string[]): boolean {
   return args.slice(1).every((a) => a.startsWith('-'));
 }
 
-function seedTemplateNodeModulesFiles(cfg: BootstrapConfig): void {
-  const fs = syncMirror();
+function seedTemplateNodeModulesFiles(
+  cfg: BootstrapConfig,
+  surface: WorkspaceMutationSurface,
+): void {
+  const fs = surface.fsSync;
   const nodeModulesRoot = `${cfg.root}/node_modules/`;
   for (const [path, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(path);
@@ -357,6 +371,14 @@ async function bootShellOwner(opts: {
   let lastDevTemplateId: string | null = null;
   let lastDevRoot: string | null = null;
   let devConfigReady: Promise<void> = Promise.resolve();
+  // The global mirror stays fail-safe `protect`. Owner-controlled Starter work
+  // must carry the explicit baseline surface through every async continuation;
+  // otherwise a delayed stamp promotion after owner-ready lies that the user
+  // edited Scratch. Never toggle the global mirror: editor/user writes may race
+  // baseline work and must keep their independent `protect` provenance.
+  const protectedWorkspace = workspaceMutationSurface(syncMirror());
+  const starterBaseline = workspaceMutationSurface(baselineFs);
+  const ptyRunProvenance = createPtyRunProvenanceLedger();
 
   // Owner-boot eddy prefetch (ADR-0195), FIRST thing in the boot — before the
   // seed/git work blocks the realm — so the bundle download runs concurrently
@@ -421,7 +443,7 @@ async function bootShellOwner(opts: {
   };
   const absorbPendingStarterGeneratedBaseline = async (root: string): Promise<void> => {
     if (!pendingStarterGeneratedBaseline.has(root)) return;
-    await amendStarterGeneratedBaseline(ownerGitVfs(), root);
+    await amendStarterGeneratedBaseline(starterBaseline.vfs, root);
     await flushSyncMirror();
     pendingStarterGeneratedBaseline.delete(root);
   };
@@ -431,10 +453,10 @@ async function bootShellOwner(opts: {
     markStarterGeneratedBaselinePending(cfg.root);
   }
   if (hiddenEmptyBoot) {
-    syncMirror().mkdirSync(cfg.root, { recursive: true });
+    starterBaseline.fsSync.mkdirSync(cfg.root, { recursive: true });
   } else {
-    seedProject(cfg);
-    if (freshRoot) seedStarterBaseline(starter, cfg.root);
+    seedProject(cfg, starterBaseline);
+    if (freshRoot) seedStarterBaseline(starter, cfg.root, starterBaseline);
     // Instant presets: pre-seed node_modules from the baked snapshot into the
     // owner store NOW, before any dev line (the full fs is already present);
     // from-scratch deps come from the explicit `npm install` boot step. The
@@ -444,17 +466,21 @@ async function bootShellOwner(opts: {
     // (starter.fault.test.ts pins the race). The amend itself stays BEFORE the
     // first publish — deferring it past ready would flash a phantom
     // package-lock.json change in SCM on every fresh pick.
-    const initialCommit = ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
+    const initialCommit = ensureStarterInitialCommit(starterBaseline.vfs, cfg.root);
     if (fromScratch) {
       await initialCommit;
     } else {
-      await Promise.all([initialCommit, restoreInstantDeps(cfg, spec.id, slug)]);
+      await Promise.all([initialCommit, restoreInstantDeps(cfg, spec.id, slug, starterBaseline)]);
       await absorbPendingStarterGeneratedBaseline(cfg.root);
     }
   }
-  if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);
-  const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });
-  const gitStatusFeed = serveGitStatusFeed(port, ownerGit);
+  if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg, starterBaseline);
+  // isomorphic-git status refreshes its index even though the user requested no
+  // mutation. Keep that owner housekeeping on the baseline surface; explicit
+  // SCM RPC/user git operations retain the protected client below.
+  const ownerStatusGit = makeGit({ fs: vfsToGitFs(starterBaseline.vfs), dir: cfg.root });
+  const ownerGit = makeGit({ fs: vfsToGitFs(protectedWorkspace.vfs), dir: cfg.root });
+  const gitStatusFeed = serveGitStatusFeed(port, ownerStatusGit);
   const publishOwnerState = (): void => {
     publishSnapshot();
     gitStatusFeed.schedule();
@@ -511,10 +537,10 @@ async function bootShellOwner(opts: {
   async function prepareActiveDevConfigDeps(): Promise<void> {
     try {
       if (!devFromScratch) {
-        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+        await restoreInstantDeps(devCfg, devSpec.id, devSlug, starterBaseline);
         await absorbPendingStarterGeneratedBaseline(devCfg.root);
       }
-      seedTemplateNodeModulesFiles(devCfg);
+      seedTemplateNodeModulesFiles(devCfg, starterBaseline);
       publishOwnerState();
     } catch (err) {
       log(
@@ -541,7 +567,7 @@ async function bootShellOwner(opts: {
         installStampSatisfied:
           devFromScratch &&
           (await installStampSatisfiedForPackageJson(
-            new SyncMirrorVfs(),
+            protectedWorkspace.vfs,
             devCfg.root,
             devSlug,
             devCfg.packageJson,
@@ -558,7 +584,7 @@ async function bootShellOwner(opts: {
         // cleanly. A same-template + same-root reload skips this — preserving the
         // user's package.json + installed tree. Owner-realm stateful across runs:
         // the clean runs HERE on the owner store the child reads over fs.* RPC.
-        const fs = syncMirror();
+        const fs = starterBaseline.fsSync;
         try {
           fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
           fs.rmSync(`${devCfg.root}/package-lock.json`, { force: true });
@@ -574,12 +600,12 @@ async function bootShellOwner(opts: {
       // clean it re-seeds package.json + node_modules for the active root). from-scratch
       // deps come SOLELY from the explicit `npm install` boot step.
       if (!devFromScratch) {
-        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+        await restoreInstantDeps(devCfg, devSpec.id, devSlug, starterBaseline);
         await absorbPendingStarterGeneratedBaseline(devCfg.root);
       }
       // The owner store is what the shell and TS LS read. Restore/clean may replace
       // node_modules, so re-assert template-owned declaration packages last.
-      seedTemplateNodeModulesFiles(devCfg);
+      seedTemplateNodeModulesFiles(devCfg, starterBaseline);
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -637,9 +663,8 @@ async function bootShellOwner(opts: {
     }
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
-  const tearGitBridge = serveGitOwnerRpc(port, ownerGit);
+  const tearGitBridge = serveGitOwnerRpc(port, ownerGit, ownerStatusGit);
 
-  const vfs = new SyncMirrorVfs();
   const registry = createProxiedRegistryClient();
   let binRunSeq = 0;
   const binPreviewSids = new WeakMap<object, string>();
@@ -788,38 +813,50 @@ async function bootShellOwner(opts: {
       }
       return runScriptCommand(command, ctx);
     };
-    const npmCommand = createNpmShellCommand({
-      vfs,
-      registry,
-      // Durable-on-exit (npm parity): checked drains around the stamp
-      // (ADR-0187 Corrected) — a dirty persist report skips the stamp so a
-      // reload never trusts a torn tree (owner-snapshot-restore-exec).
-      flush: flushSyncMirror,
-      // Stamp the install for the CURRENT project slug (same key the dev-server
-      // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
-      // this tree — otherwise the arrival re-runs and replaces node_modules,
-      // dropping the user's `npm install` (ADR-0135).
-      projectSlug: () => devSlug,
-      runScript: runPackageScript,
-      // ADR-0182 opt-in fast install — env-config only (default OFF). When a
-      // resolver URL is configured the visible `npm install` uses eddy's bundle
-      // + auto-fallback; inert (byte-identical) when unset.
-      resolverUrl: getResolverUrl(),
-      // ADR-0195: the ACTIVE template's pinned closure hash (cacheable GET) and
-      // the owner-boot prefetch — getters, the active preset can change. Keyed
-      // on the TEMPLATE id, not the slug (the template owns the dep-set).
-      resolverClosureHash: () => getEddyPin(devSpec.id),
-      resolverBundleBaseUrl: getEddyBundleBaseUrl(),
-      resolverPrefetch: () => installPrefetch,
-      // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
-      learnedPins: {
-        get: (key) => readLearnedPin(vfs, key),
-        set: (key, hash) => writeLearnedPin(vfs, key, hash),
-      },
-    });
+    const makeNpmCommand = (surface: WorkspaceMutationSurface) =>
+      createNpmShellCommand({
+        vfs: surface.vfs,
+        registry,
+        // Durable-on-exit (npm parity): checked drains around the stamp
+        // (ADR-0187 Corrected) — a dirty persist report skips the stamp so a
+        // reload never trusts a torn tree (owner-snapshot-restore-exec).
+        flush: flushSyncMirror,
+        // Stamp the install for the CURRENT project slug (same key the dev-server
+        // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
+        // this tree — otherwise the arrival re-runs and replaces node_modules,
+        // dropping the user's `npm install` (ADR-0135).
+        projectSlug: () => devSlug,
+        runScript: runPackageScript,
+        // ADR-0182 opt-in fast install — env-config only (default OFF). When a
+        // resolver URL is configured the visible `npm install` uses eddy's bundle
+        // + auto-fallback; inert (byte-identical) when unset.
+        resolverUrl: getResolverUrl(),
+        // ADR-0195: the ACTIVE template's pinned closure hash (cacheable GET) and
+        // the owner-boot prefetch — getters, the active preset can change. Keyed
+        // on the TEMPLATE id, not the slug (the template owns the dep-set).
+        resolverClosureHash: () => getEddyPin(devSpec.id),
+        resolverBundleBaseUrl: getEddyBundleBaseUrl(),
+        resolverPrefetch: () => installPrefetch,
+        // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
+        learnedPins: {
+          get: (key) => readLearnedPin(surface.vfs, key),
+          set: (key, hash) => writeLearnedPin(surface.vfs, key, hash),
+        },
+      });
+    const protectedNpmCommand = makeNpmCommand(protectedWorkspace);
+    const baselineNpmCommand = makeNpmCommand(starterBaseline);
     shell.registerCommand('npm', async (args, ctx) => {
+      // Origin is immutable on the pty:exec frame. Select a concrete VFS surface
+      // at the npm boundary; never suppress the global observer while async work
+      // runs, because an editor/user write may overlap it.
+      const bootBaseline = ptyRunProvenance.intentForSession(ptySidFromContext(ctx)) === 'baseline';
+      const mutationSurface = bootBaseline ? starterBaseline : protectedWorkspace;
+      const npmCommand = bootBaseline ? baselineNpmCommand : protectedNpmCommand;
       const absorbGeneratedBaseline =
-        devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
+        bootBaseline &&
+        devFromScratch &&
+        isFullInstall(args) &&
+        pendingStarterGeneratedBaseline.has(devCfg.root);
       // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
       // slug stamp yet) starts CLEAN — clear any prior preset's node_modules +
       // lockfile and re-seed THIS preset's package.json — so it is a real COLD
@@ -829,13 +866,13 @@ async function bootShellOwner(opts: {
       // `npm install && <dev>` boot line never races it).
       if (devFromScratch && isFullInstall(args)) {
         const stamped = await installStampSatisfiedForPackageJson(
-          new SyncMirrorVfs(),
+          mutationSurface.vfs,
           devCfg.root,
           devSlug,
           devCfg.packageJson,
         );
         if (!stamped) {
-          const fs = syncMirror();
+          const fs = mutationSurface.fsSync;
           clearProjectTree(fs, devCfg.root);
           fs.writeFileSync(
             normalizePath(`${devCfg.root}/package.json`),
@@ -925,8 +962,14 @@ async function bootShellOwner(opts: {
   const server = createPtyServer({
     send,
     makeShell,
-    onRunStart: (run) => scratchDirtyTracker.startRun(run),
-    onRunSettled: (run) => scratchDirtyTracker.settleRun(run),
+    onRunStart: (run) => {
+      ptyRunProvenance.start(run);
+      scratchDirtyTracker.startRun(run);
+    },
+    onRunSettled: (run) => {
+      scratchDirtyTracker.settleRun(run);
+      ptyRunProvenance.settle(run);
+    },
     onDevServerReq: () => previews.publishDev(),
     // ADR-0155: answer a page subscribe by re-emitting the full preview-port set.
     onPreviewReq: () => previews.publish(),
