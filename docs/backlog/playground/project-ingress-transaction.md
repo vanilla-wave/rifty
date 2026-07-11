@@ -7,7 +7,7 @@ why: Local import and Git clone can both create a Project, but independent valid
 user_story: As a developer opening an external project, I want my current Project preserved until the complete new tree is atomically committed in the active storage backend, regardless of whether its bytes came from a folder, archive, or Git.
 epic: from-intent-to-running-project
 sources: [M13, ADR-0165, ADR-0146]
-code: [apps/playground/src/glue/app-project-store.ts, apps/playground/src/orchestration/workspace-files.ts, apps/playground/src/orchestration/workspace-lifecycle.ts]
+code: [apps/playground/src/glue/app-project-store.ts, packages/workbench/src/orchestration/workspace-files.ts, apps/playground/src/orchestration/workspace-lifecycle.ts]
 ---
 
 ## Context

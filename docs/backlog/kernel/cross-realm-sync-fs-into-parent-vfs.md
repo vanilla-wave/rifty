@@ -6,7 +6,7 @@ created: 2026-06-13
 why: Option A (SAB-tunnel cross-realm fs) LANDED in ADR-0150 P6a (owner serves fs.* on the dispatcher; child reads via readKernelSyncApi → SyncRpcFsSync); residuals only — child_process grandchildren, RPC-path conformance, retire the snapshot workaround.
 user_story: As a dev whose forked Worker calls `fs.readFileSync`/`existsSync`/`statSync` on a file the parent just wrote, I want it to see the parent's live VFS, but today the child hits a fresh empty realm-local `syncMirror()` and gets ENOENT unless the playground hand-copies a snapshot.
 sources: [ADR-0011, ADR-0072, ROADMAP M6]
-code: [packages/vfs/src/sync-mirror.ts, packages/runtime-js/src/builtins/fs.ts, packages/kernel/src/shared-globals.ts, packages/runtime-js/src/builtins/child_process-sync.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+code: [packages/vfs/src/sync-mirror.ts, packages/runtime-js/src/builtins/fs.ts, packages/kernel/src/shared-globals.ts, packages/runtime-js/src/builtins/child_process-sync.ts, packages/workbench/src/workers/real-vite-bootstrap.ts]
 ---
 
 ## Context

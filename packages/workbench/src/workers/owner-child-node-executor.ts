@@ -1,0 +1,109 @@
+/**
+ * Owner-realm `node <file>` child driver (ADR-0155). Foreground run like the bin
+ * executor (stream stdout/stderr, Ctrl-C kill→mute, resolve on exit code) PLUS
+ * the dev-server child's fork-IPC: a server child posts `rifty:node-listening`
+ * which the owner forwards into the preview registry. Spawn injected (real
+ * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
+ */
+import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import type { CommandContext } from '@riftydev/shell';
+import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
+import { type ForegroundChildHandle, runForegroundChild } from '../glue/run-foreground-child.ts';
+import { type WorkbenchChildRuntimeConfig, buildChildRuntimeEnv } from './worker-config.ts';
+
+export function buildNodeChildSpawnSpec(
+  entry: string,
+  args: readonly string[],
+  env: Record<string, string>,
+  cwd: string,
+  nodeEntryUrl: string,
+  childConfig: WorkbenchChildRuntimeConfig,
+  tty = false,
+  cols?: number,
+  rows?: number,
+): SpawnWorkerSpec {
+  const isTTY = tty ? '1' : '0';
+  return {
+    entry: { kind: 'url', url: nodeEntryUrl },
+    argv: ['rifty', entry, ...args],
+    // RIFTY_BIN=0 → runNodeEntry(bin:false) imports the entry directly (not a
+    // .bin shim). serve:true → kernel keeps it alive; the bootstrap owns the
+    // run-vs-serve decision (ADR-0155). RIFTY_NODE_SERVE gates the new path.
+    env: {
+      ...env,
+      ...buildChildRuntimeEnv(childConfig),
+      RIFTY_BIN: '0',
+      RIFTY_REMOTE_FS: '1',
+      RIFTY_NODE_SERVE: '1',
+      RIFTY_STDIN_IS_TTY: '0',
+      RIFTY_STDOUT_IS_TTY: isTTY,
+      RIFTY_STDERR_IS_TTY: isTTY,
+      ...(tty && cols !== undefined ? { RIFTY_TTY_COLS: String(cols) } : {}),
+      ...(tty && rows !== undefined ? { RIFTY_TTY_ROWS: String(rows) } : {}),
+    },
+    cwd,
+    serve: true,
+  };
+}
+
+export interface NodeChildHandle extends ForegroundChildHandle {
+  readonly kind: string;
+  send(message: unknown): unknown;
+}
+
+export interface NodeRunHooks {
+  /** Stable id for this run (registry key + label). */
+  readonly sid: string;
+  readonly onListening: (sid: string, ports: number[], previewScope?: string) => void;
+  readonly onExit: (sid: string) => void;
+}
+export type OwnerNodeExecutor = (
+  entry: string,
+  args: readonly string[],
+  ctx: CommandContext,
+  hooks: NodeRunHooks,
+) => Promise<number>;
+
+export function createOwnerChildNodeExecutor(
+  nodeEntryUrl: string,
+  childConfig: WorkbenchChildRuntimeConfig,
+  spawn: (spec: SpawnWorkerSpec) => NodeChildHandle = (spec) => {
+    const h = globalProcessManager.spawnWorker('node', spec, 1);
+    if (h.kind !== 'worker')
+      throw new Error(`owner-child-node-executor: expected worker, got ${h.kind}`);
+    // After the kind guard TS narrows to WorkerProcessHandle, which structurally
+    // satisfies NodeChildHandle: stdout()/stderr() are Readable; on(event,listener)
+    // (wide EventEmitter sig) covers the narrowed 'exit'/'message' overloads;
+    // send()/kill() return values are assignable to `unknown`. No cast needed
+    // (mirrors owner-child-bin-executor).
+    return h;
+  },
+): OwnerNodeExecutor {
+  // `async` so a synchronous `spawn` throw (the kind guard / host-boundary
+  // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
+  // shared driver's listener registration run before the first suspension.
+  return async (entry, args, ctx, hooks) => {
+    const handle = spawn(
+      buildNodeChildSpawnSpec(
+        entry,
+        args,
+        ctx.env,
+        ctx.cwd,
+        nodeEntryUrl,
+        childConfig,
+        ctx.isTTY === true,
+        ctx.cols,
+        ctx.rows,
+      ),
+    );
+    // Shared foreground driver (stream/abort/exit). A server child posts
+    // `rifty:node-listening` → register a preview slot; the slot is removed on
+    // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
+    return runForegroundChild(handle, ctx, {
+      onMessage: (m) => {
+        if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
+      },
+      onExit: () => hooks.onExit(hooks.sid),
+    });
+  };
+}

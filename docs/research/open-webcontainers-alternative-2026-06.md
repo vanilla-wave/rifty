@@ -55,7 +55,8 @@ All were INFRA — none needed a curated package-substitution registry.
   `docs/public/open-runtime-position.md`; transitive licence audit parked as
   `distribution/dependency-license-audit`)
   (+ SDK facade-limit docs closed in `packages/rifty/README.md`; existing
-  create-rifty-template / workbench-controllers / framework-bindings-kit remain tagged M11).
+  create-rifty-template / framework-bindings-kit remain tagged M11;
+  framework-free workbench controllers are now governed by ADR-0224).
 - npm-client: package.json-driven install, `.bin` launcher shims, shell-side `.bin` PATH
   lookup, and generic `npm run` script routing have since landed; prod proxy remains filed
   as `prod-npm-registry-proxy`.

@@ -7,7 +7,7 @@ why: WASI (a real compiled esbuild.wasm guest sharing files with node:fs) is rif
 user_story: As a developer evaluating rifty's WASI claim, I want to click a preset and watch a file written by node:fs get read+rewritten by esbuild.wasm as a WASI guest, but today there is no WASI preset and the esbuild path uses a stdin/stdout transform that never touches a VFS file.
 epic: wasi-in-browser-showcase
 sources: [docs/public/compat/wasi.md]
-code: [apps/playground/src/presets.ts, apps/playground/src/workers/esbuild-wasi-transform.ts, packages/runtime-wasi/src/syscalls/path.ts]
+code: [apps/playground/src/presets.ts, packages/workbench/src/workers/esbuild-wasi-transform.ts, packages/runtime-wasi/src/syscalls/path.ts]
 ---
 
 ## Context

@@ -6,7 +6,7 @@ created: 2026-06-21
 why: ADR-0165 says named projects autosave with no Save button, but the trigger/cadence is unspecified — every keystroke would thrash OPFS, never saving would lose work on a crash
 user_story: As a user editing a named project, I want my edits durable without a Save button (ADR-0165) and without the IDE hammering disk on every keystroke, but the autosave trigger is currently undefined.
 sources: [ADR-0165, ADR-0072]
-code: [apps/playground/src/App.tsx, apps/playground/src/glue/workspace-archive-port.ts]
+code: [apps/playground/src/App.tsx, packages/workbench/src/glue/workspace-archive-port.ts]
 ---
 
 ## Context

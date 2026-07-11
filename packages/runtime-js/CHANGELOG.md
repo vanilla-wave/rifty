@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `execSync` now snapshots the caller's cwd/env when options omit them, while
+  explicit user env replacement cannot erase host-owned bootstrap config needed
+  by recursive node and `worker_threads` workers (ADR-0231).
 - **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
   - `open(2)` flag×target error lattice pinned WHOLE against real Node
     (parity `fs/open-flag-target-matrix`): `O_CREAT|O_DIRECTORY` is `EINVAL`
@@ -179,6 +182,11 @@
 
 ### Added
 
+- **Node TTY dimensions update live (ADR-0225).** TTY stdout/stderr expose
+  `columns`, `rows`, `getWindowSize()`, and stream `resize`; kernel resize
+  control frames update both streams before emitting process `SIGWINCH`.
+  Initial dimensions come from validated `RIFTY_TTY_COLS`/`RIFTY_TTY_ROWS`
+  with the existing 80×24 fallback, and duplicate dimensions emit no events.
 - **`node:stream` exposes `compose` + `Duplex.from` + `Readable.wrap`** —
   `require('node:stream').compose(a, b)`, `Duplex.from(src)`, and
   `readable.wrap(legacyStream)` (Node v16, owned by `@riftydev/io`) now resolve.

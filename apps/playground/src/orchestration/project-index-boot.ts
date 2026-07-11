@@ -1,3 +1,4 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 /**
  * Project-index mirror + boot decision — headless core extracted from App.tsx
  * (ADR-0197, epic playground-testable-core, slice 2). Owns the PAGE in-memory
@@ -12,7 +13,6 @@
  */
 import { createSignal, untrack } from 'solid-js';
 import { needsProjectChoiceOnBoot } from '../glue/project-boot-policy.ts';
-import type { ProjectIndex } from '../glue/project-index.ts';
 
 /** Page mirror of the owner's index bridge (structural ProjectIndexMirror subset). */
 export interface IndexMirrorPort {

@@ -107,10 +107,13 @@ function encodeChunk(chunk: string | Uint8Array): Uint8Array {
 
 type StdioCallback = () => void;
 
-interface NodeStdioWriter {
+interface NodeStdioWriter extends EventEmitter {
   write(chunk: string | Uint8Array): boolean;
   isTTY: boolean;
   fd: number;
+  columns?: number;
+  rows?: number;
+  getWindowSize?(): [number, number];
   clearLine?(dir?: number, cb?: StdioCallback): boolean;
   cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
   moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
@@ -123,7 +126,13 @@ function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallb
   return ok;
 }
 
-function attachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
+function attachTtyControls(
+  stream: NodeStdioWriter,
+  size: { readonly cols: number; readonly rows: number },
+): NodeStdioWriter {
+  stream.columns = size.cols;
+  stream.rows = size.rows;
+  stream.getWindowSize = () => [stream.columns ?? 0, stream.rows ?? 0];
   stream.clearLine = (dir, cb): boolean => {
     const direction = dir ?? 0;
     const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
@@ -148,11 +157,16 @@ function attachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
 }
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStdioWriter {
-  const stream: NodeStdioWriter = {
+function makeStdioWriter(
+  port: MessagePort,
+  fd: number,
+  isTTY: boolean,
+  size: { readonly cols: number; readonly rows: number },
+): NodeStdioWriter {
+  const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
-    write(chunk) {
+    write(chunk: string | Uint8Array) {
       const bytes = encodeChunk(chunk);
       // Transfer the buffer only when we own it (TextEncoder output). A passed-in
       // Uint8Array may share its backing buffer with the caller, so copy instead.
@@ -164,8 +178,8 @@ function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStd
       }
       return true;
     },
-  };
-  return isTTY ? attachTtyControls(stream) : stream;
+  }) as NodeStdioWriter;
+  return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
 export interface NodeStdin extends EventEmitter {
@@ -259,6 +273,20 @@ function envFlag(env: Readonly<Record<string, string | undefined>>, key: string)
   return env[key] === '1';
 }
 
+function ttyDimension(
+  env: Readonly<Record<string, string | undefined>>,
+  key: 'RIFTY_TTY_COLS' | 'RIFTY_TTY_ROWS',
+  fallback: number,
+): number {
+  const raw = env[key];
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${key} must be a positive integer; received ${raw}`);
+  }
+  return value;
+}
+
 /** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
 export function toUint8ExitCode(n: number): number {
   return ((Math.trunc(n) % 256) + 256) % 256;
@@ -348,8 +376,22 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'));
-      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'));
+      const size = {
+        cols: ttyDimension(spec.env, 'RIFTY_TTY_COLS', 80),
+        rows: ttyDimension(spec.env, 'RIFTY_TTY_ROWS', 24),
+      };
+      this.stdout = makeStdioWriter(
+        spec.stdio.stdout,
+        1,
+        envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'),
+        size,
+      );
+      this.stderr = makeStdioWriter(
+        spec.stdio.stderr,
+        2,
+        envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'),
+        size,
+      );
       const reader = makeStdinReader(spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -359,22 +401,22 @@ export class NodeProcess extends EventEmitter {
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      this.stdout = {
-        write: (chunk) => {
+      this.stdout = Object.assign(new EventEmitter(), {
+        write: (chunk: string | Uint8Array) => {
           console.log(chunk);
           return true;
         },
         isTTY: false,
         fd: 1,
-      };
-      this.stderr = {
-        write: (chunk) => {
+      }) as NodeStdioWriter;
+      this.stderr = Object.assign(new EventEmitter(), {
+        write: (chunk: string | Uint8Array) => {
           console.error(chunk);
           return true;
         },
         isTTY: false,
         fd: 2,
-      };
+      }) as NodeStdioWriter;
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -453,6 +495,8 @@ export class NodeProcess extends EventEmitter {
         } else {
           this.emit('message', frame.payload);
         }
+      } else if (frame.kind === 'ipc:tty-resize') {
+        this.#resizeTty(frame.cols, frame.rows);
       } else if (frame.kind === 'ipc:disconnect') {
         this.#tearDownIpc();
       }
@@ -498,6 +542,22 @@ export class NodeProcess extends EventEmitter {
       }
       this.#tearDownIpc();
     };
+  }
+
+  #resizeTty(cols: number, rows: number): void {
+    if (!Number.isSafeInteger(cols) || cols <= 0 || !Number.isSafeInteger(rows) || rows <= 0) {
+      throw new RangeError(`TTY resize must use positive integer cells; received ${cols}x${rows}`);
+    }
+    let changed = false;
+    for (const stream of [this.stdout, this.stderr]) {
+      if (!stream.isTTY) continue;
+      if (stream.columns === cols && stream.rows === rows) continue;
+      stream.columns = cols;
+      stream.rows = rows;
+      changed = true;
+      stream.emit('resize');
+    }
+    if (changed) this.emit('SIGWINCH', 'SIGWINCH');
   }
 
   #tearDownIpc(): void {

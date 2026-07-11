@@ -1,7 +1,7 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 import { createRoot } from 'solid-js';
 import { describe, expect, it } from 'vitest';
 import { createPageStore } from './page-store.ts';
-import type { ProjectIndex } from './project-index.ts';
 
 const SAMPLE: ProjectIndex = {
   activeId: 'p-1',

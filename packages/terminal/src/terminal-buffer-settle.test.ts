@@ -60,6 +60,18 @@ describe('terminal buffer settle (mirror marker flush)', () => {
     expect(settled).toContain(MARKER);
   });
 
+  it('keeps replay cursor restoration out of sync and settled text snapshots', async () => {
+    const term = makeTerm();
+    term.write('> \nlater\x1b[1A\x1b[2C');
+
+    const settled = await term.snapshotBufferSettled();
+    const replay = term.serializeText({ excludeModes: true });
+
+    expect(replay).toBe('> \r\nlater\x1b[1A\x1b[2C');
+    expect(term.snapshotBuffer()).toBe('> \r\nlater');
+    expect(settled).toBe('> \r\nlater');
+  });
+
   it('resolves empty after dispose without hanging', async () => {
     const term = makeTerm();
     term.write(`${MARKER}\n`);

@@ -8,7 +8,7 @@ user_story: As a developer opening an npm project, I want known blockers and unk
 epic: honest-compatibility-in-the-ide
 blocked_by: [toolchain-build/machine-readable-compat-claim-catalog]
 sources: [M11, docs/public/compat/README.md, docs/public/compat/incompatible-packages.md, docs/backlog/process-meta/compat-matrix-coverage-debt.md]
-code: [tools/compat-matrix-generator/cli.js, apps/playground/src/glue/project-deps.ts, apps/playground/src/glue/npm-shell-command.ts]
+code: [tools/compat-matrix-generator/cli.js, packages/workbench/src/glue/project-deps.ts, packages/workbench/src/glue/npm-shell-command.ts]
 ---
 
 ## Context

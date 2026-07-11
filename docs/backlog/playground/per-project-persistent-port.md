@@ -6,7 +6,7 @@ created: 2026-06-21
 why: defaultPort is per-template, not per-project (ADR-0078); two projects from the same Starter switched back and forth reuse one listen port, and the switch flips the preview port (interacts with preset-switch-port-flip-window)
 user_story: As a user with two open projects on the same Starter, I want each to keep a stable preview port/URL across switches, but today the port comes from the template spec so both share it and the preview URL churns on every switch.
 sources: [ADR-0165, ADR-0078, ADR-0148]
-code: [apps/playground/src/templates/project-spec.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/App.tsx]
+code: [packages/workbench/src/project-spec.ts, packages/workbench/src/glue/realVite.ts, apps/playground/src/App.tsx]
 ---
 
 ## Context

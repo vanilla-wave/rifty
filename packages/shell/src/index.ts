@@ -35,4 +35,11 @@ export {
   type ShellHighlightSpan,
   type ShellInputValidation,
 } from './language-service.ts';
-export type { CommandContext, ShellCommand, StdinReader, Writer } from './types.ts';
+export type {
+  CommandContext,
+  ShellCommand,
+  StdinReader,
+  TerminalResizeSource,
+  TerminalSize,
+  Writer,
+} from './types.ts';

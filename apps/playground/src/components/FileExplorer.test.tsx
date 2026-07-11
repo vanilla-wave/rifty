@@ -1,6 +1,6 @@
+import { NodeModulesCache } from '@riftydev/workbench';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it } from 'vitest';
-import { NodeModulesCache } from '../glue/node-modules-cache.ts';
 import { FileExplorer } from './FileExplorer.tsx';
 
 const enc = new TextEncoder();

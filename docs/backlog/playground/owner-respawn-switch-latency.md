@@ -6,7 +6,7 @@ created: 2026-06-21
 why: ADR-0165 makes project switch a full owner teardown+respawn (env is spawn-time-only); every switch restarts the terminal + dev server + re-wires bridges — latency is unmeasured and e2e may time out
 user_story: As a user switching between two saved projects, I want the switch to feel responsive (or at least show honest progress), but ADR-0165's mechanism kills + respawns the owner worker and reboots the dev server on every switch, which can be multi-second with no feedback.
 sources: [ADR-0165, ADR-0146, ADR-0148]
-code: [apps/playground/src/App.tsx, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/realVite.ts]
+code: [apps/playground/src/App.tsx, packages/workbench/src/workers/real-vite-bootstrap.ts, packages/workbench/src/glue/realVite.ts]
 ---
 
 ## Context

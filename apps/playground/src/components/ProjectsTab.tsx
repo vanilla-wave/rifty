@@ -1,3 +1,4 @@
+import type { ActiveId, Project, Scratch } from '@riftydev/workbench';
 /**
  * Launcher Projects tab (design §2a; ADR-0165). Scratch banner (Starter scratch +
  * dirty dot 7x7 #FFBE5C + ACTIVE badge + Save-as-project lime), SAVED PROJECTS
@@ -8,7 +9,6 @@
  */
 import { For, Show } from 'solid-js';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
-import type { ActiveId, Project, Scratch } from '../glue/project-index.ts';
 import { Icon } from './icons.tsx';
 
 export type RowAction = 'switch' | 'rename' | 'reset' | 'delete';

@@ -49,6 +49,7 @@ export type ProcessHandleKind = 'same-realm' | 'worker';
  */
 export type IpcFrame =
   | { readonly kind: 'ipc:message'; readonly payload: unknown }
+  | { readonly kind: 'ipc:tty-resize'; readonly cols: number; readonly rows: number }
   | { readonly kind: 'ipc:disconnect' };
 
 /**
@@ -124,6 +125,8 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
    * they do NOT downgrade the return value to `false`.
    */
   send(message: unknown): boolean;
+  /** Deliver a live terminal grid update over the internal control plane. */
+  resize(cols: number, rows: number): boolean;
   /**
    * Close the IPC channel (ADR-0045). Idempotent. Posts an `ipc:disconnect`
    * frame to the worker, closes the parent-side IPC port, and emits
@@ -161,6 +164,13 @@ export interface SpawnOptions {
 
 /** Root cwd for processes that have no parent. */
 export const DEFAULT_CWD = '/workspace';
+
+function ttyDimension(value: number, name: 'cols' | 'rows'): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`TTY ${name} must be a positive integer; received ${value}`);
+  }
+  return value;
+}
 
 /** Encoder for forwarded worker-error text pushed onto a child's stderr stream. */
 const STDERR_ENCODER = new TextEncoder();
@@ -339,6 +349,7 @@ export class ProcessManager {
       // `disconnect` from posting after teardown.
       #ipcStarted = false;
       #ipcDisconnected = false;
+      #controlClosed = false;
 
       get cwd(): string {
         return record.cwd;
@@ -370,9 +381,10 @@ export class ProcessManager {
           const frame = ev.data as IpcFrame | undefined;
           if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
           if (frame.kind === 'ipc:message') {
+            if (this.#ipcDisconnected) return;
             this.emit('message', frame.payload);
           } else if (frame.kind === 'ipc:disconnect') {
-            this._tearDownIpc();
+            this._disconnectIpc();
           }
         };
         ports.ipc.start();
@@ -381,15 +393,21 @@ export class ProcessManager {
        * Internal: tear down the parent-side IPC port. Idempotent — second
        * call is a no-op. Closes the port, emits `'disconnect'` exactly once.
        */
-      _tearDownIpc(): void {
+      _disconnectIpc(): void {
         if (this.#ipcDisconnected) return;
         this.#ipcDisconnected = true;
+        this.emit('disconnect');
+      }
+      /** Internal: close the physical channel after process exit/kill. */
+      _closeControl(): void {
+        if (this.#controlClosed) return;
+        this.#controlClosed = true;
         try {
           ports.ipc.close();
         } catch {
           /* peer may have closed already */
         }
-        this.emit('disconnect');
+        this._disconnectIpc();
       }
       /** Internal: push EOF on the read-side streams; called once on exit. */
       _signalEof(): void {
@@ -413,7 +431,24 @@ export class ProcessManager {
         } catch {
           // postMessage throws synchronously if the port was disentangled
           // (peer closed it). Treat as disconnect, return a stable `false`.
-          this._tearDownIpc();
+          this._disconnectIpc();
+          return false;
+        }
+      }
+      resize(cols: number, rows: number): boolean {
+        if (this.#controlClosed || this.exitCode !== null || this.signalCode !== null) {
+          return false;
+        }
+        const frame: IpcFrame = {
+          kind: 'ipc:tty-resize',
+          cols: ttyDimension(cols, 'cols'),
+          rows: ttyDimension(rows, 'rows'),
+        };
+        try {
+          ports.ipc.postMessage(frame);
+          return true;
+        } catch {
+          this._closeControl();
           return false;
         }
       }
@@ -425,7 +460,7 @@ export class ProcessManager {
         } catch {
           /* peer may have closed already */
         }
-        this._tearDownIpc();
+        this._disconnectIpc();
       }
       kill(signal = 'SIGTERM'): boolean {
         if (this.exitCode !== null) return false;
@@ -434,7 +469,7 @@ export class ProcessManager {
         this.signalCode = signal;
         this.exitCode = null;
         this._signalEof();
-        this._tearDownIpc();
+        this._closeControl();
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
         manager.finalize(pid, this, [record.parentToChild]);
@@ -457,7 +492,7 @@ export class ProcessManager {
         if (handle.exitCode !== null || handle.signalCode !== null) return;
         handle.exitCode = code;
         handle._signalEof();
-        handle._tearDownIpc();
+        handle._closeControl();
         handle.emit('exit', code, null);
         handle.emit('close', code, null);
         manager.finalize(pid, handle, [record.parentToChild]);

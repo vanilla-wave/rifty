@@ -1,5 +1,6 @@
-import type { OwnerBridgeKey } from './owner-bridge-key.ts';
+import type { WorkspaceOwnerHandle } from '@riftydev/workbench';
 
+type OwnerBridgeKey = WorkspaceOwnerHandle['snapshotPort'];
 const OWNER_BRIDGE_KEY_FIELD = 'ownerBridgeKey';
 
 export function stampTsLspOwner(message: unknown, key: OwnerBridgeKey): unknown {

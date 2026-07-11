@@ -48,11 +48,16 @@ test.describe('execSync over SAB (real COI Worker + v2 binary frame)', () => {
     const detail = (await page.locator('[data-testid="execsync-detail"]').textContent()) ?? '';
     const hex = (await page.locator('[data-testid="execsync-hex"]').textContent()) ?? '';
     const blocked = (await page.locator('[data-testid="execsync-blocked"]').textContent()) ?? '';
+    const explicitEnv =
+      (await page.locator('[data-testid="execsync-explicit-env"]').textContent()) ?? '';
 
     // The real round-trip: byte-exact non-UTF-8 bytes survive the v2 binary frame.
     expect(hex, `harness detail: ${detail}`).toContain('fffe00');
     // The blocking round-trip returns the child's captured stdout.
-    expect(blocked).toContain('blocked-result');
+    expect(blocked).toContain('blocked-result:inherited:/');
+    // Explicit user env replacement still boots the nested node worker because
+    // host-only worker/WASM config travels on a separate protected seam.
+    expect(explicitEnv).toContain('explicit');
     // Overall harness verdict.
     await expect(harness).toHaveAttribute('data-status', 'pass');
 

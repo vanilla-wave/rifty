@@ -232,7 +232,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // server's slot + serverA's :4001 — to keep one COI test from juggling three
     // live child realms (each a worker behind fs.* RPC). The THIRD concurrent
     // port (serverB :4002) is covered by the registry unit test
-    // (apps/playground/src/workers/preview-registry.test.ts), which proves the
+    // (packages/workbench/src/workers/preview-registry.test.ts), which proves the
     // dev slot + multiple node sids coexist in one snapshot. Coverage is NOT
     // silently reduced — the multi-node-sid case lives there, deterministically.
     await runLineConfirmed(

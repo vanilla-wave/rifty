@@ -15,6 +15,40 @@ export interface ExecSyncOptions {
   readonly maxBuffer?: number;
 }
 
+/** Node defaults omitted `cwd`/`env` to a snapshot of the calling process context. */
+export function resolveExecSyncOptions(
+  opts: ExecSyncOptions | undefined,
+  parentEnv: Readonly<Record<string, string>>,
+  parentCwd: string,
+): ExecSyncOptions {
+  return {
+    ...(opts ?? {}),
+    cwd: opts?.cwd ?? parentCwd,
+    env: { ...(opts?.env ?? parentEnv) },
+  };
+}
+
+function currentProcessContext(): {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+} {
+  const process = (
+    globalThis as unknown as {
+      readonly process?: {
+        cwd?(): string;
+        readonly env?: Readonly<Record<string, string>>;
+      };
+    }
+  ).process;
+  if (!process || typeof process.cwd !== 'function' || process.env === undefined) {
+    throw new Error('execSync: kernel Node process context is unavailable');
+  }
+  return {
+    cwd: process.cwd(),
+    env: process.env,
+  };
+}
+
 /**
  * `execSync` — Node-compatible synchronous child execution.
  *
@@ -33,7 +67,11 @@ export interface ExecSyncOptions {
 export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
   const api = readKernelSyncApi();
   if (api !== null && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
-    const stdout = api.call('execSync', { cmd, opts: opts ?? {} });
+    const parent = currentProcessContext();
+    const stdout = api.call('execSync', {
+      cmd,
+      opts: resolveExecSyncOptions(opts, parent.env, parent.cwd),
+    });
     // ADR-0084 #23: the kernel returns the child's stdout as raw bytes over a
     // binary frame (Node returns a Buffer by default). No re-encode — the old
     // string path mangled non-UTF-8 stdout to U+FFFD.

@@ -6,7 +6,7 @@ created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `vite` now resolves to and runs the installed node_modules/.bin/vite CLI, not an owner-registered curated command.
 user_story: As a developer running `vite ...` in rifty, I want the command to behave like the real Vite CLI — my vite.config applied, unknown flags not silently dropped, and the installed binary executing.
 sources: [ADR-0148, ADR-0173, ADR-0174, ADR-0137, ADR-0150, ADR-0155, docs/backlog/playground/vite8-production-build-preview.md]
-code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/owner-child-bin-executor.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/workers/vite-config-guard.ts]
+code: [packages/workbench/src/workers/real-vite-bootstrap.ts, packages/workbench/src/glue/bin-executor.ts, packages/workbench/src/workers/owner-child-bin-executor.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/workbench/src/workers/vite-cli-prep.ts, packages/workbench/src/workers/vite-config-guard.ts]
 ---
 
 ## Context

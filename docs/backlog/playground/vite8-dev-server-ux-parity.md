@@ -5,8 +5,8 @@ title: vite8 — dev-server UX parity (ready banner, @vite/client ws-warning, pr
 created: 2026-06-21
 why: The Vite 8 dev server diverges from a fresh `npm create vite` in user-visible UX, partly cosmetic, partly architecturally-required-but-unsignposted: no `VITE vX ready in Nms` + Local/Network URL banner (rifty calls createServer/listen programmatically, not the CLI); `@vite/client` logs a red "[vite] failed to connect to websocket" (HMR off → no ws endpoint); the preview is served at SW-routed `/preview/<port>/` on the playground origin (not http://localhost:5173/) with forced `COEP: credentialless` + `CORP: cross-origin` that a normal localhost dev server never sets.
 user_story: As a dev comparing to `npm create vite`, I want either real Vite's ready banner/URLs + clean console, or a clear sandbox signpost (preview lives at /preview/<port>/, HMR off, isolation headers on), but today I get a missing banner, a scary ws error, and a different origin with isolation headers and no explanation.
-sources: [apps/playground/src/workers/dev-server-boot.ts, apps/playground/public/sw.js, apps/playground/src/templates/vite.ts, docs/adr/playground/0161-vite-8-disables-hmr-pending-socket-parity.md]
-code: [apps/playground/src/workers/dev-server-boot.ts]
+sources: [packages/workbench/src/workers/dev-server-boot.ts, apps/playground/public/sw.js, apps/playground/src/templates/vite.ts, docs/adr/playground/0161-vite-8-disables-hmr-pending-socket-parity.md]
+code: [packages/workbench/src/workers/dev-server-boot.ts]
 ---
 
 ## Context

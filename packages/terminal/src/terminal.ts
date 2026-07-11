@@ -468,6 +468,8 @@ export interface RiftyTerminalOptions {
   onSignal?(signal: 'SIGINT'): void;
   /** Raw stdin bytes received while a foreground command is running. */
   onRawInput?(data: TerminalRawInput): void;
+  /** Called after xterm changes its character-cell grid (fit or explicit resize). */
+  onResize?(cols: number, rows: number): void;
   /**
    * Called when editable terminal input is redirected to a running foreground
    * command instead of becoming a new command line.
@@ -605,6 +607,7 @@ export class RiftyTerminal {
     this.term.onBinary((data) => {
       this.handleBinaryInput(data);
     });
+    this.disposables.push(this.term.onResize(({ cols, rows }) => this.opts.onResize?.(cols, rows)));
     this.disposables.push(this.term.onScroll((line) => this.opts.onViewportChange?.(line)));
     this.loadConstructorAddons();
     this.term.attachCustomKeyEventHandler((event) => {
@@ -773,7 +776,7 @@ export class RiftyTerminal {
    * or WebGL renderers.
    */
   snapshotBuffer(options: TerminalSerializeOptions = { excludeModes: true }): string {
-    return this.serializeText(options);
+    return this.serializeSnapshot(options);
   }
 
   /**
@@ -791,7 +794,7 @@ export class RiftyTerminal {
   ): Promise<string> {
     if (this.disposed) return Promise.resolve('');
     return new Promise((resolve) => {
-      this.term.write('', () => resolve(this.disposed ? '' : this.serializeText(options)));
+      this.term.write('', () => resolve(this.disposed ? '' : this.serializeSnapshot(options)));
     });
   }
 
@@ -989,6 +992,19 @@ export class RiftyTerminal {
   private requireSerializeAddon(): SerializeAddon {
     if (!this.serializeAddon) throw new Error('terminal.serialize unavailable');
     return this.serializeAddon;
+  }
+
+  private serializeSnapshot(options: TerminalSerializeOptions): string {
+    const bufferRows = this.term.buffer.normal.length;
+    const includedRows =
+      options.scrollback === undefined
+        ? bufferRows
+        : Math.max(0, Math.min(options.scrollback + this.term.rows, bufferRows));
+    // Explicit ranges omit addon's final cursor restore: snapshot text, not replay input.
+    return this.requireSerializeAddon().serialize({
+      ...options,
+      range: { start: bufferRows - includedRows, end: bufferRows - 1 },
+    });
   }
 
   private writeClipboard(text: string): void {

@@ -6,7 +6,7 @@ created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: the owner no longer parses `vite` args; the installed Vite CLI owns flags/help/version/unknown subcommands.
 user_story: As a developer typing `vite --port 3000` in rifty, I want the port honored or a real CLI failure, never a silent fallback to the default dev server.
 sources: [ADR-0173, ADR-0174, docs/backlog/playground/honest-vite-command-umbrella.md]
-code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/node-entry-bootstrap.ts]
+code: [packages/workbench/src/workers/real-vite-bootstrap.ts, packages/workbench/src/glue/bin-executor.ts, packages/workbench/src/workers/node-entry-bootstrap.ts]
 ---
 
 ## Context
@@ -22,7 +22,7 @@ listened ports for UI state.
 ## Done Evidence
 
 - `tests/e2e/vite-command-honesty.spec.ts` verifies `which vite` and `vite --help`.
-- `apps/playground/src/workers/real-vite-bootstrap.test.ts` pins that no owner
+- `packages/workbench/src/workers/real-vite-bootstrap.test.ts` pins that no owner
   `vite` command is registered.
 
 ## Reversibility

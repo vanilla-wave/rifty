@@ -6,7 +6,7 @@ created: 2026-06-17
 why: packages/runtime-js/src/worker-entry.ts runs installProcessGlobals() at MODULE TOP LEVEL (it is the runtime-js sandbox-worker entry). In the playground PROD bundle that module gets pulled into the workspace-owner chunk and evaluated at module-eval, swapping globalThis.process for a fresh EMPTY-env one — AFTER the kernel pre-entry hook set process.env from the spawn spec. The owner then read undefined worker URLs and threw 'missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL' → dev server never booted, explorer stuck 'Loading the workspace…'. Dev (pnpm dev) never loaded the module in the owner realm → green e2e, dead deploy. WORKED AROUND in real-vite-bootstrap (reads env from readKernelProcessSpec() + re-asserts onto process) — this item is the ROOT: a sandbox-worker entry's global side-effect must not run in another realm.
 user_story: As a rifty maintainer I want a worker entry's process-installing side-effect to run ONLY in its own worker realm — not leak into the owner chunk via prod bundling and silently reconfigure globalThis.process there.
 sources: [ADR-0039, ADR-0150]
-code: [packages/runtime-js/src/worker-entry.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/workers/kernel-worker-entry.ts]
+code: [packages/runtime-js/src/worker-entry.ts, packages/workbench/src/workers/real-vite-bootstrap.ts, packages/workbench/src/workers/kernel-worker-entry.ts]
 ---
 
 ## Context

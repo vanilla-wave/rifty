@@ -7,10 +7,13 @@
  */
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { detectVfsBackend } from '@riftydev/vfs';
+import { type StoragePersistenceStatus, probeStoragePersistence } from '@riftydev/workbench';
 import { type PreconnectDocument, injectPreconnects } from './glue/preconnect.ts';
-import { getRegistryProxyPrefix } from './glue/registry-fetch.ts';
-import { getEddyBundleBaseUrl, getResolverUrl } from './glue/resolver-config.ts';
-import { type StoragePersistenceStatus, probeStoragePersistence } from './glue/storage-status.ts';
+import {
+  getEddyBundleBaseUrl,
+  getRegistryProxyPrefix,
+  getResolverUrl,
+} from './glue/workbench-host-config.ts';
 
 export interface VfsBootDescriptor {
   readonly backend: 'opfs' | 'memory';

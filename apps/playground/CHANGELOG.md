@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (workbench controllers)
+
+- The execSync COI harness and normal owner boot now consume one resolved Vite
+  workbench host config; recursive node workers receive the real injected
+  worker/WASM assets even when user code supplies an explicit env (ADR-0231).
+
 ### Changed (install-tail-latency, ADR-0216)
 
 - **Install exit stops awaiting the OPFS durability drain** (ADR-0216,
@@ -169,6 +175,16 @@
   those.
 ### Changed
 
+- Framework-free workspace boot, terminal/session, preview, editor/VFS, file-tree,
+  and owner-worker orchestration now comes from `@riftydev/workbench`; the
+  app-local sibling implementations moved with their tests, so the Solid UI
+  dogfoods the package-owned core beneath the embedder controllers (ADR-0224).
+- Terminal grid changes now propagate from xterm through the workbench PTY
+  control plane to the foreground Node process instead of freezing the launch
+  dimensions for the run (ADR-0225).
+- The optional TS language-service child and protocol relay remain app-owned
+  over workbench's generic owner-extension channel; the package has no TS-LS
+  configuration or dependency.
 - Preview port switcher in the browser chrome now uses the playground chip
   styling, with a custom caret, hover/focus states, and label truncation.
 - Monaco editor stack (monaco-editor, EditorHost, editor-host-core, monaco-env,

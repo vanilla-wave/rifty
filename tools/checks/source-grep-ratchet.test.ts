@@ -39,6 +39,17 @@ expect(bootstrapSrc).toContain('serveProjectIndex(');
     expect(countSourceAssertions(content)).toBe(1);
   });
 
+  it('tracks async readFile bindings so browser specs cannot evade the ratchet', () => {
+    const content = `
+const source = await readFile(
+  new URL('./workbench-session-harness.ts', import.meta.url),
+  'utf8',
+);
+expect(source).toContain("from '@riftydev/workbench/owner-worker?worker&url'");
+`;
+    expect(countSourceAssertions(content)).toBe(1);
+  });
+
   it('ignores doc reads (.md) — doc greps are not source greps', () => {
     const content = `
 const compat = readFileSync(fileURLToPath(new URL('../../docs/compat/streams.md', import.meta.url)), 'utf8');

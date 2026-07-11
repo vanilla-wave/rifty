@@ -32,7 +32,7 @@
 // set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`).
 import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json?url';
 import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
-import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+import { installBundleLocalBuffer } from '@riftydev/workbench';
 
 // Realign globalThis.Buffer to THIS worker bundle's copy. In a PROD build every
 // ?worker&url child is self-contained and carries its own @riftydev/io `Buffer`;

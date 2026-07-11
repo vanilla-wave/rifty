@@ -1,5 +1,5 @@
+import type { NodeServerProjectSpec } from '@riftydev/workbench';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
-import type { NodeServerProjectSpec } from './project-spec.ts';
 
 export const SOCKET_LAB_SERVER_SOURCE = `// Socket Lab, running in your browser.
 // The passing rows exercise real rifty socket semantics; ceiling rows must fail loud.

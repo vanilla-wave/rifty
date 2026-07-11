@@ -6,7 +6,7 @@ created: 2026-06-13
 why: bakedOverrides installs @esbuild/wasi-preview1@0.28.0 (pulling ~20MB wasm + JS) at node_modules/esbuild, then esbuildShimFiles overwrites its lib/main.js + package.json with a no-op passthrough, while the real transform (transformWithEsbuild) uses a separately build-time-vendored wasm and never touches the installed bytes — so the override's heavy payload is consumed by neither downstream path, and no ADR reconciles the three mechanisms.
 user_story: As a developer resolving an `esbuild`-using project in rifty, I want install to not pull ~20MB of `@esbuild/wasi-preview1` bytes that get overwritten by a passthrough shim and read by nobody, but currently the full-package override stays load-bearing because nothing measured whether dropping it breaks real-Vite e2e.
 sources: [ADR-0006, ADR-0027, ADR-0047, ADR-0051]
-code: [tools/shadow-registry/src/index.ts, apps/playground/src/workers/real-vite-bootstrap.ts, tools/shadow-registry/src/esbuild-binding.ts]
+code: [tools/shadow-registry/src/index.ts, packages/workbench/src/workers/real-vite-bootstrap.ts, tools/shadow-registry/src/esbuild-binding.ts]
 ---
 
 ## Context

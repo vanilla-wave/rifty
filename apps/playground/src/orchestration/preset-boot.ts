@@ -1,3 +1,4 @@
+import type { ProjectSpec } from '@riftydev/workbench';
 /**
  * Preset-boot orchestration — headless core extracted from App.tsx (ADR-0197,
  * epic playground-testable-core, slice 3). Owns the preset-transition veil +
@@ -12,7 +13,6 @@
  */
 import { createSignal, untrack } from 'solid-js';
 import type { Preset } from '../presets.ts';
-import type { ProjectSpec } from '../templates/project-spec.ts';
 
 export interface TsPresetTransitionGate {
   resolve(): void;

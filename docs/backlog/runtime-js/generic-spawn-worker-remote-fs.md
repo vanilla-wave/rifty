@@ -6,7 +6,7 @@ created: 2026-06-17
 why: the generic worker path (spawnViaWorker → former spawnWorkerChild) never set RIFTY_REMOTE_FS, so a spawned worker read its OWN empty mirror instead of the parent/owner store — a Node-parity break (a node child must see the parent fs). Reachable only from a realm that serves nothing to the child (owner/page); the supervised-child realm keeps the same-realm fallback. Closed as a LOUD throw (review #1, ADR-0150) — this item is the proper fix that re-enables the worker path
 user_story: As a dev whose program does child_process.spawn('node', ['child.js']) / fork() from a realm with the kernel + node-entry worker URLs, I want the worker child to read the same filesystem as its parent (the owner store over fs.* sync-RPC), not throw NotImplementedError
 sources: [ADR-0150, ADR-0011, ADR-0137]
-code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/owner-child-bin-executor.ts]
+code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/workbench/src/workers/owner-child-bin-executor.ts]
 ---
 
 ## Context

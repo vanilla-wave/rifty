@@ -1528,6 +1528,18 @@ describe('RiftyTerminal — dimensions', () => {
     expect(term.cols).toBeGreaterThan(0);
     expect(term.rows).toBeGreaterThan(0);
   });
+
+  it('notifies the host whenever xterm dimensions change', () => {
+    const seen: Array<{ cols: number; rows: number }> = [];
+    const term = new RiftyTerminal({
+      onInput: () => {},
+      onResize: (cols, rows) => seen.push({ cols, rows }),
+    });
+
+    internalXterm(term).resize(132, 43);
+
+    expect(seen).toEqual([{ cols: 132, rows: 43 }]);
+  });
 });
 
 describe('RiftyTerminal — font measurement', () => {
@@ -2094,7 +2106,10 @@ describe('RiftyTerminal — command marker substrate', () => {
     const term = new RiftyTerminal({ onInput: () => {} });
 
     expect(term.snapshotBuffer()).toBe('serialized text');
-    expect(addonMocks.serialize).toHaveBeenCalledWith({ excludeModes: true });
+    expect(addonMocks.serialize).toHaveBeenCalledWith({
+      excludeModes: true,
+      range: { start: 0, end: 23 },
+    });
   });
 
   it('reports busy input when foreground stdin owns typed data', async () => {

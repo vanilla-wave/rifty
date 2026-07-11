@@ -9,8 +9,8 @@ import type {
   TerminalRewriteRule,
 } from '@riftydev/terminal';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
+import type { TerminalSessionSnapshot } from '@riftydev/workbench';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 
@@ -39,6 +39,7 @@ export function BottomPanel(props: {
   historyRecords?: () => readonly TerminalHistoryRecord[];
   onSignal?(id: string): void;
   onRawInput?(id: string, data: TerminalRawInput): void;
+  onResize?(id: string, dims: TerminalDims): void;
   onLink?(uri: string, event: MouseEvent): void;
   /** Aggregated TS diagnostics for the Problems tab (ADR-0166 P1.9c), path→diags. */
   diagnostics?: ReadonlyMap<string, readonly Diagnostic[]>;
@@ -181,6 +182,7 @@ export function BottomPanel(props: {
                   attach={(write) => props.attach(id, write)}
                   onSignal={() => props.onSignal?.(id)}
                   onRawInput={(data) => props.onRawInput?.(id, data)}
+                  onResize={(dims) => props.onResize?.(id, dims)}
                   onLink={props.onLink}
                   focusEpoch={id === props.activeSessionId ? props.terminalFocusEpoch : 0}
                   onLine={(line, dims) => props.onLine(id, line, dims)}

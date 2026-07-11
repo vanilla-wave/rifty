@@ -5,7 +5,8 @@ title: Embeddable dev-loop — rifty inside your app, your UI
 created: 2026-07-10
 value: A SaaS team embeds a full rifty dev-loop (editor + terminal + npm install + live preview) into its existing React app under its own layout/branding — from published packages, no playground fork.
 user_story: As a SaaS developer, I want to mount a runnable Node sandbox (edit → npm install → vite dev → live preview) inside my existing React app with my own UI, but today that wiring is locked inside the Solid playground app — my only option is forking it.
-items: [distribution/workbench-controllers, distribution/react-bindings, distribution/embed-host-vite-example]
+items: [distribution/react-bindings, distribution/embed-host-vite-example]
+sources: [ADR-0224]
 ---
 
 ## Outcome
@@ -26,7 +27,12 @@ Done when the in-repo reference host (a plain Vite React app standing in for the
 
 ## Items
 
-- `distribution/workbench-controllers` — the parts: lift framework-agnostic playground glue/orchestration into `@riftydev/workbench`; playground repointed onto it (anti-drift dogfood). Blocks the other two.
+- Implemented foundation: ADR-0224's browser-only `@riftydev/workbench` owns the
+  framework-free session controllers. The playground imports every lifted
+  package core module, while a real Vite browser harness drives the top-level
+  embedder API. Hosts inject every Worker/SW/WASM URL and the registry endpoint;
+  one page can boot one session; Vite is verified and other bundlers remain
+  unverified.
 - `distribution/react-bindings` — the ready components: `@riftydev/react` provider + atoms over the workbench, headless + themeable (DD-4).
 - `distribution/embed-host-vite-example` — the acceptance vehicle: reference Vite React host app + the `docs/public/` embedding doc + CI e2e on the built bundle.
 

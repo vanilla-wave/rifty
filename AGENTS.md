@@ -16,7 +16,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **Review convergence.** Parity/stateful changes get two checkpoints: Contract+RED, then Final+GREEN. Each correctness blocker gets a fault class, RED test, and sibling sweep in the PR. A repeated class or review-born state owner stops point fixes: redesign or split. Protocol: `docs/process/fault-classes.md` §Review convergence.
 
 ## Architecture — hard rules
-- Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
+- Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → sdk → workbench → playground), no reverse imports, no cycles, no foreign `src/internal/*`; workbench stays UI/framework/bundler-free, solid-js stays in playground (D-002/ADR-0224).
 - Public API only via `src/index.ts`.
 - No `any`; `@ts-ignore` only with why-comment + tracking issue.
 - No hardcoded external URLs — env-config (D-004).

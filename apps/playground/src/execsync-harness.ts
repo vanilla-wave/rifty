@@ -34,6 +34,10 @@ import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { getNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import { syncMirror } from '@riftydev/vfs';
+import {
+  playgroundNodeWorkerRuntimeEnv,
+  resolvePlaygroundWorkbenchConfig,
+} from './glue/workbench-host-config.ts';
 
 const dec = new TextDecoder();
 
@@ -46,7 +50,12 @@ const CHILD_BINARY_SCRIPT = 'globalThis.process.stdout.write(new Uint8Array([0xf
 
 /** Child writing a plain ASCII marker — proves the blocking round-trip returns
  *  the child's captured stdout. */
-const CHILD_BLOCKED_SCRIPT = "globalThis.process.stdout.write('blocked-result');";
+const CHILD_BLOCKED_SCRIPT =
+  'globalThis.process.stdout.write(`blocked-result:${globalThis.process.env.PARENT_VALUE}:${globalThis.process.cwd()}`);';
+
+/** Explicit user env replaces inherited user values while host bootstrap config survives. */
+const CHILD_EXPLICIT_ENV_SCRIPT =
+  "globalThis.process.stdout.write(globalThis.process.env.USER_VALUE ?? 'missing');";
 
 // ADR-0137 acceptance — `execSync('node /scripts/build.js')` where build.js (a)
 // starts with a `#!` shebang (must be STRIPPED — not a SyntaxError, not echoed),
@@ -71,6 +80,7 @@ interface HarnessResult {
   readonly status: 'pass' | 'fail';
   readonly hex: string;
   readonly blocked: string;
+  readonly explicitEnv: string;
   /** ADR-0137 loader acceptance result (`built:demo-pkg`), or '' on miss. */
   readonly loader: string;
   readonly detail: string;
@@ -93,6 +103,7 @@ function paint(result: HarnessResult): void {
   root.appendChild(mk('execsync-status', 'status', result.status));
   root.appendChild(mk('execsync-hex', 'hex', result.hex));
   root.appendChild(mk('execsync-blocked', 'blocked', result.blocked));
+  root.appendChild(mk('execsync-explicit-env', 'explicit-env', result.explicitEnv));
   root.appendChild(mk('execsync-loader', 'loader', result.loader));
   root.appendChild(mk('execsync-detail', 'detail', result.detail));
 
@@ -120,11 +131,14 @@ export async function runExecSyncHarness(): Promise<void> {
     // ADR-0137: the recursive `execSync` child now spawns a node-entry `kind:'url'`
     // child (shebang strip + relative imports), so the page realm must have the
     // node-entry bootstrap URL wired (main.tsx setNodeEntryWorkerUrl).
-    if (getNodeEntryWorkerUrl() === null) {
+    const nodeEntryWorkerUrl = getNodeEntryWorkerUrl();
+    if (nodeEntryWorkerUrl === null) {
       throw new Error(
         'getNodeEntryWorkerUrl() is null — main.tsx must call setNodeEntryWorkerUrl first',
       );
     }
+    const host = resolvePlaygroundWorkbenchConfig();
+    const nodeRuntimeEnv = playgroundNodeWorkerRuntimeEnv(host.assets);
 
     // Seed the child scripts into the PAGE mirror — the execSync child reads them
     // from this (owner) mirror over `fs.*` sync-RPC. `/scripts/build.js` is the
@@ -133,6 +147,7 @@ export async function runExecSyncHarness(): Promise<void> {
     const enc = new TextEncoder();
     mirror.writeFileSync('/child.js', enc.encode(CHILD_BINARY_SCRIPT));
     mirror.writeFileSync('/blocked.js', enc.encode(CHILD_BLOCKED_SCRIPT));
+    mirror.writeFileSync('/explicit-env.js', enc.encode(CHILD_EXPLICIT_ENV_SCRIPT));
     mirror.mkdirSync('/scripts', { recursive: true });
     mirror.writeFileSync('/scripts/package.json', enc.encode(ACCEPTANCE_PACKAGE_JSON));
     mirror.writeFileSync('/scripts/build.js', enc.encode(ACCEPTANCE_BUILD_SCRIPT));
@@ -169,6 +184,12 @@ export async function runExecSyncHarness(): Promise<void> {
           // execSync gate (getKernelWorkerUrl() !== null) passes. The value is
           // used only for the gate; the recursive child runs on THIS dispatcher.
           RIFTY_EXECSYNC_KERNEL_WORKER_URL: String(kernelWorkerUrl),
+          PARENT_VALUE: 'inherited',
+          // The package-owned node bootstrap validates its full host-owned
+          // runtime config before user code. execSync inherits this guest env,
+          // matching Node's omitted-options behavior, so every nested node
+          // worker receives the actual Vite-resolved assets.
+          ...nodeRuntimeEnv,
         },
         cwd: '/',
       },
@@ -195,18 +216,21 @@ export async function runExecSyncHarness(): Promise<void> {
 
     const hex = matchLine(stdout, 'HEX');
     const blocked = matchLine(stdout, 'BLOCKED');
+    const explicitEnv = matchLine(stdout, 'EXPLICIT_ENV');
     const loader = matchLine(stdout, 'LOADER');
     const guestErr = matchLine(stdout, 'ERROR');
 
     const ok =
       exitCode === 0 &&
       hex === 'fffe00' &&
-      blocked === 'blocked-result' &&
+      blocked === 'blocked-result:inherited:/' &&
+      explicitEnv === 'explicit' &&
       loader === 'built:demo-pkg';
     paint({
       status: ok ? 'pass' : 'fail',
       hex,
       blocked,
+      explicitEnv,
       loader,
       detail: ok
         ? 'real SAB + Atomics.waitAsync + v2 binary frame + node-entry loader round-trip'
@@ -217,6 +241,7 @@ export async function runExecSyncHarness(): Promise<void> {
       status: 'fail',
       hex: '',
       blocked: '',
+      explicitEnv: '',
       loader: '',
       detail: err instanceof Error ? (err.stack ?? err.message) : String(err),
     });

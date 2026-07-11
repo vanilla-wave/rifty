@@ -9,7 +9,7 @@ user_story: As a dev scheduling many `setImmediate`/`clearImmediate` callbacks, 
 sources: [perf-audit #28, adr-plan A/ADR-0092, ADR-0018, ADR-0026 (downgraded)]
 ---
 ## Context
-timers.ts:10-50. Auditor overturned mapper's rule5/OPEN_QUESTIONS call (mapper grounding "module-private / no cross-package API" is stale; adrRefAccurate=false). ADR-0018 ratifies ./builtins/timers as stable public API (package.json:31 + playground real-vite-bootstrap.ts:62 import installTimerGlobals); tail-snapshot changes the observable contract of a committed cross-package export. rule1. Governs drain-order contract (signatures unchanged; observable nested-drain ordering changes).
+timers.ts:10-50. Auditor overturned mapper's rule5/OPEN_QUESTIONS call (mapper grounding "module-private / no cross-package API" is stale; adrRefAccurate=false). ADR-0018 ratifies ./builtins/timers as stable public API (`package.json` + `packages/workbench/src/workers/real-vite-bootstrap.ts` import `installTimerGlobals`); tail-snapshot changes the observable contract of a committed cross-package export. rule1. Governs drain-order contract (signatures unchanged; observable nested-drain ordering changes).
 ## Options / Next
 `Map<id,item>` for O(1) clear + head-cursor drain; snapshot tail at tick entry so a nested setImmediate defers to next check phase (Node parity). Write nested-setImmediate + setImmediate-vs-setTimeout(0) parity cases FIRST (parity-first hard rule; none exist). Caveat: current array impl is already check-phase-correct via single-shift-per-postMessage; tail-snapshot = "preserve correct nesting under a batch-drain rewrite."
 ## Reversibility

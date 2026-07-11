@@ -6,7 +6,7 @@ created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `vite` runs the installed CLI, so Vite owns config discovery/loading instead of rifty hardcoding `configFile:false`.
 user_story: As a developer with a vite.config.ts (an alias, a plugin, server.proxy), I want `vite` / `vite build` to apply it like real Vite.
 sources: [ADR-0173, ADR-0137, docs/backlog/playground/honest-vite-command-umbrella.md]
-code: [apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/vite-config-guard.ts, apps/playground/src/workers/build-boot.ts, apps/playground/src/workers/dev-server-boot.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+code: [packages/workbench/src/workers/vite-cli-prep.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/workbench/src/workers/vite-config-guard.ts, packages/workbench/src/workers/build-boot.ts, packages/workbench/src/workers/dev-server-boot.ts, packages/workbench/src/workers/real-vite-bootstrap.ts]
 ---
 
 ## Context
@@ -37,7 +37,7 @@ not silently ignore config.
 
 - `tests/e2e/vite-command-honesty.spec.ts` writes `vite.config.js`, runs
   `vite build`, and verifies the configured marker in `dist/`.
-- `apps/playground/src/workers/vite-config-guard.test.ts` pins the residual
+- `packages/workbench/src/workers/vite-config-guard.test.ts` pins the residual
   loud-throw for the legacy owner path.
 
 ## Reversibility

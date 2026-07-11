@@ -6,7 +6,7 @@ created: 2026-06-21
 why: ADR-0165 evolves the OPFS layout from /workspace to /scratch + /projects/<id>/; a user who already warmed /workspace in the single-project era must not silently lose it on first multi-project load
 user_story: As an existing playground user with edits persisted in /workspace, I want my work to survive the upgrade to multi-project, but a naive multi-project boot reads /scratch + /projects and would orphan the old /workspace tree.
 sources: [ADR-0165, ADR-0013, ADR-0072]
-code: [apps/playground/src/App.tsx, apps/playground/src/workers/real-vite-bootstrap.ts, packages/vfs/src/boot.ts]
+code: [apps/playground/src/App.tsx, packages/workbench/src/workers/real-vite-bootstrap.ts, packages/vfs/src/boot.ts]
 ---
 
 ## Context

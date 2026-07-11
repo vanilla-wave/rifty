@@ -1,3 +1,4 @@
+import type { NodeServerProjectSpec } from '@riftydev/workbench';
 /**
  * Markdown SSG template — fs-heavy build plus static preview server.
  *
@@ -5,7 +6,6 @@
  * writes `/dist`, then serves the generated output through `node:http`.
  */
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
-import type { NodeServerProjectSpec } from './project-spec.ts';
 
 export const MARKDOWN_SSG_SOURCE = `// Markdown SSG.
 // - marked comes from a real npm install

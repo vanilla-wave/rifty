@@ -7,13 +7,13 @@
  * the wrong runtime.
  */
 import { NotImplementedError } from '@riftydev/vfs';
+import type { ProjectSpec } from '@riftydev/workbench';
 import { CLI_REPORT_TEMPLATE } from './cli-report.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
 import { HONO_API_TEMPLATE } from './hono-api.ts';
 import { KOA_API_TEMPLATE } from './koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
-import type { ProjectSpec } from './project-spec.ts';
 import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';

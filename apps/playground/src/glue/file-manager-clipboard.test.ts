@@ -1,6 +1,6 @@
+import type { FsOpsTarget } from '@riftydev/workbench';
 import { describe, expect, it } from 'vitest';
 import { planClipboardPaste } from './file-manager-clipboard.ts';
-import type { FsOpsTarget } from './fs-ops.ts';
 
 class FakeFs implements Pick<FsOpsTarget, 'existsSync'> {
   readonly paths = new Set<string>();

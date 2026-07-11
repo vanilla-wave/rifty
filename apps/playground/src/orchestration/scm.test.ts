@@ -5,10 +5,13 @@
  * Ports per ADR-0197 §4; the git port is the structural GitOwnerClient subset.
  */
 import type { LogEntry } from '@riftydev/git';
+import {
+  type FileReadOwnerLike,
+  type OwnerFileReader,
+  createOwnerFileReader,
+} from '@riftydev/workbench';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
-import { createOwnerFileReader } from './owner-file-read.ts';
-import type { FileReadOwnerLike, OwnerFileReader } from './owner-file-read.ts';
 import {
   type Scm,
   type ScmGitPort,

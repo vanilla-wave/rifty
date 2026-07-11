@@ -26,9 +26,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 ## Test Sources
 
 - `tests/e2e/owner-shell-prettier-eslint.spec.ts`
-- `apps/playground/src/glue/npm-shell-command.test.ts`
-- `apps/playground/src/glue/pty-client.test.ts`
-- `apps/playground/src/adapters/terminal-manager.test.ts`
+- `packages/workbench/src/glue/npm-shell-command.test.ts`
+- `packages/workbench/src/glue/pty-client.test.ts`
+- `packages/workbench/src/glue/terminal-manager.test.ts`
 - `packages/runtime-js/src/builtins/node-entry.test.ts`
 - `tests/conformance/builtins/util.test.ts`
 - `tests/conformance/builtins/fs-realpath-readdir.test.ts`

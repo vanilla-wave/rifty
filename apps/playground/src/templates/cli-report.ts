@@ -5,7 +5,7 @@
  * install a real npm dependency, read project files, print to stdout, then let
  * the process exit normally with no preview port.
  */
-import type { NodeCliProjectSpec } from './project-spec.ts';
+import type { NodeCliProjectSpec } from '@riftydev/workbench';
 
 export const CLI_REPORT_SOURCE = `// CLI report.
 // - yaml comes from a real npm install

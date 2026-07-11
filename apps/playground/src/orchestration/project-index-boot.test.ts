@@ -1,3 +1,4 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 /**
  * Behavioral contract of the extracted project-index mirror + boot decision
  * core (ADR-0197 slice 2) — replaces the App.test.ts source-greps for the
@@ -5,7 +6,6 @@
  * through its injected ports (ADR-0197 §4).
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectIndex } from '../glue/project-index.ts';
 import {
   type IndexMirrorPort,
   type ProjectIndexBoot,

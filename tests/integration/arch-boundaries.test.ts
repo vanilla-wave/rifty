@@ -63,6 +63,33 @@ describe('check:arch layer boundaries', () => {
     expect(ruleNames([root]).filter((n) => n.startsWith('no-reverse-import'))).toEqual([]);
   });
 
+  it('enforces shell/tooling → sdk → workbench → playground tier direction', () => {
+    const root = fixture({
+      'shell/src/sdk.ts': "import '../../rifty/src/index';\nexport const shell = 1;\n",
+      'rifty/src/workbench.ts': "import '../../workbench/src/index';\nexport const sdk = 1;\n",
+      'workbench/src/playground.ts':
+        "import '../../apps/playground/src/App';\nexport const workbench = 1;\n",
+      'rifty/src/index.ts': 'export const sdk = 1;\n',
+      'workbench/src/index.ts': 'export const workbench = 1;\n',
+      'apps/playground/src/App.ts': 'export const app = 1;\n',
+    });
+    const rules = ruleNames([root]);
+    expect(rules).toContain('no-reverse-import-shell');
+    expect(rules).toContain('no-reverse-import-rifty');
+    expect(rules).toContain('no-reverse-import-workbench');
+  });
+
+  it('allows playground → workbench → sdk → shell downward imports', () => {
+    const root = fixture({
+      'apps/playground/src/App.ts':
+        "import '../../../workbench/src/index';\nexport const app = 1;\n",
+      'workbench/src/index.ts': "import '../../rifty/src/index';\nexport const workbench = 1;\n",
+      'rifty/src/index.ts': "import '../../shell/src/index';\nexport const sdk = 1;\n",
+      'shell/src/index.ts': 'export const shell = 1;\n',
+    });
+    expect(ruleNames([root]).filter((n) => n.startsWith('no-reverse-import'))).toEqual([]);
+  });
+
   it('flags an import cycle', () => {
     const root = fixture({
       'vfs/src/a.ts': "import '../../io/src/b';\nexport const a = 1;\n",
@@ -96,6 +123,16 @@ describe('check:arch layer boundaries', () => {
     const root = fixture({ 'playground/src/a.ts': "import 'solid-js';\nexport const a = 1;\n" });
     expect(ruleNames([root])).not.toContain('solid-only-in-playground');
   });
+
+  it.each(['@xterm/xterm', 'monaco-editor', 'vite'])(
+    'flags %s imported by framework-free workbench',
+    (specifier) => {
+      const root = fixture({
+        'workbench/src/a.ts': `import '${specifier}';\nexport const a = 1;\n`,
+      });
+      expect(ruleNames([root])).toContain('no-ui-or-bundler-imports-in-workbench');
+    },
+  );
 
   it('flags an eager monaco-editor import outside the lazy editor stack', () => {
     const root = fixture({

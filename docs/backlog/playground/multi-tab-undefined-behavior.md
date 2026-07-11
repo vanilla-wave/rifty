@@ -6,7 +6,7 @@ created: 2026-07-06
 why: Two tabs on the same OPFS project spawn two owner workers with concurrent VFS writes of undefined outcome — a silent-corruption risk that contradicts the fidelity mission; the only defined single-owner path today is the explicit-port BroadcastChannel claim (ADR-0186). Needs discovery before it can be made loud/safe.
 user_story: As a user who duplicates the tab (or opens a shared preview URL while the playground is open), I want each tab to either work or refuse loudly, but today two tabs mean two owner workers over one OPFS project, concurrent writes with undefined outcome, and a preview that 503s with no explanation.
 sources: [ADR-0165, ADR-0186, ADR-0150]
-code: [apps/playground/src/App.tsx, apps/playground/src/glue/realVite.ts]
+code: [apps/playground/src/App.tsx, packages/workbench/src/glue/realVite.ts]
 ---
 
 ## Context

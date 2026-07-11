@@ -1,3 +1,4 @@
+import type { ActiveId, Project, ProjectIndex, Scratch } from '@riftydev/workbench';
 /**
  * Page-realm store (ADR-0165) — replaces the bare `activePreset` signal in
  * App.tsx with the multi-project shape. PAGE-side ONLY: it holds no fs handle;
@@ -8,7 +9,6 @@
  * threading here — that is the App-level switch wiring.
  */
 import { type Accessor, createSignal } from 'solid-js';
-import type { ActiveId, Project, ProjectIndex, Scratch } from './project-index.ts';
 
 export type StorageKind = 'opfs' | 'memory';
 export type LauncherTab = 'projects' | 'starters';

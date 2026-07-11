@@ -23,8 +23,8 @@ import {
   readLearnedPin,
   revalidateLearnedPin,
   writeLearnedPin,
-} from '../../apps/playground/src/glue/eddy-learned-pins.ts';
-import { createNpmShellCommand } from '../../apps/playground/src/glue/npm-shell-command.ts';
+} from '../../packages/workbench/src/glue/eddy-learned-pins.ts';
+import { createNpmShellCommand } from '../../packages/workbench/src/glue/npm-shell-command.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 

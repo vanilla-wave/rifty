@@ -6,7 +6,7 @@ created: 2026-07-07
 why: the owner worker chunk (real-vite-bootstrap, ~208 KB gz + shared deps) starts fetching only after the main bundle evaluates and spawns it — a serial network hop on every cold pick→boot path
 user_story: As a user picking a preset on a cold cache, I want the owner worker fetch to overlap the main-bundle parse, but today the browser learns about the chunk only from `new Worker(url)`.
 sources: [prod build chunk audit 2026-07-07 (real-vite-bootstrap 726 kB raw)]
-code: [apps/playground/index.html, apps/playground/vite.config.ts, apps/playground/src/glue/realVite.ts]
+code: [apps/playground/index.html, apps/playground/vite.config.ts, packages/workbench/src/glue/realVite.ts]
 ---
 
 ## Context

@@ -6,8 +6,8 @@ Binding rules: `AGENTS.md` §Fidelity. Here: tiers + why parity is the gold stan
 Same code in real Node and rifty, diff stdout. External reference — agent can't cheat. `tools/node-parity-runner/`; case = `setup` + `code` + `expected`. Any discrepancy = bug.
 
 ## Pyramid
-- Unit — package-local logic (Vitest). Playground orchestration cores (`apps/playground/src/orchestration/*`, ADR-0197) test here through their injected ports; note: node vitest resolves solid-js to the SERVER runtime — signals work, `createEffect` never runs, so cores expose explicit `attach*/dispose` instead of owning effects
-- Browser-unit — worker-side playground modules against the REAL owner worker under COI, no App boot (ADR-0196): `pnpm test:browser-unit`, `tests/browser-unit/`, harness `apps/playground/unit-harness.html`. Belongs here: owner boot/bridge/worker-realm contracts. Does NOT belong: UI scenarios (e2e), pure logic (unit)
+- Unit — package-local logic (Vitest). Workbench session controllers (`packages/workbench/src`, ADR-0224) test through injected ports with plain snapshots/subscriptions + explicit `dispose()`; no Solid runtime or app component is part of the unit seam
+- Browser-unit — workbench/worker modules against the REAL owner worker under COI, no App boot (ADR-0196/0224): `pnpm test:browser-unit`, `tests/browser-unit/`, harness `apps/playground/unit-harness.html`. Belongs here: owner boot/bridge/worker-realm contracts. Does NOT belong: UI scenarios (e2e), pure logic (unit)
 - Parity — vs real Node API (parity-runner + Vitest)
 - Conformance — documented Node semantics out of parity reach (event-loop order, async timers, errors)
 - Integration — real npm tarballs, tiers `tier-0-utility`…`tier-4-tooling`; each green package pinned by regression test

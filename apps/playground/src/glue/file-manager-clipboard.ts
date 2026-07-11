@@ -1,6 +1,6 @@
 import { basename, dirname, extname, joinPath } from '@riftydev/vfs';
+import type { FsOpsTarget } from '@riftydev/workbench';
 import { isSelfOrSubtreePath } from './file-manager-dnd.ts';
-import type { FsOpsTarget } from './fs-ops.ts';
 
 export type FileManagerClipboardMode = 'copy' | 'cut';
 

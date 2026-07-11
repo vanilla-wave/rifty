@@ -8,7 +8,7 @@ user_story: As a developer, I want the stock HMR/WS of ANY dev server to work in
 epic: preset-deglue
 blocked_by: [service-worker/preview-blocked-host-hang, playground/vite-strictport-fallback-proof, playground/vite-curated-boot-residual-forces]
 sources: [docs/adr/net/0189-preview-loopback-websocket-bridge.md, docs/adr/service-worker/0123-port-aware-preview-owner-routing.md]
-code: [packages/net/src/ws/browser-client-script.ts, packages/net/src/http/server.ts, packages/net/src/registry.ts, apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/glue/hmr-bridge.ts]
+code: [packages/net/src/ws/browser-client-script.ts, packages/net/src/http/server.ts, packages/net/src/registry.ts, packages/workbench/src/workers/vite-cli-prep.ts, apps/playground/src/glue/hmr-bridge.ts]
 ---
 
 ## Context

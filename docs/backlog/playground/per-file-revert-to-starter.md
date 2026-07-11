@@ -6,7 +6,7 @@ created: 2026-06-21
 why: ADR-0165 reset is WHOLE-workspace re-seed only; a user who wants to undo edits to ONE file must blow away the entire scratch — per-file revert needs a baseline diff that doesn't exist yet
 user_story: As a playground user who edited several files from a Starter and regret changing one, I want to revert just that file to the Starter version, but today the only restore is whole-workspace Reset (ADR-0165), which discards every edit.
 sources: [ADR-0165, ADR-0078]
-code: [apps/playground/src/templates, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/App.tsx]
+code: [apps/playground/src/templates, packages/workbench/src/glue/workspace-archive-port.ts, apps/playground/src/App.tsx]
 ---
 
 ## Context

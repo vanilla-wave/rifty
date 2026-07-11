@@ -1,3 +1,4 @@
+import { type ActiveId, type ProjectIndex, rootForId } from '@riftydev/workbench';
 /**
  * Workspace-owner lifecycle orchestration — headless core extracted from
  * App.tsx (ADR-0197, epic playground-testable-core, slice 2). Owns the owner
@@ -11,7 +12,6 @@
  * seam (ADR-0197 §4).
  */
 import { createSignal } from 'solid-js';
-import { type ActiveId, type ProjectIndex, rootForId } from '../glue/project-index.ts';
 import { requestSwitch } from '../glue/switch-owner.ts';
 
 /** Owner surface the lifecycle needs (structural subset of WorkspaceOwnerHandle). */

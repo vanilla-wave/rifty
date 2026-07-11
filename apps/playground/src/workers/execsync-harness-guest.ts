@@ -79,8 +79,14 @@ if (!isSabIpcSupported()) {
 
 // 1. Blocking round-trip with a plain ASCII result. Proves the SAB call blocks
 //    this realm and returns the child's captured stdout.
-const blocked = execSync('node /blocked.js');
+const blocked = execSync('node blocked.js');
 emit(`BLOCKED=${new TextDecoder().decode(blocked)}`);
+
+// Explicit user env replacement must not erase host-only bootstrap config: the
+// nested package node worker still boots, while the user-visible value is the
+// explicit one (not the parent's environment).
+const explicitEnv = execSync('node /explicit-env.js', { env: { USER_VALUE: 'explicit' } });
+emit(`EXPLICIT_ENV=${new TextDecoder().decode(explicitEnv)}`);
 
 // 2. The load-bearing assertion: non-UTF-8 bytes survive the v2 binary frame
 //    byte-exact. `child.js` writes [0xff,0xfe,0x00]; a correct round-trip yields

@@ -1,3 +1,4 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 import { type Dialog, type PageStore, type StorageKind, createPageStore } from './page-store.ts';
 /**
  * App-level project-store wrapper (ADR-0165 §57/§56). Wraps the page store
@@ -15,7 +16,6 @@ import { type Dialog, type PageStore, type StorageKind, createPageStore } from '
  * App.tsx transitively imports browser-only modules (xterm), so importing it in a
  * node test throws `self is not defined`. App.tsx re-exports this factory.
  */
-import type { ProjectIndex } from './project-index.ts';
 
 /** Grace window before the deferred on-disk delete fires (§56). */
 export const DELETE_GRACE_MS = 3200;

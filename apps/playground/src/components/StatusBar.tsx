@@ -1,3 +1,4 @@
+import { statusStorageChip } from '@riftydev/workbench';
 /**
  * Status bar (ADR-0075) — a 24px VSCode-style strip. Carries the relocated
  * `[data-storage-badge]` (same attributes/tone/title) so the m0-boot selector
@@ -5,7 +6,6 @@
  */
 import { Show } from 'solid-js';
 import type { Mode } from '../adapters/useMode.ts';
-import { statusStorageChip } from '../glue/degraded-storage.ts';
 
 export function StatusBar(props: {
   mode: Mode;

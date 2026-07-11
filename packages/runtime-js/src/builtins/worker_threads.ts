@@ -19,6 +19,7 @@ import { type FsSync, dirname } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { mergeNodeEntryWorkerEnv } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import { getProcessCwd } from './process.ts';
 
@@ -108,7 +109,7 @@ export class Worker extends EventEmitter {
         );
       }
       const env: Record<string, string> = {
-        ...this.env,
+        ...mergeNodeEntryWorkerEnv(this.env),
         RIFTY_REMOTE_FS: '1',
         RIFTY_WORKER_THREADS: '1',
         RIFTY_WORKER_THREAD_ID: String(this.threadId),

@@ -23,7 +23,7 @@ import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
-import type { CommandContext, ShellCommand, StdinReader } from './types.ts';
+import type { CommandContext, ShellCommand, StdinReader, TerminalResizeSource } from './types.ts';
 
 /**
  * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
@@ -80,6 +80,8 @@ export interface RunOptions {
   readonly isTTY?: boolean;
   readonly cols?: number;
   readonly rows?: number;
+  /** Run-scoped live terminal dimensions for foreground process propagation. */
+  readonly terminal?: TerminalResizeSource;
   readonly stdin?: CommandContext['stdin'];
 }
 
@@ -502,6 +504,7 @@ export class Shell {
         isTTY: options.isTTY,
         cols: options.cols,
         rows: options.rows,
+        terminal: options.terminal,
       });
       job.status = result.exitCode === 0 ? 'Done' : `Exit ${result.exitCode}`;
     } catch (err) {
@@ -718,6 +721,8 @@ export class Shell {
       }
     }
 
+    const isTTY = redirectTo || !streamStdout ? false : (options.isTTY ?? false);
+    const terminal = isTTY ? options.terminal : undefined;
     const ctx: CommandContext = {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
@@ -733,9 +738,14 @@ export class Shell {
       },
       // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
       // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
-      isTTY: redirectTo || !streamStdout ? false : (options.isTTY ?? false),
-      cols: options.cols,
-      rows: options.rows,
+      isTTY,
+      get cols() {
+        return terminal?.current().cols ?? options.cols;
+      },
+      get rows() {
+        return terminal?.current().rows ?? options.rows;
+      },
+      terminal,
       stdin: stageStdin,
       signal,
     };

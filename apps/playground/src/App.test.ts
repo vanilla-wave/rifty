@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { saveAffordance, storageModeFromBoot } from '@riftydev/workbench';
 import { createRoot } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { BootResult } from './boot.ts';
@@ -7,7 +8,6 @@ import type { BootResult } from './boot.ts';
 // pulls browser-only xterm (`self is not defined`) into the node vitest env, so
 // the factory lives in glue/app-project-store.ts to stay unit-testable.
 import { createAppProjectStore } from './glue/app-project-store.ts';
-import { saveAffordance, storageModeFromBoot } from './glue/degraded-storage.ts';
 
 // RESIDUAL source-grep pins (epic playground-testable-core). App.tsx cannot
 // render in the node vitest env (transitively imports browser-only xterm), so
@@ -86,7 +86,7 @@ describe('App terminal startup wiring', () => {
   it('threads the starter seed + editor writes through the workspace-files core', () => {
     // Seed semantics + owner-routed writes are behavioral in
     // orchestration/workspace-files.test.ts; here the App-side bindings.
-    expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(preset),');
+    expect(source).toContain('seedWorkspace: (preset) => files.seedOwner(starterById(preset.id)),');
     expect(source).toContain('onFileWritten={(path, content) => files.writeFile(path, content)}');
     // initial tabs follow the STORE-derived starter under the ACTIVE root
     expect(source).toContain(
@@ -125,8 +125,8 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('routes every line — including the dev server — to the owner pty channel', () => {
-    expect(source).toContain('return manager.runLine(id, line, dims)');
+  it('routes every line through the public terminal controller over the owner pty', () => {
+    expect(source).toContain('return terminal.run(id, line, dims)');
     // (a) ADR-0148: no page-side dev-server interception layer.
     expect(source).not.toContain('dispatchDevServerLine');
     // (a) bridge wiring lives SOLELY on the pty:preview effect (C3 clobber).
@@ -137,7 +137,7 @@ describe('App terminal startup wiring', () => {
     // Frame semantics are behavioral in orchestration/dev-server-lifecycle
     // .test.ts; the attach effect + onCleanup are tsc-silent if dropped.
     expect(source).toContain('devServer.attachOwner(workspaceOwner());');
-    expect(source).toContain('onCleanup(() => devServer.dispose());');
+    expect(source).toMatch(/unsubscribeDevServerState\(\);[\s\S]*devServerCore\.dispose\(\);/);
   });
 
   it('persists terminal environment state through the persistence core', () => {
@@ -263,15 +263,16 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
   it('threads activeRoot() + the store-derived starter through spawn and explorer', () => {
     expect(source).toContain('root: activeRoot()'); // startWorkspaceOwner spawn
     // restart-path boot lines follow the STORE-derived starter (lifecycle port)
-    expect(source).toContain('activeStarterPreset: () => presetForId(activeStarterId()),');
+    expect(source).toContain('activeStarter: () => starterById(activeStarterId()),');
     expect(source).toContain('root={activeRoot()}'); // FileExplorer prop
   });
 
   it('binds FileExplorer mutations to OwnerRpcFs (owner-routed, SnapshotFs read view)', () => {
     // Mutation ordering (close tabs → owner RPC) is e2e-covered
-    // (scm-file-manager rename/delete specs); the ctor binding is the pin.
-    expect(source).toContain(
-      'const ownerRpcFs = new OwnerRpcFs(snapshotFs, () => workspaceOwner())',
+    // (scm-file-manager rename/delete specs); coordinator disposal is behavioral
+    // in workbench fault tests. This is only the host binding pin.
+    expect(source).toMatch(
+      /const ownerRpcFs = new OwnerRpcFs\(snapshotFs, \(\) => workspaceOwner\(\)\)[\s\S]*ownerRpcFs\.dispose\(\);/,
     );
   });
 

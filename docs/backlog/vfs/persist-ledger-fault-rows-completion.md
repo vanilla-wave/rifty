@@ -6,7 +6,7 @@ created: 2026-07-05
 why: "#107 proved the ledger on write/mkdir/rm and the stamp gate; the remaining rows are unpinned — rename's quota-stage, one-op-fails-mid-queue isolation, and the consumer-visible degradation (tarball-cache put, learned-pins write) are expected-honest but untested"
 user_story: As a developer on a quota-squeezed disk, I want every persistence consumer to degrade the way #107 promised (live session works, durability refused loudly, benign caches just re-learn), but today those rows are asserted only at the ledger layer, not at the consumers
 epic: fault-honest-opfs-persistence
-code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, apps/playground/src/glue/eddy-learned-pins.ts]
+code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, packages/workbench/src/glue/eddy-learned-pins.ts]
 ---
 
 ## Context

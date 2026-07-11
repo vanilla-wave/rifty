@@ -1,8 +1,9 @@
 /**
  * Architecture import-boundary rules for dependency-cruiser (check:arch).
  * Single source for: layer top-down direction, no cycles, no foreign src/internal,
- * solid-js only in playground (D-002). Consumed by .dependency-cruiser.cjs (CLI)
- * and tests/integration/arch-boundaries.test.ts (programmatic).
+ * solid-js only in playground (D-002), workbench free of UI/bundler imports.
+ * Consumed by .dependency-cruiser.cjs (CLI) and
+ * tests/integration/arch-boundaries.test.ts (programmatic).
  *
  * Layer match is segment-based (`/<pkg>/`), so the same rules fire on real
  * `packages/<pkg>/src/...` and on test fixtures under any root.
@@ -14,6 +15,8 @@ const TIERS = [
   ['kernel'],
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],
+  ['rifty'],
+  ['workbench'],
   ['playground'],
 ];
 
@@ -85,6 +88,16 @@ const forbidden = [
     comment: 'D-002: solid-js only in apps/playground',
     from: { pathNot: '(?:^|/)playground/' },
     to: { path: '(?:^|/)solid-js(?:/|$)|(?:^|/)@solidjs/' },
+  },
+  {
+    name: 'no-ui-or-bundler-imports-in-workbench',
+    severity: 'error',
+    comment:
+      'ADR-0224: workbench is a framework-free, bundler-agnostic controller package; UI and Vite stay in host bindings/apps',
+    from: { path: '(?:^|/)workbench/src/' },
+    to: {
+      path: '(?:^|/)(?:solid-js|@solidjs|@xterm|monaco-editor|vite|vite-plugin[^/]*)(?:/|$)',
+    },
   },
   {
     name: 'no-ui-imports-in-playground-orchestration',

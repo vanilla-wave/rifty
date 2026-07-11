@@ -1,4 +1,3 @@
-import { MONO_FONT_STACK } from '../glue/fonts.ts';
 /**
  * The Express + SQLite template — a full client-server app as the second
  * registered {@link ProjectSpec} (ADR-0078's "data change, not a worker fork").
@@ -14,7 +13,8 @@ import { MONO_FONT_STACK } from '../glue/fonts.ts';
  * worker-seeded (so the first preview request already sees them) and shown in
  * the page-side explorer through the preset's `files`.
  */
-import type { NodeServerProjectSpec } from './project-spec.ts';
+import type { NodeServerProjectSpec } from '@riftydev/workbench';
+import { MONO_FONT_STACK } from '../glue/fonts.ts';
 
 export const EXPRESS_SQLITE_SERVER_SOURCE = `// Express + SQLite, running in your browser.
 // - express comes from a real npm install (check node_modules in the explorer)

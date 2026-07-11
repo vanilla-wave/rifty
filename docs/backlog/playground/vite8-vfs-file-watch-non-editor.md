@@ -5,8 +5,8 @@ title: vite8 — non-editor file changes don't update the preview (chokidar dead
 created: 2026-06-21
 why: Vite's chokidar watcher gets NO events over rifty's VFS (sync-mirror/OPFS fires no real fs.watch); only editor saves route via a bespoke IPC. A file changed from the terminal (`echo > src/x.js`), a generated file, or an `npm`-written file triggers ZERO preview reaction — real Vite would watcher-detect it and (HMR off) full-reload.
 user_story: As a dev who changes a project file from the terminal or a tool, I want the preview to pick it up like a real `vite` dev server, but today only in-editor saves are seen and every other writer is silently ignored (stale preview, no hint).
-sources: [apps/playground/src/workers/dev-server-controller.ts, apps/playground/src/workers/dev-server-boot.ts, apps/playground/src/workers/real-vite-invalidation.ts]
-code: [apps/playground/src/workers/dev-server-controller.ts]
+sources: [packages/workbench/src/workers/dev-server-controller.ts, packages/workbench/src/workers/dev-server-boot.ts, packages/workbench/src/workers/real-vite-invalidation.ts]
+code: [packages/workbench/src/workers/dev-server-controller.ts]
 ---
 
 ## Context

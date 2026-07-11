@@ -1,5 +1,5 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectIndex } from '../glue/project-index.ts';
 import { type PendingSwitchTarget, type SaveFlowDeps, createSaveFlow } from './save-flow.ts';
 
 // Behavioral heirs of the retired App.test save/switch greps (epic

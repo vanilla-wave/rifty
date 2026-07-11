@@ -1,5 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { bootOwner, gotoHarness, readOwnerFile } from './fixtures.ts';
+
+const PROJECT_INDEX_PORT_URL = `/@fs${fileURLToPath(
+  new URL('../../packages/workbench/src/glue/project-index-port.ts', import.meta.url),
+)}`;
 
 /**
  * Starter (non-hidden) owner boot against the REAL owner worker (browser-unit
@@ -29,11 +34,11 @@ test('starter boot seeds tree + synthesizes scratch index entry; bridges answer 
   });
 
   // 3. Right after ready — no polls: archive + index bridges must answer.
-  const bridges = await page.evaluate(async () => {
+  const bridges = await page.evaluate(async (projectIndexPortUrl) => {
     const w = window as unknown as {
       __buOwner: { snapshotPort: string | number; exportArchive(): Promise<string> };
     };
-    const indexPort = await import('/src/glue/project-index-port.ts');
+    const indexPort = await import(projectIndexPortUrl);
     const mirror = indexPort.bridgeProjectIndex(w.__buOwner.snapshotPort);
     const index = await new Promise<{
       activeId: string;
@@ -51,7 +56,7 @@ test('starter boot seeds tree + synthesizes scratch index entry; bridges answer 
     const archive = await w.__buOwner.exportArchive();
     mirror.dispose();
     return { index, archiveHasReadme: archive.includes('README.md') };
-  });
+  }, PROJECT_INDEX_PORT_URL);
 
   // 2. Synthesized scratch entry records the spawn starter.
   expect(bridges.index).not.toBeNull();

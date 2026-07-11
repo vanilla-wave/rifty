@@ -1,5 +1,5 @@
 import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
-import type { ProjectSpec } from '../templates/project-spec.ts';
+import type { ProjectSpec } from '@riftydev/workbench';
 
 export const TS_LS_INIT_DIAGNOSTIC_SOURCE = 'ts-lsp-init';
 const MISSING_WORKSPACE_TYPESCRIPT_ERROR =

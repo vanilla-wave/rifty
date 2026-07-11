@@ -8,7 +8,7 @@ user_story: As a contributor adding a trust claim over stored state (cache valid
 epic: trusted-state-authority
 blocked_by: [playground/install-stamp-authority]
 sources: [docs/adr/playground/0216-install-tail-latency-background-command-durability-generation-guarded-stamps-learned-pin-swr.md]
-code: [apps/playground/src/glue/eddy-learned-pins.ts]
+code: [packages/workbench/src/glue/eddy-learned-pins.ts]
 ---
 
 ## Context

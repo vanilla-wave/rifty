@@ -1,3 +1,4 @@
+import type { ProjectSpec } from '@riftydev/workbench';
 /**
  * Behavioral contract of the extracted preset-boot core (ADR-0197 slice 3) —
  * replaces the App.test.ts source-greps for the preset selection & switching
@@ -6,7 +7,6 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { Preset } from '../presets.ts';
-import type { ProjectSpec } from '../templates/project-spec.ts';
 import { type PresetBoot, type PresetBootDeps, createPresetBoot } from './preset-boot.ts';
 
 type Session = { id: string };

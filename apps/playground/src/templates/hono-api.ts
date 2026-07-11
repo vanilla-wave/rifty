@@ -1,3 +1,4 @@
+import type { NodeServerProjectSpec } from '@riftydev/workbench';
 /**
  * Hono API template — a small middleware-style Node server consumer for the
  * generic node-server project runtime (ADR-0130).
@@ -6,7 +7,6 @@
  * exercise Hono's `ctx`/middleware request flow over the Node http surface.
  */
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
-import type { NodeServerProjectSpec } from './project-spec.ts';
 
 const INDEX_HTML = `<!doctype html>
 <html lang="en">

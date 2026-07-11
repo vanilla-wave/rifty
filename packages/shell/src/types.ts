@@ -23,6 +23,21 @@ export interface StdinReader {
   read(): Promise<Uint8Array | null>;
 }
 
+/** Current terminal grid, in character cells. */
+export interface TerminalSize {
+  readonly cols: number;
+  readonly rows: number;
+}
+
+/**
+ * Run-scoped terminal size source. The host updates it while the foreground
+ * process owns the TTY; consumers subscribe to propagate a real live resize.
+ */
+export interface TerminalResizeSource {
+  current(): TerminalSize;
+  subscribe(listener: (size: TerminalSize) => void): () => void;
+}
+
 export interface CommandContext {
   cwd: string;
   env: Record<string, string>;
@@ -39,6 +54,8 @@ export interface CommandContext {
   /** Terminal width / height when {@link isTTY}; consumers fall back to 80×24. */
   readonly cols?: number;
   readonly rows?: number;
+  /** Live resize source for an interactive foreground command. */
+  readonly terminal?: TerminalResizeSource;
   /**
    * Aborts when the foreground command is cancelled (Ctrl+C / SIGINT). A
    * long-running command observes this to return early (conventionally exit

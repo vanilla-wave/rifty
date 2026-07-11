@@ -8,7 +8,7 @@ user_story: As a developer running Vite in rifty, I want Vite's own fallback-por
 epic: preset-deglue
 blocked_by: []
 sources: [docs/backlog/net/preview-websocket-bridge.md]
-code: [apps/playground/src/templates/project-spec.ts, tests/e2e/manual-vite-install.spec.ts]
+code: [packages/workbench/src/project-spec.ts, tests/e2e/manual-vite-install.spec.ts]
 ---
 
 ## Context

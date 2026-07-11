@@ -32,7 +32,10 @@ type WorkerListener = (ev: MessageEvent) => void;
 
 class FakeWorker implements WorkerLike {
   private readonly listeners = new Map<string, Set<WorkerListener>>();
-  postMessage(): void {}
+  readonly posted: unknown[] = [];
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
   terminate(): void {}
   addEventListener(type: string, listener: WorkerListener): void {
     let set = this.listeners.get(type);
@@ -90,6 +93,29 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.kill('SIGTERM');
   });
 
+  it('sends terminal resize as a dedicated control frame, not a user message', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const init = (factoryWorker as FakeWorker).posted[0] as {
+      spec: { stdio: { ipc: MessagePort } };
+    };
+    const frame = new Promise<unknown>((resolve) => {
+      init.spec.stdio.ipc.onmessage = (event) => resolve(event.data);
+      init.spec.stdio.ipc.start();
+    });
+
+    expect(handle.resize(132, 43)).toBe(true);
+    await expect(frame).resolves.toEqual({ kind: 'ipc:tty-resize', cols: 132, rows: 43 });
+
+    handle.kill('SIGTERM');
+  });
+
   it('send returns false after explicit disconnect', () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
@@ -111,6 +137,39 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.disconnect();
     expect(disconnectEvents).toBe(1);
     expect(handle.send({ a: 2 })).toBe(false);
+
+    handle.kill('SIGTERM');
+  });
+
+  it('keeps terminal control available after user IPC disconnect', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const init = (factoryWorker as FakeWorker).posted[0] as {
+      spec: { stdio: { ipc: MessagePort } };
+    };
+    const frames: unknown[] = [];
+    const received = new Promise<void>((resolve) => {
+      init.spec.stdio.ipc.onmessage = (event) => {
+        frames.push(event.data);
+        if (frames.length === 2) resolve();
+      };
+      init.spec.stdio.ipc.start();
+    });
+
+    handle.disconnect();
+    expect(handle.send({ blocked: true })).toBe(false);
+    expect(handle.resize(120, 40)).toBe(true);
+    await received;
+    expect(frames).toEqual([
+      { kind: 'ipc:disconnect' },
+      { kind: 'ipc:tty-resize', cols: 120, rows: 40 },
+    ]);
 
     handle.kill('SIGTERM');
   });

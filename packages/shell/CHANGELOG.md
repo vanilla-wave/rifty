@@ -57,6 +57,10 @@
 
 ### Added
 
+- **Run-scoped live terminal dimensions (ADR-0225).** `RunOptions.terminal`
+  accepts a `TerminalResizeSource`; foreground TTY command contexts read its
+  current rows/columns and can subscribe while a process runs. Redirected and
+  piped sinks remain non-TTY and never receive resize propagation.
 - **Shell input redirect `cmd < file`.** A `< file` operand (anywhere in a simple command, rightmost wins — mirrors the `>`/`>>` scan) reads the VFS file as the command's stdin via the same one-shot reader the pipe hand-off uses; an explicit `< file` overrides any inherited pipe stdin. A missing/unreadable file → `cmd: file: No such file or directory` exit 1 and the command does not run. Composes with pipes (`grep x < f | wc -l`). Background `cmd < file &` stays a loud ceiling. Guards: `input-redirect.test.ts`.
 - **Shell pipes `a | b`.** The dispatcher now splits a segment on `|` and runs the stages left→right, BUFFERING each stage's stdout into the next stage's `ctx.stdin` (a one-shot reader). Only the final stage streams stdout to the terminal; every stage's stderr passes through (bash never pipes stderr); pipeline exit = the last stage's exit (POSIX). To make chains work, `cat`/`grep`/`wc`/`head`/`tail` now drain `ctx.stdin` when given no FILE operand (a `-` operand also reads stdin, GNU) — so `cat f | grep x | wc -l`, `ls | wc -l` work. A piped BACKGROUND job (`a | b &`) stays a loud ceiling. `>`/`>>` redirect composes per-stage. Guards: `pipes.test.ts`.
 - **`help` builtin.** `help` lists the live command registry (sorted; includes host-registered `node`/`npm`/`vite`) plus a note that those run programs; `help <cmd>` prints a one-line synopsis, unknown topic → `help: no help topic for '<cmd>'` exit 1. Lists from the live `commandNames()` so it can't drift from the real set. Guards: `help.test.ts`.

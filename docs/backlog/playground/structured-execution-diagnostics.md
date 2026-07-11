@@ -8,7 +8,7 @@ user_story: As a developer whose install or command failed, I want the diagnosti
 epic: actionable-ide-diagnostics
 blocked_by: [playground/diagnostics-hub]
 sources: [M11, ADR-0146, ADR-0182, ADR-0188]
-code: [apps/playground/src/glue/pty-protocol.ts, apps/playground/src/glue/pty-client.ts, apps/playground/src/workers/pty-server.ts, apps/playground/src/glue/npm-shell-command.ts, packages/npm-client/src/installer.ts]
+code: [packages/workbench/src/glue/pty-protocol.ts, packages/workbench/src/glue/pty-client.ts, packages/workbench/src/workers/pty-server.ts, packages/workbench/src/glue/npm-shell-command.ts, packages/npm-client/src/installer.ts]
 ---
 
 ## Context

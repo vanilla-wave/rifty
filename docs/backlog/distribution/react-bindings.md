@@ -6,13 +6,16 @@ created: 2026-07-10
 why: React is the anchor SaaS stack; without ready components every embedder hand-wires xterm/Monaco/preview glue — the threshold the epic exists to remove
 user_story: As a SaaS developer on React, I want `<RiftyProvider>` + `<RiftyEditor/>`/`<RiftyTerminal/>`/`<RiftyPreview/>` atoms I can place in my own layout and brand, but today only the internal Solid playground exists.
 epic: embeddable-dev-loop
-blocked_by: [distribution/workbench-controllers]
-sources: [DD-4]
+sources: [ADR-0224, DD-4]
 ---
 
 ## Context
 
-Thin React binding over `@riftydev/workbench` controllers (carved out of the old EPIC D kit; vue/`<RiftyIDE/>`/default theme stay in the residual `distribution/framework-bindings-kit`). Consumer owns layout and styling; components auto-wire through provider context.
+Thin React binding over the framework-free `@riftydev/workbench` controllers
+ratified by ADR-0224 (carved out of the old EPIC D kit;
+vue/`<RiftyIDE/>`/default theme stay in the residual
+`distribution/framework-bindings-kit`). Consumer owns layout and styling;
+components auto-wire through provider context.
 
 ## Acceptance
 
@@ -40,5 +43,5 @@ None — no Node-API surface. Behavior oracle = the same dev-loop flows the play
 
 - React-only first wave (user call 2026-07-10); solid components stay in-app (playground is the solid consumer via workbench directly).
 - DD-4 (headless + themeable, CSS vars, no batteries-styled) is the decision; implementer records the ADR at track start — content pre-resolved here, no open forks.
-- Session state owned by the provider (single workbench session); atoms are views — no per-atom sandbox props.
+- Session state owned by the provider (ADR-0224 single-session rule); atoms are views — no per-atom sandbox props.
 - Monaco stays a lazy dynamic import (playground boot-speedup pattern), not a hard dependency at module top level.

@@ -6,7 +6,7 @@ created: 2026-06-21
 why: ADR-0165 keeps the export engine live and the baseline = re-derivable Starter bundle artifact intentionally reusable, but the M13 sharing surfaces (save-as-Starter and share-by-link) are explicitly out of scope and ship disabled with a "soon" pill.
 user_story: As a user with a polished project, I want to publish it as a Starter others can pick or share by link, but ADR-0165 scopes this to M13 — the Export surfaces are visible-but-disabled today.
 sources: [ADR-0165, ADR-0146, ADR-0073]
-code: [apps/playground/src/glue/workspace-archive.ts, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/presets.ts]
+code: [packages/workbench/src/glue/workspace-archive.ts, packages/workbench/src/glue/workspace-archive-port.ts, apps/playground/src/presets.ts]
 ---
 
 ## Context

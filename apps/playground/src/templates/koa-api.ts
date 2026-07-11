@@ -1,9 +1,9 @@
+import type { NodeServerProjectSpec } from '@riftydev/workbench';
 /**
  * Koa API template — a ctx/cookie/router consumer for the generic
  * node-server project runtime (ADR-0130).
  */
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
-import type { NodeServerProjectSpec } from './project-spec.ts';
 
 const INDEX_HTML = `<!doctype html>
 <html lang="en">

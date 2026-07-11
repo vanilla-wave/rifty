@@ -6,7 +6,7 @@ created: 2026-06-17
 why: P6b moved the dev server into a serve:true supervised child; the owner driver watches the child's exit only during the boot window and inside stop(). If the child crashes AFTER it reported ready (request-handler throw, OOM), nothing transitions the controller — the LIVE pill stays 'running' and /preview/<port>/ 502s until the user Ctrl-Cs/restarts.
 user_story: As a developer whose running dev server crashes mid-session, I want the UI to leave 'running' (LIVE pill clears, preview tears down) and the terminal to show the dev server stopped — instead of a stale LIVE pill over a dead server.
 sources: [ADR-0150, ADR-0148]
-code: [apps/playground/src/workers/owner-child-dev-server.ts, apps/playground/src/workers/dev-server-controller.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+code: [packages/workbench/src/workers/owner-child-dev-server.ts, packages/workbench/src/workers/dev-server-controller.ts, packages/workbench/src/workers/real-vite-bootstrap.ts]
 ---
 
 ## Context

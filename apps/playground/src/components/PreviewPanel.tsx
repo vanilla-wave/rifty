@@ -1,3 +1,4 @@
+import type { PreviewPortEntry } from '@riftydev/workbench';
 /**
  * M10 preview panel — iframe pinned to `/preview/<port>/` for the playground
  * Service Worker to route to the runtime's port registry.
@@ -35,7 +36,6 @@ import {
   onCleanup,
 } from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
-import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
 import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-panel-core.ts';
 

@@ -1,5 +1,5 @@
 import { basename, dirname, extname, joinPath } from '@riftydev/vfs';
-import type { FsOpsTarget } from './fs-ops.ts';
+import type { FsOpsTarget } from '@riftydev/workbench';
 
 export interface DragMoveAction {
   readonly kind: 'rename';

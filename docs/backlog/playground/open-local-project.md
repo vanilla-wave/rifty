@@ -8,7 +8,7 @@ user_story: As a developer with a local Node project, I want to choose a folder 
 epic: from-intent-to-running-project
 blocked_by: [playground/project-ingress-transaction]
 sources: [M13, ADR-0165, ADR-0146, docs/backlog/vfs/workspace-archive-scalability.md]
-code: [apps/playground/src/glue/workspace-archive.ts, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/glue/file-manager-dnd.ts, apps/playground/src/orchestration/workspace-files.ts]
+code: [packages/workbench/src/glue/workspace-archive.ts, packages/workbench/src/glue/workspace-archive-port.ts, apps/playground/src/glue/file-manager-dnd.ts, packages/workbench/src/orchestration/workspace-files.ts]
 ---
 
 ## Context

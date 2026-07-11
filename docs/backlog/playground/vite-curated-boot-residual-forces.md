@@ -8,7 +8,7 @@ user_story: As a developer and maintainer, I want rifty's Vite-specific glue to 
 epic: preset-deglue
 blocked_by: []
 sources: [docs/backlog/net/preview-websocket-bridge.md, docs/adr/net/0189-preview-loopback-websocket-bridge.md, docs/adr/service-worker/0097-preview-frame-port-context-routes-root-relative-requests.md]
-code: [apps/playground/src/templates/project-spec.ts, apps/playground/src/workers/dev-server-boot.ts, apps/playground/src/workers/build-boot.ts]
+code: [packages/workbench/src/project-spec.ts, packages/workbench/src/workers/dev-server-boot.ts, packages/workbench/src/workers/build-boot.ts]
 ---
 
 ## Context

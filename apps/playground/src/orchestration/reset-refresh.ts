@@ -9,7 +9,7 @@
  * the behavioral-test seam (ADR-0197 §4). The dev-server core (slice 1) is
  * injected as a port (dependency spine).
  */
-import type { ActiveId } from '../glue/project-index.ts';
+import type { ActiveId } from '@riftydev/workbench';
 
 /** An owner republish can be lost mid-switch; never hang the refresh on it. */
 const SNAPSHOT_FRAME_TIMEOUT_MS = 2000;

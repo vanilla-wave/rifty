@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of the rifty packages with a token (13: the 12 libs +
+# One-time FIRST publish of the rifty packages with a token (16: the 15 libs +
 # the @riftydev/eddy service). Pass --only <filter> to bootstrap a single new
 # name later (e.g. --only @riftydev/eddy) without re-publishing the rest.
 #
@@ -10,7 +10,7 @@
 # (see docs/PUBLISHING.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`),
+# The publish set: ./packages/* (14, incl. `@riftydev/sdk` + `@riftydev/workbench`),
 # @riftydev/shadow-registry, and the @riftydev/eddy service (services/eddy).
 # apps/playground + test fixtures stay private and are never matched by the
 # filter.

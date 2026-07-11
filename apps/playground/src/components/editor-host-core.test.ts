@@ -1,3 +1,4 @@
+import type { FsOpsTarget } from '@riftydev/workbench';
 /**
  * Behavioral heirs of the retired EditorHost source greps (epic
  * playground-testable-core): node vitest drives the REAL createEditorHostCore —
@@ -14,7 +15,6 @@
 import * as monaco from 'monaco-editor';
 import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FsOpsTarget } from '../glue/fs-ops.ts';
 import {
   type EditorDocumentEvent,
   type EditorGitOriginalTextInput,

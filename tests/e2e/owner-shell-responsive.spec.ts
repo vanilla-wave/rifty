@@ -24,12 +24,10 @@ import {
  *   - Ctrl-C on Terminal 2 kills the blocked child (shell resolves exit 130);
  *     the session recovers — a fresh `echo alive` then runs and prints `alive`.
  *
- * NOT covered here (HONEST): a CPU-bound RED→GREEN proving the owner thread is
- * not stalled by a CPU-heavy child. No CPU-hog bin ships in the default
- * template, and bare `node <script>` is not runnable from the shell (commands
- * resolve only via `node_modules/.bin`), so we do not fake one. The
- * architectural non-stall property (children are workers, owner never runs bin
- * code) is recorded in ADR-0150.
+ * NOT covered here: a CPU-heavy child stress case. This scenario deliberately
+ * uses two real installed CLIs; arbitrary `node <file>` has its own supervised
+ * child coverage in node-command.spec.ts. The architectural non-stall property
+ * (children are workers, owner never runs bin code) is recorded in ADR-0150.
  *
  * Requires cross-origin isolation (owner is SAB-IPC-gated, no PAGE fallback);
  * the e2e harness serves COOP/COEP. Chromium-only, matching the other COI specs.

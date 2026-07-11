@@ -1,3 +1,4 @@
+import type { ActiveId, Project, Scratch } from '@riftydev/workbench';
 /**
  * Launcher modal (design §2; ADR-0165 §9). 1040x624 card bg #1D1F26 radius 12,
  * veil rgba(8,9,12,0.62). Segmented Starters | Projects (active tint
@@ -10,7 +11,6 @@
  * is the lone Starter-layer type it needs (from glue/starter.ts).
  */
 import { Show } from 'solid-js';
-import type { ActiveId, Project, Scratch } from '../glue/project-index.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import type { Preset } from '../presets.ts';
 import { ProjectsTab, type RowAction } from './ProjectsTab.tsx';

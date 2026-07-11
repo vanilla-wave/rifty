@@ -5,7 +5,7 @@ title: M12 — AI-first IDE agent harness on Pi (pi-agent-core) over the rifty s
 created: 2026-06-13
 why: build an in-browser AI coding agent for Node projects whose only external dep is an OpenAI-compatible endpoint; chosen over the opencode facade (whose tool layer needs native spawn — a browser ceiling)
 user_story: As a dev shipping an in-browser AI coding agent on rifty, I want to embed `pi-agent-core` + `pi-ai/openai-completions` with rifty primitives wrapped as `AgentTool`s (vfs read/write/edit, `shell_exec`, grep, git, typecheck) talking to my OpenAI-compatible endpoint, but today the Pi harness is unbuilt — streaming over the SW-bridge unproven and the dep choice still provisional, not ratified.
-sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/distribution/public-api-ai-agent-exec-preview.md, docs/backlog/distribution/public-api-ai-agent-contract-snapshot-restore.md, docs/backlog/distribution/workbench-controllers.md]
+sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/distribution/public-api-ai-agent-exec-preview.md, docs/backlog/distribution/public-api-ai-agent-contract-snapshot-restore.md, docs/adr/distribution/0224-framework-free-workbench-session-controllers-package.md]
 code: [packages/rifty/src/sandbox.ts]
 ---
 

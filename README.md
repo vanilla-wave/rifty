@@ -15,6 +15,7 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 | Package | What it is | Runs in |
 |---|---|---|
 | [`@riftydev/sdk`](./packages/rifty) | **Umbrella**: one-install front door + `createSandbox()` | browser + Worker |
+| [`@riftydev/workbench`](./packages/workbench) | Headless boot/terminal/preview/editor/file-tree session controllers | browser |
 | [`@riftydev/io`](./packages/io) | EventEmitter, Buffer, node-compatible streams | anywhere |
 | [`@riftydev/vfs`](./packages/vfs) | Virtual FS: in-memory + OPFS, with a sync mirror | anywhere |
 | [`@riftydev/kernel`](./packages/kernel) | Processes / scheduling / IPC (Worker-as-process, SAB) | browser + Worker |
@@ -28,7 +29,8 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 | [`@riftydev/shadow-registry`](./tools/shadow-registry) | Data tables of in-browser npm substitutions | anywhere |
 
 ```bash
-npm install @riftydev/sdk                 # everything + createSandbox() (the front door)
+npm install @riftydev/sdk                 # runtime stack + createSandbox() (the front door)
+npm install @riftydev/workbench           # complete headless development session
 npm install @riftydev/vfs            # just the VFS
 npm install @riftydev/npm-client     # just the npm resolver/installer
 # …or any combination — they share singletons when installed at the same version
@@ -107,17 +109,20 @@ In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **pub
 
 ## Architecture
 
-Five layers, top-down only — **no reverse imports**:
+Seven layers, top-down only — **no reverse imports**:
 
 ```
 apps/playground          (UI: Monaco editor + xterm terminal — SolidJS, isolated)
+workbench                (headless UI-session controllers)
+sdk                      (umbrella createSandbox() façade)
 shell · terminal · npm-client
 runtime-js (Node API) · runtime-wasi (WASI)
 kernel (processes, scheduling, IPC)
 vfs · io · net   (+ service-worker, shadow-registry)
 ```
 
-UI framework (SolidJS) is confined to `apps/playground/**` (D-002).
+UI frameworks and bundler-specific imports stay outside `packages/workbench`;
+SolidJS is confined to `apps/playground/**` (D-002/ADR-0224).
 
 ## Contributing
 

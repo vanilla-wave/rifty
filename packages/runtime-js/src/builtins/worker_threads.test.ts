@@ -18,7 +18,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
-import { resetNodeEntryWorkerUrl, setNodeEntryWorkerUrl } from './node-entry-url.ts';
+import {
+  configureNodeEntryWorker,
+  resetNodeEntryWorkerUrl,
+  setNodeEntryWorkerUrl,
+} from './node-entry-url.ts';
 import { setProcessCwd } from './process.ts';
 import workerThreadsModule, {
   Worker,
@@ -159,13 +163,15 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+    });
     setProcessCwd('/project');
 
     const worker = new Worker(
       '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs',
       {
-        env: { ROLLDOWN_TEST: '1' },
+        env: { ROLLDOWN_TEST: '1', RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm' },
       },
     );
     worker.postMessage({ __emnapi__: { type: 'load' } });
@@ -183,6 +189,7 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_WORKER_THREADS: '1',
       RIFTY_WORKER_THREAD_ID: String(worker.threadId),
       ROLLDOWN_TEST: '1',
+      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
     });
     expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
 

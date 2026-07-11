@@ -6,7 +6,7 @@ created: 2026-06-13
 why: ADR-0123 deliberately keeps two preview bridge paths (page window proxy + direct SW→Worker) coexisting with a retirement follow-up gated on deployed old-SW/new-page skew elapsing; nothing tracks that gate, so the legacy page proxy lingers as maintenance surface and a second readiness/auth path.
 user_story: As a rifty contributor maintaining the preview bridge, I want a single Worker-owned routing path once the deployed SW/page skew elapses, but today both the page window proxy (`mountPlaygroundPreviewBridge`) and the `FirstWindowOwnerResolver` fallback linger with no backlog item or code TODO gating their retirement.
 sources: [ADR-0123, ADR-0040]
-code: [apps/playground/src/glue/preview-bridge-wiring.ts, apps/playground/src/glue/realVite.ts, packages/service-worker/src/owner-resolver.ts]
+code: [packages/workbench/src/glue/preview-bridge-wiring.ts, packages/workbench/src/glue/realVite.ts, packages/service-worker/src/owner-resolver.ts]
 ---
 
 ## Context

@@ -4,6 +4,9 @@
 
 ### Added
 
+- `RiftyTerminalOptions.onResize(cols, rows)` reports every xterm character-cell
+  grid change after fit or an explicit resize, so hosts can propagate live TTY
+  dimensions to the foreground process (ADR-0225).
 - `TerminalState.devCommand` (`{ line, cwd }`) — optional recorded dev-server
   command, round-tripped by the sync + async state stores; validated on parse
   (non-empty line, absolute cwd; malformed → dropped, cwd/env kept).
@@ -22,6 +25,8 @@
 
 ### Fixed
 
+- Test/debug buffer snapshots omit xterm's final cursor-restoration CSI; replay
+  serialization through `serializeText()` remains unchanged.
 - No blank row after a command whose output ends in a newline. `writePrompt`
   now re-draws bash-style: the prompt follows the output directly (the output's
   own trailing `\n` already moved to a fresh line), and only prepends a

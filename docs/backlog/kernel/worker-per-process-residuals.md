@@ -1,17 +1,30 @@
 ---
 area: kernel
 status: draft
-title: Worker-per-process residuals — worker-side process.stdin Readable + un-run conformance
+title: Worker-per-process residuals — pull-mode process.stdin + browser conformance
 created: 2026-06-08
-why: SAB-Worker stdin write path landed but worker-side process.stdin Readable + the SAB-only conformance suites stay unverified in Node
-user_story: As a developer whose worker child reads its own `process.stdin` as a Node Readable in rifty, I want it to consume bytes the parent writes via `child.stdin.write/end`, but today only the write path is wired — the worker side has no `process.stdin` Readable and the SAB-only suites are skipped under Node, so the round-trip is never exercised in CI.
-sources: [TASKS M6, ADR-0045, ADR-0011]
+why: ADR-0230 shipped ordered flowing stdin into supervised children, but pull/pipe/async Readable APIs remain loud and the generic SAB worker conformance still lacks a default browser run
+user_story: As a developer using pull-mode `process.stdin` or generic `child_process` worker behavior, I want Node-compatible reads and browser conformance; today flowing `data`/`setEncoding` works, while pull surfaces throw and generic worker suites remain browser-gated.
+sources: [TASKS M6, ADR-0045, ADR-0011, ADR-0230]
 ---
 ## Context
-The page→child stdin write path is wired (`child_process.ts:220-224` → `handle.stdin()` → `bindPortAsWritable` in `process-manager.ts:328-331`); `child.stdin.write/end` post to the worker's stdin `MessagePort`. Two residuals remain on the worker-per-process model:
-- **Worker-side `process.stdin` Readable** wiring is the explicitly-named follow-up after the SAB stdin slice — the child can be written to but cannot yet consume its own stdin as a Node Readable.
-- **Conformance only proves it in the browser:** the SAB-only suites (`child_process-stdin`, `*-worker`, `exec-sync-worker`) gate on `crossOriginIsolated && getKernelWorkerUrl()` and are skipped under Node — so CI never exercises the worker-branch end-to-end; the contract is documented, not auto-verified in the parity/conformance default run.
+ADR-0230 completed the owner→child boundary for supervised Node and `.bin`
+children. Ordered chunks reach the MessagePort-backed, non-TTY `process.stdin`;
+flowing `data` listeners, `setEncoding`, `resume`, and `pause` work. The public
+workbench Chromium acceptance covers that route. Two residuals remain:
+
+- **Pull-mode Readable surface:** `readable`, `read`, `pipe`, and async
+  iteration remain loud `NotImplementedError` ceilings. Raw mode and Ctrl+D/EOF
+  stay in the terminal backlog, not this item.
+- **Generic `child_process` browser conformance:** SAB-only suites
+  (`child_process-stdin`, `*-worker`, `exec-sync-worker`) gate on
+  `crossOriginIsolated && getKernelWorkerUrl()` and are skipped under Node. The
+  generic worker branch therefore still needs an explicit browser CI lane.
 ## Options / Next
-1. Add worker-side `process.stdin` as a Readable fed by the kernel stdin `MessagePort` (pairs with the binary-stdio-backpressure item). 2. Close the verification gap: either run the SAB suites in the browser e2e harness as a gated DoD step, or stand up a Node Worker harness that satisfies the SAB gate so the worker branch is exercised in CI. Couples to the binary-stdio-messageport-backpressure file.
+1. Add pull/pipe/async Readable behavior atop the existing MessagePort-backed
+   stdin; pair flow control with `binary-stdio-messageport-backpressure`.
+2. Run the generic SAB suites in the browser harness as a required CI gate, or
+   provide a Node Worker harness that honestly satisfies the SAB contract.
 ## Reversibility
-REVERSIBLE — additive Readable wiring + test harness; no public-API change beyond the already-shipped stdin surface. Verify the conformance-skip is intentional vs a coverage hole before deciding the harness shape.
+REVERSIBLE — additive pull-mode behavior + conformance harness; ADR-0230's
+flowing stdin contract remains unchanged.

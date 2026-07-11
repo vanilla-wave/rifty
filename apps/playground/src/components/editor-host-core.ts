@@ -12,6 +12,7 @@
  * derived reads they don't key on, see handleGitStatusChanged).
  */
 import { basename } from '@riftydev/vfs';
+import { type FsOpsTarget, looksBinary } from '@riftydev/workbench';
 import * as monaco from 'monaco-editor';
 import { type Accessor, createSignal, untrack } from 'solid-js';
 import { type DirtyGutterChange, dirtyGutterChanges } from '../glue/dirty-gutter.ts';
@@ -26,7 +27,6 @@ import {
   openFileTab,
   setDirty,
 } from '../glue/editor-tabs.ts';
-import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 
 export interface EditorOpenFileOptions {
   readonly activate?: boolean;

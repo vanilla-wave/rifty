@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { PreviewPortEntry } from '@riftydev/workbench';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { PreviewPanel, reconcileSelectedPort } from './PreviewPanel.tsx';
 
 // Read ONLY for the two residual client-only pins below (keyed remount +

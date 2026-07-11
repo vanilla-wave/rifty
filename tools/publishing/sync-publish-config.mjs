@@ -45,6 +45,30 @@ const SPEC = {
     sideEffects: false,
     keywords: ['runtime', 'sdk', 'sandbox', 'node-compatible', 'wasi'],
   },
+  '@riftydev/workbench': {
+    dir: 'packages/workbench',
+    sideEffects: [
+      './src/owner-worker.ts',
+      './src/dev-server-worker.ts',
+      './src/kernel-worker.ts',
+      './src/node-worker.ts',
+      './src/workers/real-vite-bootstrap.ts',
+      './src/workers/dev-server-child-bootstrap.ts',
+      './src/workers/kernel-worker-entry.ts',
+      './src/workers/node-entry-bootstrap.ts',
+      './dist/owner-worker.js',
+      './dist/dev-server-worker.js',
+      './dist/kernel-worker.js',
+      './dist/node-worker.js',
+    ],
+    addExports: {
+      './owner-worker': './src/owner-worker.ts',
+      './dev-server-worker': './src/dev-server-worker.ts',
+      './kernel-worker': './src/kernel-worker.ts',
+      './node-worker': './src/node-worker.ts',
+    },
+    keywords: ['workbench', 'session', 'terminal', 'editor'],
+  },
   '@riftydev/io': {
     dir: 'packages/io',
     sideEffects: false,
@@ -159,6 +183,7 @@ const SPEC = {
 const DESCRIPTIONS = {
   '@riftydev/sdk':
     'rifty SDK — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.',
+  '@riftydev/workbench': 'Framework-free browser workbench session controllers for rifty.',
   '@riftydev/io':
     'Isomorphic primitives for rifty: EventEmitter, Buffer, and a node-compatible stream stack.',
   '@riftydev/vfs':

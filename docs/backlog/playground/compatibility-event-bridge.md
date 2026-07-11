@@ -8,7 +8,7 @@ user_story: As a developer running a real project, I want observed compatibility
 epic: honest-compatibility-in-the-ide
 blocked_by: [playground/notimplemented-stub-telemetry]
 sources: [M11, ADR-0142]
-code: [apps/playground/src/glue/realVite.ts, apps/playground/src/glue/pty-protocol.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/worker-entry.ts, packages/runtime-js/src/telemetry/divergence-sink.ts]
+code: [packages/workbench/src/glue/realVite.ts, packages/workbench/src/glue/pty-protocol.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/worker-entry.ts, packages/runtime-js/src/telemetry/divergence-sink.ts]
 ---
 
 ## Context

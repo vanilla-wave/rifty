@@ -1,3 +1,4 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 /**
  * Behavioral contract of the extracted workspace-owner lifecycle core
  * (ADR-0197 slice 2) — replaces the App.test.ts source-greps for the owner
@@ -6,7 +7,6 @@
  * covered by e2e + the browser-unit lane).
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectIndex } from '../glue/project-index.ts';
 import {
   type WorkspaceLifecycle,
   type WorkspaceLifecycleDeps,

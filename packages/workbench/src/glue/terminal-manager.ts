@@ -1,0 +1,321 @@
+import { invokeHostCallback, runCleanupSteps } from '../fault-boundary.ts';
+/**
+ * Terminal session manager — PAGE-side pty port client; shell/npm/bin are
+ * owner-resident in the persistent workspace owner (ADR-0146).
+ *
+ * The `Shell`, cwd/env, npm-install and bin/`execSync` all live in the
+ * persistent workspace-owner worker now; this manager keeps only PAGE-local UI
+ * state per session (title, status, exit code, the attached terminal writer)
+ * and forwards run/stdin/signal over the {@link WorkspaceOwnerHandle} pty
+ * channel. cwd/env in snapshots are read from the owner's per-session cache
+ * (populated from `pty:exit`), so the explorer/prompt scope stays correct
+ * without the page hosting a shell.
+ *
+ * The session id (`terminal-N`) doubles as the owner pty `sid`: `openSession`
+ * on create, `closeSession` on dispose. The active run's `rid` is tracked per
+ * session so `writeStdin`/`stop` route to the in-flight run.
+ */
+import type { WorkspaceOwnerHandle } from './realVite.ts';
+
+export type TerminalRawInput = string | Uint8Array;
+
+export type TerminalStatus = 'idle' | 'running';
+
+export interface TerminalSessionSnapshot {
+  readonly id: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly env: Record<string, string>;
+  readonly status: TerminalStatus;
+  readonly exitCode?: number;
+}
+
+export interface TerminalRunDimensions {
+  readonly cols?: number;
+  readonly rows?: number;
+}
+
+export interface TerminalDimensions {
+  readonly cols: number;
+  readonly rows: number;
+}
+
+export type TerminalWriter = (chunk: string, stream?: 'stdout' | 'stderr') => void;
+
+export interface TerminalManager {
+  sessions(): TerminalSessionSnapshot[];
+  snapshot(id: string): TerminalSessionSnapshot;
+  activeSessionId(): string;
+  createSession(title?: string): TerminalSessionSnapshot;
+  select(id: string): void;
+  attachWriter(id: string, writer: TerminalWriter | null): void;
+  /** Wipe the session's screen + scrollback (e.g. a user `clear`). */
+  clear(id: string): void;
+  /**
+   * Fresh console for a (re)booting project: wipe screen + scrollback, then
+   * re-emit the onboarding `banner` so the boot terminal still greets — the
+   * boot's first clear would otherwise erase the banner printed at mount.
+   */
+  freshConsole(id: string, banner?: string): void;
+  writeStdin(id: string, data: TerminalRawInput): void;
+  /** Update the terminal grid; forwards to the active foreground run immediately. */
+  resize(id: string, dims: TerminalDimensions): void;
+  runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number>;
+  runSequence(id: string, lines: readonly string[], dims?: TerminalRunDimensions): Promise<number>;
+  /** Re-open the PAGE session ids in a respawned workspace owner. */
+  rebindOwner(owner: WorkspaceOwnerHandle): Promise<void>;
+  stop(id: string): void;
+  dispose(): void;
+}
+
+interface TerminalSession {
+  id: string;
+  title: string;
+  status: TerminalStatus;
+  exitCode?: number;
+  writer: TerminalWriter | null;
+  /** `rid` of the run currently owning the foreground; null when idle. */
+  activeRid: string | null;
+  /** Resolves once the owner replies `pty:ready` for this session. */
+  ready: Promise<void>;
+  dimensions: TerminalDimensions;
+}
+
+const DISPOSED_ERROR = 'Terminal manager is disposed';
+const OPEN_SESSION_RETRY_MS = 250;
+const enc = new TextEncoder();
+
+export interface TerminalManagerOptions {
+  /** The persistent workspace owner hosting the realm-resident shells. */
+  owner: WorkspaceOwnerHandle;
+  /**
+   * Persisted cwd/env restored into each opened owner session (ADR-0146). The
+   * shell is owner-resident, so the seed travels to it over `pty:open`; the PAGE
+   * snapshot cache reflects it immediately for the prompt/explorer.
+   */
+  initialState?: { readonly cwd: string; readonly env: Record<string, string> };
+}
+
+export function createTerminalManager(opts: TerminalManagerOptions): TerminalManager {
+  let owner = opts.owner;
+  const sessions = new Map<string, TerminalSession>();
+  let nextSessionNumber = 1;
+  let nextDefaultTitleNumber = 1;
+  let activeId = '';
+  let disposed = false;
+
+  async function openOwnerSession(
+    sid: string,
+    seed?: TerminalManagerOptions['initialState'],
+  ): Promise<void> {
+    while (!disposed) {
+      const ready = owner.openSession(sid, seed);
+      const result = await Promise.race([
+        ready.then(() => 'ready' as const),
+        new Promise<'retry'>((resolve) =>
+          setTimeout(() => resolve('retry'), OPEN_SESSION_RETRY_MS),
+        ),
+      ]);
+      if (result === 'ready') return;
+    }
+  }
+
+  const create = (title?: string): TerminalSession => {
+    const number = nextSessionNumber++;
+    const displayTitle = title ?? `Terminal ${nextDefaultTitleNumber++}`;
+    const id = `terminal-${number}`;
+    const session: TerminalSession = {
+      id,
+      title: displayTitle,
+      status: 'idle',
+      writer: null,
+      activeRid: null,
+      ready: openOwnerSession(id, opts.initialState),
+      dimensions: { cols: 80, rows: 24 },
+    };
+    sessions.set(id, session);
+    return session;
+  };
+
+  const initial = create();
+  activeId = initial.id;
+
+  function ensureNotDisposed(): void {
+    if (disposed) throw new Error(DISPOSED_ERROR);
+  }
+
+  function getSession(id: string): TerminalSession {
+    ensureNotDisposed();
+    const session = sessions.get(id);
+    if (!session) throw new Error(`Unknown terminal session: ${id}`);
+    return session;
+  }
+
+  function toSnapshot(session: TerminalSession): TerminalSessionSnapshot {
+    const { cwd, env } = owner.snapshot(session.id);
+    return {
+      id: session.id,
+      title: session.title,
+      cwd,
+      env,
+      status: session.status,
+      ...(session.exitCode === undefined ? {} : { exitCode: session.exitCode }),
+    };
+  }
+
+  function write(
+    session: TerminalSession,
+    chunk: string,
+    stream: 'stdout' | 'stderr' = 'stdout',
+  ): void {
+    if (session.writer) invokeHostCallback(session.writer, chunk, stream);
+  }
+
+  function dimension(value: number, name: 'cols' | 'rows'): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new RangeError(`Terminal ${name} must be a positive integer; received ${value}`);
+    }
+    return value;
+  }
+
+  function updateDimensions(
+    session: TerminalSession,
+    dims: TerminalRunDimensions,
+  ): TerminalDimensions {
+    const next = {
+      cols: dims.cols === undefined ? session.dimensions.cols : dimension(dims.cols, 'cols'),
+      rows: dims.rows === undefined ? session.dimensions.rows : dimension(dims.rows, 'rows'),
+    };
+    session.dimensions = next;
+    return next;
+  }
+
+  async function runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number> {
+    const session = getSession(id);
+    const trimmed = input.trim();
+    if (trimmed.length === 0) return 0;
+
+    if (session.activeRid) {
+      write(session, 'terminal is busy\n', 'stderr');
+      return 1;
+    }
+
+    const dimensions = updateDimensions(session, dims ?? {});
+
+    session.status = 'running';
+    session.exitCode = undefined;
+
+    await session.ready;
+    try {
+      const exitCode = await owner.exec(id, input, {
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+        isTTY: true,
+        onChunk: (chunk, stream) => {
+          write(session, chunk, stream);
+        },
+        onStart: (rid) => {
+          session.activeRid = rid;
+        },
+      });
+      session.exitCode = exitCode;
+      return exitCode;
+    } finally {
+      session.activeRid = null;
+      session.status = 'idle';
+    }
+  }
+
+  return {
+    sessions(): TerminalSessionSnapshot[] {
+      ensureNotDisposed();
+      return Array.from(sessions.values(), toSnapshot);
+    },
+    snapshot(id: string): TerminalSessionSnapshot {
+      return toSnapshot(getSession(id));
+    },
+    activeSessionId(): string {
+      ensureNotDisposed();
+      return activeId;
+    },
+    createSession(title?: string): TerminalSessionSnapshot {
+      ensureNotDisposed();
+      return toSnapshot(create(title));
+    },
+    select(id: string): void {
+      getSession(id);
+      activeId = id;
+    },
+    attachWriter(id: string, writer: TerminalWriter): void {
+      getSession(id).writer = writer;
+    },
+    clear(id: string): void {
+      // ANSI: erase display (2J) + scrollback (3J) + cursor home (H). A no-op
+      // when no writer is attached yet (the boot's first clear may race mount).
+      write(getSession(id), '\x1b[2J\x1b[3J\x1b[H');
+    },
+    freshConsole(id: string, banner?: string): void {
+      // Clear, then re-greet: the banner survives the boot's fresh-console wipe.
+      write(getSession(id), `\x1b[2J\x1b[3J\x1b[H${banner ? `${banner}\r\n` : ''}`);
+    },
+    writeStdin(id: string, data: TerminalRawInput): void {
+      const session = getSession(id);
+      if (!session.activeRid) return;
+      const bytes = typeof data === 'string' ? enc.encode(data) : data;
+      owner.writeStdin(id, session.activeRid, bytes);
+    },
+    resize(id: string, dims: TerminalDimensions): void {
+      const session = getSession(id);
+      const previous = session.dimensions;
+      const next = updateDimensions(session, dims);
+      if (next.cols === previous.cols && next.rows === previous.rows) return;
+      if (session.activeRid) {
+        owner.resize(id, session.activeRid, next.cols, next.rows);
+      }
+    },
+    runLine,
+    async runSequence(
+      id: string,
+      lines: readonly string[],
+      dims?: TerminalRunDimensions,
+    ): Promise<number> {
+      const session = getSession(id);
+      let exitCode = 0;
+      for (const line of lines) {
+        write(session, `$ ${line}\n`);
+        exitCode = await runLine(id, line, dims);
+        if (exitCode !== 0) break;
+      }
+      return exitCode;
+    },
+    async rebindOwner(nextOwner: WorkspaceOwnerHandle): Promise<void> {
+      ensureNotDisposed();
+      owner = nextOwner;
+      const ready: Promise<void>[] = [];
+      for (const session of sessions.values()) {
+        session.activeRid = null;
+        session.status = 'idle';
+        session.ready = openOwnerSession(session.id);
+        ready.push(session.ready);
+      }
+      await Promise.all(ready);
+    },
+    stop(id: string): void {
+      const session = getSession(id);
+      if (session.activeRid) owner.signal(id, session.activeRid);
+    },
+    dispose(): void {
+      if (disposed) return; // idempotent — don't double-close owner sessions
+      disposed = true;
+      const steps: (() => void)[] = [];
+      for (const session of sessions.values()) {
+        const rid = session.activeRid;
+        session.activeRid = null;
+        session.writer = null;
+        if (rid) steps.push(() => owner.signal(session.id, rid));
+        steps.push(() => owner.closeSession(session.id));
+      }
+      runCleanupSteps(steps, 'terminal manager dispose failed');
+    },
+  };
+}

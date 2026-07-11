@@ -2,7 +2,7 @@
  * Vite 8 opt-in template. Dev server works; build/preview stay loud-rejected
  * because Rolldown's WASI pthread build path is upstream-blocked.
  */
-import type { ViteProjectSpec } from './project-spec.ts';
+import type { ViteProjectSpec } from '@riftydev/workbench';
 
 const INITIAL_MAIN_JS = `const message =
   'Hello from real Vite 8 (Rolldown) running inside a kernel-spawned Worker — edit me, save.';

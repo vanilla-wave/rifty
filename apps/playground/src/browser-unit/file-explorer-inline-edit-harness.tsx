@@ -1,7 +1,7 @@
 import type { VfsDirent } from '@riftydev/vfs';
+import type { FsOpsTarget } from '@riftydev/workbench';
 import { render } from 'solid-js/web';
 import { FileExplorer, type FileExplorerMutations } from '../components/FileExplorer.tsx';
-import type { FsOpsTarget } from '../glue/fs-ops.ts';
 
 type Entry = { readonly isDirectory: boolean; readonly data?: Uint8Array };
 

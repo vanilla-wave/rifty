@@ -8,16 +8,19 @@
  *
  * No UI imports; every side effect goes through the injected ports below —
  * the behavioral-test seam (ADR-0197 §4). The git RPC port is the structural
- * subset of the REAL GitOwnerClient (glue/git-owner-port.ts).
+ * subset of the REAL package-owned GitOwnerClient.
  */
 import { type LogEntry, porcelainXY } from '@riftydev/git';
 import { basename } from '@riftydev/vfs';
+import {
+  type FileReadOwnerLike,
+  type GitOwnerClient,
+  type OwnerFileReader,
+  looksBinary,
+} from '@riftydev/workbench';
 import { createSignal, untrack } from 'solid-js';
-import { looksBinary } from '../glue/fs-ops.ts';
-import type { GitOwnerClient } from '../glue/git-owner-port.ts';
 import { scmDiffPlan, statusCodeHasHeadBlob } from '../glue/scm-diff-plan.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
-import type { FileReadOwnerLike, OwnerFileReader } from './owner-file-read.ts';
 
 const fatalDec = new TextDecoder('utf-8', { fatal: true });
 

@@ -1,5 +1,3 @@
-import { describe, expect, it } from 'vitest';
-import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
 import {
   type NodeCliProjectSpec,
   type NodeServerProjectSpec,
@@ -9,7 +7,9 @@ import {
   isDevScriptName,
   resolveBootstrapConfig,
   terminalDevLine,
-} from './project-spec.ts';
+} from '@riftydev/workbench';
+import { describe, expect, it } from 'vitest';
+import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 import { VITE8_TEMPLATE } from './vite8.ts';

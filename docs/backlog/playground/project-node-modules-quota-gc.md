@@ -6,7 +6,7 @@ created: 2026-06-21
 why: multi-project keeps node_modules in-place per project with no purge on switch (ADR-0165) — many projects × node_modules grows OPFS unbounded; no quota probe, no eviction
 user_story: As a playground user with several saved projects, I want the IDE to not silently exhaust my browser storage quota (and to tell me + reclaim space when it's tight), but today every project's node_modules stays on disk forever and a quota overflow surfaces only as an opaque OPFS write failure.
 sources: [ADR-0165, ADR-0135]
-code: [apps/playground/src/glue/project-deps.ts, apps/playground/src/glue/install-stamp.ts, packages/vfs/src/boot.ts]
+code: [packages/workbench/src/glue/project-deps.ts, packages/workbench/src/glue/install-stamp.ts, packages/vfs/src/boot.ts]
 ---
 
 ## Context

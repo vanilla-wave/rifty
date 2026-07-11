@@ -1,0 +1,89 @@
+{
+  "name": "@riftydev/workbench",
+  "version": "0.1.0",
+  "description": "Framework-free browser workbench session controllers for rifty.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/workbench"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "workbench", "session", "terminal", "editor"],
+  "sideEffects": [
+    "./src/owner-worker.ts",
+    "./src/dev-server-worker.ts",
+    "./src/kernel-worker.ts",
+    "./src/node-worker.ts",
+    "./src/workers/real-vite-bootstrap.ts",
+    "./src/workers/dev-server-child-bootstrap.ts",
+    "./src/workers/kernel-worker-entry.ts",
+    "./src/workers/node-entry-bootstrap.ts",
+    "./dist/owner-worker.js",
+    "./dist/dev-server-worker.js",
+    "./dist/kernel-worker.js",
+    "./dist/node-worker.js"
+  ],
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./owner-worker": "./src/owner-worker.ts",
+    "./dev-server-worker": "./src/dev-server-worker.ts",
+    "./kernel-worker": "./src/kernel-worker.ts",
+    "./node-worker": "./src/node-worker.ts"
+  },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./owner-worker": {
+        "types": "./dist/owner-worker.d.ts",
+        "import": "./dist/owner-worker.js"
+      },
+      "./dev-server-worker": {
+        "types": "./dist/dev-server-worker.d.ts",
+        "import": "./dist/dev-server-worker.js"
+      },
+      "./kernel-worker": {
+        "types": "./dist/kernel-worker.d.ts",
+        "import": "./dist/kernel-worker.js"
+      },
+      "./node-worker": {
+        "types": "./dist/node-worker.d.ts",
+        "import": "./dist/node-worker.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:run": "vitest run src",
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@riftydev/git": "workspace:*",
+    "@riftydev/io": "workspace:*",
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/net": "workspace:*",
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/runtime-wasi": "workspace:*",
+    "@riftydev/sdk": "workspace:*",
+    "@riftydev/service-worker": "workspace:*",
+    "@riftydev/shell": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
+  }
+}

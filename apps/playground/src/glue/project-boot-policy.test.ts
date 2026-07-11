@@ -1,10 +1,10 @@
+import type { ProjectIndex } from '@riftydev/workbench';
 import { describe, expect, it } from 'vitest';
 import {
   hasPersistedProjectHint,
   needsProjectChoiceOnBoot,
   recordProjectPresenceHint,
 } from './project-boot-policy.ts';
-import type { ProjectIndex } from './project-index.ts';
 
 function fakeStorage(seed: Record<string, string> = {}): Storage {
   const map = new Map(Object.entries(seed));

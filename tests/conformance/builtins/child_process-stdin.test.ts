@@ -4,11 +4,10 @@
  *
  * The parent calls `child.stdin.write(bytes)` / `child.stdin.end()`; the
  * bytes are routed via the kernel-side `bindPortAsWritable(ports.stdin)`
- * `Writable` into the child realm's stdin `MessagePort`. The child reads
- * the chunks off `globalThis.__riftyProcessSpec__.stdio.stdin` (the
- * kernel-published process spec — runtime-js's `process.stdin` shim is a
- * bare EventEmitter today and does NOT auto-wire stdin; that's a separate
- * follow-up) and echoes them back through `process.stdout`.
+ * `Writable` into the child realm's stdin `MessagePort`. This transport test
+ * reads the raw process-spec port to isolate `child_process`; runtime-js's
+ * MessagePort-fed flowing `process.stdin` is covered separately by its parity
+ * suite and the public workbench Chromium round-trip (ADR-0230).
  *
  * Skips outside an SAB-capable environment — Vitest's plain Node runner
  * has no `crossOriginIsolated` so `isSabIpcSupported()` is `false`. The

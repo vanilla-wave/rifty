@@ -1,14 +1,14 @@
 name: Release
 
-# Publishes all 12 @riftydev/* libraries (incl. the @riftydev/sdk umbrella) to npm when a
+# Publishes all 15 @riftydev/* libraries (incl. sdk + workbench) to npm when a
 # vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing (ADR-0070,
-# ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
+# ADR-0071, ADR-0224). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
 #
 # One-time prerequisites (out of repo — see docs/PUBLISHING.md):
 #   1. Own the `@riftydev` org/scope on npmjs.com and bootstrap-publish each of the
-#      12 names ONCE with a token (OIDC can't create a brand-new name — npm/cli
+#      15 names ONCE with a token (OIDC can't create a brand-new name — npm/cli
 #      #8544). After that, every release is tokenless.
-#   2. Add a GitHub Actions trusted publisher to EACH of the 12 packages on
+#   2. Add a GitHub Actions trusted publisher to EACH of the 15 packages on
 #      npmjs.com: owner = vanilla-wave, repository = rifty, workflow = release.yml
 #      (case-sensitive; no environment).
 #   3. The repo must be PUBLIC for npm provenance to be emitted.

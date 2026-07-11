@@ -8,6 +8,16 @@
  */
 import { dirname, joinPath } from '@riftydev/vfs';
 import {
+  type FsOpsTarget,
+  type NmNodeState,
+  type NmRow,
+  type NodeModulesCache,
+  type TreeChild,
+  composeNodeModulesRows,
+  fileCategory,
+  readChildren,
+} from '@riftydev/workbench';
+import {
   For,
   type JSX,
   Show,
@@ -25,20 +35,10 @@ import {
 } from '../glue/file-manager-clipboard.ts';
 import { planDragMove, planUploadFiles } from '../glue/file-manager-dnd.ts';
 import {
-  type NmNodeState,
-  type NmRow,
-  type TreeChild,
-  composeNodeModulesRows,
-  fileCategory,
-  readChildren,
-} from '../glue/file-tree.ts';
-import type { FsOpsTarget } from '../glue/fs-ops.ts';
-import {
   type GitDecoration,
   decorationForPath,
   gitStatusDecorationMaps,
 } from '../glue/git-decorations.ts';
-import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
 import {
   type ContextMenuItem,
   type ContextMenuItemId,

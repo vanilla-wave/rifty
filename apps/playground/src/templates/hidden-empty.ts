@@ -1,4 +1,4 @@
-import type { ViteProjectSpec } from './project-spec.ts';
+import type { ViteProjectSpec } from '@riftydev/workbench';
 
 /**
  * Hidden first-run workspace template. It gives the IDE a real `/scratch` owner

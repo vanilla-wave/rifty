@@ -6,7 +6,7 @@ created: 2026-06-14
 why: ADR-0143 decided D (one owner-worker holds node_modules and supervises shell/CLI/execSync execution; PAGE = viewer). It is milestone-scale + multi-ADR; this tracks the phases, decided forks, ordering, and per-phase status so the work is explicit, not silent backlog.
 user_story: As a developer at the rifty prompt, I `npm install cowsay` then run `cowsay hi` and want the CLI to actually run (and the editor/explorer to reflect the same tree) — originally the bin worker could not see the shell's node_modules (ENOENT). Delivered when one owner-worker owns install + execution supervision and the PAGE is a thin viewer.
 sources: [ADR-0143, ADR-0144, ADR-0077, ADR-0011, ADR-0080, ADR-0072, M11]
-code: [packages/kernel/src/worker-entry.ts, packages/kernel/src/spawn-worker.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/adapters/terminal-manager.ts, packages/shell/src/shell.ts, apps/playground/src/App.tsx]
+code: [packages/kernel/src/worker-entry.ts, packages/kernel/src/spawn-worker.ts, packages/workbench/src/workers/real-vite-bootstrap.ts, packages/workbench/src/glue/realVite.ts, packages/workbench/src/glue/terminal-manager.ts, packages/shell/src/shell.ts, apps/playground/src/App.tsx]
 ---
 
 ## Context
@@ -48,7 +48,7 @@ Per-phase file:line seams from the subsystem deep-map (re-verify on touch; the r
 - `packages/kernel/src/ipc/{sync-dispatch.ts,sync-client.ts}` — `register(method,handler)` (dispatch :134) + in-worker `SyncRpcClient.call` (:57, Worker-only). P6 registers an `fs.read` method here (owner serves, child reads) — B's mechanism, worker→worker.
 
 **P2 — relocate Shell + pty channel + relocate npm/bin execution:**
-- `apps/playground/src/adapters/terminal-manager.ts:86` `new Shell({cwd,env,execBin})` → Shell + cwd/env MOVE into the owner-worker; terminal-manager becomes a thin port client. `:124` `toSnapshot` (cwd/envSnapshot) → async reads / pushed snapshots.
+- `packages/workbench/src/glue/terminal-manager.ts` `new Shell({cwd,env,execBin})` → Shell + cwd/env MOVE into the owner-worker; terminal-manager becomes a thin port client. `toSnapshot` (cwd/envSnapshot) → async reads / pushed snapshots.
 - `terminal-manager.ts:147` `runLine→shell.run` → send line over the pty channel, stream stdout/stderr chunks + exit code (replaces local `onChunk` `shell.ts:534`). `:221/:264` `writeStdin`/`StdinQueue` → keystrokes cross as stdin frames; `read()→Promise<Uint8Array|null>` = stream frame + EOF; Ctrl-C = SIGNAL frame.
 - `packages/shell/src/shell.ts` — `run` (:243), `runSegment` (:467), dispatch order (:530/:564), redirect flush (:614). Shell is realm-agnostic (`package.json` deps = io+vfs only) → moves WHOLESALE into the owner; no shell-pkg code change, only the realm + host wiring flip. `bin-resolver.ts:20` `resolveBin` reads the owner `syncMirror()` in-realm.
 - `packages/terminal/src/terminal.ts` — pty contract surface: `onInput(line)→exitCode` (:1376), `write(chunk,stream)` (:816), `onSignal('SIGINT')` (:1547), `onRawInput` (:980), `writePrompt` (:951, prompt ownership → owner pushes cwd).
@@ -57,14 +57,14 @@ Per-phase file:line seams from the subsystem deep-map (re-verify on touch; the r
 - Owner entry: generalize `real-vite-bootstrap.ts` into a workspace owner that hosts a `Shell` reading the kernel stdin port + writing stdout, dispatching in-realm; spawned `serve:true` (P1). Needs its own ADR (pty channel shape).
 
 **P3 — generalize owner-served ports (already shipped for preview):**
-- `apps/playground/src/glue/node-modules-port.ts:98` `serveNodeModulesReads` (widen the `isUnderNodeModules` guard :74 → general read), `vfs-snapshot-port.ts` (`collectSnapshot` :65 full-tree-replace → consider delta for a live-mutating tree; `publishVfsSnapshot` :134; `subscribeVfsSnapshot` :145), `vfs-write-port.ts` (`serveVfsWrites` :111, `applyVfsWriteFrame` :62). Write-coherence: owner = source of truth; page editor writes become requests applied + re-broadcast (the one-way/read-only assumption breaks under a writing shell).
+- `packages/workbench/src/glue/node-modules-port.ts` `serveNodeModulesReads` (widen the `isUnderNodeModules` guard → general read), `vfs-snapshot-port.ts` (`collectSnapshot` full-tree-replace → consider delta for a live-mutating tree; `publishVfsSnapshot`; `subscribeVfsSnapshot`), `vfs-write-port.ts` (`serveVfsWrites`, `applyVfsWriteFrame`). Write-coherence: owner = source of truth; page editor writes become requests applied + re-broadcast (the one-way/read-only assumption breaks under a writing shell).
 - Readiness: replace the stdout log-string match (`App.tsx:233`) + publishSnapshot retry-storm (`:354`) with a structured owner-ready handshake.
 
 **P4 — unify with the real-vite preview owner (the two-owners trap):**
 - `App.tsx:334` `viteCommand` / `:191` `runViteCommand` → `vite`/dev runs in the SAME owner that holds node_modules + the shell (not a separate `startRealVite` worker). `glue/realVite.ts:67` `startRealVite` (already spawns `serve:true` post-P1) → generalize into the workspace owner. Co-resident dev server in v1.
 
 **P5 — OPFS persistence in the one owner + graceful stop:**
-- `apps/playground/src/glue/sync-mirror-vfs.ts:16` `SyncMirrorVfs` → delegate to `OpfsFsSync` not `MemoryFsSync`; `packages/vfs/src/opfs-sync.ts` (`init` :211, `preloadContent` :236 = O(total bytes), `flush` :513), `boot.ts:32` `initBackend` (wire in the owner; sync OPFS is worker-only). `project-deps.ts:64` flush hooks (:389); `real-vite-bootstrap.ts:164` `flushSyncMirror` (no-op on memory today). Add graceful stop to the ADR-0144 server-process model (drain stdio + flush before terminate).
+- `packages/workbench/src/glue/sync-mirror-vfs.ts` `SyncMirrorVfs` → delegate to `OpfsFsSync` not `MemoryFsSync`; `packages/vfs/src/opfs-sync.ts` (`init`, `preloadContent` = O(total bytes), `flush`), `boot.ts` `initBackend` (wire in the owner; sync OPFS is worker-only). `packages/workbench/src/glue/project-deps.ts` flush hooks; `packages/workbench/src/workers/real-vite-bootstrap.ts` `flushSyncMirror` (no-op on memory today). Add graceful stop to the ADR-0144 server-process model (drain stdio + flush before terminate).
 
 **P6 — SAB sync-views for concurrent processes:**
 - Owner SUPERVISES child worker-processes sharing the owned store via SAB sync-views (worker→worker, B's mechanism served the right direction — no UI jank). Build an `fs.read` sync method on the owner's dispatcher (`sync-dispatch.ts register`) + child reads via the published `SyncRpcClient` shim (`sync-client.ts`). Restores "shell responsive while `vite` runs".

@@ -8,7 +8,7 @@ user_story: As a developer who opened a real npm project, I want to review scrip
 epic: from-intent-to-running-project
 blocked_by: [playground/project-ingress-transaction, playground/project-compatibility-preflight]
 sources: [M11, M13, docs/public/compat/package-tooling.md]
-code: [apps/playground/src/orchestration/workspace-files.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/glue/devMode.ts, apps/playground/src/orchestration/dev-server-lifecycle.ts]
+code: [packages/workbench/src/orchestration/workspace-files.ts, packages/workbench/src/glue/npm-shell-command.ts, apps/playground/src/glue/devMode.ts, packages/workbench/src/orchestration/dev-server-lifecycle.ts]
 ---
 
 ## Context

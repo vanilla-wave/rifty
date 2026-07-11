@@ -9,6 +9,43 @@ import {
 import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { joinPath } from '@riftydev/vfs';
+import {
+  type ActiveId,
+  NodeModulesCache,
+  OwnerRpcFs,
+  type ProjectSpec,
+  SnapshotFs,
+  type TerminalRunDimensions,
+  type TerminalSessionSnapshot,
+  type VfsSnapshotEntry,
+  bridgeGitOwnerRpc,
+  bridgeNodeModulesReads,
+  bridgeProjectIndex,
+  createDevServerLifecycle,
+  createEditorOpQueue,
+  createOwnerFileReader,
+  createTerminalController,
+  createTerminalManager,
+  createWorkspaceFiles,
+  degradedBannerVisible,
+  deleteProjectTree,
+  markScratchDirtyIndex,
+  newScratchIndex,
+  readChildren,
+  renameProjectIndex,
+  requestGitStatus,
+  requestVfsSnapshot,
+  resetProjectIndex,
+  resetScratchIndex,
+  rootForId,
+  saveAffordance,
+  saveProjectIndexPhases,
+  setActiveIndex,
+  storageModeFromBoot,
+  subscribeGitStatus,
+  subscribeVfsSnapshot,
+  workspaceVfsPrefix,
+} from '@riftydev/workbench';
 import type * as monaco from 'monaco-editor';
 import {
   Show,
@@ -20,11 +57,6 @@ import {
   onMount,
   untrack,
 } from 'solid-js';
-import {
-  type TerminalRunDimensions,
-  type TerminalSessionSnapshot,
-  createTerminalManager,
-} from './adapters/terminal-manager.ts';
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './boot.ts';
@@ -47,41 +79,16 @@ import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
 import { resetBrowserSandboxState } from './glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
-import {
-  degradedBannerVisible,
-  saveAffordance,
-  storageModeFromBoot,
-} from './glue/degraded-storage.ts';
-import { readChildren } from './glue/file-tree.ts';
-import { bridgeGitOwnerRpc } from './glue/git-owner-port.ts';
-import { requestGitStatus, subscribeGitStatus } from './glue/git-status-feed.ts';
 import { initialEditorFilesForPreset } from './glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/launcher-prefs.ts';
-import { NodeModulesCache } from './glue/node-modules-cache.ts';
-import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
-import { OwnerRpcFs } from './glue/owner-rpc-fs.ts';
 import { parsePresetDeepLink } from './glue/preset-deep-link.ts';
 import { hasPersistedProjectHint, recordProjectPresenceHint } from './glue/project-boot-policy.ts';
 import { scratchDisplayName } from './glue/project-display-name.ts';
-import {
-  bridgeProjectIndex,
-  deleteProjectTree,
-  markScratchDirtyIndex,
-  newScratchIndex,
-  renameProjectIndex,
-  resetProjectIndex,
-  resetScratchIndex,
-  saveProjectIndexPhases,
-  setActiveIndex,
-} from './glue/project-index-port.ts';
-import { type ActiveId, rootForId } from './glue/project-index.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
-import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
-import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
@@ -94,21 +101,12 @@ import {
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import type { TsLanguageServiceProvidersHandle } from './glue/ts-ls-monaco-providers.ts';
-import {
-  type VfsSnapshotEntry,
-  requestVfsSnapshot,
-  subscribeVfsSnapshot,
-} from './glue/vfs-snapshot-port.ts';
-import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
-import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
-import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
 import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
 import { createTerminalStatePersistence } from './orchestration/terminal-state-persistence.ts';
-import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
 import {
   DEFAULT_PRESET,
@@ -118,7 +116,6 @@ import {
   restoreBootLines,
 } from './presets.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './templates/hidden-empty.ts';
-import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 // Re-export the App project-store factory (ADR-0165 §57/§56). It lives in glue so
@@ -186,6 +183,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     snapshotPort: UNAVAILABLE_OWNER_PORT,
     ready: Promise.resolve(),
     closed: Promise.resolve(0),
+    storageBackend: () => 'memory',
     openSession: () => Promise.resolve(),
     exec: (_sid, _line, opts) => {
       opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
@@ -193,6 +191,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     },
     writeStdin: () => {},
     signal: () => {},
+    resize: () => {},
     closeSession: () => {},
     isAlive: () => false,
     writeFile: () => {},
@@ -209,6 +208,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     onPreview: () => () => {},
     requestPreview: () => {},
     setDevConfig: () => Promise.resolve(),
+    sendRawMessage: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    onRawMessage: () => () => {},
     sendTsLsp: () => {},
     onTsLsp: () => () => {},
     close: () => {},
@@ -502,8 +503,8 @@ export function App(props: AppProps) {
   // visible `vite` terminal command.
   const machine = useMode({});
 
-  // Dev-server lifecycle is OWNER-driven (ADR-0148) and lives in the extracted
-  // orchestration core (`orchestration/dev-server-lifecycle.ts`, ADR-0197); the
+  // Dev-server lifecycle is OWNER-driven (ADR-0148) and lives in
+  // `@riftydev/workbench`; the
   // `devServer` binding below (after the manager) wires its ports to the real
   // owner/terminal/machine. Preset transitions live in the preset-boot core
   // (`orchestration/preset-boot.ts`, slice 3) bound further below.
@@ -520,17 +521,25 @@ export function App(props: AppProps) {
       env: props.terminalPersistence.initialState.env,
     },
   });
+  const terminal = createTerminalController({
+    manager,
+    project: () => ({
+      spec: activeTemplate(),
+      root: activeRoot(),
+      setup: presetForId(activeStarterId()).setup,
+    }),
+  });
 
   // Headless dev-server lifecycle core (ADR-0197) bound to the REAL ports: the
   // reactive owner handle, the page terminal manager (+ visibility state), the
   // exec funnel, the persisted dev command and the SW preview bridge. Effect
   // creation order is preserved (these mirrors precede every later bridge effect).
-  const devServer = createDevServerLifecycle<TerminalSessionSnapshot>({
+  const devServerCore = createDevServerLifecycle<TerminalSessionSnapshot>({
     terminal: {
       snapshot: (id) => manager.snapshot(id),
       activeSessionId: () => manager.activeSessionId(),
-      select: (id) => manager.select(id),
-      stop: (id) => manager.stop(id),
+      select: (id) => terminal.select(id),
+      stop: (id) => terminal.stop(id),
       freshConsole: (id, banner) => manager.freshConsole(id, banner),
       createSession: () => createSession(),
       refreshState: () => refreshTerminalState(),
@@ -544,18 +553,38 @@ export function App(props: AppProps) {
     onOwnerAlive: () => workspace.setOwnerReady(true),
     onServerRunningEdge: () => setTsProjectRevision((revision) => revision + 1),
     wirePreviewBridge,
-    bootLines: (preset) => presetBootLines(preset, activeRoot()),
-    activeStarterPreset: () => presetForId(activeStarterId()),
-    templateForPreset,
+    bootLines: (starter) => presetBootLines(presetForId(starter.id), activeRoot()),
+    activeStarter: () => starterById(activeStarterId()),
+    projectSpecForStarter: (starter) => templateForPreset(presetForId(starter.id)),
     welcomeBanner: terminalWelcomeBanner,
   });
+  // @riftydev/workbench is framework-free. Adapt its atomic external-store
+  // snapshot once at the host seam so Solid tracks every owner-driven change.
+  const [devServerState, setDevServerState] = createSignal(devServerCore.snapshot(), {
+    equals: false,
+  });
+  const unsubscribeDevServerState = devServerCore.subscribe(setDevServerState);
+  const devServer = {
+    ...devServerCore,
+    snapshot: devServerState,
+    status: () => devServerState().status,
+    running: () => devServerState().running,
+    previewPorts: () => [...devServerState().previewPorts],
+    sessionId: () => devServerState().sessionId,
+    stoppableSessionId: () => devServerState().stoppableSessionId,
+    lifecycleRunning: () => devServerState().lifecycleRunning,
+    currentGeneration: () => devServerState().generation,
+  };
   // The ONLY reactive glue the lifecycle needs: (re)bind on every owner swap
   // (switch respawn re-runs this like every other bridge effect) + teardown.
   // Keyed on the owner signal alone — attachOwner untracks its own body.
   createEffect(() => {
     devServer.attachOwner(workspaceOwner());
   });
-  onCleanup(() => devServer.dispose());
+  onCleanup(() => {
+    unsubscribeDevServerState();
+    devServerCore.dispose();
+  });
   void initialOwnerHandle.ready.catch((err: unknown) => {
     console.error('[workspace-owner] hidden empty boot failed', err);
   });
@@ -682,7 +711,7 @@ export function App(props: AppProps) {
       stopSession: (id) => devServer.stopSession(id),
       stopBeforeStarterWrite: () => devServer.stopBeforeStarterWrite(),
       startSession: (id, generation, preset, override) =>
-        devServer.startSession(id, generation, preset, override),
+        devServer.startSession(id, generation, starterById(preset.id), override),
       waitForPresetBoot: (id, generation, spec) =>
         devServer.waitForPresetBoot(id, generation, spec),
     },
@@ -712,7 +741,7 @@ export function App(props: AppProps) {
     ensureOwnerStarted: () => workspace.ensureStarted(false),
     establishScratch: (id, opts) => durableNewScratch(id, opts),
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
-    seedWorkspace: (preset) => files.seedOwner(preset),
+    seedWorkspace: (preset) => files.seedOwner(starterById(preset.id)),
   });
 
   // Guarded owner byte reads shared by the files + SCM cores (ADR-0197 slice 4):
@@ -727,6 +756,7 @@ export function App(props: AppProps) {
   // DOM blob/picker affordances.
   const files = createWorkspaceFiles<WorkspaceOwnerHandle>({
     currentOwner: () => workspaceOwner(),
+    seedFiles: (starter, root) => seedFilesForStarter(starter, root),
     reader: ownerFileReader,
     started: () => workspace.started(),
     notifyFileWritten,
@@ -841,19 +871,19 @@ export function App(props: AppProps) {
     }
     const fallback = next[0];
     if (fallback) {
-      manager.select(fallback.id);
+      terminal.select(fallback.id);
       setActiveSessionId(fallback.id);
     }
   }
 
   function selectSession(id: string): void {
-    manager.select(id);
+    terminal.select(id);
     refreshTerminalState();
   }
 
   function createSession(title?: string): TerminalSessionSnapshot {
-    const session = manager.createSession(title);
-    manager.select(session.id);
+    const session = terminal.createSession(title);
+    terminal.select(session.id);
     refreshTerminalState();
     setTerminalFocusEpoch((epoch) => epoch + 1);
     return session;
@@ -869,7 +899,7 @@ export function App(props: AppProps) {
     const wasActive = manager.activeSessionId() === id;
     hiddenSessionIds.add(id);
     if (wasActive && fallback) {
-      manager.select(fallback.id);
+      terminal.select(fallback.id);
       setTerminalFocusEpoch((epoch) => epoch + 1);
     }
     refreshTerminalState();
@@ -879,7 +909,7 @@ export function App(props: AppProps) {
     id: string,
     write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
   ): void {
-    manager.attachWriter(id, write);
+    terminal.attach(id, write);
     // Also held PAGE-side so `runTerminalSequence` can echo `$ <line>` for boot
     // sequences (the owner pty does not echo the programmatic line).
     terminalWriters.set(id, write);
@@ -897,7 +927,7 @@ export function App(props: AppProps) {
    */
   function dispatchLine(id: string, line: string, dims?: TerminalRunDimensions): Promise<number> {
     lastExecutedLine.set(id, { line, cwd: manager.snapshot(id).cwd });
-    return manager.runLine(id, line, dims);
+    return terminal.run(id, line, dims);
   }
 
   async function runTerminalLine(
@@ -968,12 +998,12 @@ export function App(props: AppProps) {
   function stopSession(id: string): void {
     // Every command — including the dev server — runs in the owner now (ADR-0148
     // co-resident dev server); forward the cooperative SIGINT (Ctrl-C aborts the in-flight run).
-    manager.stop(id);
+    terminal.stop(id);
     refreshTerminalState();
   }
 
   function writeTerminalStdin(id: string, data: TerminalRawInput): void {
-    manager.writeStdin(id, data);
+    terminal.write(id, data);
   }
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
@@ -1671,7 +1701,8 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (toastTimer) clearTimeout(toastTimer);
     void flushPendingEditorWrites();
-    manager.dispose();
+    ownerRpcFs.dispose();
+    terminal.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
 
@@ -2414,6 +2445,7 @@ export function App(props: AppProps) {
               onLink={onTerminalLink}
               onSignal={stopSession}
               onRawInput={writeTerminalStdin}
+              onResize={(id, dims) => terminal.resize(id, dims.cols, dims.rows)}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>

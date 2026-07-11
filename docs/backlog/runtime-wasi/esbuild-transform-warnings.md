@@ -6,7 +6,7 @@ created: 2026-06-26
 why: dev esbuild bridge throws on successful transforms that emit stderr warnings and returns warnings as empty.
 user_story: As a Vite-template user, I want code with esbuild warnings to compile while surfacing warnings, but today rifty aborts successful transforms when stderr is non-empty.
 sources: [PR76 review C2]
-code: [apps/playground/src/workers/esbuild-wasi-transform.ts, tools/shadow-registry/src/esbuild-transform.ts]
+code: [packages/workbench/src/workers/esbuild-wasi-transform.ts, tools/shadow-registry/src/esbuild-transform.ts]
 ---
 
 ## Context

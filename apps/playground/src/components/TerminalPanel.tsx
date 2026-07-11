@@ -65,6 +65,7 @@ export function TerminalPanel(props: {
   /** Ctrl+C from the terminal — wire to the shell session's `interrupt()`. */
   onSignal?(): void;
   onRawInput?(data: TerminalRawInput): void;
+  onResize?(dims: TerminalDims): void;
   onLink?(uri: string, event: MouseEvent): void;
   focusEpoch?: number;
   testId?: string;
@@ -338,6 +339,7 @@ export function TerminalPanel(props: {
       ghostSuggestion: props.ghostSuggestion,
       inputValidator: props.inputValidator,
       onRawInput: props.onRawInput,
+      onResize: (cols, rows) => props.onResize?.({ cols, rows }),
       get rewriteRules() {
         return props.rewriteRules?.() ?? [];
       },

@@ -7,7 +7,7 @@ why: every persistence layer is (or is being) fault-proven in isolation, but no 
 user_story: As a developer, I want to close or reload the tab mid `npm install` / mid `git commit` / mid editor save and reopen to an honest project, but today nothing proves the reopened state isn't a half-tree presented as installed or a stale saved-indicator
 epic: fault-honest-opfs-persistence
 blocked_by: [vfs/iso-git-ref-torn-write-rows]
-code: [apps/playground/src/glue/project-deps.ts, apps/playground/tests]
+code: [packages/workbench/src/glue/project-deps.ts, apps/playground/tests]
 ---
 
 ## Context

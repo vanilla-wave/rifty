@@ -6,7 +6,7 @@ created: 2026-06-26
 why: synthetic watcher tracking has no observable effect because both watcher branches publish the same snapshot.
 user_story: As a playground maintainer, I want watcher invalidation code to express real behavior, but today the synthetic change set looks meaningful while both branches do the same thing.
 sources: [PR76 review C5]
-code: [apps/playground/src/workers/dev-server-boot.ts]
+code: [packages/workbench/src/workers/dev-server-boot.ts]
 ---
 
 ## Context

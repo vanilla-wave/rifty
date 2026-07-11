@@ -6,6 +6,7 @@
  * bindings.
  */
 import { dirname, joinPath } from '@riftydev/vfs';
+import type { NmRow } from '@riftydev/workbench';
 import type {
   FileManagerClipboard,
   FileManagerClipboardMode,
@@ -16,7 +17,6 @@ import {
   type UploadWriteEntry,
   batchUploadWrites,
 } from '../glue/file-manager-dnd.ts';
-import type { NmRow } from '../glue/file-tree.ts';
 import type { IconName } from './icons.tsx';
 
 export type ExplorerRowKind = NmRow['kind'];

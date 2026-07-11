@@ -6,7 +6,7 @@ created: 2026-06-17
 why: a user edits a template but nothing tracks WHICH changes are theirs vs the template's; no per-file "revert to template", no workspace "reset", no dirty indicator — seed/switch/reload retention is implicit and surprising
 user_story: As a playground user, I want to take a template, edit it, SEE which files are my changes vs the template baseline, and revert a file (or reset the whole workspace) back to the template, but today provenance is implicit (seed-if-absent + program mirror + vfs-write into one owner tree), there is no baseline to diff against, and the only restore is a full workspace-archive import.
 sources: [ADR-0078, ADR-0079, ADR-0135, ADR-0148, ADR-0165]
-code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/App.tsx, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/glue/install-stamp.ts, apps/playground/src/templates]
+code: [packages/workbench/src/workers/real-vite-bootstrap.ts, apps/playground/src/App.tsx, packages/workbench/src/glue/workspace-archive-port.ts, packages/workbench/src/glue/install-stamp.ts, apps/playground/src/templates]
 ---
 
 ## Context

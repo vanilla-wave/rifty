@@ -90,4 +90,60 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     await drained;
     expect(seen).toEqual([1, 2, 3]);
   });
+
+  it('applies tty resize control frames before SIGWINCH without leaking a message event', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: {
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+        RIFTY_TTY_COLS: '80',
+        RIFTY_TTY_ROWS: '24',
+      },
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const stdout = process.stdout as typeof process.stdout & {
+      columns: number;
+      rows: number;
+      getWindowSize(): [number, number];
+      on(event: 'resize', listener: () => void): void;
+    };
+    const events: string[] = [];
+    const messages: unknown[] = [];
+    stdout.on('resize', () => events.push(`resize:${stdout.columns}x${stdout.rows}`));
+    process.on('SIGWINCH', (signal) => events.push(String(signal)));
+    process.on('message', (message) => messages.push(message));
+
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 80, rows: 24 });
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 132, rows: 43 });
+    await tick();
+
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 132, rows: 43 });
+    expect(stdout.getWindowSize()).toEqual([132, 43]);
+    expect(events).toEqual(['resize:132x43', 'SIGWINCH']);
+    expect(messages).toEqual([]);
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 132, rows: 43 });
+    await tick();
+    expect(events).toEqual(['resize:132x43', 'SIGWINCH']);
+  });
+
+  it('continues receiving tty controls after the user IPC channel disconnects', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: { RIFTY_STDOUT_IS_TTY: '1', RIFTY_TTY_COLS: '80', RIFTY_TTY_ROWS: '24' },
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const disconnected = new Promise<void>((resolve) =>
+      process.once('disconnect', () => resolve()),
+    );
+    ipc.port2.postMessage({ kind: 'ipc:disconnect' });
+    await disconnected;
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 120, rows: 40 });
+    await tick();
+    expect(process.stdout).toMatchObject({ columns: 120, rows: 40 });
+  });
 });

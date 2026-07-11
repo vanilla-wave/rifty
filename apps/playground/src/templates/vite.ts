@@ -2,12 +2,12 @@
  * The Vite template — the single registered {@link ProjectSpec} (ADR-0078).
  *
  * Holds exactly the literals that used to be inline in
- * `workers/real-vite-bootstrap.ts` (install deps, import specifier, createServer
+ * `@riftydev/workbench`'s owner worker (install deps, import specifier, createServer
  * knobs, the seeded entry source, default port). Adding another runnable
  * template means writing a sibling ProjectSpec and registering it in
  * `registry.ts` — no worker or orchestrator edits.
  */
-import type { ViteProjectSpec } from './project-spec.ts';
+import type { ViteProjectSpec } from '@riftydev/workbench';
 
 const INITIAL_MAIN_JS = `const message =
   'Hello from real Vite running inside a kernel-spawned Worker — edit me, save.';

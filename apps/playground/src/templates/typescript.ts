@@ -1,4 +1,4 @@
-import type { ViteProjectSpec } from './project-spec.ts';
+import type { ViteProjectSpec } from '@riftydev/workbench';
 import { VITE_TEMPLATE } from './vite.ts';
 
 export const TYPESCRIPT_ENTRY_SOURCE = `import type { LibraryShape } from '@rifty/example-types';

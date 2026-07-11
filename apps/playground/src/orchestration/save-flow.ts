@@ -1,3 +1,4 @@
+import type { ActiveId, ProjectIndex } from '@riftydev/workbench';
 /**
  * Save/switch decision flow — headless core extracted from App.tsx (ADR-0197,
  * epic playground-testable-core, slice 4b). Owns Save-as-project phase tracking
@@ -10,7 +11,6 @@
  * (slice 2) is injected as a port (dependency spine).
  */
 import { createSignal } from 'solid-js';
-import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
 
 /** A switch the user chose in the dirty-scratch dialog (ADR-0165 §9). */
 export interface PendingSwitchTarget {

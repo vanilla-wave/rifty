@@ -6,7 +6,7 @@ created: 2026-06-12
 why: JSON workspace archive v1 is dependency-free and enough for source portability, but large trees need streaming export/import and possibly zip/tar interoperability
 user_story: As a developer exporting a large, binary-heavy rifty workspace, I want streaming export/import with progress/cancel and zip/tar interop, but today only a whole-buffered JSON archive v1 exists — big trees blow memory and there is no streaming pipeline or `.zip`/`.tar` path.
 sources: [ADR-0076]
-code: [apps/playground/src/glue/workspace-archive.ts]
+code: [packages/workbench/src/glue/workspace-archive.ts]
 ---
 
 ## Context

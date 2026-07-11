@@ -6,7 +6,7 @@ created: 2026-06-30
 why: five hand-rolled copies of the same nextRequestId + pending Map + per-request timeout + dispose-reject correlation engine; a fix to one (timeout-cleanup race, dispose leak) must be applied five times
 user_story: As a rifty maintainer touching a cross-realm bridge, I want one tested correlation helper, but today each bridge re-implements the request/reply scaffold so a fix or audit has to be repeated per-port.
 sources: []
-code: [apps/playground/src/glue/git-owner-port.ts, apps/playground/src/glue/workspace-file-read-port.ts, apps/playground/src/glue/node-modules-port.ts, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/glue/ts-ls-client.ts]
+code: [packages/workbench/src/glue/git-owner-port.ts, packages/workbench/src/glue/workspace-file-read-port.ts, packages/workbench/src/glue/node-modules-port.ts, packages/workbench/src/glue/workspace-archive-port.ts, apps/playground/src/glue/ts-ls-client.ts]
 ---
 
 ## Context

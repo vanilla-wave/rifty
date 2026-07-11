@@ -8,7 +8,7 @@ user_story: As a developer, I want reload/switch/two-terminal installs at any mo
 epic: trusted-state-authority
 blocked_by: []
 sources: [docs/adr/playground/0216-install-tail-latency-background-command-durability-generation-guarded-stamps-learned-pin-swr.md, docs/process/fault-classes.md]
-code: [apps/playground/src/glue/install-stamp.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/glue/project-deps.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+code: [packages/workbench/src/glue/install-stamp.ts, packages/workbench/src/glue/npm-shell-command.ts, packages/workbench/src/glue/project-deps.ts, packages/workbench/src/workers/real-vite-bootstrap.ts]
 ---
 
 ## Context
