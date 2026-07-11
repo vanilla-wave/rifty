@@ -34,27 +34,33 @@ function setup(marker = 'v1') {
 }
 
 describe('common CJS→ESM namespace Contract+RED (ADR-0226 D3)', () => {
-  it('uses the exact CJS outer as ESM default while preserving named references', async () => {
-    const { loader } = setup();
-    const outer = loader.require('esbuild', ENTRY_ID) as EsbuildLikeOuter;
-    const namespace = await loader.import('esbuild', ENTRY_ID);
+  it.fails(
+    'uses the exact CJS outer as ESM default while preserving named references',
+    async () => {
+      const { loader } = setup();
+      const outer = loader.require('esbuild', ENTRY_ID) as EsbuildLikeOuter;
+      const namespace = await loader.import('esbuild', ENTRY_ID);
 
-    expect(outer).not.toBe(outer.default);
-    expect(outer.default.default).toBe(outer.default);
-    expect(namespace.default).toBe(outer);
-    expect(namespace.transform).toBe(outer.transform);
-  });
+      expect(outer).not.toBe(outer.default);
+      expect(outer.default.default).toBe(outer.default);
+      expect(namespace.default).toBe(outer);
+      expect(namespace.transform).toBe(outer.transform);
+    },
+  );
 
-  it('returns one namespace object for repeated imports of one CJS module record', async () => {
-    const { loader } = setup();
+  it.fails(
+    'returns one namespace object for repeated imports of one CJS module record',
+    async () => {
+      const { loader } = setup();
 
-    const first = await loader.import('esbuild', ENTRY_ID);
-    const second = await loader.import('esbuild', ENTRY_ID);
+      const first = await loader.import('esbuild', ENTRY_ID);
+      const second = await loader.import('esbuild', ENTRY_ID);
 
-    expect(second).toBe(first);
-  });
+      expect(second).toBe(first);
+    },
+  );
 
-  it('evicts the CJS namespace with its record during coherent invalidation', async () => {
+  it.fails('evicts the CJS namespace with its record during coherent invalidation', async () => {
     const { loader, vfs } = setup();
     const first = await loader.import('esbuild', ENTRY_ID);
 
