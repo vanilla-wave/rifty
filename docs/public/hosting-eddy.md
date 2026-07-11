@@ -208,11 +208,16 @@ same hash on the next POST.
    #     get the honest error, nothing re-seeds), not a runbook failure.
    ```
 
-4. **Client behavior** (already tested in-tree, no operator action): clients
-   holding a pin to the revoked hash — env pins, fresh learned pins, and
-   stale-window (≤24h) learned pins alike — get the 404, fall back to the
-   foreground POST, install from the fresh resolve, and replace the learned
-   pin on learn.
+4. **Client behavior**: clients holding a pin to the revoked hash — env pins,
+   fresh learned pins, and stale-window (≤24h) learned pins alike — get the
+   404 on any GET that REACHES the server, fall back to the foreground POST,
+   install from the fresh resolve, and replace the learned pin on learn (no
+   operator action, tested in-tree). ENV pins are the exception needing
+   operator action: `VITE_RIFTY_EDDY_PINS` has no age gate or revalidation,
+   and a browser that already cached the pinned GET serves it WITHOUT any
+   server contact for up to the immutable year — rotate/remove the affected
+   template pins and redeploy the playground (learned pins self-bound at
+   ≤24h; env pins do not).
 
 5. **Honest residual:** browser HTTP caches may keep serving the revoked
    bundle to a user who ALREADY downloaded it, until their cache evicts it —

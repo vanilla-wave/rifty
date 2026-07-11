@@ -1863,6 +1863,58 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(await trustedStamp(vfs)).toBeNull(); // never a stamp for { …, evil } OR the stale snapshot
   });
 
+  it('a SECTION move in package.json (same flat dep map) during the drain also skips the stamp — the unmoved-guard is byte-exact, not a lossy aggregate', async () => {
+    // Review round 5: the guard compared the flattened dependencies ∪
+    // devDependencies ∪ optionalDependencies map — moving a dep between
+    // sections (or editing `overrides`) changes the real installer request
+    // while the flat map stays identical, so a trusted stamp attested a tree
+    // resolved under different inputs.
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((r) => {
+      releaseFlush = r;
+    });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => {
+          await flushGate;
+          return { failures: [], total: 0 };
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    expect(exitCode).toBe(0);
+
+    // Same flat map — lodash just moves to devDependencies.
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'rifty-project',
+          version: '0.0.0',
+          private: true,
+          devDependencies: { lodash: '^4.17.0' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    releaseFlush();
+
+    await vi.waitFor(() => {
+      expect(rec.stderr.join('')).toContain('package.json changed during the install');
+    });
+    expect(await trustedStamp(vfs)).toBeNull();
+  });
+
   it('a tree DELETED during the drain window is never re-stamped — `npm install && rm -rf node_modules` must not resurrect trust', async () => {
     // Review round 2 regression: pre-background, the stamp landed before the
     // prompt, so a chained deletion removed it WITH the tree; the deferred
@@ -2275,6 +2327,37 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(ra.exitCode).toBe(0);
     expect(rb.exitCode).toBe(0);
     expect(events).toEqual(['installA:start', 'installA:end', 'prepareB', 'installB']);
+  });
+
+  it('prepareInstall runs AFTER the demote+proof — a preparation that clears the tree cannot erase the revocation evidence first', async () => {
+    // Review round 5: the clear ran before the generation claim and the
+    // trusted-stamp demote/proof; a clear whose OPFS rm never persisted
+    // erased the MIRROR stamp while OPFS kept the trusted one — the install
+    // then saw no trusted prior stamp, skipped the proof, and mutated under
+    // the durable stamp.
+    const vfs = new MemoryVfs();
+    await seedTrustedProject(vfs);
+    let stampAtPrepare: string | null | undefined = 'UNREAD';
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        prepareInstall: async () => {
+          const stamp = JSON.parse(await vfs.readFileText(STAMP)) as { durability?: string };
+          stampAtPrepare = stamp.durability ?? null; // null = trusted
+        },
+        flush: async () => ({ failures: [], total: 0 }),
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    expect(stampAtPrepare).toBe('pending'); // demoted (and proven) BEFORE the preparer could touch the tree
   });
 
   it('prepareInstall sees sessionInstallActivity=false on the first install, true after one ran — a PENDING stamp mid-window is provably OURS', async () => {

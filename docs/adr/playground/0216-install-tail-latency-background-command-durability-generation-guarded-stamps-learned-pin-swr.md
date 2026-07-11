@@ -162,6 +162,38 @@ Round-4 hardening (2026-07-11, review r4 — production semantics):
   POST inside the TTL window — named in the runbook with the restart
   escape hatch.
 
+Round-5 hardening + the mandatory 3+-round audit (2026-07-11,
+`docs/process/fault-classes.md`):
+
+- r5 fixes: demote+proof ordered BEFORE `prepareInstall` (a clear whose rm
+  never persisted erased the mirror stamp while OPFS kept the trusted one);
+  `prepareInstall` acts only at the project root (the lock is keyed by
+  `ctx.cwd`); the unmoved-guard compares package.json BYTES, never the
+  flattened dep map (`lossy-aggregate` — boot-side flat compare is
+  pre-existing, recorded in `playground/install-stamp-invalidation`); pin CAS
+  compares the SERVABLE view (a hard-expired raw entry read as absent must
+  lose to an expect-absent relearn); runbook: env pins have no age gate — a
+  revoked bundle's env-pin GET rides browser caches up to a year, affected
+  `VITE_RIFTY_EDDY_PINS` must be rotated + redeployed; `resolvedVia:'post'`
+  is SERVER-VOUCHED (may be the mutable-tier cached resolution ≤TTL), only
+  `prefer:'online'` guarantees recomputation.
+- Audit by axis: `torn-state` recurred r1→r5 (generation → phase lock →
+  chain/demote-proof → promoter recheck/prepare-in-lock/mirror-restore →
+  prepare order). Admitted gap: ITEM CONTRACT — the bg-flush item's fault
+  matrix listed rows per KNOWN writer but never the writer-set invariant
+  ("every stamp transition through one serialized authority"); the structural
+  kill (one stamp-authority chokepoint melting npm-shell-command ×
+  project-deps × prepare writers) is NOT delivered by this epic — each
+  boundary is individually proven instead, and the next stamp writer added is
+  one review round away (bounded pragmatism, said loudly).
+  `concurrent-same-key` recurred ×3 on pins (revalidate → write-back →
+  expiry-view) because the r3 sweep was instance-scoped; the class now lives
+  at ONE chokepoint (`writeLearnedPinExclusive` owns every compare).
+  `sibling-drift` (lenient `SyncMirrorVfs.writeFile`): admitted gap — TOOLING:
+  app-layer Vfs impls sit outside the packages/vfs contract suite; a shared
+  cross-impl suite is the full kill (contract test added here).
+  `lossy-aggregate`: new axis row added to fault-classes.md.
+
 ## Consequences
 
 - The install prompt returns ~0.5s earlier and a `&&`-chained dev server

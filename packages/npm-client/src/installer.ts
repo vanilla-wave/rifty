@@ -229,13 +229,15 @@ export interface InstallResult {
   /**
    * The REQUEST KIND that served the adopted bundle — a prefetch counts as
    * its underlying request: `'get'` is a CACHE serve of a content-addressed
-   * closure (pinned GET or pinned prefetch); `'post'` is a fresh server-side
-   * resolution (direct POST or unpinned prefetch). The playground's pin
-   * policy hangs off this — only a POST re-vouches a resolution's age
-   * (savedAt), and only a cache serve of a stale pin owes the `as-of`
-   * honesty line. Hash equality alone cannot distinguish the two: a
-   * pinned-GET miss whose POST fallback recomputes the SAME closure is a
-   * fresh resolution, not a cache hit.
+   * closure (pinned GET or pinned prefetch); `'post'` is a SERVER-VOUCHED
+   * resolution (direct POST or unpinned prefetch) — the server answered this
+   * request now, though its answer may itself come from eddy's mutable tier
+   * (≤ `EDDY_TTL_SECONDS`); only `prefer:'online'` guarantees a fresh
+   * recompute. The playground's pin policy hangs off this — only a POST
+   * re-vouches a resolution's age (savedAt), and only a cache serve of a
+   * stale pin owes the `as-of` honesty line. Hash equality alone cannot
+   * distinguish the two: a pinned-GET miss whose POST fallback lands the
+   * SAME closure is a server-vouched resolution, not a cache hit.
    */
   resolvedVia?: 'get' | 'post';
 }

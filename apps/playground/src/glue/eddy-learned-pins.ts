@@ -208,7 +208,11 @@ async function writeLearnedPinExclusive(
     }
   }
   if (onlyIfCurrent !== undefined) {
-    const current = file?.entries[requestKey]?.closureHash;
+    // Compare against the SERVABLE view (same expiry/future filter the reads
+    // use), not the raw entry: a hard-expired pin reads as ABSENT everywhere
+    // else, so an expect-absent write must win over its stale bytes — else a
+    // >24h key could never relearn until an unrelated write pruned it.
+    const current = pinFrom(file, requestKey, nowMs)?.closureHash;
     const expected = onlyIfCurrent === null ? undefined : onlyIfCurrent;
     if (current !== expected) {
       return false; // superseded while we were resolving — never roll it back

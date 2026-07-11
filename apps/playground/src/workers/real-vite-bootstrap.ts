@@ -804,8 +804,13 @@ async function bootShellOwner(opts: {
       // install of this very realm still mid background-durability; clearing
       // would reset the user's package.json and force a cold re-install
       // inside the drain window (review round 4).
-      prepareInstall: async (_ctx, info) => {
+      prepareInstall: async (ctx, info) => {
         if (!devFromScratch || !info.fullInstall) return;
+        // The clean-start targets devCfg.root, but the phase lock is keyed by
+        // ctx.cwd — a terminal cd'ed elsewhere would clear the ROOT tree
+        // under a lock that does not serialize with the root's installs.
+        // From-scratch clean-start only makes sense AT the project root.
+        if (normalizePath(ctx.cwd) !== normalizePath(devCfg.root)) return;
         const checkVfs = new SyncMirrorVfs();
         if (
           await installStampSatisfiedForPackageJson(

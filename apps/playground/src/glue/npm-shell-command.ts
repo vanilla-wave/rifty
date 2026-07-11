@@ -43,9 +43,8 @@ import {
   install as realInstall,
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
-import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
-  depsEqual,
   installStampPath,
   installTreeDir,
   isStampedTreeDamage,
@@ -553,44 +552,13 @@ async function runInstallExclusive(
   }
 
   // Tree preparation INSIDE the phase lock, before this install reads
-  // anything: a clear/reseed running outside the lock could raze the tree
-  // under another terminal's in-flight exclusive install (see the seam doc).
-  if (deps.prepareInstall) {
-    await deps.prepareInstall(ctx, {
-      fullInstall: pkgSpecs.length === 0,
-      sessionInstallActivity: installStateFor(deps.vfs, ctx.cwd).generation > 0,
-    });
-  }
-
-  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
-  const dependencies = { ...pkg.dependencies };
-  const devDependencies = { ...pkg.devDependencies };
-  const targetMap = target === 'devDependencies' ? devDependencies : dependencies;
-
-  for (const spec of pkgSpecs) {
-    const { name, range } = parseSpec(spec);
-    if (!name) {
-      ctx.stderr.write(`npm: malformed package spec '${spec}'\n`);
-      return 1;
-    }
-    targetMap[name] = range;
-  }
-
-  const nothingToInstall =
-    pkgSpecs.length === 0 &&
-    Object.keys(dependencies).length === 0 &&
-    Object.keys(devDependencies).length === 0 &&
-    Object.keys(pkg.optionalDependencies).length === 0 &&
-    !hasRootLifecycleScript(pkg.scripts);
-  if (nothingToInstall) {
-    ctx.stdout.write('npm: no dependencies to install\n');
-    return 0;
-  }
-
   // Claim the tree: any in-flight background sequence of an OLDER install
   // loses its right to write a trusted stamp the moment this generation is
-  // bumped (see TreeInstallState).
+  // bumped (see TreeInstallState). `sessionInstallActivity` is sampled BEFORE
+  // this install's own claim — it answers "did a PRIOR install of this realm
+  // touch the tree".
   const state = installStateFor(deps.vfs, ctx.cwd);
+  const sessionInstallActivity = state.generation > 0;
   state.generation += 1;
   const generation = state.generation;
 
@@ -664,6 +632,48 @@ async function runInstallExclusive(
     }
   }
 
+  // Tree preparation INSIDE the phase lock and AFTER the demote+proof: a
+  // preparation that clears the tree (from-scratch clean-start) must not run
+  // while OPFS could still hold a TRUSTED stamp — a clear whose rm never
+  // persisted would erase the MIRROR copy while the durable one survived,
+  // and the following install would skip the revocation proof. Before the
+  // lock it could also raze the tree under another terminal's in-flight
+  // exclusive install (see the seam doc).
+  if (deps.prepareInstall) {
+    await deps.prepareInstall(ctx, {
+      fullInstall: pkgSpecs.length === 0,
+      sessionInstallActivity,
+    });
+  }
+
+  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
+  const dependencies = { ...pkg.dependencies };
+  const devDependencies = { ...pkg.devDependencies };
+  const targetMap = target === 'devDependencies' ? devDependencies : dependencies;
+
+  for (const spec of pkgSpecs) {
+    const { name, range } = parseSpec(spec);
+    if (!name) {
+      ctx.stderr.write(`npm: malformed package spec '${spec}'\n`);
+      return 1;
+    }
+    targetMap[name] = range;
+  }
+
+  const nothingToInstall =
+    pkgSpecs.length === 0 &&
+    Object.keys(dependencies).length === 0 &&
+    Object.keys(devDependencies).length === 0 &&
+    Object.keys(pkg.optionalDependencies).length === 0 &&
+    !hasRootLifecycleScript(pkg.scripts);
+  if (nothingToInstall) {
+    // A demote above may have left a PENDING marker on an empty-deps stamped
+    // tree — untrusted is the honest resting state (the next boot re-runs
+    // arrival); real npm no-ops here too.
+    ctx.stdout.write('npm: no dependencies to install\n');
+    return 0;
+  }
+
   const packageJsonPath = `${ctx.cwd}/package.json`;
   const hadPackageJson = await deps.vfs.exists(packageJsonPath);
   const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
@@ -687,6 +697,14 @@ async function runInstallExclusive(
     };
     await writePackageJson(deps.vfs, ctx.cwd, next);
   }
+
+  // The BYTE-EXACT identity of the request this install is fed — the stamp
+  // guard compares text, never the flattened dep map: a section move
+  // (dependencies↔devDependencies) or an `overrides` edit changes the real
+  // installer request while the flat map stays identical.
+  const packageJsonTextAtInstall = (await deps.vfs.exists(packageJsonPath))
+    ? await deps.vfs.readFileText(packageJsonPath)
+    : null;
 
   const requested = pkgSpecs.length > 0 ? pkgSpecs.join(' ') : 'all from package.json';
   ctx.stdout.write(`npm: installing ${requested}…\n`);
@@ -769,6 +787,7 @@ async function runInstallExclusive(
       stampDeps,
       stampSlug,
       generation,
+      packageJsonTextAtInstall,
     ).catch((err) => {
       // stampInstalledTree reports every expected failure itself; this guard
       // only keeps an unexpected reject from surfacing unhandled — still
@@ -904,6 +923,7 @@ async function stampInstalledTree(
   stampDeps: Record<string, string>,
   stampSlug: string,
   generation: number,
+  packageJsonTextAtInstall: string | null,
 ): Promise<void> {
   const notDurable = (cause: string): void => {
     ctx.stderr.write(
@@ -946,12 +966,16 @@ async function stampInstalledTree(
   // provably did not move since (the boot promoter's contract): the real
   // installer re-reads package.json AFTER the eddy pin window, so a
   // mid-install edit can put deps in the tree the snapshot never named — a
-  // trusted stamp for either set would be a provenance lie. Moved → loud
-  // skip, self-heal (the next boot re-installs). Checked AFTER the
+  // trusted stamp for either set would be a provenance lie. The compare is
+  // BYTE-EXACT (never the flattened dep map: a section move or an `overrides`
+  // edit changes the installer request with an identical flat map). Moved →
+  // loud skip, self-heal (the next boot re-installs). Checked AFTER the
   // generation guard: a newer install legitimately rewrote package.json and
   // owns stamping — that is not an edit, no warning.
-  const currentDeps = await readEffectiveDeps(deps.vfs, cwd);
-  if (!currentDeps || !depsEqual(currentDeps, stampDeps)) {
+  const currentText = (await deps.vfs.exists(joinPath(cwd, 'package.json')))
+    ? await deps.vfs.readFileText(joinPath(cwd, 'package.json')).catch(() => null)
+    : null;
+  if (currentText === null || currentText !== packageJsonTextAtInstall) {
     ctx.stderr.write(
       'npm: WARNING: package.json changed during the install — install stamp skipped; the next boot re-installs\n',
     );

@@ -350,6 +350,26 @@ describe('revalidateLearnedPin — background manifest-only POST refresh', () =>
     });
   });
 
+  it('an expect-ABSENT CAS write wins over a HARD-EXPIRED raw entry — the key must relearn after 24h, not deadlock', async () => {
+    // Review round 5: the CAS compared the RAW file entry, but the lookup
+    // filters hard-expired pins to "absent" — so the foreground POST after a
+    // >24h drop wrote with expectedCurrent=null, always lost to the stale raw
+    // hash, and the key could never relearn until an unrelated write pruned.
+    const { vfs } = createMemoryFs();
+    let nowMs = 1_000_000;
+    await writeLearnedPin(vfs, requestKey, HASH, () => nowMs);
+    nowMs += STALE_PIN_MAX_AGE_MS + 60_000; // hard-expired: lookup reads absent
+
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toBeUndefined();
+    const wrote = await writeLearnedPin(vfs, requestKey, 'sha256-RELEARNED=', () => nowMs, null);
+
+    expect(wrote).toBe(true);
+    expect(await readLearnedPin(vfs, requestKey, () => nowMs)).toEqual({
+      closureHash: 'sha256-RELEARNED=',
+      stale: false,
+    });
+  });
+
   it('a DIFFERENT closure WITHOUT the durable-store proof keeps the old pin and throws — never a pin to an object that may not exist', async () => {
     // Mirrors the installer's learnable gate (ADR-0194): a POST-computed hash
     // is pin-worthy only when the server proved the immutable store held it.

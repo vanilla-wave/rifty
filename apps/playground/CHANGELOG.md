@@ -40,6 +40,36 @@
   unchanged; revocation safety net: §Revocation runbook in
   `docs/public/hosting-eddy.md`.
 
+### Fixed (install-tail-latency review round 5, ADR-0216 r5 notes + audit)
+
+- **Demote+proof ordered BEFORE `prepareInstall`**: a from-scratch clear whose
+  OPFS rm never persisted erased the MIRROR stamp while the durable trusted
+  one survived — the install then skipped the revocation proof and mutated
+  under it. The clean-start also acts only when `ctx.cwd` IS the project root
+  (the phase lock is keyed by cwd; a cd-ed terminal must not clear the root
+  tree under a lock that does not serialize with it).
+- **The stamp unmoved-guard is BYTE-exact** (`lossy-aggregate`, new
+  fault-class row): the flattened dep-map compare let a dependencies↔
+  devDependencies move or an `overrides` edit through with an identical flat
+  map — a trusted stamp for a tree resolved under different inputs. Boot-side
+  flat compare is pre-existing and recorded in
+  `playground/install-stamp-invalidation`.
+- **Pin CAS compares the SERVABLE view**: a hard-expired (>24h) raw entry
+  reads as absent everywhere else, so the foreground relearn's expect-absent
+  write always lost to its stale bytes — the key could never relearn until an
+  unrelated write pruned it.
+- Revocation runbook: env pins (`VITE_RIFTY_EDDY_PINS`) need operator
+  rotation + redeploy after a revocation — no age gate, and a browser-cached
+  pinned GET serves without server contact up to the immutable year (learned
+  pins self-bound at ≤24h). `resolvedVia:'post'` docs corrected to
+  SERVER-VOUCHED (the answer may be eddy's mutable-tier cache ≤TTL; only
+  `prefer:'online'` recomputes).
+- ADR-0216 records the mandatory 3+-round audit: recurring-class table
+  (torn-state ×5 rounds, concurrent-same-key ×3, sibling-drift,
+  lossy-aggregate) + admitted gaps (item-contract writer-set invariant,
+  app-layer Vfs outside the contract suite) + the NOT-delivered stamp-authority
+  chokepoint said loudly.
+
 ### Fixed (install-tail-latency review round 4, ADR-0216 r4 notes)
 
 - **`SyncMirrorVfs.writeFile` no longer auto-creates parent directories**
