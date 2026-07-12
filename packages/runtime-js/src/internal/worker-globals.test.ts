@@ -14,6 +14,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   RUNTIME_JS_GLOBAL_KEYS,
   RUNTIME_JS_ROOT_KEY,
+  publishRuntimeEsbuild,
+  readRuntimeEsbuild,
   readRuntimeGlobal,
   runtimeGlobalKeys,
   unpublishRuntimeGlobal,
@@ -55,6 +57,7 @@ describe('RUNTIME_JS_GLOBAL_KEYS', () => {
     expect(RUNTIME_JS_GLOBAL_KEYS.esmLastBody).toBe('esmLastBody');
     expect(RUNTIME_JS_GLOBAL_KEYS.esmLastFile).toBe('esmLastFile');
     expect(RUNTIME_JS_GLOBAL_KEYS.createRequireImpl).toBe('createRequireImpl');
+    expect(RUNTIME_JS_GLOBAL_KEYS.esbuild).toBe('esbuild');
   });
 
   it('lives under the single __rifty root', () => {
@@ -69,6 +72,7 @@ describe('RUNTIME_JS_GLOBAL_KEYS', () => {
     expect(keys).toContain('esmLastBody');
     expect(keys).toContain('esmLastFile');
     expect(keys).toContain('createRequireImpl');
+    expect(keys).toContain('esbuild');
   });
 });
 
@@ -136,6 +140,7 @@ describe('publish/read roundtrip', () => {
       expect(readRuntimeGlobal('esmLastBody')).toBeNull();
       expect(readRuntimeGlobal('esmLastFile')).toBeNull();
       expect(readRuntimeGlobal('createRequireImpl')).toBeNull();
+      expect(readRuntimeGlobal('esbuild')).toBeNull();
     });
   });
 
@@ -185,6 +190,42 @@ describe('unpublish', () => {
       const root = (globalThis as MaybeGlobal)[RUNTIME_JS_ROOT_KEY];
       expect(root).toBeDefined();
       expect(Object.keys(root as object)).toEqual([]);
+    });
+  });
+});
+
+describe('esbuild public seam', () => {
+  it('returns null before this realm publishes an outer', () => {
+    withClean(() => {
+      expect(readRuntimeEsbuild()).toBeNull();
+    });
+  });
+
+  it('publishes under the owner-table key and preserves exact identity', () => {
+    withClean(() => {
+      const outer = Object.freeze({ version: '0.28.0', build: () => undefined });
+      publishRuntimeEsbuild(outer);
+
+      expect(readRuntimeEsbuild()).toBe(outer);
+      const root = (globalThis as MaybeGlobal)[RUNTIME_JS_ROOT_KEY] as
+        | Record<string, unknown>
+        | undefined;
+      expect(root?.esbuild).toBe(outer);
+      expect((globalThis as MaybeGlobal).__riftyEsbuild).toBeUndefined();
+    });
+  });
+
+  it('uses owner-table overwrite semantics without mutating either outer', () => {
+    withClean(() => {
+      const first = Object.freeze({ version: 'first' });
+      const second = Object.freeze({ version: 'second' });
+
+      publishRuntimeEsbuild(first);
+      publishRuntimeEsbuild(second);
+
+      expect(readRuntimeEsbuild()).toBe(second);
+      expect(first).toEqual({ version: 'first' });
+      expect(second).toEqual({ version: 'second' });
     });
   });
 });
