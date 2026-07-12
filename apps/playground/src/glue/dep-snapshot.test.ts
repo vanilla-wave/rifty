@@ -1,11 +1,13 @@
-import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import {
+  type DepSnapshotV1,
   buildDepSnapshot,
   fetchDepSnapshot,
   parseDepSnapshot,
   restoreDepSnapshot,
 } from './dep-snapshot.ts';
+import { ensureProjectDependencies } from './project-deps.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -115,6 +117,47 @@ describe('dep snapshot (ADR-0135)', () => {
   it('rejects malformed snapshots loudly', () => {
     expect(() => parseDepSnapshot('{"version":2}')).toThrow('version');
     expect(() => parseDepSnapshot('{"version":1,"templateId":"vite"}')).toThrow('Malformed');
+  });
+
+  it('does not accept a snapshot missing the current install-artifact identity when package.json is unchanged', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    fsSync.mkdirSync(ROOT, { recursive: true });
+    fsSync.writeFileSync(
+      `${ROOT}/package.json`,
+      enc.encode(JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } })),
+    );
+    const { installArtifactIdentity: _missing, ...rawSnapshot } = JSON.parse(
+      JSON.stringify(
+        buildDepSnapshot(bakedFs(), ROOT, {
+          templateId: 'vite',
+          deps: { vite: '^5.4.0' },
+          packages: 8,
+        }),
+      ),
+    ) as Record<string, unknown>;
+    let installed = false;
+    const options = {
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      installArtifactIdentity: 'sha256:current-install-artifacts',
+      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV1,
+      install: async () => {
+        installed = true;
+        return { packages: 9 };
+      },
+      log: () => undefined,
+    } as Parameters<typeof ensureProjectDependencies>[0] & {
+      readonly installArtifactIdentity: string;
+    };
+
+    const result = await ensureProjectDependencies(options);
+
+    expect(result).toEqual({ source: 'install', packages: 9 });
+    expect(installed).toBe(true);
   });
 
   it('fetchDepSnapshot handles raw gzip bytes AND server-decoded JSON (magic sniff)', async () => {

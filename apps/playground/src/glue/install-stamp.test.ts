@@ -63,6 +63,23 @@ describe('install stamp (ADR-0135)', () => {
     expect(hit?.packages).toBe(14);
   });
 
+  it('does not reuse a trusted stamp missing the current install-artifact identity when package.json is unchanged', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await vfs.writeFile(
+      installStampPath(ROOT),
+      JSON.stringify({
+        version: 1,
+        slug: 'real-vite',
+        deps: { vite: '^5.4.0' },
+        packages: 14,
+      }),
+    );
+
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
   it('reads pending stamps but never satisfies reuse from them', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
