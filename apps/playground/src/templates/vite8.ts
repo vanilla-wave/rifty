@@ -20,6 +20,12 @@ if (import.meta.hot) {
 }
 `;
 
+const VITE8_CONFIG_JS = `export default {
+  server: { hmr: false },
+  optimizeDeps: { noDiscovery: true, include: [] },
+};
+`;
+
 export const VITE8_TEMPLATE: ViteProjectSpec = {
   id: 'vite8',
   displayName: 'Vite 8 (Rolldown experimental)',
@@ -31,6 +37,10 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
   defaultPort: 5174,
   estimatedBootSeconds: 25,
   htmlTitle: 'rifty + real Vite 8 (Rolldown, worker)',
+  extraFiles: {
+    // Rolldown optimizer/HMR remain off in user-visible template policy.
+    '/vite.config.js': VITE8_CONFIG_JS,
+  },
   server: {
     appType: 'spa',
     strictPort: true,

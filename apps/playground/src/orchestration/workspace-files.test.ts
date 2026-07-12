@@ -131,6 +131,7 @@ describe('starter re-seed (owner realm, package.json install-owned)', () => {
     await h.files().seedOwner(REACT_PRESET, true);
     expect(h.owner.writes.length).toBeGreaterThan(0);
     expect(h.owner.writes.every((w) => w.ifAbsent === true)).toBe(true);
+    expect(h.owner.writes.map((w) => w.path)).not.toContain('/scratch/vite.config.js');
   });
 });
 

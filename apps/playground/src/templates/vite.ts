@@ -25,6 +25,11 @@ if (import.meta.hot) {
 }
 `;
 
+export const DEFAULT_VITE_CONFIG_JS = `export default {
+  optimizeDeps: { noDiscovery: true, include: [] },
+};
+`;
+
 export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
@@ -41,6 +46,11 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   defaultPort: 5174,
   estimatedBootSeconds: 20,
   htmlTitle: 'rifty + real Vite (worker)',
+  extraFiles: {
+    // Empty runtime dependency graph: keep optimizer startup off this template
+    // path through visible user config, never a hidden CLI wrapper.
+    '/vite.config.js': DEFAULT_VITE_CONFIG_JS,
+  },
   server: {
     appType: 'spa',
     strictPort: true,

@@ -554,6 +554,8 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       ),
     ).toBe('module-execution-harness-ok');
 
+    const removeTemplateConfig = await execLine(page, 'rm vite.config.js');
+    expect(removeTemplateConfig).toMatchObject({ exit: 0 });
     await writeOwnerFile(
       page,
       '/scratch/vite.config.ts',

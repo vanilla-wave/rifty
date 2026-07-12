@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLI_REPORT_TEMPLATE } from '../templates/cli-report.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from '../templates/hidden-empty.ts';
 import { type NodeServerProjectSpec, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import { VITE_TEMPLATE } from '../templates/vite.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 
 /**
@@ -219,6 +220,56 @@ describe('runtime dispatch + seeding (behavioral)', () => {
         log: sinks.log,
       }),
     ).rejects.toThrow(/vite/);
+  });
+
+  it('never seeds template js over a user ts config', async () => {
+    const root = '/bu-devboot/config-slot-user';
+    const fs = syncMirror();
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(`${root}/vite.config.ts`, enc.encode('export default {};\n'));
+    const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5177, root);
+    const sinks = makeSinks();
+
+    await expect(
+      bootDevServer({
+        cfg,
+        port: cfg.port,
+        root,
+        spec: VITE_TEMPLATE,
+        slug: 'bu',
+        fromScratch: false,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    ).rejects.toThrow(/vite\.config/);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
+    expect(fs.existsSync(`${root}/.rifty/vite-config.seeded`)).toBe(false);
+  });
+
+  it('records a fresh seed and never resurrects its deletion', async () => {
+    const root = '/bu-devboot/config-slot-delete';
+    const fs = syncMirror();
+    const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5178, root);
+    const attempt = async (): Promise<void> => {
+      const sinks = makeSinks();
+      await bootDevServer({
+        cfg,
+        port: cfg.port,
+        root,
+        spec: VITE_TEMPLATE,
+        slug: 'bu',
+        fromScratch: false,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      });
+    };
+
+    await expect(attempt()).rejects.toThrow(/vite/);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(true);
+    expect(fs.existsSync(`${root}/.rifty/vite-config.seeded`)).toBe(true);
+    fs.rmSync(`${root}/vite.config.js`, { force: true });
+    await expect(attempt()).rejects.toThrow(/vite/);
+    expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
   });
 });
 

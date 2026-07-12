@@ -16,6 +16,7 @@ import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { type PersistFailureReport, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { claimTemplateViteConfigSeed, isViteConfigSlotPath } from '../glue/vite-config-seed.ts';
 import type {
   BootstrapConfig,
   NodeServerBootstrapConfig,
@@ -162,7 +163,7 @@ export async function bootDevServer(opts: {
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
-  const { cfg, port, root, publishSnapshot, log } = opts;
+  const { cfg, port, root, spec, publishSnapshot, log } = opts;
 
   // Seed the template's package.json + files IF ABSENT — never overwrite. A
   // force-overwrite here discarded the user's `npm install` additions on every
@@ -172,15 +173,19 @@ export async function bootDevServer(opts: {
   // package.json in the `boot` closure (alongside the node_modules/lockfile
   // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
-  function seedTemplateFiles(opts: { nodeModulesOnly: boolean }): void {
+  function seedTemplateFiles(seedOpts: { nodeModulesOnly: boolean }): void {
+    if (!seedOpts.nodeModulesOnly) {
+      claimTemplateViteConfigSeed(root, seedFs, { id: spec.id, seedFiles: cfg.seedFiles });
+    }
     seedFs.mkdirSync(root, { recursive: true });
-    if (!opts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
+    if (!seedOpts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
       seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
     }
     for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
       const np = normalizePath(seedPath);
       if (np === `${root}/package.json`) continue;
-      if (opts.nodeModulesOnly && !np.startsWith(`${root}/node_modules/`)) continue;
+      if (seedOpts.nodeModulesOnly && !np.startsWith(`${root}/node_modules/`)) continue;
+      if (isViteConfigSlotPath(np, root)) continue;
       seedFs.mkdirSync(dirname(np), { recursive: true });
       if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
     }

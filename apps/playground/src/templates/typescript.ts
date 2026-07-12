@@ -1,5 +1,5 @@
 import type { ViteProjectSpec } from './project-spec.ts';
-import { VITE_TEMPLATE } from './vite.ts';
+import { DEFAULT_VITE_CONFIG_JS, VITE_TEMPLATE } from './vite.ts';
 
 export const TYPESCRIPT_ENTRY_SOURCE = `import type { LibraryShape } from '@rifty/example-types';
 import './styles.css';
@@ -216,6 +216,8 @@ export const TYPESCRIPT_TEMPLATE = {
   estimatedBootSeconds: 20,
   htmlTitle: 'rifty + TypeScript',
   extraFiles: {
+    // Type-only fixture dependencies add no runtime optimizer graph.
+    '/vite.config.js': DEFAULT_VITE_CONFIG_JS,
     '/tsconfig.json': TSCONFIG_JSON,
     '/src/model.ts': MODEL_TS,
     '/src/math.ts': MATH_TS,
