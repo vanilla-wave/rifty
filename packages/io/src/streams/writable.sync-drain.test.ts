@@ -64,12 +64,11 @@ describe('Writable sync-drain edges (#25)', () => {
 
     // Only c1's _write ran — destroy halts the loop before c2/c3 are written.
     expect(writeOrder).toEqual(['c1']);
-    // The still-queued chunks' callbacks receive the destroy error (not dropped,
-    // not a success); c1 (the in-flight chunk) also errors via the destroyed
-    // branch of its own `done`.
+    // Still-queued callbacks receive the destroy reason. The in-flight hook's
+    // later success stays `null`, matching Node's late-completion oracle.
     expect(cbErrors.get('c2')).toBe(boom);
     expect(cbErrors.get('c3')).toBe(boom);
-    expect(cbErrors.get('c1')).toBe(boom);
+    expect(cbErrors.get('c1')).toBeNull();
     // destroy(err) also surfaces the error on the stream.
     expect(emittedError).toBe(boom);
   });
