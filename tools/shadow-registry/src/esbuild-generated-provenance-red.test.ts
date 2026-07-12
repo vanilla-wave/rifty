@@ -135,6 +135,34 @@ describe('generated esbuild runtime provenance Contract+RED', () => {
         inputSpan: { start: expect.any(Number), end: expect.any(Number) },
         sha256: '9eb837dd43da594cf02a89dd70e73ef7bbeab389b9ab6e685291d2d1e6a27562',
       },
+      {
+        id: 'native-validation-must-be',
+        inputSpan: { start: expect.any(Number), end: expect.any(Number) },
+        sha256: 'e680a38380dde2da37250cc2f05234766528e62967429cf9e2beafd48f738450',
+        location: {
+          file: '/node_modules/esbuild/lib/main.js',
+          namespace: 'file',
+          line: 534,
+          column: 29,
+          length: 0,
+          lineText: '  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);',
+          suggestion: '',
+        },
+      },
+      {
+        id: 'native-validation-invalid-option',
+        inputSpan: { start: expect.any(Number), end: expect.any(Number) },
+        sha256: '7c991bb02b494ef1061fd3327ee68bbd00802b44468cb56d072cf704eb114eca',
+        location: {
+          file: '/node_modules/esbuild/lib/main.js',
+          namespace: 'file',
+          line: 540,
+          column: 12,
+          length: 0,
+          lineText: '      throw new Error(`Invalid option ${where}: ${quote(key)}`);',
+          suggestion: '',
+        },
+      },
     ]);
   });
 
@@ -164,6 +192,10 @@ describe('generated esbuild runtime provenance Contract+RED', () => {
     );
     expect(contents).toContain('globalThis.fs = runtimeFs.go;');
     expect(contents).toContain('        fs: runtimeFs.transform,');
+    expect(contents).toContain('var validationErrorOrigins = new WeakMap();');
+    expect(contents).toContain('validationErrorOrigins.set(error, origin);');
+    expect(contents).toContain('normalizeTargetErrnoMessage(message);');
+    expect(contents).not.toContain('error.stack');
     expect(contents).not.toContain('new Proxy(');
     expect(contents).not.toContain('structuredClone(');
   });

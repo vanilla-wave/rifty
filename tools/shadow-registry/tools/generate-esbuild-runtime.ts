@@ -42,6 +42,28 @@ interface ExactAnchor {
   readonly anchor: string;
 }
 
+interface NativeValidationLocation {
+  readonly file: string;
+  readonly namespace: 'file';
+  readonly line: number;
+  readonly column: number;
+  readonly length: 0;
+  readonly lineText: string;
+  readonly suggestion: '';
+}
+
+interface PinnedValidationAnchor {
+  readonly id: string;
+  readonly inputSpan: { readonly start: number; readonly end: number };
+  readonly sha256: string;
+  readonly location?: NativeValidationLocation;
+}
+
+interface NativeValidationLocations {
+  readonly mustBe: NativeValidationLocation;
+  readonly invalidOption: NativeValidationLocation;
+}
+
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const manifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
 const outputUrl = new URL(
@@ -70,8 +92,15 @@ function sourceMemberPath(packageRoot: string, member: string): string {
   return join(packageRoot, member.slice(prefix.length));
 }
 
-function replacementFor(anchor: ExactAnchor): string {
+function replacementFor(
+  anchor: ExactAnchor,
+  validationLocations: NativeValidationLocations,
+): string {
   const key = `${anchor.id}/${anchor.hunk ?? 'main'}`;
+  const validationLocationTable = JSON.stringify({
+    'must-be': validationLocations.mustBe,
+    'invalid-option': validationLocations.invalidOption,
+  });
   switch (key) {
     case 'inline-worker-startup/envelope-open':
       return lines(
@@ -139,6 +168,50 @@ function replacementFor(anchor: ExactAnchor): string {
       );
     case 'transform-temp-fs/main':
       return '        fs: runtimeFs.transform,';
+    case 'native-validation-provenance/origin-owner':
+      return lines(
+        'var validationErrorOrigins = new WeakMap();',
+        `var nativeValidationLocations = ${validationLocationTable};`,
+        'var tagValidationError = (error, origin) => {',
+        '  validationErrorOrigins.set(error, origin);',
+        '  return error;',
+        '};',
+        'var nativeValidationLocation = (error) => {',
+        '  if (typeof error !== "object" || error === null) return null;',
+        '  let location = nativeValidationLocations[validationErrorOrigins.get(error)];',
+        '  return location ? { ...location } : null;',
+        '};',
+        'var canBeAnything = () => null;',
+      );
+    case 'native-validation-provenance/must-be-origin':
+      return '  if (mustBe !== null) throw tagValidationError(new Error(`${quote(key)} must be ${mustBe}`), "must-be");';
+    case 'native-validation-provenance/invalid-option-origin':
+      return '      throw tagValidationError(new Error(`Invalid option ${where}: ${quote(key)}`), "invalid-option");';
+    case 'native-validation-provenance/post-extract':
+      return lines(
+        '  let message = { id: "", pluginName, text, location: location2, notes: note ? [note] : [], detail: stash ? stash.store(e) : -1 };',
+        '  if (message.location === null) message.location = nativeValidationLocation(e);',
+        '  return message;',
+      );
+    case 'native-target-errno/owner':
+      return lines(
+        'var normalizeTargetErrnoMessage = (message) => {',
+        '  if (message.pluginName !== "" || message.detail !== void 0 || message.location !== null) return;',
+        '  if (typeof message.text !== "string" || !message.text.endsWith(": Not a directory")) return;',
+        '  message.text = message.text.slice(0, -"Not a directory".length) + "not a directory";',
+        '};',
+        'function createChannel(streamIn) {',
+      );
+    case 'native-target-errno/materialized-message':
+      return lines(
+        'function replaceDetailsInMessages(messages, stash) {',
+        '  for (const message of messages) {',
+        '    message.detail = stash.load(message.detail);',
+        '    normalizeTargetErrnoMessage(message);',
+        '  }',
+        '  return messages;',
+        '}',
+      );
     case 'gate-direct-lifecycle/main':
       return lines(
         'var stop = () => Promise.reject(new NotImplementedError("esbuild.stop"));',
@@ -175,11 +248,7 @@ function replacementFor(anchor: ExactAnchor): string {
         '};',
         'var syncValidationFailure = (kind, error) => {',
         '  let text = error && error.message || String(error);',
-        '  let isInvalidOption = text.startsWith("Invalid option ");',
-        '  let line = isInvalidOption ? 540 : 534;',
-        '  let column = isInvalidOption ? 12 : 29;',
-        '  let lineText = isInvalidOption ? "      throw new Error(`Invalid option ${where}: ${quote(key)}`);" : "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);";',
-        '  let location = { file: "/node_modules/esbuild/lib/main.js", namespace: "file", line, column, length: 0, lineText, suggestion: "" };',
+        '  let location = nativeValidationLocation(error);',
         '  let message = { id: "", pluginName: "", text, location, notes: [], detail: error };',
         '  return failureErrorWithLog(`${kind} failed`, [message], []);',
         '};',
@@ -266,7 +335,7 @@ function replacementFor(anchor: ExactAnchor): string {
   }
 }
 
-function validationAnchors(source: string): readonly object[] {
+function validationAnchors(source: string): readonly PinnedValidationAnchor[] {
   return policy.validationSource.anchors.map((anchor) => {
     const start = source.indexOf(anchor.start);
     if (start === -1) throw new Error(`validation anchor ${anchor.id}: missing start`);
@@ -277,12 +346,46 @@ function validationAnchors(source: string): readonly object[] {
     if (end === -1) throw new Error(`validation anchor ${anchor.id}: missing end`);
     const exact = source.slice(start, end);
     assertEqual(`validation anchor ${anchor.id} sha256`, sha256(exact), anchor.sha256);
+    const isNativeLocation =
+      anchor.id === 'native-validation-must-be' || anchor.id === 'native-validation-invalid-option';
+    const lineText = isNativeLocation ? source.slice(start, source.indexOf('\n', start)) : '';
+    const column = isNativeLocation ? lineText.indexOf('new Error') : -1;
+    if (isNativeLocation) {
+      assertEqual(
+        `validation anchor ${anchor.id} line start`,
+        start,
+        source.lastIndexOf('\n', start) + 1,
+      );
+      if (column < 0) throw new Error(`validation anchor ${anchor.id}: missing new Error`);
+    }
     return {
       id: anchor.id,
       inputSpan: { start, end },
       sha256: anchor.sha256,
+      ...(isNativeLocation
+        ? {
+            location: {
+              file: '/node_modules/esbuild/lib/main.js',
+              namespace: 'file' as const,
+              line: source.slice(0, start).split('\n').length,
+              column,
+              length: 0 as const,
+              lineText,
+              suggestion: '' as const,
+            },
+          }
+        : {}),
     };
   });
+}
+
+function requiredValidationLocation(
+  anchors: readonly PinnedValidationAnchor[],
+  id: string,
+): NativeValidationLocation {
+  const location = anchors.find((anchor) => anchor.id === id)?.location;
+  if (!location) throw new Error(`validation anchor ${id}: missing derived location`);
+  return location;
 }
 
 function derive(): { readonly manifest: string; readonly output: string } {
@@ -314,10 +417,17 @@ function derive(): { readonly manifest: string; readonly output: string } {
     policy.validationSource.sha256,
   );
   const pinnedValidationAnchors = validationAnchors(validationSource);
+  const validationLocations: NativeValidationLocations = {
+    mustBe: requiredValidationLocation(pinnedValidationAnchors, 'native-validation-must-be'),
+    invalidOption: requiredValidationLocation(
+      pinnedValidationAnchors,
+      'native-validation-invalid-option',
+    ),
+  };
 
   const patches = (ESBUILD_RUNTIME_PATCH_ANCHORS as readonly ExactAnchor[]).map((anchor) => ({
     ...anchor,
-    replacement: replacementFor(anchor),
+    replacement: replacementFor(anchor, validationLocations),
   }));
   const generated = applyExactTextPatches(source, patches);
   const output = `${generated.output}\n`;

@@ -33,6 +33,18 @@
         "start": "var analyzeMetafileSync = (metafile, options) => {",
         "end": "var stop = () => {",
         "sha256": "9eb837dd43da594cf02a89dd70e73ef7bbeab389b9ab6e685291d2d1e6a27562"
+      },
+      {
+        "id": "native-validation-must-be",
+        "start": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+        "end": "  return value;",
+        "sha256": "e680a38380dde2da37250cc2f05234766528e62967429cf9e2beafd48f738450"
+      },
+      {
+        "id": "native-validation-invalid-option",
+        "start": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+        "end": "    }\n  }\n}",
+        "sha256": "7c991bb02b494ef1061fd3327ee68bbd00802b44468cb56d072cf704eb114eca"
       }
     ]
   },
@@ -42,6 +54,8 @@
     "channel-has-fs",
     "runtime-default-wd",
     "transform-temp-fs",
+    "native-validation-provenance",
+    "native-target-errno",
     "gate-direct-lifecycle",
     "gate-sync-family",
     "gate-analyze-metafile",
@@ -54,6 +68,8 @@
     "channel-has-fs": "upstream channel runs with hasFS:true",
     "runtime-default-wd": "defaultWD is the guest cwd",
     "transform-temp-fs": "large-transform temporary files use guest VFS",
+    "native-validation-provenance": "exact origin tags recover Node validator diagnostic locations",
+    "native-target-errno": "service-owned target errno spelling matches the native oracle",
     "gate-direct-lifecycle": "direct initialize and stop capability gates",
     "gate-sync-family": "four synchronous API capability gates",
     "gate-analyze-metafile": "async analyzeMetafile capability gate",

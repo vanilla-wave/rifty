@@ -523,6 +523,17 @@ function validateAndJoinStringArray(values, what) {
   }
   return toJoin.join(",");
 }
+var validationErrorOrigins = new WeakMap();
+var nativeValidationLocations = {"must-be":{"file":"/node_modules/esbuild/lib/main.js","namespace":"file","line":534,"column":29,"length":0,"lineText":"  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);","suggestion":""},"invalid-option":{"file":"/node_modules/esbuild/lib/main.js","namespace":"file","line":540,"column":12,"length":0,"lineText":"      throw new Error(`Invalid option ${where}: ${quote(key)}`);","suggestion":""}};
+var tagValidationError = (error, origin) => {
+  validationErrorOrigins.set(error, origin);
+  return error;
+};
+var nativeValidationLocation = (error) => {
+  if (typeof error !== "object" || error === null) return null;
+  let location = nativeValidationLocations[validationErrorOrigins.get(error)];
+  return location ? { ...location } : null;
+};
 var canBeAnything = () => null;
 var mustBeBoolean = (value) => typeof value === "boolean" ? null : "a boolean";
 var mustBeString = (value) => typeof value === "string" ? null : "a string";
@@ -546,13 +557,13 @@ function getFlag(object, keys, key, mustBeFn) {
   keys[key + ""] = true;
   if (value === void 0) return void 0;
   let mustBe = mustBeFn(value);
-  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);
+  if (mustBe !== null) throw tagValidationError(new Error(`${quote(key)} must be ${mustBe}`), "must-be");
   return value;
 }
 function checkForInvalidFlags(object, keys, where) {
   for (let key in object) {
     if (!(key in keys)) {
-      throw new Error(`Invalid option ${where}: ${quote(key)}`);
+      throw tagValidationError(new Error(`Invalid option ${where}: ${quote(key)}`), "invalid-option");
     }
   }
 }
@@ -850,6 +861,11 @@ function flagsForTransformOptions(callName, options, isTTY, logLevelDefault) {
     mangleCache: validateMangleCache(mangleCache)
   };
 }
+var normalizeTargetErrnoMessage = (message) => {
+  if (message.pluginName !== "" || message.detail !== void 0 || message.location !== null) return;
+  if (typeof message.text !== "string" || !message.text.endsWith(": Not a directory")) return;
+  message.text = message.text.slice(0, -"Not a directory".length) + "not a directory";
+};
 function createChannel(streamIn) {
   const requestCallbacksByKey = {};
   const closeData = { didClose: false, reason: "" };
@@ -1658,7 +1674,9 @@ function extractErrorMessageV8(e, streamIn, stash, note, pluginName) {
     location2 = parseStackLinesV8(streamIn, (e.stack + "").split("\n"), "");
   } catch (e2) {
   }
-  return { id: "", pluginName, text, location: location2, notes: note ? [note] : [], detail: stash ? stash.store(e) : -1 };
+  let message = { id: "", pluginName, text, location: location2, notes: note ? [note] : [], detail: stash ? stash.store(e) : -1 };
+  if (message.location === null) message.location = nativeValidationLocation(e);
+  return message;
 }
 function parseStackLinesV8(streamIn, lines, ident) {
   let at = "    at ";
@@ -1734,6 +1752,7 @@ ${file}:${line}:${column}: ERROR: ${pluginText}${e.text}`;
 function replaceDetailsInMessages(messages, stash) {
   for (const message of messages) {
     message.detail = stash.load(message.detail);
+    normalizeTargetErrnoMessage(message);
   }
   return messages;
 }
@@ -1875,11 +1894,7 @@ var validateBuildSyncOptions = (options) => {
 };
 var syncValidationFailure = (kind, error) => {
   let text = error && error.message || String(error);
-  let isInvalidOption = text.startsWith("Invalid option ");
-  let line = isInvalidOption ? 540 : 534;
-  let column = isInvalidOption ? 12 : 29;
-  let lineText = isInvalidOption ? "      throw new Error(`Invalid option ${where}: ${quote(key)}`);" : "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);";
-  let location = { file: "/node_modules/esbuild/lib/main.js", namespace: "file", line, column, length: 0, lineText, suggestion: "" };
+  let location = nativeValidationLocation(error);
   let message = { id: "", pluginName: "", text, location, notes: [], detail: error };
   return failureErrorWithLog(`${kind} failed`, [message], []);
 };

@@ -26,17 +26,16 @@ import { internalsShims } from './index.ts';
 const expected = fixture as unknown as EsbuildContractTranscript;
 const expectedPolicy = policyFixture as unknown as EsbuildGuestPolicyTranscript;
 const require = createRequire(import.meta.url);
-const CURRENTLY_RED_CONTRACT_ROWS = new Set<EsbuildContractRowId>([
-  'module',
-  'plugin-validation',
-  'dep-prebundle-write-failure',
-]);
-const CURRENTLY_RED_GUEST_POLICY_CASES = new Set([
-  'gap-build-effective-write/invalid-plugin-default-write',
-  'gap-build-effective-write/invalid-write-type',
-  'gap-build-effective-write/false-to-invalid',
-  'gap-build-effective-write/omitted-to-invalid',
-]);
+const CURRENTLY_RED_CONTRACT_ROWS = new Set<EsbuildContractRowId>(['module']);
+const CURRENTLY_RED_GUEST_POLICY_CASES = new Set<string>();
+
+interface NegativeTextPluginBuild {
+  onStart(
+    callback: () => {
+      readonly errors: readonly Readonly<Record<string, unknown>>[];
+    },
+  ): void;
+}
 
 async function loadCurrentShimPackage(
   runtime: EsbuildContractApi,
@@ -112,6 +111,7 @@ async function startGeneratedRuntime(fs: FsSync, cwd: string): Promise<EsbuildCo
 describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
   let actual: EsbuildContractTranscript;
   let actualPolicy: EsbuildGuestPolicyTranscript;
+  let runtime: EsbuildContractApi;
 
   beforeAll(async () => {
     const previousSelf = Object.getOwnPropertyDescriptor(globalThis, 'self');
@@ -121,7 +121,7 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
     });
     try {
       const { fs, workspace } = createMemoryContractWorkspace();
-      const runtime = await startGeneratedRuntime(fs, workspace.cwd);
+      runtime = await startGeneratedRuntime(fs, workspace.cwd);
       const modules = await loadCurrentShimPackage(runtime);
       actual = await probeEsbuildContract(modules, workspace);
       actualPolicy = await probeEsbuildGuestPolicy(modules, workspace);
@@ -143,6 +143,51 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
       expect(actual.rows[rowId]).toEqual(expected.rows[rowId]);
     });
   }
+
+  it('does not rewrite errno-looking plugin text, notes, or detail after a service round-trip', async () => {
+    const text = 'plugin-owned terminal phrase: Not a directory';
+    const noteText = 'plugin-owned note: Not a directory';
+    const detail = { owner: 'contract-plugin' };
+    let failure: unknown;
+    try {
+      await runtime.build({
+        stdin: { contents: 'export default 1', loader: 'js' },
+        write: false,
+        logLevel: 'silent',
+        plugins: [
+          {
+            name: 'target-errno-negative',
+            setup(build: NegativeTextPluginBuild): void {
+              build.onStart(() => ({
+                errors: [
+                  {
+                    text,
+                    location: null,
+                    notes: [{ text: noteText, location: null }],
+                    detail,
+                  },
+                ],
+              }));
+            },
+          },
+        ],
+      });
+    } catch (error) {
+      failure = error;
+    }
+    const errors = (failure as { readonly errors?: readonly unknown[] } | undefined)?.errors;
+    expect(errors).toHaveLength(1);
+    const message = errors?.[0] as {
+      readonly text?: unknown;
+      readonly pluginName?: unknown;
+      readonly notes?: readonly { readonly text?: unknown }[];
+      readonly detail?: unknown;
+    };
+    expect(message.text).toBe(text);
+    expect(message.pluginName).toBe('target-errno-negative');
+    expect(message.notes?.[0]?.text).toBe(noteText);
+    expect(message.detail).toBe(detail);
+  });
 
   it('executes every guest-policy case instead of accepting an early API crash as RED', () => {
     expect(actualPolicy.schema).toBe(1);

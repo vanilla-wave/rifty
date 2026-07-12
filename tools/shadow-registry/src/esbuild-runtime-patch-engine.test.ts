@@ -189,6 +189,17 @@ describe('esbuild-wasm 0.28.0 exact upstream patch anchors', () => {
     });
   }
 
+  for (const patch of ESBUILD_RUNTIME_PATCH_ANCHORS.filter(
+    ({ id }) => id === 'native-validation-provenance' || id === 'native-target-errno',
+  )) {
+    it(`loud-fails a mutated diagnostic anchor: ${patch.id}/${patch.hunk ?? 'main'}`, () => {
+      const mutated = upstreamBrowserCjs.replace(patch.anchor, '[diagnostic-anchor-mutated]');
+      expect(() => inspectExactTextPatchAnchors(mutated, [patch])).toThrow(
+        `exact patch "${patch.id}/${patch.hunk ?? 'main'}": missing anchor`,
+      );
+    });
+  }
+
   it('keeps all ratified upstream anchors non-overlapping', () => {
     const inspection = inspectExactTextPatchAnchors(
       upstreamBrowserCjs,

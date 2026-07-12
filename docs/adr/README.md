@@ -171,6 +171,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0177 | Workspace TypeScript is required for TS language service |
 | 0196 | Browser-unit test lane is a thin Playwright harness on the playground dev server |
 | 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
+| 0242 | Generated esbuild diagnostic provenance and target errno normalization |
 
 ### protocol
 

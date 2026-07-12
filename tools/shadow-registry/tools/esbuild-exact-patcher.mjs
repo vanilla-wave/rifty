@@ -11,6 +11,8 @@ export const ESBUILD_RUNTIME_PATCH_IDS = Object.freeze([
   'channel-has-fs',
   'runtime-default-wd',
   'transform-temp-fs',
+  'native-validation-provenance',
+  'native-target-errno',
   'gate-direct-lifecycle',
   'gate-sync-family',
   'gate-analyze-metafile',
@@ -90,6 +92,44 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
         '            callback(null);',
         '          }',
         '        },',
+      ),
+    },
+    {
+      id: 'native-validation-provenance',
+      hunk: 'origin-owner',
+      anchor: 'var canBeAnything = () => null;',
+    },
+    {
+      id: 'native-validation-provenance',
+      hunk: 'must-be-origin',
+      anchor: '  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);',
+    },
+    {
+      id: 'native-validation-provenance',
+      hunk: 'invalid-option-origin',
+      anchor: '      throw new Error(`Invalid option ${where}: ${quote(key)}`);',
+    },
+    {
+      id: 'native-validation-provenance',
+      hunk: 'post-extract',
+      anchor:
+        '  return { id: "", pluginName, text, location: location2, notes: note ? [note] : [], detail: stash ? stash.store(e) : -1 };',
+    },
+    {
+      id: 'native-target-errno',
+      hunk: 'owner',
+      anchor: 'function createChannel(streamIn) {',
+    },
+    {
+      id: 'native-target-errno',
+      hunk: 'materialized-message',
+      anchor: lines(
+        'function replaceDetailsInMessages(messages, stash) {',
+        '  for (const message of messages) {',
+        '    message.detail = stash.load(message.detail);',
+        '  }',
+        '  return messages;',
+        '}',
       ),
     },
     {
