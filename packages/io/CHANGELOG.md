@@ -23,9 +23,10 @@
   string/Promise (readable-driven), and throws `ERR_INVALID_ARG_TYPE` on an
   unknown shape (no silent coercion). `Readable.prototype.wrap(legacyStream)`
   adapts a streams1 `'data'`/`'end'` source with `pause()`/`resume()`
-  backpressure and returns the Readable. All return an `instanceof Duplex`;
-  Node's internal `Duplexify` class NAME is deliberately NOT replicated (out of
-  scope). All parity-proven vs real Node v24.
+  backpressure and returns the receiving Readable. `compose` and `Duplex.from`
+  return an `instanceof Duplex`; Node's internal `Duplexify` class NAME is
+  deliberately NOT replicated (out of scope). Iterable source ownership and
+  writable-disabled parity remain `runtime-js/duplex-from-source-ownership`.
 
 - **`Readable.prototype` async-iterator helpers** (v17→v22) —
   `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/
@@ -52,15 +53,15 @@
   `w.end` + await `'finish'`; `abort(reason)` → `w.destroy(reason)`; `w` erroring
   rejects the writer's `closed`. `Writable.fromWeb(ws)`: `_write` pumps to a held
   web writer (its promise is the backpressure), `_final` → `writer.close`,
-  `destroy(reason)` → sink `abort(reason)` (same error object); a web-side
-  `controller.error(err)` destroys the Node writable (emits `'error'(err)`,
-  `destroyed`). `Duplex.toWeb(d)` → `{ readable, writable }` (reusing both
+  `destroy(reason)` → sink abort; a web-side `controller.error(err)` destroys
+  the Node writable. `Duplex.toWeb(d)` → `{ readable, writable }` (reusing both
   `toWeb`s); `Duplex.fromWeb(pair)` composes them into one `Duplex`. `Duplex`
   now carries `allowHalfOpen` (default `true` for a bare Duplex, Node parity):
   with `false`, the readable side ending auto-ends the writable side —
   `Duplex.fromWeb` deliberately defaults it to `false` (the OPPOSITE), honoring
   `{ allowHalfOpen: true }`. Non-WHATWG args throw a synchronous `TypeError`
-  (`ERR_INVALID_ARG_TYPE`). All parity-proven vs real Node v24.
+  (`ERR_INVALID_ARG_TYPE`). Terminal reason/order/locks/signal remain
+  `runtime-js/web-stream-adapter-terminal-lifecycle`.
 
 - **`Writable` `cork()` / `uncork()` + real `_writev` batching.** `cork()` defers
   buffered writes (no `_write`/`_writev` while corked); `uncork()` flushes them —
@@ -86,11 +87,10 @@
   single module-level source of truth (65536 bytes / 16 objects, matching current
   Node; the ctors' hardcoded `?? 16*1024` is gone) read by the Readable/Writable
   constructors when no explicit `highWaterMark` is passed (an explicit option
-  still wins). `addAbortSignal(signal, stream)` (Node v15.4) is now a standalone
-  export, extracted from `Readable.fromWeb`'s inline abort wiring (which reuses
-  it): aborting destroys the stream with an `AbortError` (`code:'ABORT_ERR'`),
-  and an already-aborted signal destroys immediately. All parity-proven vs real
-  Node.
+  still wins). `addAbortSignal(signal, stream)` (Node v15.4) is a standalone
+  export: aborting destroys with `AbortError` (`code:'ABORT_ERR'`), and a
+  pre-aborted signal destroys immediately. Raw `signal.reason` in `cause`
+  remains `runtime-js/add-abort-signal-reason-identity`.
 
 - **`Readable.toWeb(r)`** (Node v17) — converts a Node `Readable` into a real
   WHATWG `ReadableStream`. Pull-driven (NOT buffer-the-whole-stream): the
@@ -305,20 +305,11 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
   registry through `@riftydev/io` (forward-only). See ADR-0035 for the
   rationale and alternatives.
 
-- `Readable.from(iterable, options?)` now accepts a second
-  `ReadableOptions` argument and detects byte vs object mode from the first
-  chunk when `options.objectMode` is not supplied: an iterable of
-  `Buffer`/`Uint8Array`/`string` chunks yields a byte-mode stream, an
-  iterable of objects (or an async iterable, which we can't peek
-  synchronously) yields an object-mode stream. Explicit `options.objectMode`
-  always wins. `highWaterMark` and `encoding` are forwarded. Non-iterable
-  input now throws `TypeError` synchronously (Node contract: bad input
-  surfaces before any state is created). Both sync and async iterables are
-  accepted via separate code paths (no implicit cast). New unit suite
-  `readable.from.test.ts` plus parity case `stream/readable-from-options.case.ts`.
-  Note: Node always defaults `objectMode` to `true` regardless of element
-  type; rifty's detection diverges intentionally per the 2026-05-26 streams
-  review — explicit `options.objectMode` is the cross-runtime portable path.
+- `Readable.from(iterable, options?)` accepts `ReadableOptions`, forwards
+  HWM/encoding/objectMode, and rejects non-iterables synchronously. The current
+  runtime still infers mode from the first sync entry. ADR-0238 rejects that
+  inference; `runtime-js/readable-from-source-defaults` owns its replacement.
+  Explicit `objectMode` remains the portable path until that item lands.
 
 - `Readable.unpipe(dest?)` — detach a single `pipe(dest)` wiring or all of
   them. Mirrors Node's `Readable.prototype.unpipe`. `pipe(dest)` now also

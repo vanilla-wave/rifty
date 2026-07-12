@@ -12,13 +12,13 @@
  *       * `n === 0` — peek; schedules `_read`, returns `null`.
  *       * `n` bytes available — slice and return exactly that many bytes
  *         (Buffers in byte mode, single entries in object mode).
- *       * `n` bytes NOT available — schedule `_read(min(hwm, n))`; if the
+ *       * `n` bytes NOT available — schedule `_read(n)`; if the
  *         synchronous `_read` enqueues enough during the call, return; else
  *         return `null` and schedule a re-pump for the consumer's next call.
  *       * `n === undefined` — return everything currently buffered as one chunk
  *         (Buffer.concat in byte mode, single entry in object mode).
  *   - `pipe(dest)` returns dest; respects backpressure via `pause/resume`.
- *   - `Readable.from(iter)` creates an object-mode stream from any iterable.
+ *   - `Readable.from(iter)` adapts any iterable; its default-mode gap is explicit below.
  *   - `destroy(err?)` — marks destroyed, emits `error` (if err) then `close`.
  */
 
@@ -479,6 +479,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   push(chunk: unknown): boolean {
+    // TODO(backlog: runtime-js/readable-read-hook-and-chunk-admission)
     const state = this._readableState;
     if (chunk === null) {
       state.ended = true;
@@ -545,6 +546,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
       return this.applyEncoding(all);
     }
+    // TODO(backlog: runtime-js/readable-sized-read-hwm-growth)
     // Object mode: `n` is meaningless past 1; return one entry.
     if (state.objectMode) {
       if (state.length === 0) {
@@ -1171,7 +1173,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   /**
    * Create a `Readable` from any sync or async iterable.
    *
-   * Mode detection (when `options.objectMode` is NOT supplied):
+   * Current rifty mode detection (known Node divergence when `objectMode` is absent):
    *   - first chunk is a `string`, `Uint8Array`, or `Buffer` → byte mode
    *     (`objectMode: false`);
    *   - otherwise → object mode.
@@ -1180,10 +1182,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    *
    * Non-iterable inputs throw `TypeError` synchronously (Node's contract).
    *
-   * @param iter Any `Iterable` or `AsyncIterable`. A bare `string` qualifies
-   *   (it iterates char-by-char) and `Buffer`/`Uint8Array` also qualify
-   *   (they iterate byte-by-byte). Whether you want chars-as-chunks or
-   *   bytes-as-chunks is up to you — pass the iterable shape you want.
+   * @param iter Any `Iterable` or `AsyncIterable`. Rifty currently follows the
+   *   iterable's string/byte entries; ADR-0238 replaces this with Node defaults.
    * @param options Optional `ReadableOptions`. `highWaterMark` and
    *   `objectMode` are honoured; other fields are forwarded.
    */
@@ -1191,12 +1191,14 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     iter: Iterable<unknown> | AsyncIterable<unknown>,
     options: ReadableOptions = {},
   ): Readable {
+    // TODO(backlog: runtime-js/readable-from-source-defaults)
     // Surface bad input as Node does: TypeError before any state is created.
     if (iter == null || (typeof iter !== 'object' && typeof iter !== 'string')) {
       throw new TypeError(
         `Readable.from: the "iterable" argument must be iterable. Received type ${typeof iter}`,
       );
     }
+    // TODO(backlog: runtime-js/readable-from-iterator-lifecycle)
     const sym = (iter as { [Symbol.iterator]?: unknown })[Symbol.iterator];
     const asyncSym = (iter as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator];
     if (typeof sym !== 'function' && typeof asyncSym !== 'function') {
@@ -1284,9 +1286,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    *
    * The reader pump preserves each web-stream chunk boundary and stops reading
    * when `push()` reports backpressure, resuming only after the Node-readable
-   * buffer has drained below its high-water mark.
+   * buffer has drained below its high-water mark. Exact terminal reason/order,
+   * locks, settlement, and signal behavior remain tracked separately.
    */
   static fromWeb(stream: ReadableStream<unknown>, options: ReadableFromWebOptions = {}): Readable {
+    // TODO(backlog: runtime-js/web-stream-adapter-terminal-lifecycle)
     if (!stream || typeof (stream as { getReader?: unknown }).getReader !== 'function') {
       throw new TypeError(
         'Readable.fromWeb: the "readableStream" argument must be a ReadableStream',
@@ -1405,13 +1409,15 @@ interface AbortableStream {
 /**
  * `stream.addAbortSignal(signal, stream)` (Node v15.4) — destroy `stream` with
  * an `AbortError` (`code:'ABORT_ERR'`) when `signal` aborts; an already-aborted
- * signal destroys synchronously, matching Node's immediate branch.
+ * signal destroys synchronously. Rifty currently omits Node's raw reason in
+ * `error.cause`.
  * Returns `stream`. The abort listener is detached when the stream finishes
  * (`'close'` or `'end'`) so it does not leak.
  *
  * Extracted from `Readable.fromWeb`'s inline abort wiring (which now reuses it).
  */
 export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, stream: T): T {
+  // TODO(backlog: runtime-js/add-abort-signal-reason-identity)
   if (signal.aborted) {
     stream.destroy(abortError());
     return stream;

@@ -217,8 +217,9 @@ export class Duplex extends Readable {
    * Compose a Node `Duplex` over a WHATWG `{ readable, writable }` pair (Node's
    * `Duplex.fromWeb`, v17). The Duplex's readable side is fed by reading the web
    * `readable`; its writable side pumps into the web `writable`'s writer (with
-   * backpressure via the write callback), `_final` → `writer.close`,
-   * `destroy(reason)` → `writer.abort` + reader cancel.
+   * backpressure via the write callback), `_final` → `writer.close`. Terminal
+   * reason/order, one-sided teardown, settlement, locks, and signal behavior
+   * remain tracked separately.
    *
    * Defaults `allowHalfOpen` to `false` — deliberately the OPPOSITE of a bare
    * `new Duplex()` (Node parity); `{ allowHalfOpen: true }` is honored. A
@@ -235,6 +236,7 @@ export class Duplex extends Readable {
       | ReadableStream<unknown>,
     options: DuplexOptions = {},
   ): Duplex {
+    // TODO(backlog: runtime-js/web-stream-adapter-terminal-lifecycle)
     const candidate = pair as {
       readable?: { getReader?: unknown };
       writable?: { getWriter?: unknown };
@@ -314,12 +316,12 @@ export class Duplex extends Readable {
    *   - a function `(source) => asyncIterable` (e.g. an async generator) → a
    *     Duplex whose written chunks become `source`, the body's yields the read
    *     side (the "duplexify a body" shape `compose` also uses);
-   *   - any iterable / async-iterable / string / Promise → a read-only-driven
-   *     Duplex whose readable side is `Readable.from(src)` and whose writable
-   *     side discards (Node accepts these as a readable source).
+   *   - any iterable / async-iterable / string / Promise → a readable-driven
+   *     Duplex over `Readable.from(src)`. The current intermediate bridge and
+   *     discard-writable divergence are explicit in the source-ownership backlog.
    *
    * Returns an `instanceof Duplex` (Node's internal `Duplexify` class NAME is
-   * deliberately NOT replicated — out of scope). Verified vs real Node v24.
+   * deliberately NOT replicated — out of scope).
    */
   static override from(src: unknown, options: DuplexOptions = {}): Duplex {
     // `{ readable, writable }` pair (Node stream halves, not WHATWG).
@@ -505,6 +507,7 @@ function duplexFromReadableSource(
   src: Iterable<unknown> | AsyncIterable<unknown> | Promise<unknown> | string,
   options: DuplexOptions,
 ): Duplex {
+  // TODO(backlog: runtime-js/duplex-from-source-ownership)
   // A Promise resolves to a single value; an iterable/string streams its items.
   const iterable: Iterable<unknown> | AsyncIterable<unknown> =
     typeof (src as { then?: unknown }).then === 'function'
@@ -523,8 +526,8 @@ function duplexFromReadable(readable: Readable, options: DuplexOptions): Duplex 
       /* push-driven from the readable pump below */
     },
     write(_chunk, _encoding, cb): void {
-      // No writable destination — discard (Node's `Duplex.from(iterable)` has a
-      // no-op writable side). Reporting success keeps `write()` truthy.
+      // Current rifty divergence: no destination is represented by a
+      // success-discarding hook; Node returns a write-disabled Duplex.
       cb();
     },
   });
