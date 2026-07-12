@@ -9,10 +9,9 @@ import diagnosticsChannelModule from './diagnostics_channel.ts';
 /**
  * Registry of Node-compatible built-ins for our module loader.
  *
- * Each factory returns the CJS-shape `module.exports`. ESM imports go through
- * `wrapCjsAsEsmNamespace` in the loader, which adds `default` and named
- * bindings, so the same factory output works for both `require('node:path')`
- * and `import path from 'node:path'`.
+ * Each factory returns the CJS-shape `module.exports`. The loader materialises
+ * one record-owned ESM namespace, so the same output works for both
+ * `require('node:path')` and `import path from 'node:path'`.
  *
  * The registry implementation lives in `@riftydev/io/builtin-registry.ts`
  * (ADR-0035). This barrel re-exports its public surface so internal

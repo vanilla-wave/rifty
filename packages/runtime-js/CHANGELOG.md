@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **CJS imports now share one cached import job and record-owned
+  namespace.** `default`/`module.exports` preserve the exact outer, named
+  values snapshot once, require/import order and in-flight self-imports converge
+  on the final exports, failures stay cached only for import, and coherent
+  invalidation starts a new generation.
+
 - **PR #115 root-cause round (2026-07-06), class kills over point fixes:**
   - `open(2)` flag×target error lattice pinned WHOLE against real Node
     (parity `fs/open-flag-target-matrix`): `O_CREAT|O_DIRECTORY` is `EINVAL`

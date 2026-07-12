@@ -28,7 +28,7 @@ A Vite 7.3.6 project has `vite.config.ts` importing `./config-helper.ts`; the ap
 - Context prebundle JS + parseable map exist in guest VFS before user `onEnd`; a file-as-outdir path matches native rejection and creates no output marker.
 - Every named gap validates first, then throws only for an otherwise-valid unsupported success path.
 - Required Chromium proof uses exact Vite 7.3.6, real wasm, Vite Worker, and owner-backed VFS: optimize writes `picocolors`; build writes the config-helper marker.
-- Proof: `tools/shadow-registry/src/esbuild-contract-*.test.ts`, `packages/runtime-js/src/module-loader/cjs-interop-contract-red.test.ts`, `apps/playground/src/workers/vite-cli-prep.test.ts`, `tests/browser-unit/esbuild-vite-contract-red.spec.ts`.
+- Proof: `tools/shadow-registry/src/esbuild-contract-*.test.ts`, `packages/runtime-js/src/module-loader/cjs-interop.test.ts`, `apps/playground/src/workers/vite-cli-prep.test.ts`, `tests/browser-unit/esbuild-vite-contract-red.spec.ts`.
 
 ## Reference contract
 

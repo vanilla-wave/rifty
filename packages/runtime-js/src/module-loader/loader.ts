@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
@@ -7,8 +8,8 @@ import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
-import { wrapCjsAsEsmNamespace } from './interop.ts';
-import { ModuleRegistry } from './registry.ts';
+import { cjsNamespaceFor } from './interop.ts';
+import { type ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
@@ -55,8 +56,8 @@ export interface ModuleLoader {
   /** Direct id-based loader (used by REPL and tests). */
   loadById(id: string, esm?: boolean): Promise<Record<string, unknown>>;
   /**
-   * The coherent invalidation seam. Drops the module record AND the id-keyed
-   * transform/AST caches AND the resolver caches in lockstep, so a re-load
+   * The coherent invalidation seam. Drops the module record, CJS import job,
+   * id-keyed transform/AST caches, and resolver caches in lockstep, so a reload
    * re-resolves + re-transforms cleanly. No `id` wipes everything (the
    * `load-fixture` hot path uses this so loader + resolver survive editor saves);
    * an absolute `id` removes only that entry — the hook for HMR / per-file
@@ -67,9 +68,9 @@ export interface ModuleLoader {
   invalidate(id?: string): void;
   /**
    * WARNING: do NOT call `registry.invalidate(id)` for HMR — it drops only the
-   * executed-module record, leaving transform/AST/resolver caches stale. Use
-   * {@link ModuleLoader.invalidate} instead. Exposed for read access (e.g. tests
-   * inspecting cached records).
+   * execution record, leaving import-job/transform/AST/resolver caches stale.
+   * Use {@link ModuleLoader.invalidate} instead. Exposed for read access (e.g.
+   * tests inspecting cached records).
    */
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
@@ -89,10 +90,21 @@ type LoaderRequire = ((specifier: string) => unknown) & {
   main: undefined;
 };
 
+type CjsImportJob =
+  | {
+      readonly kind: 'module';
+      readonly promise: Promise<Record<string, unknown>>;
+    }
+  | {
+      readonly kind: 'builtin';
+      readonly outer: Record<string, unknown>;
+      readonly promise: Promise<Record<string, unknown>>;
+    };
+
 /**
  * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by sync
  * and async paths; deliberately returns raw CJS-shaped exports — the async path
- * wraps via {@link wrapCjsAsEsmNamespace} at the call site.
+ * materialises the record-owned namespace at the call site.
  */
 function loadBuiltinOrThrow(id: string): Record<string, unknown> {
   const builtin = loadBuiltin(id);
@@ -108,6 +120,11 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   });
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
+  // Node keeps CJS execution records (`require.cache`) and ESM ModuleJobs as
+  // separate state. This job cache owns import concurrency + cached rejection;
+  // the final namespace itself stays on the execution record. Exactly one job
+  // exists per id until coherent invalidation.
+  const cjsImportJobs = new Map<string, CjsImportJob>();
 
   // Strip cache: WASI esbuild is a full process spawn per module, so re-stripping
   // byte-identical `.ts` across repeated loads is wasted work. Keep the cache
@@ -143,6 +160,96 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     return out;
   };
 
+  function executeCjsImport(resolved: ResolvedModule): Record<string, unknown> {
+    executeCjs(resolved, { ...deps });
+    const record = registry.get(resolved.id);
+    if (!record || record.state !== 'loaded' || record.kind === 'esm') {
+      throw new Error(`CJS import did not produce a loaded record: ${resolved.id}`);
+    }
+    return cjsNamespaceFor(record);
+  }
+
+  function importCjs(resolved: ResolvedModule): Promise<Record<string, unknown>> {
+    const cachedJob = cjsImportJobs.get(resolved.id);
+    if (cachedJob) return cachedJob.promise;
+
+    const captured = registry.get(resolved.id);
+    let resolveJob!: (namespace: Record<string, unknown>) => void;
+    let rejectJob!: (error: unknown) => void;
+    const promise = new Promise<Record<string, unknown>>((resolve, reject) => {
+      resolveJob = resolve;
+      rejectJob = reject;
+    });
+    cjsImportJobs.set(resolved.id, { kind: 'module', promise });
+
+    const settle = (): void => {
+      try {
+        resolveJob(executeCjsImport(resolved));
+      } catch (error) {
+        rejectJob(error);
+      }
+    };
+
+    if (captured?.state === 'loading' && captured.kind !== 'esm') {
+      // require() is synchronous. One checkpoint lets that exact generation
+      // finish; no polling/spin. Success publishes that record; failure never
+      // re-executes or crosses into a later generation.
+      void Promise.resolve().then(() => {
+        try {
+          if (captured.state === 'loaded') {
+            resolveJob(cjsNamespaceFor(captured));
+            return;
+          }
+          if (captured.state === 'errored') {
+            const currentJob = cjsImportJobs.get(resolved.id);
+            if (currentJob?.promise !== promise) {
+              rejectJob(
+                captured.error ??
+                  new Error(`Invalidated CJS generation failed without an error: ${resolved.id}`),
+              );
+              return;
+            }
+            // TODO(backlog: runtime-js/require-cache-module-record-surface):
+            // Node 24's file translator rejects a self-import from a failed
+            // require with an internal assertion. Never retry the source or
+            // attach this job to a later require generation.
+            rejectJob(new NotImplementedError('module-loader.cjs-import-job-failed-require'));
+            return;
+          }
+          rejectJob(new Error(`CJS record remained loading after evaluation: ${resolved.id}`));
+        } catch (error) {
+          rejectJob(error);
+        }
+      });
+      return promise;
+    }
+
+    settle();
+    return promise;
+  }
+
+  function builtinRecord(id: string, outer: Record<string, unknown>): ModuleRecord {
+    const cached = registry.get(id);
+    if (cached?.kind === 'builtin' && cached.state === 'loaded' && cached.exports === outer) {
+      return cached;
+    }
+    if (cached) registry.invalidate(id);
+    const record = registry.getOrCreate(id, 'builtin');
+    record.exports = outer;
+    record.state = 'loaded';
+    return record;
+  }
+
+  function importBuiltin(id: string): Promise<Record<string, unknown>> {
+    const outer = loadBuiltinOrThrow(id);
+    const cached = cjsImportJobs.get(id);
+    if (cached?.kind === 'builtin' && cached.outer === outer) return cached.promise;
+
+    const promise = Promise.resolve(cjsNamespaceFor(builtinRecord(id, outer)));
+    cjsImportJobs.set(id, { kind: 'builtin', outer, promise });
+    return promise;
+  }
+
   const deps = {
     registry,
     resolver,
@@ -176,11 +283,12 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
-        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(id));
+        return importBuiltin(id);
       }
+      const job = cjsImportJobs.get(id);
+      if (job) return job.promise;
       const cached = registry.get(id);
-      if (cached && cached.state === 'loaded') return cached.exports;
-      if (cached && cached.state === 'loading') {
+      if (cached?.kind === 'esm' && (cached.state === 'loaded' || cached.state === 'loading')) {
         return cached.exports;
       }
       // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
@@ -196,23 +304,16 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       // (the preload carries the resolved `{kind:'builtin'}` record). Mirror the
       // id-path's `node:` short-circuit — builtins have no source to execute.
       if (resolved.kind === 'builtin') {
-        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(resolved.id));
-      }
-      const cached = registry.get(resolved.id);
-      if (cached && cached.state === 'loaded') return cached.exports;
-      if (cached && cached.state === 'loading') {
-        return cached.exports;
+        return importBuiltin(resolved.id);
       }
       if (resolved.kind === 'esm') {
+        const cached = registry.get(resolved.id);
+        if (cached && (cached.state === 'loaded' || cached.state === 'loading')) {
+          return cached.exports;
+        }
         return executeEsm(resolved, { ...deps });
       }
-      if (resolved.kind === 'json') {
-        const cjsExports = executeCjs(resolved, { ...deps });
-        return wrapCjsAsEsmNamespace(cjsExports);
-      }
-      // CJS imported from ESM — wrap exports as an ESM-shaped namespace.
-      const cjsExports = executeCjs(resolved, { ...deps });
-      return wrapCjsAsEsmNamespace(cjsExports);
+      return importCjs(resolved);
     },
   };
 
@@ -240,6 +341,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     }) as LoaderRequire;
     req.resolve = (specifier: string): string =>
       resolver.resolve(specifier, { fromFile: from, esm: false }).id;
+    // TODO(backlog: runtime-js/require-cache-module-record-surface): this is
+    // intentionally not claimed as Node-compatible until backed by registry.
     req.cache = Object.create(null) as Record<string, unknown>;
     req.extensions = Object.create(null) as Record<string, never>;
     req.main = undefined;
@@ -283,16 +386,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     invalidate(id) {
       registry.invalidate(id);
-      // Keep the strip cache + ESM AST cache coherent with the executed-module
-      // cache, dropping them in lockstep.
+      // Keep derived caches + future import-job lookup coherent with records.
+      // Already-returned job promises retain their captured generation.
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();
         sourceMaps.clear();
+        cjsImportJobs.clear();
       } else {
         transformCache.delete(id);
         esmAstCache.delete(id);
         sourceMaps.delete(id);
+        cjsImportJobs.delete(id);
       }
       // Resolver caches (package.json parses #5 + resolution memo #15) are
       // input-keyed and cannot be pruned by module id, so ANY invalidate —

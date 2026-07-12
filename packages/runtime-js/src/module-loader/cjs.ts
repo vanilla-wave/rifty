@@ -5,7 +5,7 @@ import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
-import type { ModuleRegistry } from './registry.ts';
+import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
@@ -1757,17 +1757,28 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
 
   const { registry } = deps;
-  const existing = registry.get(resolved.id);
+  let existing = registry.get(resolved.id);
   if (existing && existing.state === 'loaded') return existing.exports;
   // Cycle: re-entry mid-execution — hand back the half-populated exports so
   // the cyclic dep sees what's been set so far.
   if (existing && existing.state === 'loading') {
     return existing.cjsModule?.exports ?? existing.exports;
   }
-  const record = existing ?? registry.getOrCreate(resolved.id, 'cjs');
+  // Node removes a failed CJS evaluation from require.cache. Import jobs may
+  // still retain their own rejected outcome, but a later require gets a fresh
+  // execution record.
+  if (existing?.state === 'errored') {
+    registry.invalidate(resolved.id);
+    existing = undefined;
+  }
+  const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
 
   if (resolved.kind === 'json') {
-    record.exports = JSON.parse(resolved.source) as Record<string, unknown>;
+    try {
+      record.exports = JSON.parse(resolved.source) as Record<string, unknown>;
+    } catch (error) {
+      failCjsRecord(registry, record, error);
+    }
     record.cjsModule = { exports: record.exports };
     record.state = 'loaded';
     return record.exports;
@@ -1776,7 +1787,7 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   if (resolved.kind === 'text') {
     // Text-asset import (ADR-0067): the module value IS the raw file contents.
     // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
-    // routes here, then `wrapCjsAsEsmNamespace` maps the non-object export to
+    // routes here, then `cjsNamespaceFor` maps the non-object export to
     // `default`.
     record.exports = resolved.source as unknown as Record<string, unknown>;
     record.cjsModule = { exports: record.exports };
@@ -1802,6 +1813,8 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     }
     return deps.loadSync(dep.id);
   };
+  // TODO(backlog: runtime-js/require-cache-module-record-surface): expose the
+  // same ModuleRegistry-backed cache through CJS-local and createRequire views.
   require.resolve = (specifier: string): string => deps.resolve(specifier, resolved.id, false).id;
 
   const __filename = resolved.id;
@@ -1825,44 +1838,43 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     __riftyDynamicImport: (s: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
   ) => void;
-  let fn: CjsFactory;
-  const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
-  const dynamicImportHelperName = uniqueHelperName(resolved.source, '__riftyDynamicImport');
-  const functionHelperName = uniqueHelperName(
-    resolved.source,
-    '__riftyFunction',
-    new Set([dynamicImportHelperName]),
-  );
-  const source = rewriteCjsFunctionConstructorReferences(
-    rewriteDynamicImports(resolved.source, resolved.id, dynamicImportHelperName),
-    resolved.id,
-    functionHelperName,
-  );
   try {
-    fn = new Function(
-      'module',
-      'exports',
-      'require',
-      '__filename',
-      '__dirname',
-      dynamicImportHelperName,
-      functionHelperName,
-      `${source}\n//# sourceURL=${resolved.id}`,
-    ) as CjsFactory;
-  } catch (err) {
-    // `new Function` SyntaxError has no file context — surface a directed error
-    // naming the module and offending line (mirrors the ESM path in esm.ts).
-    record.state = 'errored';
-    const msg = (err as Error).message ?? String(err);
-    throw new ModuleLoadError(
-      'SYNTAX_ERROR',
-      resolved.id,
-      `Failed to compile CJS module ${resolved.id}: ${msg}${snippetForSource(resolved.source, (err as Error).stack ?? '')}`,
-      resolved.id,
+    const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
+    const dynamicImportHelperName = uniqueHelperName(resolved.source, '__riftyDynamicImport');
+    const functionHelperName = uniqueHelperName(
+      resolved.source,
+      '__riftyFunction',
+      new Set([dynamicImportHelperName]),
     );
-  }
+    const source = rewriteCjsFunctionConstructorReferences(
+      rewriteDynamicImports(resolved.source, resolved.id, dynamicImportHelperName),
+      resolved.id,
+      functionHelperName,
+    );
+    let fn: CjsFactory;
+    try {
+      fn = new Function(
+        'module',
+        'exports',
+        'require',
+        '__filename',
+        '__dirname',
+        dynamicImportHelperName,
+        functionHelperName,
+        `${source}\n//# sourceURL=${resolved.id}`,
+      ) as CjsFactory;
+    } catch (error) {
+      // `new Function` SyntaxError has no file context — surface a directed
+      // error naming the module (mirrors the ESM path in esm.ts).
+      const message = (error as Error).message ?? String(error);
+      throw new ModuleLoadError(
+        'SYNTAX_ERROR',
+        resolved.id,
+        `Failed to compile CJS module ${resolved.id}: ${message}${snippetForSource(resolved.source, (error as Error).stack ?? '')}`,
+        resolved.id,
+      );
+    }
 
-  try {
     fn.call(
       moduleObject.exports,
       moduleObject,
@@ -1873,15 +1885,21 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
       dynamicImport,
       routedConstructors.Function,
     );
-  } catch (err) {
-    record.state = 'errored';
-    throw err;
+  } catch (error) {
+    failCjsRecord(registry, record, error);
   }
 
   // Exports may have been reassigned (`module.exports = ...`); re-point.
   record.exports = moduleObject.exports;
   record.state = 'loaded';
   return moduleObject.exports;
+}
+
+function failCjsRecord(registry: ModuleRegistry, record: ModuleRecord, error: unknown): never {
+  record.state = 'errored';
+  record.error = error;
+  if (registry.get(record.id) === record) registry.invalidate(record.id);
+  throw error;
 }
 
 function toDynamicImportSpecifier(specifier: unknown): string {
