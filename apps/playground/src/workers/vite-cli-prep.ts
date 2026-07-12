@@ -41,7 +41,7 @@ const VITE_CLI_PREVIEW_PATCH = `configFile: false,
 			}`;
 const VITE_CLI_PREVIEW_PATCH_MARKER = 'configFile: false,';
 
-export type ViteCliMode = 'dev' | 'build' | 'preview' | 'run';
+export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 
 export interface ViteCliPrepareOptions {
   /** Force `server.hmr: false` — Vite 8 keeps HMR off pending Rolldown socket parity (ADR-0161). */
@@ -59,7 +59,11 @@ declare global {
 // node-entry-bootstrap threads proc.env through these (moved here for node
 // testability — the bootstrap is a worker-only entry).
 export function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
-  return value === 'dev' || value === 'build' || value === 'preview' || value === 'run'
+  return value === 'dev' ||
+    value === 'build' ||
+    value === 'preview' ||
+    value === 'optimize' ||
+    value === 'info'
     ? value
     : null;
 }
@@ -270,7 +274,7 @@ const VITE_DEV_COMMAND: ViteCliCommand = {
 const VITE_CLI_COMMANDS: readonly ViteCliCommand[] = [
   VITE_DEV_COMMAND,
   { names: ['build'], mode: 'build', booleans: ['--emptyOutDir', '-w', '--watch', '--app'] },
-  { names: ['optimize'], mode: 'run', booleans: ['--force'] },
+  { names: ['optimize'], mode: 'optimize', booleans: ['--force'] },
   { names: ['preview'], mode: 'preview', booleans: ['--strictPort'] },
 ];
 
@@ -338,16 +342,21 @@ function parseViteCliArgs(args: readonly string[]): ViteCliParse {
       break;
     }
   }
+  const namedCommandMatched = matched !== null;
   matched ??= {
     cmd: VITE_DEV_COMMAND,
     tokens: scanViteCliArgs(args, viteCliGrammar(VITE_DEV_COMMAND)),
   };
-  const helpOrVersion = matched.tokens.some(
-    (t) =>
-      t.kind === 'flag' &&
-      (t.flag === '--help' || t.flag === '-h' || t.flag === '--version' || t.flag === '-v'),
+  const hasHelp = matched.tokens.some(
+    (t) => t.kind === 'flag' && (t.flag === '--help' || t.flag === '-h'),
   );
-  return { mode: helpOrVersion ? 'run' : matched.cmd.mode, tokens: matched.tokens };
+  const hasVersion = matched.tokens.some(
+    (t) => t.kind === 'flag' && (t.flag === '--version' || t.flag === '-v'),
+  );
+  return {
+    mode: hasHelp || (hasVersion && !namedCommandMatched) ? 'info' : matched.cmd.mode,
+    tokens: matched.tokens,
+  };
 }
 
 export function viteCliMode(args: readonly string[]): ViteCliMode {

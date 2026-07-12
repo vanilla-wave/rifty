@@ -553,7 +553,7 @@ describe('viteCliMode — CAC command matching (every case probed on REAL vite 7
     }
   }
   for (const { args, expected } of contractRedCases) {
-    it.fails(`routes ${JSON.stringify(args)} as ${expected}`, () => {
+    it(`routes ${JSON.stringify(args)} as ${expected}`, () => {
       assertMode(args, expected);
     });
   }
