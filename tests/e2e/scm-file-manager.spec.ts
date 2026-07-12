@@ -87,6 +87,28 @@ async function openExplorerContextMenu(
   await expect(page.locator('.rf-rowmenu')).toBeVisible({ timeout: 10_000 });
 }
 
+async function openExplorerContextMenuAt(
+  page: Page,
+  name: string,
+  kind: 'file' | 'dir',
+  point: { readonly x: number; readonly y: number },
+): Promise<void> {
+  const row = explorerRow(page, name, kind);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.evaluate((element, anchor) => {
+    element.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: anchor.x,
+        clientY: anchor.y,
+      }),
+    );
+  }, point);
+  await expect(page.getByRole('menu')).toBeVisible({ timeout: 10_000 });
+}
+
 async function createExplorerEntry(
   page: Page,
   parent: string,
@@ -156,6 +178,120 @@ async function setOpenEditorValue(page: Page, path: string, text: string): Promi
 }
 
 test.describe('GIT file manager', () => {
+  test('File Explorer context menu retains viewport placement in the real App', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
+    test.setTimeout(180_000);
+
+    await bootScmFileManager(page);
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error('viewport is required');
+
+    await openExplorerContextMenuAt(page, 'README.md', 'file', {
+      x: viewport.width - 4,
+      y: viewport.height - 4,
+    });
+    const menu = page.getByRole('menu');
+    await expect(menu).toHaveCSS('position', 'fixed');
+    const menuBox = await menu.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+    });
+    expect(menuBox.left).toBeGreaterThanOrEqual(4);
+    expect(menuBox.top).toBeGreaterThanOrEqual(4);
+    expect(menuBox.right).toBe(viewport.width - 4);
+    expect(menuBox.bottom).toBe(viewport.height - 4);
+
+    const download = page.getByRole('menuitem', { name: 'Download' });
+    const ownsHitTarget = await download.evaluate((item) => {
+      const box = item.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return hit !== null && (hit === item || item.contains(hit));
+    });
+    expect(ownsHitTarget).toBe(true);
+    const downloadPromise = page.waitForEvent('download');
+    await download.click();
+    expect((await downloadPromise).suggestedFilename()).toBe('README.md');
+
+    await openExplorerContextMenuAt(page, 'README.md', 'file', { x: 100, y: 100 });
+    const reopenedBox = await page.getByRole('menu').boundingBox();
+    expect(reopenedBox?.x).toBe(100);
+    expect(reopenedBox?.y).toBe(100);
+    await page.setViewportSize({ width: viewport.width, height: 240 });
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    const shortViewport = page.viewportSize();
+    if (!shortViewport) throw new Error('short viewport is required');
+    await openExplorerContextMenuAt(page, 'README.md', 'file', {
+      x: shortViewport.width - 4,
+      y: shortViewport.height - 4,
+    });
+    const shortMenu = page.getByRole('menu');
+    const shortGeometry = await shortMenu.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      };
+    });
+    expect(shortGeometry.top).toBe(4);
+    expect(shortGeometry.bottom).toBe(shortViewport.height - 4);
+    expect(shortGeometry.scrollHeight).toBeGreaterThan(shortGeometry.clientHeight);
+    const shortDownloadPromise = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Download' }).click();
+    expect((await shortDownloadPromise).suggestedFilename()).toBe('README.md');
+  });
+
+  test('Projects row menu retains card placement in the real App', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
+    test.setTimeout(180_000);
+
+    await bootScmFileManager(page);
+    const projectName = `Menu placement ${Date.now().toString(36)}`;
+    const projectId = await saveScratchAs(page, projectName);
+    await openProjects(page);
+    const card = page.locator(`[data-project="${projectId}"]`);
+    await card.getByRole('button', { name: 'Project actions' }).click();
+    const projectMenu = card.locator('.rf-rowmenu');
+    await expect(projectMenu).toBeVisible();
+    await expect(projectMenu).toHaveCSS('position', 'absolute');
+    await projectMenu.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
+    const projectGeometry = await card.evaluate((element) => {
+      const menu = element.querySelector<HTMLElement>('.rf-rowmenu');
+      if (!menu) throw new Error('project row menu did not render');
+      const cardBox = element.getBoundingClientRect();
+      const menuBox = menu.getBoundingClientRect();
+      const cardStyle = getComputedStyle(element);
+      return {
+        cardTop: cardBox.top,
+        cardRight: cardBox.right,
+        cardBorderTop: Number.parseFloat(cardStyle.borderTopWidth),
+        cardBorderRight: Number.parseFloat(cardStyle.borderRightWidth),
+        menuTop: menuBox.top,
+        menuRight: menuBox.right,
+        menuWidth: menuBox.width,
+      };
+    });
+    expect(projectGeometry.menuTop).toBe(
+      projectGeometry.cardTop + projectGeometry.cardBorderTop + 40,
+    );
+    expect(projectGeometry.menuRight).toBe(
+      projectGeometry.cardRight - projectGeometry.cardBorderRight - 12,
+    );
+    expect(projectGeometry.menuWidth).toBe(200);
+    await projectMenu.getByRole('button', { name: 'Rename…' }).click();
+    await expect(page.getByRole('heading', { name: 'Rename project' })).toBeVisible();
+  });
+
   test('shows owner git decorations and opens a GIT diff from real owner content', async ({
     page,
     browserName,
