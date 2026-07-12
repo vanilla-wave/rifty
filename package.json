@@ -40,6 +40,8 @@
     "test:all": "pnpm test:run && pnpm test:parity && pnpm test:e2e",
     "bench": "node tools/perf/bench.mjs",
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
+    "artifacts:generate": "tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --write",
+    "check:install-artifact-drift": "tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --check",
     "check:compat-drift": "node tools/compat-matrix-generator/cli.js && git diff --exit-code -- docs/public/compat",
     "adr:new": "node tools/adr/new.mjs",
     "backlog:check": "node tools/backlog/check.mjs",

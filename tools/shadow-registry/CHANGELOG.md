@@ -32,6 +32,9 @@
 
 ### Added
 
+- A deterministic install-artifact identity hashes exact baked overrides,
+  internals-shim bytes, esbuild policy, and generated-runtime output identity;
+  the PR gate rejects a stale generated identity (ADR-0241).
 - A machine-readable esbuild 0.28.0 derivation policy and exact-text patch
   engine pin all ten ADR-0226 mutation sites. Missing, duplicate, overlapping,
   or reordered anchors fail before generation; the audit records input/output
