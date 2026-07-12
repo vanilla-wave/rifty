@@ -42,7 +42,12 @@ and writable `decodeStrings` accounting.
   `highWaterMark,decodeStrings,objectMode,signal`; Duplex
   `allowHalfOpen,objectMode,encoding,decodeStrings,highWaterMark,signal`. Hook
   getters are never read. Public option types exclude hooks and `signal`;
-  non-undefined runtime `signal` loud-throws its adapter feature key.
+  runtime signal staging follows ADR-0239.
+
+> Correction — 2026-07-12 (ADR-0239): the former "non-undefined runtime
+> signal" clause was wrong. Falsy signals are absent; invalid signals preserve
+> Node's post-acquisition errors; valid supported signals remain a pre-lock loud
+> gap.
 
 ## Consequences
 
