@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Buffer } from '../buffer.ts';
-import { Readable } from './readable.ts';
+import { Readable, type ReadableOptions } from './readable.ts';
 
-/**
- * Per the 2026-05-26 streams review (Tier 1 #5, follow-up to ADR-0034):
- * `Readable.from(iterable, options?)` must detect the first chunk type when
- * no `objectMode` is supplied — bytes/strings yield a byte-mode stream;
- * objects yield an object-mode stream. Explicit `options.objectMode` always
- * wins.
- */
+/** Node v24: `Readable.from` defaults every iterable to object mode. */
 describe('Readable.from(iter, options?)', () => {
   function drainObjectMode<T>(r: Readable): Promise<T[]> {
     return new Promise((resolve, reject) => {
@@ -19,29 +13,88 @@ describe('Readable.from(iter, options?)', () => {
     });
   }
 
-  it('detects byte mode from an iterable of Buffers', async () => {
-    const r = Readable.from([Buffer.from('a'), Buffer.from('b')]);
-    expect(r.readableObjectMode).toBe(false);
+  function settleFrom<T>(promise: Promise<T>, label: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`Readable.from never settled: ${label}`)), 250),
+      ),
+    ]);
+  }
+
+  it('defaults an iterable of Buffers to object mode and preserves entries', async () => {
+    const first = Buffer.from('a');
+    const second = Buffer.from('b');
+    const r = Readable.from([first, second]);
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(1);
     const out = await drainObjectMode<Buffer>(r);
-    expect(out).toHaveLength(2);
-    expect(out[0]).toBeInstanceOf(Uint8Array);
-    expect(Buffer.isBuffer(out[0])).toBe(true);
+    expect(out).toEqual([first, second]);
+    expect(out[0]).toBe(first);
+    expect(out[1]).toBe(second);
   });
 
   it('uses object mode for an iterable of plain objects', async () => {
     const r = Readable.from([{ a: 1 }, { a: 2 }]);
     expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(1);
     const out = await drainObjectMode<{ a: number }>(r);
     expect(out).toEqual([{ a: 1 }, { a: 2 }]);
   });
 
-  it('detects byte mode from a sync string iterable (chars)', async () => {
-    const r = Readable.from('hello');
-    expect(r.readableObjectMode).toBe(false);
+  it.each(['', 'hello', 'hé'])('treats bare string %j as one object-mode chunk', async (text) => {
+    const r = Readable.from(text);
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(16);
+    await expect(drainObjectMode<unknown>(r)).resolves.toEqual([text]);
+  });
+
+  it('treats a bare Buffer as one object-mode chunk by identity', async () => {
+    const input = Buffer.from('ab');
+    const r = Readable.from(input);
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(16);
     const out = await drainObjectMode<unknown>(r);
-    // Either each character pushed (as strings) or the queue ends up
-    // as a sequence of single-char strings — both byte-mode shapes.
-    expect(out).toEqual(['h', 'e', 'l', 'l', 'o']);
+    expect(out).toEqual([input]);
+    expect(out[0]).toBe(input);
+  });
+
+  it('treats a bare empty Buffer as one object-mode chunk by identity', async () => {
+    const input = Buffer.alloc(0);
+    const r = Readable.from(input);
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(16);
+    const out = await drainObjectMode<unknown>(r);
+    expect(out).toEqual([input]);
+    expect(out[0]).toBe(input);
+  });
+
+  it.each([
+    { label: 'false', objectMode: false },
+    { label: 'undefined', objectMode: undefined },
+    { label: 'null', objectMode: null },
+  ])('keeps a bare non-ASCII string atomic with objectMode=$label', async ({ objectMode }) => {
+    const r = Readable.from('hé', { objectMode } as unknown as ReadableOptions);
+    expect(r.readableObjectMode).toBe(false);
+    expect(r.readableHighWaterMark).toBe(65_536);
+    const out = await drainObjectMode<unknown>(r);
+    expect(out).toHaveLength(1);
+    expect(Buffer.isBuffer(out[0])).toBe(true);
+    expect(Buffer.from(out[0] as Uint8Array).toString('hex')).toBe('68c3a9');
+  });
+
+  it.each([
+    { label: 'false', objectMode: false },
+    { label: 'undefined', objectMode: undefined },
+    { label: 'null', objectMode: null },
+  ])('keeps a bare Buffer atomic with objectMode=$label', async ({ objectMode }) => {
+    const input = Buffer.from([1, 2]);
+    const r = Readable.from(input, { objectMode } as unknown as ReadableOptions);
+    expect(r.readableObjectMode).toBe(false);
+    expect(r.readableHighWaterMark).toBe(65_536);
+    const out = await drainObjectMode<unknown>(r);
+    expect(out).toEqual([input]);
+    expect(out[0]).toBe(input);
   });
 
   it('honours options.objectMode === true even with Buffer chunks', async () => {
@@ -64,10 +117,217 @@ describe('Readable.from(iter, options?)', () => {
     expect(r.readableObjectMode).toBe(false);
   });
 
+  it.each([
+    { label: 'undefined', value: undefined, expected: false },
+    { label: 'null', value: null, expected: false },
+    { label: 'false', value: false, expected: false },
+    { label: 'true', value: true, expected: true },
+  ])('lets an own objectMode=$label overwrite the generic default', ({ value, expected }) => {
+    const options = { objectMode: value } as unknown as ReadableOptions;
+    const r = Readable.from([Buffer.from('x')], options);
+    expect(r.readableObjectMode).toBe(expected);
+    expect(r.readableHighWaterMark).toBe(1);
+    r.destroy();
+  });
+
+  it('uses normal byte HWM when a special string explicitly overwrites objectMode', () => {
+    const r = Readable.from('x', { objectMode: undefined });
+    expect(r.readableObjectMode).toBe(false);
+    expect(r.readableHighWaterMark).toBe(65_536);
+    r.destroy();
+  });
+
   it('passes highWaterMark through from options', () => {
     const r = Readable.from([{ a: 1 }], { highWaterMark: 7 });
     expect(r.readableHighWaterMark).toBe(7);
   });
+
+  it('passes a special string highWaterMark through from options', () => {
+    const r = Readable.from('x', { highWaterMark: 3 });
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(3);
+    r.destroy();
+  });
+
+  it('lets explicit highWaterMark undefined overwrite the generic HWM=1 default', () => {
+    const r = Readable.from(['x'], { highWaterMark: undefined });
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(16);
+    r.destroy();
+  });
+
+  it.each([
+    { label: 'generic iterable', input: ['x'] as Iterable<unknown> },
+    { label: 'special string', input: 'x' as Iterable<unknown> },
+  ])('lets highWaterMark null reach the normal default for a $label', ({ input }) => {
+    const r = Readable.from(input, { highWaterMark: null } as unknown as ReadableOptions);
+    expect(r.readableHighWaterMark).toBe(16);
+    r.destroy();
+  });
+
+  it('does not advance a sync iterator before readable demand', () => {
+    let nexts = 0;
+    const next = vi.fn((): IteratorResult<string> => {
+      nexts += 1;
+      if (nexts === 1) return { value: 'x', done: false };
+      if (nexts === 2) return { value: undefined, done: true };
+      throw new Error('unexpected third sync next');
+    });
+    const source = {
+      [Symbol.iterator](): Iterator<string> {
+        return { next };
+      },
+    };
+
+    const r = Readable.from(source);
+    expect(next).not.toHaveBeenCalled();
+    r.read(0);
+    expect(next).toHaveBeenCalledTimes(1);
+    r.destroy();
+  });
+
+  it('makes flowing progress and reaches EOF with generic highWaterMark 0', async () => {
+    let nexts = 0;
+    const source = {
+      [Symbol.iterator](): Iterator<string> {
+        return {
+          next(): IteratorResult<string> {
+            nexts += 1;
+            return nexts === 1 ? { value: 'x', done: false } : { value: undefined, done: true };
+          },
+        };
+      },
+    };
+    const r = Readable.from(source, { highWaterMark: 0 });
+
+    await expect(settleFrom(drainObjectMode<string>(r), 'flowing HWM 0')).resolves.toEqual(['x']);
+    expect({ nexts, ended: r.readableEnded, length: r.readableLength }).toEqual({
+      nexts: 2,
+      ended: true,
+      length: 0,
+    });
+  });
+
+  it.each([
+    { label: 'read()', size: undefined },
+    { label: 'read(1)', size: 1 },
+  ])(
+    'makes paused $label progress and reaches EOF with generic highWaterMark 0',
+    async ({ size }) => {
+      let nexts = 0;
+      const source = {
+        [Symbol.iterator](): Iterator<string> {
+          return {
+            next(): IteratorResult<string> {
+              nexts += 1;
+              return nexts === 1 ? { value: 'x', done: false } : { value: undefined, done: true };
+            },
+          };
+        },
+      };
+      const r = Readable.from(source, { highWaterMark: 0 });
+      let ended = false;
+      r.on('end', () => {
+        ended = true;
+      });
+
+      expect(r.read(size)).toBe('x');
+      expect(r.read(size)).toBeNull();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect({
+        nexts,
+        ended,
+        stateEnded: r._readableState.ended,
+        length: r.readableLength,
+      }).toEqual({
+        nexts: 2,
+        ended: true,
+        stateEnded: true,
+        length: 0,
+      });
+    },
+  );
+
+  it('does not advance an async iterator before readable demand', () => {
+    let nexts = 0;
+    const next = vi.fn(async (): Promise<IteratorResult<string>> => {
+      nexts += 1;
+      if (nexts === 1) return { value: 'x', done: false };
+      if (nexts === 2) return { value: undefined, done: true };
+      throw new Error('unexpected third async next');
+    });
+    const source = {
+      [Symbol.asyncIterator](): AsyncIterator<string> {
+        return { next };
+      },
+    };
+
+    const r = Readable.from(source);
+    expect(next).not.toHaveBeenCalled();
+    r.read(0);
+    expect(next).toHaveBeenCalledTimes(1);
+    r.destroy();
+  });
+
+  it('makes async flowing progress and reaches EOF with generic highWaterMark 0', async () => {
+    let nexts = 0;
+    const source = {
+      [Symbol.asyncIterator](): AsyncIterator<string> {
+        return {
+          async next(): Promise<IteratorResult<string>> {
+            nexts += 1;
+            return nexts === 1 ? { value: 'x', done: false } : { value: undefined, done: true };
+          },
+        };
+      },
+    };
+    const r = Readable.from(source, { highWaterMark: 0 });
+
+    await expect(settleFrom(drainObjectMode<string>(r), 'async flowing HWM 0')).resolves.toEqual([
+      'x',
+    ]);
+    expect({ nexts, ended: r.readableEnded, length: r.readableLength }).toEqual({
+      nexts: 2,
+      ended: true,
+      length: 0,
+    });
+  });
+
+  it.each([
+    { label: 'read()', size: undefined },
+    { label: 'read(1)', size: 1 },
+  ])(
+    'makes async paused $label progress and reaches EOF with generic highWaterMark 0',
+    async ({ size }) => {
+      let nexts = 0;
+      const source = {
+        [Symbol.asyncIterator](): AsyncIterator<string> {
+          return {
+            async next(): Promise<IteratorResult<string>> {
+              nexts += 1;
+              return nexts === 1 ? { value: 'x', done: false } : { value: undefined, done: true };
+            },
+          };
+        },
+      };
+      const r = Readable.from(source, { highWaterMark: 0 });
+
+      expect(r.read(size)).toBeNull();
+      expect(nexts).toBe(1);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(r.read(size)).toBe('x');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(r.read(size)).toBeNull();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect({ nexts, stateEnded: r._readableState.ended, length: r.readableLength }).toEqual({
+        nexts: 2,
+        stateEnded: true,
+        length: 0,
+      });
+      r.destroy();
+    },
+  );
 
   it('throws TypeError for a non-iterable input', () => {
     expect(() => Readable.from(42 as unknown as Iterable<unknown>)).toThrow(TypeError);
@@ -83,20 +343,35 @@ describe('Readable.from(iter, options?)', () => {
     }
     const r = Readable.from(gen());
     expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(1);
     const out = await drainObjectMode<number>(r);
     expect(out).toEqual([1, 2, 3]);
   });
 
-  it('detects byte mode from an iterable of Uint8Arrays (non-Buffer)', async () => {
-    const r = Readable.from([new Uint8Array([1, 2]), new Uint8Array([3])]);
-    expect(r.readableObjectMode).toBe(false);
+  it('defaults a bare Uint8Array iterable to object-mode numeric entries', async () => {
+    const r = Readable.from(new Uint8Array([1, 2, 3]));
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(1);
+    await expect(drainObjectMode<number>(r)).resolves.toEqual([1, 2, 3]);
+  });
+
+  it('defaults an iterable of Uint8Arrays to object mode', async () => {
+    const first = new Uint8Array([1, 2]);
+    const second = Buffer.from([3]);
+    const r = Readable.from([first, second]);
+    expect(r.readableObjectMode).toBe(true);
+    expect(r.readableHighWaterMark).toBe(1);
+    const out = await drainObjectMode<Uint8Array>(r);
+    expect(out).toEqual([first, second]);
+    expect(out[0]).toBe(first);
+    expect(out[1]).toBe(second);
   });
 
   it('fromWeb preserves web-stream chunk boundaries as byte-mode data', async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(Buffer.from('aa'));
-        controller.enqueue(Buffer.from('bb'));
+        controller.enqueue(new Uint8Array([0x61, 0x61]));
+        controller.enqueue(new Uint8Array([0x62, 0x62]));
         controller.close();
       },
     });
@@ -106,12 +381,13 @@ describe('Readable.from(iter, options?)', () => {
     const out = await drainObjectMode<Uint8Array>(r);
 
     expect(out.map((chunk) => Buffer.from(chunk).toString('utf8'))).toEqual(['aa', 'bb']);
+    expect(out.every((chunk) => Buffer.isBuffer(chunk))).toBe(true);
   });
 
   it('fromWeb converts default-stream string chunks to Buffers in byte mode', async () => {
     const stream = new ReadableStream<string>({
       start(controller) {
-        controller.enqueue('hello');
+        controller.enqueue('é');
         controller.close();
       },
     });
@@ -121,8 +397,9 @@ describe('Readable.from(iter, options?)', () => {
 
     expect(r.readableObjectMode).toBe(false);
     expect(out).toHaveLength(1);
-    expect(out[0]).toBeInstanceOf(Uint8Array);
-    expect(String(out[0])).toBe('hello');
+    expect(Buffer.isBuffer(out[0])).toBe(true);
+    expect(Buffer.from(out[0] as Uint8Array).toString('hex')).toBe('c3a9');
+    expect(String(out[0])).toBe('é');
   });
 
   it('fromWeb preserves default-stream object chunks when objectMode is true', async () => {
@@ -152,7 +429,7 @@ describe('Readable.from(iter, options?)', () => {
   });
 
   it('toWeb preserves string chunks as strings', async () => {
-    const stream = Readable.toWeb(Readable.from(['x']));
+    const stream = Readable.toWeb(Readable.from(['x'], { objectMode: true }));
     const reader = stream.getReader();
 
     await expect(reader.read()).resolves.toEqual({ done: false, value: 'x' });
@@ -182,7 +459,9 @@ describe('Readable.from(iter, options?)', () => {
 
   it('toWeb passes a supplied strategy through to the Web ReadableStream', async () => {
     const size = vi.fn(() => 1);
-    const stream = Readable.toWeb(Readable.from(['x']), { strategy: { size } });
+    const stream = Readable.toWeb(Readable.from(['x'], { objectMode: true }), {
+      strategy: { size },
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
