@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { withNodeContractWorkspace } from './esbuild-contract-node-workspace.ts';
 import {
@@ -54,7 +55,11 @@ describe('esbuild 0.28.0 Vite contract oracle', () => {
         baseDirectory: process.cwd(),
         rootSuffix: 'nested/deeper/a-deliberately-much-longer-contract-workspace-root',
       });
+      const outsideRepoTopology = await withNodeContractWorkspace(runProbe, {
+        baseDirectory: tmpdir(),
+      });
       expect(differentTopology).toEqual(actual);
+      expect(outsideRepoTopology).toEqual(actual);
       if (process.env.RIFTY_PRINT_ESBUILD_CONTRACT === '1') {
         console.log(
           `ESBUILD_CONTRACT_FIXTURE\n${JSON.stringify(actual.contract, null, 2)}\nEND_ESBUILD_CONTRACT_FIXTURE`,

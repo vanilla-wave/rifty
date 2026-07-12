@@ -710,11 +710,15 @@ function metafileShape(
   return result;
 }
 
-function resultShape(result: ContractBuildResult, normalize: (value: string) => string): JsonValue {
+function resultShape(
+  result: ContractBuildResult,
+  normalize: (value: string) => string,
+  normalizeOutputText: (value: string) => string = normalize,
+): JsonValue {
   const files = result.outputFiles ?? [];
   const outputFiles = files.map((file) => {
     const rawText = file.text ?? '';
-    const text = normalize(rawText);
+    const text = normalizeOutputText(rawText);
     const normalizedBytes = new TextEncoder().encode(text).byteLength;
     return {
       path: normalizedPath(file.path ?? '', normalize),
@@ -771,6 +775,10 @@ async function prepareWorkspace(workspace: EsbuildContractWorkspace): Promise<vo
   const files = graphFiles(workspace.root);
   await workspace.mkdir(workspace.root);
   await workspace.writeFile(`${workspace.root}/package.json`, '{"type":"module"}\n');
+  await workspace.writeFile(
+    `${workspace.root}/tsconfig.json`,
+    '{"compilerOptions":{"strict":true}}\n',
+  );
   await workspace.writeFile(
     files.entry,
     `import { marker } from './config-helper.ts';\nimport { defineConfig } from 'vite';\nexport default defineConfig({ define: { __MARKER__: JSON.stringify(marker) } });\n`,
@@ -1240,7 +1248,11 @@ async function probeDepScan(
         cancelled = true;
       }
       return {
-        result: resultShape(result, normalize),
+        // WASM reports the cwd-resolved stdin comment; preserve metafile paths,
+        // normalize only this temp-root spelling to Node's logical sourcefile.
+        result: resultShape(result, normalize, (value) =>
+          normalize(value).replaceAll('// <root>/dep-scan.js', '// dep-scan.js'),
+        ),
         outputContainsDependency: outputText(result).includes('green:'),
         diskFiles: workspace.listFiles(files.scanOut).map(normalize),
       };
