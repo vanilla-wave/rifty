@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-/** @typedef {{ readonly id: string, readonly anchor: string }} ExactTextPatchAnchor */
+/** @typedef {{ readonly id: string, readonly hunk?: string, readonly anchor: string }} ExactTextPatchAnchor */
 /** @typedef {ExactTextPatchAnchor & { readonly replacement: string }} ExactTextPatch */
 
 const lines = (...parts) => parts.join('\n');
@@ -26,6 +26,12 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
   [
     {
       id: 'inline-worker-startup',
+      hunk: 'envelope-open',
+      anchor: lines('(module=>{', '"use strict";'),
+    },
+    {
+      id: 'inline-worker-startup',
+      hunk: 'service',
       anchor: lines(
         'var startRunningService = (wasmURL, wasmModule, useWorker) => __async(null, null, function* () {',
         '  let worker;',
@@ -36,6 +42,7 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'node-callback-fs',
+      hunk: 'main',
       anchor: lines(
         '      (() => {',
         '        const enosys = () => {',
@@ -50,10 +57,12 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'channel-has-fs',
+      hunk: 'main',
       anchor: lines('    isSync: false,', '    hasFS: false,', '    esbuild: browser_exports'),
     },
     {
       id: 'runtime-default-wd',
+      hunk: 'main',
       anchor: lines(
         '        defaultWD: "/",',
         '        callback: (err, res) => err ? reject(err) : resolve(res)',
@@ -71,6 +80,7 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'transform-temp-fs',
+      hunk: 'main',
       anchor: lines(
         '        fs: {',
         '          readFile(_, callback) {',
@@ -84,6 +94,7 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'gate-direct-lifecycle',
+      hunk: 'main',
       anchor: lines(
         'var stop = () => {',
         '  if (stopService) stopService();',
@@ -114,6 +125,7 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'gate-sync-family',
+      hunk: 'main',
       anchor: lines(
         'var buildSync = () => {',
         '  throw new Error(`The "buildSync" API only works in node`);',
@@ -131,6 +143,7 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
     },
     {
       id: 'gate-analyze-metafile',
+      hunk: 'main',
       anchor: lines(
         '    checkForInvalidFlags(options, keys, `in ${callName}() call`);',
         '    let request = {',
@@ -140,7 +153,20 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
       ),
     },
     {
+      id: 'gate-analyze-metafile',
+      hunk: 'request-tail',
+      anchor: lines(
+        '    if (color !== void 0) request.color = color;',
+        '    if (verbose !== void 0) request.verbose = verbose;',
+        '    sendRequest(refs, request, (error, response) => {',
+        '      if (error) return callback(new Error(error), null);',
+        '      callback(null, response.result);',
+        '    });',
+      ),
+    },
+    {
       id: 'gate-context-watch-serve',
+      hunk: 'main',
       anchor: lines(
         '        watch: (options2 = {}) => new Promise((resolve, reject) => {',
         '          if (!streamIn.hasFS) throw new Error(`Cannot use the "watch" API in this environment`);',
@@ -172,11 +198,55 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
       ),
     },
     {
+      id: 'gate-context-watch-serve',
+      hunk: 'serve-execution-tail',
+      anchor: lines(
+        '          const request2 = {',
+        '            command: "serve",',
+        '            key: buildKey,',
+        '            onRequest: !!onRequest',
+        '          };',
+        '          if (port !== void 0) request2.port = port;',
+        '          if (host !== void 0) request2.host = host;',
+        '          if (servedir !== void 0) request2.servedir = servedir;',
+        '          if (keyfile !== void 0) request2.keyfile = keyfile;',
+        '          if (certfile !== void 0) request2.certfile = certfile;',
+        '          if (fallback !== void 0) request2.fallback = fallback;',
+        '          if (cors) {',
+        '            const corsKeys = {};',
+        '            const origin = getFlag(cors, corsKeys, "origin", mustBeStringOrArrayOfStrings);',
+        '            checkForInvalidFlags(cors, corsKeys, `on "cors" object`);',
+        '            if (Array.isArray(origin)) request2.corsOrigin = origin;',
+        '            else if (origin !== void 0) request2.corsOrigin = [origin];',
+        '          }',
+        '          sendRequest(refs, request2, (error2, response2) => {',
+        '            if (error2) return reject(new Error(error2));',
+        '            if (onRequest) {',
+        '              requestCallbacks["serve-request"] = (id, request3) => {',
+        '                onRequest(request3.args);',
+        '                sendResponse(id, {});',
+        '              };',
+        '            }',
+        '            resolve(response2);',
+        '          });',
+        '        }),',
+      ),
+    },
+    {
       id: 'gate-one-shot-build-write',
+      hunk: 'main',
       anchor: lines(
         '    } = flagsForBuildOptions(callName, options, isTTY, buildLogLevelDefault, writeDefault);',
         '    if (write && !streamIn.hasFS) throw new Error(`The "write" option is unavailable in this environment`);',
         '    const request = {',
+      ),
+    },
+    {
+      id: 'inline-worker-startup',
+      hunk: 'envelope-close',
+      anchor: lines(
+        'var browser_default = browser_exports;',
+        '})(typeof module==="object"?module:{set exports(x){(typeof self!=="undefined"?self:this).esbuild=x}});',
       ),
     },
   ].map((patch) => Object.freeze(patch)),
@@ -214,15 +284,20 @@ function occurrenceOffsets(source, anchor) {
 
 /** @param {readonly ExactTextPatchAnchor[]} patches */
 function validatePatchPlan(patches) {
-  const ids = new Set();
+  const keys = new Set();
   for (const patch of patches) {
     if (typeof patch.id !== 'string' || patch.id.length === 0) {
       throw new ExactTextPatchError('exact patch plan: patch id must be non-empty');
     }
-    if (ids.has(patch.id)) {
-      throw new ExactTextPatchError(`exact patch plan: duplicate patch id "${patch.id}"`);
+    const hunk = patch.hunk ?? 'main';
+    if (typeof hunk !== 'string' || hunk.length === 0) {
+      throw new ExactTextPatchError(`exact patch "${patch.id}": hunk must be non-empty`);
     }
-    ids.add(patch.id);
+    const key = `${patch.id}/${hunk}`;
+    if (keys.has(key)) {
+      throw new ExactTextPatchError(`exact patch plan: duplicate patch key "${key}"`);
+    }
+    keys.add(key);
     if (typeof patch.anchor !== 'string' || patch.anchor.length === 0) {
       throw new ExactTextPatchError(`exact patch "${patch.id}": anchor must be non-empty`);
     }
@@ -241,13 +316,15 @@ export function inspectExactTextPatchAnchors(source, patches) {
     const offsets = occurrenceOffsets(source, patch.anchor);
     if (offsets.length !== 1) {
       const fault = offsets.length === 0 ? 'missing' : 'duplicate';
+      const hunk = patch.hunk ?? 'main';
       throw new ExactTextPatchError(
-        `exact patch "${patch.id}": ${fault} anchor; expected exactly 1, found ${offsets.length}`,
+        `exact patch "${patch.id}/${hunk}": ${fault} anchor; expected exactly 1, found ${offsets.length}`,
       );
     }
     const start = offsets[0];
     return Object.freeze({
       id: patch.id,
+      hunk: patch.hunk ?? 'main',
       inputSpan: Object.freeze({ start, end: start + patch.anchor.length }),
       beforeSha256: sha256Text(patch.anchor),
     });
@@ -260,7 +337,7 @@ export function inspectExactTextPatchAnchors(source, patches) {
     const current = bySourcePosition[index];
     if (previous.inputSpan.end > current.inputSpan.start) {
       throw new ExactTextPatchError(
-        `exact patches "${previous.id}" and "${current.id}": anchors overlap`,
+        `exact patches "${previous.id}/${previous.hunk}" and "${current.id}/${current.hunk}": anchors overlap`,
       );
     }
   }
@@ -279,7 +356,9 @@ export function applyExactTextPatches(source, patches) {
     }
   }
   const inspection = inspectExactTextPatchAnchors(source, patches);
-  const patchById = new Map(patches.map((patch) => [patch.id, patch]));
+  const patchByKey = new Map(
+    patches.map((patch) => [`${patch.id}/${patch.hunk ?? 'main'}`, patch]),
+  );
   const bySourcePosition = [...inspection.anchors].sort(
     (left, right) => left.inputSpan.start - right.inputSpan.start,
   );
@@ -288,12 +367,13 @@ export function applyExactTextPatches(source, patches) {
   let sourceCursor = 0;
   let outputCursor = 0;
   for (const anchor of bySourcePosition) {
-    const patch = patchById.get(anchor.id);
+    const key = `${anchor.id}/${anchor.hunk}`;
+    const patch = patchByKey.get(key);
     const unchanged = source.slice(sourceCursor, anchor.inputSpan.start);
     outputParts.push(unchanged, patch.replacement);
     outputCursor += unchanged.length;
     outputSpans.set(
-      anchor.id,
+      key,
       Object.freeze({ start: outputCursor, end: outputCursor + patch.replacement.length }),
     );
     outputCursor += patch.replacement.length;
@@ -302,10 +382,11 @@ export function applyExactTextPatches(source, patches) {
   outputParts.push(source.slice(sourceCursor));
   const output = outputParts.join('');
   const applied = inspection.anchors.map((anchor) => {
-    const patch = patchById.get(anchor.id);
+    const key = `${anchor.id}/${anchor.hunk}`;
+    const patch = patchByKey.get(key);
     return Object.freeze({
       ...anchor,
-      outputSpan: outputSpans.get(anchor.id),
+      outputSpan: outputSpans.get(key),
       afterSha256: sha256Text(patch.replacement),
     });
   });

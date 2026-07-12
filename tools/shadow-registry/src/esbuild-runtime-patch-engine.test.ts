@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 interface PatchAnchor {
   readonly id: string;
+  readonly hunk?: string;
   readonly anchor: string;
 }
 
@@ -20,6 +21,7 @@ interface Span {
 
 interface InspectedAnchor {
   readonly id: string;
+  readonly hunk: string;
   readonly inputSpan: Span;
   readonly beforeSha256: string;
 }
@@ -90,6 +92,7 @@ describe('exact textual patch engine', () => {
     expect(result.patches).toEqual([
       {
         id: 'second',
+        hunk: 'main',
         inputSpan: { start: 11, end: 19 },
         outputSpan: { start: 7, end: 10 },
         beforeSha256: sha256('[second]'),
@@ -97,6 +100,7 @@ describe('exact textual patch engine', () => {
       },
       {
         id: 'first',
+        hunk: 'main',
         inputSpan: { start: 2, end: 9 },
         outputSpan: { start: 2, end: 5 },
         beforeSha256: sha256('[first]'),
@@ -112,19 +116,21 @@ describe('exact textual patch engine', () => {
   it('loud-fails a missing anchor with its patch id', () => {
     expect(() =>
       inspectExactTextPatchAnchors('alpha', [{ id: 'missing-row', anchor: 'omega' }]),
-    ).toThrow('exact patch "missing-row": missing anchor; expected exactly 1, found 0');
+    ).toThrow('exact patch "missing-row/main": missing anchor; expected exactly 1, found 0');
   });
 
   it('loud-fails a duplicate anchor with its patch id and cardinality', () => {
     expect(() =>
       inspectExactTextPatchAnchors('alpha alpha', [{ id: 'duplicate-row', anchor: 'alpha' }]),
-    ).toThrow('exact patch "duplicate-row": duplicate anchor; expected exactly 1, found 2');
+    ).toThrow('exact patch "duplicate-row/main": duplicate anchor; expected exactly 1, found 2');
   });
 
   it('counts overlapping duplicates instead of accepting the first occurrence', () => {
     expect(() =>
       inspectExactTextPatchAnchors('aaaa', [{ id: 'overlapping-duplicate', anchor: 'aaa' }]),
-    ).toThrow('exact patch "overlapping-duplicate": duplicate anchor; expected exactly 1, found 2');
+    ).toThrow(
+      'exact patch "overlapping-duplicate/main": duplicate anchor; expected exactly 1, found 2',
+    );
   });
 
   it('loud-fails overlapping patch spans with both patch ids', () => {
@@ -133,23 +139,34 @@ describe('exact textual patch engine', () => {
         { id: 'left-row', anchor: 'bcd' },
         { id: 'right-row', anchor: 'cde' },
       ]),
-    ).toThrow('exact patches "left-row" and "right-row": anchors overlap');
+    ).toThrow('exact patches "left-row/main" and "right-row/main": anchors overlap');
   });
 
-  it('loud-fails duplicate patch ids before mutation', () => {
+  it('allows multiple named hunks owned by one semantic policy id', () => {
+    expect(
+      applyExactTextPatches('alpha beta', [
+        { id: 'same-row', hunk: 'first', anchor: 'alpha', replacement: 'one' },
+        { id: 'same-row', hunk: 'second', anchor: 'beta', replacement: 'two' },
+      ]).output,
+    ).toBe('one two');
+  });
+
+  it('loud-fails a duplicate semantic-id/hunk key before mutation', () => {
     expect(() =>
       inspectExactTextPatchAnchors('alpha beta', [
         { id: 'same-row', anchor: 'alpha' },
         { id: 'same-row', anchor: 'beta' },
       ]),
-    ).toThrow('exact patch plan: duplicate patch id "same-row"');
+    ).toThrow('exact patch plan: duplicate patch key "same-row/main"');
   });
 });
 
 describe('esbuild-wasm 0.28.0 exact upstream patch anchors', () => {
   it('keeps the ratified patch ids in one exact order', () => {
     expect(ESBUILD_RUNTIME_PATCH_IDS).toEqual(RATIFIED_PATCH_IDS);
-    expect(ESBUILD_RUNTIME_PATCH_ANCHORS.map(({ id }) => id)).toEqual(RATIFIED_PATCH_IDS);
+    expect([...new Set(ESBUILD_RUNTIME_PATCH_ANCHORS.map(({ id }) => id))]).toEqual(
+      RATIFIED_PATCH_IDS,
+    );
   });
 
   for (const patch of ESBUILD_RUNTIME_PATCH_ANCHORS) {
@@ -161,6 +178,7 @@ describe('esbuild-wasm 0.28.0 exact upstream patch anchors', () => {
       expect(inspection.anchors).toEqual([
         {
           id: patch.id,
+          hunk: patch.hunk ?? 'main',
           inputSpan: {
             start: upstreamBrowserCjs.indexOf(patch.anchor),
             end: upstreamBrowserCjs.indexOf(patch.anchor) + patch.anchor.length,
@@ -176,6 +194,6 @@ describe('esbuild-wasm 0.28.0 exact upstream patch anchors', () => {
       upstreamBrowserCjs,
       ESBUILD_RUNTIME_PATCH_ANCHORS,
     );
-    expect(inspection.anchors).toHaveLength(RATIFIED_PATCH_IDS.length);
+    expect(inspection.anchors).toHaveLength(ESBUILD_RUNTIME_PATCH_ANCHORS.length);
   });
 });

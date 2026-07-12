@@ -41,6 +41,8 @@
     "bench": "node tools/perf/bench.mjs",
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
     "artifacts:generate": "tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --write",
+    "esbuild-runtime:generate": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --write",
+    "check:esbuild-runtime-drift": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --check",
     "check:install-artifact-drift": "tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --check",
     "check:snapshot-artifact-drift": "tsx tools/shadow-registry/tools/migrate-dep-snapshots-v2.ts --check",
     "check:compat-drift": "node tools/compat-matrix-generator/cli.js && git diff --exit-code -- docs/public/compat",

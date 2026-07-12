@@ -16,6 +16,26 @@
     "member": "package/esbuild.wasm",
     "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
   },
+  "validationSource": {
+    "package": "esbuild",
+    "version": "0.28.0",
+    "member": "package/lib/main.js",
+    "sha256": "41abefec8704d24e069532fb38a418905d16f8fee4da88e54ecd65adc71f5507",
+    "anchors": [
+      {
+        "id": "sync-build-validation",
+        "start": "  let fakeBuildError = (text) => {",
+        "end": "  let applyProperties = (object, properties) => {",
+        "sha256": "2998e2821ef1f87f4782c9fc51003b5d4bf7f6e4df52a43947e3ee18608268a2"
+      },
+      {
+        "id": "sync-analyze-validation",
+        "start": "var analyzeMetafileSync = (metafile, options) => {",
+        "end": "var stop = () => {",
+        "sha256": "9eb837dd43da594cf02a89dd70e73ef7bbeab389b9ab6e685291d2d1e6a27562"
+      }
+    ]
+  },
   "patches": [
     "inline-worker-startup",
     "node-callback-fs",
