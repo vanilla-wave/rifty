@@ -154,6 +154,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0216 | Install tail latency: background command durability, generation-guarded stamps, learned-pin SWR |
+| 0241 | Install artifact identity for dependency trees |
 
 ### toolchain-build
 
