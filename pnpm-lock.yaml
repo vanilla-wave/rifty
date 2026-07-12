@@ -413,6 +413,9 @@ importers:
 
   tools/shadow-registry:
     devDependencies:
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../../packages/vfs
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
