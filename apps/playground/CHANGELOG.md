@@ -7,7 +7,9 @@
 - Dependency snapshots and install stamps use schema v2 with exact
   `package.json` text plus the generated installer/shim/runtime identity.
   Legacy or mismatched claims are untrusted and re-run arrival; one shared
-  constructor/parser owns async and sync stamp shapes.
+  constructor/parser owns async and sync stamp shapes. Committed snapshots
+  migrated only after byte-exact comparison of every embedded shadow artifact;
+  CI repeats that proof and otherwise requires a full bake.
 
 ### Fixed (File Explorer context menu placement)
 

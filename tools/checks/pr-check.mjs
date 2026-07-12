@@ -71,6 +71,7 @@ const TASKS = [
   // running it inside the gate only mutates the tree when there IS drift.
   'check:compat-drift',
   'check:install-artifact-drift',
+  'check:snapshot-artifact-drift',
   'check:source-grep',
   'backlog:check',
   'refs:check',
