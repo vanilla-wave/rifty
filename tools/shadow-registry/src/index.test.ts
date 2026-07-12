@@ -50,65 +50,47 @@ describe('shadow-registry', () => {
     expect(internalsShims.rollup?.companions).toEqual(['@rollup/wasm-node']);
   });
 
-  it('esbuild alias shim materializes the original import name with the bridge-backed entry', () => {
+  it('esbuild alias materializes one CJS overlay over the realm runtime slot', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     expect(shim?.into).toBe('esbuild');
     expect(shim?.files['package.json']).toContain('"esbuild"');
-    const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain('__riftyEsbuildTransform');
-    expect(main).toContain("NotImplementedError('esbuild.transform'");
-    // Unified content: real bridge transform + write:false config build.
-    expect(main).toContain('loadEntryThroughPlugins');
-    expect(main).toContain('opts.write !== false');
-    expect(main).not.toContain('Pass-through');
+    expect(Object.keys(shim?.files ?? {}).sort()).toEqual(['lib/main.cjs', 'package.json']);
+    const main = shim?.files['lib/main.cjs'] ?? '';
+    expect(main).toContain('globalThis.__rifty?.esbuild');
+    expect(main).toContain('module.exports = esbuild');
+    expect(main).not.toContain('__riftyEsbuildTransform');
+    expect(main).not.toContain('Proxy');
+    expect(main).not.toContain('Object.assign');
   });
 
   it('esbuild alias version matches the bakedOverrides trigger pin exactly (no lying metadata)', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     const pinned = bakedOverrides.esbuild?.split('@').at(-1);
     const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as { version?: string };
-    // The alias package.json + the shim's `version` export are STATIC claims;
-    // they must equal the version the override actually installs, and the
-    // exact-pin range must refuse any drifted trigger at install time.
+    // Static package metadata must equal the installed trigger pin.
     expect(pkg.version).toBe(pinned);
-    expect(shim?.files['lib/main.js']).toContain(`const version = "${pinned}"`);
+    expect(shim?.apiVersion).toBe(pinned);
     expect(shim?.range).toBe(pinned);
   });
 
-  it('esbuild alias serves BOTH module systems: ESM entry + CJS entry (require("esbuild") is real Node behavior)', () => {
+  it('esbuild main/import/require/default resolve to the same CJS module id', () => {
     const shim = internalsShims['@esbuild/wasi-preview1'];
     const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as {
       main?: string;
+      module?: string;
+      type?: string;
       exports?: Record<string, Record<string, string>>;
     };
-    // `type: module` classifies lib/main.js as ESM; a require condition pointing
-    // there would loud-fail sync require() in the rifty loader — the require
-    // entry must be a real .cjs file (the lightningcss shim pattern).
-    expect(pkg.exports?.['.']?.import).toBe('./lib/main.js');
-    expect(pkg.exports?.['.']?.require).toBe('./lib/main.cjs');
-    expect(pkg.main).toBe('./lib/main.cjs');
-    const esm = shim?.files['lib/main.js'] ?? '';
-    const cjs = shim?.files['lib/main.cjs'] ?? '';
-    expect(esm).toContain('export default');
-    expect(esm).not.toContain('module.exports');
-    expect(cjs).toContain('module.exports');
-    expect(cjs).not.toContain('export default');
-    // Same single body in both — no per-format drift.
-    expect(cjs).toContain('loadEntryThroughPlugins');
-    expect(cjs).toContain('__riftyEsbuildTransform');
-  });
-
-  it('esbuild build() loud-throws when the transformed entry imports local files (no silent single-module "bundle")', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain("'esbuild.build.bundle'");
-  });
-
-  it('esbuild context()/analyzeMetafile() are honest: empty inputs only, loud otherwise', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const main = shim?.files['lib/main.js'] ?? '';
-    expect(main).toContain("'esbuild.context'");
-    expect(main).toContain("'esbuild.analyzeMetafile'");
+    const ids = [
+      pkg.main,
+      pkg.module,
+      pkg.exports?.['.']?.import,
+      pkg.exports?.['.']?.require,
+      pkg.exports?.['.']?.default,
+    ];
+    expect(ids).toEqual(Array.from({ length: 5 }, () => './lib/main.cjs'));
+    expect(new Set(ids)).toEqual(new Set(['./lib/main.cjs']));
+    expect(pkg.type).toBe('commonjs');
   });
 
   it('lightningcss alias shim delegates both entrypoints to lightningcss-wasm', () => {
@@ -120,92 +102,53 @@ describe('shadow-registry', () => {
   });
 });
 
-describe('esbuild shim behavior (CJS body executed)', () => {
-  interface EsbuildShimApi {
-    readonly version: string;
-    readonly transform: (input: string, options?: object) => Promise<{ code: string }>;
-    readonly build: (
-      opts: object,
-    ) => Promise<{ errors: unknown[]; outputFiles: { text: string }[] }>;
-    readonly context: (
-      opts: object,
-    ) => Promise<{ rebuild: () => Promise<{ errors: unknown[]; outputFiles: unknown[] }> }>;
-    readonly analyzeMetafile: (metafile: object) => Promise<string>;
-  }
-  type PluginApi = {
-    onResolve: (options: object, cb: unknown) => void;
-    onLoad: (
-      options: { filter: RegExp },
-      cb: (args: object) => { contents: string; loader: string },
-    ) => void;
+describe('esbuild CJS overlay behavior', () => {
+  type RiftyTestGlobal = typeof globalThis & {
+    __rifty?: { esbuild?: unknown };
+    __riftyEsbuildTransform?: unknown;
   };
 
-  function loadCjsShim(): EsbuildShimApi {
+  function loadCjsShim(): unknown {
     const cjs = internalsShims['@esbuild/wasi-preview1']?.files['lib/main.cjs'] ?? '';
-    const module = { exports: {} };
+    const module: { exports: unknown } = { exports: {} };
     new Function('module', 'exports', cjs)(module, module.exports);
-    return module.exports as EsbuildShimApi;
+    return module.exports;
   }
 
-  function entryPlugin(contents: string): object {
-    return {
-      name: 'test-loader',
-      setup(api: PluginApi): void {
-        api.onLoad({ filter: /.*/ }, () => ({ contents, loader: 'ts' }));
-      },
-    };
-  }
-
-  const withBridge = async (run: (esbuild: EsbuildShimApi) => Promise<void>): Promise<void> => {
-    const g = globalThis as { __riftyEsbuildTransform?: unknown };
-    g.__riftyEsbuildTransform = async (code: string) => ({ code, map: '', warnings: [] });
+  function withRuntimeSlot(run: (global: RiftyTestGlobal) => void): void {
+    const global = globalThis as RiftyTestGlobal;
+    const previous = Object.getOwnPropertyDescriptor(global, '__rifty');
     try {
-      await run(loadCjsShim());
+      run(global);
     } finally {
-      g.__riftyEsbuildTransform = undefined;
+      if (previous) Object.defineProperty(global, '__rifty', previous);
+      else Reflect.deleteProperty(global, '__rifty');
     }
-  };
+  }
 
-  it('build() succeeds for a single-module config with only bare (external) imports', async () => {
-    await withBridge(async (esbuild) => {
-      const result = await esbuild.build({
-        write: false,
-        entryPoints: ['/proj/vite.config.ts'],
-        plugins: [
-          entryPlugin("import { defineConfig } from 'vite';\nexport default defineConfig({});"),
-        ],
+  it('exports the exact slot object without a facade or wrapper', () => {
+    withRuntimeSlot((global) => {
+      const runtime = Object.freeze({
+        version: '0.28.0',
+        build: () => 'build-marker',
+        default: Object.freeze({ default: 'upstream-default-marker' }),
       });
-      expect(result.errors).toEqual([]);
-      expect(result.outputFiles[0]?.text).toContain('defineConfig');
+      global.__rifty = { esbuild: runtime };
+      expect(loadCjsShim()).toBe(runtime);
     });
   });
 
-  it('build() loud-throws when the entry imports a LOCAL file (real esbuild would bundle it)', async () => {
-    await withBridge(async (esbuild) => {
-      await expect(
-        esbuild.build({
-          write: false,
-          entryPoints: ['/proj/vite.config.ts'],
-          plugins: [
-            entryPlugin("import { helper } from './config-helper.js';\nexport default helper();"),
-          ],
-        }),
-      ).rejects.toThrow(/esbuild\.build\.bundle/);
+  it('loud-throws when the runtime slot is absent and ignores the legacy bridge', () => {
+    withRuntimeSlot((global) => {
+      global.__rifty = {};
+      global.__riftyEsbuildTransform = () => undefined;
+      try {
+        expect(() => loadCjsShim()).toThrow(
+          'rifty invariant: esbuild runtime slot is not initialized',
+        );
+      } finally {
+        Reflect.deleteProperty(global, '__riftyEsbuildTransform');
+      }
     });
-  });
-
-  it('context() with entry points loud-throws; the EMPTY dep-optimizer context rebuilds empty (real zero-entry result)', async () => {
-    const esbuild = loadCjsShim();
-    await expect(esbuild.context({ entryPoints: ['a.ts'] })).rejects.toThrow(/esbuild\.context/);
-    const ctx = await esbuild.context({ entryPoints: [] });
-    await expect(ctx.rebuild()).resolves.toMatchObject({ errors: [], outputFiles: [] });
-  });
-
-  it('analyzeMetafile is loud for a non-empty metafile, honest-empty otherwise', async () => {
-    const esbuild = loadCjsShim();
-    await expect(esbuild.analyzeMetafile({ inputs: { 'a.ts': {} }, outputs: {} })).rejects.toThrow(
-      /esbuild\.analyzeMetafile/,
-    );
-    await expect(esbuild.analyzeMetafile({ inputs: {}, outputs: {} })).resolves.toBe('');
   });
 });
