@@ -32,6 +32,10 @@
 
 ### Added
 
+- A machine-readable esbuild 0.28.0 derivation policy and exact-text patch
+  engine pin all ten ADR-0226 mutation sites. Missing, duplicate, overlapping,
+  or reordered anchors fail before generation; the audit records input/output
+  spans and SHA-256 digests.
 - **esbuild 0.28.0 Vite Contract+RED (ADR-0226).** Row-addressable live oracle
   pins module/plugin identity, transform/diagnostics, config graph, dependency scan,
   default-write prebundle, and write failure before the VFS runtime implementation;

@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "api": "esbuild-js-api",
+  "state": "contract-red",
+  "version": "0.28.0",
+  "consumer": {
+    "package": "vite",
+    "version": "7.3.6"
+  },
+  "source": {
+    "package": "esbuild-wasm",
+    "member": "package/lib/browser.js",
+    "sha256": "b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10"
+  },
+  "wasm": {
+    "member": "package/esbuild.wasm",
+    "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
+  },
+  "patches": [
+    "inline-worker-startup",
+    "node-callback-fs",
+    "channel-has-fs",
+    "runtime-default-wd",
+    "transform-temp-fs",
+    "gate-direct-lifecycle",
+    "gate-sync-family",
+    "gate-analyze-metafile",
+    "gate-context-watch-serve",
+    "gate-one-shot-build-write"
+  ],
+  "patchDescriptions": {
+    "inline-worker-startup": "private worker:false Go/WASM startup in the Vite Worker",
+    "node-callback-fs": "Node-callback filesystem over guest FsSync; protocol fds preserved",
+    "channel-has-fs": "upstream channel runs with hasFS:true",
+    "runtime-default-wd": "defaultWD is the guest cwd",
+    "transform-temp-fs": "large-transform temporary files use guest VFS",
+    "gate-direct-lifecycle": "direct initialize and stop capability gates",
+    "gate-sync-family": "four synchronous API capability gates",
+    "gate-analyze-metafile": "async analyzeMetafile capability gate",
+    "gate-context-watch-serve": "context watch and serve capability gates",
+    "gate-one-shot-build-write": "post-plugin one-shot build write gate"
+  },
+  "currentSurfaces": [
+    {
+      "surface": "Generated upstream-derived runtime",
+      "status": "partial",
+      "notes": "Contract+RED only: source, oracle, patch plan, and browser acceptance are pinned; the generated runtime is not implemented or published yet."
+    },
+    {
+      "surface": "Install request for esbuild@0.28.0",
+      "status": "implemented",
+      "notes": "Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; incompatible baked requests loud-fail, while an explicit user override to the exact WASI target remains supported without false shadow provenance."
+    },
+    {
+      "surface": "transform",
+      "status": "partial",
+      "notes": "The current shim runs the real 0.28.0 WASI transform bridge; exact upstream module identity, validation, result shape, large-input filesystem path, and lifecycle remain Contract RED."
+    },
+    {
+      "surface": "build with write:false",
+      "status": "partial",
+      "notes": "Current shim transforms one plugin-loaded entry only; local config imports loud-throw esbuild.build.bundle instead of pretending to bundle."
+    },
+    {
+      "surface": "context",
+      "status": "partial",
+      "notes": "Current shim supports only a zero-entry context; Vite dependency scan and default-write prebundle remain Contract RED."
+    }
+  ],
+  "gaps": [
+    {
+      "surface": "direct initialize",
+      "feature": "esbuild.initialize",
+      "current": "Current shim silently resolves; Contract RED requires native validation followed by the named loud gap."
+    },
+    {
+      "surface": "direct stop",
+      "feature": "esbuild.stop",
+      "current": "Current shim does not expose the required named loud gap."
+    },
+    {
+      "surface": "transformSync",
+      "feature": "esbuild.transformSync",
+      "current": "Current shim loud-throws; complete upstream validation and error ordering remain under Contract RED."
+    },
+    {
+      "surface": "buildSync",
+      "feature": "esbuild.buildSync",
+      "current": "Current shim loud-throws; complete upstream validation and error ordering remain under Contract RED."
+    },
+    {
+      "surface": "formatMessagesSync",
+      "feature": "esbuild.formatMessagesSync",
+      "current": "Current shim returns simplified strings; Contract RED requires validation then the named loud gap."
+    },
+    {
+      "surface": "analyzeMetafileSync",
+      "feature": "esbuild.analyzeMetafileSync",
+      "current": "Current shim accepts empty metafiles and uses the async gap name for non-empty input; Contract RED owns the correction."
+    },
+    {
+      "surface": "analyzeMetafile",
+      "feature": "esbuild.analyzeMetafile",
+      "current": "Current shim accepts empty metafiles; valid calls must instead reach the named loud gap after native validation."
+    },
+    {
+      "surface": "context.watch",
+      "feature": "esbuild.context.watch",
+      "current": "Current zero-entry context silently resolves watch; Contract RED requires the named loud gap."
+    },
+    {
+      "surface": "context.serve",
+      "feature": "esbuild.context.serve",
+      "current": "A current context method loud-throws, but full context construction and validation ordering remain Contract RED."
+    },
+    {
+      "surface": "one-shot build with effective write enabled",
+      "feature": "esbuild.build.write",
+      "current": "Current shim gates write before plugin setup; Contract RED requires upstream validation and the post-plugin effective value first."
+    }
+  ],
+  "tests": [
+    "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts",
+    "tools/shadow-registry/src/esbuild-contract-oracle.test.ts",
+    "tools/shadow-registry/src/esbuild-contract-red.test.ts",
+    "tools/shadow-registry/src/esbuild-generated-provenance-red.test.ts",
+    "packages/npm-client/src/installer-shadow-shims.test.ts",
+    "apps/playground/src/workers/vite-cli-prep.test.ts",
+    "tests/browser-unit/esbuild-vite-contract-red.spec.ts"
+  ],
+  "limitations": [
+    "No Final+GREEN claim: the upstream-derived runtime, publication slot, common CJS interop/cache correction, and Chromium Vite optimize/build acceptance are still expected RED.",
+    "Only exact esbuild 0.28.0 with exact Vite 7.3.6 is in this contract; other esbuild versions and Vite 8/Rolldown are outside it.",
+    "Every D4 gap must preserve upstream validation and error priority before NotImplementedError; a current early, absent, or silent gate is recorded as partial, never supported."
+  ]
+}

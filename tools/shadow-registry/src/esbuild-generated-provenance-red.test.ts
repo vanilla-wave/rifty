@@ -10,18 +10,7 @@ const OUTPUT_PATH = fileURLToPath(
   new URL('../../../apps/playground/src/workers/generated/esbuild-runtime.js', import.meta.url),
 );
 
-const EXPECTED_PATCH_IDS = [
-  'inline-worker-startup',
-  'node-callback-fs',
-  'channel-has-fs',
-  'runtime-default-wd',
-  'transform-temp-fs',
-  'gate-direct-lifecycle',
-  'gate-sync-family',
-  'gate-analyze-metafile',
-  'gate-context-watch-serve',
-  'gate-one-shot-build-write',
-] as const;
+const policy = readJson(fileURLToPath(new URL('../esbuild-runtime-policy.json', import.meta.url)));
 
 const EXPECTED_METADATA = {
   schema: 1,
@@ -95,7 +84,8 @@ describe('generated esbuild runtime provenance Contract+RED', () => {
   });
 
   it('patch-plan/ordered-ids', () => {
-    expect(at(manifest.value, 'patches')).toEqual(EXPECTED_PATCH_IDS);
+    expect(policy.error).toBeNull();
+    expect(at(manifest.value, 'patches')).toEqual(at(policy.value, 'patches'));
   });
 
   it('output/present', () => {
