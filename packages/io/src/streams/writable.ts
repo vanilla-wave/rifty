@@ -258,6 +258,7 @@ export class Writable extends EventEmitter {
     if (state.writing && state.corked === 0) state.writevBatch = true;
     // While corked, hold the chunk — `uncork()`/`end()` triggers the flush. An
     // uncorked write schedules the (coalesced) drain as before.
+    // TODO(backlog: runtime-js/writable-sync-dispatch-state)
     if (state.corked === 0) this.scheduleDrain();
     const okToContinue = state.length < state.highWaterMark;
     // Hit HWM: owe a 'drain' for the next dip below it. Don't clear once set.
@@ -506,12 +507,11 @@ export class Writable extends EventEmitter {
    *
    * `_write` pumps each chunk to a held web writer and awaits its promise (so a
    * slow web sink applies backpressure through the Node write callback); `_final`
-   * → `writer.close()`; `destroy(reason)` → `writer.abort(reason)` (the sink's
-   * `abort` sees the SAME reason). An error from the web side (`controller.error`
-   * → the writer's `closed` rejects) destroys this Node writable with that error
-   * (emitting `'error'`). Verified vs real Node v24.
+   * → `writer.close()`. Terminal reason/order, one-sided teardown, settlement,
+   * locks, and signal behavior remain tracked separately.
    */
   static fromWeb(stream: WritableStream<unknown>, options: WritableOptions = {}): Writable {
+    // TODO(backlog: runtime-js/web-stream-adapter-terminal-lifecycle)
     if (!stream || typeof (stream as { getWriter?: unknown }).getWriter !== 'function') {
       throw new TypeError(
         'The "writableStream" argument must be an instance of WritableStream',
@@ -534,9 +534,8 @@ export class Writable extends EventEmitter {
         );
       },
     });
-    // destroy(reason) → abort the web sink with that reason (its `abort` sees the
-    // same object). Guard `aborted` so a web-side error (which also lands here
-    // via destroy) doesn't double-abort an already-closing writer.
+    // Start web abort on destroy. Exact terminal identity/order is backlogged;
+    // `aborted` prevents a second abort from writer.closed.
     w.onDestroy = (err?: Error): void => {
       if (aborted) return;
       aborted = true;

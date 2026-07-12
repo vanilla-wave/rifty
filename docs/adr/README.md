@@ -57,6 +57,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
+| 0237 | Readable owns read-hook dispatch and demand latch |
+| 0238 | Readable.from defaults to object mode |
 
 ### runtime-wasi
 
