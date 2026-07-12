@@ -52,8 +52,10 @@ export {
   type ReadableFromWebOptions,
   type AsyncHelperOptions,
   type WritableOptions,
+  type WritableFromWebOptions,
   type WriteChunk,
   type DuplexOptions,
+  type DuplexFromWebOptions,
   type TransformOptions,
 } from './streams/index.ts';
 export {

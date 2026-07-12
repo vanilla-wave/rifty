@@ -103,6 +103,20 @@
 
 ### Fixed
 
+- **Node stream source protocol converges on one owner (ADR-0237–0239).**
+  `Readable` now dispatches late-bound `_read`, keeps demand latched until
+  `push`, bounds filtered refill, normalizes covered byte chunks once, and
+  destroys on push-after-EOF with Node's coded error. `Readable.from` uses Node object-mode
+  defaults and atomic string/Buffer sources without pre-demand `next()`.
+  `fromWeb` adapters are cold, ignore hook getters, and share exact staged
+  option/error/lock acquisition; valid signal lifecycle stays a loud gap.
+  Writable admission now owns encoding/decodeStrings and shared plain-
+  Uint8Array conversion. ADR-0240 separates synchronous internal completion
+  from public effects, so scalar/batch HWM returns, drain, callbacks, errors,
+  finish, and Duplex close follow Node without callback-before-return
+  reentrancy. Focused fault/unit suites and parity match Node v24; remaining
+  ArrayBufferView/invalid chunk kinds stay explicit in the compat backlog.
+
 - **Node stream edge parity tightened after PR #102 review.** `Writable.toWeb()`
   and `Duplex.toWeb()` now reject pending web writes/closes with `AbortError`
   when the Node side is destroyed without an explicit error; `Readable.from()`
@@ -306,10 +320,9 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
   rationale and alternatives.
 
 - `Readable.from(iterable, options?)` accepts `ReadableOptions`, forwards
-  HWM/encoding/objectMode, and rejects non-iterables synchronously. The current
-  runtime still infers mode from the first sync entry. ADR-0238 rejects that
-  inference; `runtime-js/readable-from-source-defaults` owns its replacement.
-  Explicit `objectMode` remains the portable path until that item lands.
+  HWM/encoding/objectMode, and rejects non-iterables synchronously. ADR-0238 now
+  owns Node's object-mode defaults, atomic bare string/Buffer boundaries, and
+  cold iterator start.
 
 - `Readable.unpipe(dest?)` — detach a single `pipe(dest)` wiring or all of
   them. Mirrors Node's `Readable.prototype.unpipe`. `pipe(dest)` now also

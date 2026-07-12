@@ -100,4 +100,7 @@ export class Transform extends Duplex {
     super(superOpts);
     transformRef.instance = this;
   }
+
+  /** Transform callbacks push the readable side; Node owns the same no-op hook. */
+  override _read(): void {}
 }

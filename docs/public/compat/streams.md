@@ -8,12 +8,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Readable` push/data/end | ⚠️ | Object-mode identity works; empty object strings, byte-mode zero chunks, and string/plain-Uint8Array Buffer admission still diverge — backlog `runtime-js/readable-read-hook-and-chunk-admission` |
+| `Readable` push/data/end | ⚠️ | Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds` |
 | `Readable.read(n)` | ⚠️ | Exact byte slicing works; sized reads do not raise `readableHighWaterMark` to Node's next-power-of-two projection or pass that projected HWM to `_read` — backlog `runtime-js/readable-sized-read-hwm-growth` |
 | Readable async iteration | ✅ | `for await` over readable chunks |
 | Readable async-iterator helpers | ✅ | `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested |
-| `Readable.from(iterable)` | ⚠️ | ADR-0238 defaults/boundaries/cold iteration are pending — backlog `runtime-js/readable-from-source-defaults`; iterator async-value/throw/return cleanup also diverges — backlog `runtime-js/readable-from-iterator-lifecycle` |
-| `Writable` write/end/finish | ⚠️ | HWM return/drain exists; first uncorked `_write` is microtask-deferred and `writableNeedDrain` is absent — backlog `runtime-js/writable-sync-dispatch-state` |
+| `Readable.from(iterable)` | ⚠️ | Node object-mode defaults, atomic string/Buffer boundaries, HWM, and cold start are parity-tested; iterator async-value/throw/return cleanup still diverges — backlog `runtime-js/readable-from-iterator-lifecycle` |
+| `Writable` write/end/finish | ⚠️ | decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state` |
 | `Transform` | ✅ | `_transform` callback path |
 | `PassThrough` | ✅ | Forwards chunks unchanged |
 | `pipeline` | ✅ | Promise/callback chaining, multi-stage, destroy-on-error parity |
@@ -23,11 +23,11 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
-| `Readable.fromWeb` | ⚠️ | Normal chunks/pipe work; pending destroy, reason identity, terminal events, locks, and signal semantics diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
+| `Readable.fromWeb` | ⚠️ | Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
 | `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
 | `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |
 | `Writable.toWeb` / `Writable.fromWeb` / `Duplex.toWeb` / `Duplex.fromWeb` | ⚠️ | Normal data/backpressure and allowHalfOpen work; reason identity, duplicate events, pending settlement, locks, and one-sided teardown diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
-| `Readable/Writable/Duplex.fromWeb({ signal })` | ⚠️ | Readable partially wires signal but loses exact cause/terminal semantics; Writable/Duplex ignore it at runtime — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
+| `Readable/Writable/Duplex.fromWeb({ signal })` | ❌ | Falsy signal is absent and invalid values preserve Node errors; a valid signal throws `NotImplementedError` before lock acquisition — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
 | `isReadable` / `isWritable` / `isErrored` / `isDisturbed` | ✅ | Predicates over the existing state machine; `isDisturbed` backed by an explicit bit; non-stream input never throws (parity-tested truth tables) |
 | `getDefaultHighWaterMark` / `setDefaultHighWaterMark` | ✅ | Module-level default HWM read by the Readable/Writable ctors (explicit `{ highWaterMark }` still wins); parity-tested |
 | `addAbortSignal` | ⚠️ | Abort destroys with `AbortError`/`ABORT_ERR`; `error.cause === signal.reason` is missing — backlog `runtime-js/add-abort-signal-reason-identity` |
@@ -39,6 +39,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/stream-legacy.test.ts`
 - `tests/conformance/builtins/stream-consumers.test.ts`
 - `packages/io/src/streams/readable.from.test.ts`
+- `packages/io/src/streams/readable.read-hook.fault.test.ts`
+- `packages/io/src/streams/readable.refill-terminal.fault.test.ts`
+- `packages/io/src/streams/from-web-options.fault.test.ts`
+- `packages/io/src/streams/writable.admission.fault.test.ts`
+- `packages/io/src/streams/writable.decode-strings.fault.test.ts`
+- `packages/io/src/streams/writable.completion-order.fault.test.ts`
 - `packages/io/src/streams/readable.to-web.test.ts`
 - `packages/io/src/streams/writable.to-web.test.ts`
 - `packages/io/src/streams/duplex.web-bridge.test.ts`

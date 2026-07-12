@@ -227,6 +227,8 @@ export class IncomingMessage extends Readable {
   declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
+  /** `pipeBodyStream` pushes independently of pull demand. */
+  override _read(): void {}
   constructor(request: Request | IncomingMessageInit) {
     super({ objectMode: false });
     const init = isIncomingMessageInit(request)
@@ -266,6 +268,8 @@ export class IncomingMessageFromFetch extends Readable {
   declare rawHeaders: string[];
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
+  /** `pipeBodyStream` pushes independently of pull demand. */
+  override _read(): void {}
   constructor(response: Response) {
     super({ objectMode: false });
     this.statusCode = response.status;

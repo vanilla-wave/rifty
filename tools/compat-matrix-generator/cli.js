@@ -133,7 +133,7 @@ const matrices = [
       [
         '`Readable` push/data/end',
         '⚠️',
-        'Object-mode identity works; empty object strings, byte-mode zero chunks, and string/plain-Uint8Array Buffer admission still diverge — backlog `runtime-js/readable-read-hook-and-chunk-admission`',
+        'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`',
       ],
       [
         '`Readable.read(n)`',
@@ -149,12 +149,12 @@ const matrices = [
       [
         '`Readable.from(iterable)`',
         '⚠️',
-        'ADR-0238 defaults/boundaries/cold iteration are pending — backlog `runtime-js/readable-from-source-defaults`; iterator async-value/throw/return cleanup also diverges — backlog `runtime-js/readable-from-iterator-lifecycle`',
+        'Node object-mode defaults, atomic string/Buffer boundaries, HWM, and cold start are parity-tested; iterator async-value/throw/return cleanup still diverges — backlog `runtime-js/readable-from-iterator-lifecycle`',
       ],
       [
         '`Writable` write/end/finish',
         '⚠️',
-        'HWM return/drain exists; first uncorked `_write` is microtask-deferred and `writableNeedDrain` is absent — backlog `runtime-js/writable-sync-dispatch-state`',
+        'decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state`',
       ],
       ['`Transform`', '✅', '`_transform` callback path'],
       ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
@@ -176,7 +176,7 @@ const matrices = [
       [
         '`Readable.fromWeb`',
         '⚠️',
-        'Normal chunks/pipe work; pending destroy, reason identity, terminal events, locks, and signal semantics diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
+        'Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
       ],
       [
         '`node:stream/web` module',
@@ -195,8 +195,8 @@ const matrices = [
       ],
       [
         '`Readable/Writable/Duplex.fromWeb({ signal })`',
-        '⚠️',
-        'Readable partially wires signal but loses exact cause/terminal semantics; Writable/Duplex ignore it at runtime — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
+        '❌',
+        'Falsy signal is absent and invalid values preserve Node errors; a valid signal throws `NotImplementedError` before lock acquisition — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
       ],
       [
         '`isReadable` / `isWritable` / `isErrored` / `isDisturbed`',
@@ -224,6 +224,12 @@ const matrices = [
       '`tests/conformance/builtins/stream-legacy.test.ts`',
       '`tests/conformance/builtins/stream-consumers.test.ts`',
       '`packages/io/src/streams/readable.from.test.ts`',
+      '`packages/io/src/streams/readable.read-hook.fault.test.ts`',
+      '`packages/io/src/streams/readable.refill-terminal.fault.test.ts`',
+      '`packages/io/src/streams/from-web-options.fault.test.ts`',
+      '`packages/io/src/streams/writable.admission.fault.test.ts`',
+      '`packages/io/src/streams/writable.decode-strings.fault.test.ts`',
+      '`packages/io/src/streams/writable.completion-order.fault.test.ts`',
       '`packages/io/src/streams/readable.to-web.test.ts`',
       '`packages/io/src/streams/writable.to-web.test.ts`',
       '`packages/io/src/streams/duplex.web-bridge.test.ts`',

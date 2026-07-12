@@ -60,6 +60,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
 | 0239 | fromWeb arguments have one staged validation owner |
+| 0240 | Writable completion separates internal and public phases |
 
 ### runtime-wasi
 

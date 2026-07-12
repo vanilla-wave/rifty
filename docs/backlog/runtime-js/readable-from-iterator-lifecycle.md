@@ -5,15 +5,15 @@ title: Readable.from iterator lifecycle ownership
 created: 2026-07-12
 why: Readable.from does not own iterator acquisition, async values, pending next, and terminal cleanup like Node
 user_story: As a CLI streaming an async generator, I want cancellation, errors, and backpressure to stop and close the generator exactly once without leaking work.
-blocked_by: [runtime-js/readable-from-source-defaults]
+blocked_by: []
 sources: [docs/adr/runtime-js/0238-readable-from-defaults-to-object-mode.md, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts]
 ---
 
 ## Context
 
-ADR-0238 owns default mode, special string/Buffer boundaries, initial HWM, and
-pre-demand peeking. This item owns the generic iterator protocol and teardown:
+ADR-0238 now owns default mode, special string/Buffer boundaries, initial HWM,
+and cold start. This item owns the remaining generic iterator protocol and teardown:
 rifty does not call `throw`/`return`, await sync-iterator Promise values or
 cleanup, reject null with `ERR_STREAM_NULL_VALUES`, or serialize a pending async
 `next()` through destruction.
