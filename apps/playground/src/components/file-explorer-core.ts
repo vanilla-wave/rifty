@@ -180,6 +180,26 @@ export interface ContextMenuItem {
   readonly disabled: 'never' | 'busy' | 'busy-or-empty-clipboard' | 'not-two-comparable';
 }
 
+export interface MenuClampInput {
+  readonly x: number;
+  readonly y: number;
+  readonly menuWidth: number;
+  readonly menuHeight: number;
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+}
+
+/** Keep a measured cursor menu inside a 4px viewport margin; oversized menus pin top-left. */
+export function clampMenuPosition(input: MenuClampInput): { x: number; y: number } {
+  const margin = 4;
+  const maxX = Math.max(margin, input.viewportWidth - input.menuWidth - margin);
+  const maxY = Math.max(margin, input.viewportHeight - input.menuHeight - margin);
+  return {
+    x: Math.min(Math.max(input.x, margin), maxX),
+    y: Math.min(Math.max(input.y, margin), maxY),
+  };
+}
+
 /**
  * VS-Code-parity menu per row capabilities. Mutation items appear ONLY on
  * mutable rows (download-only rows get no grayed clipboard entries); New

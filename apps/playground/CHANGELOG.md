@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (File Explorer context menu placement)
+
+- Context menus now own viewport placement, remain fully visible above panel
+  chrome, and use normal hit-tested actions; project-card menus retain their
+  separate anchored geometry.
+
 ### Changed (install-tail-latency, ADR-0216)
 
 - **Install exit stops awaiting the OPFS durability drain** (ADR-0216,

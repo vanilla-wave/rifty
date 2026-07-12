@@ -1047,13 +1047,6 @@ body {
   padding: 2px 6px;
   outline: none;
 }
-.rf-explorer__context {
-  position: fixed;
-  right: auto;
-  width: 168px;
-  z-index: 30;
-}
-
 /* ====================================================================== */
 /* Editor panel                                                            */
 /* ====================================================================== */
@@ -2899,17 +2892,28 @@ body.rf-resizing iframe {
   color: var(--rf-text);
 }
 .rf-rowmenu {
-  position: absolute;
-  top: 40px;
-  right: 12px;
-  z-index: 5;
-  width: 200px;
   padding: 5px;
   background: var(--rf-pop);
   border: 1px solid var(--rf-line-strong);
   border-radius: var(--rf-r-lg);
   box-shadow: var(--rf-shadow-pop);
   animation: rf-rise 0.14s var(--rf-ease) both;
+}
+.rf-projects__rowmenu {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  z-index: 5;
+  width: 200px;
+}
+.rf-explorer__context {
+  position: fixed;
+  z-index: 150;
+  width: 168px;
+  max-width: calc(100vw - 8px);
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  animation: none;
 }
 .rf-rowmenu__item {
   display: flex;

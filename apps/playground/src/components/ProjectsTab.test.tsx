@@ -32,6 +32,7 @@ describe('ProjectsTab', () => {
     expect(html).toContain('Export archive');
     expect(html).toContain('soon');
     expect(html).toContain('data-disabled="true"');
+    expect(html).toContain('rf-rowmenu rf-projects__rowmenu');
   });
 
   it('hides the scratch banner when there is no scratch', () => {
