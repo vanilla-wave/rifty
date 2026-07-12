@@ -1,5 +1,6 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
   type InstallStampSyncFs,
   depsEqual,
@@ -45,8 +46,15 @@ describe('install stamp (ADR-0135)', () => {
     const stamp = await readInstallStamp(vfs, ROOT);
 
     expect(stamp).toEqual({
-      version: 1,
+      version: 2,
       slug: 'real-vite',
+      packageJsonText: JSON.stringify({
+        name: 'app',
+        dependencies: { vite: '^5.4.0' },
+        devDependencies: { tool: '1.0.0' },
+        optionalDependencies: { fsevents: '^2' },
+      }),
+      installArtifactIdentity,
       deps: { vite: '^5.4.0', tool: '1.0.0', fsevents: '^2' },
       packages: 14,
     });
@@ -87,8 +95,10 @@ describe('install stamp (ADR-0135)', () => {
     await writeInstallStamp(vfs, ROOT, 14, 'real-vite', 'pending');
 
     expect(await readInstallStamp(vfs, ROOT)).toEqual({
-      version: 1,
+      version: 2,
       slug: 'real-vite',
+      packageJsonText: JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
+      installArtifactIdentity,
       deps: { vite: '^5.4.0' },
       packages: 14,
       durability: 'pending',
@@ -126,6 +136,42 @@ describe('install stamp (ADR-0135)', () => {
       name: 'app',
       dependencies: { vite: '^5.4.0', lodash: '^4' },
     });
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
+  it('does not reuse the same flattened deps after overrides, section, or text drift', async () => {
+    for (const drifted of [
+      JSON.stringify({
+        name: 'app',
+        dependencies: { vite: '^5.4.0' },
+        overrides: { esbuild: '@esbuild/wasi-preview1@0.28.0' },
+      }),
+      JSON.stringify({ name: 'app', devDependencies: { vite: '^5.4.0' } }),
+      '{ "name": "app", "dependencies": { "vite": "^5.4.0" } }',
+    ]) {
+      const vfs = new MemoryVfs();
+      await seedProject(vfs);
+      await seedNodeModules(vfs);
+      await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+
+      await vfs.writeFile(`${ROOT}/package.json`, drifted);
+
+      expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+    }
+  });
+
+  it('does not reuse exact package.json text under a different install-artifact identity', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+    const stamp = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+      string,
+      unknown
+    >;
+    stamp.installArtifactIdentity = `sha256:${'0'.repeat(64)}`;
+    await vfs.writeFile(installStampPath(ROOT), JSON.stringify(stamp));
+
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 

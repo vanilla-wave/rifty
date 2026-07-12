@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed (install artifact identity, ADR-0241)
+
+- Dependency snapshots and install stamps use schema v2 with exact
+  `package.json` text plus the generated installer/shim/runtime identity.
+  Legacy or mismatched claims are untrusted and re-run arrival; one shared
+  constructor/parser owns async and sync stamp shapes.
+
 ### Fixed (File Explorer context menu placement)
 
 - Context menus now own viewport placement, remain fully visible above panel

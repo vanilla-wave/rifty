@@ -18,11 +18,16 @@
  */
 // TODO(backlog: playground/install-stamp-invalidation)
 import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
 
 export interface InstallStamp {
-  readonly version: 1;
+  readonly version: 2;
   /** Project identity (preset slug) the tree was installed for — the reuse key. */
   readonly slug: string;
+  /** Exact request bytes that produced the tree; never a flattened projection. */
+  readonly packageJsonText: string;
+  /** Exact installer/shim/generated-runtime policy that produced the tree. */
+  readonly installArtifactIdentity: string;
   /** package.json effective request: dependencies ∪ devDependencies ∪
    *  optionalDependencies (secondary freshness guard alongside the slug). */
   readonly deps: Readonly<Record<string, string>>;
@@ -104,9 +109,18 @@ export async function readEffectiveDeps(
   vfs: Vfs,
   root: string,
 ): Promise<Record<string, string> | null> {
+  const text = await readPackageJsonText(vfs, root);
+  return text === null ? null : effectiveDepsFromPackageJsonText(text);
+}
+
+export async function readPackageJsonText(vfs: Vfs, root: string): Promise<string | null> {
   const path = joinPath(root, 'package.json');
   if (!(await vfs.exists(path))) return null;
-  return effectiveDepsFromPackageJsonText(await vfs.readFileText(path));
+  try {
+    return await vfs.readFileText(path);
+  } catch {
+    return null;
+  }
 }
 
 export function depsEqual(
@@ -116,6 +130,76 @@ export function depsEqual(
   const aKeys = Object.keys(a);
   if (aKeys.length !== Object.keys(b).length) return false;
   return aKeys.every((key) => a[key] === b[key]);
+}
+
+export interface InstallStampPayload {
+  readonly slug: string;
+  readonly packages: number;
+  readonly durability?: 'pending';
+  readonly promotionId?: string;
+}
+
+/** One constructor for every async/sync stamp writer. */
+export function createInstallStamp(
+  packageJsonText: string,
+  payload: InstallStampPayload,
+): InstallStamp | null {
+  const deps = effectiveDepsFromPackageJsonText(packageJsonText);
+  if (!deps) return null;
+  return {
+    version: 2,
+    slug: payload.slug,
+    packageJsonText,
+    installArtifactIdentity,
+    deps,
+    packages: payload.packages,
+    ...(payload.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(payload.durability === 'pending' && payload.promotionId
+      ? { promotionId: payload.promotionId }
+      : {}),
+  };
+}
+
+/** One parser for async and sync readers. Legacy/malformed claims are misses. */
+export function parseInstallStamp(value: unknown): InstallStamp | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as {
+    version?: unknown;
+    slug?: unknown;
+    packageJsonText?: unknown;
+    installArtifactIdentity?: unknown;
+    deps?: unknown;
+    packages?: unknown;
+    durability?: unknown;
+    promotionId?: unknown;
+  };
+  if (
+    raw.version !== 2 ||
+    typeof raw.slug !== 'string' ||
+    typeof raw.packageJsonText !== 'string' ||
+    typeof raw.installArtifactIdentity !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(raw.installArtifactIdentity) ||
+    typeof raw.packages !== 'number'
+  ) {
+    return null;
+  }
+  const exactDeps = effectiveDepsFromPackageJsonText(raw.packageJsonText);
+  if (!exactDeps || !raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps))
+    return null;
+  const deps = readStringMap(raw.deps);
+  if (!depsEqual(deps, exactDeps)) return null;
+  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
+  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
+  return {
+    version: 2,
+    slug: raw.slug,
+    packageJsonText: raw.packageJsonText,
+    installArtifactIdentity: raw.installArtifactIdentity,
+    deps,
+    packages: raw.packages,
+    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
+    ...(typeof raw.promotionId === 'string' ? { promotionId: raw.promotionId } : {}),
+  };
 }
 
 function depsInclude(
@@ -134,33 +218,13 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as {
-    version?: unknown;
-    slug?: unknown;
-    deps?: unknown;
-    packages?: unknown;
-    durability?: unknown;
-    promotionId?: unknown;
-  };
-  if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
-  if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
-  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
-  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
-  return {
-    version: 1,
-    slug: typeof raw.slug === 'string' ? raw.slug : '',
-    deps: readStringMap(raw.deps),
-    packages: raw.packages,
-    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
-    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
-      ? { promotionId: raw.promotionId }
-      : {}),
-  };
+  return parseInstallStamp(parsed);
 }
 
 export function stampTrusted(stamp: InstallStamp): boolean {
-  return stamp.durability !== 'pending';
+  return (
+    stamp.durability !== 'pending' && stamp.installArtifactIdentity === installArtifactIdentity
+  );
 }
 
 /**
@@ -180,16 +244,17 @@ export async function writeInstallStamp(
   promotionId?: string,
   precomputedDeps?: Record<string, string>,
 ): Promise<void> {
-  const deps = precomputedDeps ?? (await readEffectiveDeps(vfs, root));
-  if (!deps) return;
-  const stamp: InstallStamp = {
-    version: 1,
+  const currentText = await readPackageJsonText(vfs, root);
+  const prior = currentText === null && precomputedDeps ? await readInstallStamp(vfs, root) : null;
+  const packageJsonText = currentText ?? prior?.packageJsonText;
+  if (packageJsonText === undefined) return;
+  const stamp = createInstallStamp(packageJsonText, {
     slug,
-    deps,
     packages,
-    ...(durability === 'pending' ? { durability } : {}),
-    ...(durability === 'pending' && promotionId ? { promotionId } : {}),
-  };
+    durability,
+    promotionId,
+  });
+  if (!stamp || (precomputedDeps && !depsEqual(stamp.deps, precomputedDeps))) return;
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
   await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
@@ -211,7 +276,15 @@ export async function writeDeferredTrustedStamp(
   slug: string,
   deps: Record<string, string>,
 ): Promise<void> {
-  const stamp: InstallStamp = { version: 1, slug, deps, packages };
+  const currentText = await readPackageJsonText(vfs, root);
+  const prior = currentText === null ? await readInstallStamp(vfs, root) : null;
+  const packageJsonText = currentText ?? prior?.packageJsonText;
+  if (packageJsonText === undefined)
+    throw new Error('Cannot stamp without exact package.json text');
+  const stamp = createInstallStamp(packageJsonText, { slug, packages });
+  if (!stamp || !depsEqual(stamp.deps, deps)) {
+    throw new Error('Cannot stamp: package.json request differs from install-time dependencies');
+  }
   await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
 }
 
@@ -244,8 +317,8 @@ export async function installStampSatisfied(
   if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
-  const deps = await readEffectiveDeps(vfs, root);
-  if (!deps || !depsEqual(stamp.deps, deps)) return null;
+  const packageJsonText = await readPackageJsonText(vfs, root);
+  if (packageJsonText === null || stamp.packageJsonText !== packageJsonText) return null;
   return stamp;
 }
 
@@ -263,14 +336,16 @@ export async function installStampSatisfiedForPackageJson(
 ): Promise<InstallStamp | null> {
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!expectedDeps) return null;
-  const currentDeps = await readEffectiveDeps(vfs, root);
+  const currentText = await readPackageJsonText(vfs, root);
+  if (currentText === null) return null;
+  const currentDeps = effectiveDepsFromPackageJsonText(currentText);
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
   if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
-  if (!depsEqual(stamp.deps, currentDeps)) return null;
+  if (stamp.packageJsonText !== currentText) return null;
   return stamp;
 }
 
@@ -297,14 +372,16 @@ export function installStampSatisfiedForPackageJsonSync(
 ): InstallStamp | null {
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!expectedDeps) return null;
-  const currentDeps = readEffectiveDepsSync(fs, root);
+  const currentText = readTextSyncOrNull(fs, joinPath(root, 'package.json'));
+  if (currentText === null) return null;
+  const currentDeps = effectiveDepsFromPackageJsonText(currentText);
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = readInstallStampSync(fs, root);
   if (!stamp) return null;
   if (!stampTrusted(stamp)) return null;
   if (stamp.slug !== slug) return null;
   if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
-  if (!depsEqual(stamp.deps, currentDeps)) return null;
+  if (stamp.packageJsonText !== currentText) return null;
   return stamp;
 }
 
@@ -315,14 +392,6 @@ function readTextSyncOrNull(fs: InstallStampSyncFs, path: string): string | null
   } catch {
     return null;
   }
-}
-
-function readEffectiveDepsSync(
-  fs: InstallStampSyncFs,
-  root: string,
-): Record<string, string> | null {
-  const text = readTextSyncOrNull(fs, joinPath(root, 'package.json'));
-  return text === null ? null : effectiveDepsFromPackageJsonText(text);
 }
 
 /** Sync twin of {@link readInstallStamp} — exported for write-site rechecks
@@ -336,27 +405,5 @@ export function readInstallStampSync(fs: InstallStampSyncFs, root: string): Inst
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as {
-    version?: unknown;
-    slug?: unknown;
-    deps?: unknown;
-    packages?: unknown;
-    durability?: unknown;
-    promotionId?: unknown;
-  };
-  if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
-  if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
-  if (raw.durability !== undefined && raw.durability !== 'pending') return null;
-  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
-  return {
-    version: 1,
-    slug: typeof raw.slug === 'string' ? raw.slug : '',
-    deps: readStringMap(raw.deps),
-    packages: raw.packages,
-    ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
-    ...(raw.promotionId !== undefined && typeof raw.promotionId === 'string'
-      ? { promotionId: raw.promotionId }
-      : {}),
-  };
+  return parseInstallStamp(parsed);
 }

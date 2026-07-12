@@ -1,16 +1,26 @@
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { type DepSnapshotV1, buildDepSnapshot } from './dep-snapshot.ts';
-import { installStampSatisfied, readInstallStamp, writeInstallStamp } from './install-stamp.ts';
+import { type DepSnapshotV2, buildDepSnapshot } from './dep-snapshot.ts';
+import {
+  createInstallStamp,
+  installStampSatisfied,
+  readInstallStamp,
+  writeInstallStamp,
+} from './install-stamp.ts';
 import { ensureProjectDependencies } from './project-deps.ts';
 import { ScopedFsSync, ScopedVfs, workspaceVfsPrefix } from './scoped-vfs.ts';
 
 const ROOT = '/workspace';
 const enc = new TextEncoder();
+const packageJsonText = (deps: Record<string, string>): string =>
+  JSON.stringify({ name: 'app', dependencies: deps });
+const VITE_PACKAGE_JSON_TEXT = packageJsonText({ vite: '^5.4.0' });
 
-function viteSnapshot(): DepSnapshotV1 {
+function viteSnapshot(): DepSnapshotV2 {
   const fs = new MemoryFsSync();
+  fs.mkdirSync(ROOT, { recursive: true });
+  fs.writeFileSync(`${ROOT}/package.json`, enc.encode(VITE_PACKAGE_JSON_TEXT));
   fs.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
   fs.writeFileSync(`${ROOT}/node_modules/vite/package.json`, enc.encode('{"name":"vite"}'));
   fs.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}'));
@@ -20,10 +30,7 @@ function viteSnapshot(): DepSnapshotV1 {
 function project(deps: Record<string, string> = { vite: '^5.4.0' }) {
   const { vfs, fsSync } = createMemoryFs();
   fsSync.mkdirSync(ROOT, { recursive: true });
-  fsSync.writeFileSync(
-    `${ROOT}/package.json`,
-    enc.encode(JSON.stringify({ name: 'app', dependencies: deps })),
-  );
+  fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(packageJsonText(deps)));
   const log: string[] = [];
   return { vfs, fsSync, log, logFn: (line: string) => log.push(line) };
 }
@@ -571,13 +578,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
                 stampPath,
                 enc.encode(
                   `${JSON.stringify(
-                    {
-                      version: 1,
+                    createInstallStamp(VITE_PACKAGE_JSON_TEXT, {
                       slug: 'project-files',
-                      deps: { vite: '^5.4.0' },
                       packages: 0,
                       durability: 'pending',
-                    },
+                    }),
                     null,
                     2,
                   )}\n`,

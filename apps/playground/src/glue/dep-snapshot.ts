@@ -5,11 +5,12 @@
  * restores it on a stampless boot instead of running `install()`, so the
  * first-ever open of an instant preset is truly instant.
  *
- * The snapshot carries the effective dep set it satisfies; restore is gated on
- * `depsEqual(snapshot.deps, package.json deps)` — a stale asset (template deps
- * bumped without re-baking) falls back to a real install, never a wrong tree.
+ * Snapshot v2 carries the exact package.json text and install-artifact identity
+ * that produced the tree. Restore compares both byte-for-byte (ADR-0241).
  */
 import { joinPath } from '@riftydev/vfs';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts';
 import {
   type WorkspaceArchiveFs,
   type WorkspaceArchiveV1,
@@ -17,9 +18,11 @@ import {
   buildWorkspaceArchive,
 } from './workspace-archive.ts';
 
-export interface DepSnapshotV1 {
-  readonly version: 1;
+export interface DepSnapshotV2 {
+  readonly version: 2;
   readonly templateId: string;
+  readonly packageJsonText: string;
+  readonly installArtifactIdentity: string;
   /** Effective dep request the baked tree satisfies (deps ∪ dev ∪ optional). */
   readonly deps: Readonly<Record<string, string>>;
   /** Installed package count — recorded into the install stamp on restore. */
@@ -41,7 +44,12 @@ export function buildDepSnapshot(
     readonly deps: Record<string, string>;
     readonly packages: number;
   },
-): DepSnapshotV1 {
+): DepSnapshotV2 {
+  const packageJsonPath = joinPath(root, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error('Cannot build dep snapshot without package.json');
+  }
+  const packageJsonText = new TextDecoder().decode(fs.readFileBytesSync(packageJsonPath));
   const lockfilePath = joinPath(root, 'package-lock.json');
   const lockfile = fs.existsSync(lockfilePath)
     ? new TextDecoder().decode(fs.readFileBytesSync(lockfilePath))
@@ -49,19 +57,36 @@ export function buildDepSnapshot(
   // exclude: [] — the default exclusion list contains 'node_modules', which
   // would silently drop the nested copies nest-on-conflict creates.
   const nodeModules = buildWorkspaceArchive(fs, joinPath(root, 'node_modules'), { exclude: [] });
-  return { version: 1, ...meta, lockfile, nodeModules };
+  return {
+    version: 2,
+    ...meta,
+    packageJsonText,
+    installArtifactIdentity,
+    lockfile,
+    nodeModules,
+  };
 }
 
-export function parseDepSnapshot(json: string): DepSnapshotV1 {
-  const parsed = JSON.parse(json) as DepSnapshotV1;
-  if (parsed.version !== 1) {
+export function parseDepSnapshot(json: string): DepSnapshotV2 {
+  const parsed = JSON.parse(json) as DepSnapshotV2;
+  if (parsed.version !== 2) {
     throw new Error(`Unsupported dep snapshot version ${parsed.version}`);
   }
-  if (typeof parsed.templateId !== 'string' || typeof parsed.packages !== 'number') {
+  if (
+    typeof parsed.templateId !== 'string' ||
+    typeof parsed.packageJsonText !== 'string' ||
+    typeof parsed.installArtifactIdentity !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(parsed.installArtifactIdentity) ||
+    typeof parsed.packages !== 'number'
+  ) {
     throw new Error('Malformed dep snapshot: missing templateId/packages');
   }
-  if (!parsed.deps || typeof parsed.deps !== 'object') {
+  if (!parsed.deps || typeof parsed.deps !== 'object' || Array.isArray(parsed.deps)) {
     throw new Error('Malformed dep snapshot: missing deps');
+  }
+  const exactDeps = effectiveDepsFromPackageJsonText(parsed.packageJsonText);
+  if (!exactDeps || !depsEqual(parsed.deps, exactDeps)) {
+    throw new Error('Malformed dep snapshot: deps do not match packageJsonText');
   }
   if (typeof parsed.lockfile !== 'string' || !parsed.nodeModules) {
     throw new Error('Malformed dep snapshot: missing lockfile/nodeModules');
@@ -76,7 +101,7 @@ export function parseDepSnapshot(json: string): DepSnapshotV1 {
 export function restoreDepSnapshot(
   fs: WorkspaceArchiveFs,
   root: string,
-  snapshot: DepSnapshotV1,
+  snapshot: DepSnapshotV2,
 ): void {
   applyWorkspaceArchive(fs, snapshot.nodeModules, {
     root: joinPath(root, 'node_modules'),
@@ -99,7 +124,7 @@ export function restoreDepSnapshot(
  * (vite dev among them) serve `.gz` with `Content-Encoding: gzip`, so the
  * browser hands us already-decoded JSON; others serve the raw gzip bytes.
  */
-export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV1 | null> {
+export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2 | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;

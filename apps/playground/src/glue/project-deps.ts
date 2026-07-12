@@ -25,20 +25,19 @@
  */
 import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
-  type DepSnapshotV1,
+  type DepSnapshotV2,
   fetchDepSnapshot as realFetchDepSnapshot,
   restoreDepSnapshot,
 } from './dep-snapshot.ts';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
-  type InstallStamp,
-  depsEqual,
-  effectiveDepsFromPackageJsonText,
+  createInstallStamp,
   installStampPath,
   installStampSatisfied,
   isStampedTreeDamage,
-  readEffectiveDeps,
   readInstallStamp,
   readInstallStampSync,
+  readPackageJsonText,
   reportHasFailure,
 } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
@@ -74,7 +73,7 @@ export interface EnsureProjectDepsOptions {
   readonly install?: () => Promise<{ readonly packages: number }>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
-  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV1 | null>;
+  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV2 | null>;
   /**
    * Drains the realm's OPFS write-through and reports persist failures
    * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
@@ -150,15 +149,16 @@ async function tryRestoreSnapshot(
     opts.log(`[real-vite/worker] baked snapshot unavailable (${url}) — falling back to install\n`);
     return null;
   }
-  const deps = await readEffectiveDeps(opts.vfs, opts.root);
+  const packageJsonText = await readPackageJsonText(opts.vfs, opts.root);
   const expectedSnapshotTemplateId = opts.snapshotTemplateId ?? opts.templateId;
   if (
     snapshot.templateId !== expectedSnapshotTemplateId ||
-    !deps ||
-    !depsEqual(snapshot.deps, deps)
+    packageJsonText === null ||
+    snapshot.packageJsonText !== packageJsonText ||
+    snapshot.installArtifactIdentity !== installArtifactIdentity
   ) {
     opts.log(
-      '[real-vite/worker] baked snapshot is stale (deps drifted; re-run `pnpm snapshots:bake`) — falling back to install\n',
+      '[real-vite/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run `pnpm snapshots:bake`) — falling back to install\n',
     );
     return null;
   }
@@ -192,14 +192,11 @@ function nextPendingPromotionId(epoch: number): string {
   return `${epoch}:${pendingPromotionSeq}`;
 }
 
-function readEffectiveDepsSync(
-  fsSync: WorkspaceArchiveFs,
-  root: string,
-): Record<string, string> | null {
+function readPackageJsonTextSync(fsSync: WorkspaceArchiveFs, root: string): string | null {
   const path = joinPath(root, 'package.json');
   if (!fsSync.existsSync(path)) return null;
   try {
-    return effectiveDepsFromPackageJsonText(stampDecoder.decode(fsSync.readFileBytesSync(path)));
+    return stampDecoder.decode(fsSync.readFileBytesSync(path));
   } catch {
     return null;
   }
@@ -211,27 +208,26 @@ function writeInstallStampSync(
   durability?: 'pending',
   promotionId?: string,
 ): boolean {
-  const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
-  if (!deps) return false;
-  writeInstallStampForDepsSync(opts, deps, packages, durability, promotionId);
+  const packageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
+  if (packageJsonText === null) return false;
+  writeInstallStampForPackageJsonSync(opts, packageJsonText, packages, durability, promotionId);
   return true;
 }
 
-function writeInstallStampForDepsSync(
+function writeInstallStampForPackageJsonSync(
   opts: EnsureProjectDepsOptions,
-  deps: Record<string, string>,
+  packageJsonText: string,
   packages: number,
   durability?: 'pending',
   promotionId?: string,
 ): void {
-  const stamp: InstallStamp = {
-    version: 1,
+  const stamp = createInstallStamp(packageJsonText, {
     slug: opts.slug,
-    deps,
     packages,
     ...(durability === 'pending' ? { durability } : {}),
     ...(durability === 'pending' && promotionId ? { promotionId } : {}),
-  };
+  });
+  if (!stamp) return;
   opts.fsSync.mkdirSync(joinPath(opts.root, 'node_modules'), { recursive: true });
   opts.fsSync.writeFileSync(
     installStampPath(opts.root),
@@ -244,7 +240,7 @@ async function pendingPromotionStillCurrent(
   packages: number,
   arrivalEpoch: number,
   promotionId: string,
-  deps: Record<string, string>,
+  packageJsonText: string,
 ): Promise<boolean> {
   if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
   const stamp = await readInstallStamp(opts.vfs, opts.root);
@@ -254,7 +250,8 @@ async function pendingPromotionStillCurrent(
     stamp.promotionId === promotionId &&
     stamp.slug === opts.slug &&
     stamp.packages === packages &&
-    depsEqual(stamp.deps, deps)
+    stamp.packageJsonText === packageJsonText &&
+    stamp.installArtifactIdentity === installArtifactIdentity
   );
 }
 
@@ -275,10 +272,10 @@ async function stampTree(
   }
   if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
   const promotionId = nextPendingPromotionId(arrivalEpoch);
-  const deps = readEffectiveDepsSync(opts.fsSync, opts.root);
-  if (!deps) return;
-  writeInstallStampForDepsSync(opts, deps, packages, 'pending', promotionId);
-  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId, deps);
+  const packageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
+  if (packageJsonText === null) return;
+  writeInstallStampForPackageJsonSync(opts, packageJsonText, packages, 'pending', promotionId);
+  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId, packageJsonText);
 }
 
 /**
@@ -295,14 +292,22 @@ function scheduleStampDurabilityCheck(
   packages: number,
   arrivalEpoch: number,
   promotionId: string,
-  deps: Record<string, string>,
+  packageJsonText: string,
 ): void {
   const flush = opts.flush;
   if (!flush) return;
   const stampPath = installStampPath(opts.root);
   void (async () => {
     const report = await flush();
-    if (!(await pendingPromotionStillCurrent(opts, packages, arrivalEpoch, promotionId, deps))) {
+    if (
+      !(await pendingPromotionStillCurrent(
+        opts,
+        packages,
+        arrivalEpoch,
+        promotionId,
+        packageJsonText,
+      ))
+    ) {
       return;
     }
     // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
@@ -331,8 +336,8 @@ function scheduleStampDurabilityCheck(
       return;
     }
 
-    const currentDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
-    if (!currentDeps || !depsEqual(currentDeps, deps)) {
+    const currentPackageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
+    if (currentPackageJsonText !== packageJsonText) {
       opts.fsSync.rmSync(stampPath, { force: true });
       opts.log(
         '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — pending install stamp discarded; the next boot re-runs dependency arrival\n',
@@ -352,11 +357,11 @@ function scheduleStampDurabilityCheck(
     // not promote over it. Sync read + sync write = atomic in-realm.
     const atWrite = readInstallStampSync(opts.fsSync, opts.root);
     if (atWrite?.durability !== 'pending' || atWrite.promotionId !== promotionId) return;
-    writeInstallStampForDepsSync(opts, deps, packages);
+    writeInstallStampForPackageJsonSync(opts, packageJsonText, packages);
     const promoted = await flush();
     if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
-    const promotedDeps = readEffectiveDepsSync(opts.fsSync, opts.root);
-    if (!promotedDeps || !depsEqual(promotedDeps, deps)) {
+    const promotedPackageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
+    if (promotedPackageJsonText !== packageJsonText) {
       opts.fsSync.rmSync(stampPath, { force: true });
       opts.log(
         '[real-vite/worker] WARNING: package.json deps changed during install stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',

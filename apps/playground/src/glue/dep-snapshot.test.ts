@@ -1,7 +1,7 @@
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import {
-  type DepSnapshotV1,
+  type DepSnapshotV2,
   buildDepSnapshot,
   fetchDepSnapshot,
   parseDepSnapshot,
@@ -13,6 +13,10 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const ROOT = '/workspace';
+const PACKAGE_JSON_TEXT = JSON.stringify({
+  name: 'app',
+  dependencies: { vite: '^5.4.0' },
+});
 
 function write(fs: MemoryFsSync, path: string, bytes: Uint8Array): void {
   const slash = path.lastIndexOf('/');
@@ -22,6 +26,7 @@ function write(fs: MemoryFsSync, path: string, bytes: Uint8Array): void {
 
 function bakedFs(): MemoryFsSync {
   const fs = new MemoryFsSync();
+  write(fs, `${ROOT}/package.json`, enc.encode(PACKAGE_JSON_TEXT));
   write(fs, `${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}'));
   write(fs, `${ROOT}/node_modules/vite/package.json`, enc.encode('{"name":"vite"}'));
   write(fs, `${ROOT}/node_modules/vite/bin/vite.js`, enc.encode('#!/usr/bin/env node'));
@@ -71,6 +76,8 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(target.existsSync(`${ROOT}/node_modules/esbuild/package.json`)).toBe(true);
     expect(reparsed.packages).toBe(8);
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
+    expect(reparsed.packageJsonText).toBe(PACKAGE_JSON_TEXT);
+    expect(reparsed.installArtifactIdentity).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it('restores the baked tree into a DIFFERENT root (multi-project dynamic root, ADR-0165)', () => {
@@ -115,17 +122,22 @@ describe('dep snapshot (ADR-0135)', () => {
   });
 
   it('rejects malformed snapshots loudly', () => {
-    expect(() => parseDepSnapshot('{"version":2}')).toThrow('version');
-    expect(() => parseDepSnapshot('{"version":1,"templateId":"vite"}')).toThrow('Malformed');
+    expect(() => parseDepSnapshot('{"version":1}')).toThrow('version');
+    expect(() => parseDepSnapshot('{"version":2,"templateId":"vite"}')).toThrow('Malformed');
+    const mismatched = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    expect(() =>
+      parseDepSnapshot(JSON.stringify({ ...mismatched, deps: { vite: '^6.0.0' } })),
+    ).toThrow('packageJsonText');
   });
 
   it('does not accept a snapshot missing the current install-artifact identity when package.json is unchanged', async () => {
     const { vfs, fsSync } = createMemoryFs();
     fsSync.mkdirSync(ROOT, { recursive: true });
-    fsSync.writeFileSync(
-      `${ROOT}/package.json`,
-      enc.encode(JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } })),
-    );
+    fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON_TEXT));
     const { installArtifactIdentity: _missing, ...rawSnapshot } = JSON.parse(
       JSON.stringify(
         buildDepSnapshot(bakedFs(), ROOT, {
@@ -143,21 +155,80 @@ describe('dep snapshot (ADR-0135)', () => {
       templateId: 'vite',
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
-      installArtifactIdentity: 'sha256:current-install-artifacts',
-      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV1,
+      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV2,
       install: async () => {
         installed = true;
         return { packages: 9 };
       },
       log: () => undefined,
-    } as Parameters<typeof ensureProjectDependencies>[0] & {
-      readonly installArtifactIdentity: string;
-    };
+    } satisfies Parameters<typeof ensureProjectDependencies>[0];
 
     const result = await ensureProjectDependencies(options);
 
     expect(result).toEqual({ source: 'install', packages: 9 });
     expect(installed).toBe(true);
+  });
+
+  it('does not restore the same dependency map when package.json overrides drift', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    fsSync.mkdirSync(ROOT, { recursive: true });
+    fsSync.writeFileSync(
+      `${ROOT}/package.json`,
+      enc.encode(
+        JSON.stringify({
+          name: 'app',
+          dependencies: { vite: '^5.4.0' },
+          overrides: { esbuild: '@esbuild/wasi-preview1@0.28.0' },
+        }),
+      ),
+    );
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => snapshot,
+      install: async () => ({ packages: 9 }),
+      log: () => undefined,
+    });
+
+    expect(result).toEqual({ source: 'install', packages: 9 });
+  });
+
+  it('does not restore package-identical bytes from a different install-artifact identity', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    fsSync.mkdirSync(ROOT, { recursive: true });
+    fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON_TEXT));
+    const snapshot = {
+      ...buildDepSnapshot(bakedFs(), ROOT, {
+        templateId: 'vite',
+        deps: { vite: '^5.4.0' },
+        packages: 8,
+      }),
+      installArtifactIdentity: `sha256:${'0'.repeat(64)}`,
+    } satisfies DepSnapshotV2;
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => snapshot,
+      install: async () => ({ packages: 9 }),
+      log: () => undefined,
+    });
+
+    expect(result).toEqual({ source: 'install', packages: 9 });
   });
 
   it('fetchDepSnapshot handles raw gzip bytes AND server-decoded JSON (magic sniff)', async () => {
