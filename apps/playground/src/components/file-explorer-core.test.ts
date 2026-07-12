@@ -6,6 +6,7 @@ import {
   UPLOAD_BATCH,
   type UploadSource,
   canOpenContextMenu,
+  clampMenuPosition,
   contextMenuItems,
   dropTargetForRow,
   ensureMovablePaths,
@@ -164,6 +165,28 @@ describe('FileExplorer context menu composition', () => {
     expect(canOpenContextMenu(caps({ mutable: true }))).toBe(true);
     expect(canOpenContextMenu(caps({ downloadable: true }))).toBe(true);
     expect(canOpenContextMenu(caps({ headComparable: true }))).toBe(true);
+  });
+});
+
+describe('FileExplorer context menu viewport clamp', () => {
+  const viewport = { viewportWidth: 1280, viewportHeight: 720 };
+
+  it.each([
+    ['keeps an inside anchor', { x: 100, y: 100 }, { x: 100, y: 100 }],
+    ['clamps the bottom edge', { x: 100, y: 700 }, { x: 100, y: 476 }],
+    ['clamps the right edge', { x: 1270, y: 100 }, { x: 1108, y: 100 }],
+    ['clamps both far edges', { x: 1270, y: 700 }, { x: 1108, y: 476 }],
+    ['clamps negative anchors', { x: -20, y: -30 }, { x: 4, y: 4 }],
+  ])('%s', (_name, anchor, expected) => {
+    expect(clampMenuPosition({ ...anchor, menuWidth: 168, menuHeight: 240, ...viewport })).toEqual(
+      expected,
+    );
+  });
+
+  it('pins an oversized menu to the top-left margin', () => {
+    expect(
+      clampMenuPosition({ x: 50, y: 50, menuWidth: 2000, menuHeight: 2000, ...viewport }),
+    ).toEqual({ x: 4, y: 4 });
   });
 });
 

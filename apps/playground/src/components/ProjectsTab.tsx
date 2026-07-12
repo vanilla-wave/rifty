@@ -146,7 +146,7 @@ export function ProjectsTab(props: {
                 </div>
                 <Show when={props.menuFor === p.id}>
                   {/* biome-ignore lint/a11y/useKeyWithClickEvents: container only stops bubbling into the card's switch handler; its real actions are the <button> rows below (each keyboard-accessible). */}
-                  <div class="rf-rowmenu" onClick={(e) => e.stopPropagation()}>
+                  <div class="rf-rowmenu rf-projects__rowmenu" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       class="rf-rowmenu__item"

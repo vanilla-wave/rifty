@@ -17,6 +17,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { copyToClipboard } from '../glue/clipboard.ts';
 import {
   type FileManagerClipboard,
@@ -50,6 +51,7 @@ import {
   type FileExplorerMutations,
   UPLOAD_BATCH,
   canOpenContextMenu,
+  clampMenuPosition,
   contextMenuItems,
   dropTargetForRow,
   ensureMovablePaths,
@@ -140,6 +142,30 @@ export function FileExplorer(props: {
   const [clipboard, setClipboard] = createSignal<FileManagerClipboard | null>(null);
   const [dragging, setDragging] = createSignal<readonly string[] | null>(null);
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = createSignal<{
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
+  let contextMenuEl: HTMLDivElement | undefined;
+  createEffect(() => {
+    const menu = contextMenu();
+    if (!menu) {
+      contextMenuEl = undefined;
+      setContextMenuPosition(null);
+      return;
+    }
+    if (!contextMenuEl) return;
+    setContextMenuPosition(
+      clampMenuPosition({
+        x: menu.x,
+        y: menu.y,
+        menuWidth: contextMenuEl.offsetWidth,
+        menuHeight: contextMenuEl.offsetHeight,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }),
+    );
+  });
   let editInputEl: HTMLInputElement | undefined;
   const gitDecorations = createMemo(() => gitStatusDecorationMaps(props.gitStatus ?? new Map()));
   // Per-directory async state of the node_modules subtree (ADR-0080). Written
@@ -237,6 +263,7 @@ export function FileExplorer(props: {
       setContextMenu(null);
     };
     document.addEventListener('click', closeContextMenu);
+    window.addEventListener('resize', closeContextMenu);
     const timer = setInterval(() => {
       if (!visibleNow) return;
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
@@ -246,6 +273,7 @@ export function FileExplorer(props: {
     onCleanup(() => {
       clearInterval(timer);
       document.removeEventListener('click', closeContextMenu);
+      window.removeEventListener('resize', closeContextMenu);
     });
   });
 
@@ -416,6 +444,7 @@ export function FileExplorer(props: {
     if (!canOpenContextMenu(caps)) return;
     e.preventDefault();
     if (!selectedPaths().has(row.path)) selectSingle(row.path);
+    setContextMenuPosition(null);
     setContextMenu({
       ...caps,
       path: row.path,
@@ -973,26 +1002,34 @@ export function FileExplorer(props: {
 
         <Show when={contextMenu()}>
           {(menu) => (
-            <div
-              class="rf-rowmenu rf-explorer__context"
-              role="menu"
-              style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
-            >
-              <For each={contextMenuItems(menu())}>
-                {(item) => (
-                  <button
-                    type="button"
-                    class="rf-rowmenu__item"
-                    role="menuitem"
-                    disabled={menuItemDisabled(item.disabled)}
-                    onClick={() => runMenuItem(item.id, menu())}
-                  >
-                    <Icon name={item.icon} size={13} />
-                    {item.label}
-                  </button>
-                )}
-              </For>
-            </div>
+            <Portal>
+              <div
+                ref={(element) => {
+                  contextMenuEl = element;
+                }}
+                class="rf-rowmenu rf-explorer__context"
+                role="menu"
+                style={{
+                  left: `${(contextMenuPosition() ?? menu()).x}px`,
+                  top: `${(contextMenuPosition() ?? menu()).y}px`,
+                }}
+              >
+                <For each={contextMenuItems(menu())}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      class="rf-rowmenu__item"
+                      role="menuitem"
+                      disabled={menuItemDisabled(item.disabled)}
+                      onClick={() => runMenuItem(item.id, menu())}
+                    >
+                      <Icon name={item.icon} size={13} />
+                      {item.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Portal>
           )}
         </Show>
 

@@ -35,11 +35,27 @@ describe('multi-project launcher styles (ADR-0165 §9)', () => {
       '.rf-projects__grid',
       '.rf-pcard {',
       '.rf-rowmenu {',
+      '.rf-projects__rowmenu {',
+      '.rf-explorer__context {',
       '.rf-dialog {',
       '.rf-dialog__icon[data-tone="amber"]',
     ]) {
       expect(css, `missing style for ${sel}`).toContain(sel);
     }
+  });
+  it('keeps shared menu appearance separate from owner-specific placement', () => {
+    const shared = css.slice(css.indexOf('.rf-rowmenu {'), css.indexOf('.rf-projects__rowmenu {'));
+    const projects = css.slice(
+      css.indexOf('.rf-projects__rowmenu {'),
+      css.indexOf('.rf-explorer__context {'),
+    );
+    const explorer = css.slice(
+      css.indexOf('.rf-explorer__context {'),
+      css.indexOf('.rf-rowmenu__item {'),
+    );
+    expect(shared).not.toContain('position:');
+    expect(projects).toContain('position: absolute');
+    expect(explorer).toContain('position: fixed');
   });
   it('adds the dialog/launcher button tones + ACTIVE badge', () => {
     for (const sel of ['.rf-btn--lime', '.rf-btn--amber', '.rf-btn--danger', '.rf-badge--active']) {
