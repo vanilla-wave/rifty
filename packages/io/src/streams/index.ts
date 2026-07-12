@@ -19,8 +19,18 @@ export {
   type ReadableOptions,
   type AsyncHelperOptions,
 } from './readable.ts';
-export { Writable, type WritableOptions, type WriteChunk } from './writable.ts';
-export { Duplex, type DuplexOptions, type DuplexWebPair } from './duplex.ts';
+export {
+  Writable,
+  type WritableOptions,
+  type WritableFromWebOptions,
+  type WriteChunk,
+} from './writable.ts';
+export {
+  Duplex,
+  type DuplexOptions,
+  type DuplexFromWebOptions,
+  type DuplexWebPair,
+} from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';
 export { PassThrough } from './pass-through.ts';
 export { pipeline, finished } from './pipeline.ts';

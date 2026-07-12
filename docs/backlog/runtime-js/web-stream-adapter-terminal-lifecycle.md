@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: WHATWG fromWeb terminal lifecycle, signal, and reason identity
 created: 2026-07-12
-why: fromWeb adapters split terminal ownership, lose reasons, and only partially handle signal
+why: fromWeb adapters split terminal ownership, lose reasons, and loudly reject the still-unsupported valid signal lifecycle
 user_story: As a Node program adapting fetch or web streams, I want abort, destroy, and web failures to preserve Node reason identity and event order exactly once.
 blocked_by: []
 sources: [docs/public/compat/streams.md]
@@ -12,10 +12,11 @@ code: [packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts,
 
 ## Context
 
-Current adapters split terminal state across pump catches, close listeners,
-writer promises, and core destroy. Readable partially wires `signal`; Writable
-and Duplex do not own it. Node probes show reason, event, lock, and opposite-side
-teardown differences plus duplicate/spurious terminal events.
+Argument snapshot, validation, acquisition order, cold demand, and invalid-signal
+errors now match Node through ADR-0239. Terminal state remains split across read/
+write promises, close listeners, and core destroy; valid `{ signal }` is a loud
+gap. Node probes still show reason, event, lock-release, opposite-side teardown,
+and duplicate/spurious terminal differences.
 
 ## Acceptance
 
@@ -33,7 +34,7 @@ teardown differences plus duplicate/spurious terminal events.
 
 ## Out of scope
 
-- Normal chunk admission/backpressure.
+- Argument validation/acquisition and normal chunk admission/backpressure.
 - `toWeb` lifecycle.
 - Core non-WHATWG destroy semantics.
 

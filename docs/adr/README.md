@@ -59,6 +59,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0200 | Persistent ESM transform cache across dev-server child boots |
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
+| 0239 | fromWeb arguments have one staged validation owner |
+| 0240 | Writable completion separates internal and public phases |
 
 ### runtime-wasi
 
@@ -273,6 +275,7 @@ superseded.
 | 0187 command-site "returns only when durable" clause | 0216 | `npm install` exit no longer awaits the drain; the drain→gate→stamp sequence runs in background with pending-first demotion + generation-guarded promotion (every other 0187 clause stands) |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0216 | freshness is serve-stale-while-revalidate: fresh <1800s, stale ≤24h (served with the as-of line + one manifest-only background revalidate), dropped past 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
+| 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |

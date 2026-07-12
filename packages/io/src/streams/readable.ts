@@ -25,6 +25,8 @@
 import { Buffer } from '../buffer.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import { getDefaultHighWaterMark } from './default-highwatermark.ts';
+import { acquireReadableFromWeb } from './from-web-validation.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -86,6 +88,28 @@ export function chunkSize(chunk: unknown): number {
   if (typeof chunk === 'string') return chunk.length;
   if (chunk instanceof Uint8Array) return chunk.length;
   return 1;
+}
+
+function needsReadableData(state: ReadableState): boolean {
+  return state.length === 0 || state.length < state.highWaterMark;
+}
+
+function canPushMore(state: ReadableState): boolean {
+  return !state.ended && needsReadableData(state);
+}
+
+function autoRefillEligible(state: ReadableState): boolean {
+  return (
+    !state.ended &&
+    !state.destroyed &&
+    (state.length < state.highWaterMark || (state.flowing === true && state.length === 0))
+  );
+}
+
+function pushAfterEofError(): Error {
+  const error = new Error('stream.push() after EOF') as Error & { code: string };
+  error.code = 'ERR_STREAM_PUSH_AFTER_EOF';
+  return error;
 }
 
 /**
@@ -351,7 +375,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   readonly _readableState: ReadableState;
-  private readImpl?: (this: Readable, size: number) => void;
+  private readMoreScheduled = false;
+  private readableScheduled = false;
+  private endScheduled = false;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
   private encodingState: EncodingState | null = null;
   /**
@@ -380,7 +406,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       disturbed: false,
       flowScheduled: false,
     };
-    this.readImpl = opts.read;
+    if (opts.read !== undefined) this._read = opts.read;
     // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
     if (opts.encoding) this.setEncoding(opts.encoding);
     this.on('newListener', (event) => {
@@ -388,27 +414,18 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         this._readableState.flowing = true;
         this.scheduleFlow();
       } else if (event === 'readable' && !this._readableState.endEmitted) {
-        // Pump so a cold reader doesn't sit idle on a first chunk that's
-        // already queued (Node fires `'readable'` once a chunk lands).
         queueMicrotask(() => {
-          if (this._readableState.buffer.length > 0 && !this._readableState.endEmitted) {
-            this.emit('readable');
-          }
-          if (
-            !this._readableState.ended &&
-            !this._readableState.reading &&
-            this.readImpl !== undefined
-          ) {
-            this._readableState.reading = true;
-            try {
-              this.readImpl.call(this, this._readableState.highWaterMark);
-            } finally {
-              this._readableState.reading = false;
-            }
-          }
+          const state = this._readableState;
+          if (state.destroyed || state.endEmitted) return;
+          if (state.buffer.length > 0 || state.ended) this.scheduleReadable();
+          if (!state.ended) this.maybeRead();
         });
       }
     });
+  }
+
+  _read(_size: number): void {
+    throw methodNotImplementedError('_read()');
   }
 
   get readable(): boolean {
@@ -479,41 +496,53 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   }
 
   push(chunk: unknown): boolean {
-    // TODO(backlog: runtime-js/readable-read-hook-and-chunk-admission)
     const state = this._readableState;
+    const wasReading = state.reading;
     if (chunk === null) {
+      state.reading = false;
       state.ended = true;
       if (state.flowing) this.scheduleFlow();
-      else {
-        // Paused readers still need `end`; fire a final `'readable'` first so
-        // `read(n)`-on-`'readable'` consumers can drain the tail (Node fires
-        // `'readable'` once more at EOF, then `read()` returns null).
-        queueMicrotask(() => {
-          if (this.listenerCount('readable') > 0 && !state.endEmitted) {
-            this.emit('readable');
-          }
-          this.finishIfDone();
-        });
-      }
+      else if (this.listenerCount('readable') > 0) this.scheduleReadable();
+      else if (wasReading && state.disturbed && state.length === 0) this.requestEnd();
       return false;
     }
+
+    let admitted = chunk;
+    let filtered = false;
+    if (!state.objectMode) {
+      filtered =
+        chunk === undefined ||
+        chunk === '' ||
+        (chunk instanceof Uint8Array && chunk.byteLength === 0);
+      if (!filtered) {
+        if (typeof chunk === 'string') admitted = Buffer.from(chunk);
+        else if (chunk instanceof Uint8Array && !Buffer.isBuffer(chunk)) {
+          admitted = new Buffer(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.byteLength);
+        }
+      }
+    }
+    state.reading = false;
+
+    if (filtered) {
+      if (state.ended) return false;
+      if (state.destroyed) return canPushMore(state);
+      if (wasReading) this.scheduleReadMore();
+      return canPushMore(state);
+    }
     if (state.ended) {
-      // Push after EOF is a programming error in Node — emit error.
-      const err = new Error('stream.push() after EOF');
-      queueMicrotask(() => this.emit('error', err));
+      this.destroy(pushAfterEofError());
       return false;
     }
     if (state.destroyed) return false;
-    state.buffer.push(chunk);
-    state.length += state.objectMode ? 1 : chunkSize(chunk);
+    state.buffer.push(admitted);
+    state.length += state.objectMode ? 1 : chunkSize(admitted);
+    if (wasReading) this.scheduleReadMore();
     if (state.flowing) {
       this.scheduleFlow();
     } else if (this.listenerCount('readable') > 0) {
-      queueMicrotask(() => {
-        if (!state.endEmitted) this.emit('readable');
-      });
+      this.scheduleReadable();
     }
-    return state.length < state.highWaterMark;
+    return canPushMore(state);
   }
 
   /**
@@ -522,85 +551,66 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   read(n?: number): unknown {
     const state = this._readableState;
-    // `read(0)` is a peek in Node: schedule `_read`, return null.
     if (n === 0) {
       this.maybeRead();
       return null;
     }
     if (n === undefined) {
       if (state.length === 0) {
-        if (state.ended && !state.endEmitted) {
-          state.endEmitted = true;
-          queueMicrotask(() => this.emit('end'));
-        } else {
-          this.maybeRead();
+        if (!state.ended) this.maybeRead();
+        if (state.length === 0) {
+          if (state.ended) this.requestEnd();
+          return null;
         }
-        return null;
       }
       const all = takeAll(state);
       state.disturbed = true;
       if (!state.ended) this.maybeRead();
-      else if (state.length === 0 && !state.endEmitted) {
-        state.endEmitted = true;
-        queueMicrotask(() => this.emit('end'));
-      }
+      if (state.ended && state.length === 0) this.requestEnd();
       return this.applyEncoding(all);
     }
     // TODO(backlog: runtime-js/readable-sized-read-hwm-growth)
     // Object mode: `n` is meaningless past 1; return one entry.
     if (state.objectMode) {
       if (state.length === 0) {
-        if (state.ended && !state.endEmitted) {
-          state.endEmitted = true;
-          queueMicrotask(() => this.emit('end'));
-        } else {
-          this.maybeRead();
+        if (!state.ended) this.maybeRead(n, true);
+        if (state.length === 0) {
+          if (state.ended) this.requestEnd();
+          return null;
         }
-        return null;
       }
       const v = state.buffer.shift();
       state.length -= 1;
       state.disturbed = true;
-      if (!state.ended && state.length < state.highWaterMark) this.maybeRead();
-      return v ?? null;
+      if (!state.ended) this.maybeRead();
+      if (state.ended && state.length === 0) this.requestEnd();
+      return v;
     }
     // Byte mode: exact-n semantics.
     if (state.length < n) {
       // Synchronous pump: if `_read` enqueues enough we satisfy the request in
       // the same tick (Node's "_read may push synchronously" path).
-      this.maybeRead(n);
+      this.maybeRead(n, true);
       if (state.length < n) {
         // Producer ended with leftovers: return them (Node's final partial read).
         if (state.ended) {
           if (state.length > 0) {
             const partial = takeAll(state);
             state.disturbed = true;
-            if (!state.endEmitted) {
-              state.endEmitted = true;
-              queueMicrotask(() => this.emit('end'));
-            }
+            this.requestEnd();
             return this.applyEncoding(partial);
           }
-          // Drained AND ended: schedule end. (Node fires `'readable'` once more
-          // on EOF, but only after a successful read — none here, so skip it.)
-          if (!state.endEmitted) {
-            state.endEmitted = true;
-            queueMicrotask(() => this.emit('end'));
-          }
+          this.requestEnd();
         }
         return null;
       }
     }
     const slice = sliceBuffer(state, n);
     state.disturbed = true;
-    if (state.length === 0 && state.ended && !state.endEmitted) {
-      state.endEmitted = true;
-      // Final `readable` so the consumer observes EOF before `end` fires.
-      if (this.listenerCount('readable') > 0) {
-        queueMicrotask(() => this.emit('readable'));
-      }
-      queueMicrotask(() => this.emit('end'));
-    } else if (!state.ended && state.length < state.highWaterMark) {
+    if (state.length === 0 && state.ended) {
+      if (this.listenerCount('readable') > 0) this.scheduleReadable();
+      this.requestEnd();
+    } else if (!state.ended) {
       this.maybeRead();
     }
     return this.applyEncoding(slice);
@@ -611,16 +621,64 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    * read isn't already in flight. Caller passes the desired size hint; default
    * is the current high-water headroom.
    */
-  private maybeRead(hint?: number): void {
+  private maybeRead(hint?: number, force = false): void {
     const state = this._readableState;
-    if (state.ended || state.reading || !this.readImpl || state.destroyed) return;
-    const size = hint ?? Math.max(state.highWaterMark - state.length, 1);
+    if (state.ended || state.reading || state.destroyed || state.errored) return;
+    if (!force && !needsReadableData(state)) return;
+    const size = hint ?? state.highWaterMark;
     state.reading = true;
     try {
-      this.readImpl.call(this, size);
-    } finally {
-      state.reading = false;
+      this._read(size);
+    } catch (error) {
+      this.destroy(error as Error);
     }
+  }
+
+  private scheduleReadMore(): void {
+    const state = this._readableState;
+    if (this.readMoreScheduled || state.reading || !autoRefillEligible(state)) return;
+    this.readMoreScheduled = true;
+    queueMicrotask(() => {
+      try {
+        while (!state.reading && autoRefillEligible(state)) {
+          const before = state.length;
+          this.maybeRead();
+          if (state.length === before) break;
+        }
+      } finally {
+        this.readMoreScheduled = false;
+      }
+    });
+  }
+
+  private scheduleReadable(): void {
+    if (this.readableScheduled) return;
+    this.readableScheduled = true;
+    queueMicrotask(() => {
+      this.readableScheduled = false;
+      const state = this._readableState;
+      if (state.destroyed || state.errored || state.endEmitted) return;
+      if (this.listenerCount('readable') > 0) this.emit('readable');
+    });
+  }
+
+  private requestEnd(): void {
+    if (this.endScheduled) return;
+    this.endScheduled = true;
+    queueMicrotask(() => {
+      this.endScheduled = false;
+      const state = this._readableState;
+      if (
+        state.ended &&
+        state.length === 0 &&
+        !state.destroyed &&
+        !state.errored &&
+        !state.endEmitted
+      ) {
+        state.endEmitted = true;
+        this.emit('end');
+      }
+    });
   }
 
   /**
@@ -646,20 +704,14 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       const out = this.applyEncoding(chunk);
       // A streaming decoder returns '' while it buffers an incomplete multi-byte
       // sequence — Node does not surface an empty `'data'` in that case.
-      if (out !== '') {
+      if (state.objectMode || out !== '') {
         // Delivering a chunk disturbs the stream (flowing-mode consumption).
         state.disturbed = true;
         this.emit('data', out);
       }
     }
     this.finishIfDone();
-    if (
-      state.flowing &&
-      this.readImpl &&
-      !state.ended &&
-      state.length < state.highWaterMark &&
-      !state.reading
-    ) {
+    if (state.flowing && autoRefillEligible(state) && !state.reading) {
       this.maybeRead();
       // If `_read` enqueued synchronously, drain again on the next tick.
       if (state.buffer.length > 0 && state.flowing) this.scheduleFlow();
@@ -668,10 +720,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
   private finishIfDone(): void {
     const state = this._readableState;
-    if (state.ended && !state.endEmitted && state.length === 0) {
-      state.endEmitted = true;
-      this.emit('end');
-    }
+    if (state.ended && state.length === 0 && !state.destroyed && !state.errored) this.requestEnd();
   }
 
   resume(): this {
@@ -994,7 +1043,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     });
     // Install a `_read` so a paused-mode consumer's `read()` resumes the legacy
     // source (Node's wrap installs a `_read` that calls `stream.resume()`).
-    this.readImpl = (): void => {
+    this._read = (): void => {
       resumeLegacy();
     };
     stream.on('data', onData);
@@ -1173,12 +1222,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   /**
    * Create a `Readable` from any sync or async iterable.
    *
-   * Current rifty mode detection (known Node divergence when `objectMode` is absent):
-   *   - first chunk is a `string`, `Uint8Array`, or `Buffer` → byte mode
-   *     (`objectMode: false`);
-   *   - otherwise → object mode.
-   *
-   * When `options.objectMode` IS supplied it always wins — the caller knows.
+   * Defaults generic iterables to object mode/HWM 1. Bare strings and Buffers
+   * are one atomic object-mode entry. Caller options spread last and win.
    *
    * Non-iterable inputs throw `TypeError` synchronously (Node's contract).
    *
@@ -1191,13 +1236,26 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     iter: Iterable<unknown> | AsyncIterable<unknown>,
     options: ReadableOptions = {},
   ): Readable {
-    // TODO(backlog: runtime-js/readable-from-source-defaults)
     // Surface bad input as Node does: TypeError before any state is created.
     if (iter == null || (typeof iter !== 'object' && typeof iter !== 'string')) {
       throw new TypeError(
         `Readable.from: the "iterable" argument must be iterable. Received type ${typeof iter}`,
       );
     }
+    if (typeof iter === 'string' || Buffer.isBuffer(iter)) {
+      let emitted = false;
+      return new Readable({
+        objectMode: true,
+        ...options,
+        read(): void {
+          if (emitted) return;
+          emitted = true;
+          this.push(iter);
+          this.push(null);
+        },
+      });
+    }
+
     // TODO(backlog: runtime-js/readable-from-iterator-lifecycle)
     const sym = (iter as { [Symbol.iterator]?: unknown })[Symbol.iterator];
     const asyncSym = (iter as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator];
@@ -1207,8 +1265,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       );
     }
 
-    // Build the runtime iterator now so we can peek the first chunk for mode
-    // detection without re-consuming the source.
     let iterator: AsyncIterator<unknown> | Iterator<unknown>;
     let isAsync = false;
     if (typeof asyncSym === 'function') {
@@ -1218,34 +1274,12 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       iterator = (sym as () => Iterator<unknown>).call(iter);
     }
 
-    // Peek the first chunk to detect byte vs object mode when objectMode is not
-    // explicit; the peek is pushed back before the pump.
-    let firstResult: IteratorResult<unknown> | Promise<IteratorResult<unknown>> | null = null;
-    let resolvedMode: boolean;
-    if (options.objectMode !== undefined) {
-      resolvedMode = options.objectMode;
-    } else if (!isAsync) {
-      const r = (iterator as Iterator<unknown>).next();
-      firstResult = r;
-      if (r.done) {
-        // Empty iterable defaults to objectMode true (Node-like).
-        resolvedMode = true;
-      } else {
-        const v = r.value;
-        resolvedMode = !(v instanceof Uint8Array || typeof v === 'string');
-      }
-    } else {
-      // Can't peek an async iterator without making `from` async; default to
-      // objectMode true — Node's default for `Readable.from(asyncIter)`.
-      resolvedMode = true;
-    }
-
     let pulling = false;
     let done = false;
     const r = new Readable({
-      highWaterMark: options.highWaterMark,
-      objectMode: resolvedMode,
-      encoding: options.encoding,
+      objectMode: true,
+      highWaterMark: 1,
+      ...options,
       read(): void {
         void pump();
       },
@@ -1255,12 +1289,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       if (pulling || done || r.destroyed) return;
       pulling = true;
       try {
-        while (!r.destroyed && r._readableState.length < r._readableState.highWaterMark) {
+        while (!r.destroyed && needsReadableData(r._readableState)) {
           let step: IteratorResult<unknown>;
-          if (firstResult !== null) {
-            step = firstResult as IteratorResult<unknown>;
-            firstResult = null;
-          } else if (isAsync) {
+          if (isAsync) {
             step = await (iterator as AsyncIterator<unknown>).next();
           } else {
             step = (iterator as Iterator<unknown>).next();
@@ -1284,67 +1315,54 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   /**
    * Convert a WHATWG `ReadableStream` into this Node-shape `Readable`.
    *
-   * The reader pump preserves each web-stream chunk boundary and stops reading
-   * when `push()` reports backpressure, resuming only after the Node-readable
-   * buffer has drained below its high-water mark. Exact terminal reason/order,
-   * locks, settlement, and signal behavior remain tracked separately.
+   * One cold web read follows each core demand latch. Core `push()` owns chunk
+   * admission and HWM refill. Terminal reason/order and signal lifecycle remain
+   * tracked separately.
    */
   static fromWeb(stream: ReadableStream<unknown>, options: ReadableFromWebOptions = {}): Readable {
-    // TODO(backlog: runtime-js/web-stream-adapter-terminal-lifecycle)
-    if (!stream || typeof (stream as { getReader?: unknown }).getReader !== 'function') {
-      throw new TypeError(
-        'Readable.fromWeb: the "readableStream" argument must be a ReadableStream',
-      );
-    }
-    if (options.signal?.aborted) {
-      const r = new Readable(options);
-      queueMicrotask(() => r.destroy(abortError()));
-      return r;
-    }
-
-    const reader = stream.getReader();
-    const r = new Readable(options);
+    const { reader, config } = acquireReadableFromWeb(stream, options);
     let closed = false;
-
-    // Abort→destroy wiring shared with `stream.addAbortSignal` (its `'close'`/
-    // `'end'` cleanup detaches the listener; the pump no longer removes it).
-    if (options.signal) addAbortSignal(options.signal, r);
+    const r = new Readable({
+      highWaterMark: config.highWaterMark,
+      encoding: config.encoding,
+      objectMode: config.objectMode,
+      read(): void {
+        void reader.read().then(
+          ({ done, value }) => {
+            if (done) {
+              closed = true;
+              reader.releaseLock();
+              this.push(null);
+              return;
+            }
+            this.push(value);
+          },
+          (error: unknown) => {
+            closed = true;
+            try {
+              reader.releaseLock();
+            } catch {
+              // A rejected read can coincide with an externally released lock.
+            }
+            this.destroy(error as Error);
+          },
+        );
+      },
+    });
 
     r.once('close', () => {
       if (closed) return;
       closed = true;
       void reader.cancel().catch(() => {});
     });
-
-    void (async () => {
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value === undefined) continue;
-          const chunk =
-            !r.readableObjectMode && typeof value === 'string' ? Buffer.from(value) : value;
-          if (!r.push(chunk)) await waitForReadableDemand(r);
-        }
-        closed = true;
-        reader.releaseLock();
-        r.push(null);
-      } catch (err) {
-        closed = true;
-        try {
-          reader.releaseLock();
-        } catch {
-          /* already released/cancelled */
-        }
-        r.destroy(err as Error);
-      }
-    })();
     return r;
   }
 }
 
-export interface ReadableFromWebOptions extends ReadableOptions {
-  signal?: AbortSignal;
+export interface ReadableFromWebOptions {
+  highWaterMark?: number;
+  encoding?: string;
+  objectMode?: boolean;
 }
 
 /**
@@ -1364,39 +1382,6 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     (typeof value === 'object' || typeof value === 'function') &&
     typeof (value as { then?: unknown }).then === 'function'
   );
-}
-
-function waitForReadableDemand(r: Readable): Promise<void> {
-  if (r.destroyed || r.readableLength < r.readableHighWaterMark) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const cleanup = (): void => {
-      r.off('data', onProgress);
-      r.off('readable', onProgress);
-      r.off('end', onProgress);
-      r.off('close', onClose);
-      r.off('error', onError);
-    };
-    const done = (): void => {
-      cleanup();
-      resolve();
-    };
-    const onProgress = (): void => {
-      if (r.destroyed || r.readableLength < r.readableHighWaterMark || r.readableEnded) done();
-    };
-    const onClose = (): void => {
-      done();
-    };
-    const onError = (err: unknown): void => {
-      cleanup();
-      reject(err);
-    };
-    r.on('data', onProgress);
-    r.on('readable', onProgress);
-    r.on('end', onProgress);
-    r.on('close', onClose);
-    r.on('error', onError);
-    queueMicrotask(onProgress);
-  });
 }
 
 /** Minimal shape `addAbortSignal` drives: anything with Node's `destroy(err)`. */

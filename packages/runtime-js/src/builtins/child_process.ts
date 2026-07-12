@@ -124,8 +124,9 @@ class ChildProcess extends EventEmitter {
     this.handle = handle;
     this.pid = handle.pid;
     this.ipcEnabled = ipcEnabled;
-    this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
-    this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
+    // Handle/Worker events push stdio; neither fallback is a bare source.
+    this.stdout = streams?.stdout ?? new Readable({ objectMode: false, read(): void {} });
+    this.stderr = streams?.stderr ?? new Readable({ objectMode: false, read(): void {} });
     this.stdin = streams?.stdin ?? new InRealmStdinUnsupported();
     // Surface kernel-tracked exit/close so existing `.on('close', …)` consumers
     // keep working.

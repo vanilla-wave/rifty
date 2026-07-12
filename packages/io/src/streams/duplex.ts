@@ -14,8 +14,14 @@
  * field any cast can pass through.
  */
 
+import { acquireDuplexFromWeb } from './from-web-validation.ts';
 import { Readable, type ReadableOptions } from './readable.ts';
-import { Writable, type WritableOptions, type WritableState } from './writable.ts';
+import {
+  Writable,
+  type WritableOptions,
+  type WritableState,
+  streamDestroyedError,
+} from './writable.ts';
 
 type WriteOverride = (
   this: Duplex,
@@ -25,6 +31,7 @@ type WriteOverride = (
 ) => void;
 
 type FinalOverride = (this: Duplex, cb: (err?: Error | null) => void) => void;
+type DuplexEndCallback = (error?: Error | null) => void;
 
 function ownFunction(target: object, name: '_write' | '_final'): unknown {
   if (!Object.prototype.hasOwnProperty.call(target, name)) return undefined;
@@ -67,6 +74,14 @@ export interface DuplexOptions extends ReadableOptions, WritableOptions {
    * parity); `Duplex.fromWeb` deliberately defaults it to `false`.
    */
   allowHalfOpen?: boolean;
+}
+
+export interface DuplexFromWebOptions {
+  allowHalfOpen?: boolean;
+  highWaterMark?: number;
+  objectMode?: boolean;
+  encoding?: string;
+  decodeStrings?: boolean;
 }
 
 // @ts-expect-error TS2417 — `Duplex.toWeb` returns a `{ readable, writable }`
@@ -122,8 +137,19 @@ export class Duplex extends Readable {
     this.writableSide.on('finish', () => {
       this.emit('finish');
     });
+    this.writableSide.on('prefinish', () => {
+      this.emit('prefinish');
+    });
     this.writableSide.on('error', (err) => {
+      if (this._readableState.destroyed) return;
+      // Writable owns the deferred public completion stack. Close the readable
+      // half on that same stack: write errors have already published end
+      // callbacks, while final errors publish them after this public close.
+      this._readableState.errored = err as Error;
+      this._readableState.destroyed = true;
+      this._readableState.disturbed = true;
       this.emit('error', err);
+      this.emit('close');
     });
     this.writableSide.on('drain', () => {
       this.emit('drain');
@@ -185,8 +211,31 @@ export class Duplex extends Readable {
   }
 
   /** Signal end-of-writable. Delegates to the writable side. */
-  end(chunkOrCb?: unknown, encodingOrCb?: string | (() => void), cb?: () => void): this {
-    this.writableSide.end(chunkOrCb, encodingOrCb, cb);
+  end(cb?: DuplexEndCallback): this;
+  end(chunk: unknown, cb?: DuplexEndCallback): this;
+  end(chunk: unknown, encoding?: string, cb?: DuplexEndCallback): this;
+  end(
+    chunkOrCb?: unknown,
+    encodingOrCb?: string | DuplexEndCallback,
+    cb?: DuplexEndCallback,
+  ): this {
+    const state = this.writableSide._writableState;
+    if (state.destroyed && !state.finished) {
+      const cbFinal =
+        typeof chunkOrCb === 'function'
+          ? (chunkOrCb as DuplexEndCallback)
+          : typeof encodingOrCb === 'function'
+            ? encodingOrCb
+            : cb;
+      if (cbFinal && state.errored) {
+        const publish = (): void => cbFinal(streamDestroyedError());
+        if (state.closed) queueMicrotask(publish);
+        else this.once('close', publish);
+      }
+      return this;
+    }
+    if (typeof encodingOrCb === 'function') this.writableSide.end(chunkOrCb, encodingOrCb);
+    else this.writableSide.end(chunkOrCb, encodingOrCb, cb);
     return this;
   }
 
@@ -234,46 +283,37 @@ export class Duplex extends Readable {
     pair:
       | { readable: ReadableStream<unknown>; writable: WritableStream<unknown> }
       | ReadableStream<unknown>,
-    options: DuplexOptions = {},
+    options: DuplexFromWebOptions = {},
   ): Duplex {
-    // TODO(backlog: runtime-js/web-stream-adapter-terminal-lifecycle)
-    const candidate = pair as {
-      readable?: { getReader?: unknown };
-      writable?: { getWriter?: unknown };
-    } | null;
-    if (
-      candidate === null ||
-      typeof candidate !== 'object' ||
-      typeof candidate.readable?.getReader !== 'function' ||
-      typeof candidate.writable?.getWriter !== 'function'
-    ) {
-      throw new TypeError(
-        'The "pair.readable"/"pair.writable" arguments must be of type ReadableStream/WritableStream',
-      ) as TypeError & { code?: string };
-    }
-    const validPair = pair as {
-      readable: ReadableStream<unknown>;
-      writable: WritableStream<unknown>;
-    };
-    const reader = validPair.readable.getReader();
-    const writer = validPair.writable.getWriter();
+    const { reader, writer, config } = acquireDuplexFromWeb(pair, options);
     let writeAborted = false;
+    let readClosed = false;
 
     const d = new Duplex({
-      ...options,
-      // fromWeb's deliberate default is the OPPOSITE of a bare Duplex.
-      allowHalfOpen: options.allowHalfOpen ?? false,
+      allowHalfOpen: config.allowHalfOpen,
+      highWaterMark: config.highWaterMark,
+      objectMode: config.objectMode,
+      encoding: config.encoding,
+      decodeStrings: config.decodeStrings,
       read(): void {
-        reader.read().then(
+        void reader.read().then(
           ({ done, value }) => {
             if (done) {
-              d.push(null);
+              readClosed = true;
+              reader.releaseLock();
+              this.push(null);
               return;
             }
-            if (value !== undefined) d.push(value);
+            this.push(value);
           },
-          (err) => {
-            if (!d.destroyed) d.destroy(err as Error);
+          (error: unknown) => {
+            readClosed = true;
+            try {
+              reader.releaseLock();
+            } catch {
+              // A rejected read can coincide with an externally released lock.
+            }
+            if (!this.destroyed) this.destroy(error as Error);
           },
         );
       },
@@ -303,7 +343,10 @@ export class Duplex extends Readable {
         writeAborted = true;
         void writer.abort(d._writableState.errored ?? undefined).catch(() => {});
       }
-      void reader.cancel().catch(() => {});
+      if (!readClosed) {
+        readClosed = true;
+        void reader.cancel().catch(() => {});
+      }
     });
     return d;
   }
@@ -515,7 +558,10 @@ function duplexFromReadableSource(
           yield await (src as Promise<unknown>);
         })()
       : (src as Iterable<unknown> | AsyncIterable<unknown>);
-  return duplexFromReadable(Readable.from(iterable, { objectMode: options.objectMode }), options);
+  return duplexFromReadable(
+    Readable.from(iterable, { objectMode: options.objectMode ?? true }),
+    options,
+  );
 }
 
 function duplexFromReadable(readable: Readable, options: DuplexOptions): Duplex {

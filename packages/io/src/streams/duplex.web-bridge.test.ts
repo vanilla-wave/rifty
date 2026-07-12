@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { Buffer } from '../buffer.ts';
 import { Duplex } from './duplex.ts';
 import { Transform } from './transform.ts';
 
 const tick = (ms = 30): Promise<void> => new Promise((res) => setTimeout(res, ms));
+
+function collectToEnd(stream: Duplex, label: string): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    const chunks: unknown[] = [];
+    const timer = setTimeout(() => reject(new Error(`Duplex did not end: ${label}`)), 250);
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('end', () => {
+      clearTimeout(timer);
+      resolve(chunks);
+    });
+    stream.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 
 /**
  * `Duplex.toWeb(d)` → `{ readable, writable }` (Node v17); `Duplex.fromWeb(pair)`
@@ -175,6 +192,22 @@ describe('Duplex.fromWeb', () => {
     expect(out).toEqual(['d:yo']);
   });
 
+  it('normalizes a byte-mode web string to a UTF-8 Buffer', async () => {
+    const readable = new ReadableStream({
+      start(controller) {
+        controller.enqueue('é');
+        controller.close();
+      },
+    });
+    const d = Duplex.fromWeb({ readable, writable: new WritableStream() });
+    const chunks = await collectToEnd(d, 'fromWeb byte string');
+
+    expect(chunks).toHaveLength(1);
+    expect(Buffer.isBuffer(chunks[0])).toBe(true);
+    expect(Buffer.from(chunks[0] as Uint8Array).toString('hex')).toBe('c3a9');
+    expect(String(chunks[0])).toBe('é');
+  });
+
   it('throws a synchronous TypeError for a non-WHATWG argument', () => {
     expect(() =>
       Duplex.fromWeb(42 as unknown as { readable: ReadableStream; writable: WritableStream }),
@@ -193,17 +226,16 @@ describe('Duplex.from', () => {
     const d = Duplex.from(
       new ReadableStream({
         start(controller) {
-          controller.enqueue('hello');
+          controller.enqueue('é');
           controller.close();
         },
       }),
     );
-    const chunks: unknown[] = [];
-    d.on('data', (chunk) => chunks.push(chunk));
-    await tick();
+    const chunks = await collectToEnd(d, 'from ReadableStream byte string');
 
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toBeInstanceOf(Uint8Array);
-    expect(String(chunks[0])).toBe('hello');
+    expect(Buffer.isBuffer(chunks[0])).toBe(true);
+    expect(Buffer.from(chunks[0] as Uint8Array).toString('hex')).toBe('c3a9');
+    expect(String(chunks[0])).toBe('é');
   });
 });

@@ -65,6 +65,10 @@
 
 ### Fixed
 
+- **HTTP body Readables declare their push-fed `_read` owner.** The new loud
+  base Readable hook no longer mistakes fetch-driven request/response bodies for
+  an unimplemented pull source.
+
 - **Loopback HTTP/HTTPS fidelity tightened after PR #102 review.** `https.request('http://…')`
   now throws `ERR_INVALID_PROTOCOL` instead of silently rewriting plaintext to
   TLS, `https.request(new URL(...))` preserves the URL host/path, and IPv4-mapped

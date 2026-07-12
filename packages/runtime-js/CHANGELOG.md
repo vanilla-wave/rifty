@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Fallback child-process stdout/stderr declare their push-fed read hook.**
+  Handle/Worker events remain the only producer while the base Readable now
+  correctly loud-throws for genuinely missing `_read` implementations.
+
 - **CJS imports now share one cached import job and record-owned
   namespace.** `default`/`module.exports` preserve the exact outer, named
   values snapshot once, require/import order and in-flight self-imports converge

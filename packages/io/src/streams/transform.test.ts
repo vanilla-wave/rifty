@@ -65,11 +65,15 @@ describe('Transform subclassing', () => {
 
 describe('Duplex.write routes to the writable side', () => {
   it('writes via Duplex go to the writable side, not the readable buffer', async () => {
-    const d = new Duplex({ objectMode: true });
-    // Per ADR-0034, `writableSide` is `readonly` and there's no need to reach
-    // in to override the write impl — instead, the Duplex's writable side is
-    // a real `Writable` with its own default no-op `_write`. We assert the
-    // protocol-level guarantee that writes don't echo onto the readable half.
+    const written: unknown[] = [];
+    const d = new Duplex({
+      objectMode: true,
+      read(): void {},
+      write(chunk, _encoding, cb): void {
+        written.push(chunk);
+        cb();
+      },
+    });
     const dataSeen: unknown[] = [];
     d.on('data', (c) => dataSeen.push(c));
     d.write('one');
@@ -78,6 +82,7 @@ describe('Duplex.write routes to the writable side', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(dataSeen).toEqual([]); // not echoed to the readable side
+    expect(written).toEqual(['one', 'two']);
   });
 
   it('Duplex with a writable impl invokes it for write()', async () => {
