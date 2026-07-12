@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Alias shims declare the exact public API version they materialize, allowing
+  npm-client to reject incompatible source ranges before applying a baked
+  substitution.
+
 - **Shim data restructured for install-time application (ADR-0188).** New `internalsShims`
   table keyed by the INSTALLED trigger package with package-relative file paths, a proven
   `range`, alias `into` (esbuild/lightningcss import names), and `companions` (rollup →

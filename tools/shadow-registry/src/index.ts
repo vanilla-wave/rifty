@@ -367,6 +367,11 @@ export interface InternalsShim {
    * Absent → in-place patch of the trigger package.
    */
   readonly into?: string;
+  /**
+   * Exact public API version materialized under `into`. A redirect may expose
+   * this alias only when its effective source request admits this version.
+   */
+  readonly apiVersion?: string;
   /** Files keyed by package-relative path (e.g. `dist/native.js`). */
   readonly files: Record<string, string>;
   /**
@@ -393,6 +398,7 @@ export const internalsShims: Record<string, InternalsShim> = {
   '@esbuild/wasi-preview1': {
     range: '0.28.0',
     into: 'esbuild',
+    apiVersion: SHIM_ESBUILD_VERSION,
     files: {
       'package.json': SHIM_ESBUILD_PACKAGE_JSON,
       'lib/main.js': SHIM_ESBUILD_ESM,
@@ -403,6 +409,7 @@ export const internalsShims: Record<string, InternalsShim> = {
   'lightningcss-wasm': {
     range: '^1.32.0',
     into: 'lightningcss',
+    apiVersion: SHIM_LIGHTNINGCSS_VERSION,
     files: {
       'package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
       'index.mjs': SHIM_LIGHTNINGCSS_ESM,

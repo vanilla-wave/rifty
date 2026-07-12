@@ -27,6 +27,11 @@
 
 ### Fixed
 
+- Baked alias substitution now checks the caller's package range at one shared
+  fresh/replay resolution boundary. An esbuild request that excludes the exact
+  shadow API version fails before network, lockfile lookup, provenance, or writes;
+  an explicit user override continues to own its replacement range.
+
 - **Standard-path registry fetches are stall-bounded.** `RegistryClient`
   packument/tarball fetches now bound BOTH phases (headers + body) through the
   shared `bounded-fetch` chokepoint (no-progress window, default 10s + 128MiB
