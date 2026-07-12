@@ -1,8 +1,8 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import type { CommandContext } from '@riftydev/shell';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserVitePreviewConfig, findUserViteConfig } from './vite-config-guard.ts';
+import { startAndPublishViteEsbuild } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -84,10 +84,10 @@ export function viteCliPrepareOptionsFromEnv(
 // patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle — the
 // keepalive pin (CAC never awaits async actions) and the preview inline-config
 // (executes only under `vite preview`; needle-guarded, loud on drift).
-function installCliActionPatches(root: string, mode: ViteCliMode): void {
+function installCliActionPatches(vitePackageRoot: string, mode: ViteCliMode): void {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
-  const path = normalizePath(`${root}/node_modules/vite/dist/node/cli.js`);
+  const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
   if (!fs.existsSync(path)) return;
   let source = dec.decode(fs.readFileBytesSync(path));
   let changed = false;
@@ -231,15 +231,76 @@ function writeViteCliConfigWrapper(root: string, opts: ViteCliPrepareOptions): v
   );
 }
 
-export async function prepareViteCli(
+const VITE_BIN_SUFFIX = '/.bin/vite';
+const EXACT_ESBUILD_VITE_VERSION = '7.3.6';
+
+function vitePackageRoot(root: string, executedBinPath?: string): string {
+  if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
+  const binPath = normalizePath(executedBinPath);
+  if (!binPath.endsWith(VITE_BIN_SUFFIX)) {
+    throw new Error(`vite CLI preparation expected an executed .bin/vite; got ${executedBinPath}`);
+  }
+  const nodeModules = binPath.slice(0, -VITE_BIN_SUFFIX.length);
+  if (!nodeModules.endsWith('/node_modules')) {
+    throw new Error(`vite CLI preparation cannot resolve package from ${executedBinPath}`);
+  }
+  return `${nodeModules}/vite`;
+}
+
+export type ViteEsbuildRuntimeDecision = 'start' | 'skip-rolldown';
+
+export function decideViteEsbuildRuntime(
+  root: string,
+  executedBinPath: string,
+): ViteEsbuildRuntimeDecision {
+  const packageRoot = vitePackageRoot(root, executedBinPath);
+  const manifestPath = `${packageRoot}/package.json`;
+  const fs = syncMirror();
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`vite esbuild runtime cannot read executed package: ${manifestPath}`);
+  }
+  let manifest: { readonly name?: unknown; readonly version?: unknown };
+  try {
+    manifest = JSON.parse(dec.decode(fs.readFileBytesSync(manifestPath))) as {
+      readonly name?: unknown;
+      readonly version?: unknown;
+    };
+  } catch (error) {
+    throw new Error(`vite esbuild runtime found invalid package.json: ${manifestPath}`, {
+      cause: error,
+    });
+  }
+  if (manifest.name !== 'vite' || typeof manifest.version !== 'string') {
+    throw new Error(`vite esbuild runtime found invalid package metadata: ${manifestPath}`);
+  }
+  if (manifest.version === EXACT_ESBUILD_VITE_VERSION) return 'start';
+  if (/^8\./.test(manifest.version)) return 'skip-rolldown';
+  throw new Error(
+    `vite esbuild runtime supports exact Vite ${EXACT_ESBUILD_VITE_VERSION}; executed ${manifest.version}`,
+  );
+}
+
+export async function prepareViteCliFiles(
   root: string,
   mode: ViteCliMode,
   opts: ViteCliPrepareOptions = {},
+  executedBinPath?: string,
 ): Promise<void> {
   if (mode === 'preview') assertNoUserVitePreviewConfig(root, undefined, opts.userConfigPath);
-  installCliActionPatches(root, mode);
+  installCliActionPatches(vitePackageRoot(root, executedBinPath), mode);
   if (mode === 'dev') writeViteCliConfigWrapper(root, opts);
-  if (mode === 'build' || mode === 'dev') installEsbuildTransformBridge(root);
+}
+
+export async function prepareViteCli(
+  root: string,
+  mode: ViteCliMode,
+  executedBinPath: string,
+  opts: ViteCliPrepareOptions = {},
+): Promise<void> {
+  await prepareViteCliFiles(root, mode, opts, executedBinPath);
+  if (mode === 'info') return;
+  if (decideViteEsbuildRuntime(root, executedBinPath) === 'skip-rolldown') return;
+  await startAndPublishViteEsbuild({ fs: syncMirror(), cwd: root });
 }
 
 // ——— vite CLI arg/env preparation (relocated from real-vite-bootstrap so the

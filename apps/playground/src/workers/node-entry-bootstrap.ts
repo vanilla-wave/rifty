@@ -111,7 +111,7 @@ function installViteFileChangeBridge(): void {
 
 const viteCliMode = viteCliModeFromEnv(proc.env.RIFTY_VITE_CLI_MODE);
 if (viteCliMode !== null) {
-  await prepareViteCli(proc.cwd(), viteCliMode, viteCliPrepareOptionsFromEnv(proc.env));
+  await prepareViteCli(proc.cwd(), viteCliMode, entryPath, viteCliPrepareOptionsFromEnv(proc.env));
   if (viteCliMode === 'dev') installViteFileChangeBridge();
 }
 

@@ -75,7 +75,7 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     // residual source pin: the call happens in top-level await of the worker
     // entry; the decode itself is behavioral above.
     expect(source).toContain(
-      'await prepareViteCli(proc.cwd(), viteCliMode, viteCliPrepareOptionsFromEnv(proc.env));',
+      'prepareViteCli(proc.cwd(), viteCliMode, entryPath, viteCliPrepareOptionsFromEnv(proc.env))',
     );
   });
 
