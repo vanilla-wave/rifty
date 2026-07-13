@@ -147,6 +147,70 @@ function buildEsbuildMatrix(policyValue) {
 const esbuildPolicy = JSON.parse(await readFile(esbuildPolicyUrl, 'utf8'));
 const esbuildMatrix = buildEsbuildMatrix(esbuildPolicy);
 
+const viteCommandMatrix = {
+  file: 'vite-command.md',
+  title: 'Compatibility matrix — installed Vite command',
+  intro:
+    'Public claim surface for Vite 7 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243).',
+  rows: [
+    [
+      'Installed `.bin/vite` dispatch',
+      '✅',
+      'No owner-registered Vite command or curated execution path; `which vite` resolves the installed binary.',
+    ],
+    [
+      '`vite`, `vite dev`, `vite serve`, flags, help/version, unknown commands',
+      '✅',
+      "Args reach Vite's own CLI parser byte-for-byte; rifty classifies only lifecycle mode before execution.",
+    ],
+    [
+      'Visible `vite.config.{js,mjs,ts,cjs,mts,cts}` ownership',
+      '✅',
+      'Ordinary user config is never hidden or overwritten. A versioned durable seed claim preserves edits and deletion across boot/reset/reload.',
+    ],
+    [
+      '`vite` / `npm run dev` server lifecycle',
+      '✅',
+      'The installed CLI child publishes real listened ports; stock Vite HMR crosses the generic preview WebSocket bridge.',
+    ],
+    [
+      '`vite build` with local-importing config',
+      '✅',
+      'Exact Vite 7.3.6 + upstream-derived esbuild 0.28.0 reads the config graph and writes a config-defined marker into `dist/`.',
+    ],
+    [
+      '`vite preview` and user config',
+      '⚠️',
+      'The real CLI loads root/`--config` normally and serves `dist/`; parity for `preview.cors`/`preview.allowedHosts` through the same-origin browser bridge remains unproven.',
+    ],
+    [
+      '`vite optimize`',
+      '✅',
+      'Chromium runs exact Vite 7.3.6 over owner VFS; a real CJS dependency prebundle and source map are written and consumed.',
+    ],
+    [
+      'Server-capable non-Vite `.bin` commands',
+      '✅',
+      'The same generic child/port/preview lifecycle is browser-proven with a non-Vite server.',
+    ],
+  ],
+  tests: [
+    '`apps/playground/src/workers/vite-cli-prep.test.ts`',
+    '`apps/playground/src/glue/vite-config-seed.test.ts`',
+    '`apps/playground/src/glue/vite-config-seed.fault.test.ts`',
+    '`tests/browser-unit/esbuild-vite-contract.spec.ts`',
+    '`tests/e2e/vite-command-honesty.spec.ts`',
+    '`tests/e2e/vite7-build-preview.spec.ts`',
+    '`tests/e2e/m7-preview-sw.spec.ts`',
+    '`tests/e2e/generic-dev-server-lifecycle.spec.ts`',
+  ],
+  limitations: [
+    'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; Vite 8 uses Rolldown and keeps HMR disabled in visible template config.',
+    'Preview traffic traverses the same-origin Service Worker/owner bridge, so `preview.cors` and `preview.allowedHosts` need direct-Node differential proof.',
+    'Fallback-port publication when the requested Vite port is busy still needs browser proof; no hidden `strictPort` force exists.',
+  ],
+};
+
 const matrices = [
   {
     file: 'fs.md',
@@ -939,6 +1003,7 @@ const matrices = [
     ],
   },
   esbuildMatrix,
+  viteCommandMatrix,
 ];
 
 async function listFilesRecursive(dir) {
@@ -1032,7 +1097,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\` are rendered by \`pnpm compat:generate\`
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 

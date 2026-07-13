@@ -7,6 +7,9 @@
 - Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer
   before execution; Vite 8/Rolldown skips it. The retired WASI transform global
   and wrapper are removed.
+- One bounded static-asset reader owns esbuild WASM and dependency snapshots:
+  header/body no-progress and byte overflow fail finitely; esbuild publishes no
+  slot, while a broken snapshot falls back to normal install.
 
 ### Changed (installed Vite ownership, ADR-0174/0243)
 
@@ -15,7 +18,8 @@
   ProjectSpec knobs are deleted; visible `vite.config.js` owns policy.
 - A versioned root-local seed claim preserves user config edits/deletion across
   boot, reset, Save, and reload. Config then claim each pass a checked durable
-  drain; torn writes recover without silent resurrection.
+  drain; torn writes recover without silent resurrection. Chromium proves the
+  marker and deletion across an OPFS owner respawn.
 
 ### Changed (install artifact identity, ADR-0241)
 

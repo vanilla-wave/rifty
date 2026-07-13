@@ -1,11 +1,6 @@
 /**
- * The Vite template — the single registered {@link ProjectSpec} (ADR-0078).
- *
- * Holds exactly the literals that used to be inline in
- * `workers/real-vite-bootstrap.ts` (install deps, import specifier, createServer
- * knobs, the seeded entry source, default port). Adding another runnable
- * template means writing a sibling ProjectSpec and registering it in
- * `registry.ts` — no worker or orchestrator edits.
+ * Default Vite 7 template (ADR-0078/0174): install, visible config, entry, port.
+ * Installed `.bin/vite` owns execution; adding a template is registry data.
  */
 import type { ViteProjectSpec } from './project-spec.ts';
 

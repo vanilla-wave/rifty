@@ -174,8 +174,8 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 /**
  * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
  * dev-server command, so `npm run <any>` here boots the dev server — the single
- * source the page realm uses to recognise `npm run <script>` dev lines (ADR-0146:
- * npm runs in the owner, but the lifecycle-owning dev line is intercepted page-side).
+ * source the owner shell uses to recognize node-server lifecycle scripts. Vite
+ * scripts stay on the generic installed-bin path.
  */
 export function projectScripts(spec: ProjectSpec): Record<string, string> {
   const body = devScriptCommand(spec);

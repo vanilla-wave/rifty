@@ -5,7 +5,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in `tests/conformance/` and `tests/integration/` for a
-Node-compatible area. `fs.md`/`streams.md`/`http.md`/`zlib.md`/`git.md`/`esbuild-js-api.md` are rendered by `pnpm compat:generate`
+Node-compatible area. `fs.md`/`streams.md`/`http.md`/`zlib.md`/`git.md`/`esbuild-js-api.md`/`vite-command.md` are rendered by `pnpm compat:generate`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test-result-sink`.
 

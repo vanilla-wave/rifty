@@ -309,14 +309,10 @@ function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
 }
 
 /**
- * Unified workspace owner (ADR-0146 owner-resident shell + ADR-0148 co-resident
- * dev server): this realm hosts the
- * resident `Shell` per session AND the co-resident dev server. npm + the in-realm
- * `.bin` executor + vite/node all run HERE against this realm's `syncMirror()`
- * (the tree the install writes) — one store, no two-owners gap. The dev server
- * starts on demand (`vite` / `npm run <script>`), blocks its run until Ctrl-C,
- * and stops via `server.close()` WITHOUT killing the owner. The realm stays alive
- * on `serve:true` via its IPC channel + served bridges.
+ * Unified workspace owner: this realm hosts the resident Shell and sole writable
+ * store. Foreground bins/Vite and node-server programs run in supervised children
+ * over this realm's remote `syncMirror()`; one store, no two-owners gap. The realm
+ * stays alive on `serve:true` via its IPC channel + served bridges.
  */
 async function bootShellOwner(opts: {
   readonly cfg: BootstrapConfig;
@@ -332,11 +328,11 @@ async function bootShellOwner(opts: {
   /** Hidden first-run owner: real shell/root, but no chosen starter/index scratch. */
   readonly hiddenEmptyBoot: boolean;
   readonly fromScratch: boolean;
-  /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
+  /** Kernel worker URL for supervised children that spawn worker_threads descendants. */
   readonly kernelWorkerUrl: string;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
-  /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
+  /** Node-server bootstrap URL — the supervised serve:true child (ADR-0150 P6b). */
   readonly devServerWorkerUrl: string;
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
   readonly tsLspWorkerUrl: string;
@@ -355,8 +351,8 @@ async function bootShellOwner(opts: {
   } = opts;
 
   // The persistent owner is spawned once with the deep-link/default template; a
-  // preset switch updates which template/runtime the NEXT co-resident dev server
-  // boots (ADR-0148 — the page sends `pty:dev-config` before the dev line).
+  // preset switch updates which template/runtime the next owner-supervised dev
+  // server boots (the page sends `pty:dev-config` before the dev line).
   let devSpec = spec;
   let devCfg = cfg;
   let devSlug = slug;
@@ -667,8 +663,7 @@ async function bootShellOwner(opts: {
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
   const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl, {
-    // Thread the recursive worker URLs so the dev-server child can spawn
-    // Rolldown's WASI worker_threads pool (Vite 8).
+    // Thread recursive worker URLs for node-server descendants.
     kernelWorkerUrl: opts.kernelWorkerUrl,
     nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
   });
@@ -679,9 +674,8 @@ async function bootShellOwner(opts: {
   const ownerNodeExecutor = createOwnerChildNodeExecutor(opts.nodeEntryWorkerUrl);
   let nodeRunSeq = 0;
 
-  // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
-  // via package.json) boot the co-resident dev server and BLOCK the run until
-  // Ctrl-C (`ctx.signal` → exit 130). Single active server per owner.
+  // Node-server scripts use the dedicated supervised server child and block the
+  // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
   const runDevServer = async (ctx: CommandContext): Promise<number> => {
     const signal = ctx.signal ?? new AbortController().signal;
     try {
@@ -1181,7 +1175,7 @@ async function bootstrap(): Promise<void> {
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
   // ADR-0148: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
   // bridges. It is a synthetic owner bridge key, not a real network port. The
-  // co-resident dev server listens on the template's own port (`cfg.port`).
+  // owner-supervised dev server listens on the template's own port (`cfg.port`).
   const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
 
   const kernelIpc = installRuntimeGlobals();

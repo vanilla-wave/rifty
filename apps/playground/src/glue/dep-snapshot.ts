@@ -9,6 +9,7 @@
  * that produced the tree. Restore compares both byte-for-byte (ADR-0241).
  */
 import { joinPath } from '@riftydev/vfs';
+import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts';
 import {
@@ -48,6 +49,7 @@ export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
 }
 
 const enc = new TextEncoder();
+const SNAPSHOT_MAX_BYTES = 128 * 1024 * 1024;
 
 /** Serialize the installed tree at `<root>` into a snapshot (bake script). */
 export function buildDepSnapshot(
@@ -140,15 +142,18 @@ export function restoreDepSnapshot(
  */
 export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2 | null> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = await fetchAssetBytesBounded(url, {
+      label: `dependency snapshot ${url}`,
+      maxBytes: SNAPSHOT_MAX_BYTES,
+    });
     const gzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-    const text = gzipped
-      ? await new Response(
+    const decoded = gzipped
+      ? await drainByteStreamBounded(
           new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')),
-        ).text()
-      : new TextDecoder().decode(bytes);
+          { label: `dependency snapshot ${url} decompression`, maxBytes: SNAPSHOT_MAX_BYTES },
+        )
+      : bytes;
+    const text = new TextDecoder().decode(decoded);
     return parseDepSnapshot(text);
   } catch {
     return null;

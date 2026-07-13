@@ -1,5 +1,5 @@
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type DepSnapshotV2,
   buildDepSnapshot,
@@ -285,6 +285,20 @@ describe('dep snapshot (ADR-0135)', () => {
       expect(await fetchDepSnapshot('/x.json.gz')).toBeNull();
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('fetchDepSnapshot bounds a stalled asset and falls back to null', async () => {
+    const originalFetch = globalThis.fetch;
+    vi.useFakeTimers();
+    try {
+      globalThis.fetch = () => new Promise<Response>(() => {});
+      const fetched = fetchDepSnapshot('/stalled.json.gz');
+      await vi.advanceTimersByTimeAsync(10_001);
+      await expect(fetched).resolves.toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+      vi.useRealTimers();
     }
   });
 });

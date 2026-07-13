@@ -1,6 +1,6 @@
 /**
- * Vite 8 opt-in template. Dev server works; build/preview stay loud-rejected
- * because Rolldown's WASI pthread build path is upstream-blocked.
+ * Vite 8 opt-in template. Dev is proven; build/preview remain outside compat
+ * while Rolldown's WASI pthread path is upstream-blocked.
  */
 import type { ViteProjectSpec } from './project-spec.ts';
 
