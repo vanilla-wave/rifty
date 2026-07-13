@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { buildDepSnapshot } from '../src/glue/dep-snapshot.ts';
+import { buildDepSnapshot, serializeDepSnapshot } from '../src/glue/dep-snapshot.ts';
 import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
@@ -58,7 +58,7 @@ for (const spec of baked) {
     packages: result.packages.length,
   });
 
-  const json = JSON.stringify(snapshot);
+  const json = serializeDepSnapshot(snapshot);
   const gz = gzipSync(Buffer.from(json), { level: 9 });
   const outPath = join(publicDir, ...url.replace(/^\/+/, '').split('/'));
   mkdirSync(dirname(outPath), { recursive: true });

@@ -3,6 +3,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import identityFile from '../../../apps/playground/src/generated/install-artifact-identity.json';
+import {
+  type DepSnapshotV2,
+  serializeDepSnapshot,
+} from '../../../apps/playground/src/glue/dep-snapshot.ts';
 import { effectiveDepsFromPackageJsonText } from '../../../apps/playground/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../../../apps/playground/src/templates/project-spec.ts';
 import { allProjectSpecs } from '../../../apps/playground/src/templates/registry.ts';
@@ -22,7 +26,7 @@ interface LegacySnapshot {
   readonly deps: Readonly<Record<string, string>>;
   readonly packages: number;
   readonly lockfile: string;
-  readonly nodeModules: { readonly files: readonly SnapshotFile[] };
+  readonly nodeModules: DepSnapshotV2['nodeModules'];
 }
 
 const publicDir = fileURLToPath(new URL('../../../apps/playground/public/', import.meta.url));
@@ -80,7 +84,7 @@ function migrateSnapshot(
   templateId: string,
   packageJsonText: string,
   label: string,
-): LegacySnapshot {
+): DepSnapshotV2 {
   if (snapshot.version !== 1 && snapshot.version !== 2) {
     throw new Error(`${label}: unsupported snapshot version ${snapshot.version}`);
   }
@@ -116,7 +120,7 @@ async function main(): Promise<void> {
     const snapshot = JSON.parse(gunzipSync(before).toString('utf8')) as LegacySnapshot;
     const packageJsonText = buildProjectPackageJson(spec).json;
     const migrated = migrateSnapshot(snapshot, spec.id, packageJsonText, spec.id);
-    const after = gzipSync(Buffer.from(JSON.stringify(migrated)), { level: 9 });
+    const after = gzipSync(Buffer.from(serializeDepSnapshot(migrated)), { level: 9 });
     if (mode === '--write') {
       await writeFile(path, after);
       console.log(`snapshot identity: migrated ${spec.id} (${dirname(path)})`);

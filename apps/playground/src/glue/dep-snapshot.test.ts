@@ -6,6 +6,7 @@ import {
   fetchDepSnapshot,
   parseDepSnapshot,
   restoreDepSnapshot,
+  serializeDepSnapshot,
 } from './dep-snapshot.ts';
 import { ensureProjectDependencies } from './project-deps.ts';
 
@@ -78,6 +79,36 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
     expect(reparsed.packageJsonText).toBe(PACKAGE_JSON_TEXT);
     expect(reparsed.installArtifactIdentity).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it('serializes bake and migration payloads in one stable top-level order', () => {
+    const baked = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    const migrationOrder = {
+      version: baked.version,
+      templateId: baked.templateId,
+      packageJsonText: baked.packageJsonText,
+      installArtifactIdentity: baked.installArtifactIdentity,
+      deps: baked.deps,
+      packages: baked.packages,
+      lockfile: baked.lockfile,
+      nodeModules: baked.nodeModules,
+    } satisfies DepSnapshotV2;
+
+    expect(serializeDepSnapshot(migrationOrder)).toBe(serializeDepSnapshot(baked));
+    expect(Object.keys(JSON.parse(serializeDepSnapshot(baked)) as object)).toEqual([
+      'version',
+      'templateId',
+      'deps',
+      'packages',
+      'packageJsonText',
+      'installArtifactIdentity',
+      'lockfile',
+      'nodeModules',
+    ]);
   });
 
   it('restores the baked tree into a DIFFERENT root (multi-project dynamic root, ADR-0165)', () => {

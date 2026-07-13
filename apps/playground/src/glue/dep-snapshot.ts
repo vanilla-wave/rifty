@@ -33,6 +33,20 @@ export interface DepSnapshotV2 {
   readonly nodeModules: WorkspaceArchiveV1;
 }
 
+/** One byte-stable top-level order for bake and provenance tooling. */
+export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
+  return JSON.stringify({
+    version: snapshot.version,
+    templateId: snapshot.templateId,
+    deps: snapshot.deps,
+    packages: snapshot.packages,
+    packageJsonText: snapshot.packageJsonText,
+    installArtifactIdentity: snapshot.installArtifactIdentity,
+    lockfile: snapshot.lockfile,
+    nodeModules: snapshot.nodeModules,
+  });
+}
+
 const enc = new TextEncoder();
 
 /** Serialize the installed tree at `<root>` into a snapshot (bake script). */
