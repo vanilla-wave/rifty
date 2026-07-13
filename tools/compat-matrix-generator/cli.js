@@ -166,7 +166,7 @@ const viteCommandMatrix = {
     [
       'Visible `vite.config.{js,mjs,ts,cjs,mts,cts}` ownership',
       '✅',
-      'Ordinary user config is never hidden or overwritten. A versioned durable seed claim preserves edits and deletion across boot/reset/reload.',
+      'Ordinary user config is never hidden or overwritten. A durable seed claim preserves edits/deletion across boot, reload, and Save; explicit Reset restores the starter baseline and a new claim.',
     ],
     [
       '`vite` / `npm run dev` server lifecycle',
@@ -198,6 +198,7 @@ const viteCommandMatrix = {
     '`apps/playground/src/workers/vite-cli-prep.test.ts`',
     '`apps/playground/src/glue/vite-config-seed.test.ts`',
     '`apps/playground/src/glue/vite-config-seed.fault.test.ts`',
+    '`tests/browser-unit/owner-publish-and-persistence.spec.ts`',
     '`tests/browser-unit/esbuild-vite-contract.spec.ts`',
     '`tests/e2e/vite-command-honesty.spec.ts`',
     '`tests/e2e/vite7-build-preview.spec.ts`',

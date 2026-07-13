@@ -3,7 +3,7 @@ area: service-worker
 status: ready
 title: Preview parks forever when vite rejects the Host — diagnose + fix
 created: 2026-07-05
-why: with the forced `allowedHosts: true` removed, a host-check rejection parks the iframe forever instead of showing vite's real 403 — hides a lost-response bug in the chain and blocks preset-deglue's allowedHosts retirement
+why: After retiring forced `allowedHosts`, the rejected-Host path still lacks proof that Vite's real 403 crosses the preview bridge instead of parking the iframe.
 user_story: As a developer running real vite with MY OWN config (no rifty-forced allowedHosts), I want a host-check rejection to show vite's real 403 page in the preview, but today the request parks forever with a white iframe
 epic: fault-honest-sw-preview
 code: [packages/service-worker/src/route-preview.ts, packages/net/src/cross-realm/preview-port.ts, packages/net/src/http/server.ts]

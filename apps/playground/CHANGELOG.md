@@ -17,9 +17,10 @@
   `createServer`, curated build/preview, module-invalidation IPC, and duplicate
   ProjectSpec knobs are deleted; visible `vite.config.js` owns policy.
 - A versioned root-local seed claim preserves user config edits/deletion across
-  boot, reset, Save, and reload. Config then claim each pass a checked durable
-  drain; torn writes recover without silent resurrection. Chromium proves the
-  marker and deletion across an OPFS owner respawn.
+  boot, Save, and reload; explicit Reset restores the starter baseline and a new
+  claim. Config then claim each pass a checked durable drain; torn writes recover
+  without silent resurrection. Chromium proves the marker and deletion across
+  an OPFS owner respawn.
 
 ### Changed (install artifact identity, ADR-0241)
 

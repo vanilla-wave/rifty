@@ -10,7 +10,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 |---|---|---|
 | Installed `.bin/vite` dispatch | ✅ | No owner-registered Vite command or curated execution path; `which vite` resolves the installed binary. |
 | `vite`, `vite dev`, `vite serve`, flags, help/version, unknown commands | ✅ | Args reach Vite's own CLI parser byte-for-byte; rifty classifies only lifecycle mode before execution. |
-| Visible `vite.config.{js,mjs,ts,cjs,mts,cts}` ownership | ✅ | Ordinary user config is never hidden or overwritten. A versioned durable seed claim preserves edits and deletion across boot/reset/reload. |
+| Visible `vite.config.{js,mjs,ts,cjs,mts,cts}` ownership | ✅ | Ordinary user config is never hidden or overwritten. A durable seed claim preserves edits/deletion across boot, reload, and Save; explicit Reset restores the starter baseline and a new claim. |
 | `vite` / `npm run dev` server lifecycle | ✅ | The installed CLI child publishes real listened ports; stock Vite HMR crosses the generic preview WebSocket bridge. |
 | `vite build` with local-importing config | ✅ | Exact Vite 7.3.6 + upstream-derived esbuild 0.28.0 reads the config graph and writes a config-defined marker into `dist/`. |
 | `vite preview` and user config | ⚠️ | The real CLI loads root/`--config` normally and serves `dist/`; parity for `preview.cors`/`preview.allowedHosts` through the same-origin browser bridge remains unproven. |
@@ -22,6 +22,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `apps/playground/src/workers/vite-cli-prep.test.ts`
 - `apps/playground/src/glue/vite-config-seed.test.ts`
 - `apps/playground/src/glue/vite-config-seed.fault.test.ts`
+- `tests/browser-unit/owner-publish-and-persistence.spec.ts`
 - `tests/browser-unit/esbuild-vite-contract.spec.ts`
 - `tests/e2e/vite-command-honesty.spec.ts`
 - `tests/e2e/vite7-build-preview.spec.ts`
