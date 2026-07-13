@@ -1,9 +1,9 @@
 ---
 area: npm-client
 status: ready
-title: Eddy batch asset closure — one immutable bundle GET for the whole shadow-asset set
+title: Eddy batch asset closure — one immutable bundle GET for the exact missing asset set
 created: 2026-07-13
-why: per-asset fetches scale as n round-trips and skip eddy's shared cache; the asset set is identical for every project on one app version
+why: per-asset fetches scale as n round-trips and skip eddy's shared cache; one ensure can batch its exact missing source packages
 user_story: As a vite user on an eddy-enabled deployment, I want shadow assets to arrive as fast as my dependencies do, but today the wasm fetch bypasses eddy entirely
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-asset-store]
@@ -13,28 +13,35 @@ code: [packages/npm-client/src/eddy-request.ts, packages/npm-client/src/eddy-bun
 
 ## Context
 
-`ensureShadowAssets` lands with the STD registry transport only. When eddy is
-configured, the full asset-pin set (exact versions from the shim registry) can
-ride the existing wire protocol as ONE closure — the set is app-version-global,
-so the bundle is CDN-hot for every client after the first resolve anywhere.
+`ShadowAssetManager` lands with the STD registry adapter only. When eddy is
+configured, one ensure can send the exact de-duplicated source package set for
+its verified misses through the existing wire protocol as one closure. Store
+hits never enter either transport.
 
 ## Acceptance
 
-- Eddy-configured miss path: `ensureShadowAssets` builds one `EddyRequestBody`
-  whose `dependencies` are the exact asset-pin set (e.g. `{"esbuild-wasm":
-  "0.28.0"}`) — the SAME body shape installs use; zero eddy server changes
-  (prove: no `services/` diff; contract test against the existing wire
-  fixtures).
-- Learned-pin fast path applies: warm client re-fill = 1 GET, 0 POST (existing
-  eddy semantics, asserted the way learned-pin install tests do).
+- Manager verifies every object before transport selection; zero misses means
+  zero Eddy/STD requests.
+- Eddy miss path builds one canonical `EddyRequestBody` whose dependencies are
+  the sorted, de-duplicated exact source packages for the missing descriptors
+  (e.g. `{"esbuild-wasm":"0.28.0"}`) — the SAME body shape installs use;
+  zero server changes (existing wire fixtures prove it).
+- Composed-registry construction rejects an asset source package/version that
+  matches any baked override or shadow trigger as `ESHADOWASSETSOURCE`. Without
+  this invariant Eddy's ordinary `install()` resolver could substitute the
+  source. Test proves rejection happens before POST/GET.
+- The owner manager owns learned-pin state; its key derives from the canonical
+  request body. Warm re-fill of the same missing set = 1 GET, 0 POST.
 - The asset closure is never merged into a project's install closure: test
   pins that a project's resolve request body and closure hash are byte-equal
   with the asset feature on and off.
 - Eddy failure (down, 5xx, stall) → bounded abort (ADR-0201) → STD registry
   fallback with a loud log line; both transports failing → one loud error
   naming both diagnoses.
-- Extracted member passes the same final sha256 gate as STD; store write path
-  is byte-identical (single ensure owner — no second writer).
+- Every required member passes the manager's path/type/size/decompression/hash
+  gates; no readiness receipt publishes until the whole required set validates.
+- STD and Eddy share the one manager writer and produce byte-identical objects;
+  receipts differ only in truthful transport/cache fields.
 - Cold-fill benchmark row (STD vs eddy, same harness as the install ladder)
   recorded in the bench matrix.
 
@@ -42,34 +49,40 @@ so the bundle is CDN-hot for every client after the first resolve anywhere.
 
 1. Bytes delivered via eddy == bytes via STD == pinned sha256 (three-way
    equality on `esbuild-wasm@0.28.0` member).
-2. Learned-pin replay: second client fill = 1 GET / 0 POST.
+2. Learned-pin replay: second fill of the same canonical missing set = 1 GET /
+   0 POST; a different set never reuses its key.
 3. Transient eddy GET failure never overwrites an existing valid store object
    (byte-stability, same invariant as the eddy tarball cache).
-4. Partial/truncated bundle → completeness gate declines, store untouched,
-   fallback proceeds.
+4. Partial/truncated bundle → completeness gate declines, no receipt
+   publishes, STD fallback proceeds.
 
 ## Fault matrix
 
-| Fault | Outcome |
-| --- | --- |
-| Eddy unreachable at fill | Bounded abort → STD fallback (loud log), fill succeeds |
-| Eddy mid-stream stall | ADR-0201 no-progress abort → STD fallback |
-| Truncated/extra-member bundle | Completeness gate declines → fallback; no partial store write |
-| Both transports fail | One loud error naming both; consumer action fails named; no retry spin |
-| Concurrent fill during eddy stream | Same single-flight owner as STD (no new writer) |
+| Axis | Fault | Outcome |
+| --- | --- | --- |
+| `false-fallback` | Eddy unreachable at fill | Bounded abort → STD fallback (loud log), fill succeeds |
+| `unbounded-read` | Eddy mid-stream stall/oversize | ADR-0201 abort/cap → STD fallback |
+| `corrupt-input` | Truncated/extra-member bundle | Completeness gate declines → fallback; no receipt publishes |
+| `false-fallback` | Both transports fail | One loud error naming both; no retry spin |
+| `concurrent-same-key` | Install/child fill during Eddy stream | Manager single-flight per hash; no second writer |
+| `provenance-lie` | Eddy falls back to STD | Receipt records STD/cache result, never planned Eddy |
+| `poisoned-cache` | Missing-set request changes | Canonical body selects a different learned-pin key |
+| `false-fallback` | Source package matches override/trigger | Construction fails `ESHADOWASSETSOURCE`; zero Eddy/STD request; no accidental substitute bytes |
 
 ## Out of scope
 
-- Per-asset degenerate closures (n GETs — rejected in ADR-0249 design).
+- App-global/full-catalog asset closures; only the exact missing applied set is
+  requested.
 - Merging asset pins into project install closures (pollutes closure hash and
   lockfile).
 - Any eddy server/protocol change.
+- Raw-source resolver mode that bypasses baked overrides/shims.
 - Prefetching the asset bundle before install starts.
 
 ## Decisions
 
-- One batch closure per asset-set, not per asset — round-trips are O(1) in n
-  (ADR-0249).
+- One batch closure per canonical missing set; a one-asset set is valid.
 - Fallback order fixed: eddy → STD → loud; never STD → eddy.
-- Asset closure requests carry no `overrides` (pins are exact; overrides are a
-  project-tree concept).
+- Asset closure requests carry no `overrides` only because source descriptors
+  cannot match builtins/triggers. Supporting such a source requires a new Eddy
+  raw-source protocol decision.
