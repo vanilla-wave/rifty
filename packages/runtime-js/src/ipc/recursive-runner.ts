@@ -28,6 +28,7 @@
  */
 
 import { spawnKernelWorker } from '@riftydev/kernel';
+import { mergeNodeEntryWorkerEnv } from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
 /**
@@ -58,6 +59,18 @@ export interface RecursiveRunResult {
 
 /** A runner: turn a {@link NodeEntryRunSpec} into the child's stdout + exit. */
 export type NodeEntryRunner = (spec: NodeEntryRunSpec) => Promise<RecursiveRunResult>;
+
+/** One merge boundary: user env, host bootstrap snapshot, operation controls. */
+export function buildRecursiveWorkerEnv(
+  userEnv: Readonly<Record<string, string>>,
+  runtimeEnv?: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return {
+    ...mergeNodeEntryWorkerEnv(userEnv, runtimeEnv),
+    RIFTY_BIN: '0',
+    RIFTY_REMOTE_FS: '1',
+  };
+}
 
 /**
  * Browser/owner runner: spawn a node-entry child `kind:'url'` (the ADR-0137
@@ -92,6 +105,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
           '`node <script>` through the node-entry bootstrap (shebang + relative imports)',
       );
     }
+    const env = buildRecursiveWorkerEnv(spec.env);
     const nestedPid = nextNestedPid++;
     const nested = spawnKernelWorker(
       {
@@ -103,11 +117,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
         // so the bootstrap's else-branch (plain runNodeEntry) runs and the realm
         // reaps on settle.
         argv: spec.argv,
-        env: {
-          ...spec.env,
-          RIFTY_BIN: '0',
-          RIFTY_REMOTE_FS: '1',
-        },
+        env,
         cwd: spec.cwd,
       },
       { pid: nestedPid, ppid: 1 },

@@ -1,12 +1,11 @@
+import { Writable } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { installNodeProcessShim } from '@riftydev/runtime-js/install-process';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { installLoudStdin } from './node-stdin-guard.ts';
 
-// Guard the REAL spec-seeded process (makeStdinReader-backed stdin), NOT a
-// synthetic `{ stdin: {} }` — the old test was false-green (it asserted the stub's
-// own throwers, never the real EventEmitter's on/setEncoding/resume/pause).
+// Exercise the REAL serve-child process before node-entry-bootstrap runs. Loud
+// gaps must already belong to runtime-js; a bootstrap decorator is sibling drift.
 const originalProcess = (globalThis as { process?: unknown }).process;
 afterEach(() => {
   Object.defineProperty(globalThis, 'process', {
@@ -22,7 +21,7 @@ function realSeededProcess(): { stdin: unknown } {
     pid: 2,
     ppid: 1,
     argv: ['node', '/entry.js'],
-    env: {},
+    env: { RIFTY_NODE_SERVE: '1', RIFTY_STDIN_IS_TTY: '1' },
     cwd: '/workspace',
     stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
   };
@@ -31,6 +30,7 @@ function realSeededProcess(): { stdin: unknown } {
 
 interface LoudStdin {
   isTTY: boolean;
+  readonly readable?: boolean;
   on(event: string, cb: () => void): unknown;
   once(event: string, cb: () => void): unknown;
   addListener(event: string, cb: () => void): unknown;
@@ -45,36 +45,39 @@ interface LoudStdin {
   [Symbol.asyncIterator](): unknown;
 }
 
-describe('installLoudStdin (real seeded process.stdin)', () => {
-  it('makes every consume path throw NotImplementedError, never a silent hang', () => {
+describe('serve bootstrap uses runtime-owned NodeStdin gaps', () => {
+  it('needs no playground guard for unsupported pull and raw-mode surfaces', () => {
     const proc = realSeededProcess();
-    installLoudStdin(proc);
     const s = proc.stdin as LoudStdin;
-    // consume-event listener-add: BOTH 'data' and 'readable' (the pull idiom).
-    expect(() => s.on('data', () => {})).toThrow(NotImplementedError);
-    expect(() => s.on('readable', () => {})).toThrow(NotImplementedError);
-    expect(() => s.once('data', () => {})).toThrow(NotImplementedError);
-    expect(() => s.addListener('data', () => {})).toThrow(NotImplementedError);
-    expect(() => s.prependListener('data', () => {})).toThrow(NotImplementedError);
-    expect(() => s.prependOnceListener('readable', () => {})).toThrow(NotImplementedError);
-    // readable
-    expect(() => s.read()).toThrow(/process\.stdin/);
-    expect(() => s.pipe({})).toThrow(NotImplementedError);
-    expect(() => s[Symbol.asyncIterator]()).toThrow(NotImplementedError);
-    // flow/encoding controls that the real reader implements as working no-ops
-    // (former silent-success surface): MUST be loud too.
-    expect(() => s.resume()).toThrow(NotImplementedError);
-    expect(() => s.setEncoding('utf8')).toThrow(NotImplementedError);
+    expect(() => s.on('data', () => {})).not.toThrow();
+    expect(() => s.on('readable', () => {})).toThrow(
+      expect.objectContaining({ feature: 'process.stdin.readable' }),
+    );
+    expect(() => s.prependOnceListener('readable', () => {})).toThrow(
+      expect.objectContaining({ feature: 'process.stdin.readable' }),
+    );
+    expect(() => s.read()).toThrow(expect.objectContaining({ feature: 'process.stdin.read' }));
+    expect(() => s.pipe(new Writable())).toThrow(
+      expect.objectContaining({ feature: 'process.stdin.pipe' }),
+    );
+    expect(() => s[Symbol.asyncIterator]()).toThrow(
+      expect.objectContaining({ feature: 'process.stdin[Symbol.asyncIterator]' }),
+    );
+    expect(() => s.resume()).not.toThrow();
+    expect(() => s.setEncoding('utf8')).not.toThrow();
+    expect(() => s.setRawMode(true)).toThrow(
+      expect.objectContaining({ feature: 'process.stdin.setRawMode' }),
+    );
     expect(() => s.setRawMode(true)).toThrow(NotImplementedError);
   });
 
   it('keeps non-consume listeners, passive isTTY, and a defensive pause() safe', () => {
     const proc = realSeededProcess();
-    installLoudStdin(proc);
     const s = proc.stdin as LoudStdin;
     // 'end'/'close' etc. must still register (the reader's own end-handler relies on it).
     expect(() => s.on('end', () => {})).not.toThrow();
-    expect(s.isTTY).toBe(false);
+    expect(s.isTTY).toBe(true);
+    expect(() => s.readable).not.toThrow();
     // pause() on an unread stream is a Node no-op a non-reading CLI uses to exit —
     // must NOT throw (else it kills a legit program that never reads stdin).
     expect(() => s.pause()).not.toThrow();

@@ -153,6 +153,9 @@ for (const { rel, area, fm, text } of itemRecords) {
   if (fm.status != null && !ITEM_STATUS_SET.has(fm.status)) {
     errors.push(`${rel}: invalid status '${fm.status}' (must be ${ITEM_STATUSES.join('|')})`);
   }
+  if (typeof fm.why === 'string' && /^(?:DELIVERED|DONE|LANDED)\b/i.test(fm.why)) {
+    errors.push(`${rel}: completed item must be deleted, not kept active via why: ${fm.why}`);
+  }
   if (fm.area != null) {
     if (!KNOWN_AREAS.has(fm.area)) errors.push(`${rel}: unknown area '${fm.area}'`);
     if (fm.area !== area)

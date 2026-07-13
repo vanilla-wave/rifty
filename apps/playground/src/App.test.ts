@@ -44,9 +44,9 @@ const streamInteropAdrSrc = readFileSync(
 
 describe('App terminal startup wiring', () => {
   it('cold boot spawns the hidden empty workspace owner and never auto-boots a preset', () => {
-    // Launcher gating + the one-shot boot decision are behavioral in
-    // orchestration/project-index-boot.test.ts; here the spawn binding only.
-    expect(source).toContain('const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();');
+    // The real default-owner boot is behavioral in tests/e2e/m0-boot.spec.ts;
+    // launcher gating + the one-shot decision live in project-index-boot tests.
+    // Keep only the hidden-template selection pin here.
     expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
     // (a) project-first cold boot: chooser, no auto-boot of the default preset.
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');

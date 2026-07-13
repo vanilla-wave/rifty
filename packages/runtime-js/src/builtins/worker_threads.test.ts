@@ -1,3 +1,4 @@
+import { Writable } from '@riftydev/io';
 /**
  * Same-realm fallback contract for `worker_threads.Worker`.
  *
@@ -14,12 +15,13 @@ import {
   globalProcessManager,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
+import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
-import { resetNodeEntryWorkerUrl, setNodeEntryWorkerUrl } from './node-entry-url.ts';
-import { setProcessCwd } from './process.ts';
+import * as nodeEntryUrl from './node-entry-url.ts';
+import { NodeProcess, setProcessCwd } from './process.ts';
 import workerThreadsModule, {
   Worker,
   _resetFallbackWarnState,
@@ -33,6 +35,12 @@ type WorkerProcessHandle = Extract<ProcessHandle, { kind: 'worker' }>;
 type ProcessWithWorkerIpc = NodeJS.Process & {
   send?: (message: unknown) => unknown;
 };
+type NodeEntryUrlContract = typeof nodeEntryUrl & {
+  configureNodeEntryWorker(url: string | URL, runtimeEnv: Readonly<Record<string, string>>): void;
+};
+
+const { resetNodeEntryWorkerUrl, setNodeEntryWorkerUrl } = nodeEntryUrl;
+const configureNodeEntryWorker = (nodeEntryUrl as NodeEntryUrlContract).configureNodeEntryWorker;
 
 beforeEach(() => {
   _resetFallbackWarnState();
@@ -148,7 +156,7 @@ globalThis.onmessage = ({ data }) => {
     await worker.terminate();
   });
 
-  it('uses kernel-backed workers when SAB and worker URLs are configured', async () => {
+  it('snapshots omitted env and cwd for a kernel-backed worker', async () => {
     const sent: unknown[] = [];
     let capturedSpec: SpawnWorkerSpec | undefined;
     const fakeHandle = makeFakeWorkerHandle(sent);
@@ -159,34 +167,122 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+    });
+    const parent = new NodeProcess();
+    parent.env.PARENT_ONLY = 'parent';
+    parent.env.RIFTY_SQLITE_WASM_URL = 'https://parent.test/sqlite.wasm';
+    setProcessCwd('/parent');
+
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker('/workspace/worker.mjs');
+      parent.env.PARENT_ONLY = 'mutated';
+      setProcessCwd('/mutated');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(capturedSpec).toMatchObject({
+        cwd: '/parent',
+        env: {
+          PARENT_ONLY: 'parent',
+          RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+          RIFTY_REMOTE_FS: '1',
+          RIFTY_WORKER_THREADS: '1',
+          RIFTY_WORKER_THREAD_ID: String(worker.threadId),
+        },
+      });
+      await worker.terminate();
+    });
+  });
+
+  it('uses explicit env as a replacement and keeps host/control precedence', async () => {
+    const sent: unknown[] = [];
+    let capturedSpec: SpawnWorkerSpec | undefined;
+    const fakeHandle = makeFakeWorkerHandle(sent);
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, spec) => {
+      capturedSpec = spec;
+      return fakeHandle;
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+      RIFTY_REMOTE_FS: 'host-poison',
+      RIFTY_WORKER_THREADS: 'host-poison',
+    });
+    const parent = new NodeProcess();
+    parent.env.PARENT_ONLY = 'parent';
     setProcessCwd('/project');
 
-    const worker = new Worker(
-      '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs',
-      {
-        env: { ROLLDOWN_TEST: '1' },
-      },
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker(
+        '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs',
+        {
+          env: {
+            ROLLDOWN_TEST: '1',
+            RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
+            RIFTY_REMOTE_FS: 'user-poison',
+            RIFTY_WORKER_THREADS: 'user-poison',
+          },
+        },
+      );
+      worker.postMessage({ __emnapi__: { type: 'load' } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(capturedSpec).toMatchObject({
+        entry: { kind: 'url', url: 'https://rifty.test/node-entry.js' },
+        argv: ['rifty', '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs'],
+        cwd: '/project',
+        serve: true,
+      });
+      expect(capturedSpec?.env).toEqual({
+        ROLLDOWN_TEST: '1',
+        RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+        RIFTY_REMOTE_FS: '1',
+        RIFTY_WORKER_THREADS: '1',
+        RIFTY_WORKER_THREAD_ID: String(worker.threadId),
+      });
+      expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
+
+      const child = seededWorkerProcess(capturedSpec?.env ?? {});
+      const childStdin = child.stdin as NodeProcess['stdin'] & {
+        pipe(destination: unknown): unknown;
+        setRawMode(enabled: boolean): unknown;
+      };
+      expect(() => childStdin.pipe(new Writable())).toThrow(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'process.stdin.pipe',
+        }),
+      );
+      expect(() => childStdin.setRawMode(true)).toThrow(NotImplementedError);
+
+      await worker.terminate();
+    });
+  });
+
+  it('fails loud before kernel spawn when only the URL seam was configured', async () => {
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, _spec) =>
+      makeFakeWorkerHandle([]),
     );
-    worker.postMessage({ __emnapi__: { type: 'load' } });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+
+    const errors: unknown[] = [];
+    const worker = new Worker('/workspace/w.mjs');
+    worker.on('error', (error) => errors.push(error));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(warnSpy).not.toHaveBeenCalled();
-    expect(capturedSpec).toMatchObject({
-      entry: { kind: 'url', url: 'https://rifty.test/node-entry.js' },
-      argv: ['rifty', '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs'],
-      cwd: '/project',
-      serve: true,
-    });
-    expect(capturedSpec?.env).toMatchObject({
-      RIFTY_REMOTE_FS: '1',
-      RIFTY_WORKER_THREADS: '1',
-      RIFTY_WORKER_THREAD_ID: String(worker.threadId),
-      ROLLDOWN_TEST: '1',
-    });
-    expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
-
-    await worker.terminate();
+    expect(errors).toEqual([
+      expect.objectContaining({
+        message: expect.stringMatching(/node-entry.*runtime config.*not configured/i),
+      }),
+    ]);
+    expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
   });
 
   it('throws loudly instead of JSON-shaping non-plain workerData on the kernel path', async () => {
@@ -196,7 +292,9 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
 
     const worker = new Worker('/workspace/w.mjs', { workerData: new Date(0) });
     const error = await new Promise<unknown>((resolve) => {
@@ -221,7 +319,9 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
 
     const worker = new Worker('/workspace/w.mjs', { workerData: { z: -0 } });
     const error = await new Promise<unknown>((resolve) => {
@@ -387,4 +487,34 @@ function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
     },
   });
   return handle as unknown as WorkerProcessHandle;
+}
+
+function seededWorkerProcess(env: Readonly<Record<string, string>>): NodeProcess {
+  const port = (): MessagePort => new MessageChannel().port1;
+  return new NodeProcess({
+    pid: 3,
+    ppid: 2,
+    argv: ['rifty', '/workspace/worker.mjs'],
+    env,
+    cwd: '/workspace',
+    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
+  });
+}
+
+async function withProcessGlobal<T>(process: NodeProcess, run: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  Object.defineProperty(globalThis, 'process', {
+    value: process,
+    configurable: true,
+    writable: true,
+  });
+  try {
+    return await run();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(globalThis, 'process');
+    } else {
+      Object.defineProperty(globalThis, 'process', descriptor);
+    }
+  }
 }

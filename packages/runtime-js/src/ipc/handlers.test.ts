@@ -56,14 +56,18 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
 
   it("rejects commands that aren't 'node <script>' with EUNSUPPORTED", async () => {
     const handler = installAndCapture(() => new Uint8Array());
-    await expect(handler({ cmd: 'ls -la' })).rejects.toMatchObject({
+    await expect(
+      handler({ cmd: 'ls -la', opts: { cwd: '/workspace', env: {} } }),
+    ).rejects.toMatchObject({
       code: 'EUNSUPPORTED',
     });
   });
 
   it('rejects missing scripts with ENOENT', async () => {
     const handler = installAndCapture(() => null);
-    await expect(handler({ cmd: 'node /missing.js' })).rejects.toMatchObject({
+    await expect(
+      handler({ cmd: 'node /missing.js', opts: { cwd: '/workspace', env: {} } }),
+    ).rejects.toMatchObject({
       code: 'ENOENT',
     });
   });
@@ -90,7 +94,10 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
         return { stdout: enc.encode('hello-from-child'), exitCode: 0 };
       },
     );
-    const result = await handler({ cmd: 'node /run.js' });
+    const result = await handler({
+      cmd: 'node /run.js',
+      opts: { cwd: '/workspace', env: {} },
+    });
     expect(result).toBeInstanceOf(Uint8Array);
     expect(new TextDecoder().decode(result as Uint8Array)).toBe('hello-from-child');
   });
@@ -101,7 +108,9 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
       () => enc.encode('void 0;'),
       async () => ({ stdout: new Uint8Array(), exitCode: 7 }),
     );
-    await expect(handler({ cmd: 'node /run.js' })).rejects.toMatchObject({
+    await expect(
+      handler({ cmd: 'node /run.js', opts: { cwd: '/workspace', env: {} } }),
+    ).rejects.toMatchObject({
       code: 'ECHILDFAILED',
       exitCode: 7,
     });
@@ -129,5 +138,38 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     const handler = installAndCapture(() => null);
     await expect(handler(undefined)).rejects.toThrow(/payload must be an object/);
     await expect(handler({})).rejects.toThrow(/payload.cmd must be a string/);
+  });
+
+  it.each([
+    ['missing opts', { cmd: 'node /run.js' }, /payload\.opts must be an object/],
+    ['null opts', { cmd: 'node /run.js', opts: null }, /payload\.opts must be an object/],
+    [
+      'missing cwd',
+      { cmd: 'node /run.js', opts: { env: {} } },
+      /payload\.opts\.cwd must be a string/,
+    ],
+    [
+      'malformed cwd',
+      { cmd: 'node /run.js', opts: { cwd: 42, env: {} } },
+      /payload\.opts\.cwd must be a string/,
+    ],
+    [
+      'missing env',
+      { cmd: 'node /run.js', opts: { cwd: '/workspace' } },
+      /payload\.opts\.env must be a string record/,
+    ],
+    [
+      'array env',
+      { cmd: 'node /run.js', opts: { cwd: '/workspace', env: [] } },
+      /payload\.opts\.env must be a string record/,
+    ],
+    [
+      'non-string env value',
+      { cmd: 'node /run.js', opts: { cwd: '/workspace', env: { PORT: 5173 } } },
+      /payload\.opts\.env must be a string record/,
+    ],
+  ])('rejects %s instead of inventing child process context', async (_label, payload, error) => {
+    const handler = installAndCapture(() => new Uint8Array());
+    await expect(handler(payload)).rejects.toThrow(error);
   });
 });

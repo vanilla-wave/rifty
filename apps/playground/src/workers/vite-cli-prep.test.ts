@@ -22,6 +22,16 @@ const dec = new TextDecoder();
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
 const VITE_PACKAGE_JSON = '/app/node_modules/vite/package.json';
 const VITE_BIN = '/app/node_modules/.bin/vite';
+const ESBUILD_WASM_URL = 'blob:test-esbuild-wasm';
+
+function prepareVite(mode: 'dev' | 'build' | 'preview' | 'optimize' | 'info', bin = VITE_BIN) {
+  return prepareViteCli({
+    root: '/app',
+    mode,
+    executedBinPath: bin,
+    esbuildWasmUrl: ESBUILD_WASM_URL,
+  });
+}
 /** Mirrors the CAC runMatchedCommand call shape of real vite dist/node/cli.js —
  * the keepalive patch's needle. Registers the class on globalThis so the test
  * can drive parse() after executing the patched source. */
@@ -371,7 +381,7 @@ describe('Vite esbuild runtime startup policy', () => {
       expect(decideViteEsbuildRuntime({ fs: fsSync, packageRoot: '/app/node_modules/vite' })).toBe(
         'skip-rolldown',
       );
-      await prepareViteCli('/app', 'build', VITE_BIN);
+      await prepareVite('build');
       expect(fetchCalls).toBe(0);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
     } finally {
@@ -390,7 +400,7 @@ describe('Vite esbuild runtime startup policy', () => {
     };
     clearEsbuildRuntimeSlot();
     try {
-      await prepareViteCli('/app', 'info', VITE_BIN);
+      await prepareVite('info');
       expect(readText(fsSync, CLI_PATH)).toContain('__riftyTrackCliPromise');
       expect(fetchCalls).toBe(0);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
@@ -409,9 +419,7 @@ describe('Vite esbuild runtime startup policy', () => {
       return Promise.reject(new Error('version gate must run first'));
     };
     try {
-      await expect(prepareViteCli('/app', 'dev', VITE_BIN)).rejects.toThrow(
-        'supports exact Vite 7.3.6; executed 7.3.5',
-      );
+      await expect(prepareVite('dev')).rejects.toThrow('supports exact Vite 7.3.6; executed 7.3.5');
       expect(fetchCalls).toBe(0);
     } finally {
       globalThis.fetch = savedFetch;
@@ -420,7 +428,7 @@ describe('Vite esbuild runtime startup policy', () => {
 
   it('loud-fails a forged Vite mode whose executed argv[1] is not a .bin/vite shim', async () => {
     bootFs();
-    await expect(prepareViteCli('/app', 'dev', '/app/scripts/vite.js')).rejects.toThrow(
+    await expect(prepareVite('dev', '/app/scripts/vite.js')).rejects.toThrow(
       'expected an executed .bin/vite',
     );
   });
@@ -444,12 +452,12 @@ describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)',
     clearEsbuildRuntimeSlot();
 
     try {
-      await expect(prepareViteCli('/app', 'build', VITE_BIN)).rejects.toThrow(
+      await expect(prepareVite('build')).rejects.toThrow(
         'contract injected esbuild startup failure',
       );
       expect(fetchCalls).toBe(1);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
-      await expect(prepareViteCli('/app', 'build', VITE_BIN)).rejects.toThrow(
+      await expect(prepareVite('build')).rejects.toThrow(
         'contract injected esbuild startup failure',
       );
       expect(fetchCalls).toBe(1);

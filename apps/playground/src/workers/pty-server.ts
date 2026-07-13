@@ -14,7 +14,13 @@
  * `Shell.run`). `seq` is monotonic per `rid` for loss-detect / forward-compat.
  */
 
-import type { Shell, StdinReader } from '@riftydev/shell';
+import type {
+  ProcessExit,
+  Shell,
+  StdinReader,
+  TerminalResizeSource,
+  TerminalSize,
+} from '@riftydev/shell';
 import type { OwnerToPageFrame, PageToOwnerFrame, PtyStream } from '../glue/pty-protocol.ts';
 
 /**
@@ -23,45 +29,101 @@ import type { OwnerToPageFrame, PageToOwnerFrame, PtyStream } from '../glue/pty-
  * `terminal-manager.ts` — its sole owner is now this server (S2 drops the PAGE copy).
  */
 class StdinQueue implements StdinReader {
-  readonly #chunks: Uint8Array[] = [];
+  readonly #chunks: Array<{
+    readonly data: Uint8Array;
+    readonly ack: (error?: Error) => void;
+  }> = [];
   readonly #readers: Array<(chunk: Uint8Array | null) => void> = [];
-  #closed = false;
+  readonly #eofAcks: Array<(error?: Error) => void> = [];
+  #ended = false;
+  #aborted = false;
 
-  write(data: Uint8Array): void {
-    if (this.#closed) return;
+  write(data: Uint8Array, ack: (error?: Error) => void): boolean {
+    if (this.#ended || this.#aborted) return false;
     const reader = this.#readers.shift();
     if (reader) {
       reader(data);
-      return;
+      ack();
+      return true;
     }
-    this.#chunks.push(data);
+    this.#chunks.push({ data, ack });
+    return true;
   }
 
   read(): Promise<Uint8Array | null> {
     const chunk = this.#chunks.shift();
-    if (chunk) return Promise.resolve(chunk);
-    if (this.#closed) return Promise.resolve(null);
+    if (chunk) {
+      chunk.ack();
+      return Promise.resolve(chunk.data);
+    }
+    if (this.#ended || this.#aborted) {
+      for (const ack of this.#eofAcks.splice(0)) ack();
+      return Promise.resolve(null);
+    }
     return new Promise((resolve) => {
       this.#readers.push(resolve);
     });
   }
 
-  close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
+  end(ack: (error?: Error) => void): void {
+    if (this.#aborted) {
+      ack(new Error('ClosedHandleError: pty stdin is closed'));
+      return;
+    }
+    this.#eofAcks.push(ack);
+    if (this.#ended) return;
+    this.#ended = true;
+    if (this.#readers.length === 0) return;
+    for (const reader of this.#readers.splice(0)) reader(null);
+    for (const eofAck of this.#eofAcks.splice(0)) eofAck();
+  }
+
+  abort(error: Error): void {
+    if (this.#aborted) return;
+    this.#aborted = true;
+    this.#ended = true;
+    for (const chunk of this.#chunks.splice(0)) chunk.ack(error);
+    for (const ack of this.#eofAcks.splice(0)) ack(error);
     for (const reader of this.#readers.splice(0)) reader(null);
   }
 }
 
 interface RunState {
+  readonly rid: string;
   readonly stdin: StdinQueue;
   readonly controller: AbortController;
+  readonly terminal: MutableTerminalResizeSource;
+  done?: Promise<void>;
+  stdinEnded: boolean;
   seq: number;
 }
 
-interface Session {
-  readonly shell: Shell;
-  readonly runs: Map<string, RunState>;
+class MutableTerminalResizeSource implements TerminalResizeSource {
+  #size: TerminalSize;
+  readonly #listeners = new Set<(size: TerminalSize) => void>();
+
+  constructor(cols: number, rows: number) {
+    this.#size = { cols, rows };
+  }
+
+  current(): TerminalSize {
+    return this.#size;
+  }
+
+  subscribe(listener: (size: TerminalSize) => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  resize(cols: number, rows: number): void {
+    if (this.#size.cols === cols && this.#size.rows === rows) return;
+    this.#size = { cols, rows };
+    for (const listener of this.#listeners) listener(this.#size);
+  }
+
+  dispose(): void {
+    this.#listeners.clear();
+  }
 }
 
 /** Seed cwd/env for a session's Shell (restored persisted terminal state). */
@@ -127,128 +189,365 @@ function abortSettled(signal: AbortSignal): Promise<void> {
   });
 }
 
-export function createPtyServer(deps: PtyServerDeps): PtyServer {
-  const sessions = new Map<string, Session>();
+function validDimension(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
 
-  function emitChunk(
-    sid: string,
-    run: RunState,
-    rid: string,
-    chunk: string,
-    stream: PtyStream,
-  ): void {
-    deps.send({ type: 'pty:chunk', sid, rid, stream, seq: run.seq++, data: enc.encode(chunk) });
+class PtySessionActor {
+  readonly #sid: string;
+  readonly #shell: Shell;
+  readonly #deps: PtyServerDeps;
+  #active: RunState | null = null;
+  #state: 'open' | 'closing' | 'closed' = 'open';
+  #shutdownPromise: Promise<void> | undefined;
+
+  constructor(sid: string, shell: Shell, deps: PtyServerDeps) {
+    this.#sid = sid;
+    this.#shell = shell;
+    this.#deps = deps;
   }
 
-  async function exec(
-    sid: string,
-    frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>,
-  ): Promise<void> {
-    const session = sessions.get(sid);
-    if (!session) {
-      // No open session for this sid (protocol-order violation / owner restart).
-      // Emit a synthetic error-exit so the page run promise settles LOUD instead
-      // of hanging the terminal line forever (AGENTS.md §Fidelity — no silent stub).
-      deps.send({
-        type: 'pty:exit',
-        sid,
+  openError(): string | undefined {
+    return this.#state === 'open'
+      ? undefined
+      : `ClosedHandleError: pty session ${this.#sid} is ${this.#state}`;
+  }
+
+  exec(frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>): Promise<void> {
+    if (this.#state !== 'open') {
+      this.#emitRejectedExit(frame, `pty session ${this.#sid} is ${this.#state}`);
+      return Promise.resolve();
+    }
+    if (this.#active) {
+      this.#emitRejectedExit(
+        frame,
+        `ProjectBusyError: pty session ${this.#sid} already running ${this.#active.rid}`,
+      );
+      return Promise.resolve();
+    }
+    if (!validDimension(frame.cols) || !validDimension(frame.rows)) {
+      this.#emitRejectedExit(
+        frame,
+        'RangeError: terminal dimensions must be positive safe integers',
+      );
+      return Promise.resolve();
+    }
+
+    const run: RunState = {
+      rid: frame.rid,
+      stdin: new StdinQueue(),
+      controller: new AbortController(),
+      terminal: new MutableTerminalResizeSource(frame.cols, frame.rows),
+      stdinEnded: false,
+      seq: 0,
+    };
+    this.#active = run;
+    const done = this.#execute(run, frame);
+    run.done = done;
+    return done;
+  }
+
+  resize(frame: Extract<PageToOwnerFrame, { type: 'pty:resize' }>): void {
+    const run = this.#run(frame.rid);
+    if (!run) {
+      this.#deps.send({
+        type: 'pty:resize-ack',
+        sid: this.#sid,
         rid: frame.rid,
-        code: 1,
-        cwd: '/',
-        env: {},
-        error: `pty:exec for unknown session ${sid} — no pty:open (protocol-order violation)`,
+        opId: frame.opId,
+        ok: false,
+        error: `StaleRunError: ${frame.rid} is not active in ${this.#sid}`,
       });
       return;
     }
-    const run: RunState = { stdin: new StdinQueue(), controller: new AbortController(), seq: 0 };
-    session.runs.set(frame.rid, run);
+    if (!validDimension(frame.cols) || !validDimension(frame.rows)) {
+      this.#deps.send({
+        type: 'pty:resize-ack',
+        sid: this.#sid,
+        rid: frame.rid,
+        opId: frame.opId,
+        ok: false,
+        error: 'RangeError: terminal dimensions must be positive safe integers',
+      });
+      return;
+    }
+    try {
+      run.terminal.resize(frame.cols, frame.rows);
+      this.#deps.send({
+        type: 'pty:resize-ack',
+        sid: this.#sid,
+        rid: frame.rid,
+        opId: frame.opId,
+        ok: true,
+      });
+    } catch (error) {
+      this.#deps.send({
+        type: 'pty:resize-ack',
+        sid: this.#sid,
+        rid: frame.rid,
+        opId: frame.opId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  stdin(frame: Extract<PageToOwnerFrame, { type: 'pty:stdin' }>): void {
+    const run = this.#run(frame.rid);
+    if (
+      !run ||
+      run.stdinEnded ||
+      !run.stdin.write(frame.data, (error) => this.#stdinAck(frame.rid, frame.opId, error?.message))
+    ) {
+      this.#stdinAck(frame.rid, frame.opId, `StdinClosedError: stdin is closed for ${frame.rid}`);
+    }
+  }
+
+  endStdin(frame: Extract<PageToOwnerFrame, { type: 'pty:stdin-eof' }>): void {
+    const run = this.#run(frame.rid);
+    if (!run) {
+      this.#stdinAck(frame.rid, frame.opId, `StaleRunError: ${frame.rid} is not active`);
+      return;
+    }
+    run.stdinEnded = true;
+    run.stdin.end((error) => this.#stdinAck(frame.rid, frame.opId, error?.message));
+  }
+
+  signal(rid: string): void {
+    this.#run(rid)?.controller.abort();
+  }
+
+  close(opId: string): Promise<void> {
+    return this.#shutdown().then(
+      () => {
+        this.#deps.send({ type: 'pty:close-ack', sid: this.#sid, opId, ok: true });
+      },
+      (error: unknown) => {
+        this.#deps.send({
+          type: 'pty:close-ack',
+          sid: this.#sid,
+          opId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    );
+  }
+
+  dispose(): void {
+    void this.#shutdown();
+  }
+
+  async #execute(
+    run: RunState,
+    frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>,
+  ): Promise<void> {
     let code = 0;
+    let exit: ProcessExit = { code: 0, signal: null };
     let error: string | undefined;
     try {
-      // A blank line is a shell no-op — nothing it runs needs deps, so it skips
-      // the gate (instant prompt, no restore-progress noise on empty Enter).
       if (frame.line.trim() !== '') {
-        const gate = deps.beforeRun?.((chunk, stream) => {
-          // Progress from a gate the user already aborted is noise at the next
-          // prompt (the page routes post-exit chunks to the terminal).
-          if (!run.controller.signal.aborted) emitChunk(sid, run, frame.rid, chunk, stream);
+        const gate = this.#deps.beforeRun?.((chunk, stream) => {
+          if (!run.controller.signal.aborted) this.#emitChunk(run, chunk, stream);
         });
         if (gate !== undefined) {
-          // Abort-aware gate: pty:signal/pty:close during a slow deps restore
-          // settles the run NOW (the restore keeps running for the next run —
-          // it is shared state, not owned by this run). Waiting it out left the
-          // terminal `busy` for the whole restore after a Ctrl-C.
           const gatePromise = Promise.resolve(gate);
           await Promise.race([gatePromise, abortSettled(run.controller.signal)]);
-          // A gate failure AFTER the abort won the race has no run to fail —
-          // swallow it so it cannot surface as an unhandled rejection.
           gatePromise.catch(() => {});
         }
       }
       if (run.controller.signal.aborted) {
-        // pty:signal / pty:close landed while the gate was pending: the user
-        // stopped the run before it started — never invoke the command.
         code = 130;
+        exit = { code: null, signal: 'SIGINT' };
       } else {
-        const result = await session.shell.run(frame.line, {
-          onChunk: (chunk, stream) => emitChunk(sid, run, frame.rid, chunk, stream),
+        const size = run.terminal.current();
+        const options = {
+          onChunk: (chunk: string, stream: PtyStream) => this.#emitChunk(run, chunk, stream),
           signal: run.controller.signal,
           isTTY: frame.isTTY,
-          cols: frame.cols,
-          rows: frame.rows,
+          cols: size.cols,
+          rows: size.rows,
           stdin: run.stdin,
-        });
+          terminal: run.terminal,
+          awaitAbortSettlement: true,
+        };
+        const result = await this.#shell.run(frame.line, options);
         code = result.exitCode;
+        exit = result.exit;
       }
-    } catch (err) {
+    } catch (caught) {
       code = 1;
-      error = err instanceof Error ? err.message : String(err);
+      exit = { code: 1, signal: null };
+      error = caught instanceof Error ? caught.message : String(caught);
     } finally {
-      session.runs.delete(frame.rid);
-      run.stdin.close();
+      if (this.#active === run) this.#active = null;
+      run.stdin.abort(
+        new Error(`ClosedHandleError: pty run ${this.#sid}/${frame.rid} settled before delivery`),
+      );
+      run.terminal.dispose();
     }
-    deps.send({
+    this.#deps.send({
       type: 'pty:exit',
-      sid,
+      sid: this.#sid,
       rid: frame.rid,
       code,
-      cwd: session.shell.cwd,
-      env: publicEnv(session.shell.envSnapshot()),
+      exit,
+      cwd: this.#shell.cwd,
+      env: publicEnv(this.#shell.envSnapshot()),
       ...(error === undefined ? {} : { error }),
     });
+  }
+
+  #run(rid: string): RunState | undefined {
+    return this.#state === 'open' && this.#active?.rid === rid ? this.#active : undefined;
+  }
+
+  #emitChunk(run: RunState, chunk: string, stream: PtyStream): void {
+    this.#deps.send({
+      type: 'pty:chunk',
+      sid: this.#sid,
+      rid: run.rid,
+      stream,
+      seq: run.seq++,
+      data: enc.encode(chunk),
+    });
+  }
+
+  #emitRejectedExit(frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>, error: string): void {
+    this.#deps.send({
+      type: 'pty:exit',
+      sid: this.#sid,
+      rid: frame.rid,
+      code: 1,
+      exit: { code: 1, signal: null },
+      cwd: this.#shell.cwd,
+      env: publicEnv(this.#shell.envSnapshot()),
+      error,
+    });
+  }
+
+  #stdinAck(rid: string, opId: string, error?: string): void {
+    this.#deps.send(
+      error === undefined
+        ? { type: 'pty:stdin-ack', sid: this.#sid, rid, opId, ok: true }
+        : { type: 'pty:stdin-ack', sid: this.#sid, rid, opId, ok: false, error },
+    );
+  }
+
+  #shutdown(): Promise<void> {
+    if (this.#shutdownPromise) return this.#shutdownPromise;
+    this.#state = 'closing';
+    const run = this.#active;
+    run?.controller.abort();
+    this.#shutdownPromise = Promise.resolve(run?.done).then(async () => {
+      await this.#shell.dispose();
+      this.#state = 'closed';
+    });
+    return this.#shutdownPromise;
+  }
+}
+
+export function createPtyServer(deps: PtyServerDeps): PtyServer {
+  const sessions = new Map<string, PtySessionActor>();
+
+  function missingRunAck(
+    frame:
+      | Extract<PageToOwnerFrame, { type: 'pty:resize' }>
+      | Extract<PageToOwnerFrame, { type: 'pty:stdin' }>
+      | Extract<PageToOwnerFrame, { type: 'pty:stdin-eof' }>,
+  ): void {
+    const error = `StaleRunError: no open pty session ${frame.sid}`;
+    if (frame.type === 'pty:resize') {
+      deps.send({
+        type: 'pty:resize-ack',
+        sid: frame.sid,
+        rid: frame.rid,
+        opId: frame.opId,
+        ok: false,
+        error,
+      });
+    } else {
+      deps.send({
+        type: 'pty:stdin-ack',
+        sid: frame.sid,
+        rid: frame.rid,
+        opId: frame.opId,
+        ok: false,
+        error,
+      });
+    }
   }
 
   function handleFrame(frame: PageToOwnerFrame): void | Promise<void> {
     switch (frame.type) {
       case 'pty:open': {
-        if (!sessions.has(frame.sid)) {
-          sessions.set(frame.sid, {
-            shell: deps.makeShell({ cwd: frame.cwd, env: frame.env }, frame.sid),
-            runs: new Map(),
-          });
+        const existing = sessions.get(frame.sid);
+        if (existing) {
+          const error = existing.openError();
+          deps.send(
+            error === undefined
+              ? { type: 'pty:ready', sid: frame.sid }
+              : { type: 'pty:ready', sid: frame.sid, error },
+          );
+          return;
         }
+        sessions.set(
+          frame.sid,
+          new PtySessionActor(
+            frame.sid,
+            deps.makeShell({ cwd: frame.cwd, env: frame.env }, frame.sid),
+            deps,
+          ),
+        );
         deps.send({ type: 'pty:ready', sid: frame.sid });
         return;
       }
-      case 'pty:exec':
-        return exec(frame.sid, frame);
+      case 'pty:exec': {
+        const actor = sessions.get(frame.sid);
+        if (actor) return actor.exec(frame);
+        deps.send({
+          type: 'pty:exit',
+          sid: frame.sid,
+          rid: frame.rid,
+          code: 1,
+          exit: { code: 1, signal: null },
+          cwd: '/',
+          env: {},
+          error: `pty:exec for unknown session ${frame.sid} — no pty:open (protocol-order violation)`,
+        });
+        return Promise.resolve();
+      }
       case 'pty:stdin': {
-        sessions.get(frame.sid)?.runs.get(frame.rid)?.stdin.write(frame.data);
+        const actor = sessions.get(frame.sid);
+        if (actor) actor.stdin(frame);
+        else missingRunAck(frame);
         return;
       }
       case 'pty:stdin-eof': {
-        sessions.get(frame.sid)?.runs.get(frame.rid)?.stdin.close();
+        const actor = sessions.get(frame.sid);
+        if (actor) actor.endStdin(frame);
+        else missingRunAck(frame);
         return;
       }
       case 'pty:signal': {
-        sessions.get(frame.sid)?.runs.get(frame.rid)?.controller.abort();
+        sessions.get(frame.sid)?.signal(frame.rid);
+        return;
+      }
+      case 'pty:resize': {
+        const actor = sessions.get(frame.sid);
+        if (actor) actor.resize(frame);
+        else missingRunAck(frame);
         return;
       }
       case 'pty:close': {
-        const session = sessions.get(frame.sid);
-        if (session) for (const run of session.runs.values()) run.controller.abort();
-        sessions.delete(frame.sid);
-        return;
+        const actor = sessions.get(frame.sid);
+        if (!actor) {
+          deps.send({ type: 'pty:close-ack', sid: frame.sid, opId: frame.opId, ok: true });
+          return Promise.resolve();
+        }
+        return actor.close(frame.opId).finally(() => {
+          if (sessions.get(frame.sid) === actor) sessions.delete(frame.sid);
+        });
       }
       case 'pty:dev-server-req': {
         deps.onDevServerReq?.();
@@ -281,9 +580,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
   return {
     handleFrame,
     dispose(): void {
-      for (const session of sessions.values()) {
-        for (const run of session.runs.values()) run.controller.abort();
-      }
+      for (const actor of sessions.values()) actor.dispose();
       sessions.clear();
     },
   };

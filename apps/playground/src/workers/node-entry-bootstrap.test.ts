@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { viteCliModeFromEnv } from './vite-cli-prep.ts';
+import { viteCliModeFromEnv, viteCliPreparationFromEnv } from './vite-cli-prep.ts';
 
 // node-entry-bootstrap.ts is a worker-only `kind:'url'` entry: top-level await
 // + import-time side effects (reads the kernel process shim's argv, re-routes
@@ -36,6 +36,22 @@ describe('vite CLI mode decoding (seam used by the node-entry bootstrap)', () =>
 
   it('rejects the legacy run vite CLI mode', () => {
     expect(viteCliModeFromEnv('run')).toBeNull();
+  });
+
+  it('builds one complete preparation with the exact inherited esbuild URL', () => {
+    expect(
+      viteCliPreparationFromEnv({
+        root: '/parent',
+        mode: 'build',
+        executedBinPath: '/parent/node_modules/.bin/vite',
+        esbuildWasmUrl: 'blob:host-esbuild-wasm',
+      }),
+    ).toEqual({
+      root: '/parent',
+      mode: 'build',
+      executedBinPath: '/parent/node_modules/.bin/vite',
+      esbuildWasmUrl: 'blob:host-esbuild-wasm',
+    });
   });
 });
 

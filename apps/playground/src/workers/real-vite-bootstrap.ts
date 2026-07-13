@@ -30,14 +30,19 @@ import {
   getKernelDispatcher,
   globalProcessManager,
   readKernelProcessSpec,
-  setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { NODE_PROCESS_IDENTITY, installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
-import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
+import {
+  type BinExecutor,
+  type CommandContext,
+  type ProcessExit,
+  Shell,
+  type ShellCommandResult,
+  shellCommandExitCode,
+} from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import {
@@ -60,6 +65,7 @@ import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
+import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
 import { reconcileOwnerIndexAtBoot, recoverIndex } from '../glue/project-index.ts';
@@ -72,6 +78,7 @@ import {
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
+import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -111,13 +118,17 @@ import {
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
-import { createDevServerController } from './dev-server-controller.ts';
+import { createDevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
 import {
   type NodeInvocation,
   buildNodeEvalSource,
   classifyNodeInvocation,
   resolveNodeEntry,
 } from './node-entry-resolve.ts';
+import {
+  installNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfig,
+} from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
@@ -144,8 +155,6 @@ function ptySidFromContext(ctx: CommandContext): string | undefined {
 
 registerNetBuiltins();
 registerSqliteBuiltin();
-// node:sqlite self-initializes at first require.
-installSqliteWasmSyncProvider();
 
 function log(line: string): void {
   // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
@@ -332,6 +341,8 @@ async function bootShellOwner(opts: {
   readonly kernelWorkerUrl: string;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
+  /** Opaque host bootstrap snapshot inherited by every node-capable descendant. */
+  readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   /** Node-server bootstrap URL — the supervised serve:true child (ADR-0150 P6b). */
   readonly devServerWorkerUrl: string;
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
@@ -534,7 +545,7 @@ async function bootShellOwner(opts: {
     lifecycle: previews,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: async (signal, devLog, devSid) => {
+    boot: async (devCtx, devSid) => {
       const cleanForSwitch = shouldCleanForDevBootWithInstallState({
         lastTemplateId: lastDevTemplateId,
         lastRoot: lastDevRoot,
@@ -590,8 +601,8 @@ async function bootShellOwner(opts: {
       // is forwarded for the contract; v1 boot runs to completion (a Ctrl-C
       // mid-boot takes effect right after, via the controller's stop()).
       return devServerChild.boot({
-        signal,
-        log: devLog,
+        signal: devCtx.signal,
+        log: (chunk) => devCtx.stdout.write(chunk),
         params: {
           templateId: devSpec.id,
           // The dev server listens on the template port (devCfg.port), distinct
@@ -599,6 +610,10 @@ async function bootShellOwner(opts: {
           root: devCfg.root,
           devPort: devCfg.port,
           previewScope: createPreviewScope(),
+          isTTY: devCtx.isTTY,
+          cols: devCtx.cols,
+          rows: devCtx.rows,
+          terminal: devCtx.terminal,
         },
         onSnapshotDirty: publishOwnerState,
         // Post-ready port changes (the entry called server.close() / re-listened):
@@ -636,25 +651,29 @@ async function bootShellOwner(opts: {
   // register/unregister events); the preview registry derives the LIVE pill from
   // it. No bin-name dispatch: webpack-dev-server or a bare server CLI gets the
   // same preview + pill wiring vite does.
-  const childBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl, {
-    onStart: (req) => {
-      binPreviewSids.set(req, `bin-${++binRunSeq}`);
+  const childBinExecutor = createOwnerChildBinExecutor(
+    opts.nodeEntryWorkerUrl,
+    opts.nodeWorkerRuntimeEnv,
+    {
+      onStart: (req) => {
+        binPreviewSids.set(req, `bin-${++binRunSeq}`);
+      },
+      onMessage: (req, message, ctx) => {
+        if (!isNodeChildMessage(message)) return;
+        const sid = binPreviewSids.get(req);
+        if (sid === undefined) return;
+        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
+          ptySid: ptySidFromContext(ctx),
+          cwd: ctx.cwd,
+          labelBase: binNameOf(req.shimPath),
+        });
+      },
+      onExit: (req) => {
+        const sid = binPreviewSids.get(req);
+        if (sid !== undefined) previews.removeBySid(sid);
+      },
     },
-    onMessage: (req, message, ctx) => {
-      if (!isNodeChildMessage(message)) return;
-      const sid = binPreviewSids.get(req);
-      if (sid === undefined) return;
-      previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
-        ptySid: ptySidFromContext(ctx),
-        cwd: ctx.cwd,
-        labelBase: binNameOf(req.shimPath),
-      });
-    },
-    onExit: (req) => {
-      const sid = binPreviewSids.get(req);
-      if (sid !== undefined) previews.removeBySid(sid);
-    },
-  });
+  );
   const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
     const viteCtx = withViteCliEnv(binPath, args, ctx);
     return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
@@ -662,35 +681,24 @@ async function bootShellOwner(opts: {
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
-  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl, {
-    // Thread recursive worker URLs for node-server descendants.
-    kernelWorkerUrl: opts.kernelWorkerUrl,
-    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
-  });
+  const devServerChild = createOwnerChildDevServer(
+    opts.devServerWorkerUrl,
+    opts.nodeWorkerRuntimeEnv,
+  );
   // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
   // preview slot. A monotonic run-seq keys each run's registry entries (teardown
   // correlation): node-1, node-2, …
-  const ownerNodeExecutor = createOwnerChildNodeExecutor(opts.nodeEntryWorkerUrl);
+  const ownerNodeExecutor = createOwnerChildNodeExecutor(
+    opts.nodeEntryWorkerUrl,
+    opts.nodeWorkerRuntimeEnv,
+  );
   let nodeRunSeq = 0;
 
   // Node-server scripts use the dedicated supervised server child and block the
   // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
-  const runDevServer = async (ctx: CommandContext): Promise<number> => {
-    const signal = ctx.signal ?? new AbortController().signal;
-    try {
-      await devServer.run(
-        signal,
-        (chunk) => ctx.stdout.write(chunk),
-        ptySidFromContext(ctx),
-        ctx.cwd,
-      );
-      return 130; // resolves only when `signal` aborts (Ctrl-C)
-    } catch (err) {
-      if (signal.aborted) return 130;
-      ctx.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-      return 1;
-    }
+  const runDevServer = async (ctx: CommandContext): Promise<ShellCommandResult> => {
+    return runDevServerShellCommand(devServer, ctx, ptySidFromContext(ctx));
   };
 
   const makeShell = (
@@ -714,40 +722,25 @@ async function bootShellOwner(opts: {
       name: string,
       command: string,
       ctx: CommandContext,
-    ): Promise<number> => {
+    ): Promise<ShellCommandResult> => {
       const runScriptCommand = async (
         scriptCommand: string,
         scriptCtx: CommandContext,
-      ): Promise<number> => {
+      ): Promise<ShellCommandResult> => {
         const scriptShell = makeShell(
           { cwd: scriptCtx.cwd, env: scriptCtx.env },
           ptySidFromContext(scriptCtx),
         );
-        try {
-          const result = await scriptShell.run(scriptCommand, {
-            onChunk: (chunk, stream) => {
-              if (stream === 'stdout') scriptCtx.stdout.write(chunk);
-              else scriptCtx.stderr.write(chunk);
-            },
-            signal: scriptCtx.signal,
-            isTTY: scriptCtx.isTTY,
-            cols: scriptCtx.cols,
-            rows: scriptCtx.rows,
-            stdin: scriptCtx.stdin,
-          });
-          return result.exitCode;
-        } finally {
-          scriptShell.dispose();
-        }
+        return runNestedShellCommand(scriptShell, scriptCommand, scriptCtx);
       };
       const runNodeCliTemplate = async (
         scriptCommand: string,
         scriptCtx: CommandContext,
-      ): Promise<number> => {
+      ): Promise<ShellCommandResult> => {
         scriptCtx.stdout.write(`cli: running ${devSpec.displayName}\n`);
-        const code = await runScriptCommand(scriptCommand, scriptCtx);
-        scriptCtx.stdout.write(`[cli] completed with exit code ${code}\n`);
-        return code;
+        const result = await runScriptCommand(scriptCommand, scriptCtx);
+        scriptCtx.stdout.write(`[cli] completed with exit code ${shellCommandExitCode(result)}\n`);
+        return result;
       };
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
@@ -849,12 +842,12 @@ async function bootShellOwner(opts: {
         devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
       // The from-scratch clean-start moved into `prepareInstall` (above) — it
       // must run INSIDE the per-tree install phase lock (review round 4).
-      const code = await npmCommand(args, ctx);
-      if (code === 0 && absorbGeneratedBaseline) {
+      const result = await npmCommand(args, ctx);
+      if (shellCommandExitCode(result) === 0 && absorbGeneratedBaseline) {
         await absorbPendingStarterGeneratedBaseline(devCfg.root);
       }
       publishOwnerState(); // node_modules may have changed — refresh the page's view
-      return code;
+      return result;
     });
     // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
     // then run it in a supervised child. A long-running server child registers a
@@ -864,7 +857,7 @@ async function bootShellOwner(opts: {
       entryPath: string,
       scriptArgs: readonly string[],
       ctx: CommandContext,
-    ): Promise<number> => {
+    ): Promise<ProcessExit> => {
       const sid = `node-${++nodeRunSeq}`;
       const previewScope = createPreviewScope();
       return ownerNodeExecutor(entryPath, [...scriptArgs], withPreviewScope(ctx, previewScope), {
@@ -883,7 +876,7 @@ async function bootShellOwner(opts: {
     const runNodeEval = async (
       inv: Extract<NodeInvocation, { kind: 'eval' }>,
       ctx: CommandContext,
-    ): Promise<number> => {
+    ): Promise<ProcessExit> => {
       const fs = syncMirror();
       const evalPath = normalizePath(`${ctx.cwd}/.rifty-eval-${++nodeRunSeq}.cjs`);
       fs.writeFileSync(evalPath, enc.encode(buildNodeEvalSource(inv.source, inv.print)));
@@ -982,6 +975,7 @@ async function bootShellOwner(opts: {
       entry: { kind: 'url', url: opts.tsLspWorkerUrl },
       argv: ['rifty', 'ts-lsp'],
       env: {
+        ...opts.nodeWorkerRuntimeEnv,
         RIFTY_REMOTE_FS: '1',
         RIFTY_RFV_ROOT: cfg.root,
       },
@@ -1221,19 +1215,20 @@ async function bootstrap(): Promise<void> {
   // ADR-0150: the owner spawns each foreground CLI as a supervised child
   // worker-process; give this realm the kernel + node-entry worker URLs (recursive
   // spawn) and serve the child's fs over the kernel dispatcher (owner = SSoT).
-  const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
-  const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
+  const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(env, 'workspace-owner');
+  const { kernelWorkerUrl, nodeEntryWorkerUrl } = nodeWorkerRuntimeConfig;
   const devServerWorkerUrl = env.RIFTY_DEV_SERVER_WORKER_URL;
   // ADR-0166 P1.9a: child entry for the TS language service (serve:true grandchild).
   const tsLspWorkerUrl = env.RIFTY_TS_LSP_WORKER_URL;
-  if (!kernelWorkerUrl || !nodeEntryWorkerUrl || !devServerWorkerUrl || !tsLspWorkerUrl) {
+  if (!devServerWorkerUrl || !tsLspWorkerUrl) {
     throw new Error(
-      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL / RIFTY_DEV_SERVER_WORKER_URL / RIFTY_TS_LSP_WORKER_URL — cannot spawn child CLIs, the dev server, or the language service',
+      'workspace-owner: missing RIFTY_DEV_SERVER_WORKER_URL / RIFTY_TS_LSP_WORKER_URL — cannot spawn the dev server or language service',
     );
   }
-  setKernelWorkerUrl(kernelWorkerUrl);
-  setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
-  installRuntimeJsFsHandlers(getKernelDispatcher(), syncMirror);
+  const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
+  // node:sqlite self-initializes at first require using the host-owned asset.
+  installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror);
 
   // ADR-0148/0150: ONE unified owner — shell sessions + the dev server it spawns
   // on demand (`vite` / `npm run <script>`) as a supervised serve:true child that
@@ -1252,6 +1247,7 @@ async function bootstrap(): Promise<void> {
     fromScratch,
     kernelWorkerUrl,
     nodeEntryWorkerUrl,
+    nodeWorkerRuntimeEnv,
     devServerWorkerUrl,
     tsLspWorkerUrl,
   });

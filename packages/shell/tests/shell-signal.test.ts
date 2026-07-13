@@ -39,6 +39,33 @@ describe('Shell.run — SIGINT cancellation contract (ADR-0089)', () => {
     expect(r.exitCode).toBe(130);
   });
 
+  it('can keep the owner run pending until an aborted handler physically settles', async () => {
+    const sh = new Shell();
+    let settlePhysicalExit!: () => void;
+    const physicalExit = new Promise<void>((resolve) => {
+      settlePhysicalExit = resolve;
+    });
+    sh.registerCommand('child', async () => {
+      await physicalExit;
+      return 143;
+    });
+    const controller = new AbortController();
+    const run = sh.run('child', {
+      signal: controller.signal,
+      awaitAbortSettlement: true,
+    });
+
+    controller.abort();
+    const beforePhysicalExit = await Promise.race([
+      run.then(() => 'settled' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 50)),
+    ]);
+    settlePhysicalExit();
+
+    expect(beforePhysicalExit).toBe('pending');
+    await expect(run).resolves.toMatchObject({ exitCode: 130 });
+  });
+
   it('an already-aborted host signal resolves 130 without hanging', async () => {
     const sh = new Shell();
     sh.registerCommand('hang', () => new Promise<number>(() => {}));
@@ -63,6 +90,62 @@ describe('Shell.run — SIGINT cancellation contract (ADR-0089)', () => {
     controller.abort();
     await run;
     expect(secondRan).toBe(false);
+  });
+
+  it.each([
+    [';', 'foreground', 'second'],
+    ['&&', 'foreground', 'second'],
+    ['||', 'foreground', 'second'],
+    [';', 'background', 'second &'],
+    ['&&', 'background', 'second &'],
+    ['||', 'background', 'second &'],
+  ] as const)(
+    'an abort between %s segments never starts the trailing %s command',
+    async (joiner, _kind, tail) => {
+      const sh = new Shell();
+      let secondRan = false;
+      sh.registerCommand(
+        'first',
+        (_args, ctx) =>
+          new Promise<number>((resolve) => {
+            if (ctx.signal?.aborted) {
+              resolve(130);
+              return;
+            }
+            ctx.signal?.addEventListener('abort', () => resolve(130), { once: true });
+          }),
+      );
+      sh.registerCommand('second', async () => {
+        secondRan = true;
+        return 0;
+      });
+      const controller = new AbortController();
+      const run = sh.run(`first ${joiner} ${tail}`, { signal: controller.signal });
+
+      controller.abort();
+
+      await expect(run).resolves.toMatchObject({
+        exitCode: 130,
+        exit: { code: null, signal: 'SIGINT' },
+      });
+      expect(secondRan).toBe(false);
+      expect((await sh.run('jobs')).stdout).toBe('');
+    },
+  );
+
+  it('a natural status 130 still honors || and starts its trailing background command', async () => {
+    const sh = new Shell();
+    let secondRan = false;
+    sh.registerCommand('first', async () => 130);
+    sh.registerCommand('second', async () => {
+      secondRan = true;
+      return 0;
+    });
+
+    const result = await sh.run('first || second &');
+
+    expect(result.exitCode).toBe(0);
+    expect(secondRan).toBe(true);
   });
 
   it('removes its abort listener on a clean (non-aborted) settle — no leak', async () => {
@@ -101,6 +184,24 @@ describe('CommandContext.isTTY per sink (ADR-0089 §56/§94)', () => {
     expect(seen()?.rows).toBe(40);
   });
 
+  it('exposes live terminal dimensions through context getters', async () => {
+    const { sh, seen } = probeShell();
+    let size = { cols: 80, rows: 24 };
+    const terminal = {
+      current: () => size,
+      subscribe: () => () => {},
+    };
+
+    await sh.run('probe', { isTTY: true, cols: 10, rows: 5, terminal });
+    expect(seen()?.terminal).toBe(terminal);
+    expect(seen()?.cols).toBe(80);
+    expect(seen()?.rows).toBe(24);
+
+    size = { cols: 120, rows: 40 };
+    expect(seen()?.cols).toBe(120);
+    expect(seen()?.rows).toBe(40);
+  });
+
   it('defaults isTTY to false when the host does not say (color-safe default)', async () => {
     const { sh, seen } = probeShell();
     await sh.run('probe');
@@ -110,8 +211,13 @@ describe('CommandContext.isTTY per sink (ADR-0089 §56/§94)', () => {
   it('the REDIRECT path forces ctx.isTTY false even when the host says TTY (§94)', async () => {
     setSyncMirror(new MemoryFsSync());
     const { sh, seen } = probeShell();
-    await sh.run('probe > /out.txt', { isTTY: true });
+    const terminal = {
+      current: () => ({ cols: 120, rows: 40 }),
+      subscribe: () => () => {},
+    };
+    await sh.run('probe > /out.txt', { isTTY: true, terminal });
     expect(seen()?.isTTY).toBe(false); // a file sink is never a TTY → SGR must be suppressed
+    expect(seen()?.terminal).toBeUndefined();
   });
 });
 

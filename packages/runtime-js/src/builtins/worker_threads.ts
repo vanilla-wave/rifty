@@ -19,12 +19,21 @@ import { type FsSync, dirname } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { mergeNodeEntryWorkerEnv } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
-import { getProcessCwd } from './process.ts';
+import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
-  env?: Record<string, string>;
+  env?: Record<string, string | undefined>;
+}
+
+function snapshotWorkerEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const snapshot: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) snapshot[key] = String(value);
+  return snapshot;
 }
 
 type WorkerScript = string | URL;
@@ -66,6 +75,7 @@ export class Worker extends EventEmitter {
   private readonly script: string;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
+  private readonly processContext: NodeProcessContextSnapshot | null;
   private exited = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
@@ -80,7 +90,11 @@ export class Worker extends EventEmitter {
     this.threadId = nextThreadId++;
     this.script = normalizeWorkerScript(script);
     this.workerData = opts.workerData;
-    this.env = opts.env ?? {};
+    this.processContext = snapshotNodeProcessContext();
+    this.env =
+      opts.env === undefined
+        ? { ...(this.processContext?.env ?? {}) }
+        : snapshotWorkerEnvironment(opts.env);
     queueMicrotask(() => this.start());
   }
 
@@ -108,13 +122,16 @@ export class Worker extends EventEmitter {
         );
       }
       const env: Record<string, string> = {
-        ...this.env,
+        ...mergeNodeEntryWorkerEnv(this.env),
         RIFTY_REMOTE_FS: '1',
         RIFTY_WORKER_THREADS: '1',
         RIFTY_WORKER_THREAD_ID: String(this.threadId),
       };
       const encodedWorkerData = encodeWorkerData(this.workerData);
       if (encodedWorkerData !== undefined) env.RIFTY_WORKER_DATA_JSON = encodedWorkerData;
+      if (this.processContext === null) {
+        throw new Error('worker_threads.Worker: kernel Node process context is unavailable');
+      }
       const spec: SpawnWorkerSpec = {
         entry: {
           kind: 'url',
@@ -123,7 +140,7 @@ export class Worker extends EventEmitter {
         },
         argv: ['rifty', this.script],
         env,
-        cwd: getProcessCwd(),
+        cwd: this.processContext.cwd,
         // serve:true keeps a message-driven Worker alive (Node parity, and the
         // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
         // serve child. Cost: a run-to-completion Worker (no live handle after the

@@ -6,10 +6,21 @@
  * but the child is a long-lived SERVER (serve:true), not run-to-completion.
  */
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import type { ProcessExit } from '@riftydev/shell';
+import {
+  type ChildTerminalContext,
+  bindChildTerminalResize,
+  childTerminalEnv,
+} from '../glue/child-terminal.ts';
 import { type DevServerChildMessage, isDevServerChildMessage } from '../glue/dev-server-ipc.ts';
-import type { DevServerHandle } from './dev-server-controller.ts';
+import { processExitFromChildEvent } from '../glue/process-exit.ts';
+import {
+  type DevServerFailure,
+  DevServerRunError,
+  type SupervisedDevServerHandle,
+} from './dev-server-controller.ts';
 
-export interface DevServerChildSpawnParams {
+export interface DevServerChildSpawnParams extends ChildTerminalContext {
   readonly templateId: string;
   readonly root: string;
   /** The template's real dev port (distinct from the owner's 59124 bridge key). */
@@ -17,21 +28,17 @@ export interface DevServerChildSpawnParams {
   readonly previewScope?: string;
 }
 
-export interface RecursiveWorkerUrls {
-  readonly kernelWorkerUrl?: string;
-  readonly nodeEntryWorkerUrl?: string;
-}
-
 /** Pure: build the spawn spec for the dev-server child (unit-tested). */
 export function buildDevServerChildSpawnSpec(
   params: DevServerChildSpawnParams,
   devServerWorkerUrl: string,
-  workerUrls: RecursiveWorkerUrls = {},
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
 ): SpawnWorkerSpec {
   return {
     entry: { kind: 'url', url: devServerWorkerUrl },
     argv: ['rifty', 'dev-server'],
     env: {
+      ...nodeWorkerRuntimeEnv,
       RIFTY_REMOTE_FS: '1',
       RIFTY_RFV_TEMPLATE: params.templateId,
       RIFTY_RFV_ROOT: params.root,
@@ -41,12 +48,6 @@ export function buildDevServerChildSpawnSpec(
       // onto their WASI path so a failed WASI load stays loud instead of falling
       // through to the generic "Cannot find native binding" diagnostic.
       NAPI_RS_FORCE_WASI: '1',
-      ...(workerUrls.kernelWorkerUrl
-        ? { RIFTY_KERNEL_WORKER_URL: workerUrls.kernelWorkerUrl }
-        : {}),
-      ...(workerUrls.nodeEntryWorkerUrl
-        ? { RIFTY_NODE_ENTRY_WORKER_URL: workerUrls.nodeEntryWorkerUrl }
-        : {}),
       // node-server template entries bind `process.env.PORT`; set it to the dev
       // port so the child's entry listens where the owner expects (ADR-0150 P6b).
       // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach
@@ -54,6 +55,7 @@ export function buildDevServerChildSpawnSpec(
       // env from the spawn-time KernelProcessSpec.env (the clobber-safe source),
       // which otherwise inherits the owner's spawn-time PORT unless overridden.
       PORT: String(params.devPort),
+      ...childTerminalEnv(params),
     },
     cwd: params.root,
     // ADR-0144: serve:true — the kernel does NOT reap the realm when the entry's
@@ -72,8 +74,9 @@ export interface DevServerChildHandle {
   readonly kind: string;
   stdout(): DevReadable;
   stderr(): DevReadable;
-  on(event: 'exit', listener: (code?: unknown) => void): unknown;
+  on(event: 'exit', listener: (code: number | null, signal: string | null) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -101,10 +104,14 @@ export interface DevServerChildBootOpts {
 }
 
 export interface OwnerChildDevServer {
-  boot(opts: DevServerChildBootOpts): Promise<DevServerHandle>;
+  boot(opts: DevServerChildBootOpts): Promise<SupervisedDevServerHandle>;
 }
 
 const decoder = new TextDecoder();
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 function decodeChunk(chunk: unknown): string {
   if (chunk instanceof Uint8Array) return decoder.decode(chunk);
   if (chunk instanceof ArrayBuffer) return decoder.decode(new Uint8Array(chunk));
@@ -121,26 +128,20 @@ function decodeChunk(chunk: unknown): string {
  */
 export function createOwnerChildDevServer(
   devServerWorkerUrl: string,
-  workerUrlsOrSpawn: RecursiveWorkerUrls | ((spec: SpawnWorkerSpec) => DevServerChildHandle) = {},
-  maybeSpawn?: (spec: SpawnWorkerSpec) => DevServerChildHandle,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  spawn: (spec: SpawnWorkerSpec) => DevServerChildHandle = (spec: SpawnWorkerSpec) => {
+    const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
+    if (h.kind !== 'worker') {
+      throw new Error(`owner-child-dev-server: expected worker handle, got ${h.kind}`);
+    }
+    return h as unknown as DevServerChildHandle;
+  },
 ): OwnerChildDevServer {
-  const workerUrls = typeof workerUrlsOrSpawn === 'function' ? {} : workerUrlsOrSpawn;
-  const spawn =
-    typeof workerUrlsOrSpawn === 'function'
-      ? workerUrlsOrSpawn
-      : (maybeSpawn ??
-        ((spec: SpawnWorkerSpec) => {
-          const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
-          if (h.kind !== 'worker') {
-            throw new Error(`owner-child-dev-server: expected worker handle, got ${h.kind}`);
-          }
-          return h as unknown as DevServerChildHandle;
-        }));
   return {
-    boot(opts: DevServerChildBootOpts): Promise<DevServerHandle> {
-      return new Promise<DevServerHandle>((resolve, reject) => {
+    boot(opts: DevServerChildBootOpts): Promise<SupervisedDevServerHandle> {
+      return new Promise<SupervisedDevServerHandle>((resolve, reject) => {
         const handle = spawn(
-          buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl, workerUrls),
+          buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl, nodeWorkerRuntimeEnv),
         );
         let outputClosed = false;
         const writeLog = (chunk: unknown): void => {
@@ -152,56 +153,246 @@ export function createOwnerChildDevServer(
         handle.stderr().on('data', writeLog);
 
         let settled = false;
+        let listening = false;
         const finish = (fn: () => void): void => {
           if (settled) return;
           settled = true;
           fn();
         };
 
-        const makeHandle = (port: number, previewScope?: string): DevServerHandle => ({
-          port,
-          ...(previewScope === undefined ? {} : { previewScope }),
-          async stop() {
-            outputClosed = true;
-            await new Promise<void>((res) => {
-              handle.on('exit', () => res());
-              // kill() returns false when the child has ALREADY exited (a
-              // post-ready crash): an already-dead handle emits NO 'exit', so
-              // resolve now instead of awaiting a frame that never comes — else a
-              // Ctrl-C recovery after a mid-run crash hangs the dev-run forever.
-              // TODO(backlog: shell/dev-server-child-exit-unobserved)
-              if (handle.kill('SIGTERM') === false) res();
-            });
-          },
+        let childExited = false;
+        let bootFault: Error | undefined;
+        let stopRequested = false;
+        let failureReported = false;
+        let resolveFailure!: (failure: DevServerFailure) => void;
+        const failure = new Promise<DevServerFailure>((res) => {
+          resolveFailure = res;
         });
+        const reportFailure = (next: DevServerFailure): void => {
+          if (failureReported || stopRequested) return;
+          failureReported = true;
+          resolveFailure(next);
+        };
+        let physicalExitSettled = false;
+        let resolvePhysicalExit!: (exit: ProcessExit) => void;
+        let rejectPhysicalExit!: (error: Error) => void;
+        const physicalExit = new Promise<ProcessExit>((resolveExit, rejectExit) => {
+          resolvePhysicalExit = resolveExit;
+          rejectPhysicalExit = rejectExit;
+        });
+        void physicalExit.catch(() => {});
+        const failPhysicalExit = (error: Error): void => {
+          if (physicalExitSettled) return;
+          physicalExitSettled = true;
+          rejectPhysicalExit(error);
+        };
+        const finishPhysicalExit = (exit: ProcessExit): void => {
+          if (physicalExitSettled) return;
+          physicalExitSettled = true;
+          resolvePhysicalExit(exit);
+        };
+        let resizeCleanup = (): void => {};
+        let resizeAbortBound = false;
+        const onResizeAbort = (): void => {
+          if (!listening && !childExited) {
+            failChild(new Error('dev-server boot aborted before ready'));
+            return;
+          }
+          try {
+            stopResize();
+          } catch (error) {
+            failChild(error);
+          }
+        };
+        const stopResize = (): void => {
+          if (resizeAbortBound) {
+            resizeAbortBound = false;
+            opts.signal.removeEventListener('abort', onResizeAbort);
+          }
+          const cleanup = resizeCleanup;
+          resizeCleanup = () => {};
+          cleanup();
+        };
+        let failingChild = false;
+        const failChild = (error: unknown): Error => {
+          if (bootFault) return bootFault;
+          failingChild = true;
+          const cause = asError(error);
+          let cleanupError: Error | undefined;
+          try {
+            stopResize();
+          } catch (cleanupFailure) {
+            cleanupError = asError(cleanupFailure);
+          }
+          bootFault = cleanupError
+            ? new AggregateError([cause, cleanupError], 'dev-server child lifecycle failed')
+            : cause;
+          outputClosed = true;
+          try {
+            if (handle.kill('SIGTERM') === false) {
+              failPhysicalExit(new Error('dev-server child closed without an exit event'));
+              finish(() => reject(bootFault!));
+            }
+          } catch (killError) {
+            bootFault = new AggregateError(
+              [bootFault, asError(killError)],
+              'dev-server child lifecycle failed and kill threw',
+            );
+            failPhysicalExit(bootFault);
+            finish(() => reject(bootFault!));
+          }
+          failingChild = false;
+          if (listening) reportFailure({ kind: 'error', error: bootFault });
+          return bootFault;
+        };
+
+        const makeHandle = (port: number, previewScope?: string): SupervisedDevServerHandle => {
+          let stopPromise: Promise<ProcessExit> | undefined;
+          return {
+            port,
+            ...(previewScope === undefined ? {} : { previewScope }),
+            failure,
+            stop() {
+              if (stopPromise) return stopPromise;
+              stopRequested = true;
+              outputClosed = true;
+              stopPromise = (async () => {
+                let cleanupError: Error | undefined;
+                try {
+                  stopResize();
+                } catch (error) {
+                  cleanupError = asError(error);
+                }
+                if (!childExited) {
+                  try {
+                    if (handle.kill('SIGTERM') === false && !childExited) {
+                      failPhysicalExit(new Error('dev-server child closed without an exit event'));
+                    }
+                  } catch (error) {
+                    failPhysicalExit(asError(error));
+                  }
+                }
+                let exit: ProcessExit;
+                try {
+                  exit = await physicalExit;
+                } catch (error) {
+                  if (cleanupError) {
+                    throw new AggregateError(
+                      [asError(error), cleanupError],
+                      'dev-server child stop failed',
+                    );
+                  }
+                  throw error;
+                }
+                if (cleanupError) throw cleanupError;
+                return exit;
+              })();
+              return stopPromise;
+            },
+          };
+        };
 
         handle.on('message', (message: unknown) => {
           if (!isDevServerChildMessage(message)) return;
           const m = message as DevServerChildMessage;
           if (m.type === 'rifty:dev-ready') {
+            if (bootFault || childExited || opts.signal.aborted) return;
             // Drain the owner's OPFS write-through before resolving. A stray
             // rejection still resolves boot: the server is already listening.
-            const ready = m.port;
+            const port = m.port;
             Promise.resolve(opts.flush?.()).then(
-              () => finish(() => resolve(makeHandle(ready, m.previewScope))),
-              () => finish(() => resolve(makeHandle(ready, m.previewScope))),
+              () =>
+                finish(() => {
+                  listening = true;
+                  resolve(makeHandle(port, m.previewScope));
+                }),
+              () =>
+                finish(() => {
+                  listening = true;
+                  resolve(makeHandle(port, m.previewScope));
+                }),
             );
-          } else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
+          } else if (m.type === 'rifty:dev-error') failChild(new Error(m.message));
           else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();
-          else if (m.type === 'rifty:dev-ports' && settled) {
+          else if (m.type === 'rifty:dev-ports' && listening) {
             // Only meaningful after ready (boot resolution owns the first port).
             opts.onPortsChanged?.(m.ports, m.previewScope);
           }
         });
 
-        // Boot-window only: a child exit BEFORE ready rejects boot. A post-ready
-        // exit (mid-run crash) is currently unobserved (the controller parks on
-        // onceAborted) → stale LIVE pill until Ctrl-C. Fixing it needs a
-        // controller transition (left "state machine unchanged" for P6b).
-        // TODO(backlog: shell/dev-server-child-exit-unobserved)
-        handle.on('exit', () => {
-          finish(() => reject(new Error('dev-server child exited before listening')));
+        handle.on('exit', (code, signal) => {
+          childExited = true;
+          outputClosed = true;
+          let exit: ProcessExit | undefined;
+          let invalidExit: Error | undefined;
+          try {
+            exit = processExitFromChildEvent(code, signal);
+            finishPhysicalExit(exit);
+          } catch (error) {
+            invalidExit = asError(error);
+            failPhysicalExit(invalidExit);
+          }
+          let cleanupError: Error | undefined;
+          try {
+            stopResize();
+          } catch (error) {
+            cleanupError = asError(error);
+          }
+          if (invalidExit) {
+            const lifecycleError = cleanupError
+              ? new AggregateError(
+                  [invalidExit, cleanupError],
+                  'dev-server child emitted an invalid exit and resize cleanup failed',
+                )
+              : invalidExit;
+            if (listening && !stopRequested)
+              reportFailure({ kind: 'error', error: lifecycleError });
+            finish(() => reject(lifecycleError));
+            return;
+          }
+          if (listening && !stopRequested && !failingChild && exit) {
+            const exitError = new Error(
+              `dev-server child exited after listening (code ${String(code)}, signal ${String(signal)})`,
+            );
+            reportFailure({
+              kind: 'exit',
+              ...exit,
+              error: cleanupError
+                ? new AggregateError(
+                    [exitError, cleanupError],
+                    'dev-server child exited and resize cleanup failed',
+                  )
+                : exitError,
+            });
+            return;
+          }
+          finish(() => {
+            const error = bootFault
+              ? cleanupError
+                ? new AggregateError([bootFault, cleanupError], 'dev-server child lifecycle failed')
+                : bootFault
+              : (cleanupError ??
+                new Error(
+                  `dev-server child exited before listening (code ${String(code)}, signal ${String(signal)})`,
+                ));
+            reject(new DevServerRunError(error, exit!));
+          });
         });
+
+        if (!opts.signal.aborted) {
+          resizeAbortBound = true;
+          opts.signal.addEventListener('abort', onResizeAbort, { once: true });
+        }
+        resizeCleanup = bindChildTerminalResize(
+          handle,
+          opts.params,
+          () => !childExited && bootFault === undefined && !opts.signal.aborted,
+          (error) => {
+            const fault = failChild(error);
+            if (listening) throw fault;
+          },
+        );
+        if (opts.signal.aborted) onResizeAbort();
       });
     },
   };

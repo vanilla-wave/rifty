@@ -26,7 +26,7 @@ import {
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
 } from '@riftydev/npm-client';
-import { Shell } from '@riftydev/shell';
+import { type ProcessExit, Shell } from '@riftydev/shell';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { createInstallStamp } from './install-stamp.ts';
@@ -343,6 +343,73 @@ describe('npm-shell-command — happy path', () => {
       { name: 'lint', command: 'eslint src/lint.js --fix src/lint.js', cwd: '/proj' },
       { name: 'postlint', command: 'echo POST', cwd: '/proj' },
     ]);
+  });
+
+  it('carries exact successful process exits through every pre/main/post hook', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({
+        scripts: { predev: 'pre', dev: 'node server.js', postdev: 'post' },
+      })}\n`,
+    );
+    const calls: string[] = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name): Promise<ProcessExit> => {
+          calls.push(name);
+          return { code: 0, signal: null };
+        },
+      }),
+    );
+
+    const result = await shell.run('npm run dev');
+
+    expect(calls).toEqual(['predev', 'dev', 'postdev']);
+    expect(result.exit).toEqual({ code: 0, signal: null });
+  });
+
+  it.each([
+    ['predev', ['predev']],
+    ['dev', ['predev', 'dev']],
+    ['postdev', ['predev', 'dev', 'postdev']],
+  ] as const)('stops at a signal exit from %s and preserves it', async (terminatedAt, expected) => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({
+        scripts: { predev: 'pre', dev: 'node server.js', postdev: 'post' },
+      })}\n`,
+    );
+    const calls: string[] = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name): Promise<ProcessExit> => {
+          calls.push(name);
+          return name === terminatedAt
+            ? { code: null, signal: 'SIGTERM' }
+            : { code: 0, signal: null };
+        },
+      }),
+    );
+
+    const result = await shell.run('npm run dev');
+
+    expect(calls).toEqual(expected);
+    expect(result).toMatchObject({
+      exitCode: 143,
+      exit: { code: null, signal: 'SIGTERM' },
+    });
   });
 
   it('stops npm run hooks after the first failing hook or script', async () => {

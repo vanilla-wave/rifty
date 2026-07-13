@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+### Added (foreground Node stdin and resize)
+
+- Each owner terminal now has one `PtySessionActor` with a synchronous run
+  claim and ACK-backed stdin/EOF, resize, and close operations. Pre-ready input
+  stays ordered, resize latches the latest grid, and closing waits for process
+  exit plus shell disposal without affecting sibling terminals.
+- The mounted xterm grid now flows through the page terminal manager to the
+  active owner run; closing a terminal performs the real owner teardown instead
+  of only hiding its tab.
+- The shared Node/`.bin` foreground driver now pumps one stdin chunk at a
+  time, sends explicit EOF, cancels late reads on exit, and terminates loudly
+  on source/write/end faults. Active TTY runs forward current and live terminal
+  dimensions and unsubscribe on every exit/fault path. A closed resize control
+  returns a negative PTY ACK; `kill()` false/throw settles loudly instead of
+  waiting forever for an exit event (ADR-0225/0230).
+- Node-server dev children use the same child-TTY env/resize chokepoint as
+  Node/`.bin`: spawn metadata, current/live grids, and abort/stop/exit/error
+  cleanup cannot drift between the three adapters (ADR-0225).
+- Post-ready dev-child exit, error, and resize faults now converge through one
+  controller terminalization path. Exact `(code, signal)` survives supervision,
+  LIVE/preview state clears, and a closed resize control receives a negative ACK.
+- Dev-server abort before readiness now kills and physically settles the child;
+  natural pre-ready exits retain the same exact provenance as Node and `.bin`.
+  One strict child-exit normalizer rejects invalid pairs across all adapters.
+- `pty:exit` now transports the shell status beside the independent physical
+  exit. The owner handle exposes both, while owner death rejects runs instead
+  of inventing exit 137.
+- PTY close now waits for the supervised child's physical exit, including
+  control-pump faults and background jobs. Stop/close before child attachment
+  rejects queued stdin/EOF instead of falsely ACKing delivery.
+- Owner death and session closing reject pending and future PTY operations with
+  `ClosedHandleError`; terminal rebind/dispose also rejects already-forwarded
+  control waiters without routing an old `rid` through a replacement owner.
+- The hidden terminal text mirror removes xterm's ANSI cursor/style replay, so an
+  idle prompt remains observable after exact foreground child settlement.
+
+### Fixed (recursive Node bootstrap)
+
+- Node-entry serve children now use the same runtime-owned loud stdin gaps as
+  `.bin`, recursive `execSync`, and `worker_threads`; the branch-local stdin
+  guard is removed.
+
+- Page, workspace owner, node/bin, dev-server, and TS-LSP realms now install and
+  propagate one validated worker/WASM bootstrap snapshot. Explicit user env can
+  replace user variables without erasing deployment capabilities. The inherited
+  esbuild URL is the sole fetched source; every recursive Node entry installs
+  SQLite before user code; operation controls override host metadata. Owner and
+  relay dispatchers now serve real recursive `execSync` beside the same VFS
+  handlers. Worker entries read the installed process through one Vite-safe seam,
+  so production bundles retain the inherited snapshot (ADR-0231).
+
 ### Changed (exact Vite esbuild runtime)
 
 - Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer

@@ -42,7 +42,16 @@ async function runOne(file: string): Promise<CaseRun> {
   }
   const testCase = mod.default;
   try {
-    const [nodeOut, riftyOut] = await Promise.all([runInNode(testCase), runInRifty(testCase)]);
+    // These modes temporarily install an isolated rifty NodeProcess on the
+    // shared harness global. Run the native oracle first so it can never
+    // observe the replacement while selecting/spawning the real Node process.
+    const installsProcess =
+      testCase.kind === 'exec-sync' ||
+      testCase.kind === 'tty-resize' ||
+      testCase.stdin !== undefined;
+    const [nodeOut, riftyOut] = installsProcess
+      ? [await runInNode(testCase), await runInRifty(testCase)]
+      : await Promise.all([runInNode(testCase), runInRifty(testCase)]);
     const a = normalise(nodeOut);
     const b = normalise(riftyOut);
     let match = a === b;

@@ -27,6 +27,15 @@ Two genuine forks resolved by the user (2026-06-18): (1) SCOPE = full (run-to-co
 
 **5. Loud gaps (Fidelity — never silent).** Interactive stdin is NOT forwarded to the child; the child's `process.stdin` consume surface throws `NotImplementedError` (`node-stdin-guard.ts`) rather than hanging on input that never arrives — compat ❌ + `backlog: kernel/worker-per-process-residuals` (+ `terminal/raw-stdin-deferred-items` for real wiring). Bare-node `node:sqlite` if lazy infeasible → loud defer (`backlog: net/node-bare-sqlite-lazy-bringup`). NOTE — `node x.js &` is NOT a gap: trailing `&` runs the command in a background job via the shell's generic trailing-`&` path (`cloneForBackground` copies `node`); the unimplemented surface is the job-control builtins (`jobs`/`fg`/`bg`), tracked separately in `backlog: shell/background-job-model`. Compat matrix: `node <file>` ✅ (run-to-completion + listening server + preview + background `&`), the remaining gaps ❌ with backlog links.
 
+> **Corrected (2026-07-13, ADR-0230):** the loud-only interactive-stdin clause
+> above is overtaken. One owner PTY pump now gives `node` and `.bin` children
+> ordered flowing data, explicit host EOF/one `end`, split-UTF-8 decoding, and
+> real `pause()`/`resume()`. ADR-0225 also ships live TTY dimensions/resize with
+> stream `resize` before `SIGWINCH`. The playground-only guard is deleted;
+> unsupported pull/raw surfaces (`readable`, `read`, `pipe`, async iteration,
+> `setRawMode`, byte backpressure/line discipline) remain runtime-owned loud
+> gaps. The rest of §5 stands.
+
 ## Consequences
 
 - (+) Meets the parked user story — run any entry file; pure-JS CLIs (run-to-completion) AND arbitrary servers (preview), distinct from template `npm run dev`.

@@ -419,6 +419,35 @@ describe('Shell — background jobs', () => {
     expect(aborted).toBe(true);
   });
 
+  it('dispose remains pending until an aborted background handler physically settles', async () => {
+    const sh = new Shell();
+    let aborted = false;
+    let settlePhysicalExit!: () => void;
+    const physicalExit = new Promise<void>((resolve) => {
+      settlePhysicalExit = resolve;
+    });
+    sh.registerCommand('child', async (_args, ctx) => {
+      ctx.signal?.addEventListener('abort', () => {
+        aborted = true;
+      });
+      await physicalExit;
+      return 143;
+    });
+
+    await sh.run('child &');
+    const disposing = Promise.resolve(sh.dispose());
+    for (let i = 0; i < 50 && !aborted; i++) await Promise.resolve();
+    expect(aborted).toBe(true);
+    const beforePhysicalExit = await Promise.race([
+      disposing.then(() => 'settled' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 50)),
+    ]);
+    settlePhysicalExit();
+
+    expect(beforePhysicalExit).toBe('pending');
+    await disposing;
+  });
+
   it('&& is a joiner, NOT background — the chain still runs (op discriminator, not substring)', async () => {
     const sh = new Shell();
     const r = await sh.run('echo a && echo b');

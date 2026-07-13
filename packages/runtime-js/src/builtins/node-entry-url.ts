@@ -8,19 +8,32 @@
  * `setKernelWorkerUrl`.
  */
 
-let nodeEntryWorkerUrl: string | URL | null = null;
+import {
+  configureNodeEntryWorkerRuntime,
+  getConfiguredNodeEntryWorkerUrl,
+  resetNodeEntryWorkerRuntime,
+  setNodeEntryWorkerUrlOnly,
+} from './node-entry-runtime-config.ts';
 
-/** Inject the node-entry bootstrap worker URL (host startup). */
+/** Inject only the URL; invalidates any older host bootstrap snapshot. */
 export function setNodeEntryWorkerUrl(url: string | URL): void {
-  nodeEntryWorkerUrl = url;
+  setNodeEntryWorkerUrlOnly(url);
+}
+
+/** Atomically inject the URL plus host-owned bootstrap values. */
+export function configureNodeEntryWorker(
+  url: string | URL,
+  runtimeEnv: Readonly<Record<string, string>>,
+): void {
+  configureNodeEntryWorkerRuntime(url, runtimeEnv);
 }
 
 /** The configured node-entry bootstrap worker URL, or `null` if unset. */
 export function getNodeEntryWorkerUrl(): string | URL | null {
-  return nodeEntryWorkerUrl;
+  return getConfiguredNodeEntryWorkerUrl();
 }
 
 /** Test-only: clear the injected URL. */
 export function resetNodeEntryWorkerUrl(): void {
-  nodeEntryWorkerUrl = null;
+  resetNodeEntryWorkerRuntime();
 }

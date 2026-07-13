@@ -15,13 +15,14 @@ function exactViteFs(): MemoryFsSync {
   return fs;
 }
 
-async function prepare(): Promise<void> {
+async function prepare(esbuildWasmUrl = 'blob:inherited-esbuild-wasm'): Promise<void> {
   vi.resetModules();
   const runtime = await import('./vite-esbuild-runtime.ts');
   await runtime.prepareViteEsbuildRuntime({
     fs: exactViteFs(),
     cwd: '/workspace',
     packageRoot,
+    esbuildWasmUrl,
   });
 }
 
@@ -31,6 +32,19 @@ afterEach(() => {
 });
 
 describe('Vite esbuild asset acquisition fault matrix', () => {
+  it('fetches only the esbuild URL inherited from the worker host config', async () => {
+    const inheritedUrl = 'blob:exact-host-esbuild-wasm';
+    let fetchedUrl: string | undefined;
+    globalThis.fetch = async (input) => {
+      fetchedUrl = String(input);
+      throw new Error('stop after provenance capture');
+    };
+
+    await expect(prepare(inheritedUrl)).rejects.toThrow('stop after provenance capture');
+    expect(fetchedUrl).toBe(inheritedUrl);
+    expect(readRuntimeEsbuild()).toBeNull();
+  });
+
   it('header stall fails startup and publishes no runtime', async () => {
     vi.useFakeTimers();
     let fetched!: () => void;

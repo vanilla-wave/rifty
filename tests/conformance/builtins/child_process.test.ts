@@ -121,7 +121,12 @@ describe('execSync — v2 binary frame returns byte-exact stdout (ADR-0084 #23)'
       runWorker: async () => ({ stdout, exitCode: 0 }),
     });
     dispatcher.attach(ring);
-    caller.writeRequest(encodeRequest({ method: 'execSync', payload: { cmd: 'node /bin.js' } }));
+    caller.writeRequest(
+      encodeRequest({
+        method: 'execSync',
+        payload: { cmd: 'node /bin.js', opts: { cwd: '/workspace', env: {} } },
+      }),
+    );
     // The handler is async (awaits the runner); the backstop/pump writes the
     // reply on a microtask — `waitReplyAsync` parks until the notify fires.
     const replyBytes = await caller.waitReplyAsync(2000);
@@ -160,7 +165,7 @@ describe('execSync — v2 binary frame returns byte-exact stdout (ADR-0084 #23)'
     caller.writeRequest(
       encodeRequest({
         method: 'execSync',
-        payload: { cmd: 'node /bin.js', opts: { cwd: '/' } },
+        payload: { cmd: 'node /bin.js', opts: { cwd: '/', env: {} } },
       }),
     );
 
