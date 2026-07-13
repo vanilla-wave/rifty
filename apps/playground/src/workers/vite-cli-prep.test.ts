@@ -6,12 +6,12 @@ import {
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  decideViteEsbuildRuntime,
   prepareViteCli,
   prepareViteCliFiles,
   viteCliMode,
   withViteCliEnv,
 } from './vite-cli-prep.ts';
+import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): file tests drive the pre-runtime preparation over
@@ -348,13 +348,18 @@ describe('Vite esbuild runtime startup policy', () => {
       [hoistedCli]: CAC_CALL_SITE,
     });
     const bin = '/workspace/node_modules/.bin/vite';
-    expect(decideViteEsbuildRuntime('/workspace/packages/app', bin)).toBe('start');
+    expect(
+      decideViteEsbuildRuntime({ fs: fsSync, packageRoot: '/workspace/node_modules/vite' }),
+    ).toBe('start');
     await prepareViteCliFiles('/workspace/packages/app', bin);
     expect(readText(fsSync, hoistedCli)).toContain('__riftyTrackCliPromise');
   });
 
   it('skips Vite 8 Rolldown without fetching, compiling, starting, or publishing', async () => {
-    bootFs({ [CLI_PATH]: CAC_CALL_SITE, [VITE_PACKAGE_JSON]: manifest('8.0.0-beta.3') });
+    const fsSync = bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: manifest('8.0.0-beta.3'),
+    });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
     globalThis.fetch = () => {
@@ -363,7 +368,9 @@ describe('Vite esbuild runtime startup policy', () => {
     };
     clearEsbuildRuntimeSlot();
     try {
-      expect(decideViteEsbuildRuntime('/app', VITE_BIN)).toBe('skip-rolldown');
+      expect(decideViteEsbuildRuntime({ fs: fsSync, packageRoot: '/app/node_modules/vite' })).toBe(
+        'skip-rolldown',
+      );
       await prepareViteCli('/app', 'build', VITE_BIN);
       expect(fetchCalls).toBe(0);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
@@ -411,9 +418,9 @@ describe('Vite esbuild runtime startup policy', () => {
     }
   });
 
-  it('loud-fails a forged Vite mode whose executed argv[1] is not a .bin/vite shim', () => {
+  it('loud-fails a forged Vite mode whose executed argv[1] is not a .bin/vite shim', async () => {
     bootFs();
-    expect(() => decideViteEsbuildRuntime('/app', '/app/scripts/vite.js')).toThrow(
+    await expect(prepareViteCli('/app', 'dev', '/app/scripts/vite.js')).rejects.toThrow(
       'expected an executed .bin/vite',
     );
   });
@@ -421,7 +428,7 @@ describe('Vite esbuild runtime startup policy', () => {
 
 // Keep this fault last: ADR-0226 gives a failed startup no retry lifecycle;
 // the real child Worker terminates, while this unit realm stays alive.
-// Browser Contract+RED proves dev/build/preview/optimize routing; this faults their shared branch.
+// Browser contract proves dev/build/preview/optimize routing; this faults their shared branch.
 describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)', () => {
   it('startup failure rejects the child and leaves the typed runtime slot absent', async () => {
     bootFs({

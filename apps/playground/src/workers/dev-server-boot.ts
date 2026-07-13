@@ -23,9 +23,9 @@ import type {
   ProjectSpec,
 } from '../templates/project-spec.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
+import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 
@@ -199,7 +199,7 @@ export async function bootDevServer(opts: {
   // → vite/node fails loudly with a real "Cannot find module" (the honest gap).
   publishSnapshot();
 
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
+  const loader = createModuleLoader(seedFs, { cwd: root });
   __setCreateRequireImpl((from: string) => {
     const fromPath = from.startsWith('file://')
       ? decodeURIComponent(from.slice('file://'.length))
@@ -251,12 +251,21 @@ export async function bootDevServer(opts: {
 
   if (cfg.runtime === 'vite') {
     assertNoUserViteConfig(root);
-    installEsbuildTransformBridge(root);
+    const importer = `${root}/__entry__.mjs`;
+    const resolvedVite = loader.resolver.resolve(cfg.runtimeSpecifier, {
+      fromFile: importer,
+      esm: true,
+    });
+    if (resolvedVite.packageRoot === null) {
+      throw new Error(`vite esbuild runtime expected a package for ${resolvedVite.id}`);
+    }
+    await prepareViteEsbuildRuntime({
+      fs: seedFs,
+      cwd: root,
+      packageRoot: resolvedVite.packageRoot,
+    });
     log(`importing ${cfg.runtimeSpecifier}…\n`);
-    const viteNs = (await loader.import(
-      cfg.runtimeSpecifier,
-      `${root}/__entry__.mjs`,
-    )) as unknown as {
+    const viteNs = (await loader.import(cfg.runtimeSpecifier, importer)) as unknown as {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
     log(`[real-vite/worker] starting dev server on port ${port}…\n`);

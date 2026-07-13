@@ -425,8 +425,8 @@ describe('install — package.json defaults', () => {
     // ADR-0188: the installer now materializes the `esbuild` import name from
     // the shadow-registry alias shim (was a playground boot-overlay concern).
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
-    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.js')).toContain(
-      '__riftyEsbuildTransform',
+    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
+      '__rifty?.esbuild',
     );
   });
 

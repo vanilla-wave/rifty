@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import {
   type MemoryFsSync,
   createMemoryFs,
@@ -11,23 +13,26 @@ import { bootBuild, bootPreview } from './build-boot.ts';
 // playground-testable-core): the REAL bootBuild/bootPreview run against a
 // memory VFS whose node_modules holds a probe `vite` ESM package the runtime-js
 // module loader resolves and executes — the probe records the inline config and
-// whether the esbuild bridge was already installed at vite import time.
+// whether the exact esbuild runtime was already published at vite import time.
 
 interface ViteProbe {
-  bridgeAtViteImport?: string;
+  esbuildAtViteImport?: unknown;
+  legacyBridgeAtViteImport?: boolean;
   calls: { kind: 'build' | 'preview'; config: unknown }[];
   previewCloseCalls: number;
 }
 
 interface TestGlobals {
   __riftyTestViteProbe?: ViteProbe;
+  __rifty?: { esbuild?: unknown };
   __riftyEsbuildTransform?: unknown;
 }
 const g = globalThis as TestGlobals;
 
 const PROBE_VITE_PACKAGE = [
   'const probe = globalThis.__riftyTestViteProbe;',
-  'probe.bridgeAtViteImport = typeof globalThis.__riftyEsbuildTransform;',
+  'probe.esbuildAtViteImport = globalThis.__rifty?.esbuild;',
+  "probe.legacyBridgeAtViteImport = Reflect.has(globalThis, '__riftyEsbuildTransform');",
   'export async function build(config) {',
   "  probe.calls.push({ kind: 'build', config });",
   '}',
@@ -47,7 +52,7 @@ function probe(): ViteProbe {
 }
 
 function bootFixture(
-  options: { dist?: string | null; files?: Record<string, string> } = {},
+  options: { dist?: string | null; files?: Record<string, string>; viteVersion?: string } = {},
 ): MemoryFsSync {
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
@@ -56,7 +61,7 @@ function bootFixture(
     '/app/package.json': JSON.stringify({ name: 'app', type: 'module' }),
     '/app/node_modules/vite/package.json': JSON.stringify({
       name: 'vite',
-      version: '7.0.0',
+      version: options.viteVersion ?? '8.0.16',
       type: 'module',
       main: 'index.js',
     }),
@@ -65,6 +70,22 @@ function bootFixture(
     ...options.files,
   });
   return fsSync;
+}
+
+async function withRealEsbuildWasm<T>(run: () => Promise<T>): Promise<T> {
+  const previousSelf = Object.getOwnPropertyDescriptor(globalThis, 'self');
+  const previousFetch = globalThis.fetch;
+  const require = createRequire(import.meta.url);
+  const wasm = new Uint8Array(readFileSync(require.resolve('esbuild-wasm/esbuild.wasm')));
+  Object.defineProperty(globalThis, 'self', { configurable: true, value: globalThis });
+  globalThis.fetch = async () => new Response(wasm, { status: 200 });
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousSelf) Object.defineProperty(globalThis, 'self', previousSelf);
+    else Reflect.deleteProperty(globalThis, 'self');
+  }
 }
 
 function walkTree(fsSync: MemoryFsSync, dir: string, out: string[] = []): string[] {
@@ -82,7 +103,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   g.__riftyTestViteProbe = undefined;
-  g.__riftyEsbuildTransform = undefined;
+  if (g.__rifty) Reflect.deleteProperty(g.__rifty, 'esbuild');
+  Reflect.deleteProperty(g, '__riftyEsbuildTransform');
   // (`= undefined` would store the string "undefined" in a real node env)
   if (savedPwd === undefined) Reflect.deleteProperty(process.env, 'PWD');
   else process.env.PWD = savedPwd;
@@ -91,9 +113,9 @@ afterEach(() => {
 
 describe('bootBuild — curated production build', () => {
   it('drives vite.build with the forced inline config: absolute base /, no config file, dist outDir', async () => {
-    bootFixture();
+    bootFixture({ viteVersion: '7.3.6' });
     const logs: string[] = [];
-    await bootBuild({ root: '/app', log: (chunk) => logs.push(chunk) });
+    await withRealEsbuildWasm(() => bootBuild({ root: '/app', log: (chunk) => logs.push(chunk) }));
 
     expect(probe().calls).toEqual([
       {
@@ -112,13 +134,27 @@ describe('bootBuild — curated production build', () => {
       '[vite] production build starting\n',
       '[vite] production build complete\n',
     ]);
+    expect(probe().esbuildAtViteImport).toBe(g.__rifty?.esbuild);
+    expect(probe().esbuildAtViteImport).toMatchObject({ version: '0.28.0' });
+    expect(probe().legacyBridgeAtViteImport).toBe(false);
   });
 
-  it('installs the shared esbuild WASI transform bridge BEFORE vite is imported', async () => {
+  it('skips the generated esbuild runtime for Vite 8 Rolldown and leaves the legacy bridge absent', async () => {
     bootFixture();
-    await bootBuild({ root: '/app', log: () => {} });
-    // Captured by the probe package's MODULE BODY — i.e. at vite import time.
-    expect(probe().bridgeAtViteImport).toBe('function');
+    const previousFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls += 1;
+      return Promise.reject(new Error('Vite 8 must not fetch esbuild wasm'));
+    };
+    try {
+      await bootBuild({ root: '/app', log: () => {} });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+    expect(fetchCalls).toBe(0);
+    expect(probe().esbuildAtViteImport).toBeUndefined();
+    expect(probe().legacyBridgeAtViteImport).toBe(false);
   });
 
   it('loud-rejects a user vite.config before importing or running vite', async () => {
@@ -128,7 +164,7 @@ describe('bootBuild — curated production build', () => {
       feature: 'vite.config-loading',
     });
     expect(probe().calls).toEqual([]);
-    expect(probe().bridgeAtViteImport).toBeUndefined();
+    expect(probe().esbuildAtViteImport).toBeUndefined();
   });
 
   it('refuses a build whose dist/index.html never references built assets', async () => {

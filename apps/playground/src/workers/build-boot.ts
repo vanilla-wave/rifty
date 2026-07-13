@@ -2,8 +2,8 @@ import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
-import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { assertNoUserViteConfig } from './vite-config-guard.ts';
+import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const dec = new TextDecoder();
 
@@ -79,12 +79,18 @@ export async function bootBuild(opts: {
 }): Promise<void> {
   const { root, log } = opts;
   assertNoUserViteConfig(root);
-  installEsbuildTransformBridge(root);
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
+  const fs = syncMirror();
+  const loader = createModuleLoader(fs, { cwd: root });
   installCreateRequire(loader, root);
 
   log('[vite] production build starting\n');
-  const viteNs = (await loader.import('vite', `${root}/__build__.mjs`)) as {
+  const importer = `${root}/__build__.mjs`;
+  const resolvedVite = loader.resolver.resolve('vite', { fromFile: importer, esm: true });
+  if (resolvedVite.packageRoot === null) {
+    throw new Error(`vite esbuild runtime expected a package for ${resolvedVite.id}`);
+  }
+  await prepareViteEsbuildRuntime({ fs, cwd: root, packageRoot: resolvedVite.packageRoot });
+  const viteNs = (await loader.import('vite', importer)) as {
     build: (config: ViteUserConfig) => Promise<unknown>;
   };
   await viteNs.build({

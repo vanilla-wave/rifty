@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed (exact Vite esbuild runtime)
+
+- Curated Vite 7 build/dev boot now publishes the same upstream-derived esbuild
+  CJS outer as the CLI before importing Vite; Vite 8/Rolldown skips it. The
+  retired WASI transform global and its wrapper are removed.
+
 ### Changed (install artifact identity, ADR-0241)
 
 - Dependency snapshots and install stamps use schema v2 with exact

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { listPorts } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
@@ -6,7 +7,11 @@ import { syncMirror } from '@riftydev/vfs';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLI_REPORT_TEMPLATE } from '../templates/cli-report.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from '../templates/hidden-empty.ts';
-import { type NodeServerProjectSpec, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import {
+  type NodeServerProjectSpec,
+  type ViteProjectSpec,
+  resolveBootstrapConfig,
+} from '../templates/project-spec.ts';
 import { VITE_TEMPLATE } from '../templates/vite.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 
@@ -29,6 +34,33 @@ import { bootDevServer } from './dev-server-boot.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+interface ViteProbe {
+  esbuildAtViteImport?: unknown;
+  legacyBridgeAtViteImport?: boolean;
+  config?: unknown;
+}
+
+interface TestGlobals {
+  __rifty?: { esbuild?: unknown };
+  __riftyEsbuildTransform?: unknown;
+  __riftyTestCuratedViteProbe?: ViteProbe;
+}
+
+const g = globalThis as TestGlobals;
+const PROBE_VITE_PACKAGE = [
+  'const probe = globalThis.__riftyTestCuratedViteProbe;',
+  'probe.esbuildAtViteImport = globalThis.__rifty?.esbuild;',
+  "probe.legacyBridgeAtViteImport = Reflect.has(globalThis, '__riftyEsbuildTransform');",
+  'export async function createServer(config) {',
+  '  probe.config = config;',
+  '  return {',
+  '    async listen() {},',
+  '    async close() {},',
+  '    watcher: { on() {} },',
+  '  };',
+  '}',
+].join('\n');
 
 interface BootAttempt {
   readonly logs: string[];
@@ -77,6 +109,39 @@ const NEVER_LISTENS_SPEC: NodeServerProjectSpec = {
   defaultPort: 4472,
 };
 
+const CURATED_VITE_SPEC = {
+  ...HIDDEN_EMPTY_TEMPLATE,
+  id: 'bu-curated-vite',
+  install: { vite: '7.3.6' },
+} satisfies ViteProjectSpec;
+
+function seedProbeVite(root: string, version: string): void {
+  const fs = syncMirror();
+  const packageRoot = `${root}/node_modules/vite`;
+  fs.mkdirSync(packageRoot, { recursive: true });
+  fs.writeFileSync(
+    `${packageRoot}/package.json`,
+    enc.encode(JSON.stringify({ name: 'vite', version, type: 'module', main: 'index.js' })),
+  );
+  fs.writeFileSync(`${packageRoot}/index.js`, enc.encode(PROBE_VITE_PACKAGE));
+}
+
+async function withRealEsbuildWasm<T>(run: () => Promise<T>): Promise<T> {
+  const previousSelf = Object.getOwnPropertyDescriptor(globalThis, 'self');
+  const previousFetch = globalThis.fetch;
+  const require = createRequire(import.meta.url);
+  const wasm = new Uint8Array(readFileSync(require.resolve('esbuild-wasm/esbuild.wasm')));
+  Object.defineProperty(globalThis, 'self', { configurable: true, value: globalThis });
+  globalThis.fetch = async () => new Response(wasm, { status: 200 });
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousSelf) Object.defineProperty(globalThis, 'self', previousSelf);
+    else Reflect.deleteProperty(globalThis, 'self');
+  }
+}
+
 const realConsole = globalThis.console;
 const realPortEnv = process.env.PORT;
 
@@ -94,6 +159,9 @@ afterEach(() => {
   // Reflect (not `delete`, noDelete; not `= undefined` — env coerces it to 'undefined').
   if (realPortEnv === undefined) Reflect.deleteProperty(process.env, 'PORT');
   else process.env.PORT = realPortEnv;
+  if (g.__rifty) Reflect.deleteProperty(g.__rifty, 'esbuild');
+  Reflect.deleteProperty(g, '__riftyEsbuildTransform');
+  Reflect.deleteProperty(g, '__riftyTestCuratedViteProbe');
   vi.useRealTimers();
 });
 
@@ -270,6 +338,78 @@ describe('runtime dispatch + seeding (behavioral)', () => {
     fs.rmSync(`${root}/vite.config.js`, { force: true });
     await expect(attempt()).rejects.toThrow(/vite/);
     expect(fs.existsSync(`${root}/vite.config.js`)).toBe(false);
+  });
+});
+
+describe('curated Vite esbuild runtime ownership', () => {
+  it('publishes the exact Vite 7 runtime before importing Vite; legacy bridge stays absent', async () => {
+    const root = '/bu-devboot/curated-vite7';
+    const cfg = resolveBootstrapConfig(CURATED_VITE_SPEC, 5180, root);
+    const sinks = makeSinks();
+    const probe: ViteProbe = {};
+    g.__riftyTestCuratedViteProbe = probe;
+    seedProbeVite(root, '7.3.6');
+
+    const handle = await withRealEsbuildWasm(() =>
+      bootDevServer({
+        cfg,
+        port: cfg.port,
+        root,
+        spec: CURATED_VITE_SPEC,
+        slug: 'bu',
+        fromScratch: true,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      }),
+    );
+    try {
+      expect(probe.esbuildAtViteImport).toBe(g.__rifty?.esbuild);
+      expect(probe.esbuildAtViteImport).toMatchObject({ version: '0.28.0' });
+      expect(probe.legacyBridgeAtViteImport).toBe(false);
+      expect(probe.config).toMatchObject({ root, base: './' });
+    } finally {
+      await handle.stop();
+    }
+  });
+
+  it('skips generated esbuild startup for Vite 8 Rolldown', async () => {
+    const root = '/bu-devboot/curated-vite8';
+    const spec = {
+      ...CURATED_VITE_SPEC,
+      id: 'bu-curated-vite8',
+      install: { vite: '8.0.16' },
+    } satisfies ViteProjectSpec;
+    const cfg = resolveBootstrapConfig(spec, 5181, root);
+    const sinks = makeSinks();
+    const probe: ViteProbe = {};
+    g.__riftyTestCuratedViteProbe = probe;
+    seedProbeVite(root, '8.0.16');
+    const previousFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls += 1;
+      return Promise.reject(new Error('Vite 8 must not fetch esbuild wasm'));
+    };
+
+    let handle: Awaited<ReturnType<typeof bootDevServer>> | undefined;
+    try {
+      handle = await bootDevServer({
+        cfg,
+        port: cfg.port,
+        root,
+        spec,
+        slug: 'bu',
+        fromScratch: true,
+        publishSnapshot: sinks.publishSnapshot,
+        log: sinks.log,
+      });
+      expect(fetchCalls).toBe(0);
+      expect(probe.esbuildAtViteImport).toBeUndefined();
+      expect(probe.legacyBridgeAtViteImport).toBe(false);
+    } finally {
+      globalThis.fetch = previousFetch;
+      await handle?.stop();
+    }
   });
 });
 

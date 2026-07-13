@@ -262,8 +262,8 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
       },
     );
 
-    const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.js');
-    expect(aliasMain).toContain('__riftyEsbuildTransform');
+    const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    expect(aliasMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
     expect(fresh).toContain(REDIRECT_LINE);
     expect(fresh).toContain(PATCH_LINE);
@@ -283,7 +283,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     );
     expect(replay).toContain(REDIRECT_LINE);
     expect(replay).toContain(PATCH_LINE);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.js')).toBe(aliasMain);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
   });
 
   it('prints the redirect + patch lines for a TRANSITIVE baked override on fresh AND replay', async () => {
@@ -304,7 +304,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     );
     expect(fresh).toContain(REDIRECT_LINE);
     expect(fresh).toContain(PATCH_LINE);
-    expect(await vfs.exists('/proj/node_modules/esbuild/lib/main.js')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/esbuild/lib/main.cjs')).toBe(true);
 
     const replay: string[] = [];
     await install(
@@ -355,7 +355,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
     await install('root', '1.0.0', { esbuild: '^0.28.0' }, { vfs, cwd: '/proj', registry });
-    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.js');
+    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     const packument = vi.spyOn(registry, 'getPackument');
     const lines: string[] = [];
 
@@ -369,7 +369,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     ).rejects.toMatchObject(unsupportedRequestError);
     expect(packument).not.toHaveBeenCalled();
     expect(lines).toEqual([]);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.js')).toBe(aliasBefore);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
   it('refuses a transitive baked substitution when the fresh request excludes exact esbuild 0.28.0', async () => {
@@ -407,7 +407,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
       throw new Error('test setup: viteish lockfile dependencies missing');
     viteish.dependencies.esbuild = UNSUPPORTED_REQUEST;
     await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lockfile));
-    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.js');
+    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     const packument = vi.spyOn(registry, 'getPackument');
     const lines: string[] = [];
 
@@ -421,7 +421,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     ).rejects.toMatchObject(unsupportedRequestError);
     expect(packument).not.toHaveBeenCalled();
     expect(lines).toEqual([]);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.js')).toBe(aliasBefore);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
   it('allows an explicit user target at 0.28.0 to replace an otherwise-incompatible source request on fresh and replay', async () => {

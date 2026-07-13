@@ -1,7 +1,7 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
-import { startAndPublishViteEsbuild } from './vite-esbuild-runtime.ts';
+import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -52,8 +52,6 @@ function installCliActionPatch(vitePackageRoot: string): void {
 }
 
 const VITE_BIN_SUFFIX = '/.bin/vite';
-const EXACT_ESBUILD_VITE_VERSION = '7.3.6';
-
 function vitePackageRoot(root: string, executedBinPath?: string): string {
   if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
   const binPath = normalizePath(executedBinPath);
@@ -67,39 +65,6 @@ function vitePackageRoot(root: string, executedBinPath?: string): string {
   return `${nodeModules}/vite`;
 }
 
-export type ViteEsbuildRuntimeDecision = 'start' | 'skip-rolldown';
-
-export function decideViteEsbuildRuntime(
-  root: string,
-  executedBinPath: string,
-): ViteEsbuildRuntimeDecision {
-  const packageRoot = vitePackageRoot(root, executedBinPath);
-  const manifestPath = `${packageRoot}/package.json`;
-  const fs = syncMirror();
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error(`vite esbuild runtime cannot read executed package: ${manifestPath}`);
-  }
-  let manifest: { readonly name?: unknown; readonly version?: unknown };
-  try {
-    manifest = JSON.parse(dec.decode(fs.readFileBytesSync(manifestPath))) as {
-      readonly name?: unknown;
-      readonly version?: unknown;
-    };
-  } catch (error) {
-    throw new Error(`vite esbuild runtime found invalid package.json: ${manifestPath}`, {
-      cause: error,
-    });
-  }
-  if (manifest.name !== 'vite' || typeof manifest.version !== 'string') {
-    throw new Error(`vite esbuild runtime found invalid package metadata: ${manifestPath}`);
-  }
-  if (manifest.version === EXACT_ESBUILD_VITE_VERSION) return 'start';
-  if (/^8\./.test(manifest.version)) return 'skip-rolldown';
-  throw new Error(
-    `vite esbuild runtime supports exact Vite ${EXACT_ESBUILD_VITE_VERSION}; executed ${manifest.version}`,
-  );
-}
-
 export async function prepareViteCliFiles(root: string, executedBinPath?: string): Promise<void> {
   installCliActionPatch(vitePackageRoot(root, executedBinPath));
 }
@@ -111,8 +76,12 @@ export async function prepareViteCli(
 ): Promise<void> {
   await prepareViteCliFiles(root, executedBinPath);
   if (mode === 'info') return;
-  if (decideViteEsbuildRuntime(root, executedBinPath) === 'skip-rolldown') return;
-  await startAndPublishViteEsbuild({ fs: syncMirror(), cwd: root });
+  const fs = syncMirror();
+  await prepareViteEsbuildRuntime({
+    fs,
+    cwd: root,
+    packageRoot: vitePackageRoot(root, executedBinPath),
+  });
 }
 
 // ——— vite CLI mode/env preparation (relocated from real-vite-bootstrap so the
