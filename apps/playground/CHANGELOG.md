@@ -35,6 +35,8 @@
 - Owner death and session closing reject pending and future PTY operations with
   `ClosedHandleError`; terminal rebind/dispose also rejects already-forwarded
   control waiters without routing an old `rid` through a replacement owner.
+- The hidden terminal text mirror removes xterm's ANSI cursor/style replay, so an
+  idle prompt remains observable after exact foreground child settlement.
 
 ### Fixed (recursive Node bootstrap)
 
@@ -48,7 +50,8 @@
   esbuild URL is the sole fetched source; every recursive Node entry installs
   SQLite before user code; operation controls override host metadata. Owner and
   relay dispatchers now serve real recursive `execSync` beside the same VFS
-  handlers (ADR-0231).
+  handlers. Worker entries read the installed process through one Vite-safe seam,
+  so production bundles retain the inherited snapshot (ADR-0231).
 
 ### Changed (exact Vite esbuild runtime)
 

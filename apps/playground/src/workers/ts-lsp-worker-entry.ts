@@ -34,7 +34,7 @@ import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json
 import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
 import {
   installNodeWorkerRuntimeConfig,
-  readNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfigFromProcess,
 } from './node-worker-runtime-config.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
@@ -46,7 +46,9 @@ import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 // kind:url children. Every kind:url child must reinstall before booting code that
 // can touch Buffer.
 installBundleLocalBuffer();
-installNodeWorkerRuntimeConfig(readNodeWorkerRuntimeConfig(globalThis.process.env, 'ts-lsp-child'));
+installNodeWorkerRuntimeConfig(
+  readNodeWorkerRuntimeConfigFromProcess(globalThis.process, 'ts-lsp-child'),
+);
 
 (globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
 

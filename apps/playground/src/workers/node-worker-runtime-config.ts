@@ -47,6 +47,14 @@ export function readNodeWorkerRuntimeConfig(
   };
 }
 
+/** Keep Vite from replacing a direct `globalThis.process.env` read with `{}`. */
+export function readNodeWorkerRuntimeConfigFromProcess(
+  proc: Pick<NodeJS.Process, 'env'>,
+  owner: string,
+): NodeWorkerRuntimeConfig {
+  return readNodeWorkerRuntimeConfig(proc.env, owner);
+}
+
 /** Validate once, then atomically install both recursive-worker seams. */
 export function installNodeWorkerRuntimeConfig(
   config: NodeWorkerRuntimeConfig,

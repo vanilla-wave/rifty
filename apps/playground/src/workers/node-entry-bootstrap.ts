@@ -42,13 +42,16 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
-  readNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfigFromProcess,
 } from './node-worker-runtime-config.ts';
 import { prepareViteCli, viteCliPreparationFromEnv } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
-const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(proc.env, 'node-entry-bootstrap');
+const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfigFromProcess(
+  proc,
+  'node-entry-bootstrap',
+);
 installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
 const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {

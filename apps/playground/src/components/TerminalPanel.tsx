@@ -25,6 +25,7 @@ import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { Icon } from './icons.tsx';
 import { TERMINAL_APPEARANCE } from './terminal-appearance.ts';
 import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
+import { terminalMirrorText } from './terminal-mirror-text.ts';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */
 export interface TerminalDims {
@@ -169,7 +170,7 @@ export function TerminalPanel(props: {
     // later refresh) is missed — the CI-only `data-terminal-buffer` marker flake.
     void t
       .snapshotBufferSettled({ excludeModes: true })
-      .then((text) => setTerminalBuffer(text))
+      .then((text) => setTerminalBuffer(terminalMirrorText(text)))
       .catch(() => setTerminalBuffer(''));
   }
 
