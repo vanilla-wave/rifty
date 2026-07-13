@@ -21,6 +21,7 @@ export {
   type RunOptions,
   type RunResult,
   type ShellOptions,
+  shellCommandExitCode,
 } from './shell.ts';
 export { tokenize, type Token } from './tokenize.ts';
 export {
@@ -35,4 +36,14 @@ export {
   type ShellHighlightSpan,
   type ShellInputValidation,
 } from './language-service.ts';
-export type { CommandContext, ShellCommand, StdinReader, Writer } from './types.ts';
+export type {
+  CommandContext,
+  ProcessExit,
+  ProcessExitSignal,
+  ShellCommand,
+  ShellCommandResult,
+  StdinReader,
+  TerminalResizeSource,
+  TerminalSize,
+  Writer,
+} from './types.ts';

@@ -1,21 +1,41 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
-import { type DevServerHandle, createDevServerController } from './dev-server-controller.ts';
+import {
+  type DevServerFailure,
+  type DevServerRunContext,
+  DevServerRunError,
+  type SupervisedDevServerHandle,
+  createDevServerController,
+  runDevServerShellCommand,
+} from './dev-server-controller.ts';
 import { createPreviewRegistry } from './preview-registry.ts';
 
 function fakeBoot(port: number) {
   let stopped = 0;
-  const handle: DevServerHandle = {
+  const handle: SupervisedDevServerHandle = {
     port,
+    failure: new Promise<DevServerFailure>(() => {}),
     stop: async () => {
       stopped++;
+      return { code: null, signal: 'SIGTERM' } as const;
     },
   };
   return { boot: async () => handle, stopped: () => stopped };
 }
 
+function commandContext(signal: AbortSignal): DevServerRunContext {
+  const sink = { write: () => {} };
+  return {
+    cwd: '/workspace',
+    env: {},
+    stdout: sink,
+    stderr: sink,
+    signal,
+  };
+}
+
 /** Controller + registry composed: frames the page actually sees. */
-function wired(boot: (signal: AbortSignal) => Promise<DevServerHandle>) {
+function wired(boot: (ctx: DevServerRunContext) => Promise<SupervisedDevServerHandle>) {
   const frames: OwnerToPageFrame[] = [];
   const registry = createPreviewRegistry({ send: (f) => frames.push(f) });
   const ctrl = createDevServerController({ lifecycle: registry, boot });
@@ -32,7 +52,7 @@ describe('createDevServerController', () => {
     const { boot, stopped } = fakeBoot(5174);
     const { ctrl, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(ac.signal);
+    const run = ctrl.run(commandContext(ac.signal));
     await Promise.resolve();
     await Promise.resolve();
     expect(dev().map((f) => [f.status, f.port])).toEqual([
@@ -41,7 +61,7 @@ describe('createDevServerController', () => {
     ]);
     expect(ctrl.status).toBe('running');
     ac.abort();
-    await run;
+    await expect(run).resolves.toEqual({ code: null, signal: 'SIGTERM' });
     expect(stopped()).toBe(1);
     expect(dev().at(-1)).toMatchObject({ status: 'stopped' });
     expect(ctrl.status).toBe('stopped');
@@ -51,7 +71,7 @@ describe('createDevServerController', () => {
     const { boot } = fakeBoot(5174);
     const { ctrl, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(ac.signal, undefined, 'terminal-7');
+    const run = ctrl.run(commandContext(ac.signal), 'terminal-7');
     await Promise.resolve();
     await Promise.resolve();
     expect(dev()).toEqual([
@@ -62,6 +82,7 @@ describe('createDevServerController', () => {
         sid: 'terminal-7',
         port: 5174,
         url: '/preview/5174/',
+        cwd: '/workspace',
       },
     ]);
     ac.abort();
@@ -77,13 +98,19 @@ describe('createDevServerController', () => {
     let boots = 0;
     const { ctrl } = wired(async () => {
       boots++;
-      return { port: 5174, stop: async () => {} };
+      return {
+        port: 5174,
+        failure: new Promise<DevServerFailure>(() => {}),
+        stop: async () => ({ code: null, signal: 'SIGTERM' }) as const,
+      };
     });
     const ac = new AbortController();
-    const first = ctrl.run(ac.signal);
+    const first = ctrl.run(commandContext(ac.signal));
     await Promise.resolve();
     await Promise.resolve();
-    await expect(ctrl.run(new AbortController().signal)).rejects.toThrow(/already running/i);
+    await expect(ctrl.run(commandContext(new AbortController().signal))).rejects.toThrow(
+      /already running/i,
+    );
     expect(boots).toBe(1);
     ac.abort();
     await first;
@@ -95,7 +122,7 @@ describe('createDevServerController', () => {
     registry.publishDev();
     expect(dev().at(-1)).toEqual({ type: 'pty:dev-server', status: 'stopped' });
     const ac = new AbortController();
-    const run = ctrl.run(ac.signal);
+    const run = ctrl.run(commandContext(ac.signal));
     await Promise.resolve();
     await Promise.resolve();
     frames.length = 0;
@@ -105,6 +132,7 @@ describe('createDevServerController', () => {
       status: 'running',
       port: 5174,
       url: '/preview/5174/',
+      cwd: '/workspace',
     });
     ac.abort();
     await run;
@@ -115,9 +143,15 @@ describe('createDevServerController', () => {
     const { ctrl, dev } = wired(async () => {
       calls++;
       if (calls === 1) throw new Error('vite blew up');
-      return { port: 5174, stop: async () => {} };
+      return {
+        port: 5174,
+        failure: new Promise<DevServerFailure>(() => {}),
+        stop: async () => ({ code: null, signal: 'SIGTERM' }) as const,
+      };
     });
-    await expect(ctrl.run(new AbortController().signal)).rejects.toThrow(/vite blew up/);
+    await expect(ctrl.run(commandContext(new AbortController().signal))).rejects.toThrow(
+      /vite blew up/,
+    );
     expect(dev().at(-1)).toEqual({
       type: 'pty:dev-server',
       status: 'stopped',
@@ -126,12 +160,56 @@ describe('createDevServerController', () => {
     expect(ctrl.status).toBe('stopped');
     // recoverable: a subsequent run boots again
     const ac = new AbortController();
-    const run = ctrl.run(ac.signal);
+    const run = ctrl.run(commandContext(ac.signal));
     await Promise.resolve();
     await Promise.resolve();
     expect(ctrl.status).toBe('running');
     ac.abort();
     await run;
+  });
+
+  it('treats an exact pre-ready abort settlement as cancellation, not boot failure', async () => {
+    const { ctrl, dev } = wired(async () => {
+      throw new DevServerRunError(new Error('dev-server boot aborted before ready'), {
+        code: null,
+        signal: 'SIGTERM',
+      });
+    });
+    const abort = new AbortController();
+    abort.abort();
+
+    await expect(ctrl.run(commandContext(abort.signal), 'terminal-pre-ready')).resolves.toEqual({
+      code: null,
+      signal: 'SIGTERM',
+    });
+    expect(dev().at(-1)).toEqual({
+      type: 'pty:dev-server',
+      status: 'stopped',
+      sid: 'terminal-pre-ready',
+    });
+  });
+
+  it('shell adapter returns exact crash provenance while surfacing the diagnostic', async () => {
+    const stderr: string[] = [];
+    const controller = {
+      status: 'stopped' as const,
+      run: async () => {
+        throw new DevServerRunError(new Error('dev child crashed'), {
+          code: 7,
+          signal: null,
+        });
+      },
+    };
+    const ctx = {
+      ...commandContext(new AbortController().signal),
+      stderr: { write: (chunk: string) => stderr.push(chunk) },
+    };
+
+    await expect(runDevServerShellCommand(controller, ctx)).resolves.toEqual({
+      code: 7,
+      signal: null,
+    });
+    expect(stderr.join('')).toBe('dev child crashed\n');
   });
 
   it('a bin/node server listening during a controller run keeps the pill running after stop', async () => {
@@ -141,12 +219,125 @@ describe('createDevServerController', () => {
     const { boot } = fakeBoot(5174);
     const { ctrl, registry, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(ac.signal, undefined, 'terminal-1');
+    const run = ctrl.run(commandContext(ac.signal), 'terminal-1');
     await Promise.resolve();
     await Promise.resolve();
     registry.addNode('node-1', [3000], 'scope-n', { ptySid: 'terminal-2' });
     ac.abort();
     await run;
     expect(dev().at(-1)).toMatchObject({ status: 'running', port: 3000, sid: 'terminal-2' });
+  });
+
+  it('owns a post-ready child failure: stops the handle, clears LIVE, and rejects the run', async () => {
+    let reportFailure: ((failure: DevServerFailure) => void) | undefined;
+    const failure = new Promise<DevServerFailure>((resolve) => {
+      reportFailure = resolve;
+    });
+    let stops = 0;
+    const { ctrl, dev } = wired(async () => ({
+      port: 5174,
+      failure,
+      stop: async () => {
+        stops += 1;
+        return { code: null, signal: 'SIGTERM' } as const;
+      },
+    }));
+    const ac = new AbortController();
+    const run = ctrl.run(commandContext(ac.signal), 'terminal-crash');
+    const outcome = run.then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    await vi.waitFor(() => expect(ctrl.status).toBe('running'));
+
+    try {
+      reportFailure?.({
+        kind: 'exit',
+        code: null,
+        signal: 'SIGTERM',
+        error: new Error('dev child exited after listening (code null, signal SIGTERM)'),
+      });
+      await vi.waitFor(() => expect(ctrl.status).toBe('stopped'));
+      const result = await outcome;
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          message: 'dev child exited after listening (code null, signal SIGTERM)',
+          exit: { code: null, signal: 'SIGTERM' },
+        });
+      }
+      expect(stops).toBe(1);
+      expect(dev().at(-1)).toEqual({
+        type: 'pty:dev-server',
+        status: 'stopped',
+        sid: 'terminal-crash',
+        error: 'dev child exited after listening (code null, signal SIGTERM)',
+      });
+    } finally {
+      ac.abort();
+      await outcome;
+    }
+  });
+
+  it('preserves a natural post-ready child exit in the controller error', async () => {
+    let reportFailure: ((failure: DevServerFailure) => void) | undefined;
+    const failure = new Promise<DevServerFailure>((resolve) => {
+      reportFailure = resolve;
+    });
+    const { ctrl } = wired(async () => ({
+      port: 5174,
+      failure,
+      stop: async () => ({ code: 7, signal: null }) as const,
+    }));
+    const ac = new AbortController();
+    const run = ctrl.run(commandContext(ac.signal));
+    await vi.waitFor(() => expect(ctrl.status).toBe('running'));
+
+    reportFailure?.({
+      kind: 'exit',
+      code: 7,
+      signal: null,
+      error: new Error('dev child exited after listening (code 7, signal null)'),
+    });
+
+    await expect(run).rejects.toMatchObject({
+      message: 'dev child exited after listening (code 7, signal null)',
+      exit: { code: 7, signal: null },
+    });
+  });
+
+  it('owns stop failure: clears LIVE, reports the error, and stays recoverable', async () => {
+    let boots = 0;
+    const { ctrl, dev } = wired(async () => {
+      boots += 1;
+      return {
+        port: 5174,
+        failure: new Promise<DevServerFailure>(() => {}),
+        stop: async () => {
+          if (boots === 1) throw new Error('dev stop transport failed');
+          return { code: null, signal: 'SIGTERM' } as const;
+        },
+      };
+    });
+    const firstAbort = new AbortController();
+    const first = ctrl.run(commandContext(firstAbort.signal), 'terminal-stop-fault');
+    await vi.waitFor(() => expect(ctrl.status).toBe('running'));
+
+    firstAbort.abort();
+
+    await expect(first).rejects.toThrow('dev stop transport failed');
+    expect(ctrl.status).toBe('stopped');
+    expect(dev().at(-1)).toEqual({
+      type: 'pty:dev-server',
+      status: 'stopped',
+      sid: 'terminal-stop-fault',
+      error: 'dev stop transport failed',
+    });
+
+    const secondAbort = new AbortController();
+    const second = ctrl.run(commandContext(secondAbort.signal), 'terminal-retry');
+    await vi.waitFor(() => expect(ctrl.status).toBe('running'));
+    secondAbort.abort();
+    await second;
   });
 });

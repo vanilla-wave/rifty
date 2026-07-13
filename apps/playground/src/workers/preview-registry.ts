@@ -25,7 +25,7 @@ export interface PreviewRegistry {
   devStarting(ptySid?: string): void;
   /** Controller run ended — clears the dev slot + the starting phase. */
   devStopped(): void;
-  /** Controller boot failed — emits a stopped frame carrying `error`. */
+  /** Controller boot or running child failed — removes its slot and carries `error`. */
   devBootFailed(message: string, ptySid?: string): void;
   /** Re-emit the current port set (answers pty:preview-req). */
   publish(): void;
@@ -205,6 +205,8 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     },
     devBootFailed(message, ptySid) {
       starting = null;
+      dev = null;
+      deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
       const next = currentDev();
       // Status stays DERIVED: with another server live, forcing a global
       // 'stopped' would flip the pill off while its port still serves. The

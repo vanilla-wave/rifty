@@ -174,6 +174,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0196 | Browser-unit test lane is a thin Playwright harness on the playground dev server |
 | 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
 | 0242 | Generated esbuild diagnostic provenance and target errno normalization |
+| 0255 | Disposable worker realm for seeded-process parity cases |
 
 ### protocol
 
@@ -213,6 +214,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0150 | Supervised child processes over SAB sync-views (D P6) |
 | 0167 | git capability over VFS via isomorphic-git |
 | 0198 | Byte-transparent shell data plane; string display plane |
+| 0256 | Owned abort settlement and asynchronous shell disposal |
+| 0257 | Exact process exit through shell command results |
 
 ### terminal
 
@@ -285,6 +288,8 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
+| 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 | 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
 | 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |
@@ -366,5 +371,7 @@ Removed, no successor (resolve to git history):
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
 - `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
+- `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
+- `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record
 
 Retired ADR numbers (process moved to `AGENTS.md` / `docs/process/decision-workflow.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve there, not to a file. Older docs may also cite `CLAUDE.md` — it is a symlink to `AGENTS.md`. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `docs/process/decision-workflow.md`.)

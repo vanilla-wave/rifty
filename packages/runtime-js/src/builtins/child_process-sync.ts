@@ -7,12 +7,26 @@
 
 import { Buffer, NotImplementedError } from '@riftydev/io';
 import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@riftydev/kernel';
+import { requireNodeProcessContext, snapshotProcessEnv } from './process-context.ts';
 
 export interface ExecSyncOptions {
   readonly cwd?: string;
-  readonly env?: Record<string, string>;
+  readonly env?: Record<string, string | undefined>;
   readonly encoding?: string;
   readonly maxBuffer?: number;
+}
+
+/** Resolve Node's omitted cwd/env defaults without sharing mutable parent state. */
+export function resolveExecSyncOptions(
+  opts: ExecSyncOptions | undefined,
+  parentEnv: Readonly<Record<string, string | undefined>>,
+  parentCwd: string,
+): ExecSyncOptions {
+  return {
+    ...(opts ?? {}),
+    cwd: opts?.cwd ?? parentCwd,
+    env: snapshotProcessEnv(opts?.env ?? parentEnv),
+  };
 }
 
 /**
@@ -33,7 +47,11 @@ export interface ExecSyncOptions {
 export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
   const api = readKernelSyncApi();
   if (api !== null && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
-    const stdout = api.call('execSync', { cmd, opts: opts ?? {} });
+    const parent = requireNodeProcessContext('execSync');
+    const stdout = api.call('execSync', {
+      cmd,
+      opts: resolveExecSyncOptions(opts, parent.env, parent.cwd),
+    });
     // ADR-0084 #23: the kernel returns the child's stdout as raw bytes over a
     // binary frame (Node returns a Buffer by default). No re-encode — the old
     // string path mangled non-UTF-8 stdout to U+FFFD.

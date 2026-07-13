@@ -48,7 +48,7 @@ function makeFakeSpawn(): {
   emitStdout: (chunk: Uint8Array) => void;
   emitStderr: (chunk: Uint8Array) => void;
   emitMessage: (message: unknown) => void;
-  emitExit: (code: number | null) => void;
+  emitExit: (code: number | null, signal?: 'SIGINT' | 'SIGTERM' | null) => void;
   killedWith: () => string | null;
   spawnCount: () => number;
 } {
@@ -56,7 +56,7 @@ function makeFakeSpawn(): {
   let count = 0;
   let onOut: (c: unknown) => void = () => {};
   let onErr: (c: unknown) => void = () => {};
-  let onExit: (code?: unknown) => void = () => {};
+  let onExit: (code?: unknown, signal?: unknown) => void = () => {};
   let onMessage: (message: unknown) => void = () => {};
   let killed: string | null = null;
   const handle: BinWorkerHandle = {
@@ -70,10 +70,16 @@ function makeFakeSpawn(): {
         onErr = l;
       },
     }),
+    stdin: () => {
+      throw new Error('unexpected stdin access');
+    },
     on: (event, listener) => {
-      if (event === 'exit') onExit = listener as (code?: unknown) => void;
+      if (event === 'exit') {
+        onExit = listener as (code?: unknown, signal?: unknown) => void;
+      }
       if (event === 'message') onMessage = listener as (message: unknown) => void;
     },
+    resize: () => true,
     kill: (signal) => {
       killed = signal ?? 'SIGTERM';
     },
@@ -88,7 +94,7 @@ function makeFakeSpawn(): {
     emitStdout: (c) => onOut(c),
     emitStderr: (c) => onErr(c),
     emitMessage: (m) => onMessage(m),
-    emitExit: (code) => onExit(code),
+    emitExit: (code, signal = null) => onExit(code, signal),
     killedWith: () => killed,
     spawnCount: () => count,
   };
@@ -103,9 +109,9 @@ describe('createBinExecutor', () => {
     const p = exec('/proj/node_modules/.bin/cli', ['--flag', 'x'], ctx);
     fake.emitStdout(enc.encode('hello\n'));
     fake.emitExit(0);
-    const code = await p;
+    const exit = await p;
 
-    expect(code).toBe(0);
+    expect(exit).toEqual({ code: 0, signal: null });
     expect(out()).toBe('hello\n');
     const req = fake.req();
     expect(req?.shimPath).toBe('/proj/node_modules/.bin/cli');
@@ -118,13 +124,14 @@ describe('createBinExecutor', () => {
   it('passes terminal TTY metadata into the bin spawn request', async () => {
     const fake = makeFakeSpawn();
     const exec = createBinExecutor({ spawn: fake.spawn });
-    const { ctx } = makeCtx({ isTTY: true });
+    const { ctx } = makeCtx({ isTTY: true, cols: 120, rows: 40 });
 
     const p = exec('/proj/node_modules/.bin/prettier', ['--write', 'src/a.ts'], ctx);
     fake.emitExit(0);
     await p;
 
     expect(fake.req()?.isTTY).toBe(true);
+    expect(fake.req()).toMatchObject({ cols: 120, rows: 40 });
   });
 
   it('propagates a non-zero exit code', async () => {
@@ -133,7 +140,7 @@ describe('createBinExecutor', () => {
     const { ctx } = makeCtx();
     const p = exec('/proj/node_modules/.bin/tsc', [], ctx);
     fake.emitExit(3);
-    expect(await p).toBe(3);
+    expect(await p).toEqual({ code: 3, signal: null });
   });
 
   it('forwards child messages and exit through request-aware hooks', async () => {
@@ -147,7 +154,7 @@ describe('createBinExecutor', () => {
     fake.emitMessage({ type: 'rifty:node-listening', ports: [5174] });
     fake.emitExit(0);
 
-    expect(await p).toBe(0);
+    expect(await p).toEqual({ code: 0, signal: null });
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({ shimPath: '/proj/node_modules/.bin/vite' }),
       { type: 'rifty:node-listening', ports: [5174] },
@@ -178,8 +185,8 @@ describe('createBinExecutor', () => {
     const p = exec('/proj/node_modules/.bin/dev', [], ctx);
     controller.abort();
     expect(fake.killedWith()).toBe('SIGTERM');
-    fake.emitExit(null); // worker winds down after the kill
-    await p;
+    fake.emitExit(null, 'SIGTERM'); // worker winds down after the kill
+    await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
   });
 
   it('kills the worker when ctx.signal is ALREADY aborted at exec entry', async () => {
@@ -190,8 +197,8 @@ describe('createBinExecutor', () => {
     const { ctx } = makeCtx({ signal: controller.signal });
     const p = exec('/proj/node_modules/.bin/dev', [], ctx);
     expect(fake.killedWith()).toBe('SIGTERM');
-    fake.emitExit(null);
-    await p;
+    fake.emitExit(null, 'SIGTERM');
+    await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
   });
 
   it('mutes worker output buffered after an abort', async () => {
@@ -204,8 +211,8 @@ describe('createBinExecutor', () => {
     fake.emitStdout(enc.encode('before\n'));
     controller.abort();
     fake.emitStdout(enc.encode('after-kill\n')); // post-SIGTERM buffer — must not surface
-    fake.emitExit(null);
-    await p;
+    fake.emitExit(null, 'SIGTERM');
+    await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
 
     expect(out()).toBe('before\n');
   });
@@ -225,15 +232,19 @@ describe('createBinExecutor', () => {
     // run-foreground-child driver registers the exit listener BEFORE acting on an
     // already-aborted signal; with the old inline bin ordering (signal handling
     // first) that synchronous exit would be lost and this would hang forever.
-    let exitCb: ((code?: unknown) => void) | undefined;
+    let exitCb: ((code?: unknown, signal?: unknown) => void) | undefined;
     const handle: BinWorkerHandle = {
       stdout: () => ({ on: () => {} }),
       stderr: () => ({ on: () => {} }),
-      on: (ev, l) => {
-        if (ev === 'exit') exitCb = l as (code?: unknown) => void;
+      stdin: () => {
+        throw new Error('unexpected stdin access');
       },
+      on: (ev, l) => {
+        if (ev === 'exit') exitCb = l as (code?: unknown, signal?: unknown) => void;
+      },
+      resize: () => true,
       kill: () => {
-        exitCb?.(130); // synchronous, like the real handle
+        exitCb?.(null, 'SIGTERM'); // synchronous, like the real handle
       },
     };
     const exec = createBinExecutor({ spawn: () => handle });
@@ -241,6 +252,9 @@ describe('createBinExecutor', () => {
     controller.abort();
     const { ctx } = makeCtx({ signal: controller.signal });
 
-    expect(await exec('/proj/node_modules/.bin/dev', [], ctx)).toBe(130);
+    expect(await exec('/proj/node_modules/.bin/dev', [], ctx)).toEqual({
+      code: null,
+      signal: 'SIGTERM',
+    });
   });
 });

@@ -87,7 +87,10 @@ const TOMBSTONES = new Set([
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
   'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
+  'docs/backlog/runtime-js/readline-createinterface-line-question.md', // done → runtime-js readline subset + conformance
   'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)
+  'docs/backlog/kernel/worker-per-process-residuals.md', // done → ADR-0230 + runtime stdin parity
+  'docs/backlog/shell/pty-live-resize.md', // done → ADR-0225 + terminal/worker resize tests
 ]);
 
 const errors = [];

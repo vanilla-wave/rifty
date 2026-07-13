@@ -33,6 +33,15 @@ ADR-0155 §5 already fixed observable behavior loudly (stdin guard) but on the o
 
 **4. stdin contract.** Forward target (faithful, backlog): pump owner `ctx.stdin` → `handle.stdin()` → child stdin MessagePort → `makeStdinReader` (both ends already exist; only the pump is missing — `backlog: kernel/worker-per-process-residuals` + `terminal/raw-stdin-deferred-items`). Interim (this ADR, extends ADR-0155 §5): `installLoudStdin` patches the REAL seeded stdin EventEmitter **in place** so every consume path throws `NotImplementedError` — listener-add for BOTH consume events `'data'` AND `'readable'` (the pull idiom) (on/once/addListener/prependListener/prependOnceListener), `read`/`pipe`/`[Symbol.asyncIterator]`, and the silent-success surfaces `resume`/`setEncoding`/`setRawMode` (absorbs the former missed-method gap). `pause()` is deliberately NOT loud (a defensive `pause()` on an unread stream is a Node no-op that lets a non-reading program exit). `isTTY`/`fd`/`'end'` stay passive. Gated to node-serve scope (RIFTY_NODE_SERVE), matching ADR-0155 §5.
 
+> **Corrected (2026-07-13, ADR-0230):** the forward-target/interim-guard clause
+> above is overtaken. The owner PTY actor now pumps ordered data and explicit
+> EOF into seeded child stdin; flowing `data`, one `end`, UTF-8 decoding, and
+> `pause()`/`resume()` are real for Node and `.bin` children. ADR-0225 carries
+> live dimensions/resize through the same child control path. Pull/raw surfaces
+> (`readable`, `read`, `pipe`, async iteration, `setRawMode`, byte backpressure
+> and line discipline) remain exact `NotImplementedError` gaps. The unified
+> seeded-process decision in §1–3 stands.
+
 ## Consequences
 
 - (+) argv/cwd/stdin/nextTick/Buffer faithful by construction for every Node worker; the swap/re-copy/orphan class of bugs is structurally impossible.

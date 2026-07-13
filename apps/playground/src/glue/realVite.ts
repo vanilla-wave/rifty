@@ -19,15 +19,15 @@ import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
 import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
-import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
-import nodeEntryWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
 import type { OwnerBridgeKey } from './owner-bridge-key.ts';
+import { PLAYGROUND_NODE_WORKER_RUNTIME_ENV } from './playground-node-worker-runtime.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import {
   type ExecOptions,
   type PtyOpenSeed,
+  type PtyRunResult,
   type PtySessionSnapshot,
   createPtyClient,
 } from './pty-client.ts';
@@ -141,9 +141,13 @@ export interface WorkspaceOwnerHandle {
   openSession(sid: string, seed?: PtyOpenSeed): Promise<void>;
   /** Run one line in `sid`; streams chunks to `onChunk`, resolves exit code. */
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
-  writeStdin(sid: string, rid: string, data: Uint8Array): void;
+  /** Run one line without losing the exact physical final-command exit. */
+  execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult>;
+  writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void>;
+  endStdin(sid: string, rid: string): Promise<void>;
+  resize(sid: string, rid: string, cols: number, rows: number): Promise<void>;
   signal(sid: string, rid: string): void;
-  closeSession(sid: string): void;
+  closeSession(sid: string): Promise<void>;
   /**
    * Seed/overwrite a file in the owner realm's tree (a `rifty:vfs-write` frame,
    * ADR-0146). The owner-resident shell reads its OWN realm's `syncMirror()`, so
@@ -293,8 +297,8 @@ function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwn
  * `createPtyServer` wired to the same kernel IPC channel this handle posts on.
  * Frames travel as `{ type: PTY_IPC_TYPE, frame }`; this side filters owner→page
  * envelopes via `isPtyIpcMessage` and feeds `client.onFrame`. On worker exit
- * `client.disconnect()` resolves any in-flight `exec` nonzero so the terminal
- * never hangs.
+ * `client.disconnect()` rejects any in-flight `exec` loudly so transport death
+ * cannot masquerade as a process exit.
  *
  * @throws NotImplementedError when SAB IPC is unavailable — cross-origin
  *   isolation is the gate (ADR-0002 / D-001), same as {@link startRealVite}.
@@ -352,8 +356,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // ADR-0150: worker URLs the owner needs to recursively spawn each
         // foreground CLI as a supervised child reading the owner fs over
         // sync-RPC (kernel realm + node-entry boot).
-        RIFTY_KERNEL_WORKER_URL: kernelWorkerUrl,
-        RIFTY_NODE_ENTRY_WORKER_URL: nodeEntryWorkerUrl,
+        ...PLAYGROUND_NODE_WORKER_RUNTIME_ENV,
         // ADR-0150 P6b — child entry the owner spawns for the dev server.
         RIFTY_DEV_SERVER_WORKER_URL: devServerWorkerUrl,
         // ADR-0166 P1.9a — child entry the owner spawns for the TS language
@@ -606,7 +609,13 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       await ready;
       return client.exec(sid, line, execOpts);
     },
+    execResult: async (sid, line, execOpts) => {
+      await ready;
+      return client.execResult(sid, line, execOpts);
+    },
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
+    endStdin: (sid, rid) => client.endStdin(sid, rid),
+    resize: (sid, rid, cols, rows) => client.resize(sid, rid, cols, rows),
     signal: (sid, rid) => client.signal(sid, rid),
     closeSession: (sid) => client.closeSession(sid),
     isAlive: () => !exited,

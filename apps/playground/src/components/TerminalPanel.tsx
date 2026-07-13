@@ -65,6 +65,7 @@ export function TerminalPanel(props: {
   /** Ctrl+C from the terminal — wire to the shell session's `interrupt()`. */
   onSignal?(): void;
   onRawInput?(data: TerminalRawInput): void;
+  onResize?(dims: TerminalDims): void;
   onLink?(uri: string, event: MouseEvent): void;
   focusEpoch?: number;
   testId?: string;
@@ -353,6 +354,7 @@ export function TerminalPanel(props: {
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
       webgl: navigator.webdriver ? false : undefined,
       onSignal: props.onSignal ? () => props.onSignal?.() : undefined,
+      onResize: (cols, rows) => props.onResize?.({ cols, rows }),
     });
     disposeTheme = watchPreferredTerminalTheme(globalThis, (theme) => term?.setTheme(theme));
     term.mount(container);

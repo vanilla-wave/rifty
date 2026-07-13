@@ -42,7 +42,12 @@ import {
   eddyRequestFromPackageJson,
   install as realInstall,
 } from '@riftydev/npm-client';
-import type { CommandContext, ShellCommand } from '@riftydev/shell';
+import {
+  type CommandContext,
+  type ShellCommand,
+  type ShellCommandResult,
+  shellCommandExitCode,
+} from '@riftydev/shell';
 import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
   installStampPath,
@@ -88,7 +93,11 @@ export interface NpmShellCommandDeps {
     info: { fullInstall: boolean; sessionInstallActivity: boolean },
   ) => Promise<void>;
   /** Executes an `npm run <script>` command in the host shell/session. */
-  readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
+  readonly runScript?: (
+    name: string,
+    command: string,
+    ctx: CommandContext,
+  ) => Promise<ShellCommandResult>;
   /** Drains the VFS write-through — in BACKGROUND, after the command returned
    *  (npm parity: real `npm install` exit does not fsync node_modules; a
    *  reload before the drain settles only costs a re-install, never a torn
@@ -386,7 +395,7 @@ async function runPackageScript(
   args: string[],
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
-): Promise<number> {
+): Promise<ShellCommandResult> {
   const scriptName = args[0];
   if (!scriptName) {
     ctx.stderr.write('npm: missing script name (try `npm run dev`)\n');
@@ -412,11 +421,12 @@ async function runPackageScript(
     [scriptName, appendScriptArguments(command, scriptForwardArgs(args))],
     [`post${scriptName}`, packageScripts[`post${scriptName}`]],
   ].filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  let result: ShellCommandResult = 0;
   for (const [name, scriptCommand] of scriptSteps) {
-    const code = await deps.runScript(name, scriptCommand, ctx);
-    if (code !== 0) return code;
+    result = await deps.runScript(name, scriptCommand, ctx);
+    if (shellCommandExitCode(result) !== 0) return result;
   }
-  return 0;
+  return result;
 }
 
 function scriptForwardArgs(args: readonly string[]): readonly string[] {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ExecOptions, PtySessionSnapshot } from '../glue/pty-client.ts';
+import type { ExecOptions, PtyRunResult, PtySessionSnapshot } from '../glue/pty-client.ts';
 import type { WorkspaceOwnerHandle } from '../glue/realVite.ts';
 import { createTerminalManager } from './terminal-manager.ts';
 
@@ -35,6 +35,9 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
+const settledOr = <T>(promise: Promise<T>, pending: T): Promise<T> =>
+  Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(pending), 50))]);
+
 /** Flush microtasks until `count` execs have been recorded (or give up). */
 async function waitForExecs(execs: readonly unknown[], count: number): Promise<void> {
   for (let i = 0; i < 50 && execs.length < count; i++) await Promise.resolve();
@@ -58,11 +61,31 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
   const opened: string[] = [];
   const closed: string[] = [];
   const stdin: Array<{ sid: string; rid: string; data: Uint8Array }> = [];
+  const stdinEof: Array<{ sid: string; rid: string }> = [];
+  const resizes: Array<{ sid: string; rid: string; cols: number; rows: number }> = [];
   const signalled: Array<{ sid: string; rid: string }> = [];
   const writes: Array<{ path: string; content: string }> = [];
   const execs: ExecCall[] = [];
   const snapshots = new Map<string, PtySessionSnapshot>();
   let ridSeq = 0;
+
+  const startExec = (sid: string, line: string, execOpts: ExecOptions): Promise<PtyRunResult> => {
+    const rid = `r${++ridSeq}`;
+    execOpts.onStart?.(rid);
+    const done = deferred<PtyRunResult>();
+    execs.push({
+      sid,
+      line,
+      opts: execOpts,
+      rid,
+      resolve: (code) =>
+        done.resolve({
+          exitCode: code,
+          exit: code === 130 ? { code: null, signal: 'SIGINT' } : { code, signal: null },
+        }),
+    });
+    return done.promise;
+  };
 
   const owner: WorkspaceOwnerHandle = {
     workspaceId: 'ws-test',
@@ -76,20 +99,29 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
       return Promise.resolve();
     },
     exec(sid: string, line: string, opts: ExecOptions): Promise<number> {
-      const rid = `r${++ridSeq}`;
-      opts.onStart?.(rid);
-      const done = deferred<number>();
-      execs.push({ sid, line, opts, rid, resolve: done.resolve });
-      return done.promise;
+      return startExec(sid, line, opts).then((result) => result.exitCode);
     },
-    writeStdin(sid: string, rid: string, data: Uint8Array): void {
+    execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult> {
+      return startExec(sid, line, opts);
+    },
+    writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void> {
       stdin.push({ sid, rid, data });
+      return Promise.resolve();
+    },
+    endStdin(sid: string, rid: string): Promise<void> {
+      stdinEof.push({ sid, rid });
+      return Promise.resolve();
+    },
+    resize(sid: string, rid: string, cols: number, rows: number): Promise<void> {
+      resizes.push({ sid, rid, cols, rows });
+      return Promise.resolve();
     },
     signal(sid: string, rid: string): void {
       signalled.push({ sid, rid });
     },
-    closeSession(sid: string): void {
+    closeSession(sid: string): Promise<void> {
       closed.push(sid);
+      return Promise.resolve();
     },
     isAlive(): boolean {
       return true;
@@ -134,7 +166,18 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     close(): void {},
   };
 
-  return { owner, opened, closed, stdin, signalled, writes, execs, snapshots };
+  return {
+    owner,
+    opened,
+    closed,
+    stdin,
+    stdinEof,
+    resizes,
+    signalled,
+    writes,
+    execs,
+    snapshots,
+  };
 }
 
 describe('createTerminalManager (pty port client)', () => {
@@ -390,6 +433,386 @@ describe('createTerminalManager (pty port client)', () => {
     expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 130 });
 
     manager.dispose();
+  });
+
+  it('claims the session before deferred owner readiness in the same tick', async () => {
+    const fake = makeFakeOwner();
+    const ownerReady = deferred<void>();
+    fake.owner.openSession = () => ownerReady.promise;
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const first = manager.runLine(session.id, 'first');
+    const second = manager.runLine(session.id, 'second');
+    const outcome = await Promise.race([
+      second,
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 50)),
+    ]);
+
+    try {
+      expect(outcome).toBe(1);
+    } finally {
+      ownerReady.resolve();
+      await waitForExecs(fake.execs, 1);
+      for (const call of fake.execs) call.resolve(0);
+      await Promise.allSettled([first, second]);
+      manager.dispose();
+    }
+    expect(fake.execs).toHaveLength(1);
+  });
+
+  it('latches the latest pre-ready resize, queues EOF, and rejects writes after EOF', async () => {
+    const fake = makeFakeOwner();
+    const ownerReady = deferred<void>();
+    const resizeAck = deferred<void>();
+    fake.owner.openSession = () => ownerReady.promise;
+    fake.owner.resize = (sid, rid, cols, rows) => {
+      fake.resizes.push({ sid, rid, cols, rows });
+      return resizeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const run = manager.runLine(session.id, 'cat');
+    const firstResize = manager.resize(session.id, { cols: 100, rows: 30 });
+    const latestResize = manager.resize(session.id, { cols: 132, rows: 43 });
+    const eof = manager.endStdin(session.id);
+    await expect(manager.writeStdin(session.id, 'late')).rejects.toThrow(
+      /StdinClosedError|stdin.*ended/i,
+    );
+    expect(fake.resizes).toEqual([]);
+    expect(fake.stdinEof).toEqual([]);
+
+    ownerReady.resolve();
+    await waitForExecs(fake.execs, 1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fake.resizes).toEqual([
+      { sid: session.id, rid: fake.execs[0]!.rid, cols: 132, rows: 43 },
+    ]);
+    expect(fake.stdinEof).toEqual([{ sid: session.id, rid: fake.execs[0]!.rid }]);
+
+    resizeAck.resolve();
+    await Promise.all([firstResize, latestResize, eof]);
+    fake.execs[0]!.resolve(0);
+    await run;
+    manager.dispose();
+  });
+
+  it('stops a pre-ready run without starting it and rejects every queued control', async () => {
+    const fake = makeFakeOwner();
+    const ownerReady = deferred<void>();
+    fake.owner.openSession = () => ownerReady.promise;
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const run = manager.runLine(session.id, 'cat');
+    const stdin = manager.writeStdin(session.id, 'queued');
+    const eof = manager.endStdin(session.id);
+    const resize = manager.resize(session.id, { cols: 120, rows: 40 });
+    const runOutcome = run.then(
+      (code) => code,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    const controlOutcome = (operation: Promise<void>) =>
+      operation.then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+
+    manager.stop(session.id);
+    const outcomes = await Promise.all([
+      settledOr(runOutcome, 'pending'),
+      settledOr(controlOutcome(stdin), 'pending'),
+      settledOr(controlOutcome(eof), 'pending'),
+      settledOr(controlOutcome(resize), 'pending'),
+    ]);
+
+    try {
+      expect(outcomes).toEqual([
+        130,
+        expect.stringMatching(/stopped/i),
+        expect.stringMatching(/stopped/i),
+        expect.stringMatching(/stopped/i),
+      ]);
+      expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 130 });
+    } finally {
+      ownerReady.resolve();
+      await waitForExecs(fake.execs, 1);
+      for (const call of fake.execs) call.resolve(0);
+      manager.dispose();
+      await Promise.allSettled([run, stdin, eof, resize]);
+    }
+
+    expect(fake.execs).toEqual([]);
+    expect(fake.stdin).toEqual([]);
+    expect(fake.stdinEof).toEqual([]);
+    expect(fake.resizes).toEqual([]);
+    expect(fake.signalled).toEqual([]);
+  });
+
+  it('latches stop after exec claim but before onStart and never flushes queued controls', async () => {
+    const fake = makeFakeOwner();
+    const execution = deferred<number>();
+    let claimed: { sid: string; opts: ExecOptions } | undefined;
+    fake.owner.exec = (sid, _line, opts) => {
+      claimed = { sid, opts };
+      return execution.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const run = manager.runLine(session.id, 'cat');
+    await vi.waitFor(() => expect(claimed).toBeDefined());
+    const stdin = manager.writeStdin(session.id, 'queued');
+    const eof = manager.endStdin(session.id);
+    const resize = manager.resize(session.id, { cols: 120, rows: 40 });
+    const controlOutcome = (operation: Promise<void>) =>
+      operation.then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+
+    manager.stop(session.id);
+    const outcomes = Promise.all([
+      controlOutcome(stdin),
+      controlOutcome(eof),
+      controlOutcome(resize),
+    ]);
+    claimed!.opts.onStart?.('late-rid');
+    await Promise.resolve();
+
+    try {
+      expect(await outcomes).toEqual([
+        expect.stringMatching(/stopped/i),
+        expect.stringMatching(/stopped/i),
+        expect.stringMatching(/stopped/i),
+      ]);
+      expect(fake.signalled).toEqual([{ sid: session.id, rid: 'late-rid' }]);
+      expect(fake.stdin).toEqual([]);
+      expect(fake.stdinEof).toEqual([]);
+      expect(fake.resizes).toEqual([]);
+    } finally {
+      execution.resolve(130);
+      await Promise.allSettled([run, stdin, eof, resize]);
+      manager.dispose();
+    }
+    await expect(run).resolves.toBe(130);
+  });
+
+  it('rejects pre-ready control waiters and the claimed run on owner rebind', async () => {
+    const firstOwner = makeFakeOwner();
+    const firstReady = deferred<void>();
+    firstOwner.owner.openSession = () => firstReady.promise;
+    const manager = createTerminalManager({ owner: firstOwner.owner });
+    const session = manager.sessions()[0]!;
+    const run = manager.runLine(session.id, 'cat');
+    const stdin = manager.writeStdin(session.id, 'queued');
+    const resize = manager.resize(session.id, { cols: 120, rows: 40 });
+    const stdinRejected = expect(stdin).rejects.toThrow(/owner rebound/i);
+    const resizeRejected = expect(resize).rejects.toThrow(/owner rebound/i);
+    const runRejected = expect(run).rejects.toThrow(/owner rebound/i);
+
+    const nextOwner = makeFakeOwner();
+    await manager.rebindOwner(nextOwner.owner);
+    await Promise.all([stdinRejected, resizeRejected, runRejected]);
+    expect(nextOwner.opened).toEqual([session.id]);
+
+    firstReady.resolve();
+    manager.dispose();
+  });
+
+  it('rejects forwarded ACK waiters on rebind and never sends an old run tail to the new owner', async () => {
+    const firstOwner = makeFakeOwner();
+    const stdinAck = deferred<void>();
+    const resizeAck = deferred<void>();
+    firstOwner.owner.writeStdin = (sid, rid, data) => {
+      firstOwner.stdin.push({ sid, rid, data });
+      return stdinAck.promise;
+    };
+    firstOwner.owner.resize = (sid, rid, cols, rows) => {
+      firstOwner.resizes.push({ sid, rid, cols, rows });
+      return resizeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: firstOwner.owner });
+    const session = manager.sessions()[0]!;
+
+    const run = manager.runLine(session.id, 'cat');
+    const firstWrite = manager.writeStdin(session.id, 'first');
+    const secondWrite = manager.writeStdin(session.id, 'second');
+    const resize = manager.resize(session.id, { cols: 120, rows: 40 });
+    const outcome = (promise: Promise<void>) =>
+      promise.then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+    const firstOutcome = outcome(firstWrite);
+    const secondOutcome = outcome(secondWrite);
+    const resizeOutcome = outcome(resize);
+
+    await waitForExecs(firstOwner.execs, 1);
+    await vi.waitFor(() => {
+      expect(firstOwner.stdin).toHaveLength(1);
+      expect(firstOwner.resizes).toHaveLength(1);
+    });
+
+    const nextOwner = makeFakeOwner();
+    await manager.rebindOwner(nextOwner.owner);
+    const outcomes = await Promise.all([
+      settledOr(firstOutcome, 'pending'),
+      settledOr(secondOutcome, 'pending'),
+      settledOr(resizeOutcome, 'pending'),
+    ]);
+
+    stdinAck.resolve();
+    resizeAck.resolve();
+    firstOwner.execs[0]!.resolve(0);
+    await Promise.allSettled([firstWrite, secondWrite, resize, run]);
+    await Promise.resolve();
+    try {
+      expect(outcomes).toEqual([
+        expect.stringMatching(/ClosedHandleError.*owner rebound/i),
+        expect.stringMatching(/ClosedHandleError.*owner rebound/i),
+        expect.stringMatching(/ClosedHandleError.*owner rebound/i),
+      ]);
+      expect(nextOwner.stdin).toEqual([]);
+      expect(nextOwner.resizes).toEqual([]);
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it('rejects every pre-ready waiter when disposed', async () => {
+    const fake = makeFakeOwner();
+    const ownerReady = deferred<void>();
+    fake.owner.openSession = () => ownerReady.promise;
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const run = manager.runLine(session.id, 'cat');
+    const stdin = manager.writeStdin(session.id, 'queued');
+    const resize = manager.resize(session.id, { cols: 120, rows: 40 });
+    const stdinRejected = expect(stdin).rejects.toThrow(/disposed/i);
+    const resizeRejected = expect(resize).rejects.toThrow(/disposed/i);
+    const runRejected = expect(run).rejects.toThrow(/disposed/i);
+
+    manager.dispose();
+    await Promise.all([stdinRejected, resizeRejected, runRejected]);
+    ownerReady.resolve();
+  });
+
+  it('rejects already-forwarded stdin, EOF, and resize ACK waiters when disposed', async () => {
+    const fake = makeFakeOwner();
+    const stdinAck = deferred<void>();
+    const eofAck = deferred<void>();
+    const resizeAck = deferred<void>();
+    fake.owner.writeStdin = (sid, rid, data) => {
+      fake.stdin.push({ sid, rid, data });
+      return stdinAck.promise;
+    };
+    fake.owner.endStdin = (sid, rid) => {
+      fake.stdinEof.push({ sid, rid });
+      return eofAck.promise;
+    };
+    fake.owner.resize = (sid, rid, cols, rows) => {
+      fake.resizes.push({ sid, rid, cols, rows });
+      return resizeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const run = manager.runLine(session.id, 'cat');
+    await waitForExecs(fake.execs, 1);
+
+    const stdin = manager.writeStdin(session.id, 'data');
+    const eof = manager.endStdin(session.id);
+    const resize = manager.resize(session.id, { cols: 100, rows: 30 });
+    const outcome = (promise: Promise<void>) =>
+      promise.then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+    const stdinOutcome = outcome(stdin);
+    const eofOutcome = outcome(eof);
+    const resizeOutcome = outcome(resize);
+
+    manager.dispose();
+    const outcomes = await Promise.all([
+      settledOr(stdinOutcome, 'pending'),
+      settledOr(eofOutcome, 'pending'),
+      settledOr(resizeOutcome, 'pending'),
+    ]);
+
+    stdinAck.resolve();
+    eofAck.resolve();
+    resizeAck.resolve();
+    fake.execs[0]!.resolve(0);
+    await Promise.allSettled([stdin, eof, resize, run]);
+    expect(outcomes).toEqual([
+      expect.stringMatching(/ClosedHandleError.*disposed/i),
+      expect.stringMatching(/ClosedHandleError.*disposed/i),
+      expect.stringMatching(/ClosedHandleError.*disposed/i),
+    ]);
+  });
+
+  it('awaits an idempotent per-session close and preserves its sibling', async () => {
+    const fake = makeFakeOwner();
+    const closeAck = deferred<void>();
+    fake.owner.closeSession = (sid) => {
+      fake.closed.push(sid);
+      return closeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const first = manager.sessions()[0]!;
+    const second = manager.createSession('Second');
+    manager.select(first.id);
+
+    const close = manager.closeSession(first.id);
+    expect(manager.closeSession(first.id)).toBe(close);
+    expect(manager.sessions().map((session) => session.id)).toEqual([first.id, second.id]);
+    closeAck.resolve();
+    await close;
+
+    expect(manager.sessions().map((session) => session.id)).toEqual([second.id]);
+    expect(manager.activeSessionId()).toBe(second.id);
+    expect(manager.snapshot(second.id).status).toBe('idle');
+    manager.dispose();
+  });
+
+  it('keeps a locally closed session closed when owner close fails', async () => {
+    const fake = makeFakeOwner();
+    fake.owner.closeSession = () => Promise.reject(new Error('owner close failed'));
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const writer = vi.fn();
+    manager.attachWriter(session.id, writer);
+
+    const close = manager.closeSession(session.id);
+    await expect(close).rejects.toThrow('owner close failed');
+    expect(manager.closeSession(session.id)).toBe(close);
+    manager.clear(session.id);
+    expect(writer).not.toHaveBeenCalled();
+    await expect(manager.runLine(session.id, 'echo nope')).rejects.toThrow(/ClosedHandleError/);
+    await expect(manager.resize(session.id, { cols: 100, rows: 30 })).rejects.toThrow(
+      /ClosedHandleError/,
+    );
+  });
+
+  it('does not resurrect a locally closed tombstone when the owner is rebound', async () => {
+    const firstOwner = makeFakeOwner();
+    firstOwner.owner.closeSession = () => Promise.reject(new Error('owner died during close'));
+    const manager = createTerminalManager({ owner: firstOwner.owner });
+    const closed = manager.sessions()[0]!;
+    const sibling = manager.createSession('Sibling');
+    await expect(manager.closeSession(closed.id)).rejects.toThrow('owner died during close');
+
+    const nextOwner = makeFakeOwner();
+    await manager.rebindOwner(nextOwner.owner);
+
+    expect(nextOwner.opened).toEqual([sibling.id]);
+    await expect(manager.runLine(closed.id, 'echo resurrected')).rejects.toThrow(
+      /ClosedHandleError/,
+    );
+    manager.dispose();
+    expect(nextOwner.closed).toEqual([sibling.id]);
   });
 
   it('runs a new foreground command after a non-zero command exits', async () => {

@@ -16,7 +16,7 @@
  */
 
 import type { BinExecutor, CommandContext } from '@riftydev/shell';
-import { runForegroundChild } from './run-foreground-child.ts';
+import { type ForegroundWritable, runForegroundChild } from './run-foreground-child.ts';
 
 /** Read-side of a worker stdio stream (subset of `@riftydev/io` `Readable`). */
 export interface BinReadable {
@@ -32,9 +32,11 @@ export interface BinReadable {
 export interface BinWorkerHandle {
   stdout(): BinReadable;
   stderr(): BinReadable;
-  on(event: 'exit', listener: (code?: unknown) => void): unknown;
+  stdin(): ForegroundWritable;
+  on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
   send?(message: unknown): unknown;
+  resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -46,6 +48,8 @@ export interface BinSpawnRequest {
   readonly env: Record<string, string>;
   readonly cwd: string;
   readonly isTTY: boolean;
+  readonly cols?: number;
+  readonly rows?: number;
 }
 
 export interface BinExecutorDeps {
@@ -80,6 +84,8 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
       env: ctx.env,
       cwd: ctx.cwd,
       isTTY: ctx.isTTY === true,
+      cols: ctx.cols,
+      rows: ctx.rows,
     };
     deps.onStart?.(req, ctx);
     const handle = deps.spawn(req);

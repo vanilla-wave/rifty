@@ -41,7 +41,7 @@ import type { RowAction } from './components/ProjectsTab.tsx';
 import { ScmPanel } from './components/ScmPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
-import type { TerminalModeHint } from './components/TerminalPanel.tsx';
+import type { TerminalDims, TerminalModeHint } from './components/TerminalPanel.tsx';
 import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
@@ -75,6 +75,7 @@ import {
   setActiveIndex,
 } from './glue/project-index-port.ts';
 import { type ActiveId, rootForId } from './glue/project-index.ts';
+import type { PtyRunResult } from './glue/pty-client.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
@@ -107,6 +108,7 @@ import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
 import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
+import { closeTerminalSession } from './orchestration/terminal-session-close.ts';
 import { createTerminalStatePersistence } from './orchestration/terminal-state-persistence.ts';
 import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
@@ -179,6 +181,12 @@ function loadWorkspaceId(storage: Storage | undefined = globalThis.sessionStorag
  * No worker is spawned and no bridges are served.
  */
 function createUnavailableOwner(): WorkspaceOwnerHandle {
+  const unavailableResult = (opts: {
+    onChunk(chunk: string, stream: 'stdout' | 'stderr'): void;
+  }): Promise<PtyRunResult> => {
+    opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
+    return Promise.resolve({ exitCode: 1, exit: { code: 1, signal: null } });
+  };
   return {
     workspaceId: 'unavailable',
     root: '/scratch',
@@ -187,13 +195,13 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     ready: Promise.resolve(),
     closed: Promise.resolve(0),
     openSession: () => Promise.resolve(),
-    exec: (_sid, _line, opts) => {
-      opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
-      return Promise.resolve(1);
-    },
-    writeStdin: () => {},
+    exec: (_sid, _line, opts) => unavailableResult(opts).then((result) => result.exitCode),
+    execResult: (_sid, _line, opts) => unavailableResult(opts),
+    writeStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    endStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    resize: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     signal: () => {},
-    closeSession: () => {},
+    closeSession: () => Promise.resolve(),
     isAlive: () => false,
     writeFile: () => {},
     writeFrame: () => {
@@ -873,6 +881,21 @@ export function App(props: AppProps) {
       setTerminalFocusEpoch((epoch) => epoch + 1);
     }
     refreshTerminalState();
+    closeTerminalSession({
+      detachWriter: () => terminalWriters.delete(id),
+      closeRemote: () => manager.closeSession(id),
+      onClosed: () => {
+        hiddenSessionIds.delete(id);
+        refreshTerminalState();
+      },
+      onError: (error: unknown) => {
+        // The manager handle is locally closed even when the dead owner cannot
+        // ACK teardown; keep the tombstone hidden.
+        flashError(
+          `Terminal close failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    });
   }
 
   function attachTerminalWriter(
@@ -973,7 +996,11 @@ export function App(props: AppProps) {
   }
 
   function writeTerminalStdin(id: string, data: TerminalRawInput): void {
-    manager.writeStdin(id, data);
+    void manager.writeStdin(id, data).catch((error: unknown) => console.error(error));
+  }
+
+  function resizeTerminal(id: string, dims: TerminalDims): void {
+    void manager.resize(id, dims).catch((error: unknown) => console.error(error));
   }
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
@@ -2414,6 +2441,7 @@ export function App(props: AppProps) {
               onLink={onTerminalLink}
               onSignal={stopSession}
               onRawInput={writeTerminalStdin}
+              onResize={resizeTerminal}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>

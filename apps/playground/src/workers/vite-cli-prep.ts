@@ -31,6 +31,31 @@ export function viteCliModeFromEnv(value: string | undefined): ViteCliMode | nul
     : null;
 }
 
+export interface ViteCliPreparation {
+  readonly root: string;
+  readonly mode: ViteCliMode;
+  readonly executedBinPath: string;
+  readonly esbuildWasmUrl: string;
+}
+
+/** Decode one complete bootstrap-owned Vite preparation or no preparation. */
+export function viteCliPreparationFromEnv(options: {
+  readonly root: string;
+  readonly mode: string | undefined;
+  readonly executedBinPath: string;
+  readonly esbuildWasmUrl: string;
+}): ViteCliPreparation | null {
+  const mode = viteCliModeFromEnv(options.mode);
+  return mode === null
+    ? null
+    : {
+        root: options.root,
+        mode,
+        executedBinPath: options.executedBinPath,
+        esbuildWasmUrl: options.esbuildWasmUrl,
+      };
+}
+
 // NOT shadow-registry shims (those apply at install time, ADR-0188): these
 // patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle. CAC never
 // awaits async actions, so the keepalive pin is the sole patch.
@@ -69,18 +94,15 @@ export async function prepareViteCliFiles(root: string, executedBinPath?: string
   installCliActionPatch(vitePackageRoot(root, executedBinPath));
 }
 
-export async function prepareViteCli(
-  root: string,
-  mode: ViteCliMode,
-  executedBinPath: string,
-): Promise<void> {
-  await prepareViteCliFiles(root, executedBinPath);
-  if (mode === 'info') return;
+export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
+  await prepareViteCliFiles(options.root, options.executedBinPath);
+  if (options.mode === 'info') return;
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({
     fs,
-    cwd: root,
-    packageRoot: vitePackageRoot(root, executedBinPath),
+    cwd: options.root,
+    packageRoot: vitePackageRoot(options.root, options.executedBinPath),
+    esbuildWasmUrl: options.esbuildWasmUrl,
   });
 }
 

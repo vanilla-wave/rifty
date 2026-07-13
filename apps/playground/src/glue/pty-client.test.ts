@@ -37,13 +37,94 @@ describe('pty-client', () => {
       seq: 0,
       data: new TextEncoder().encode('hi\n'),
     });
-    client.onFrame({ type: 'pty:exit', sid: 's1', rid, code: 0, cwd: '/x', env: { A: '1' } });
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/x',
+      env: { A: '1' },
+    });
     await expect(p).resolves.toBe(0);
     expect(chunks.join('')).toBe('hi\n');
     expect(client.snapshot('s1')).toMatchObject({ cwd: '/x', env: { A: '1' } });
   });
 
-  it('routes chunk to the matching run only (rid correlation)', async () => {
+  it('exposes the exact physical exit independently from the shell status', async () => {
+    const { client, sent } = harness();
+    const result = client.execResult('s1', 'node server.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: exec?.rid ?? 'missing',
+      code: 130,
+      exit: { code: null, signal: 'SIGTERM' },
+      cwd: '/',
+      env: {},
+    });
+
+    await expect(result).resolves.toEqual({
+      exitCode: 130,
+      exit: { code: null, signal: 'SIGTERM' },
+    });
+  });
+
+  it('rejects an invalid exact exit frame and releases the session claim', async () => {
+    const { client, sent } = harness();
+    const result = client.execResult('s1', 'node broken.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: exec?.rid ?? 'missing',
+      code: 1,
+      exit: { code: 0, signal: 'SIGTERM' },
+      cwd: '/',
+      env: {},
+    } as never);
+
+    await expect(result).rejects.toThrow(/exactly one supported code or signal/i);
+    const next = client.exec('s1', 'true', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const nextExec = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )[1];
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: nextExec?.rid ?? 'missing',
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await expect(next).resolves.toBe(0);
+  });
+
+  it('routes chunks to matching runs in different sessions (rid correlation)', async () => {
     const { client, sent } = harness();
     const aChunks: string[] = [];
     const bChunks: string[] = [];
@@ -53,7 +134,7 @@ describe('pty-client', () => {
       isTTY: true,
       onChunk: (c) => aChunks.push(c),
     });
-    const b = client.exec('s1', 'cmd-b', {
+    const b = client.exec('s2', 'cmd-b', {
       cols: 80,
       rows: 24,
       isTTY: true,
@@ -67,7 +148,7 @@ describe('pty-client', () => {
     expect(ridA).not.toBe(ridB);
     client.onFrame({
       type: 'pty:chunk',
-      sid: 's1',
+      sid: 's2',
       rid: ridB,
       stream: 'stdout',
       seq: 0,
@@ -81,8 +162,24 @@ describe('pty-client', () => {
       seq: 0,
       data: new TextEncoder().encode('A'),
     });
-    client.onFrame({ type: 'pty:exit', sid: 's1', rid: ridA, code: 0, cwd: '/', env: {} });
-    client.onFrame({ type: 'pty:exit', sid: 's1', rid: ridB, code: 0, cwd: '/', env: {} });
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: ridA,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's2',
+      rid: ridB,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
     await Promise.all([a, b]);
     expect(aChunks.join('')).toBe('A');
     expect(bChunks.join('')).toBe('B');
@@ -107,7 +204,15 @@ describe('pty-client', () => {
       sent.find((f) => f.type === 'pty:exec') as Extract<PageToOwnerFrame, { type: 'pty:exec' }>
     ).rid;
     // Run exits first (Ctrl-C / restart abort, code 130) ...
-    client.onFrame({ type: 'pty:exit', sid: 's1', rid, code: 130, cwd: '/', env: {} });
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid,
+      code: 130,
+      exit: { code: null, signal: 'SIGINT' },
+      cwd: '/',
+      env: {},
+    });
     await expect(p).resolves.toBe(130);
     // ... then the readiness marker arrives late for the now-gone run.
     client.onFrame({
@@ -132,6 +237,7 @@ describe('pty-client', () => {
       sid: 's1',
       rid,
       code: 0,
+      exit: { code: 0, signal: null },
       cwd: '/work',
       env: { PATH: '/bin' },
     });
@@ -152,16 +258,212 @@ describe('pty-client', () => {
     expect(client.snapshot('s1')).toEqual({ cwd: '/restored', env: { TERM: 'xterm' } });
   });
 
-  it('synthetic disconnect resolves a hung exec so onInput never hangs', async () => {
+  it('disconnect rejects a hung exec loudly instead of inventing a process exit', async () => {
     const { client } = harness();
     const p = client.exec('s1', 'sleep 9', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} });
     client.disconnect(); // owner died
-    await expect(p).resolves.toBeGreaterThan(0); // nonzero exit, not a hang
+    await expect(p).rejects.toThrow(/ClosedHandleError.*owner died/i);
   });
 
   // Race a promise against a 50ms sentinel so a hang fails fast + deterministically.
   const settledOr = <T>(p: Promise<T>, pending: T): Promise<T> =>
     Promise.race([p, new Promise<T>((r) => setTimeout(() => r(pending), 50))]);
+
+  it('claims one run per session synchronously', async () => {
+    const { client, sent } = harness();
+    const first = client.exec('s1', 'first', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+
+    expect(() =>
+      client.exec('s1', 'second', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+    ).toThrow(/busy|already running/i);
+    const execs = sent.filter((frame) => frame.type === 'pty:exec');
+    expect(execs).toHaveLength(1);
+
+    const rid = (execs[0] as Extract<PageToOwnerFrame, { type: 'pty:exec' }>).rid;
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await first;
+  });
+
+  it('validates resize before transport and resolves only after matching owner ack', async () => {
+    const { client, sent } = harness();
+    const run = client.exec('s1', 'watch-size', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    const control = client as unknown as {
+      resize(sid: string, rid: string, cols: number, rows: number): Promise<void>;
+    };
+
+    expect(() => control.resize('s1', exec.rid, 0, 40)).toThrow(RangeError);
+    expect(sent).toHaveLength(1);
+
+    const resized = control.resize('s1', exec.rid, 120, 40);
+    const frame = sent.at(-1) as unknown as {
+      type: string;
+      sid: string;
+      rid: string;
+      opId: string;
+      cols: number;
+      rows: number;
+    };
+    expect(frame).toMatchObject({
+      type: 'pty:resize',
+      sid: 's1',
+      rid: exec.rid,
+      cols: 120,
+      rows: 40,
+    });
+    await expect(
+      settledOr(
+        resized.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+
+    client.onFrame({
+      type: 'pty:resize-ack',
+      sid: 's1',
+      rid: exec.rid,
+      opId: frame.opId,
+      ok: true,
+    } as never);
+    await expect(resized).resolves.toBeUndefined();
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: exec.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await run;
+  });
+
+  it('serializes acknowledged stdin writes, makes EOF idempotent, and rejects writes after EOF', async () => {
+    const { client, sent } = harness();
+    const run = client.exec('s1', 'cat', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    const writer = client as unknown as {
+      writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void>;
+      endStdin(sid: string, rid: string): Promise<void>;
+    };
+
+    const first = writer.writeStdin('s1', exec.rid, new Uint8Array([1]));
+    const second = writer.writeStdin('s1', exec.rid, new Uint8Array([2]));
+    const eof = writer.endStdin('s1', exec.rid);
+    const duplicateEof = writer.endStdin('s1', exec.rid);
+    expect(duplicateEof).toBe(eof);
+    expect(sent.filter((frame) => frame.type === 'pty:stdin')).toHaveLength(1);
+    expect(sent.some((frame) => frame.type === 'pty:stdin-eof')).toBe(false);
+
+    const firstFrame = sent.at(-1) as unknown as { opId: string };
+    client.onFrame({
+      type: 'pty:stdin-ack',
+      sid: 's1',
+      rid: exec.rid,
+      opId: firstFrame.opId,
+      ok: true,
+    } as never);
+    await first;
+    await Promise.resolve();
+    const stdinFrames = sent.filter((frame) => frame.type === 'pty:stdin');
+    expect(stdinFrames).toHaveLength(2);
+
+    const secondFrame = stdinFrames[1] as unknown as { opId: string };
+    client.onFrame({
+      type: 'pty:stdin-ack',
+      sid: 's1',
+      rid: exec.rid,
+      opId: secondFrame.opId,
+      ok: true,
+    } as never);
+    await second;
+    await Promise.resolve();
+    const eofFrames = sent.filter((frame) => frame.type === 'pty:stdin-eof');
+    expect(eofFrames).toHaveLength(1);
+
+    await expect(writer.writeStdin('s1', exec.rid, new Uint8Array([3]))).rejects.toThrow(
+      /StdinClosedError|stdin.*(?:closed|ended)/i,
+    );
+    const eofFrame = eofFrames[0] as unknown as { opId: string };
+    client.onFrame({
+      type: 'pty:stdin-ack',
+      sid: 's1',
+      rid: exec.rid,
+      opId: eofFrame.opId,
+      ok: true,
+    } as never);
+    await eof;
+
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: exec.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await run;
+  });
+
+  it('keeps session state until idempotent close receives its owner ack', async () => {
+    const { client, sent } = harness();
+    const opening = client.openSession('s1', { cwd: '/kept', env: { A: '1' } });
+    const closer = client as unknown as { closeSession(sid: string): Promise<void> };
+
+    const first = closer.closeSession('s1');
+    await expect(opening).rejects.toThrow(/ClosedHandleError.*closing/i);
+    const second = closer.closeSession('s1');
+    expect(second).toBe(first);
+    const frames = sent.filter((frame) => frame.type === 'pty:close');
+    expect(frames).toHaveLength(1);
+    expect(client.snapshot('s1')).toEqual({ cwd: '/kept', env: { A: '1' } });
+    await expect(
+      settledOr(
+        first.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+
+    const frame = frames[0] as unknown as { opId: string };
+    client.onFrame({ type: 'pty:close-ack', sid: 's1', opId: frame.opId, ok: true } as never);
+    await expect(first).resolves.toBeUndefined();
+    expect(client.snapshot('s1')).toEqual({ cwd: '/', env: {} });
+  });
 
   it('does not lose a synchronous pty:ready reply during openSession send', async () => {
     const ref: { client?: ReturnType<typeof createPtyClient> } = {};
@@ -192,6 +494,7 @@ describe('pty-client', () => {
             sid: frame.sid,
             rid: frame.rid,
             code: 7,
+            exit: { code: 7, signal: null },
             cwd: '/after',
             env: { DONE: '1' },
           });
@@ -217,38 +520,139 @@ describe('pty-client', () => {
     expect(client.snapshot('s1')).toEqual({ cwd: '/after', env: { DONE: '1' } });
   });
 
-  it('disconnect resolves a pending openSession waiter (owner died before pty:ready)', async () => {
-    const { client } = harness();
+  it('sends exec before onStart and releases the claim when onStart throws', async () => {
+    const order: string[] = [];
+    const sent: PageToOwnerFrame[] = [];
+    const client = createPtyClient({
+      send: (frame) => {
+        sent.push(frame);
+        order.push(frame.type);
+      },
+    });
+
+    const failed = client.exec('s1', 'first', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: () => {
+        order.push('onStart');
+        throw new Error('start callback failed');
+      },
+    });
+    await expect(failed).rejects.toThrow('start callback failed');
+    expect(order).toEqual(['pty:exec', 'onStart', 'pty:signal']);
+
+    const next = client.exec('s1', 'second', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const execs = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    expect(execs).toHaveLength(2);
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: execs[1]!.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await expect(next).resolves.toBe(0);
+  });
+
+  it('disconnect rejects a pending openSession waiter loudly (owner died before pty:ready)', async () => {
+    const { client, sent } = harness();
     const ready = client.openSession('s1'); // no pty:ready will ever arrive
-    client.disconnect();
-    const settled = await settledOr(
-      ready.then(() => 'resolved' as const),
-      'pending' as const,
+    const outcome = ready.then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
     );
-    expect(settled).toBe('resolved');
+    client.disconnect();
+    await expect(settledOr(outcome, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
+    expect(sent).toEqual([{ type: 'pty:open', sid: 's1' }]);
   });
 
-  it('openSession after owner death resolves immediately instead of hanging', async () => {
-    const { client } = harness();
-    client.disconnect();
-    const settled = await settledOr(
-      client.openSession('s2').then(() => 'resolved' as const),
-      'pending' as const,
-    );
-    expect(settled).toBe('resolved');
-  });
-
-  it('exec after owner death resolves nonzero immediately instead of registering a hung run', async () => {
+  it('future open and close after owner death reject loudly without posting doomed frames', async () => {
     const { client, sent } = harness();
     client.disconnect();
-    const code = await settledOr(
-      client.exec('s1', 'ls', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} }),
-      -999,
+    const open = client.openSession('s2').then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
     );
-    expect(code).toBeGreaterThan(0); // OWNER_DIED_EXIT, not the sentinel
-    expect(code).not.toBe(-999);
-    // and it must not post a doomed pty:exec frame into the void
+    const close = client.closeSession('s2').then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+
+    await expect(settledOr(open, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
+    await expect(settledOr(close, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
+    expect(sent).toEqual([]);
+  });
+
+  it('starting close rejects a pending open and every future open with ClosedHandleError', async () => {
+    const { client, sent } = harness();
+    const ready = client.openSession('s1');
+    const readyOutcome = ready.then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+
+    const close = client.closeSession('s1');
+    const futureOpen = client.openSession('s1').then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    const openOutcome = await settledOr(readyOutcome, 'pending');
+    const futureOutcome = await settledOr(futureOpen, 'pending');
+
+    const closeFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )!;
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: 's1',
+      opId: closeFrame.opId,
+      ok: true,
+    });
+    await close;
+
+    expect(openOutcome).toMatch(/ClosedHandleError.*closing/i);
+    expect(futureOutcome).toMatch(/ClosedHandleError.*closing/i);
+  });
+
+  it('future exec after owner death rejects loudly instead of inventing a process exit', async () => {
+    const { client, sent } = harness();
+    client.disconnect();
+    const outcome = client
+      .exec('s1', 'ls', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} })
+      .then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+    await expect(settledOr(outcome, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
     expect(sent.some((f) => f.type === 'pty:exec')).toBe(false);
+  });
+
+  it('future run controls and owner handshakes fail loudly after owner death', async () => {
+    const { client, sent } = harness();
+    client.disconnect();
+
+    await expect(client.writeStdin('s1', 'r1', new Uint8Array([1]))).rejects.toThrow(
+      /ClosedHandleError/,
+    );
+    await expect(client.endStdin('s1', 'r1')).rejects.toThrow(/ClosedHandleError/);
+    expect(() => client.resize('s1', 'r1', 80, 24)).toThrow(/ClosedHandleError/);
+    expect(() => client.signal('s1', 'r1')).toThrow(/ClosedHandleError.*owner died/i);
+    expect(() => client.requestDevServer()).toThrow(/ClosedHandleError.*owner died/i);
+    expect(() => client.requestPreview()).toThrow(/ClosedHandleError.*owner died/i);
+    expect(sent).toEqual([]);
   });
 
   it('routes pty:dev-server to onDevServer (ADR-0148)', () => {
@@ -329,18 +733,27 @@ describe('pty-client', () => {
     await expect(ready).resolves.toBeUndefined();
   });
 
-  it('disconnect resolves a pending setDevConfig waiter (owner died before readiness ack)', async () => {
-    const { client } = harness();
+  it('disconnect rejects pending and future setDevConfig loudly', async () => {
+    const { client, sent } = harness();
     const ready = client.setDevConfig({
       templateId: 'typescript',
       slug: 'scratch',
       setup: 'instant',
     });
-    client.disconnect();
-    const settled = await settledOr(
-      ready.then(() => 'resolved' as const),
-      'pending' as const,
+    const outcome = ready.then(
+      () => 'resolved' as const,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
     );
-    expect(settled).toBe('resolved');
+    client.disconnect();
+    await expect(settledOr(outcome, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
+
+    const future = client
+      .setDevConfig({ templateId: 'vite-react', slug: 'later', setup: 'from-scratch' })
+      .then(
+        () => 'resolved' as const,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+    await expect(settledOr(future, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
+    expect(sent.filter((frame) => frame.type === 'pty:dev-config')).toHaveLength(1);
   });
 });

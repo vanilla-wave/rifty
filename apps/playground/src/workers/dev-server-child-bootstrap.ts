@@ -11,25 +11,20 @@
  * Env is read from readKernelProcessSpec() (the installProcessGlobals clobber-safe
  * source), never globalThis.process.env.
  */
-import {
-  getKernelDispatcher,
-  readKernelProcessSpec,
-  readKernelSyncApi,
-  setKernelWorkerUrl,
-} from '@riftydev/kernel';
+import { getKernelDispatcher, readKernelProcessSpec, readKernelSyncApi } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import {
-  installConsole,
-  installRemoteSyncFs,
-  installRuntimeJsFsHandlers,
-} from '@riftydev/runtime-js';
-import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
+import {
+  installNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfig,
+} from './node-worker-runtime-config.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -39,9 +34,6 @@ import {
 async function bootstrapDevServerChild(): Promise<void> {
   registerNetBuiltins();
   registerSqliteBuiltin();
-  // node:sqlite self-initializes at first require (sync wasm provider) — no
-  // preset flag, no eager bring-up.
-  installSqliteWasmSyncProvider();
 
   // Realign globalThis.Buffer with THIS bundle's `require('buffer')` (the one
   // express builds chunks with) — else etag reads the kernel-worker-entry bundle's
@@ -53,15 +45,10 @@ async function bootstrapDevServerChild(): Promise<void> {
   const kernelIpc: KernelIpc = installRuntimeGlobals();
   globalThis.process.env = env;
 
-  const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
-  const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
-  if (!kernelWorkerUrl || !nodeEntryWorkerUrl) {
-    throw new Error(
-      'dev-server-child: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL — cannot spawn worker_threads children',
-    );
-  }
-  setKernelWorkerUrl(kernelWorkerUrl);
-  setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
+  const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(env, 'dev-server-child');
+  installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
+  // node:sqlite self-initializes at first require using the inherited asset.
+  installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
 
   const proc = globalThis.process;
   installConsole({
@@ -81,7 +68,7 @@ async function bootstrapDevServerChild(): Promise<void> {
   // (single-writer is the owner), so register the fs handlers backed by our own
   // remote view: the child becomes a fs RELAY that forwards a nested worker's
   // `fs.statOrNull`/reads to the owner store.
-  installRuntimeJsFsHandlers(getKernelDispatcher(), () => remoteFs);
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs);
 
   const c = resolveDevServerChildConfig(env);
   setProcessCwd(c.root);

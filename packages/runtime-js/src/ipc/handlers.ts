@@ -30,10 +30,10 @@ export interface ExecSyncPayload {
    * path with the original error.
    */
   readonly cmd: string;
-  /** `execSync` options; only `cwd` + `env` are forwarded. */
-  readonly opts?: {
-    readonly cwd?: string;
-    readonly env?: Record<string, string>;
+  /** Calling-process context resolved by the client before crossing IPC. */
+  readonly opts: {
+    readonly cwd: string;
+    readonly env: Record<string, string>;
   };
 }
 
@@ -83,7 +83,7 @@ export function installRuntimeJsExecSyncHandler(
         code: 'EUNSUPPORTED',
       });
     }
-    const cwd = payload.opts?.cwd ?? '/workspace';
+    const cwd = payload.opts.cwd;
     // Absolutize the entry against cwd, mirroring the `node <file>` shell command
     // (`resolveNodeEntry`, ADR-0155): the module loader treats a bare `build.js`
     // as a PACKAGE specifier (Node-faithful), so `execSync('node build.js')` must
@@ -103,7 +103,7 @@ export function installRuntimeJsExecSyncHandler(
     const result = await runWorker({
       entryPath: scriptPath,
       argv: ['rifty', scriptPath, ...tokens.slice(2)],
-      env: payload.opts?.env ?? {},
+      env: payload.opts.env,
       cwd,
     });
     if (result.exitCode !== 0) {
@@ -135,22 +135,21 @@ function coerceExecSyncPayload(v: unknown): ExecSyncPayload {
   if (typeof p.cmd !== 'string') {
     throw new TypeError('execSync: payload.cmd must be a string');
   }
-  let opts: ExecSyncPayload['opts'] | undefined;
-  if (p.opts !== undefined && p.opts !== null) {
-    if (typeof p.opts !== 'object') {
-      throw new TypeError('execSync: payload.opts must be an object');
-    }
-    const o = p.opts as { cwd?: unknown; env?: unknown };
-    opts = {
-      cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
-      env: isStringRecord(o.env) ? o.env : undefined,
-    };
+  if (typeof p.opts !== 'object' || p.opts === null || Array.isArray(p.opts)) {
+    throw new TypeError('execSync: payload.opts must be an object');
   }
-  return { cmd: p.cmd, opts };
+  const o = p.opts as { cwd?: unknown; env?: unknown };
+  if (typeof o.cwd !== 'string') {
+    throw new TypeError('execSync: payload.opts.cwd must be a string');
+  }
+  if (!isStringRecord(o.env)) {
+    throw new TypeError('execSync: payload.opts.env must be a string record');
+  }
+  return { cmd: p.cmd, opts: { cwd: o.cwd, env: o.env } };
 }
 
 function isStringRecord(v: unknown): v is Record<string, string> {
-  if (typeof v !== 'object' || v === null) return false;
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   for (const value of Object.values(v as Record<string, unknown>)) {
     if (typeof value !== 'string') return false;
   }

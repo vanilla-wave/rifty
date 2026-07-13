@@ -1,5 +1,5 @@
 import type { KernelProcessSpec } from '@riftydev/kernel';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -89,5 +89,119 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     });
     await drained;
     expect(seen).toEqual([1, 2, 3]);
+  });
+
+  it('keeps physical control open for a delayed tty resize after logical disconnect', async () => {
+    const ipc = new MessageChannel();
+    const close = vi.spyOn(ipc.port1, 'close');
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: {
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+        RIFTY_TTY_COLS: '80',
+        RIFTY_TTY_ROWS: '24',
+      },
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const disconnected = new Promise<void>((resolve) =>
+      process.once('disconnect', () => resolve()),
+    );
+
+    ipc.port2.postMessage({ kind: 'ipc:disconnect' });
+    await disconnected;
+    await tick();
+    expect(close).not.toHaveBeenCalled();
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 120, rows: 40 });
+    await tick();
+    expect(process.stdout).toMatchObject({ columns: 120, rows: 40 });
+    expect(process.stderr).toMatchObject({ columns: 120, rows: 40 });
+  });
+
+  it('keeps child control open when process.disconnect initiates logical disconnect', async () => {
+    const ipc = new MessageChannel();
+    const close = vi.spyOn(ipc.port1, 'close');
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: { RIFTY_STDOUT_IS_TTY: '1' },
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const frames: unknown[] = [];
+    ipc.port2.onmessage = (event) => frames.push(event.data);
+    ipc.port2.start();
+
+    process.disconnect?.();
+    await tick();
+    expect(frames).toEqual([{ kind: 'ipc:disconnect' }]);
+    expect(close).not.toHaveBeenCalled();
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 100, rows: 30 });
+    await tick();
+    expect(process.stdout).toMatchObject({ columns: 100, rows: 30 });
+  });
+
+  it('updates tty dimensions and emits stdout resize, stderr resize, then SIGWINCH once', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: {
+        RIFTY_STDOUT_IS_TTY: '1',
+        RIFTY_STDERR_IS_TTY: '1',
+        RIFTY_TTY_COLS: '80',
+        RIFTY_TTY_ROWS: '24',
+      },
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    type ResizableWriter = typeof process.stdout & {
+      columns: number;
+      rows: number;
+      getWindowSize(): [number, number];
+      on(event: 'resize', listener: () => void): unknown;
+    };
+    const stdout = process.stdout as ResizableWriter;
+    const stderr = process.stderr as ResizableWriter;
+    const events: string[] = [];
+
+    stdout.on('resize', () => events.push(`stdout:${stdout.columns}x${stdout.rows}`));
+    stderr.on('resize', () => events.push(`stderr:${stderr.columns}x${stderr.rows}`));
+    process.on('SIGWINCH', () => events.push('SIGWINCH'));
+
+    expect(stdout.getWindowSize()).toEqual([80, 24]);
+    expect(stderr.getWindowSize()).toEqual([80, 24]);
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 120, rows: 40 });
+    await tick();
+
+    expect(stdout).toMatchObject({ columns: 120, rows: 40 });
+    expect(stderr).toMatchObject({ columns: 120, rows: 40 });
+    expect(stdout.getWindowSize()).toEqual([120, 40]);
+    expect(stderr.getWindowSize()).toEqual([120, 40]);
+    expect(events).toEqual(['stdout:120x40', 'stderr:120x40', 'SIGWINCH']);
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 120, rows: 40 });
+    await tick();
+    expect(events).toEqual(['stdout:120x40', 'stderr:120x40', 'SIGWINCH']);
+  });
+
+  it('leaves non-tty stdio unchanged on tty resize control frames', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      env: {},
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 120, rows: 40 });
+    await tick();
+
+    expect(process.stdout).toMatchObject({ isTTY: false, fd: 1 });
+    expect(process.stderr).toMatchObject({ isTTY: false, fd: 2 });
+    expect(process.stdout).not.toHaveProperty('columns');
+    expect(process.stdout).not.toHaveProperty('rows');
+    expect(process.stdout).not.toHaveProperty('getWindowSize');
+    expect(process.stderr).not.toHaveProperty('columns');
+    expect(process.stderr).not.toHaveProperty('rows');
+    expect(process.stderr).not.toHaveProperty('getWindowSize');
   });
 });

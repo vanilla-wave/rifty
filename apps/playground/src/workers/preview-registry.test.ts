@@ -221,6 +221,22 @@ describe('preview-registry derived dev-server lifecycle', () => {
     });
   });
 
+  it('devBootFailed removes an already-running dev slot before emitting the error', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    reg.setDevServer(5174, 'scope-dev', 'term-1');
+
+    reg.devBootFailed('child crashed', 'term-1');
+
+    expect(devFrames(sent).at(-1)).toEqual({
+      type: 'pty:dev-server',
+      status: 'stopped',
+      sid: 'term-1',
+      error: 'child crashed',
+    });
+    expect(previewFrames(sent).at(-1)).toEqual({ type: 'pty:preview', ports: [] });
+  });
+
   it('devBootFailed with ANOTHER server live keeps the derived running status (error still carried)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });

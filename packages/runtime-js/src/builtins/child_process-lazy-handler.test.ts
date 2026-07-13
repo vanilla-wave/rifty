@@ -88,7 +88,12 @@ describe('#26 PART B — execSync handler installs on first child_process requir
 
     // The live handler is the runtime-js code path: a non-`node <script>` command
     // is rejected with EUNSUPPORTED (proves it is wired end-to-end, not a no-op).
-    await expect((handler as SyncRpcHandler)({ cmd: 'ls -la' })).rejects.toMatchObject({
+    await expect(
+      (handler as SyncRpcHandler)({
+        cmd: 'ls -la',
+        opts: { cwd: '/workspace', env: {} },
+      }),
+    ).rejects.toMatchObject({
       code: 'EUNSUPPORTED',
     });
   });

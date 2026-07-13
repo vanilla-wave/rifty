@@ -18,7 +18,7 @@
  * stub-Worker factory so they can run in plain Vitest.
  */
 import { once } from '@riftydev/io';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
 import { clearKernelWorkerUrl, setKernelWorkerUrl } from '../src/spawn-worker.ts';
 import {
@@ -32,7 +32,10 @@ type WorkerListener = (ev: MessageEvent) => void;
 
 class FakeWorker implements WorkerLike {
   private readonly listeners = new Map<string, Set<WorkerListener>>();
-  postMessage(): void {}
+  readonly posted: unknown[] = [];
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
   terminate(): void {}
   addEventListener(type: string, listener: WorkerListener): void {
     let set = this.listeners.get(type);
@@ -90,6 +93,34 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.kill('SIGTERM');
   });
 
+  it('posts an explicit stdin EOF frame after the final data chunk', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const init = (factoryWorker as FakeWorker).posted[0] as {
+      spec: { stdio: { stdin: MessagePort } };
+    };
+    const frames: unknown[] = [];
+    init.spec.stdio.stdin.onmessage = (event) => frames.push(event.data);
+    init.spec.stdio.stdin.start();
+
+    try {
+      handle.stdin().write(new Uint8Array([0x68, 0x69]));
+      handle.stdin().end();
+
+      await vi.waitFor(() =>
+        expect(frames).toEqual([new Uint8Array([0x68, 0x69]), { kind: 'stdin:eof' }]),
+      );
+    } finally {
+      handle.kill('SIGTERM');
+    }
+  });
+
   it('send returns false after explicit disconnect', () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
@@ -113,6 +144,42 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     expect(handle.send({ a: 2 })).toBe(false);
 
     handle.kill('SIGTERM');
+  });
+
+  it('delivers a delayed tty control after logical IPC disconnect', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const controlHandle = handle as typeof handle & {
+      resize(cols: number, rows: number): boolean;
+    };
+    const init = (factoryWorker as FakeWorker).posted[0] as {
+      spec: { stdio: { ipc: MessagePort } };
+    };
+    const frames: unknown[] = [];
+    init.spec.stdio.ipc.onmessage = (event) => frames.push(event.data);
+    init.spec.stdio.ipc.start();
+
+    try {
+      handle.disconnect();
+      await vi.waitFor(() => expect(frames).toEqual([{ kind: 'ipc:disconnect' }]));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(controlHandle.resize(120, 40)).toBe(true);
+      await vi.waitFor(() =>
+        expect(frames).toEqual([
+          { kind: 'ipc:disconnect' },
+          { kind: 'ipc:tty-resize', cols: 120, rows: 40 },
+        ]),
+      );
+    } finally {
+      handle.kill('SIGTERM');
+    }
   });
 
   it("worker exit emits 'disconnect' once and subsequent send returns false", async () => {

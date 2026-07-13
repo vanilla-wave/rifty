@@ -1,5 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { BroadcastChannel, Worker } from 'node:worker_threads';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  KERNEL_SYNC_CALL_KEY,
+  getKernelWorkerUrl,
+  setKernelWorkerUrl,
+} from '../../../packages/kernel/src/index.ts';
+import { clearKernelWorkerUrl } from '../../../packages/kernel/src/spawn-worker.ts';
+import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
+import {
+  getProcessCwd,
+  riftyProcess,
+  setProcessCwd,
+} from '../../../packages/runtime-js/src/builtins/process.ts';
+import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
+import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import { runInRifty } from './run-in-rifty.ts';
+
+function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  else Reflect.deleteProperty(globalThis, name);
+}
+
+function restoreKernelWorkerUrl(url: string | URL | null): void {
+  if (url === null) clearKernelWorkerUrl();
+  else setKernelWorkerUrl(url);
+}
 
 describe('runInRifty', () => {
   it('waits for keepalive-backed timers before restoring console capture', async () => {
@@ -43,5 +68,424 @@ describe('runInRifty', () => {
     });
 
     expect(stdout).toBe('ENOENT\n');
+  });
+
+  it('feeds stdin concurrently with ESM top-level evaluation', async () => {
+    const stdout = await runInRifty({
+      kind: 'esm',
+      stdin: [],
+      code: `
+        const order = [];
+        let settle;
+        const done = new Promise((resolve) => { settle = resolve; });
+        const fallback = setTimeout(() => {
+          order.push('fallback');
+          settle();
+        }, 75);
+        process.stdin.once('end', () => {
+          order.push('end');
+          clearTimeout(fallback);
+          settle();
+        });
+        process.stdin.resume();
+        await done;
+        console.log(order[0]);
+      `,
+    });
+
+    expect(stdout).toBe('end\n');
+  });
+
+  it('keeps stdin transport bookkeeping out of the public end-listener count', async () => {
+    const stdout = await runInRifty({
+      stdin: [],
+      code: `
+        console.log(process.stdin.listenerCount('end'));
+        process.stdin.resume();
+      `,
+    });
+
+    expect(stdout).toBe('0\n');
+  });
+
+  it('acknowledges delivered stdin EOF after guest removeAllListeners', async () => {
+    const stdout = await runInRifty(
+      {
+        stdin: [],
+        code: `
+          process.stdin.removeAllListeners('end');
+          process.stdin.resume();
+          console.log('alive');
+        `,
+      },
+      { stdinTimeoutMs: 500 },
+    );
+
+    expect(stdout).toBe('alive\n');
+  });
+
+  it('captures raw stdout from a seeded process byte-exactly', async () => {
+    const stdout = await runInRifty({
+      stdin: [],
+      code: `
+        process.stdout.write('raw');
+        process.stdin.resume();
+      `,
+    });
+
+    expect(stdout).toBe('raw');
+  });
+
+  it('orders seeded raw and console stdout while excluding stderr', async () => {
+    const stdout = await runInRifty({
+      stdin: [],
+      code: `
+        process.stdout.write('raw-before|');
+        console.log('console');
+        process.stderr.write('hidden-raw-stderr');
+        console.error('hidden-console-stderr');
+        process.stdout.write(new Uint8Array([0xe2, 0x82]));
+        process.stdout.write(new Uint8Array([0xac]));
+        process.stdin.resume();
+      `,
+    });
+
+    expect(stdout).toBe('raw-before|console\n€');
+  });
+
+  it('restores timer globals with their exact pre-case descriptors', async () => {
+    const priorSetTimeout = Object.getOwnPropertyDescriptor(globalThis, 'setTimeout');
+    if (!priorSetTimeout) throw new Error('test host has no global setTimeout descriptor');
+    const guestEnumerable = !priorSetTimeout.enumerable;
+    let observed: PropertyDescriptor | undefined;
+
+    try {
+      await runInRifty(
+        {
+          stdin: [],
+          code: `
+            Object.defineProperty(globalThis, 'setTimeout', {
+              value: globalThis.setTimeout,
+              writable: true,
+              enumerable: ${guestEnumerable},
+              configurable: true,
+            });
+            process.stdin.resume();
+          `,
+        },
+        { createMessageChannel: () => new MessageChannel() },
+      );
+      observed = Object.getOwnPropertyDescriptor(globalThis, 'setTimeout');
+    } finally {
+      restoreGlobalDescriptor('setTimeout', priorSetTimeout);
+    }
+
+    expect(observed).toEqual(priorSetTimeout);
+  });
+
+  it('does not let a case-timeout ESM guest execute callbacks after rejection', async () => {
+    const lateStateKey = '__RIFTY_PARITY_LATE_STATE__';
+    const priorLateState = Object.getOwnPropertyDescriptor(globalThis, lateStateKey);
+    const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+    const hostLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    try {
+      await expect(
+        runInRifty(
+          {
+            kind: 'esm',
+            stdin: [],
+            code: `
+              await new Promise((resolve) => setTimeout(resolve, 40));
+              globalThis.${lateStateKey} = 'leaked';
+              console.log('late-after-timeout');
+            `,
+          },
+          { caseTimeoutMs: 10 },
+        ),
+      ).rejects.toThrow('case timed out after 10ms');
+
+      await new Promise<void>((resolve) => hostSetTimeout(resolve, 100));
+
+      expect(Object.getOwnPropertyDescriptor(globalThis, lateStateKey)).toEqual(priorLateState);
+      expect(hostLog).not.toHaveBeenCalledWith('late-after-timeout');
+    } finally {
+      hostLog.mockRestore();
+      restoreGlobalDescriptor(lateStateKey, priorLateState);
+    }
+  });
+
+  it('terminates a failed TTY realm before its late timer can mutate harness globals', async () => {
+    const lateStateKey = '__RIFTY_PARITY_TTY_LATE_STATE__';
+    const priorLateState = Object.getOwnPropertyDescriptor(globalThis, lateStateKey);
+    const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+
+    try {
+      await expect(
+        runInRifty({
+          kind: 'tty-resize',
+          code: `
+            setTimeout(() => { globalThis.${lateStateKey} = 'leaked'; }, 40);
+            throw new Error('tty-case-failed');
+          `,
+        }),
+      ).rejects.toThrow('tty-case-failed');
+
+      await new Promise<void>((resolve) => hostSetTimeout(resolve, 100));
+
+      expect(Object.getOwnPropertyDescriptor(globalThis, lateStateKey)).toEqual(priorLateState);
+    } finally {
+      restoreGlobalDescriptor(lateStateKey, priorLateState);
+    }
+  });
+
+  it('keeps parent settlement pending until the real Worker termination promise settles', async () => {
+    const originalTerminate = Worker.prototype.terminate;
+    let releaseTerminationBarrier: (() => void) | undefined;
+    const terminationBarrier = new Promise<void>((resolve) => {
+      releaseTerminationBarrier = resolve;
+    });
+    let reportRealTermination: (() => void) | undefined;
+    const realTermination = new Promise<void>((resolve) => {
+      reportRealTermination = resolve;
+    });
+    const terminateSpy = vi.spyOn(Worker.prototype, 'terminate').mockImplementation(function (
+      this: Worker,
+    ): Promise<number> {
+      return originalTerminate.call(this).then(async (exitCode) => {
+        reportRealTermination?.();
+        await terminationBarrier;
+        return exitCode;
+      });
+    });
+    let run: Promise<string> | undefined;
+
+    try {
+      run = runInRifty({
+        kind: 'tty-resize',
+        code: `throw new Error('termination-order-probe');`,
+      });
+      let settled = false;
+      void run.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+
+      await realTermination;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(terminateSpy).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+
+      releaseTerminationBarrier?.();
+      await expect(run).rejects.toThrow('termination-order-probe');
+    } finally {
+      releaseTerminationBarrier?.();
+      terminateSpy.mockRestore();
+      await run?.catch(() => undefined);
+    }
+  });
+
+  it('kills failed-Worker callbacks before they can publish a cross-realm side effect', async () => {
+    const channelName = `rifty-parity-worker-termination-${Date.now()}-${Math.random()}`;
+    const probe = new BroadcastChannel(channelName);
+    const messages: unknown[] = [];
+    const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+    probe.onmessage = (event): void => {
+      messages.push(event.data);
+    };
+
+    try {
+      await expect(
+        runInRifty({
+          kind: 'tty-resize',
+          code: `
+            const probe = new BroadcastChannel(${JSON.stringify(channelName)});
+            setTimeout(() => {
+              probe.postMessage('late-worker-callback');
+              probe.close();
+            }, 500);
+            throw new Error('cross-realm-probe');
+          `,
+        }),
+      ).rejects.toThrow('cross-realm-probe');
+
+      await new Promise<void>((resolve) => hostSetTimeout(resolve, 1_000));
+
+      expect(messages).toEqual([]);
+    } finally {
+      probe.close();
+    }
+  });
+
+  it('enforces the parent case timeout for a slow TTY case', async () => {
+    await expect(
+      runInRifty(
+        {
+          kind: 'tty-resize',
+          code: `
+            setTimeout(() => {
+              console.log('late-tty-result');
+            }, 118);
+          `,
+        },
+        { caseTimeoutMs: 10 },
+      ),
+    ).rejects.toThrow('rifty parity case timed out after 10ms');
+  });
+
+  it('restores exec-sync and seeded process globals in exact LIFO order', async () => {
+    const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
+    const priorCrossOrigin = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
+    const priorSyncCall = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY);
+    const priorKernelUrl = getKernelWorkerUrl();
+    const priorRiftyEnv = riftyProcess.env;
+    const sentinelEnv = { RIFTY_TEST_SENTINEL: '1' };
+    const sentinelCall = (): null => null;
+    const crossOriginDescriptor: PropertyDescriptor = {
+      value: false,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    };
+    let observed:
+      | {
+          process: PropertyDescriptor | undefined;
+          crossOrigin: PropertyDescriptor | undefined;
+          syncCall: PropertyDescriptor | undefined;
+          kernelUrl: string | URL | null;
+          riftyEnv: Record<string, string | undefined>;
+        }
+      | undefined;
+
+    try {
+      Object.defineProperty(globalThis, 'crossOriginIsolated', crossOriginDescriptor);
+      Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
+        value: sentinelCall,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      setKernelWorkerUrl('https://host.test/original-kernel-worker.js');
+      riftyProcess.env = sentinelEnv;
+
+      await runInRifty(
+        {
+          kind: 'exec-sync',
+          stdin: [],
+          code: 'process.stdin.resume();',
+        },
+        { createMessageChannel: () => new MessageChannel() },
+      );
+
+      observed = {
+        process: Object.getOwnPropertyDescriptor(globalThis, 'process'),
+        crossOrigin: Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated'),
+        syncCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY),
+        kernelUrl: getKernelWorkerUrl(),
+        riftyEnv: riftyProcess.env,
+      };
+    } finally {
+      restoreGlobalDescriptor('process', priorProcess);
+      restoreGlobalDescriptor('crossOriginIsolated', priorCrossOrigin);
+      restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, priorSyncCall);
+      restoreKernelWorkerUrl(priorKernelUrl);
+      riftyProcess.env = priorRiftyEnv;
+      refreshRuntimeJsProcessBuiltin();
+    }
+
+    expect(observed?.process).toEqual(priorProcess);
+    expect(observed?.crossOrigin).toEqual(crossOriginDescriptor);
+    expect(observed?.syncCall).toEqual({
+      value: sentinelCall,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    expect(observed?.kernelUrl).toBe('https://host.test/original-kernel-worker.js');
+    expect(observed?.riftyEnv).toBe(sentinelEnv);
+  });
+
+  it('unwinds acquired globals and closes partial channels when seeded setup throws', async () => {
+    const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
+    const priorCrossOrigin = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
+    const priorSyncCall = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY);
+    const priorKernelUrl = getKernelWorkerUrl();
+    const priorCwd = getProcessCwd();
+    const priorSyncMirror = syncMirror();
+    const priorAsyncVfs = asyncVfs();
+    const channel = new MessageChannel();
+    const closePort1 = vi.spyOn(channel.port1, 'close');
+    const closePort2 = vi.spyOn(channel.port2, 'close');
+    let channelCalls = 0;
+    let observedPort1Closes = 0;
+    let observedPort2Closes = 0;
+    let caught: unknown;
+    let observed:
+      | {
+          process: PropertyDescriptor | undefined;
+          crossOrigin: PropertyDescriptor | undefined;
+          syncCall: PropertyDescriptor | undefined;
+          kernelUrl: string | URL | null;
+          cwd: string;
+          mirror: ReturnType<typeof syncMirror>;
+        }
+      | undefined;
+
+    try {
+      await runInRifty(
+        {
+          kind: 'exec-sync',
+          stdin: [],
+          code: 'process.stdin.resume();',
+        },
+        {
+          createMessageChannel: () => {
+            channelCalls += 1;
+            if (channelCalls === 1) return channel;
+            throw new Error('message-channel-setup-fault');
+          },
+        },
+      );
+    } catch (error) {
+      caught = error;
+    } finally {
+      observed = {
+        process: Object.getOwnPropertyDescriptor(globalThis, 'process'),
+        crossOrigin: Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated'),
+        syncCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY),
+        kernelUrl: getKernelWorkerUrl(),
+        cwd: getProcessCwd(),
+        mirror: syncMirror(),
+      };
+      restoreGlobalDescriptor('process', priorProcess);
+      restoreGlobalDescriptor('crossOriginIsolated', priorCrossOrigin);
+      restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, priorSyncCall);
+      restoreKernelWorkerUrl(priorKernelUrl);
+      setProcessCwd(priorCwd);
+      setSyncMirror(priorSyncMirror, priorAsyncVfs ? { async: priorAsyncVfs } : {});
+      refreshRuntimeJsProcessBuiltin();
+      observedPort1Closes = closePort1.mock.calls.length;
+      observedPort2Closes = closePort2.mock.calls.length;
+      closePort1.mockRestore();
+      closePort2.mockRestore();
+      channel.port1.close();
+      channel.port2.close();
+    }
+
+    expect(caught).toEqual(new Error('message-channel-setup-fault'));
+    expect(channelCalls).toBe(2);
+    expect(observedPort1Closes).toBe(1);
+    expect(observedPort2Closes).toBe(1);
+    expect(observed?.process).toEqual(priorProcess);
+    expect(observed?.crossOrigin).toEqual(priorCrossOrigin);
+    expect(observed?.syncCall).toEqual(priorSyncCall);
+    expect(observed?.kernelUrl).toBe(priorKernelUrl);
+    expect(observed?.cwd).toBe(priorCwd);
+    expect(observed?.mirror).toBe(priorSyncMirror);
   });
 });

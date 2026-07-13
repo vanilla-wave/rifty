@@ -21,6 +21,11 @@
 
 ### Added
 
+- **Worker stdin EOF and live TTY control (ADR-0225/0230).** Ending
+  `WorkerProcessHandle.stdin()` now posts an ordered `stdin:eof` frame before
+  closing its data port. `WorkerProcessHandle.resize(cols, rows)` uses the
+  physical control port, which stays live after logical user-IPC disconnect
+  and closes only on worker exit/kill.
 - **Drain-hook seam:** a run-to-completion child (`serve!==true`) awaits an optional event-loop drain (`setKernelDrainHook`) before reaping, so it exits on loop-empty like Node, not at top-level resolve; kernel stays Node-API-agnostic (ADR-0039). Child realm de-contaminated: `worker-entry.ts` runEntry uses an indirect dynamic import so bundlers don't inject infra (a dev HMR-client ping) that would pin the drain. The entry-run + drain + exit-outcome logic is the realm-independent `runEntryLifecycle` (pure, unit-testable for the serve-skip / await-drain / reject→exit1 paths without the COI-gated SAB realm — mirrors `finalizeWorkerEntry`).
 
 - **ADR-0144 — kernel server-process model (`serve`).** `WorkerSpawnSpec` + `SpawnWorkerSpec` gain a public `serve?: boolean`. When `true`, a worker whose entry finishes setup WITHOUT throwing is NOT reaped — the kernel skips the exit message, port close, and `self.close()`, leaving the realm alive (its open ports/timers keep it live) until the parent terminates it. A run-to-completion process (`serve` absent/false) reaps the instant its entry settles, as before; a `serve` entry that THREW during setup still reaps. The teardown decision is the pure, exported `finalizeWorkerEntry(target, spec, outcome)` (realm-independent → unit-testable). This retires the `await new Promise<never>(() => {})` keep-alive hack (ADR-0077 follow-up) and is the P1 gate for ADR-0143 "D" (the owner-worker execution model). Hard kill unchanged; graceful stop deferred to ADR-0143 P5.

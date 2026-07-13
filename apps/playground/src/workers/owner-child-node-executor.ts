@@ -6,9 +6,10 @@
  * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
  */
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
-import type { CommandContext } from '@riftydev/shell';
+import type { CommandContext, ProcessExit } from '@riftydev/shell';
+import { childTerminalEnv } from '../glue/child-terminal.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
-import { runForegroundChild } from '../glue/run-foreground-child.ts';
+import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
 
 export function buildNodeChildSpawnSpec(
   entry: string,
@@ -16,9 +17,11 @@ export function buildNodeChildSpawnSpec(
   env: Record<string, string>,
   cwd: string,
   nodeEntryUrl: string,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   tty = false,
+  cols = 80,
+  rows = 24,
 ): SpawnWorkerSpec {
-  const isTTY = tty ? '1' : '0';
   return {
     entry: { kind: 'url', url: nodeEntryUrl },
     argv: ['rifty', entry, ...args],
@@ -27,12 +30,11 @@ export function buildNodeChildSpawnSpec(
     // run-vs-serve decision (ADR-0155). RIFTY_NODE_SERVE gates the new path.
     env: {
       ...env,
+      ...nodeWorkerRuntimeEnv,
       RIFTY_BIN: '0',
       RIFTY_REMOTE_FS: '1',
       RIFTY_NODE_SERVE: '1',
-      RIFTY_STDIN_IS_TTY: '0',
-      RIFTY_STDOUT_IS_TTY: isTTY,
-      RIFTY_STDERR_IS_TTY: isTTY,
+      ...childTerminalEnv({ isTTY: tty, cols, rows }),
     },
     cwd,
     serve: true,
@@ -46,9 +48,11 @@ export interface NodeChildHandle {
   readonly kind: string;
   stdout(): NodeReadable;
   stderr(): NodeReadable;
-  on(event: 'exit', listener: (code?: unknown) => void): unknown;
+  stdin(): ForegroundWritable;
+  on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
   send(message: unknown): unknown;
+  resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -63,10 +67,11 @@ export type OwnerNodeExecutor = (
   args: readonly string[],
   ctx: CommandContext,
   hooks: NodeRunHooks,
-) => Promise<number>;
+) => Promise<ProcessExit>;
 
 export function createOwnerChildNodeExecutor(
   nodeEntryUrl: string,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   spawn: (spec: SpawnWorkerSpec) => NodeChildHandle = (spec) => {
     const h = globalProcessManager.spawnWorker('node', spec, 1);
     if (h.kind !== 'worker')
@@ -84,7 +89,17 @@ export function createOwnerChildNodeExecutor(
   // shared driver's listener registration run before the first suspension.
   return async (entry, args, ctx, hooks) => {
     const handle = spawn(
-      buildNodeChildSpawnSpec(entry, args, ctx.env, ctx.cwd, nodeEntryUrl, ctx.isTTY === true),
+      buildNodeChildSpawnSpec(
+        entry,
+        args,
+        ctx.env,
+        ctx.cwd,
+        nodeEntryUrl,
+        nodeWorkerRuntimeEnv,
+        ctx.isTTY === true,
+        ctx.cols ?? 80,
+        ctx.rows ?? 24,
+      ),
     );
     // Shared foreground driver (stream/abort/exit). A server child posts
     // `rifty:node-listening` → register a preview slot; the slot is removed on
