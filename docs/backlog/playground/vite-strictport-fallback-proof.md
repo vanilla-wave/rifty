@@ -24,7 +24,7 @@ publishes to LIVE/preview.
 - Browser e2e RED first: start a real listener on the template's preferred Vite port, then run `vite --port <preferred>` through the normal shell/.bin path.
 - The test asserts Vite selects a different port, the LIVE pill/preview entry use that actual port, and `/preview/<actual-port>/` serves the Vite page.
 - The stale preferred port must not satisfy the assertion; the test fails if preview still points at `<preferred>`.
-- The test covers the normal shell/.bin path, not the legacy curated `bootDevServer` path.
+- The test covers the normal shell/.bin path; no alternate Vite boot path exists.
 
 ## Parity cases
 
@@ -33,9 +33,7 @@ publishes to LIVE/preview.
 
 ## Out of scope
 
-- Retiring `server.allowedHosts`; blocked by `service-worker/preview-blocked-host-hang`.
-- Retiring `optimizeDeps.noDiscovery`; blocked by real bundling esbuild support.
-- Deleting legacy direct Vite boot config; tracked in `playground/vite-curated-boot-residual-forces`.
+- User-config host-rejection settlement remains in `service-worker/preview-blocked-host-hang`.
 
 ## Decisions
 

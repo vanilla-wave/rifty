@@ -8,14 +8,18 @@ Date: 2026-06
 > loader, while the generic `.bin` child path becomes server-capable so real CLI
 > dev/preview ports still register in the playground.
 
+> Completion 2026-07-13: curated build/preview helpers, the direct Vite
+> `createServer` tail, and bespoke file-change IPC are deleted. Installed
+> `.bin/vite` is the only Vite execution path; node-server keeps its dedicated
+> child lifecycle.
+
 ## Context
 
 ADR-0148 made `vite` a co-resident owner command for HMR/preview control.
 ADR-0173 extended that curated command to Vite 7 build/preview via Vite's Node
 API. That kept core subcommands real enough for the milestone, but it bypassed
 the installed CLI: real Vite arg parsing, help/version, mode handling, and
-`vite.config.*` loading did not run. The interim guard
-`docs/backlog/playground/honest-vite-command-umbrella.md` closed silent gaps by
+`vite.config.*` loading did not run. Interim guards closed silent gaps by
 loud-rejecting unsupported args/config, but the project mission is maximal Node
 fidelity, not a permanent curated shim.
 

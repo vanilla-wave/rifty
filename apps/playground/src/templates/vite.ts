@@ -41,7 +41,6 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   install: { vite: '^7.0.0' },
   // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
-  runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
   estimatedBootSeconds: 20,
@@ -51,14 +50,4 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
     // path through visible user config, never a hidden CLI wrapper.
     '/vite.config.js': DEFAULT_VITE_CONFIG_JS,
   },
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
-  },
-  // Vite 7 uses the proven cross-realm native-HMR bridge; Vite 8 keeps HMR off
-  // separately until its Rolldown WASI socket path is re-proven (ADR-0161).
-  hmr: { enabled: true },
 };

@@ -210,7 +210,6 @@ export const TYPESCRIPT_TEMPLATE = {
   install: VITE_TEMPLATE.install,
   devDependencies: { typescript: '5.9.3' },
   bakedNodeModulesUrl: '/snapshots/typescript-node-modules.json.gz',
-  runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.ts', content: TYPESCRIPT_ENTRY_SOURCE },
   defaultPort: 5174,
   estimatedBootSeconds: 20,
@@ -227,12 +226,4 @@ export const TYPESCRIPT_TEMPLATE = {
     '/node_modules/@rifty/example-types/package.json': EXAMPLE_TYPES_PACKAGE_JSON,
     '/node_modules/@rifty/example-types/index.d.ts': EXAMPLE_TYPES_DTS,
   },
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
-  },
-  hmr: { enabled: true },
 } satisfies ViteProjectSpec;

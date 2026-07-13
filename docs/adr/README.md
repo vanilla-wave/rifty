@@ -155,6 +155,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0216 | Install tail latency: background command durability, generation-guarded stamps, learned-pin SWR |
 | 0241 | Install artifact identity for dependency trees |
+| 0243 | Visible Vite config ownership via durable root-local seed claim |
 
 ### toolchain-build
 
@@ -259,9 +260,15 @@ superseded.
 | 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
 | 0047 gojs-moot / JS-build-through-WASI clauses | 0226 | WASI remains the CLI forcing consumer; Vite JS API derives the exact upstream browser CJS client with a guest-VFS environment |
+| 0078 Vite runtime/config fields and direct `createServer` clauses | 0174 / note 2026-07-13 | Vite specs retain install/seed/UI data; installed `.bin/vite` owns execution |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
+| 0145 editor-write/plugin-injection clauses | 0174 / note 2026-07-13 | installed Vite polls the owner VFS; curated invalidation IPC/plugin injection are retired |
+| 0150 P6b Vite/file-change-IPC clauses | 0174 / note 2026-07-13 | dedicated child is node-server-only; Vite uses the generic `.bin` child; fs.* invariant stands |
+| 0161 `ProjectSpec.hmr` policy owner | 0174 / note 2026-07-13 | visible seeded Vite config owns Vite 8 `server.hmr: false` |
+| 0173 curated Node-API runner clause | 0174 / note 2026-07-13 | installed CLI owns build/preview/config/args; old helpers are deleted |
+| 0174 deferred curated-helper cleanup | 0174 note 2026-07-13 | direct Vite/helpers/file-change IPC deleted; installed `.bin/vite` is the only Vite path |
 | 0165 Starter bundle shape | 0165 note 2026-06-29 | preset `source` overlay removed; `files[]` is the ordinary file bundle and must include the template entry |
 | 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
 | 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
@@ -277,6 +284,7 @@ superseded.
 | 0187 command-site "returns only when durable" clause | 0216 | `npm install` exit no longer awaits the drain; the drain→gate→stamp sequence runs in background with pending-first demotion + generation-guarded promotion (every other 0187 clause stands) |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0216 | freshness is serve-stale-while-revalidate: fresh <1800s, stale ≤24h (served with the as-of line + one manifest-only background revalidate), dropped past 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
+| 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |

@@ -9,6 +9,10 @@ Date: 2026-06
 > `dist/` through the existing cross-realm preview bridge. Vite 8 build/preview
 > remains loud-rejected.
 
+> Correction 2026-07-13 (ADR-0174): decision 3's curated Node-API runner is
+> superseded. Installed `.bin/vite` owns build/preview/config/args; exact browser
+> runtime preparation happens before the CLI. The old helpers are deleted.
+
 ## Context
 
 The playground goal is real Node programs in Chromium, not a Vite-like stub.

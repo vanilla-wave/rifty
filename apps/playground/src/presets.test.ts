@@ -100,10 +100,14 @@ describe('playground presets', () => {
     expect(presetText(demo)).toContain('summarizeShape');
   });
 
-  it('keeps browser Vite presets as HMR accept boundaries', () => {
+  it('keeps HMR-enabled browser Vite presets as accept boundaries', () => {
     const browserVitePresets = PRESETS.filter((preset) => {
       const spec = resolveProjectSpec(preset.templateId ?? 'vite');
-      return preset.mode === 'real-vite' && spec.runtime === 'vite' && spec.hmr.enabled;
+      return (
+        preset.mode === 'real-vite' &&
+        spec.runtime === 'vite' &&
+        !spec.extraFiles?.['/vite.config.js']?.includes('hmr: false')
+      );
     });
 
     expect(browserVitePresets.map((preset) => preset.id)).toEqual([

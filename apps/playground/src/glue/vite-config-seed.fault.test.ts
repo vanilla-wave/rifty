@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  claimTemplateViteConfigSeed,
-  templateViteConfigSeedMarkerPath,
+  type ViteConfigSeedStore,
+  claimViteConfigSeed,
+  viteConfigSeedClaimPath,
 } from './vite-config-seed.ts';
 
 const enc = new TextEncoder();
@@ -9,50 +10,60 @@ const dec = new TextDecoder();
 const root = '/scratch';
 const config = '/scratch/vite.config.js';
 const seed = 'export default {};';
-const template = { id: 'vite', seedFiles: { [config]: seed } };
-const marker = templateViteConfigSeedMarkerPath(root);
+const starter = { id: 'real-vite', seedFiles: { [config]: seed } };
+const marker = viteConfigSeedClaimPath(root);
 
-function makeFs(initial: Readonly<Record<string, string>> = {}, failOnce: readonly string[] = []) {
-  const files = new Map<string, string>(Object.entries(initial));
-  const failures = new Set(failOnce);
+function faultStore(failPersistOnce: string): ViteConfigSeedStore & {
+  readonly files: Map<string, string>;
+  failed: boolean;
+} {
+  const files = new Map<string, string>();
+  let lastWrite = '';
   return {
     files,
-    existsSync: (path: string) => files.has(path),
-    readFileBytesSync: (path: string) => enc.encode(files.get(path) ?? ''),
-    mkdirSync: () => {},
-    writeFileSync: (path: string, data: Uint8Array) => {
-      if (failures.delete(path)) throw new Error(`quota exceeded: ${path}`);
+    failed: false,
+    async read(path) {
+      const value = files.get(path);
+      return value === undefined ? null : enc.encode(value);
+    },
+    async write(path, data) {
+      lastWrite = path;
       files.set(path, dec.decode(data));
+    },
+    async flush() {
+      if (!this.failed && lastWrite === failPersistOnce) {
+        this.failed = true;
+        throw new Error(`persist failed: ${lastWrite}`);
+      }
     },
   };
 }
 
-describe('claimTemplateViteConfigSeed torn writes', () => {
-  it('marker failure leaves healable config-without-marker', () => {
-    const fs = makeFs({}, [marker]);
-    expect(() => claimTemplateViteConfigSeed(root, fs, template)).toThrow(/quota/);
-    expect(fs.files.get(config)).toBe(seed);
-    expect(fs.files.has(marker)).toBe(false);
-    expect(claimTemplateViteConfigSeed(root, fs, template)).toBe(false);
-    expect(fs.files.has(marker)).toBe(true);
+describe('Vite config seed claim fault matrix', () => {
+  it('config persist failure writes no claim; retry heals exact config first', async () => {
+    const store = faultStore(config);
+    await expect(claimViteConfigSeed(root, store, starter)).rejects.toThrow(/persist failed/);
+    expect(store.files.get(config)).toBe(seed);
+    expect(store.files.has(marker)).toBe(false);
+
+    await expect(claimViteConfigSeed(root, store, starter)).resolves.toBe(false);
+    expect(store.files.has(marker)).toBe(true);
   });
 
-  it('config failure never writes marker and retry seeds both', () => {
-    const fs = makeFs({}, [config]);
-    expect(() => claimTemplateViteConfigSeed(root, fs, template)).toThrow(/quota/);
-    expect(fs.files.has(marker)).toBe(false);
-    expect(claimTemplateViteConfigSeed(root, fs, template)).toBe(true);
-    expect(fs.files.get(config)).toBe(seed);
-    expect(fs.files.has(marker)).toBe(true);
+  it('claim persist failure is loud; retry rewrites and drains the claim', async () => {
+    const store = faultStore(marker);
+    await expect(claimViteConfigSeed(root, store, starter)).rejects.toThrow(/persist failed/);
+    expect(store.files.get(config)).toBe(seed);
+    expect(store.files.has(marker)).toBe(true);
+
+    await expect(claimViteConfigSeed(root, store, starter)).resolves.toBe(false);
+    expect(JSON.parse(store.files.get(marker) ?? '')).toMatchObject({ schema: 1 });
   });
 
-  it('heals exact seed bytes but never marker-claims user bytes', () => {
-    const heal = makeFs({ [config]: seed });
-    expect(claimTemplateViteConfigSeed(root, heal, template)).toBe(false);
-    expect(heal.files.has(marker)).toBe(true);
-
-    const user = makeFs({ [config]: 'export default { plugins: [] };' });
-    expect(claimTemplateViteConfigSeed(root, user, template)).toBe(false);
-    expect(user.files.has(marker)).toBe(false);
+  it('exact config without claim completes a two-drain recovery', async () => {
+    const store = faultStore('never');
+    store.files.set(config, seed);
+    await expect(claimViteConfigSeed(root, store, starter)).resolves.toBe(false);
+    expect(store.files.has(marker)).toBe(true);
   });
 });

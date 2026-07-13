@@ -89,12 +89,6 @@ export const ALLOWLIST = [
   },
 
   {
-    file: 'apps/playground/src/workers/dev-server-boot.test.ts',
-    count: 1,
-    digest: 'cea1282fdc73',
-    why: 'ADR-0161 hmr flag is vite8-opt-in only (no default-lane seam); boot behavior heirs = in-file node tests + tests/browser-unit + e2e m7/generic-dev-server-lifecycle',
-  },
-  {
     file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
     count: 12,
     digest: '0c9f1de026ac',

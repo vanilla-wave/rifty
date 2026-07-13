@@ -32,7 +32,6 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
   runtime: 'vite',
   install: { vite: '8.0.16' },
   bakedNodeModulesUrl: '/snapshots/vite8-node-modules.json.gz',
-  runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
   estimatedBootSeconds: 25,
@@ -41,12 +40,4 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
     // Rolldown optimizer/HMR remain off in user-visible template policy.
     '/vite.config.js': VITE8_CONFIG_JS,
   },
-  server: {
-    appType: 'spa',
-    strictPort: true,
-    optimizeDepsDisabled: true,
-    host: true,
-    allowedHosts: true,
-  },
-  hmr: { enabled: false },
 };

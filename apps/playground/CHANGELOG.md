@@ -4,9 +4,18 @@
 
 ### Changed (exact Vite esbuild runtime)
 
-- Curated Vite 7 build/dev boot now publishes the same upstream-derived esbuild
-  CJS outer as the CLI before importing Vite; Vite 8/Rolldown skips it. The
-  retired WASI transform global and its wrapper are removed.
+- Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer
+  before execution; Vite 8/Rolldown skips it. The retired WASI transform global
+  and wrapper are removed.
+
+### Changed (installed Vite ownership, ADR-0174/0243)
+
+- Installed `.bin/vite` is the only Vite execution path. Retired direct
+  `createServer`, curated build/preview, module-invalidation IPC, and duplicate
+  ProjectSpec knobs are deleted; visible `vite.config.js` owns policy.
+- A versioned root-local seed claim preserves user config edits/deletion across
+  boot, reset, Save, and reload. Config then claim each pass a checked durable
+  drain; torn writes recover without silent resurrection.
 
 ### Changed (install artifact identity, ADR-0241)
 
@@ -14,8 +23,8 @@
   `package.json` text plus the generated installer/shim/runtime identity.
   Legacy or mismatched claims are untrusted and re-run arrival; one shared
   constructor/parser owns async and sync stamp shapes. Committed snapshots
-  migrated only after byte-exact comparison of every embedded shadow artifact;
-  CI repeats that proof and otherwise requires a full bake.
+  were fully rebaked. CI is read-only: stale metadata, shim bytes, or canonical
+  archive drift requires a full bake; no checker can relabel an old tree.
 
 ### Fixed (File Explorer context menu placement)
 

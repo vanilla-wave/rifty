@@ -21,12 +21,6 @@ export interface DevServerHandle {
   readonly previewScope?: string;
   /** `server.close()` + bridge disposal; idempotent. */
   stop(): Promise<void>;
-  /**
-   * Invalidate a changed file + broadcast HMR (vite only; no-op for a node
-   * server). The owner's single vfs-write handler forwards editor writes here so
-   * the preview live-updates — the virtual FS fires no real watcher events.
-   */
-  onFileChanged?(path: string): void;
 }
 
 /** Registry surface the controller drives (PreviewRegistry satisfies it). */
@@ -65,8 +59,6 @@ export interface DevServerController {
     sid?: string,
     cwd?: string,
   ): Promise<void>;
-  /** Forward an editor write to the running server's HMR (no-op when stopped). */
-  notifyFileChanged(path: string): void;
   readonly status: DevServerStatus;
 }
 
@@ -84,9 +76,6 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
   return {
     get status() {
       return status;
-    },
-    notifyFileChanged(path: string): void {
-      if (status === 'running' && active) active.onFileChanged?.(path);
     },
     async run(
       signal: AbortSignal,

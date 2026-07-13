@@ -5,7 +5,7 @@ title: Vite preview CORS middleware parity over the browser preview bridge
 created: 2026-06-28
 why: Vite 7 `preview` now runs through the real installed CLI, but the browser bridge serves preview traffic same-origin at `/preview/<port>/`; Vite's preview CORS middleware is disabled in the CLI source patch until that cross-origin surface is faithfully modelled.
 user_story: As a developer using `vite preview` in rifty, I want preview HTTP headers and CORS behavior to match real Vite where observable, or to see a loud tracked ceiling instead of a silent sandbox-only divergence.
-sources: [ADR-0173, docs/backlog/playground/honest-vite-command-umbrella.md]
+sources: [ADR-0173, ADR-0174]
 code: [apps/playground/src/workers/vite-cli-prep.ts, tests/e2e/vite7-build-preview.spec.ts]
 ---
 

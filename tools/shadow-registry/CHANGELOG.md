@@ -7,6 +7,12 @@
 - Alias shims declare the exact public API version they materialize, allowing
   npm-client to reject incompatible source ranges before applying a baked
   substitution.
+- Final esbuild shape replaces the interim bridge/dual-entry facade with one
+  install-time CJS overlay backed by the exact Worker runtime slot
+  (ADR-0226/0242).
+- Snapshot drift checking is read-only. Legacy metadata or current contract
+  drift requires `pnpm snapshots:bake`; the former relabeling migrator is
+  deleted.
 
 - **Shim data restructured for install-time application (ADR-0188).** New `internalsShims`
   table keyed by the INSTALLED trigger package with package-relative file paths, a proven
@@ -36,7 +42,7 @@
   internals-shim bytes, esbuild policy, and generated-runtime output identity;
   the PR gate rejects a stale generated identity (ADR-0241).
 - A machine-readable esbuild 0.28.0 derivation policy and exact-text patch
-  engine pin all ten ADR-0226 mutation sites. Missing, duplicate, overlapping,
+  engine pin all twelve ADR-0226/0242 mutation sites. Missing, duplicate, overlapping,
   or reordered anchors fail before generation; the audit records input/output
   spans and SHA-256 digests.
 - **esbuild 0.28.0 Vite Contract+RED (ADR-0226).** Row-addressable live oracle

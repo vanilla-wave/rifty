@@ -13,6 +13,9 @@ import { type FilesOwnerLike, createWorkspaceFiles } from './workspace-files.ts'
 class FakeOwner implements FilesOwnerLike {
   alive = true;
   writes: Array<{ path: string; data: Uint8Array; ifAbsent?: boolean }> = [];
+  reads: string[] = [];
+  events: string[] = [];
+  durableFlushes = 0;
   files = new Map<string, Uint8Array>();
   archive = '{"files":{}}';
   imported: string[] = [];
@@ -24,8 +27,9 @@ class FakeOwner implements FilesOwnerLike {
     return this.alive;
   }
   async readFileBytes(path: string): Promise<Uint8Array> {
+    this.reads.push(path);
     const bytes = this.files.get(path);
-    if (!bytes) throw new Error(`ENOENT ${path}`);
+    if (!bytes) throw new Error(`ENOENT: ${path}`);
     return bytes;
   }
   async writeFrameAcked(frame: {
@@ -35,6 +39,13 @@ class FakeOwner implements FilesOwnerLike {
     ifAbsent?: boolean;
   }): Promise<void> {
     this.writes.push({ path: frame.path, data: frame.data, ifAbsent: frame.ifAbsent });
+    this.events.push(`write:${frame.path}`);
+    if (frame.ifAbsent && this.files.has(frame.path)) return;
+    this.files.set(frame.path, frame.data.slice());
+  }
+  async flushDurable(): Promise<void> {
+    this.durableFlushes += 1;
+    this.events.push('flush');
   }
   async exportArchive(): Promise<string> {
     return this.archive;
@@ -115,7 +126,7 @@ describe('SSoT editor write (ADR-0148 owner-routed)', () => {
 });
 
 describe('starter re-seed (owner realm, package.json install-owned)', () => {
-  it('seeds every REAL starter file except the root package.json', async () => {
+  it('claims the initial visible Vite config with two durability drains, then seeds generic files', async () => {
     const h = new Harness();
     await h.files().seedOwner(REACT_PRESET);
     expect(h.owner.writes.length).toBeGreaterThan(1);
@@ -123,15 +134,107 @@ describe('starter re-seed (owner realm, package.json install-owned)', () => {
     expect(paths).not.toContain('/scratch/package.json'); // install-owned after boot
     expect(paths.every((p) => p.startsWith('/scratch/'))).toBe(true);
     expect(paths).toContain('/scratch/index.html'); // seed covers the HTML, not just the entry
+    expect(paths.filter((path) => path === '/scratch/vite.config.js')).toHaveLength(1);
+    expect(paths.filter((path) => path === '/scratch/.rifty/vite-config.seeded')).toHaveLength(1);
     expect(h.owner.writes.every((w) => w.ifAbsent === undefined)).toBe(true);
+    expect(h.owner.events.slice(0, 4)).toEqual([
+      'write:/scratch/vite.config.js',
+      'flush',
+      'write:/scratch/.rifty/vite-config.seeded',
+      'flush',
+    ]);
+    expect(h.owner.durableFlushes).toBe(2);
+    expect(new TextDecoder().decode(h.owner.files.get('/scratch/.rifty/vite-config.seeded'))).toBe(
+      '{"schema":1,"file":"vite.config.js","starter":"real-vite"}\n',
+    );
   });
 
-  it('ifAbsent (reload re-seed) never clobbers a persisted edit', async () => {
+  it('ifAbsent applies only to generic seed files; the config slot stays claim-owned', async () => {
     const h = new Harness();
     await h.files().seedOwner(REACT_PRESET, true);
     expect(h.owner.writes.length).toBeGreaterThan(0);
-    expect(h.owner.writes.every((w) => w.ifAbsent === true)).toBe(true);
-    expect(h.owner.writes.map((w) => w.path)).not.toContain('/scratch/vite.config.js');
+    const genericWrites = h.owner.writes.filter(
+      (write) =>
+        write.path !== '/scratch/vite.config.js' &&
+        write.path !== '/scratch/.rifty/vite-config.seeded',
+    );
+    expect(genericWrites.every((write) => write.ifAbsent === true)).toBe(true);
+    expect(h.owner.writes.filter((write) => write.path === '/scratch/vite.config.js')).toHaveLength(
+      1,
+    );
+  });
+
+  it('reload preserves a marker-recorded config deletion', async () => {
+    const h = new Harness();
+    const files = h.files();
+    await files.seedOwner(REACT_PRESET);
+    h.owner.files.delete('/scratch/vite.config.js');
+    h.owner.writes = [];
+
+    await files.seedOwner(REACT_PRESET, true);
+
+    expect(h.owner.files.has('/scratch/vite.config.js')).toBe(false);
+    expect(h.owner.writes.map((write) => write.path)).not.toContain('/scratch/vite.config.js');
+    expect(h.owner.files.has('/scratch/.rifty/vite-config.seeded')).toBe(true);
+  });
+
+  it('reload preserves user-edited config bytes', async () => {
+    const h = new Harness();
+    const files = h.files();
+    await files.seedOwner(REACT_PRESET);
+    const edited = new TextEncoder().encode('export default { server: { hmr: false } };\n');
+    h.owner.files.set('/scratch/vite.config.js', edited);
+    h.owner.writes = [];
+
+    await files.seedOwner(REACT_PRESET, true);
+
+    expect(h.owner.files.get('/scratch/vite.config.js')).toEqual(edited);
+    expect(h.owner.writes.map((write) => write.path)).not.toContain('/scratch/vite.config.js');
+  });
+
+  it('propagates a non-missing owner read failure instead of treating it as absence', async () => {
+    const h = new Harness();
+    h.owner.readFileBytes = async () => {
+      throw new Error('EIO: owner read failed');
+    };
+    await expect(h.files().seedOwner(REACT_PRESET)).rejects.toThrow('EIO: owner read failed');
+    expect(h.owner.writes).toEqual([]);
+  });
+
+  it('propagates a failed durability drain and never writes the claim', async () => {
+    const h = new Harness();
+    h.owner.flushDurable = async () => {
+      throw new Error('persist failed');
+    };
+    await expect(h.files().seedOwner(REACT_PRESET)).rejects.toThrow('persist failed');
+    expect(h.owner.files.has('/scratch/vite.config.js')).toBe(true);
+    expect(h.owner.files.has('/scratch/.rifty/vite-config.seeded')).toBe(false);
+  });
+
+  it('propagates owner death even when the rejected read looks like ENOENT', async () => {
+    const h = new Harness();
+    const owner = h.owner;
+    owner.readFileBytes = async (path) => {
+      owner.alive = false;
+      throw new Error(`ENOENT: ${path}`);
+    };
+    await expect(h.files().seedOwner(REACT_PRESET)).rejects.toThrow(
+      'workspace owner is unavailable — cannot inspect vite-config.seeded',
+    );
+    expect(owner.writes).toEqual([]);
+  });
+
+  it('propagates owner replacement even when the rejected read looks like not-found', async () => {
+    const h = new Harness();
+    const owner = h.owner;
+    owner.readFileBytes = async () => {
+      h.owner = new FakeOwner('/scratch', 2);
+      throw new Error('not-found: marker');
+    };
+    await expect(h.files().seedOwner(REACT_PRESET)).rejects.toThrow(
+      'workspace owner changed while inspecting vite-config.seeded',
+    );
+    expect(owner.writes).toEqual([]);
   });
 });
 

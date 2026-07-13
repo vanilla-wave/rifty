@@ -14,6 +14,7 @@ import {
 } from './project-index-port.ts';
 import type { ProjectIndex } from './project-index.ts';
 import { loadIndex, writeIndex } from './project-index.ts';
+import { viteConfigSeedClaimPath } from './vite-config-seed.ts';
 
 // In-process BroadcastChannel fake (node env has none): a name-keyed bus.
 class FakeChannel {
@@ -267,10 +268,10 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const fs = scratchOwnerFs('alpha-slow-flush');
     let releaseFlush!: () => void;
     let flushStarted = 0;
-    const flush = (): Promise<void> => {
+    const flush = (): Promise<undefined> => {
       flushStarted++;
-      return new Promise<void>((resolve) => {
-        releaseFlush = resolve;
+      return new Promise<undefined>((resolve) => {
+        releaseFlush = () => resolve(undefined);
       });
     };
     const tearOwner = serveProjectIndex(PORT, fs, '/', flush);
@@ -365,8 +366,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
 
-    setActiveIndex(PORT, 'p-2');
-    await Promise.resolve();
+    await setActiveIndex(PORT, 'p-2');
 
     // Durable on disk + re-published, so a respawned owner reads p-2 (no revert).
     expect(received.at(-1)?.activeId).toBe('p-2');
@@ -406,8 +406,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
 
-    newScratchIndex(PORT, 'node-worker');
-    await Promise.resolve();
+    await newScratchIndex(PORT, 'node-worker');
 
     // A fresh scratch entry + activeId re-pointed to scratch; the prior project stays.
     const reply = received.at(-1);
@@ -416,8 +415,16 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(reply?.projects).toMatchObject([{ id: 'p-1' }]);
     // /scratch re-seeded from the starter bundle.
     expect(fs.existsSync('/scratch/src/main.js')).toBe(true);
+    expect(fs.existsSync('/scratch/vite.config.js')).toBe(true);
+    expect(JSON.parse(readUtf8(fs, viteConfigSeedClaimPath('/scratch')))).toMatchObject({
+      schema: 1,
+      starter: 'node-worker',
+      file: 'vite.config.js',
+    });
     // The Save precondition now holds (no throw).
-    expect(() => saveProjectIndex(PORT, 'p-2', 'B', 'node-worker')).not.toThrow();
+    await expect(saveProjectIndex(PORT, 'p-2', 'B', 'node-worker')).resolves.toMatchObject({
+      activeId: 'p-2',
+    });
 
     dispose();
     tearOwner();
@@ -500,14 +507,19 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
 
-    resetScratchIndex(PORT, 'project-files');
-    await Promise.resolve();
+    await resetScratchIndex(PORT, 'project-files');
 
     // The stray marker is gone (whole-workspace re-seed) and the starter baseline
     // is written back (the entry the starter seeds is present).
     expect(fs.existsSync('/scratch/marker.txt')).toBe(false);
     expect(fs.existsSync('/scratch')).toBe(true);
     expect(fs.existsSync('/scratch/src/main.js')).toBe(true);
+    expect(fs.existsSync('/scratch/vite.config.js')).toBe(true);
+    expect(JSON.parse(readUtf8(fs, viteConfigSeedClaimPath('/scratch')))).toMatchObject({
+      schema: 1,
+      starter: 'project-files',
+      file: 'vite.config.js',
+    });
 
     // Index: scratch dirty cleared, still scratch-active.
     const reply = received.at(-1);
@@ -527,13 +539,45 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, () => {});
     await Promise.resolve();
 
-    resetScratchIndex(PORT, 'project-files');
-    await Promise.resolve();
+    await resetScratchIndex(PORT, 'project-files');
     // The reset published a fresh FILE snapshot so the editor/explorer reflect the
     // restored tree — without this the on-disk re-seed would be invisible.
     expect(refreshed).toBe(1);
 
     dispose();
+    tearOwner();
+  });
+
+  it('index-reset proves config then claim durable before git, refresh, and ack', async () => {
+    const fs = scratchOwnerFs('user-edits');
+    const marker = viteConfigSeedClaimPath('/scratch');
+    const events: string[] = [];
+    const flush = async (): Promise<undefined> => {
+      events.push(
+        fs.existsSync(marker)
+          ? 'flush:claim'
+          : fs.existsSync('/scratch/vite.config.js')
+            ? 'flush:config'
+            : 'flush:baseline',
+      );
+      return undefined;
+    };
+    const tearOwner = serveProjectIndex(
+      PORT,
+      fs,
+      '/',
+      flush,
+      () => events.push('refresh'),
+      async () => {
+        expect(fs.existsSync('/scratch/vite.config.js')).toBe(true);
+        expect(fs.existsSync(marker)).toBe(true);
+        events.push('git');
+      },
+    );
+
+    await resetScratchIndex(PORT, 'project-files');
+
+    expect(events).toEqual(['flush:config', 'flush:claim', 'git', 'flush:claim', 'refresh']);
     tearOwner();
   });
 
@@ -557,14 +601,19 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
 
-    resetProjectIndex(PORT, 'p-1');
-    await Promise.resolve();
+    await resetProjectIndex(PORT, 'p-1');
 
     // Tree restored from the starter bundle: edit reverted, stray + node_modules gone.
     expect(readUtf8(fs, '/projects/p-1/src/main.js')).not.toBe('user-edited-source');
     expect(fs.existsSync('/projects/p-1/stray.txt')).toBe(false);
     expect(fs.existsSync('/projects/p-1/node_modules')).toBe(false);
     expect(fs.existsSync('/projects/p-1/src/main.js')).toBe(true);
+    expect(fs.existsSync('/projects/p-1/vite.config.js')).toBe(true);
+    expect(JSON.parse(readUtf8(fs, viteConfigSeedClaimPath('/projects/p-1')))).toMatchObject({
+      schema: 1,
+      starter: 'project-files',
+      file: 'vite.config.js',
+    });
     // editedAt bumped; live snapshot refreshed; project still listed.
     expect(received.at(-1)?.projects).toMatchObject([{ id: 'p-1', name: 'A' }]);
     expect(received.at(-1)?.projects[0]?.editedAt).not.toBe('old');

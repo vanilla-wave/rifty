@@ -2,7 +2,7 @@
  * Owner-realm supervised dev-server child (ADR-0150 P6b): the dev server runs in
  * a serve:true child worker reading+writing the owner store over fs.* sync-RPC
  * (RIFTY_REMOTE_FS=1). The owner stays a free async supervisor — blocking work
- * (vite transform/install) left its thread. Mirrors owner-child-bin-executor.ts,
+ * (module loading and user code) left its thread. Mirrors owner-child-bin-executor.ts,
  * but the child is a long-lived SERVER (serve:true), not run-to-completion.
  */
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
@@ -11,8 +11,6 @@ import type { DevServerHandle } from './dev-server-controller.ts';
 
 export interface DevServerChildSpawnParams {
   readonly templateId: string;
-  readonly slug: string;
-  readonly setup: 'instant' | 'from-scratch';
   readonly root: string;
   /** The template's real dev port (distinct from the owner's 59124 bridge key). */
   readonly devPort: number;
@@ -36,18 +34,12 @@ export function buildDevServerChildSpawnSpec(
     env: {
       RIFTY_REMOTE_FS: '1',
       RIFTY_RFV_TEMPLATE: params.templateId,
-      RIFTY_RFV_SLUG: params.slug,
-      RIFTY_RFV_SETUP: params.setup,
       RIFTY_RFV_ROOT: params.root,
       RIFTY_DEV_PORT: String(params.devPort),
       ...(params.previewScope === undefined ? {} : { RIFTY_PREVIEW_SCOPE: params.previewScope }),
-      // Rolldown (Vite 8 bundler) ships a napi-rs loader that tries every native
-      // `@rolldown/binding-<platform>` first; in rifty those all throw
-      // ENATIVEUNSUPPORTED, then its `@rolldown/binding-wasm32-wasi` attempt is
-      // made but its error is SWALLOWED unless this is set — so a failed WASI
-      // load surfaced only as the generic "Cannot find native binding". rifty has
-      // no native bindings by construction, so force the WASI path and make its
-      // load errors loud (ADR-0156 / ADR-0051 WASI policy).
+      // rifty has no native bindings by construction. Force napi-rs consumers
+      // onto their WASI path so a failed WASI load stays loud instead of falling
+      // through to the generic "Cannot find native binding" diagnostic.
       NAPI_RS_FORCE_WASI: '1',
       ...(workerUrls.kernelWorkerUrl
         ? { RIFTY_KERNEL_WORKER_URL: workerUrls.kernelWorkerUrl }
@@ -60,8 +52,7 @@ export function buildDevServerChildSpawnSpec(
       // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach
       // the entry across the PROD process-globals clobber — the entry reads its
       // env from the spawn-time KernelProcessSpec.env (the clobber-safe source),
-      // which inherits the OWNER's PORT (the default vite template's 5174) unless
-      // we override it here.
+      // which otherwise inherits the owner's spawn-time PORT unless overridden.
       PORT: String(params.devPort),
     },
     cwd: params.root,
@@ -83,7 +74,6 @@ export interface DevServerChildHandle {
   stderr(): DevReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
-  send(message: unknown): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -100,13 +90,11 @@ export interface DevServerChildBootOpts {
   readonly onPortsChanged?: (ports: readonly number[], previewScope?: string) => void;
   /**
    * Drain the OWNER realm's OPFS write-through before boot resolves (ADR-0072 /
-   * ADR-0150 P6b). The child writes node_modules into the owner store over fs.*
-   * RPC, filling the owner's async write-through queue; the child's own
+   * ADR-0150 P6b). The child may write into the owner store over fs.* RPC,
+   * filling the owner's async write-through queue; the child's own
    * `flushSyncMirror` is a no-op (its remote `SyncRpcFsSync` has no `flush`). So
-   * on `rifty:dev-ready` the owner drains ITS queue here — matching the pre-P6b
-   * in-owner install flush — leaving the queue empty for subsequent (small)
-   * shell writes, which then persist to durable OPFS before a reload terminates
-   * the owner worker. Optional: absent on the memory backend (flush no-ops).
+   * on `rifty:dev-ready` the owner drains its queue here before publishing a
+   * live server. Optional: absent on the memory backend (flush no-ops).
    * Ordering-only: the persist report (ADR-0187 Corrected) is ignored here.
    */
   readonly flush?: () => Promise<unknown>;
@@ -173,9 +161,6 @@ export function createOwnerChildDevServer(
         const makeHandle = (port: number, previewScope?: string): DevServerHandle => ({
           port,
           ...(previewScope === undefined ? {} : { previewScope }),
-          onFileChanged(path: string) {
-            handle.send({ type: 'rifty:dev-file-changed', path });
-          },
           async stop() {
             outputClosed = true;
             await new Promise<void>((res) => {
@@ -194,11 +179,8 @@ export function createOwnerChildDevServer(
           if (!isDevServerChildMessage(message)) return;
           const m = message as DevServerChildMessage;
           if (m.type === 'rifty:dev-ready') {
-            // Drain the OWNER's OPFS write-through (the child's install landed in
-            // it over fs.* RPC) BEFORE resolving — so the controller goes LIVE
-            // only once the owner store is durable, matching the pre-P6b in-owner
-            // install flush. `flush` never rejects (flushSyncMirror swallows);
-            // a stray rejection still resolves boot (the server IS listening).
+            // Drain the owner's OPFS write-through before resolving. A stray
+            // rejection still resolves boot: the server is already listening.
             const ready = m.port;
             Promise.resolve(opts.flush?.()).then(
               () => finish(() => resolve(makeHandle(ready, m.previewScope))),

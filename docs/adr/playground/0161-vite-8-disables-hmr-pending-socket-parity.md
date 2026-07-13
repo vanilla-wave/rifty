@@ -6,6 +6,10 @@ Date: 2026-06
 > TL;DR: The Vite 8 template disables HMR until the native socket/HMR path is
 > re-proven against Rolldown's WASI worker pool.
 
+> Correction 2026-07-13 (ADR-0174): Vite 8's visible seeded
+> `vite.config.js` owns `server.hmr: false`; the retired `ProjectSpec.hmr` field
+> no longer carries this policy. The HMR-off decision is unchanged.
+
 ## Context
 
 ADR-0145 requires Real-Vite HMR to be Vite-owned through native `server.ws`

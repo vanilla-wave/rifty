@@ -46,6 +46,7 @@ import {
   revalidateLearnedPin,
   writeLearnedPin,
 } from '../glue/eddy-learned-pins.ts';
+import { flushSyncMirror } from '../glue/flush-sync-mirror.ts';
 import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
 import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
@@ -94,7 +95,11 @@ import {
   isVfsFlushIpcMessage,
   serveVfsWrites,
 } from '../glue/vfs-write-port.ts';
-import { claimTemplateViteConfigSeed, isViteConfigSlotPath } from '../glue/vite-config-seed.ts';
+import {
+  claimViteConfigSeed,
+  syncViteConfigSeedStore,
+  withoutViteConfigSeedFiles,
+} from '../glue/vite-config-seed.ts';
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
 import { serveWorkspaceFileReads } from '../glue/workspace-file-read-port.ts';
 import { DEFAULT_PRESET } from '../presets.ts';
@@ -106,7 +111,6 @@ import {
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
-import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import {
   type NodeInvocation,
@@ -169,15 +173,19 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
 }
 
-function seedProject(cfg: BootstrapConfig, templateId: string): void {
+async function seedProject(cfg: BootstrapConfig, starterId: string): Promise<void> {
   const fs = syncMirror();
-  claimTemplateViteConfigSeed(cfg.root, fs, { id: templateId, seedFiles: cfg.seedFiles });
+  await claimViteConfigSeed(cfg.root, syncViteConfigSeedStore(fs, flushSyncMirror), {
+    id: starterId,
+    seedFiles: cfg.seedFiles,
+  });
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
-  for (const [path, content] of Object.entries(cfg.seedFiles)) {
+  for (const [path, content] of Object.entries(
+    withoutViteConfigSeedFiles(cfg.root, cfg.seedFiles),
+  )) {
     const np = normalizePath(path);
-    if (isViteConfigSlotPath(np, cfg.root)) continue;
     fs.mkdirSync(dirname(np), { recursive: true });
     if (!fs.existsSync(np)) {
       fs.writeFileSync(np, enc.encode(content));
@@ -200,7 +208,8 @@ function seedProject(cfg: BootstrapConfig, templateId: string): void {
 
 function seedStarterBaseline(starter: string, root: string): void {
   const fs = syncMirror();
-  for (const [path, content] of Object.entries(seedFilesForStarter(starterById(starter), root))) {
+  const files = withoutViteConfigSeedFiles(root, seedFilesForStarter(starterById(starter), root));
+  for (const [path, content] of Object.entries(files)) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
@@ -431,7 +440,7 @@ async function bootShellOwner(opts: {
   if (hiddenEmptyBoot) {
     syncMirror().mkdirSync(cfg.root, { recursive: true });
   } else {
-    seedProject(cfg, spec.id);
+    await seedProject(cfg, starter);
     if (freshRoot) seedStarterBaseline(starter, cfg.root);
     // Instant presets: pre-seed node_modules from the baked snapshot into the
     // owner store NOW, before any dev line (the full fs is already present);
@@ -523,8 +532,8 @@ async function bootShellOwner(opts: {
     }
   }
 
-  // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
-  // on demand, reading the realm's installed tree → it sees terminal-installed deps.
+  // Dedicated node-server lifecycle. Vite scripts bypass this controller and
+  // run through the installed CLI child below.
   const devServer = createDevServerController({
     lifecycle: previews,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
@@ -589,8 +598,6 @@ async function bootShellOwner(opts: {
         log: devLog,
         params: {
           templateId: devSpec.id,
-          slug: devSlug,
-          setup: devFromScratch ? 'from-scratch' : 'instant',
           // The dev server listens on the template port (devCfg.port), distinct
           // from `port` (the owner's snapshot/nm/vfs-write bridge key).
           root: devCfg.root,
@@ -617,11 +624,8 @@ async function bootShellOwner(opts: {
 
   // Editor writes land via the vfs-write bridge. Foreground CLI children observe
   // them through polling fs.watch over the remote sync mirror.
-  const onVfsWrite = (paths: readonly string[]): void => {
+  const onVfsWrite = (_paths: readonly string[]): void => {
     publishOwnerState();
-    for (const path of paths) {
-      devServer.notifyFileChanged(path);
-    }
   };
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
   const tearGitBridge = serveGitOwnerRpc(port, ownerGit);
