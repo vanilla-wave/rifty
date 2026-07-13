@@ -10,6 +10,9 @@
 - One bounded static-asset reader owns esbuild WASM and dependency snapshots:
   header/body no-progress and byte overflow fail finitely; esbuild publishes no
   slot, while a broken snapshot falls back to normal install.
+- Browser-unit runs force a cold host optimizer; Worker/child-only `sql.js` and
+  `typescript` prebundle before tests, preventing optimizer full reloads from
+  dropping owner state or hiding fresh-CI failures behind a warm local cache.
 
 ### Changed (installed Vite ownership, ADR-0174/0243)
 

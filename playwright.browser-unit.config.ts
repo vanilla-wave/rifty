@@ -35,9 +35,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    // `npx vite` directly (not `pnpm dev`): bypasses pnpm script indirection
-    // (registry deps-status-check can stall) — same binary, same config.
-    command: 'npx vite',
+    // Cold optimizer makes worker-only dependency drift fail locally and in CI.
+    command: 'npx vite --force',
     cwd: './apps/playground',
     // Poll the harness page itself: proves the file is served, not just index.
     url: `http://localhost:${port}/unit-harness.html`,

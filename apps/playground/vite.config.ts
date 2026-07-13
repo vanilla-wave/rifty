@@ -88,9 +88,8 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['monaco-editor'],
-    // Pre-bundle upfront: sql.js is CJS and first imported from the real-vite
-    // worker chunk — discovering it lazily makes dev Vite re-optimize and
-    // FULL-RELOAD the page mid-session (drops the selected preset/dev server).
-    include: ['sql.js'],
+    // Pre-bundle deps first seen from Worker/child graphs. Late discovery makes
+    // dev Vite re-optimize and FULL-RELOAD the page mid-session (drops owner state).
+    include: ['sql.js', 'typescript'],
   },
 });
