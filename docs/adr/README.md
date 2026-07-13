@@ -57,6 +57,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
+| 0231 | Host-owned bootstrap config for recursive node workers |
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
 | 0239 | fromWeb arguments have one staged validation owner |
@@ -226,6 +227,14 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0116 | Persisted terminal session state |
 | 0120 | AI command suggestions |
 | 0122 | Raw stdin and mouse reporting |
+| 0225 | Cross-realm PTY resize control plane |
+| 0230 | Owner PTY stdin pump for supervised Node children |
+
+### distribution
+
+| # | Title |
+|---|---|
+| 0224 | Deep Workbench project sessions over generic runtimes |
 
 ## Superseded (removed)
 

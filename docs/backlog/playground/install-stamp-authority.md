@@ -7,7 +7,7 @@ why: the stamp's trust invariant is held by ~7 scattered mechanisms across 3 mod
 user_story: As a developer, I want reload/switch/two-terminal installs at any moment to always reopen a provably honest tree, but today that holds only because seven hand-rolled guards each close one known interleaving — the writer-set invariant has no owner.
 epic: trusted-state-authority
 blocked_by: []
-sources: [docs/adr/playground/0216-install-tail-latency-background-command-durability-generation-guarded-stamps-learned-pin-swr.md, docs/process/fault-classes.md]
+sources: [ADR-0224, docs/adr/playground/0216-install-tail-latency-background-command-durability-generation-guarded-stamps-learned-pin-swr.md, docs/process/fault-classes.md]
 code: [apps/playground/src/glue/install-stamp.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/glue/project-deps.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
 ---
 
@@ -74,8 +74,8 @@ parity of install exit semantics already pinned by ADR-0216 tests.
 
 ## Decisions
 
-- IRREVERSIBLE-ish module boundary → new ADR at implementation start
-  (supersedes the coordination clauses of ADR-0216 §2; the audit section
-  already names this as the not-delivered structural kill).
+- ADR-0224 ratifies one owner-realm package-acquisition/stamp authority; no new
+  ADR at implementation start. The implementation PR adds a dated correction
+  to ADR-0216 for the replaced coordination clauses.
 - The claim stays a real file at the current path (honest, cat-able,
   delete-with-tree = revocation) — no registry/hidden state.

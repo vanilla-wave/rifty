@@ -11,7 +11,7 @@ sources: [M12, docs/backlog/distribution/ai-ide-pi-agent-harness.md, docs/backlo
 ## Context
 
 Generic IDE atoms (editor / terminal / preview / filetree) stay in rifty (EPIC C/D:
-workbench-controllers + framework-bindings-kit). The agent-specific surface — chat panel,
+deep Workbench project sessions + framework-bindings-kit). The agent-specific surface — chat panel,
 streamed tool-call rendering, diff + approve-gate, session history — is PRODUCT UI on the
 AI side, consuming those atoms plus the M12 harness events. Same boundary as D-002: the
 generic kit is reusable; the agent UI lives in the consumer.
