@@ -29,6 +29,11 @@ export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
 export { SyncRpcFsSync, installRemoteSyncFs } from './ipc/sync-rpc-fs.ts';
 export type { SyncCall } from './ipc/sync-rpc-fs.ts';
+export {
+  publishRuntimeEsbuild,
+  readRuntimeEsbuild,
+  type RuntimeEsbuildCjsOuter,
+} from './internal/worker-globals.ts';
 export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
 export { installConsole, type ConsoleSink } from './repl/console.ts';
 export {

@@ -13,12 +13,6 @@ export interface DevReadyMessage {
   readonly port: number;
   readonly previewScope?: string;
 }
-/** Child→owner: vite preview is listening on `port` (adds the production preview slot). */
-export interface PreviewReadyMessage {
-  readonly type: 'rifty:preview-ready';
-  readonly port: number;
-  readonly previewScope?: string;
-}
 /** Child→owner: boot failed (rejects the controller boot → recoverable). */
 export interface DevErrorMessage {
   readonly type: 'rifty:dev-error';
@@ -40,17 +34,9 @@ export interface DevPortsMessage {
 }
 export type DevServerChildMessage =
   | DevReadyMessage
-  | PreviewReadyMessage
   | DevErrorMessage
   | DevSnapshotMessage
   | DevPortsMessage;
-
-/** Owner→child: an editor write — forward to the running server's HMR. */
-export interface DevFileChangedMessage {
-  readonly type: 'rifty:dev-file-changed';
-  readonly path: string;
-}
-export type DevServerOwnerMessage = DevFileChangedMessage;
 
 function optionalPreviewScope(c: { readonly previewScope?: unknown }): boolean {
   return c.previewScope === undefined || typeof c.previewScope === 'string';
@@ -68,7 +54,6 @@ export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage 
   // on `/preview/NaN/`). error keeps a plain string check: an error frame MUST
   // reject boot even with a thin message, else dropping it would hang the boot.
   if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
-  if (c.type === 'rifty:preview-ready') return Number.isInteger(c.port) && optionalPreviewScope(c);
   if (c.type === 'rifty:dev-error') return typeof c.message === 'string';
   if (c.type === 'rifty:dev-ports') {
     const ports = (m as { ports?: unknown }).ports;
@@ -77,10 +62,4 @@ export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage 
     );
   }
   return c.type === 'rifty:dev-snapshot';
-}
-
-export function isDevServerOwnerMessage(m: unknown): m is DevServerOwnerMessage {
-  if (!m || typeof m !== 'object') return false;
-  const c = m as { type?: unknown; path?: unknown };
-  return c.type === 'rifty:dev-file-changed' && typeof c.path === 'string';
 }

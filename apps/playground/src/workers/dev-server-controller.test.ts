@@ -110,26 +110,6 @@ describe('createDevServerController', () => {
     await run;
   });
 
-  it('notifyFileChanged forwards to the running handle only', async () => {
-    const changed: string[] = [];
-    const { ctrl } = wired(async () => ({
-      port: 5174,
-      stop: async () => {},
-      onFileChanged: (p) => changed.push(p),
-    }));
-    // stopped: forwarding is a no-op
-    ctrl.notifyFileChanged('/workspace/src/a.js');
-    expect(changed).toEqual([]);
-    const ac = new AbortController();
-    const run = ctrl.run(ac.signal);
-    await Promise.resolve();
-    await Promise.resolve();
-    ctrl.notifyFileChanged('/workspace/src/b.js');
-    expect(changed).toEqual(['/workspace/src/b.js']);
-    ac.abort();
-    await run;
-  });
-
   it('a boot failure emits stopped{error} and stays recoverable', async () => {
     let calls = 0;
     const { ctrl, dev } = wired(async () => {

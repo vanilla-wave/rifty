@@ -46,6 +46,7 @@
     "build": "tsup"
   },
   "devDependencies": {
+    "@riftydev/vfs": "workspace:*",
     "esbuild": "0.28.0",
     "esbuild-wasm": "0.28.0"
   }

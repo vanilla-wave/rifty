@@ -21,9 +21,12 @@ separate infra change (LFS or a deploy-time bake pipeline) outside this Vite 8
 support pass. Tracked here; revisit when re-bakes become frequent or another
 instant template pushes the committed total materially higher.
 
+Update 2026-07-12 (ADR-0241): CI now proves exact package input, install-artifact
+identity, and embedded shadow bytes for every committed snapshot. Silent policy
+drift is closed; range-resolution cadence and Git storage remain open here.
+
 ## Options or Next
 
-- CI check: bake-dry-run comparing `snapshot.deps` against each template's effective deps; fail on drift (no network needed — compare the committed asset's `deps` field only).
 - Range-resolution drift (same ranges, newer published versions) — decide whether periodic re-bakes are wanted at all; the lockfile inside the snapshot keeps installs deterministic either way.
 - Git size: Git LFS, or move the asset out of the repo (deploy-time bake) if re-bakes become frequent.
 

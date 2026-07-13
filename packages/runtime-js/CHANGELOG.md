@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Realm-local exact esbuild CJS-outer slot with typed publish/read APIs. The
+  runtime owns identity across Vite imports without cloning esbuild's API
+  object (ADR-0226).
+
 ### Fixed
 
 - **Fallback child-process stdout/stderr declare their push-fed read hook.**

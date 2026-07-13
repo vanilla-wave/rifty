@@ -4,19 +4,17 @@
  * module (vite / sql.js). The entry (dev-server-child-bootstrap.ts) imports this.
  */
 import {
-  type BootstrapConfig,
-  type ProjectSpec,
+  type NodeServerBootstrapConfig,
+  type NodeServerProjectSpec,
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
 
 export interface DevServerChildConfig {
-  readonly spec: ProjectSpec;
-  readonly cfg: BootstrapConfig;
+  readonly spec: NodeServerProjectSpec;
+  readonly cfg: NodeServerBootstrapConfig;
   readonly port: number;
   readonly root: string;
-  readonly slug: string;
-  readonly fromScratch: boolean;
   readonly previewScope?: string;
 }
 
@@ -33,6 +31,11 @@ export function resolveDevServerChildConfig(
   env: Record<string, string | undefined>,
 ): DevServerChildConfig {
   const spec = resolveProjectSpec(required(env, 'RIFTY_RFV_TEMPLATE'));
+  if (spec.runtime !== 'node-server') {
+    throw new Error(
+      `dev-server-child: expected a node-server template, got ${spec.id} (${spec.runtime})`,
+    );
+  }
   const root = required(env, 'RIFTY_RFV_ROOT');
   const portRaw = required(env, 'RIFTY_DEV_PORT');
   const port = Number.parseInt(portRaw, 10);
@@ -42,13 +45,14 @@ export function resolveDevServerChildConfig(
     throw new Error(`dev-server-child: RIFTY_DEV_PORT is not an integer: ${portRaw}`);
   }
   const cfg = resolveBootstrapConfig(spec, port, root);
+  if (cfg.runtime !== 'node-server') {
+    throw new Error(`dev-server-child: expected node-server config, got ${cfg.runtime}`);
+  }
   return {
     spec,
     cfg,
     port,
     root,
-    slug: required(env, 'RIFTY_RFV_SLUG'),
-    fromScratch: env.RIFTY_RFV_SETUP === 'from-scratch',
     ...(env.RIFTY_PREVIEW_SCOPE ? { previewScope: env.RIFTY_PREVIEW_SCOPE } : {}),
   };
 }

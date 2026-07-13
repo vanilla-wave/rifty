@@ -42,7 +42,7 @@ const CLI_FIXTURE: NodeCliProjectSpec = {
 };
 
 describe('resolveBootstrapConfig', () => {
-  it('maps a ProjectSpec + port + root to the concrete install/server config', () => {
+  it('maps a ProjectSpec + port + root to the concrete install/seed config', () => {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5174, '/workspace');
     if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
 
@@ -50,10 +50,8 @@ describe('resolveBootstrapConfig', () => {
     // @rollup/wasm-node is no longer hand-pinned: the installer injects it as
     // rollup's same-version shadow-shim companion (ADR-0188).
     expect(cfg.installDeps).toEqual({ vite: '^7.0.0' });
-    expect(cfg.runtimeSpecifier).toBe('vite');
-    expect(cfg.server.appType).toBe('spa');
-    expect(cfg.server.optimizeDepsDisabled).toBe(true);
-    expect(cfg.hmrEnabled).toBe(true);
+    expect(cfg.seedFiles['/workspace/vite.config.js']).toContain('noDiscovery: true');
+    expect(cfg.seedFiles['/workspace/vite.config.js']).not.toContain('hmr: false');
 
     const pkg = JSON.parse(cfg.packageJson) as {
       dependencies: Record<string, string>;
@@ -140,6 +138,7 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.entryPath).toBe('/workspace/src/main.ts');
     expect(cfg.seedFiles['/workspace/index.html']).toContain('src="src/main.ts"');
     expect(cfg.seedFiles['/workspace/src/main.ts']).toBe(TYPESCRIPT_TEMPLATE.entry.content);
+    expect(cfg.seedFiles['/workspace/vite.config.js']).toContain('noDiscovery: true');
     expect(cfg.seedFiles['/workspace/tsconfig.json']).toContain('"strict": true');
     expect(cfg.seedFiles['/workspace/src/model.ts']).toContain('export interface Widget');
     expect(cfg.seedFiles['/workspace/node_modules/@rifty/example-types/index.d.ts']).toContain(
@@ -243,8 +242,8 @@ describe('vite8 opt-in preset', () => {
 
   it('keeps HMR disabled for the Vite 8 Rolldown path (ADR-0161)', () => {
     const cfg = resolveBootstrapConfig(VITE8_TEMPLATE, 5174, '/workspace');
-    if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
-    expect(cfg.hmrEnabled).toBe(false);
+    expect(cfg.seedFiles['/workspace/vite.config.js']).toContain('server: { hmr: false }');
+    expect(cfg.seedFiles['/workspace/vite.config.js']).toContain('noDiscovery: true');
   });
 });
 

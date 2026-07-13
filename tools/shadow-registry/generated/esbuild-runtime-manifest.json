@@ -1,0 +1,373 @@
+{
+  "schema": 1,
+  "source": {
+    "package": "esbuild-wasm",
+    "version": "0.28.0",
+    "member": "package/lib/browser.js",
+    "sha256": "b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10"
+  },
+  "wasm": {
+    "member": "package/esbuild.wasm",
+    "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
+  },
+  "validationSource": {
+    "package": "esbuild",
+    "version": "0.28.0",
+    "member": "package/lib/main.js",
+    "sha256": "41abefec8704d24e069532fb38a418905d16f8fee4da88e54ecd65adc71f5507",
+    "anchors": [
+      {
+        "id": "sync-build-validation",
+        "inputSpan": {
+          "start": 92924,
+          "end": 93424
+        },
+        "sha256": "2998e2821ef1f87f4782c9fc51003b5d4bf7f6e4df52a43947e3ee18608268a2"
+      },
+      {
+        "id": "sync-analyze-validation",
+        "inputSpan": {
+          "start": 86842,
+          "end": 87440
+        },
+        "sha256": "9eb837dd43da594cf02a89dd70e73ef7bbeab389b9ab6e685291d2d1e6a27562"
+      },
+      {
+        "id": "native-validation-must-be",
+        "inputSpan": {
+          "start": 17527,
+          "end": 17602
+        },
+        "sha256": "e680a38380dde2da37250cc2f05234766528e62967429cf9e2beafd48f738450",
+        "location": {
+          "file": "/node_modules/esbuild/lib/main.js",
+          "namespace": "file",
+          "line": 534,
+          "column": 29,
+          "length": 0,
+          "lineText": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+          "suggestion": ""
+        }
+      },
+      {
+        "id": "native-validation-invalid-option",
+        "inputSpan": {
+          "start": 17727,
+          "end": 17792
+        },
+        "sha256": "7c991bb02b494ef1061fd3327ee68bbd00802b44468cb56d072cf704eb114eca",
+        "location": {
+          "file": "/node_modules/esbuild/lib/main.js",
+          "namespace": "file",
+          "line": 540,
+          "column": 12,
+          "length": 0,
+          "lineText": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+          "suggestion": ""
+        }
+      }
+    ]
+  },
+  "patches": [
+    "inline-worker-startup",
+    "node-callback-fs",
+    "channel-has-fs",
+    "runtime-default-wd",
+    "transform-temp-fs",
+    "native-validation-provenance",
+    "native-target-errno",
+    "gate-direct-lifecycle",
+    "gate-sync-family",
+    "gate-analyze-metafile",
+    "gate-context-watch-serve",
+    "gate-one-shot-build-write"
+  ],
+  "hunks": [
+    {
+      "id": "inline-worker-startup",
+      "hunk": "envelope-open",
+      "inputSpan": {
+        "start": 0,
+        "end": 24
+      },
+      "beforeSha256": "b55bfd86796b039b02b024e24284f44b28227777306aec6311696113081601cf",
+      "outputSpan": {
+        "start": 0,
+        "end": 201
+      },
+      "afterSha256": "63e9601574fd96cb9ed85da80067e3116f8904d5b0585dcfbade1bd60bfb8558"
+    },
+    {
+      "id": "inline-worker-startup",
+      "hunk": "service",
+      "inputSpan": {
+        "start": 76208,
+        "end": 76436
+      },
+      "beforeSha256": "d67e208a24f70dc8c12faf971f9fd767ca0f294479cb69b1e37a9f800a5ec373",
+      "outputSpan": {
+        "start": 77840,
+        "end": 78457
+      },
+      "afterSha256": "87cfaa231b745737a58e92e572a1cc10883620ebce32347f1d4a92ff9b6c24ac"
+    },
+    {
+      "id": "node-callback-fs",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 104765,
+        "end": 105014
+      },
+      "beforeSha256": "dffa5cb40d56a4d55e5887e4ee943c8f2af2bf3c063c68a0080ac35761f497c3",
+      "outputSpan": {
+        "start": 106786,
+        "end": 107071
+      },
+      "afterSha256": "7f5aecf872b7ea3a733b0d0ca11e154edcf981fed5461223a43d13126c684cc4"
+    },
+    {
+      "id": "channel-has-fs",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 130924,
+        "end": 130989
+      },
+      "beforeSha256": "a11e6a2c0f9a2f509ccdbbb8f3ebeb3a5ccc40bd458b23e18b1b2a9b8b3aad50",
+      "outputSpan": {
+        "start": 132981,
+        "end": 133045
+      },
+      "afterSha256": "919a1e63f741633fd88b9b7460a5d514543c70acab49a9308642e731bc82e035"
+    },
+    {
+      "id": "runtime-default-wd",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 131403,
+        "end": 131750
+      },
+      "beforeSha256": "635695deb81580a53e50be785a980ed76413111ae16ee74303af1fefc298dcd2",
+      "outputSpan": {
+        "start": 133459,
+        "end": 133832
+      },
+      "afterSha256": "8654a83cede45c3a20170d0e8ea67a495dc3b4c1ffbe052f14d25ce1b290dcb9"
+    },
+    {
+      "id": "transform-temp-fs",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 132087,
+        "end": 132290
+      },
+      "beforeSha256": "93502bc608b5cf4577b6ba82805e20054bde959cf8503c3285301e4e657c5022",
+      "outputSpan": {
+        "start": 134169,
+        "end": 134201
+      },
+      "afterSha256": "29ce1a5cd7101e607e12f68a4a8b1aba641cf502bcab0ca6bea301140769f4ac"
+    },
+    {
+      "id": "native-validation-provenance",
+      "hunk": "origin-owner",
+      "inputSpan": {
+        "start": 15317,
+        "end": 15348
+      },
+      "beforeSha256": "6fc635322cef6ea6e624c3af409903e5991829c564e9921030db35aaa312caf9",
+      "outputSpan": {
+        "start": 15494,
+        "end": 16369
+      },
+      "afterSha256": "f15c9566f2075fdcda3528252deff378d3dc596b131dbaa3ed1ffd30b3ed29d8"
+    },
+    {
+      "id": "native-validation-provenance",
+      "hunk": "must-be-origin",
+      "inputSpan": {
+        "start": 17504,
+        "end": 17578
+      },
+      "beforeSha256": "f86d59879d2c7cd32de0304cd96f5ff8cc9b89881e8eff0ab3be69f7b9c4accd",
+      "outputSpan": {
+        "start": 18525,
+        "end": 18630
+      },
+      "afterSha256": "bfed8fc44a8e0eadcc791dda1c5d8faad3a3792c0c378ad4f879a1904adb9957"
+    },
+    {
+      "id": "native-validation-provenance",
+      "hunk": "invalid-option-origin",
+      "inputSpan": {
+        "start": 17704,
+        "end": 17768
+      },
+      "beforeSha256": "30a9c0835d95f46eb75d364a986b6c993acd21cefd37e18b775c3402397f36c3",
+      "outputSpan": {
+        "start": 18756,
+        "end": 18858
+      },
+      "afterSha256": "45443d2719b0101c3b553eb311f775100608841150d803f96ed566716c5468e0"
+    },
+    {
+      "id": "native-validation-provenance",
+      "hunk": "post-extract",
+      "inputSpan": {
+        "start": 67769,
+        "end": 67892
+      },
+      "beforeSha256": "8b3086124a8618199dfc290861403a027524f8c90ebc344d6a32c4d47e1a878f",
+      "outputSpan": {
+        "start": 67216,
+        "end": 67445
+      },
+      "afterSha256": "3279a30298d94650d5323317baa9b0a8e7a81be9c48c85dcdb6b205e5b0ec05d"
+    },
+    {
+      "id": "native-target-errno",
+      "hunk": "owner",
+      "inputSpan": {
+        "start": 33311,
+        "end": 33345
+      },
+      "beforeSha256": "13920f33e035aaf552bbad146be7936c727c1703b80c7c95b894e59ac6f2bdb7",
+      "outputSpan": {
+        "start": 34401,
+        "end": 34768
+      },
+      "afterSha256": "2c56aeff29bab755996c2136580bfff0e20a4b65d674b8087aa1c52d40f50d58"
+    },
+    {
+      "id": "native-target-errno",
+      "hunk": "materialized-message",
+      "inputSpan": {
+        "start": 70296,
+        "end": 70458
+      },
+      "beforeSha256": "ad8f0f05d643b95959f665d263610ec8417418fa077baa4dae548bdf0d99c886",
+      "outputSpan": {
+        "start": 69849,
+        "end": 70053
+      },
+      "afterSha256": "911c9764bf98a2b376db8d2827e6fb240a1b6abfdaa7630d24a36a944cee6580"
+    },
+    {
+      "id": "gate-direct-lifecycle",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 75171,
+        "end": 76207
+      },
+      "beforeSha256": "72d0b69b6a6d2054d5fc81c3ec99e3c5bb52131be6a96680cdc55855598685b3",
+      "outputSpan": {
+        "start": 76968,
+        "end": 77839
+      },
+      "afterSha256": "1b68eb0255bf4c8c653fc30d5d3957d1c83a2a45532fb8dcc3968a30f234a160"
+    },
+    {
+      "id": "gate-sync-family",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 74773,
+        "end": 75170
+      },
+      "beforeSha256": "54c551581891aad879b3c6c08a848bc221ef0de2b21b6542f641f1d246c38853",
+      "outputSpan": {
+        "start": 74368,
+        "end": 76967
+      },
+      "afterSha256": "50ff40fda97bb55460d9cafab77afcec3d3a0f43b2ce1e1c6e9352930520256e"
+    },
+    {
+      "id": "gate-analyze-metafile",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 42119,
+        "end": 42261
+      },
+      "beforeSha256": "990615b3a057d4cee9cce673ec0f1c458d9304b6440f3ad208caacd56cb82c18",
+      "outputSpan": {
+        "start": 43542,
+        "end": 43718
+      },
+      "afterSha256": "9e370fb451dd96dad21217ca858d3cf51be7827600a1e135fbfde379cc23cd15"
+    },
+    {
+      "id": "gate-analyze-metafile",
+      "hunk": "request-tail",
+      "inputSpan": {
+        "start": 42262,
+        "end": 42524
+      },
+      "beforeSha256": "514b704899b121b4cf37820d5d7095be155d8e17ccae2fc216db3712930bcebc",
+      "outputSpan": {
+        "start": 43719,
+        "end": 43719
+      },
+      "afterSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "gate-context-watch-serve",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 48628,
+        "end": 50139
+      },
+      "beforeSha256": "9f817b54cfac68e662a2f3b160a8bc0ab93298d28eee5bd295ec570c29bde487",
+      "outputSpan": {
+        "start": 49815,
+        "end": 50830
+      },
+      "afterSha256": "4c9104fd421e472788394b7d414afc3bb642855486ac9f35c25333b4cd7164e7"
+    },
+    {
+      "id": "gate-context-watch-serve",
+      "hunk": "serve-execution-tail",
+      "inputSpan": {
+        "start": 50140,
+        "end": 51395
+      },
+      "beforeSha256": "5dee07657cec1701ad9b045bd6c5937f321a1ade3aec25599a23243001b2fc9e",
+      "outputSpan": {
+        "start": 50831,
+        "end": 50842
+      },
+      "afterSha256": "abd94a156ada91ea32eb4823cfcf5ee7c06b374dc9d953025fe15dac0cc43985"
+    },
+    {
+      "id": "gate-one-shot-build-write",
+      "hunk": "main",
+      "inputSpan": {
+        "start": 44821,
+        "end": 45042
+      },
+      "beforeSha256": "ae762ee19b8fddfba267aa27d367f1d2033a3f6aaf205739b26eee1fb32e214a",
+      "outputSpan": {
+        "start": 46016,
+        "end": 46229
+      },
+      "afterSha256": "0f0a0bbff4b9f1d2ed629ee55eebd20ce917c55f3b1220b324420c939685d975"
+    },
+    {
+      "id": "inline-worker-startup",
+      "hunk": "envelope-close",
+      "inputSpan": {
+        "start": 133093,
+        "end": 133234
+      },
+      "beforeSha256": "a17a367c63c545b531020840e99aa71de577b741cc2bfeb6c14a35e405d7bdbd",
+      "outputSpan": {
+        "start": 135004,
+        "end": 135142
+      },
+      "afterSha256": "1a09c2217985927952a7bfa5d010ab9cd50111653dd08a8fe5595934de7009bd"
+    }
+  ],
+  "output": {
+    "path": "apps/playground/src/workers/generated/esbuild-runtime.js",
+    "format": "esm",
+    "bytes": 135144,
+    "sha256": "7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553"
+  }
+}

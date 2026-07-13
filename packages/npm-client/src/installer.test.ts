@@ -387,14 +387,14 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
   });
 
-  it('uses the baked esbuild override before the registry lifecycle gate', async () => {
+  it('uses the baked esbuild override before the registry lifecycle gate when the request admits 0.28.0', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(
       'esbuild',
       new Map([
         [
-          '0.21.5',
-          await makeEntry('esbuild', '0.21.5', {}, { scripts: { postinstall: 'node install.js' } }),
+          '0.28.0',
+          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
         ],
       ]),
     );
@@ -412,7 +412,7 @@ describe('install — package.json defaults', () => {
       JSON.stringify({
         name: 'app',
         version: '1.0.0',
-        dependencies: { esbuild: '0.21.5' },
+        dependencies: { esbuild: '^0.28.0' },
       }),
     );
 
@@ -425,8 +425,8 @@ describe('install — package.json defaults', () => {
     // ADR-0188: the installer now materializes the `esbuild` import name from
     // the shadow-registry alias shim (was a playground boot-overlay concern).
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
-    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.js')).toContain(
-      '__riftyEsbuildTransform',
+    expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
+      '__rifty?.esbuild',
     );
   });
 
@@ -440,13 +440,13 @@ describe('install — package.json defaults', () => {
     // override, else it looks up bare `esbuild`, misses, and throws
     // EBROKENLOCK. Exactly the break the live eddy bundle hit on vite → esbuild.
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
-    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '0.21.5' })]]));
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '^0.28.0' })]]));
     db.set(
       'esbuild',
       new Map([
         [
-          '0.21.5',
-          await makeEntry('esbuild', '0.21.5', {}, { scripts: { postinstall: 'node install.js' } }),
+          '0.28.0',
+          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
         ],
       ]),
     );

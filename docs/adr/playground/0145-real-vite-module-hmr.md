@@ -1,6 +1,6 @@
 # ADR 0145: Real Vite module HMR
 
-Status: Accepted (corrected by ADR-0147, ADR-0151, and ADR-0161)
+Status: Accepted (corrected by ADR-0147, ADR-0151, ADR-0161, and ADR-0174)
 Date: 2026-06-14
 
 > Correction 2026-06-20: ADR-0161 scopes the Vite 8 template default — HMR is
@@ -8,6 +8,11 @@ Date: 2026-06-14
 > Rolldown's WASI worker pool. This ADR's "Vite owns HMR over the browser
 > WebSocket bridge" architecture still stands; only the Vite 8 default-on scope
 > is superseded (transport corrections to ADR-0147/0151 are already in Context).
+
+> Correction 2026-07-13 (ADR-0174): installed Vite observes owner-VFS writes
+> through polling `fs.watch`. Curated file-change IPC/module-graph invalidation
+> and wrapper plugin injection are retired; Vite still owns HMR payloads over
+> the generic preview WebSocket bridge.
 
 ## Context
 

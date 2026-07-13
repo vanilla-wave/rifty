@@ -18,9 +18,8 @@ import { describe, expect, it } from 'vitest';
  *     archive/index/file-read bridges answering → owner-boot-modes.spec.ts
  *
  * e2e:
- *   - editor write → owner fan-out → child HMR → preview update (incl.
- *     liveBinChildren) → m7-preview-sw.spec.ts
- *   - real .bin/vite dispatch + dev wrapper config → vite-command-honesty.spec.ts
+ *   - editor write → remote fs.watch → child HMR → preview update → m7-preview-sw.spec.ts
+ *   - real .bin/vite dispatch + visible config → vite-command-honesty.spec.ts
  *   - preview mode (stock args, SW-stamped Host) → vite7-build-preview.spec.ts
  *   - uniform bin/preview-registry lifecycle → generic-dev-server-lifecycle,
  *     node-command, socket-lab/hono-api/koa-api specs
@@ -42,9 +41,8 @@ describe('residual source pins', () => {
   it('bin lifecycle stays uniform — ZERO vite-name dispatch in the owner bootstrap', () => {
     // residual source pin: the per-bin-name dispatch class regresses silently
     // (webpack-dev-server et al. keep working through generic paths in e2e).
-    // The only allowed vite keying lives in vite-cli-prep's withViteCliArgs/
-    // withViteCliEnv (behavioral tests there; ADR-0161 hmr-off pin included);
-    // the ADR-0189 endpoint-rewrite envs must stay retired.
+    // Vite wrapper/args/file-watch behavior is covered by the browser contract
+    // and HMR e2e; keep only the pre-existing generic-dispatch pins here.
     expect(source).not.toContain("!== 'vite'");
     expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
     expect(source).not.toContain('RIFTY_VITE_CLI_PORT');

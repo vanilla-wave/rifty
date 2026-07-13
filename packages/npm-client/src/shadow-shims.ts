@@ -11,6 +11,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
 import { matchesRange } from './semver.ts';
 
 /** Minimal pinned-package view the applier needs. */
@@ -24,6 +25,43 @@ export interface ShimTargetPackage {
 /** User-facing name a shim substitutes (`esbuild` for the wasi-preview1 alias). */
 function publicName(name: string, shim: InternalsShim): string {
   return shim.into ?? name;
+}
+
+export interface EffectivePackageRequest {
+  readonly override: ResolvedOverrideTarget | null;
+  readonly effectiveName: string;
+  readonly effectiveRange: string | null;
+}
+
+function rangeAdmitsVersion(range: string | null, version: string): boolean {
+  return range === null || range === '' || range === '*' || matchesRange(version, range);
+}
+
+/**
+ * One override/request authority for preflight, live resolve, and replay.
+ * Baked aliases preserve the caller's semver contract; explicit user overrides
+ * intentionally replace it and therefore own the effective target range.
+ */
+export function resolveEffectivePackageRequest(
+  name: string,
+  range: string | null,
+  parent: string | undefined,
+  userOverrides: OverrideMap | undefined,
+): EffectivePackageRequest {
+  const override = resolveOverride(name, parent, userOverrides);
+  const effectiveName = override?.name ?? name;
+  const effectiveRange = override?.range ?? range;
+  const shim = override ? internalsShims[effectiveName] : undefined;
+  if (override && shim?.into === name && shim.apiVersion) {
+    const admittedRange = override.source === 'baked' ? range : effectiveRange;
+    if (!rangeAdmitsVersion(admittedRange, shim.apiVersion)) {
+      throw new NotImplementedError(
+        `shadow-registry.${shim.into}@${admittedRange ?? '*'}`,
+        `alias exposes exact ${shim.into}@${shim.apiVersion}; requested range is unsupported`,
+      );
+    }
+  }
+  return { override, effectiveName, effectiveRange };
 }
 
 /**

@@ -8,9 +8,7 @@ import {
 } from './owner-child-dev-server.ts';
 
 const params: DevServerChildSpawnParams = {
-  templateId: 'm7-preview-sw',
-  slug: 'm7-preview-sw',
-  setup: 'instant',
+  templateId: 'express-sqlite',
   root: '/workspace',
   devPort: 5174,
 };
@@ -23,15 +21,13 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.cwd).toBe('/workspace');
     expect(spec.serve).toBe(true); // long-lived server (vs P6a run-to-completion)
     expect(spec.env.RIFTY_REMOTE_FS).toBe('1');
-    expect(spec.env.RIFTY_RFV_TEMPLATE).toBe('m7-preview-sw');
-    expect(spec.env.RIFTY_RFV_SLUG).toBe('m7-preview-sw');
-    expect(spec.env.RIFTY_RFV_SETUP).toBe('instant');
+    expect(spec.env.RIFTY_RFV_TEMPLATE).toBe('express-sqlite');
     expect(spec.env.RIFTY_RFV_ROOT).toBe('/workspace');
     expect(spec.env.RIFTY_DEV_PORT).toBe('5174');
     expect(spec.env.PORT).toBe('5174'); // node-server entries bind process.env.PORT
   });
 
-  it('threads recursive worker URLs so Vite 8 can spawn Rolldown workers', () => {
+  it('threads recursive worker URLs for nested node-server workers', () => {
     const spec = buildDevServerChildSpawnSpec(params, 'blob:dev-server-url', {
       kernelWorkerUrl: 'blob:kernel-url',
       nodeEntryWorkerUrl: 'blob:node-entry-url',
@@ -41,11 +37,8 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBe('blob:node-entry-url');
   });
 
-  it('forces the WASI path for napi-rs bindings (Rolldown) — never native', () => {
-    // Rolldown's napi-rs loader tries every native `@rolldown/binding-<platform>`
-    // (all ENATIVEUNSUPPORTED in rifty), then SWALLOWS its wasm32-wasi load error
-    // unless NAPI_RS_FORCE_WASI is set — surfacing only "Cannot find native
-    // binding". rifty has no native bindings by construction (ADR-0051/0156).
+  it('forces the WASI path for napi-rs bindings — never native', () => {
+    // rifty has no native bindings by construction (ADR-0051/0156).
     const spec = buildDevServerChildSpawnSpec(params, 'blob:dev-server-url');
     expect(spec.env.NAPI_RS_FORCE_WASI).toBe('1');
   });
@@ -56,7 +49,6 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
   kind = 'worker' as const;
   killed: string | null = null;
   exited = false;
-  sent: unknown[] = [];
   #out = new EventEmitter();
   #err = new EventEmitter();
   stdout() {
@@ -64,10 +56,6 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
   }
   stderr() {
     return this.#err;
-  }
-  send(m: unknown) {
-    this.sent.push(m);
-    return true;
   }
   kill(sig?: string) {
     // Mirror the real WorkerHandle: kill() on an ALREADY-exited child returns
@@ -92,7 +80,7 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
 }
 
 describe('createOwnerChildDevServer', () => {
-  it('resolves boot on rifty:dev-ready, streams logs, forwards file-changed, kills on stop', async () => {
+  it('resolves boot on rifty:dev-ready, streams logs, and kills on stop', async () => {
     const fake = new FakeHandle();
     const logs: string[] = [];
     const snapshots: number[] = [];
@@ -102,9 +90,7 @@ describe('createOwnerChildDevServer', () => {
       signal,
       log: (c) => logs.push(c),
       params: {
-        templateId: 'm7-preview-sw',
-        slug: 'm7-preview-sw',
-        setup: 'instant',
+        templateId: 'express-sqlite',
         root: '/workspace',
         devPort: 5174,
       },
@@ -117,11 +103,6 @@ describe('createOwnerChildDevServer', () => {
     expect(handle.port).toBe(5174);
     expect(logs.join('')).toContain('installing');
     expect(snapshots.length).toBe(1);
-    handle.onFileChanged?.('/workspace/src/main.js');
-    expect(fake.sent).toContainEqual({
-      type: 'rifty:dev-file-changed',
-      path: '/workspace/src/main.js',
-    });
     await handle.stop();
     expect(fake.killed).toBe('SIGTERM');
   });
@@ -134,9 +115,7 @@ describe('createOwnerChildDevServer', () => {
       signal: new AbortController().signal,
       log: () => {},
       params: {
-        templateId: 'm7-preview-sw',
-        slug: 'm7-preview-sw',
-        setup: 'instant',
+        templateId: 'express-sqlite',
         root: '/workspace',
         devPort: 5174,
       },
@@ -173,8 +152,6 @@ describe('createOwnerChildDevServer', () => {
       log: () => {},
       params: {
         templateId: 't',
-        slug: 't',
-        setup: 'instant',
         root: '/workspace',
         devPort: 5174,
       },
@@ -205,8 +182,6 @@ describe('createOwnerChildDevServer', () => {
       log: () => {},
       params: {
         templateId: 't',
-        slug: 't',
-        setup: 'instant',
         root: '/workspace',
         devPort: 5174,
       },
@@ -226,8 +201,6 @@ describe('createOwnerChildDevServer', () => {
       log: () => {},
       params: {
         templateId: 't',
-        slug: 't',
-        setup: 'instant',
         root: '/workspace',
         devPort: 5174,
       },
@@ -245,8 +218,6 @@ describe('createOwnerChildDevServer', () => {
       log: () => {},
       params: {
         templateId: 't',
-        slug: 't',
-        setup: 'instant',
         root: '/workspace',
         devPort: 5174,
       },
@@ -265,7 +236,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: { templateId: 't', slug: 't', setup: 'instant', root: '/workspace', devPort: 5174 },
+      params: { templateId: 't', root: '/workspace', devPort: 5174 },
       onSnapshotDirty: () => {},
     });
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });

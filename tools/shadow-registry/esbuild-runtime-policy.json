@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "api": "esbuild-js-api",
+  "state": "final-green",
+  "version": "0.28.0",
+  "consumer": {
+    "package": "vite",
+    "version": "7.3.6"
+  },
+  "source": {
+    "package": "esbuild-wasm",
+    "member": "package/lib/browser.js",
+    "sha256": "b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10"
+  },
+  "wasm": {
+    "member": "package/esbuild.wasm",
+    "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
+  },
+  "validationSource": {
+    "package": "esbuild",
+    "version": "0.28.0",
+    "member": "package/lib/main.js",
+    "sha256": "41abefec8704d24e069532fb38a418905d16f8fee4da88e54ecd65adc71f5507",
+    "anchors": [
+      {
+        "id": "sync-build-validation",
+        "start": "  let fakeBuildError = (text) => {",
+        "end": "  let applyProperties = (object, properties) => {",
+        "sha256": "2998e2821ef1f87f4782c9fc51003b5d4bf7f6e4df52a43947e3ee18608268a2"
+      },
+      {
+        "id": "sync-analyze-validation",
+        "start": "var analyzeMetafileSync = (metafile, options) => {",
+        "end": "var stop = () => {",
+        "sha256": "9eb837dd43da594cf02a89dd70e73ef7bbeab389b9ab6e685291d2d1e6a27562"
+      },
+      {
+        "id": "native-validation-must-be",
+        "start": "  if (mustBe !== null) throw new Error(`${quote(key)} must be ${mustBe}`);",
+        "end": "  return value;",
+        "sha256": "e680a38380dde2da37250cc2f05234766528e62967429cf9e2beafd48f738450"
+      },
+      {
+        "id": "native-validation-invalid-option",
+        "start": "      throw new Error(`Invalid option ${where}: ${quote(key)}`);",
+        "end": "    }\n  }\n}",
+        "sha256": "7c991bb02b494ef1061fd3327ee68bbd00802b44468cb56d072cf704eb114eca"
+      }
+    ]
+  },
+  "patches": [
+    "inline-worker-startup",
+    "node-callback-fs",
+    "channel-has-fs",
+    "runtime-default-wd",
+    "transform-temp-fs",
+    "native-validation-provenance",
+    "native-target-errno",
+    "gate-direct-lifecycle",
+    "gate-sync-family",
+    "gate-analyze-metafile",
+    "gate-context-watch-serve",
+    "gate-one-shot-build-write"
+  ],
+  "patchDescriptions": {
+    "inline-worker-startup": "private worker:false Go/WASM startup in the Vite Worker",
+    "node-callback-fs": "Node-callback filesystem over guest FsSync; protocol fds preserved",
+    "channel-has-fs": "upstream channel runs with hasFS:true",
+    "runtime-default-wd": "defaultWD is the guest cwd",
+    "transform-temp-fs": "large-transform temporary files use guest VFS",
+    "native-validation-provenance": "exact origin tags recover Node validator diagnostic locations",
+    "native-target-errno": "service-owned target errno spelling matches the native oracle",
+    "gate-direct-lifecycle": "direct initialize and stop capability gates",
+    "gate-sync-family": "four synchronous API capability gates",
+    "gate-analyze-metafile": "async analyzeMetafile capability gate",
+    "gate-context-watch-serve": "context watch and serve capability gates",
+    "gate-one-shot-build-write": "post-plugin one-shot build write gate"
+  },
+  "currentSurfaces": [
+    {
+      "surface": "Generated upstream-derived runtime",
+      "status": "implemented",
+      "notes": "Exact esbuild-wasm 0.28.0 client runs over guest VFS in the Vite Worker and publishes one exact CJS outer before the first import."
+    },
+    {
+      "surface": "Install request for esbuild@0.28.0",
+      "status": "implemented",
+      "notes": "Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; incompatible baked requests loud-fail, while an explicit user override to the exact WASI target remains supported without false shadow provenance."
+    },
+    {
+      "surface": "transform",
+      "status": "implemented",
+      "notes": "Exact upstream transform matches native validation, diagnostics, result shape, and the large-input temporary-file path over guest VFS."
+    },
+    {
+      "surface": "build with write:false",
+      "status": "implemented",
+      "notes": "Exact upstream build handles config imports, dependency scan/prebundle, plugin validation, and bundled output over guest VFS."
+    },
+    {
+      "surface": "context",
+      "status": "partial",
+      "notes": "Exact upstream context supports Vite scan/rebuild/dispose; watch and serve remain explicit D4 loud gaps."
+    }
+  ],
+  "gaps": [
+    {
+      "surface": "direct initialize",
+      "feature": "esbuild.initialize",
+      "required": "Native validation first, then `NotImplementedError('esbuild.initialize')`.",
+      "current": "Native validation runs first; every otherwise-valid call throws the named loud gap."
+    },
+    {
+      "surface": "direct stop",
+      "feature": "esbuild.stop",
+      "required": "Direct calls throw `NotImplementedError('esbuild.stop')`.",
+      "current": "The Worker owns service teardown; direct calls throw the named loud gap."
+    },
+    {
+      "surface": "transformSync",
+      "feature": "esbuild.transformSync",
+      "required": "Native validation first, then `NotImplementedError('esbuild.transformSync')`.",
+      "current": "Native validation and error ordering run first; otherwise-valid calls throw the named loud gap."
+    },
+    {
+      "surface": "buildSync",
+      "feature": "esbuild.buildSync",
+      "required": "Native validation first, then `NotImplementedError('esbuild.buildSync')`.",
+      "current": "Native validation and error ordering run first; otherwise-valid calls throw the named loud gap."
+    },
+    {
+      "surface": "formatMessagesSync",
+      "feature": "esbuild.formatMessagesSync",
+      "required": "Native validation first, then `NotImplementedError('esbuild.formatMessagesSync')`.",
+      "current": "Native validation and error ordering run first; otherwise-valid calls throw the named loud gap."
+    },
+    {
+      "surface": "analyzeMetafileSync",
+      "feature": "esbuild.analyzeMetafileSync",
+      "required": "Native validation first, then `NotImplementedError('esbuild.analyzeMetafileSync')`.",
+      "current": "Native validation and error ordering run first; otherwise-valid calls throw the named loud gap."
+    },
+    {
+      "surface": "analyzeMetafile",
+      "feature": "esbuild.analyzeMetafile",
+      "required": "Native validation first, then `NotImplementedError('esbuild.analyzeMetafile')`.",
+      "current": "Native validation runs first; otherwise-valid calls throw the named loud gap."
+    },
+    {
+      "surface": "context.watch",
+      "feature": "esbuild.context.watch",
+      "required": "Native context validation first, then `NotImplementedError('esbuild.context.watch')`.",
+      "current": "Context construction validates natively; watch then throws the named loud gap."
+    },
+    {
+      "surface": "context.serve",
+      "feature": "esbuild.context.serve",
+      "required": "Native context validation first, then `NotImplementedError('esbuild.context.serve')`.",
+      "current": "Context construction validates natively; serve then throws the named loud gap."
+    },
+    {
+      "surface": "one-shot build with effective write enabled",
+      "feature": "esbuild.build.write",
+      "required": "Native validation and plugin setup first, then `NotImplementedError('esbuild.build.write')`.",
+      "current": "Upstream validation and plugin setup determine the effective value first; enabled write then throws the named loud gap."
+    }
+  ],
+  "tests": [
+    "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts",
+    "tools/shadow-registry/src/esbuild-contract-oracle.test.ts",
+    "tools/shadow-registry/src/esbuild-contract.test.ts",
+    "tools/shadow-registry/src/esbuild-generated-provenance.test.ts",
+    "packages/npm-client/src/installer-shadow-shims.test.ts",
+    "apps/playground/src/workers/vite-cli-prep.test.ts",
+    "tests/browser-unit/esbuild-vite-contract.spec.ts"
+  ],
+  "limitations": [
+    "Only exact esbuild 0.28.0 with exact Vite 7.3.6 is in this contract; other esbuild versions and Vite 8/Rolldown are outside it.",
+    "Every D4 gap must preserve upstream validation and error priority before NotImplementedError; a current early, absent, or silent gate is recorded as partial, never supported."
+  ]
+}

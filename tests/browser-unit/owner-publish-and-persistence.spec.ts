@@ -120,3 +120,47 @@ test('hidden-empty owner stays hidden; OPFS tree survives an owner respawn', asy
   expect(readBack.ok).toBe(true);
   expect(readBack.text).toBe(marker);
 });
+
+test('durable Vite config claim preserves user deletion across owner respawn', async ({ page }) => {
+  await gotoHarness(page);
+  const boot = {
+    workspaceId: 'bu-vite-config-claim',
+    template: 'vite' as const,
+    starter: 'real-vite',
+    setup: 'from-scratch' as const,
+    hiddenEmptyBoot: false,
+  };
+  await bootOwner(page, boot);
+
+  const claimPath = '/scratch/.rifty/vite-config.seeded';
+  const configPath = '/scratch/vite.config.js';
+  expect((await readOwnerFile(page, configPath)).ok).toBe(true);
+  const firstClaim = await readOwnerFile(page, claimPath);
+  expect(firstClaim.ok).toBe(true);
+  expect(JSON.parse(firstClaim.text)).toMatchObject({
+    schema: 1,
+    starter: 'real-vite',
+    file: 'vite.config.js',
+  });
+
+  await page.evaluate(async (path) => {
+    const w = window as unknown as {
+      __buOwner?: {
+        writeFrameAcked(frame: {
+          type: 'rm';
+          path: string;
+          recursive: boolean;
+          force: boolean;
+        }): Promise<void>;
+      };
+    };
+    if (!w.__buOwner) throw new Error('config deletion: no owner booted on this page');
+    await w.__buOwner.writeFrameAcked({ type: 'rm', path, recursive: false, force: false });
+  }, configPath);
+  await flushOwnerDurable(page);
+  await closeOwner(page);
+
+  await bootOwner(page, boot);
+  expect((await readOwnerFile(page, configPath)).ok).toBe(false);
+  expect((await readOwnerFile(page, claimPath)).text).toBe(firstClaim.text);
+});

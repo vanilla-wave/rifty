@@ -4,7 +4,7 @@
  * OWNER spawns (serve:true) to run the dev server out of the owner thread. It
  * reads+writes the owner store over fs.* sync-RPC (RIFTY_REMOTE_FS=1, like
  * node-entry-bootstrap), owns listen() + serveCrossRealmPreview, and talks to
- * the owner over fork-IPC (rifty:dev-ready/error/snapshot from here; rifty:dev-file-changed in).
+ * the owner over fork-IPC (rifty:dev-ready/error/snapshot/ports from here).
  *
  * NOT here: initBackend()/OPFS (child reads via RPC — single-writer is the owner);
  * the pty server / shell / owner serve-bridges (those stay on the owner).
@@ -26,7 +26,6 @@ import {
 } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { isDevServerOwnerMessage } from '../glue/dev-server-ipc.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
@@ -77,14 +76,11 @@ async function bootstrapDevServerChild(): Promise<void> {
     );
   }
   const remoteFs = installRemoteSyncFs(syncApi.call);
-  // The dev-server child SPAWNS nested workers — Rolldown's WASI pthread pool
-  // (`@rolldown/binding-wasm32-wasi`, RIFTY_REMOTE_FS=1) — whose `fs.*` sync-RPC
-  // calls land on THIS realm's dispatcher. The child has no OPFS of its own
+  // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
+  // land on THIS realm's dispatcher. The child has no OPFS of its own
   // (single-writer is the owner), so register the fs handlers backed by our own
   // remote view: the child becomes a fs RELAY that forwards a nested worker's
-  // `fs.statOrNull`/reads to the owner store. Without this the Rolldown pthread
-  // crashed with "SyncRpcDispatcher: no handler for 'fs.statOrNull'" and Vite
-  // hung serving the first request.
+  // `fs.statOrNull`/reads to the owner store.
   installRuntimeJsFsHandlers(getKernelDispatcher(), () => remoteFs);
 
   const c = resolveDevServerChildConfig(env);
@@ -94,42 +90,9 @@ async function bootstrapDevServerChild(): Promise<void> {
     kernelIpc.send?.(message);
   };
 
-  let handle: DevServerHandle | null = null;
-  let previewHandle: { readonly port: number; stop(): Promise<void> } | null = null;
-  kernelIpc.onMessage?.((message) => {
-    if (isDevServerOwnerMessage(message) && handle) handle.onFileChanged?.(message.path);
-    void previewHandle;
-  });
-
   try {
-    if (env.RIFTY_VITE_CHILD_MODE === 'build') {
-      const { bootBuild } = await import('./build-boot.ts');
-      await bootBuild({ root: c.root, log: (chunk) => proc.stdout.write(chunk) });
-      send({ type: 'rifty:dev-snapshot' });
-      return;
-    }
-    if (env.RIFTY_VITE_CHILD_MODE === 'preview') {
-      const { bootPreview } = await import('./build-boot.ts');
-      previewHandle = await bootPreview({
-        root: c.root,
-        port: c.port,
-        previewScope: c.previewScope,
-        log: (chunk) => proc.stdout.write(chunk),
-      });
-      send({
-        type: 'rifty:preview-ready',
-        port: previewHandle.port,
-        ...(c.previewScope === undefined ? {} : { previewScope: c.previewScope }),
-      });
-      return;
-    }
-    handle = await bootDevServer({
+    const handle: DevServerHandle = await bootDevServer({
       cfg: c.cfg,
-      port: c.port,
-      root: c.root,
-      spec: c.spec,
-      slug: c.slug,
-      fromScratch: c.fromScratch,
       previewScope: c.previewScope,
       publishSnapshot: () => send({ type: 'rifty:dev-snapshot' }),
       log: (chunk) => proc.stdout.write(chunk),
@@ -175,7 +138,7 @@ async function bootstrapDevServerChild(): Promise<void> {
 
 // Real worker only: the kernel publishes the process spec per spawn; under vitest
 // it is null, so importing this module never boots (and never triggers the heavy
-// register/net/vite paths inside the fn).
+// register/net paths inside the fn).
 if (readKernelProcessSpec() !== null) {
   await bootstrapDevServerChild();
 }

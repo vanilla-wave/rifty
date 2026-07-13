@@ -5,6 +5,11 @@ Date: 2026-06
 
 > TL;DR: Each foreground CLI/dev-server runs in a SUPERVISED CHILD worker-process; the owner becomes a pure async supervisor + fs-server, serving the child's sync `fs.*` over the existing SAB sync-RPC ring (owner = single source of truth, read+write, chunked). Closes D's last accepted-until-P6 debt ("shell usable while a CPU CLI / `vite` runs"). IRREVERSIBLE — new `fs.*` wire surface.
 
+> Correction 2026-07-13 (ADR-0174): the dedicated dev-server child now owns
+> node-server templates only; Vite runs in the generic `.bin` child. Its
+> owner→child file-change IPC is retired; the supervised-child/fs.* invariant
+> is unchanged.
+
 ## Context
 
 D milestone (ADR-0143) destination: the process owns its filesystem, the UI is a viewer over a port — WebContainers-shaped. P1–P5 landed one persistent workspace OWNER worker holding `node_modules` + running the shell, dev server, npm, and bin/CLIs ALL in-realm against one `syncMirror()`. Single JS thread → a CPU-bound CLI or a `vite` transform burst stalls every other shell session + the snapshot/nm/vfs-write bridge replies (ADR-0148 accepted this "until P6"). ADR-0143 fixed the P6 destination: *"SAB sync-views for concurrent spawned processes … B and D compose at the limit (WebContainers = owned store + SAB sync views)"*; acceptance: *"a CPU-bound CLI stalls everything else … until P6; true 'shell usable while `vite` runs' needs P6."*

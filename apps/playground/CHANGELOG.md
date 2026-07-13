@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### Changed (exact Vite esbuild runtime)
+
+- Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer
+  before execution; Vite 8/Rolldown skips it. The retired WASI transform global
+  and wrapper are removed.
+- One bounded static-asset reader owns esbuild WASM and dependency snapshots:
+  header/body no-progress and byte overflow fail finitely; esbuild publishes no
+  slot, while a broken snapshot falls back to normal install.
+- Browser-unit runs force a cold host optimizer; Worker/child-only `sql.js` and
+  `typescript` prebundle before tests, preventing optimizer full reloads from
+  dropping owner state or hiding fresh-CI failures behind a warm local cache.
+
+### Changed (installed Vite ownership, ADR-0174/0243)
+
+- Installed `.bin/vite` is the only Vite execution path. Retired direct
+  `createServer`, curated build/preview, module-invalidation IPC, and duplicate
+  ProjectSpec knobs are deleted; visible `vite.config.js` owns policy.
+- A versioned root-local seed claim preserves user config edits/deletion across
+  boot, Save, and reload; explicit Reset restores the starter baseline and a new
+  claim. Config then claim each pass a checked durable drain; torn writes recover
+  without silent resurrection. Chromium proves the marker and deletion across
+  an OPFS owner respawn.
+
+### Changed (install artifact identity, ADR-0241)
+
+- Dependency snapshots and install stamps use schema v2 with exact
+  `package.json` text plus the generated installer/shim/runtime identity.
+  Legacy or mismatched claims are untrusted and re-run arrival; one shared
+  constructor/parser owns async and sync stamp shapes. Committed snapshots
+  were fully rebaked. CI is read-only: stale metadata, shim bytes, or canonical
+  archive drift requires a full bake; no checker can relabel an old tree.
+
 ### Fixed (File Explorer context menu placement)
 
 - Context menus now own viewport placement, remain fully visible above panel

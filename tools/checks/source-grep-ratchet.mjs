@@ -77,9 +77,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 6,
-    digest: 'e188a3aa7a22',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, file-change bridge wiring; env-decoder heirs in vite-cli-prep.test.ts',
+    count: 2,
+    digest: '72006ccff761',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin spawn flags; prepare/runtime and file-watch heirs run in browser contract/e2e',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
@@ -88,12 +88,6 @@ export const ALLOWLIST = [
     why: 'contract = emitted-bundle shape (explicit bindings keep Vite from tree-shaking the setup chunk) — unobservable at node runtime; import executes installWorkerEntry worker wiring',
   },
 
-  {
-    file: 'apps/playground/src/workers/dev-server-boot.test.ts',
-    count: 1,
-    digest: 'cea1282fdc73',
-    why: 'ADR-0161 hmr flag is vite8-opt-in only (no default-lane seam); boot behavior heirs = in-file node tests + tests/browser-unit + e2e m7/generic-dev-server-lifecycle',
-  },
   {
     file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
     count: 12,

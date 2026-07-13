@@ -20,7 +20,6 @@
     "@riftydev/net": "workspace:*",
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
-    "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/service-worker": "workspace:*",
     "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/shell": "workspace:*",
@@ -28,6 +27,7 @@
     "@riftydev/ts-language-service": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "@xterm/xterm": "^5.5.0",
+    "esbuild-wasm": "0.28.0",
     "monaco-editor": "^0.52.0",
     "solid-js": "^1.9.0",
     "sql.js": "^1.14.1"

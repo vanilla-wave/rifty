@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  type DevServerChildMessage,
-  type DevServerOwnerMessage,
-  isDevServerChildMessage,
-  isDevServerOwnerMessage,
-} from './dev-server-ipc.ts';
+import { type DevServerChildMessage, isDevServerChildMessage } from './dev-server-ipc.ts';
 
 describe('dev-server-ipc guards', () => {
   it('accepts child→owner frames', () => {
@@ -12,11 +7,6 @@ describe('dev-server-ipc guards', () => {
       type: 'rifty:dev-ready',
       port: 5174,
       previewScope: 'dev-scope',
-    };
-    const preview: DevServerChildMessage = {
-      type: 'rifty:preview-ready',
-      port: 4173,
-      previewScope: 'preview-scope',
     };
     const error: DevServerChildMessage = { type: 'rifty:dev-error', message: 'boom' };
     const snap: DevServerChildMessage = { type: 'rifty:dev-snapshot' };
@@ -27,19 +17,10 @@ describe('dev-server-ipc guards', () => {
       previewScope: 'dev-scope',
     };
     expect(isDevServerChildMessage(ready)).toBe(true);
-    expect(isDevServerChildMessage(preview)).toBe(true);
     expect(isDevServerChildMessage(error)).toBe(true);
     expect(isDevServerChildMessage(snap)).toBe(true);
     expect(isDevServerChildMessage(ports)).toBe(true);
     expect(isDevServerChildMessage(portsFull)).toBe(true);
-  });
-
-  it('accepts owner→child frames', () => {
-    const fc: DevServerOwnerMessage = {
-      type: 'rifty:dev-file-changed',
-      path: '/workspace/src/main.js',
-    };
-    expect(isDevServerOwnerMessage(fc)).toBe(true);
   });
 
   it('rejects foreign / malformed messages', () => {
@@ -55,8 +36,5 @@ describe('dev-server-ipc guards', () => {
     expect(isDevServerChildMessage({ type: 'rifty:dev-ports', ports: [5174, 'x'] })).toBe(false); // port wrong type
     expect(isDevServerChildMessage({ type: 'rifty:dev-ports', ports: [1.5] })).toBe(false); // non-integer port
     expect(isDevServerChildMessage(null)).toBe(false);
-    expect(isDevServerOwnerMessage({ type: 'rifty:dev-file-changed' })).toBe(false); // missing path
-    expect(isDevServerOwnerMessage({ type: 'rifty:dev-file-changed', path: 42 })).toBe(false); // path wrong type
-    expect(isDevServerOwnerMessage('rifty:dev-file-changed')).toBe(false);
   });
 });

@@ -70,6 +70,9 @@ const TASKS = [
   // `compat:generate` (PR #115 finding #1). Regeneration is idempotent, so
   // running it inside the gate only mutates the tree when there IS drift.
   'check:compat-drift',
+  'check:esbuild-runtime-drift',
+  'check:install-artifact-drift',
+  'check:snapshot-artifact-drift',
   'check:source-grep',
   'backlog:check',
   'refs:check',

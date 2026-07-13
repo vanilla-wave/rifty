@@ -69,7 +69,12 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
-import { applyInternalsShims, assertShimSupported, companionRequestsFor } from './shadow-shims.ts';
+import {
+  applyInternalsShims,
+  assertShimSupported,
+  companionRequestsFor,
+  resolveEffectivePackageRequest,
+} from './shadow-shims.ts';
 import {
   type TarballCache,
   VfsTarballCache,
@@ -1037,7 +1042,7 @@ function reportTopLevelBakedRedirects(
   reporter: SubstitutionReporter,
 ): void {
   for (const [name, range] of Object.entries(request)) {
-    const override = resolveOverride(name, parent, overrides);
+    const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
     if (!override || override.source !== 'baked' || override.name === name) continue;
     const version = topLevelPins.get(override.name);
     if (version) reporter.redirect(name, range, override.name, version);
@@ -1453,8 +1458,12 @@ function createLockfileSource(
       // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
       // esbuild. `subgraphFreeOfOverrideDivergence` cannot pre-empt it: the
       // source name has no entry, so `lockfileSubgraph` never surfaces it.
-      const override = resolveOverride(name, ctx.parentName, opts.overrides);
-      const effectiveName = override?.name ?? name;
+      const { override, effectiveName } = resolveEffectivePackageRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+      );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentInstallPath);
       if (!hit) {
         throw Object.assign(
@@ -1590,34 +1599,23 @@ function createRegistrySource(
     return pending;
   };
 
-  const effectiveRequest = (
-    name: string,
-    range: string | null,
-    parentName: string | undefined,
-  ): {
-    override: ReturnType<typeof resolveOverride>;
-    effectiveName: string;
-    effectiveRange: string | null;
-  } => {
-    const override = resolveOverride(name, parentName, opts.overrides);
-    return {
-      override,
-      effectiveName: override?.name ?? name,
-      effectiveRange: override?.range ?? range,
-    };
-  };
-
   return {
     prefetch(name, range, ctx): void {
-      const { effectiveName } = effectiveRequest(name, range, ctx.parentName);
+      const { effectiveName } = resolveEffectivePackageRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+      );
       void loadPackument(effectiveName);
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const { override, effectiveName, effectiveRange } = effectiveRequest(
+      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
+        opts.overrides,
       );
 
       const packument = await loadPackument(effectiveName);
@@ -1698,12 +1696,12 @@ function applyOverridesToRequest(
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, range] of Object.entries(request)) {
-    const override = resolveOverride(name, parent, overrides);
-    if (override) {
+    const effective = resolveEffectivePackageRequest(name, range, parent, overrides);
+    if (effective.override) {
       // null range ("latest") has no lockfile-pinnable range, so reuse the
       // request's `range`; an operator wanting a specific one writes it into
       // the override target (`"bcrypt": "bcryptjs@2.x"`).
-      out[override.name] = override.range ?? range;
+      out[effective.effectiveName] = effective.effectiveRange ?? range;
     } else {
       out[name] = range;
     }

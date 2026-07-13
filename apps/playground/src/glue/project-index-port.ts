@@ -8,6 +8,7 @@
  * `channelNameFor` is borrowed from `@riftydev/net`.
  */
 import { channelNameFor } from '@riftydev/net';
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 import {
   type IndexFs,
@@ -21,6 +22,11 @@ import {
   writeIndex,
 } from './project-index.ts';
 import { seedFilesForStarter, starterById } from './starter.ts';
+import {
+  claimViteConfigSeed,
+  syncViteConfigSeedStore,
+  withoutViteConfigSeedFiles,
+} from './vite-config-seed.ts';
 
 export function projectIndexChannelUrl(key: OwnerBridgeKey): string {
   return ownerBridgeChannelUrl('project-index', key);
@@ -148,8 +154,7 @@ export function serveProjectIndex(
   key: OwnerBridgeKey,
   fs: IndexFs,
   base: string,
-  // Ordering-only drain: the persist report (ADR-0187 Corrected) is ignored.
-  flush?: () => Promise<unknown>,
+  flush?: () => Promise<PersistFailureReport | undefined>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
 ): () => void {
@@ -169,17 +174,19 @@ export function serveProjectIndex(
     if (opId)
       channel.postMessage({ type: 'index-applied', opId, index } satisfies IndexAppliedFrame);
   };
+  const viteConfigSeedStore = syncViteConfigSeedStore(fs, flush ?? (async () => undefined));
+  const flushDurable = (): Promise<void> => viteConfigSeedStore.flush();
   // Drain the OPFS write-through after a tree mutation, then publish. Errors
   // surface loud (rejected promise → owner worker-entry → stderr), never swallowed.
   const flushThenPublish = async (opId?: string): Promise<void> => {
-    if (flush) await flush();
+    if (flush) await flushDurable();
     ack(opId, publish());
   };
   // As flushThenPublish, plus a snapshot republish for an IN-PLACE re-seed so the
   // live page reflects the restored files (reset only — save/delete/new-scratch
   // mutate the active root's identity, not its content in place).
   const flushRefreshPublish = async (opId?: string): Promise<void> => {
-    if (flush) await flush();
+    if (flush) await flushDurable();
     refresh?.();
     ack(opId, publish());
   };
@@ -215,12 +222,9 @@ export function serveProjectIndex(
   const cleanupScratchAfterCommittedSave = (): void => {
     setTimeout(() => {
       cleanupCommittedScratchSource(fs, loadIndex(fs, base));
-      const cleanupFlush = flush?.();
-      if (cleanupFlush) {
-        void cleanupFlush.catch((err: unknown) =>
-          console.error('[project-index] committed scratch cleanup flush failed', err),
-        );
-      }
+      void flushDurable().catch((err: unknown) =>
+        console.error('[project-index] committed scratch cleanup flush failed', err),
+      );
     }, 0);
   };
   const saveScratch = (id: string, name: string, starter: string, opId?: string): void => {
@@ -269,16 +273,24 @@ export function serveProjectIndex(
   const resetScratch = (starter: string, opId?: string): void => {
     const index = loadIndex(fs, base);
     const root = rootForId('scratch');
-    if (index.scratch) {
-      // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
-      resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
-      writeIndex(fs, base, {
-        ...index,
-        scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
-      });
+    if (!index.scratch) {
+      void flushRefreshPublish(opId);
+      return;
     }
+    const starterSpec = starterById(starter);
+    const seedFiles = seedFilesForStarter(starterSpec, root);
+    // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
+    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
+    writeIndex(fs, base, {
+      ...index,
+      scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
+    });
     void (async (): Promise<void> => {
-      if (index.scratch) await initializeStarterGit?.(root);
+      await claimViteConfigSeed(root, viteConfigSeedStore, {
+        id: starterSpec.id,
+        seedFiles,
+      });
+      await initializeStarterGit?.(root);
       await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
     })();
   };
@@ -290,15 +302,23 @@ export function serveProjectIndex(
     const index = loadIndex(fs, base);
     const target = index.projects.find((p) => p.id === projectId);
     const root = rootForId(projectId);
-    if (target) {
-      resetProjectToStarter(fs, projectId, seedFilesForStarter(starterById(target.starter), root));
-      const projects = index.projects.map((p) =>
-        p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
-      );
-      writeIndex(fs, base, { ...index, projects });
+    if (!target) {
+      void flushRefreshPublish(opId);
+      return;
     }
+    const starterSpec = starterById(target.starter);
+    const seedFiles = seedFilesForStarter(starterSpec, root);
+    resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
+    const projects = index.projects.map((p) =>
+      p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
+    );
+    writeIndex(fs, base, { ...index, projects });
     void (async (): Promise<void> => {
-      if (target) await initializeStarterGit?.(root);
+      await claimViteConfigSeed(root, viteConfigSeedStore, {
+        id: starterSpec.id,
+        seedFiles,
+      });
+      await initializeStarterGit?.(root);
       await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
     })();
   };
@@ -322,13 +342,19 @@ export function serveProjectIndex(
       void flushThenPublish(opId);
       return;
     }
-    resetScratchToStarter(fs, seedFilesForStarter(starterById(starter), root));
+    const starterSpec = starterById(starter);
+    const seedFiles = seedFilesForStarter(starterSpec, root);
+    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
     writeIndex(fs, base, {
       ...index,
       activeId: 'scratch',
       scratch: { starter, dirty: false, editedAt: 'no edits yet' },
     });
     void (async (): Promise<void> => {
+      await claimViteConfigSeed(root, viteConfigSeedStore, {
+        id: starterSpec.id,
+        seedFiles,
+      });
       await initializeStarterGit?.(root);
       await flushThenPublish(opId);
     })();

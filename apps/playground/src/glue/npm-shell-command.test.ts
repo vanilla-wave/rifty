@@ -29,6 +29,7 @@ import {
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
+import { createInstallStamp } from './install-stamp.ts';
 import {
   type InstallFn,
   createNpmShellCommand,
@@ -1103,7 +1104,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
-    expect(stamp.version).toBe(1);
+    expect(stamp.version).toBe(2);
     expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
     expect(stamp.packages).toBe(2);
   });
@@ -2084,18 +2085,20 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(rec.stderr.join('')).toContain('install stamp write failed');
   });
 
+  const TRUSTED_PACKAGE_JSON = `${JSON.stringify(
+    { name: 'demo', version: '0.0.0', dependencies: { lodash: '^4.17.0' } },
+    null,
+    2,
+  )}\n`;
   const TRUSTED_SEED = `${JSON.stringify(
-    { version: 1, slug: '', deps: { lodash: '^4.17.0' }, packages: 2 },
+    createInstallStamp(TRUSTED_PACKAGE_JSON, { slug: '', packages: 2 }),
     null,
     2,
   )}\n`;
 
   async function seedTrustedProject(vfs: MemoryVfs): Promise<void> {
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    await vfs.writeFile(
-      '/proj/package.json',
-      `${JSON.stringify({ name: 'demo', version: '0.0.0', dependencies: { lodash: '^4.17.0' } }, null, 2)}\n`,
-    );
+    await vfs.writeFile('/proj/package.json', TRUSTED_PACKAGE_JSON);
     await vfs.writeFile(STAMP, TRUSTED_SEED);
   }
 

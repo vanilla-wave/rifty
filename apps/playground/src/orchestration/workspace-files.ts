@@ -11,6 +11,11 @@
  */
 import { basename } from '@riftydev/vfs';
 import { seedFilesForStarter, starterById } from '../glue/starter.ts';
+import {
+  type ViteConfigSeedStore,
+  claimViteConfigSeed,
+  withoutViteConfigSeedFiles,
+} from '../glue/vite-config-seed.ts';
 import type { Preset } from '../presets.ts';
 import type { FileReadOwnerLike, OwnerFileReader } from './owner-file-read.ts';
 
@@ -24,6 +29,7 @@ export interface FilesOwnerLike extends FileReadOwnerLike {
     readonly data: Uint8Array;
     readonly ifAbsent?: boolean;
   }): Promise<unknown>;
+  flushDurable(): Promise<void>;
   exportArchive(): Promise<string>;
   importArchive(text: string): Promise<unknown>;
 }
@@ -71,6 +77,40 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
 ): WorkspaceFiles {
   const { reader } = deps;
 
+  function isMissingOwnerRead(error: unknown): boolean {
+    if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return true;
+    }
+    const message = error instanceof Error ? error.message : '';
+    return /^(?:ENOENT\b|(?:file )?not[- ]found\b)/i.test(message);
+  }
+
+  function remoteViteConfigSeedStore(owner: O, root: string): ViteConfigSeedStore {
+    return {
+      async read(path) {
+        try {
+          return await reader.readBytes(owner, path, 'inspect');
+        } catch (error) {
+          // A rejected owner read does not run readBytes' post-read guard. Check
+          // currency here before interpreting a genuine missing-file result.
+          reader.assertOwnerAlive(owner, path, 'inspect');
+          if (isMissingOwnerRead(error)) return null;
+          throw error;
+        }
+      },
+      async write(path, data) {
+        reader.assertOwnerAlive(owner, path, 'seed');
+        await owner.writeFrameAcked({ type: 'write', path, data });
+        reader.assertOwnerAlive(owner, path, 'seed');
+      },
+      async flush() {
+        reader.assertOwnerAlive(owner, root, 'flush');
+        await owner.flushDurable();
+        reader.assertOwnerAlive(owner, root, 'flush');
+      },
+    };
+  }
+
   async function writeFile(path: string, content: string): Promise<void> {
     if (!deps.started()) {
       deps.showError('Choose a project before editing files');
@@ -87,18 +127,25 @@ export function createWorkspaceFiles<O extends FilesOwnerLike>(
   async function seedOwner(preset: Preset, ifAbsent = false): Promise<void> {
     const root = deps.activeRoot();
     const rootPackageJsonPath = `${root}/package.json`;
-    for (const [path, content] of Object.entries(
-      seedFilesForStarter(starterById(preset.id), root),
-    )) {
+    const owner = deps.currentOwner();
+    const starter = starterById(preset.id);
+    const seedFiles = seedFilesForStarter(starter, root);
+    await claimViteConfigSeed(root, remoteViteConfigSeedStore(owner, root), {
+      id: starter.id,
+      seedFiles,
+    });
+    for (const [path, content] of Object.entries(withoutViteConfigSeedFiles(root, seedFiles))) {
       // package.json is install-owned after boot; rewriting it here drops
       // npm-installed deps on reload while the owner/index reset already seeds it.
       if (path === rootPackageJsonPath) continue;
-      await deps.currentOwner().writeFrameAcked({
+      reader.assertOwnerAlive(owner, path, 'seed');
+      await owner.writeFrameAcked({
         type: 'write',
         path,
         data: ownerWriteEnc.encode(content),
         ...(ifAbsent ? { ifAbsent: true } : {}),
       });
+      reader.assertOwnerAlive(owner, path, 'seed');
     }
   }
 

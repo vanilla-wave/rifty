@@ -5,8 +5,8 @@
  * template is a data change rather than a worker fork.
  *
  * Runtimes (discriminated on `runtime`):
- * - `'vite'` — the worker imports `runtimeSpecifier` and boots its dev server
- *   (`createServer` + HMR bridge); the worker seeds an index.html for it.
+ * - `'vite'` — the shell runs the installed `.bin/vite`; the worker seeds an
+ *   index.html and visible Vite config for it.
  * - `'node-server'` — the worker imports the ENTRY itself; the entry is a
  *   long-running Node program (e.g. Express) that calls `listen(port)` and
  *   serves its own HTML. No index.html is seeded — it would shadow the server.
@@ -17,19 +17,6 @@
  * altitude). Only `id` crosses a realm boundary (over env as
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
-
-/** Serializable subset of Vite's `createServer` knobs the worker reconstructs.
- *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
- *  worker builds them from {@link ViteProjectSpec.hmr} after resolving the spec. */
-export interface ServerSpec {
-  // TODO(backlog: playground/vite-curated-boot-residual-forces): remove retired
-  // direct-boot Vite knobs from ServerSpec unless a live direct path proves them.
-  readonly appType: string;
-  readonly strictPort: boolean;
-  readonly optimizeDepsDisabled: boolean;
-  readonly host: boolean;
-  readonly allowedHosts: boolean;
-}
 
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
@@ -64,17 +51,13 @@ interface ProjectSpecBase {
   readonly bakedNodeModulesTemplateId?: string;
 }
 
-/** Template whose worker boots a Vite-shaped dev server from an npm package. */
+/** Template whose installed Vite CLI owns dev/build/preview behavior. */
 export interface ViteProjectSpec extends ProjectSpecBase {
   readonly runtime: 'vite';
-  /** Dynamic-`import()` specifier the worker loads to get the dev server. */
-  readonly runtimeSpecifier: string;
   /** `<title>` for the seeded index.html. */
   readonly htmlTitle: string;
   /** Root-relative files seeded before Vite starts (tsconfig, sibling modules, .d.ts fixtures). */
   readonly extraFiles?: Readonly<Record<string, string>>;
-  readonly server: ServerSpec;
-  readonly hmr: { readonly enabled: boolean };
 }
 
 interface NodeProjectSpecBase extends ProjectSpecBase {
@@ -117,9 +100,6 @@ interface BootstrapConfigBase {
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
   readonly runtime: 'vite';
-  readonly runtimeSpecifier: string;
-  readonly server: ServerSpec;
-  readonly hmrEnabled: boolean;
 }
 
 export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
@@ -194,8 +174,8 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 /**
  * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
  * dev-server command, so `npm run <any>` here boots the dev server — the single
- * source the page realm uses to recognise `npm run <script>` dev lines (ADR-0146:
- * npm runs in the owner, but the lifecycle-owning dev line is intercepted page-side).
+ * source the owner shell uses to recognize node-server lifecycle scripts. Vite
+ * scripts stay on the generic installed-bin path.
  */
 export function projectScripts(spec: ProjectSpec): Record<string, string> {
   const body = devScriptCommand(spec);
@@ -265,7 +245,7 @@ function addExtraFiles(
 
 /**
  * Pure mapping: ProjectSpec + resolved port/root → the config the worker
- * bootstrap uses for package.json seeding / `createServer()` / the seed step.
+ * bootstrap uses for package.json seeding and the seed step.
  * Unit-tested seam where entry/package.json/index.html drift surfaces as a red
  * test rather than a silent "works for vite, breaks for the next template".
  */
@@ -309,9 +289,6 @@ export function resolveBootstrapConfig(
   return {
     ...base,
     runtime: 'vite',
-    runtimeSpecifier: spec.runtimeSpecifier,
-    server: spec.server,
-    hmrEnabled: spec.hmr.enabled,
     seedFiles,
   };
 }

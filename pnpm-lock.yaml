@@ -68,9 +68,6 @@ importers:
       '@riftydev/runtime-js':
         specifier: workspace:*
         version: link:../../packages/runtime-js
-      '@riftydev/runtime-wasi':
-        specifier: workspace:*
-        version: link:../../packages/runtime-wasi
       '@riftydev/service-worker':
         specifier: workspace:*
         version: link:../../packages/service-worker
@@ -92,6 +89,9 @@ importers:
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
+      esbuild-wasm:
+        specifier: 0.28.0
+        version: 0.28.0
       monaco-editor:
         specifier: ^0.52.0
         version: 0.52.2
@@ -410,6 +410,9 @@ importers:
 
   tools/shadow-registry:
     devDependencies:
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../../packages/vfs
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
