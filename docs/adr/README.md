@@ -121,6 +121,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0194 | eddy v1.2 — stateless bundle store, shared resolve caches, learned pins |
 | 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
+| 0249 | Shadow runtime assets install through the npm pipeline into a workspace content store |
 
 ### playground
 
