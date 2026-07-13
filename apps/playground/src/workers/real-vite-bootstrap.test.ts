@@ -41,15 +41,12 @@ describe('residual source pins', () => {
   it('bin lifecycle stays uniform — ZERO vite-name dispatch in the owner bootstrap', () => {
     // residual source pin: the per-bin-name dispatch class regresses silently
     // (webpack-dev-server et al. keep working through generic paths in e2e).
-    // Only the startup-mode env lives in vite-cli-prep; user args flow straight
-    // to the child and template policy lives in visible config.
+    // Vite wrapper/args/file-watch behavior is covered by the browser contract
+    // and HMR e2e; keep only the pre-existing generic-dispatch pins here.
     expect(source).not.toContain("!== 'vite'");
     expect(source).not.toContain("binNameOf(req.shimPath) === 'vite'");
     expect(source).not.toContain('RIFTY_VITE_CLI_PORT');
     expect(source).not.toContain('VITE_DEFAULT_DEV_PORT');
-    expect(source).not.toContain('withViteCliArgs');
-    expect(source).not.toContain('rifty:vite-file-change');
-    expect(source).toContain('childBinExecutor(binPath, args, withPreviewScope(viteCtx))');
   });
 
   it('dev-config ack never awaits the deps restore (echo-behind-download regression)', () => {

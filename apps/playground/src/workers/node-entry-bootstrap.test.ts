@@ -6,8 +6,8 @@ import { viteCliModeFromEnv } from './vite-cli-prep.ts';
 // node-entry-bootstrap.ts is a worker-only `kind:'url'` entry: top-level await
 // + import-time side effects (reads the kernel process shim's argv, re-routes
 // console, RUNS the entry) — importing it in node vitest executes a program
-// run. Its env→prepareViteCli decoding moved to vite-cli-prep.ts (importable
-// seam) and is behavioral below; what remains greps are realm-wiring pins.
+// run. Its mode decoding moved to vite-cli-prep.ts; the browser esbuild/Vite
+// contract executes the real prepare call. Only unobservable spawn flags remain.
 const source = readFileSync(
   fileURLToPath(new URL('./node-entry-bootstrap.ts', import.meta.url)),
   'utf8',
@@ -46,17 +46,5 @@ describe('node-entry bootstrap wiring (worker realm)', () => {
     // executing the entry in a kernel worker (browser-unit/e2e lane).
     expect(source).toContain('RIFTY_NODE_SERVE');
     expect(source).toContain('bin: proc.env.RIFTY_BIN ===');
-  });
-
-  it('threads proc.env through the decode seam into prepareViteCli at boot', () => {
-    // residual source pin: the call happens in top-level await of the worker
-    // entry; the decode itself is behavioral above.
-    expect(source).toContain('prepareViteCli(proc.cwd(), viteCliMode, entryPath)');
-  });
-
-  it('has no wrapper-owned editor invalidation bridge', () => {
-    expect(source).not.toContain('rifty:vite-file-change');
-    expect(source).not.toContain('__riftyActiveViteServer');
-    expect(source).not.toContain('invalidateViteModule');
   });
 });

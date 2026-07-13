@@ -77,9 +77,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 6,
-    digest: 'e188a3aa7a22',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin branch, prepareViteCli call-site, file-change bridge wiring; env-decoder heirs in vite-cli-prep.test.ts',
+    count: 2,
+    digest: '72006ccff761',
+    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin spawn flags; prepare/runtime and file-watch heirs run in browser contract/e2e',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
