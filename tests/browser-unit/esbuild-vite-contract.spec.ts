@@ -584,9 +584,8 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
 `,
     );
 
-    test.fail(true, 'Contract+RED: upstream VFS runtime is not implemented yet');
-    // Health above proves the real guest loader/CLI Worker/VFS ran every row.
-    // Soft comparisons and Vite acceptance all execute before expected RED closes.
+    // The real guest loader/CLI Worker/VFS owns the full module identity row;
+    // the Node harness covers every field except its host-only ESM namespace.
     for (const rowId of ESBUILD_CONTRACT_ROW_IDS) {
       expect
         .soft(contract.dev.parity.rows[rowId], `guest parity ${rowId}`)

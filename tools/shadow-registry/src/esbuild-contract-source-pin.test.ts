@@ -36,7 +36,7 @@ function snapshotFile(snapshot: ViteSnapshot, path: string): string {
   return Buffer.from(file.content, 'base64').toString('utf8');
 }
 
-describe('esbuild-wasm 0.28.0 Contract+RED source pin', () => {
+describe('esbuild-wasm 0.28.0 source pin', () => {
   it('pins the exact upstream browser CJS client and Go WASM bytes from ADR-0226', () => {
     const manifest = JSON.parse(readFileSync(packagePath, 'utf8')) as {
       readonly version?: unknown;
@@ -51,7 +51,7 @@ describe('esbuild-wasm 0.28.0 Contract+RED source pin', () => {
   });
 });
 
-describe('Vite 7.3.6 Contract+RED consumer pin', () => {
+describe('Vite 7.3.6 consumer pin', () => {
   it('pins action imports, requested esbuild range, and CAC no-action split', () => {
     const snapshot = JSON.parse(
       gunzipSync(

@@ -45,9 +45,10 @@ function policyArray(value, label) {
 function buildEsbuildMatrix(policyValue) {
   const policy = policyRecord(policyValue, 'root');
   if (policy.schema !== 1) throw new Error('esbuild runtime policy: schema must be 1');
-  if (policy.state !== 'contract-red') {
-    throw new Error('esbuild runtime policy: state must stay contract-red until Final+GREEN');
+  if (policy.state !== 'contract-red' && policy.state !== 'final-green') {
+    throw new Error('esbuild runtime policy: state must be contract-red or final-green');
   }
+  const finalGreen = policy.state === 'final-green';
   const version = policyString(policy.version, 'version');
   const consumer = policyRecord(policy.consumer, 'consumer');
   const consumerPackage = policyString(consumer.package, 'consumer.package');
@@ -71,8 +72,8 @@ function buildEsbuildMatrix(policyValue) {
   const patches = policyArray(policy.patches, 'patches').map((value, index) =>
     policyString(value, `patches[${index}]`),
   );
-  if (patches.length !== 10 || new Set(patches).size !== patches.length) {
-    throw new Error('esbuild runtime policy: patches must contain 10 unique ordered ids');
+  if (patches.length !== 12 || new Set(patches).size !== patches.length) {
+    throw new Error('esbuild runtime policy: patches must contain 12 unique ordered ids');
   }
   const patchDescriptions = policyRecord(policy.patchDescriptions, 'patchDescriptions');
   const patchPlan = patches
@@ -103,6 +104,7 @@ function buildEsbuildMatrix(policyValue) {
     return {
       surface: policyString(entry.surface, `gaps[${index}].surface`),
       feature: policyString(entry.feature, `gaps[${index}].feature`),
+      required: policyString(entry.required, `gaps[${index}].required`),
       current: policyString(entry.current, `gaps[${index}].current`),
     };
   });
@@ -122,19 +124,19 @@ function buildEsbuildMatrix(policyValue) {
     title: 'Compatibility matrix — esbuild JavaScript API',
     intro:
       `Current claim for the Vite-facing esbuild API. Policy is exact \`${sourcePackage}@${version}\` ` +
-      `for \`${consumerPackage}@${consumerVersion}\`; Contract+RED is merged, Final+GREEN is not.`,
+      `for \`${consumerPackage}@${consumerVersion}\`; ${finalGreen ? 'Final+GREEN is browser-proven.' : 'Contract+RED is merged, Final+GREEN is not.'}`,
     rows: [
       [
         'Exact source and WASM provenance',
         '✅',
-        `Pinned and test-verified \`${sourceMember}\` SHA-256 \`${sourceSha256}\` and \`${wasmMember}\` SHA-256 \`${wasmSha256}\`; generated output is tracked separately and remains Contract RED.`,
+        `Pinned and test-verified \`${sourceMember}\` SHA-256 \`${sourceSha256}\` and \`${wasmMember}\` SHA-256 \`${wasmSha256}\`; generated output and manifest are drift-gated.`,
       ],
-      ['Ordered generated patch plan', '⚠️', patchPlan],
+      ['Ordered generated patch plan', finalGreen ? '✅' : '⚠️', patchPlan],
       ...currentSurfaces,
       ...gaps.map((gap) => [
         `D4 gap: \`${gap.surface}\``,
         '⚠️',
-        `Required outcome: native validation first, then \`NotImplementedError('${gap.feature}')\`. ${gap.current}`,
+        `Required outcome: ${gap.required} ${gap.current}`,
       ]),
     ],
     tests,
@@ -1042,7 +1044,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
 - [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed \`typescript-eslint\`)
-- [esbuild-js-api.md](./esbuild-js-api.md) — exact esbuild 0.28.0 Contract+RED and current partial WASI-shim surface (ADR-0226)
+- [esbuild-js-api.md](./esbuild-js-api.md) — exact esbuild 0.28.0 Final+GREEN over guest VFS, with explicit D4 loud gaps (ADR-0226)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)

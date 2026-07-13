@@ -71,7 +71,7 @@ function sha256(contents: string): string {
 
 const manifest = readJson(MANIFEST_PATH);
 
-describe('generated esbuild runtime provenance Contract+RED', () => {
+describe('generated esbuild runtime provenance', () => {
   it('manifest/present', () => {
     expect(existsSync(MANIFEST_PATH)).toBe(true);
   });

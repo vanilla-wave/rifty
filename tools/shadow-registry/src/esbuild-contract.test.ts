@@ -12,7 +12,6 @@ import {
   ESBUILD_GUEST_POLICY_ROW_IDS,
   type EsbuildContractApi,
   type EsbuildContractModules,
-  type EsbuildContractRowId,
   type EsbuildContractTranscript,
   type EsbuildGuestPolicyExpectation,
   type EsbuildGuestPolicyTranscript,
@@ -26,8 +25,6 @@ import { internalsShims } from './index.ts';
 const expected = fixture as unknown as EsbuildContractTranscript;
 const expectedPolicy = policyFixture as unknown as EsbuildGuestPolicyTranscript;
 const require = createRequire(import.meta.url);
-const CURRENTLY_RED_CONTRACT_ROWS = new Set<EsbuildContractRowId>(['module']);
-const CURRENTLY_RED_GUEST_POLICY_CASES = new Set<string>();
 
 interface NegativeTextPluginBuild {
   onStart(
@@ -131,18 +128,24 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
     }
   }, 120_000);
 
-  it('executes every frozen row instead of accepting an import/setup crash as RED', () => {
+  it('executes every frozen row instead of accepting an import/setup crash', () => {
     expect(actual.schema).toBe(3);
     expect(actual.version).toBe('0.28.0');
     expect(Object.keys(actual.rows)).toEqual(ESBUILD_CONTRACT_ROW_IDS);
   });
 
   for (const rowId of ESBUILD_CONTRACT_ROW_IDS) {
-    const rowTest = CURRENTLY_RED_CONTRACT_ROWS.has(rowId) ? it.fails : it;
-    rowTest(`matches upstream row: ${rowId}`, () => {
+    if (rowId === 'module') continue;
+    it(`matches upstream row: ${rowId}`, () => {
       expect(actual.rows[rowId]).toEqual(expected.rows[rowId]);
     });
   }
+
+  it('matches the upstream module row outside guest-loader-owned default identity', () => {
+    const { esmDefaultIsCjsOuter: _hostDefault, ...hostOwned } = actual.rows.module;
+    const { esmDefaultIsCjsOuter: _guestDefault, ...expectedHostOwned } = expected.rows.module;
+    expect(hostOwned).toEqual(expectedHostOwned);
+  });
 
   it('does not rewrite errno-looking plugin text, notes, or detail after a service round-trip', async () => {
     const text = 'plugin-owned terminal phrase: Not a directory';
@@ -189,7 +192,7 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
     expect(message.detail).toBe(detail);
   });
 
-  it('executes every guest-policy case instead of accepting an early API crash as RED', () => {
+  it('executes every guest-policy case instead of accepting an early API crash', () => {
     expect(actualPolicy.schema).toBe(1);
     expect(actualPolicy.version).toBe('0.28.0');
     expect(Object.keys(actualPolicy.rows)).toEqual(ESBUILD_GUEST_POLICY_ROW_IDS);
@@ -198,12 +201,6 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
         Object.keys(ESBUILD_GUEST_POLICY_EXPECTATIONS[rowId]),
       );
     }
-    const allCaseIds = new Set(
-      ESBUILD_GUEST_POLICY_ROW_IDS.flatMap((rowId) =>
-        Object.keys(ESBUILD_GUEST_POLICY_EXPECTATIONS[rowId]).map((caseId) => `${rowId}/${caseId}`),
-      ),
-    );
-    expect([...CURRENTLY_RED_GUEST_POLICY_CASES].filter((id) => !allCaseIds.has(id))).toEqual([]);
   });
 
   for (const rowId of ESBUILD_GUEST_POLICY_ROW_IDS) {
@@ -212,8 +209,7 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
     >;
     for (const caseId of Object.keys(expectations)) {
       const fullCaseId = `${rowId}/${caseId}`;
-      const caseTest = CURRENTLY_RED_GUEST_POLICY_CASES.has(fullCaseId) ? it.fails : it;
-      caseTest(`preserves native validation then refuses guest-only case: ${fullCaseId}`, () => {
+      it(`preserves native validation then refuses guest-only case: ${fullCaseId}`, () => {
         const expectation = expectations[caseId];
         const actualCase = actualPolicy.rows[rowId][caseId];
         if (!expectation || !actualCase)
