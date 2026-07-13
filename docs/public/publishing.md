@@ -111,7 +111,7 @@ On npmjs.com, for **each** published package → **Settings → Trusted Publishe
 | Environment | *(leave empty)* |
 | Allowed actions | tick **npm publish** |
 
-To skip the per-package toil, use npm's **bulk trusted-publishing** config flow, or the `npm trust github <pkg> --repo vanilla-wave/rifty --file release.yml --allow-publish` CLI (npm ≥ 11.10.0; needs account 2FA + an interactive OTP). The package must already exist either way (Phase 1).
+To skip the per-package toil: `bash tools/publishing/setup-trusted-publishers.sh` — idempotent, covers every non-private `packages/*` + `@riftydev/shadow-registry` via `npm trust github` (npm ≥ 11.10.0); `--only @riftydev/eddy` adds a late-bootstrapped name. **Tokens don't work for trust ops** (granular + Bypass 2FA → 403, per npm docs) — the script needs an interactive `npm login` session; on the first browser 2FA prompt tick **"skip 2FA for 5 minutes"** and the rest of the loop passes silently. The package must already exist either way (Phase 1).
 
 ### After that
 
