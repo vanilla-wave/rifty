@@ -13,6 +13,7 @@
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { PackageMutationExecutor } from './package-mutation-executor.ts';
 import {
   type WorkspaceArchiveBridge,
   bridgeWorkspaceArchive,
@@ -26,8 +27,15 @@ const dec = new TextDecoder();
 const teardowns: Array<() => void> = [];
 let bridge: WorkspaceArchiveBridge | null = null;
 
+const directPackageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+  reset: async (_target, prepare) => {
+    const plan = await prepare();
+    if (plan.status === 'ready') await plan.mutate();
+  },
+};
+
 function serve(port: number, root = '/workspace'): void {
-  teardowns.push(serveWorkspaceArchive(port, root));
+  teardowns.push(serveWorkspaceArchive(port, root, directPackageMutations));
 }
 
 function client(port: number, timeoutMs?: number): WorkspaceArchiveBridge {
@@ -65,6 +73,31 @@ describe('owner-served workspace archive bridge', () => {
     expect(paths.some((p) => p.startsWith('node_modules'))).toBe(false);
   });
 
+  it.each([
+    { failedDirectory: '/workspace', port: 9105 },
+    { failedDirectory: '/workspace/src', port: 9106 },
+  ])(
+    'export rejects the exact readdir permission failure at $failedDirectory',
+    async ({ failedDirectory, port }) => {
+      const fs = syncMirror();
+      fs.mkdirSync('/workspace/src', { recursive: true });
+      fs.writeFileSync('/workspace/src/main.js', enc.encode('must-not-disappear'));
+      const realReaddir = fs.readdirSync.bind(fs);
+      const failure = new Error(`permission denied reading ${failedDirectory}`);
+      failure.name = 'ArchivePermissionError';
+      fs.readdirSync = ((path) => {
+        if (path === failedDirectory) throw failure;
+        return realReaddir(path);
+      }) as typeof fs.readdirSync;
+      serve(port);
+
+      await expect(client(port).export()).rejects.toMatchObject({
+        name: 'ArchivePermissionError',
+        message: `permission denied reading ${failedDirectory}`,
+      });
+    },
+  );
+
   it('import applies an archive into the owner tree (no PAGE store needed)', async () => {
     serve(9102);
     const archive: WorkspaceArchiveV1 = {
@@ -77,6 +110,32 @@ describe('owner-served workspace archive bridge', () => {
 
     expect(syncMirror().existsSync('/workspace/src/app.js')).toBe(true);
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/src/app.js'))).toBe('hello owner');
+  });
+
+  it('runs the whole-root archive replacement inside the supplied package FIFO', async () => {
+    const events: string[] = [];
+    teardowns.push(
+      serveWorkspaceArchive(9104, '/workspace', {
+        reset: async (target, prepare) => {
+          events.push(`before:${target.root}`);
+          const plan = await prepare();
+          if (plan.status === 'ready') await plan.mutate();
+          events.push(`after:${target.root}`);
+        },
+      }),
+    );
+    const archive: WorkspaceArchiveV1 = {
+      version: 1,
+      root: '/workspace',
+      files: [{ path: 'package.json', encoding: 'base64', content: btoa('{"name":"next"}\n') }],
+    };
+
+    await client(9104).import(JSON.stringify(archive));
+
+    expect(events).toEqual(['before:/workspace', 'after:/workspace']);
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/package.json'))).toBe(
+      '{"name":"next"}\n',
+    );
   });
 
   it('export rejects with a timeout when no owner is listening', async () => {

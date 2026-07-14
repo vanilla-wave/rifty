@@ -127,6 +127,8 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     fakeWorker.emit('message', {
       type: 'rifty:workspace-owner-ready',
       port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 0,
     });
     await handle.ready;
     await Promise.resolve();
@@ -309,5 +311,105 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     fakeWorker.die(137);
 
     await expect(acked).rejects.toThrow(/workspace owner exited/);
+  });
+
+  it('binds conditional commits to the ready owner and restores exact conflict evidence', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const { VfsVersionConflictError } = await import('./owner-vfs-protocol.ts');
+    const { encodeOwnerVfsError } = await import('./owner-vfs-ipc.ts');
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+    expect(handle.ownerEpoch).toBe('owner-a');
+
+    const pending = handle.applyHostCommit({
+      kind: 'write',
+      operationId: 'host-save',
+      path: '/workspace/large.bin',
+      data: new Uint8Array([1]),
+      expectedVersion: 'opened',
+    });
+    const request = fakeWorker.sent.find(
+      (message): message is { type: string; request: { operationId: string } } =>
+        !!message &&
+        typeof message === 'object' &&
+        (message as { type?: unknown }).type === 'rifty:owner-vfs-commit',
+    );
+    expect(request?.request.operationId).toBe('host-save');
+
+    const remote = new Uint8Array(192 * 1024 + 1);
+    remote.fill(0x5a);
+    const conflict = new VfsVersionConflictError({
+      path: '/workspace/large.bin',
+      expectedVersion: 'opened',
+      actualVersion: 'guest',
+      actualEntry: {
+        path: '/workspace/large.bin',
+        kind: 'file',
+        size: remote.byteLength,
+        content: remote,
+        version: 'guest',
+      },
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+    });
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-save',
+      ok: false,
+      error: encodeOwnerVfsError(conflict),
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'VfsVersionConflictError',
+      actualVersion: 'guest',
+      treeRevision: 4,
+    });
+    await pending.catch((error: unknown) => {
+      expect(error).toBeInstanceOf(VfsVersionConflictError);
+      expect((error as InstanceType<typeof VfsVersionConflictError>).actualBytes).toEqual(remote);
+    });
+  });
+
+  it('returns the owner-bound durability receipt and rejects the barrier on owner exit', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 5,
+    });
+    await handle.ready;
+
+    const durable = handle.durabilityBarrier(5);
+    const request = fakeWorker.sent.find(
+      (message): message is { type: string; barrierId: string; ownerEpoch: string } =>
+        !!message &&
+        typeof message === 'object' &&
+        (message as { type?: unknown }).type === 'rifty:owner-vfs-durability',
+    );
+    expect(request).toMatchObject({ ownerEpoch: 'owner-a' });
+    if (!request) throw new Error('expected durability request');
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-durability-ack',
+      barrierId: request.barrierId,
+      ok: true,
+      receipt: { ownerEpoch: 'owner-a', treeRevision: 5, durability: 'durable' },
+    });
+    await expect(durable).resolves.toEqual({
+      ownerEpoch: 'owner-a',
+      treeRevision: 5,
+      durability: 'durable',
+    });
+
+    const interrupted = handle.durabilityBarrier(5);
+    fakeWorker.die(137);
+    await expect(interrupted).rejects.toThrow(/workspace owner exited/);
   });
 });

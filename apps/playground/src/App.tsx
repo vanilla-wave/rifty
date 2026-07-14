@@ -83,7 +83,7 @@ import {
 } from './glue/realVite.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
+import type { StarterGroup } from './glue/starter.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
@@ -95,11 +95,7 @@ import {
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import type { TsLanguageServiceProvidersHandle } from './glue/ts-ls-monaco-providers.ts';
-import {
-  type VfsSnapshotEntry,
-  requestVfsSnapshot,
-  subscribeVfsSnapshot,
-} from './glue/vfs-snapshot-port.ts';
+import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
 import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
@@ -156,7 +152,6 @@ const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
-const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {
   return `ws-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
@@ -194,6 +189,9 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     snapshotPort: UNAVAILABLE_OWNER_PORT,
     ready: Promise.resolve(),
     closed: Promise.resolve(0),
+    get ownerEpoch(): never {
+      throw new Error(OWNER_UNAVAILABLE_MSG);
+    },
     openSession: () => Promise.resolve(),
     exec: (_sid, _line, opts) => unavailableResult(opts).then((result) => result.exitCode),
     execResult: (_sid, _line, opts) => unavailableResult(opts),
@@ -209,6 +207,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     },
     writeFrameAcked: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     flushDurable: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    applyHostCommit: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    durabilityBarrier: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     readFileBytes: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
@@ -1013,15 +1013,35 @@ export function App(props: AppProps) {
   // explorer reflects the owner tree (where `npm install` lands) before AND after
   // any vite run. Subscribed once at setup (no signal dependency), torn on unmount.
   createEffect(() => {
-    const unsubscribe = subscribeVfsSnapshot(workspaceOwner().snapshotPort, (frame) => {
-      snapshotFs.update(frame);
-      setNodeModulesPresent(frame.nodeModulesPresent);
+    const owner = workspaceOwner();
+    let active = true;
+    snapshotFs.clear();
+    setNodeModulesPresent(false);
+    const unsubscribe = subscribeVfsSnapshot(owner.snapshotPort, (frame) => {
+      try {
+        snapshotFs.update(frame);
+      } finally {
+        setNodeModulesPresent(snapshotFs.nodeModulesPresent);
+      }
     });
-    // Readiness handshake (ADR-0146 owner republishes its snapshot): ask the owner to publish now — covers
-    // the case where the owner came up before this subscription (its startup
-    // publish would have been missed), replacing the owner-side retry-storm.
-    requestVfsSnapshot(workspaceOwner().snapshotPort);
-    onCleanup(unsubscribe);
+    if (owner.snapshotPort !== UNAVAILABLE_OWNER_PORT) {
+      void owner.ready
+        .then(() => {
+          if (!active) return;
+          snapshotFs.bindOwner(owner.ownerEpoch, owner.root);
+          // Readiness handshake (ADR-0146): bind the expected ready nonce first,
+          // then request a fresh frame. A delayed prior-owner frame on the reused
+          // workspace channel can never claim the new mirror.
+          requestVfsSnapshot(owner.snapshotPort);
+        })
+        .catch((error: unknown) => {
+          if (active) console.error('[vfs-snapshot] owner readiness failed', error);
+        });
+    }
+    onCleanup(() => {
+      active = false;
+      unsubscribe();
+    });
   });
 
   // (Re)bind the owner-backed SCM core (git-status feed + branch/history reads
@@ -1643,37 +1663,6 @@ export function App(props: AppProps) {
     editorApi?.openInitialFiles(paths);
   }
 
-  function starterSnapshotEntries(preset: Preset, root: string): VfsSnapshotEntry[] {
-    const dirs = new Set<string>();
-    const files = Object.entries(seedFilesForStarter(starterById(preset.id), root)).sort(
-      ([left], [right]) => left.localeCompare(right),
-    );
-    for (const [path] of files) {
-      let slash = path.lastIndexOf('/');
-      while (slash > root.length) {
-        const dir = path.slice(0, slash);
-        dirs.add(dir);
-        slash = dir.lastIndexOf('/');
-      }
-    }
-    return [
-      ...[...dirs].sort().map((path) => ({ path, kind: 'dir' as const, size: 0 })),
-      ...files.map(([path, content]) => {
-        const data = ownerWriteEnc.encode(content);
-        return { path, kind: 'file' as const, size: data.byteLength, content: data };
-      }),
-    ];
-  }
-
-  function paintPickedStarterSnapshot(preset: Preset): void {
-    snapshotFs.update({
-      type: 'snapshot',
-      root: activeRoot(),
-      entries: starterSnapshotEntries(preset, activeRoot()),
-      nodeModulesPresent: false,
-    });
-  }
-
   function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
@@ -1681,7 +1670,6 @@ export function App(props: AppProps) {
   async function loadPresetUi(preset: Preset): Promise<void> {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
-    paintPickedStarterSnapshot(preset);
     resetEditorToActiveInitialFiles();
   }
 

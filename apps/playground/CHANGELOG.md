@@ -76,14 +76,15 @@
   without silent resurrection. Chromium proves the marker and deletion across
   an OPFS owner respawn.
 
-### Changed (install artifact identity, ADR-0241)
+### Changed (root-bound install claims, ADR-0261; supersedes ADR-0241)
 
-- Dependency snapshots and install stamps use schema v2 with exact
-  `package.json` text plus the generated installer/shim/runtime identity.
-  Legacy or mismatched claims are untrusted and re-run arrival; one shared
-  constructor/parser owns async and sync stamp shapes. Committed snapshots
-  were fully rebaked. CI is read-only: stale metadata, shim bytes, or canonical
-  archive drift requires a full bake; no checker can relabel an old tree.
+- Install claims use schema v3 with their canonical absolute root, exact
+  `package.json` text, and generated installer/shim/runtime identity. Legacy,
+  copied, malformed, or mismatched claims are untrusted and re-run arrival;
+  only the owner authority may mutate their reserved paths. Dependency
+  snapshots remain claim-free v2 payloads and were fully rebaked. CI is
+  read-only: stale metadata, shim bytes, or canonical archive drift requires a
+  full bake; no checker can relabel an old tree.
 
 ### Fixed (File Explorer context menu placement)
 
@@ -91,11 +92,32 @@
   chrome, and use normal hit-tested actions; project-card menus retain their
   separate anchored geometry.
 
-### Changed (install-tail-latency, ADR-0216)
+### Changed (install-tail-latency, ADR-0261; supersedes ADR-0216)
 
-- **Install exit stops awaiting the OPFS durability drain** (ADR-0216,
-  supersedes ADR-0187's command-site durable-on-exit clause): the drain →
-  full-ledger gate → stamp → stamp-drain sequence (gate semantics intact) now
+- One owner-realm install-stamp authority now serializes absent, pending, and
+  trusted transitions for boot restore and terminal installs. Per-claim epochs
+  replace generation/promotionId chains; promotion uses byte-exact package.json
+  identity plus full-ledger tree/claim durability, while an unproven trusted
+  demote restores the mirror and aborts before mutation. The owner VFS reserves
+  claim paths behind one construction-local capability across direct, aliased,
+  recursive, Git, Shell, runtime, page, archive, snapshot, and npm ingress.
+- One owner-realm package-acquisition FIFO now owns instant snapshot restore,
+  terminal npm mutation, exact acquisition provenance, and stamp promotion.
+  Terminal project identity and whole-root reset claims resolve at the FIFO
+  head, so a queued switch uses its new config and nested claims are revoked
+  before project replacement.
+  Snapshot-only boot never installs; rejected partial restores re-prepare the
+  tree before fallback, while durability failures remain loud with exact causes.
+  Snapshot metadata, archive paths/bytes, and reserved ingress are fully planned
+  before demotion, so snapshot-only rejection leaves the destination byte-exact.
+- Save no longer carries a speculative stamp re-key writer: stamped
+  node_modules is derived and omitted. User workspace archives now reject
+  derived node_modules before replacing source, so crafted archives cannot
+  forge a trust claim outside the authority (ADR-0261, ADR-0224).
+
+- **Install exit stops awaiting the OPFS durability drain** (ADR-0261,
+  supersedes ADR-0187's command-site durable-on-exit clause): one full-ledger
+  proof while pending, followed by the best-effort final trusted marker, now
   runs in background after `npm install` returns, so a `&&`-chained dev
   server starts immediately; dirty-drain/stamp warnings still print,
   asynchronously. Reloads stay TRUST-safe via the boot path's pending-first
@@ -103,16 +125,16 @@
   `pending` before the first tree mutation (a mid-install or mid-drain reload
   re-arrives — this also NARROWS the pre-existing torn-window where a bare
   re-install's reload could trust the old stamp, and a failed install no
-  longer resurrects it), the trusted stamp attests the INSTALL-TIME deps+slug
-  snapshot, and a per-tree generation guard (cross-terminal) cancels an older
-  sequence's stamp instead of racing it — deliberately no await-chain (a
-  wedged drain must not park later installs). A reload inside the ~0.5–2s
+  longer resurrects it), the trusted claim attests the exact install-time
+  request/root/slug/artifact identity, and a per-root epoch fences an older
+  promoter instead of racing it. The proof stays outside the transition FIFO,
+  so a wedged drain cannot park later installs. A reload inside the ~0.5–2s
   window costs a re-install (self-heal), never a torn trusted tree. Measured
   install→vite-ready (eddy path, real-vite preset, local, n=5 median):
   3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the full
   ~490ms profiled drain does not all land on this marker).
 - **Learned pins serve-stale-while-revalidate inside a hard 24h bound**
-  (ADR-0216, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
+  (ADR-0261, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
   ≤ 24h now still rides the immutable pinned GET (install AND boot prefetch);
   the terminal prints
   `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in background`
@@ -125,11 +147,29 @@
   server-vouched resolutions: the post-install write-back fires only for
   POST-adopted bundles — a GET/prefetch cache serve never rewrites the pin,
   so repeat installs cannot self-renew a stale closure past the bound.
-  Deliberate npm deviation recorded in ADR-0216; `prefer:'online'` bypass
+  Deliberate npm deviation recorded in ADR-0261; `prefer:'online'` bypass
   unchanged; revocation safety net: §Revocation runbook in
   `docs/public/hosting-eddy.md`.
 
-### Fixed (install-tail-latency review round 5, ADR-0216 r5 notes + audit)
+### Added (owner VFS revisions and documents)
+
+- One owner-realm VFS authority now assigns exact per-path versions and a
+  monotonic tree revision across sync, async, guest, npm, remote-fs, reset, and
+  profile-wide metadata mutations. Host commits use exact CAS; the page waits
+  for owner reflection and the bounded durability barrier before resolving.
+- Page snapshots are fenced to an explicit owner epoch, project root, and
+  nondecreasing revision, with defensive byte/dirent copies. Collection faults,
+  mid-walk owner changes, and malformed path/version graphs cannot certify a
+  reflected revision. Editable documents preserve local and remote conflict
+  bytes, follow owner serial order for save-versus-rename/delete/reset, and
+  require an explicit dirty-close choice.
+- Every project-index mutation now enters one owner FIFO. A reset parked on
+  durable package revocation cannot overwrite a later rename, switch, dirty
+  mark, Save, delete, or scratch transition with a stale captured index. Passive
+  readers see only the last durability-proven index; Save's early applied phase
+  remains operation-scoped until both persistence barriers pass.
+
+### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 
 - **Demote+proof ordered BEFORE `prepareInstall`**: a from-scratch clear whose
   OPFS rm never persisted erased the MIRROR stamp while the durable trusted
@@ -140,9 +180,8 @@
 - **The stamp unmoved-guard is BYTE-exact** (`lossy-aggregate`, new
   fault-class row): the flattened dep-map compare let a dependencies↔
   devDependencies move or an `overrides` edit through with an identical flat
-  map — a trusted stamp for a tree resolved under different inputs. Boot-side
-  flat compare is pre-existing and recorded in
-  `playground/install-stamp-invalidation`.
+  map — a trusted stamp for a tree resolved under different inputs. Boot and
+  command paths now share the same exact-byte authority check.
 - **Pin CAS compares the SERVABLE view**: a hard-expired (>24h) raw entry
   reads as absent everywhere else, so the foreground relearn's expect-absent
   write always lost to its stale bytes — the key could never relearn until an
@@ -153,11 +192,10 @@
   pins self-bound at ≤24h). `resolvedVia:'post'` docs corrected to
   SERVER-VOUCHED (the answer may be eddy's mutable-tier cache ≤TTL; only
   `prefer:'online'` recomputes).
-- ADR-0216 records the mandatory 3+-round audit: recurring-class table
+- ADR-0261 grafts the mandatory 3+-round audit: recurring-class table
   (torn-state ×5 rounds, concurrent-same-key ×3, sibling-drift,
-  lossy-aggregate) + admitted gaps (item-contract writer-set invariant,
-  app-layer Vfs outside the contract suite) + the NOT-delivered stamp-authority
-  chokepoint said loudly.
+  lossy-aggregate); the single stamp/package authorities and writer gate close
+  its admitted writer-set and app-layer chokepoint gaps.
 
 ### Fixed (install-tail-latency review round 4, ADR-0216 r4 notes)
 

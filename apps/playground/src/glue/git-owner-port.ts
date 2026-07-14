@@ -23,7 +23,12 @@ import type {
 import { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import { channelNameFor } from '@riftydev/net';
+import { type VfsMutationIntent, normalizePath } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import {
+  type PackageMutationImpact,
+  classifyVfsMutationIntentsPackageImpact,
+} from './package-mutation-executor.ts';
 
 type Git = ReturnType<typeof makeGit>;
 
@@ -62,7 +67,7 @@ export type GitOwnerRequest =
     }
   | { readonly id: string; readonly op: 'reset'; readonly input: ResetInput };
 
-type GitOwnerResult =
+export type GitOwnerResult =
   | readonly StatusEntry[]
   | readonly DiffEntry[]
   | ShowObject
@@ -71,6 +76,76 @@ type GitOwnerResult =
   | readonly string[]
   | CheckoutResult
   | undefined;
+
+export interface GitOwnerRequestExecutor {
+  execute(
+    request: GitOwnerRequest,
+    operation: () => Promise<GitOwnerResult>,
+  ): Promise<GitOwnerResult>;
+}
+
+function pathspecMutationRoot(root: string, pathspec: string): string {
+  const normalized = pathspec.replace(/^\.\//, '').replace(/\/$/, '');
+  if (normalized === '' || normalized === '.') return normalizePath(root);
+  const wildcard = normalized.search(/[?*[]/);
+  if (wildcard >= 0) {
+    const prefix = normalized.slice(0, wildcard).replace(/\/$/, '');
+    if (prefix === '') return normalizePath(root);
+    return normalizePath(`${root}/${prefix}`);
+  }
+  return normalizePath(`${root}/${normalized}`);
+}
+
+/** Semantic write set for owner Git RPC; empty means the request is read-only. */
+export function gitOwnerMutationIntents(
+  request: GitOwnerRequest,
+  root: string,
+): readonly VfsMutationIntent[] {
+  const gitMetadata: VfsMutationIntent = {
+    kind: 'write',
+    path: normalizePath(`${root}/.git`),
+  };
+  switch (request.op) {
+    case 'status':
+    case 'diff':
+    case 'show':
+    case 'log':
+    case 'currentBranch':
+    case 'listBranches':
+      return [];
+    case 'restore':
+      return [
+        gitMetadata,
+        ...request.pathspecs.map(
+          (pathspec): VfsMutationIntent => ({
+            kind: 'rm',
+            path: pathspecMutationRoot(root, pathspec),
+          }),
+        ),
+      ];
+    case 'reset':
+      return request.input.mode === 'hard'
+        ? [gitMetadata, { kind: 'rm', path: normalizePath(root) }]
+        : [gitMetadata];
+    case 'add':
+    case 'remove':
+    case 'unstage':
+    case 'commit':
+    case 'commitResolvedIdentity':
+      return [gitMetadata];
+  }
+}
+
+export function classifyGitOwnerPackageImpact(
+  request: GitOwnerRequest,
+  root = '/workspace',
+): PackageMutationImpact {
+  return classifyVfsMutationIntentsPackageImpact(gitOwnerMutationIntents(request, root), root);
+}
+
+export function gitRequestMayEditPackageJson(request: GitOwnerRequest): boolean {
+  return classifyGitOwnerPackageImpact(request) !== 'none';
+}
 
 export type GitOwnerRequestFrame = {
   readonly type: typeof GIT_OWNER_RPC_TYPE;
@@ -278,7 +353,11 @@ async function dispatchGitOwnerRequest(
  * Owner side. Serves git RPC requests against the live owner `makeGit` facade.
  * Returns an idempotent teardown.
  */
-export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
+export function serveGitOwnerRpc(
+  key: OwnerBridgeKey,
+  git: Git,
+  executor?: GitOwnerRequestExecutor,
+): () => void {
   const channel = new BroadcastChannel(channelNameFor(gitOwnerChannelUrl(key)));
 
   const onMessage = (event: MessageEvent): void => {
@@ -286,12 +365,14 @@ export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
     if (isResponseFrame(frame)) return;
     void (async (): Promise<void> => {
       try {
+        const operation = (): Promise<GitOwnerResult> =>
+          dispatchGitOwnerRequest(git, frame.request);
         channel.postMessage({
           type: GIT_OWNER_RPC_TYPE,
           response: {
             id: frame.request.id,
             ok: true,
-            result: await dispatchGitOwnerRequest(git, frame.request),
+            result: executor ? await executor.execute(frame.request, operation) : await operation(),
           },
         } satisfies GitOwnerResponseFrame);
       } catch (err) {

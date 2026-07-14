@@ -9,7 +9,13 @@
  */
 
 import type { SyncRpcDispatcher } from '@riftydev/kernel';
-import type { FsSync, VfsDirent } from '@riftydev/vfs';
+import {
+  type FsSync,
+  type VfsDirent,
+  type VfsMutationGuard,
+  type VfsMutationIntent,
+  guardVfsMutations,
+} from '@riftydev/vfs';
 import { FS_METHODS, type FsStatShape, base64ToBytes } from './fs-rpc-protocol.ts';
 
 export type VfsAccessor = () => FsSync;
@@ -31,14 +37,28 @@ const obj = (v: unknown): Req => {
   return v as Req;
 };
 
+function applyMutation(
+  guard: VfsMutationGuard | undefined,
+  intent: VfsMutationIntent,
+  apply: () => void,
+): null | Promise<null> {
+  return guardVfsMutations(guard, [intent], () => {
+    apply();
+    return null;
+  });
+}
+
 /**
  * Register all `fs.*` sync-RPC handlers on `dispatcher`. The `getVfs` accessor
  * is called per-request so the owner can swap the mirror after boot without
- * re-registering. TSDoc mirrors `FsSync` — see `@riftydev/vfs` for contracts.
+ * re-registering. `mutationGuard` lets the host serialize writes with its own
+ * policy; it receives the shared path-only intent and the real handler body.
+ * TSDoc mirrors `FsSync` — see `@riftydev/vfs` for contracts.
  */
 export function installRuntimeJsFsHandlers(
   dispatcher: SyncRpcDispatcher,
   getVfs: VfsAccessor,
+  mutationGuard?: VfsMutationGuard,
 ): void {
   dispatcher.register(FS_METHODS.exists, (p) => getVfs().existsSync(str(obj(p), 'path')));
   dispatcher.register(
@@ -67,52 +87,74 @@ export function installRuntimeJsFsHandlers(
 
   // Write: truncate creates/replaces; subsequent chunks append.
   // TODO(backlog: perf/fs-rpc-chunk-perf) — append reads prev+concat+writes per chunk → O(N²); base64 inflation
-  dispatcher.register(FS_METHODS.writeChunk, (p): null => {
+  dispatcher.register(FS_METHODS.writeChunk, (p): null | Promise<null> => {
     const r = obj(p);
     const path = str(r, 'path');
     const incoming = base64ToBytes(str(r, 'b64'));
     const truncate = r.truncate === true;
-    const vfs = getVfs();
-    if (truncate) {
-      vfs.writeFileSync(path, incoming);
-    } else {
-      const prev = vfs.existsSync(path) ? vfs.readFileBytesSync(path) : new Uint8Array(0);
-      const merged = new Uint8Array(prev.length + incoming.length);
-      merged.set(prev);
-      merged.set(incoming, prev.length);
-      vfs.writeFileSync(path, merged);
-    }
-    return null;
+    return applyMutation(mutationGuard, { kind: 'write', path }, () => {
+      const vfs = getVfs();
+      if (truncate) {
+        vfs.writeFileSync(path, incoming);
+      } else {
+        const prev = vfs.existsSync(path) ? vfs.readFileBytesSync(path) : new Uint8Array(0);
+        const merged = new Uint8Array(prev.length + incoming.length);
+        merged.set(prev);
+        merged.set(incoming, prev.length);
+        vfs.writeFileSync(path, merged);
+      }
+    });
   });
 
-  dispatcher.register(FS_METHODS.mkdir, (p): null => {
+  dispatcher.register(FS_METHODS.mkdir, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().mkdirSync(str(r, 'path'), { recursive: r.recursive === true });
-    return null;
+    const path = str(r, 'path');
+    const recursive = r.recursive === true;
+    return applyMutation(mutationGuard, { kind: 'mkdir', path }, () => {
+      getVfs().mkdirSync(path, { recursive });
+    });
   });
-  dispatcher.register(FS_METHODS.rm, (p): null => {
+  dispatcher.register(FS_METHODS.rm, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().rmSync(str(r, 'path'), { recursive: r.recursive === true, force: r.force === true });
-    return null;
+    const path = str(r, 'path');
+    const recursive = r.recursive === true;
+    const force = r.force === true;
+    return applyMutation(mutationGuard, { kind: 'rm', path }, () => {
+      getVfs().rmSync(path, { recursive, force });
+    });
   });
-  dispatcher.register(FS_METHODS.rename, (p): null => {
+  dispatcher.register(FS_METHODS.rename, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().renameSync(str(r, 'src'), str(r, 'dst'));
-    return null;
+    const sourcePath = str(r, 'src');
+    const targetPath = str(r, 'dst');
+    return applyMutation(mutationGuard, { kind: 'rename', sourcePath, targetPath }, () => {
+      getVfs().renameSync(sourcePath, targetPath);
+    });
   });
-  dispatcher.register(FS_METHODS.utimes, (p): null => {
+  dispatcher.register(FS_METHODS.utimes, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().utimes(str(r, 'path'), num(r, 'atimeMs'), num(r, 'mtimeMs'));
-    return null;
+    const path = str(r, 'path');
+    const atimeMs = num(r, 'atimeMs');
+    const mtimeMs = num(r, 'mtimeMs');
+    return applyMutation(mutationGuard, { kind: 'utimes', path }, () => {
+      getVfs().utimes(path, atimeMs, mtimeMs);
+    });
   });
-  dispatcher.register(FS_METHODS.copyFile, (p): null => {
+  dispatcher.register(FS_METHODS.copyFile, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().copyFileSync(str(r, 'src'), str(r, 'dst'));
-    return null;
+    const sourcePath = str(r, 'src');
+    const targetPath = str(r, 'dst');
+    return applyMutation(mutationGuard, { kind: 'copy', sourcePath, targetPath }, () => {
+      getVfs().copyFileSync(sourcePath, targetPath);
+    });
   });
-  dispatcher.register(FS_METHODS.cp, (p): null => {
+  dispatcher.register(FS_METHODS.cp, (p): null | Promise<null> => {
     const r = obj(p);
-    getVfs().cpSync(str(r, 'src'), str(r, 'dst'), { recursive: r.recursive === true });
-    return null;
+    const sourcePath = str(r, 'src');
+    const targetPath = str(r, 'dst');
+    const recursive = r.recursive === true;
+    return applyMutation(mutationGuard, { kind: 'copy', sourcePath, targetPath }, () => {
+      getVfs().cpSync(sourcePath, targetPath, { recursive });
+    });
   });
 }

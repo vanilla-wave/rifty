@@ -94,6 +94,7 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     previewOwnerToken: 'ws-test-token',
     snapshotPort: 59124,
     closed: Promise.resolve(null),
+    ownerEpoch: 'terminal-manager-test-owner',
     openSession(sid: string): Promise<void> {
       opened.push(sid);
       return Promise.resolve();
@@ -136,6 +137,12 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     // In-memory fake: no durability tier behind it (memory-backend contract).
     flushDurable(): Promise<void> {
       return Promise.resolve();
+    },
+    applyHostCommit(): Promise<never> {
+      return Promise.reject(new Error('terminal-manager fake does not serve VFS commits'));
+    },
+    durabilityBarrier(): Promise<never> {
+      return Promise.reject(new Error('terminal-manager fake has no durability authority'));
     },
     exportArchive(): Promise<string> {
       return Promise.resolve('{"version":1,"root":"/workspace","files":[]}');

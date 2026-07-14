@@ -22,7 +22,12 @@
 import { channelNameFor } from '@riftydev/net';
 import { syncMirror } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
-import { exportWorkspaceArchive, importWorkspaceArchive } from './workspace-archive.ts';
+import type { PackageMutationExecutor } from './package-mutation-executor.ts';
+import {
+  type WorkspaceArchiveV1,
+  exportWorkspaceArchive,
+  prepareWorkspaceArchiveImport,
+} from './workspace-archive.ts';
 
 /** Synthetic channel URL keyed by the owner's snapshot port — a distinct host
  *  so it never cross-talks with the write / snapshot / node_modules bridges. */
@@ -45,7 +50,11 @@ export type WorkspaceArchiveReplyFrame =
       readonly archiveJson: string;
     }
   | { readonly type: 'archive-import-reply'; readonly requestId: string }
-  | { readonly type: 'archive-error'; readonly requestId: string; readonly message: string };
+  | {
+      readonly type: 'archive-error';
+      readonly requestId: string;
+      readonly error: { readonly name: string; readonly message: string };
+    };
 
 type WorkspaceArchiveFrame = WorkspaceArchiveRequestFrame | WorkspaceArchiveReplyFrame;
 
@@ -61,14 +70,19 @@ function nextRequestId(): string {
  * single source of truth). Returns an idempotent teardown. The owner stays
  * alive to answer (ADR-0144 `serve` process).
  */
-export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => void {
+export function serveWorkspaceArchive(
+  key: OwnerBridgeKey,
+  root: string,
+  packageMutations?: Pick<PackageMutationExecutor, 'reset'>,
+): () => void {
   const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(key)));
 
-  const replyError = (requestId: string, message: string): void => {
+  const replyError = (requestId: string, cause: unknown): void => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
     channel.postMessage({
       type: 'archive-error',
       requestId,
-      message,
+      error: { name: error.name, message: error.message },
     } satisfies WorkspaceArchiveReplyFrame);
   };
 
@@ -83,20 +97,35 @@ export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => 
           archiveJson,
         } satisfies WorkspaceArchiveReplyFrame);
       } catch (err) {
-        replyError(frame.requestId, err instanceof Error ? err.message : String(err));
+        replyError(frame.requestId, err);
       }
       return;
     }
     if (frame.type === 'archive-import-req') {
-      try {
-        importWorkspaceArchive(syncMirror(), frame.archiveJson, { root });
-        channel.postMessage({
-          type: 'archive-import-reply',
-          requestId: frame.requestId,
-        } satisfies WorkspaceArchiveReplyFrame);
-      } catch (err) {
-        replyError(frame.requestId, err instanceof Error ? err.message : String(err));
-      }
+      void (async (): Promise<void> => {
+        try {
+          if (!packageMutations) {
+            throw new Error(`workspace archive package mutation executor missing for ${root}`);
+          }
+          await packageMutations.reset({ root }, async () => {
+            const prepared = prepareWorkspaceArchiveImport(
+              syncMirror(),
+              JSON.parse(frame.archiveJson) as WorkspaceArchiveV1,
+              { root },
+            );
+            return {
+              status: 'ready',
+              mutate: async () => prepared.apply(),
+            };
+          });
+          channel.postMessage({
+            type: 'archive-import-reply',
+            requestId: frame.requestId,
+          } satisfies WorkspaceArchiveReplyFrame);
+        } catch (err) {
+          replyError(frame.requestId, err);
+        }
+      })();
       return;
     }
   };
@@ -149,7 +178,9 @@ export function bridgeWorkspaceArchive(
     pending.delete(frame.requestId);
     clearTimeout(waiter.timer);
     if (frame.type === 'archive-error') {
-      waiter.reject(new Error(frame.message));
+      const error = new Error(frame.error.message);
+      error.name = frame.error.name;
+      waiter.reject(error);
       return;
     }
     if (frame.type === 'archive-export-reply') {

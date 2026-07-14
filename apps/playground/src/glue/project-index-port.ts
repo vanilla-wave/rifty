@@ -10,6 +10,10 @@
 import { channelNameFor } from '@riftydev/net';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import type {
+  PackageMutationExecutor,
+  PackageResetPreparation,
+} from './package-mutation-executor.ts';
 import {
   type IndexFs,
   type ProjectIndex,
@@ -39,11 +43,19 @@ type IndexAppliedFrame = {
   readonly opId: string;
   readonly index: ProjectIndex;
 };
-type IndexAckFrame = {
-  readonly type: 'index-ack';
-  readonly opId: string;
-  readonly index: ProjectIndex;
-};
+type IndexAckFrame =
+  | {
+      readonly type: 'index-ack';
+      readonly opId: string;
+      readonly ok: true;
+      readonly index: ProjectIndex;
+    }
+  | {
+      readonly type: 'index-ack';
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: { readonly name: string; readonly message: string };
+    };
 type IndexOp = { readonly opId?: string };
 type IndexDeleteFrame = IndexOp & { readonly type: 'index-delete'; readonly projectId: string };
 /**
@@ -157,22 +169,49 @@ export function serveProjectIndex(
   flush?: () => Promise<PersistFailureReport | undefined>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
+  packageMutations?: Pick<PackageMutationExecutor, 'reset'>,
 ): () => void {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
-  const publish = (): ProjectIndex => {
-    const index = loadIndex(fs, base);
-    channel.postMessage({
-      type: 'index-reply',
-      index,
-    } satisfies IndexReplyFrame);
-    return index;
+  let torn = false;
+  const closedError = new Error('project index bridge is closed');
+  closedError.name = 'ProjectIndexBridgeClosedError';
+  const assertServing = (): void => {
+    if (torn) throw closedError;
+  };
+  // The sync mirror can run ahead of OPFS while a mutation's flush is parked or
+  // rejected. Passive readers may observe only the last index whose complete
+  // operation reached its durability boundary.
+  let durableIndex = loadIndex(fs, base);
+  const publishDurable = (): ProjectIndex => {
+    if (!torn) {
+      channel.postMessage({
+        type: 'index-reply',
+        index: durableIndex,
+      } satisfies IndexReplyFrame);
+    }
+    return durableIndex;
   };
   const ack = (opId: string | undefined, index: ProjectIndex): void => {
-    if (opId) channel.postMessage({ type: 'index-ack', opId, index } satisfies IndexAckFrame);
+    if (opId && !torn)
+      channel.postMessage({ type: 'index-ack', opId, ok: true, index } satisfies IndexAckFrame);
+  };
+  const nack = (opId: string | undefined, cause: unknown): void => {
+    if (!opId || torn) return;
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    channel.postMessage({
+      type: 'index-ack',
+      opId,
+      ok: false,
+      error: { name: error.name, message: error.message },
+    } satisfies IndexAckFrame);
   };
   const applied = (opId: string | undefined, index: ProjectIndex): void => {
-    if (opId)
+    if (opId && !torn)
       channel.postMessage({ type: 'index-applied', opId, index } satisfies IndexAppliedFrame);
+  };
+  const publishCurrentAsDurable = (opId?: string): void => {
+    durableIndex = loadIndex(fs, base);
+    ack(opId, publishDurable());
   };
   const viteConfigSeedStore = syncViteConfigSeedStore(fs, flush ?? (async () => undefined));
   const flushDurable = (): Promise<void> => viteConfigSeedStore.flush();
@@ -180,15 +219,36 @@ export function serveProjectIndex(
   // surface loud (rejected promise → owner worker-entry → stderr), never swallowed.
   const flushThenPublish = async (opId?: string): Promise<void> => {
     if (flush) await flushDurable();
-    ack(opId, publish());
+    publishCurrentAsDurable(opId);
   };
   // As flushThenPublish, plus a snapshot republish for an IN-PLACE re-seed so the
   // live page reflects the restored files (reset only — save/delete/new-scratch
   // mutate the active root's identity, not its content in place).
   const flushRefreshPublish = async (opId?: string): Promise<void> => {
     if (flush) await flushDurable();
+    if (torn) return;
     refresh?.();
-    ack(opId, publish());
+    publishCurrentAsDurable(opId);
+  };
+  const runPackageReset = async (root: string, prepare: PackageResetPreparation): Promise<void> => {
+    if (!packageMutations) {
+      throw new Error(`project-index package mutation executor missing for reset at ${root}`);
+    }
+    const guardedPrepare: PackageResetPreparation = async () => {
+      assertServing();
+      const plan = await prepare();
+      assertServing();
+      if (plan.status === 'noop') return plan;
+      return {
+        status: 'ready',
+        mutate: async () => {
+          assertServing();
+          await plan.mutate();
+          assertServing();
+        },
+      };
+    };
+    await packageMutations.reset({ root }, guardedPrepare);
   };
   // ADR-0165 §56 durable delete: flip the index (drop the entry) → THEN rm the
   // tree — the COMMIT-FIRST ordering, the inverse of the dangerous one. A crash
@@ -197,180 +257,222 @@ export function serveProjectIndex(
   // (rm then write) would leave an indexed-but-missing tree → recoverIndex case (D)
   // THROWS on every boot = unrecoverable brick. Unknown id = idempotent no-op
   // publish (no throw): re-asserts state so a re-fired delete still reconciles.
-  const deleteTree = (projectId: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const projects = index.projects.filter((p) => p.id !== projectId);
-    // Defensive: a delete of the ACTIVE project re-points activeId — scratch if a
-    // draft exists, else the first remaining project, else 'scratch' (empty).
-    const activeId =
-      index.activeId === projectId
-        ? index.scratch
-          ? 'scratch'
-          : (projects[0]?.id ?? 'scratch')
-        : index.activeId;
-    writeIndex(fs, base, { ...index, activeId, projects }); // commit FIRST
-    fs.rmSync(rootForId(projectId), { recursive: true, force: true }); // then drop the tree
-    void flushThenPublish(opId); // durable on disk, then every page mirror reconciles
-  };
-  // ADR-0165 §7 durable Save: convert the active scratch into a named project
-  // (copy /scratch → /projects/<id>, flip+persist the index LAST), then delete
-  // the stale source after the durability ack. The `!index.scratch` /
-  // duplicate-id throws inside commitScratchProjectSave are the LOUD signal —
-  // never swallowed; in the owner realm they propagate to worker-entry → stderr,
-  // never a silent half-move. The throw is SYNCHRONOUS (the unit harness asserts
-  // it on the poster call); flush+publish run async after.
-  const cleanupScratchAfterCommittedSave = (): void => {
-    setTimeout(() => {
-      cleanupCommittedScratchSource(fs, loadIndex(fs, base));
-      void flushDurable().catch((err: unknown) =>
-        console.error('[project-index] committed scratch cleanup flush failed', err),
-      );
-    }, 0);
-  };
-  const saveScratch = (id: string, name: string, starter: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const existing = index.projects.find((p) => p.id === id);
-    if (existing) {
-      if (
-        index.activeId === id &&
-        index.scratch === null &&
-        existing.name === name &&
-        existing.starter === starter &&
-        fs.existsSync(rootForId(id))
-      ) {
-        const committed = publish();
-        applied(opId, committed);
-        void (async (): Promise<void> => {
-          await flushThenPublish(opId);
-          cleanupScratchAfterCommittedSave();
-        })();
-        return;
+  const deleteTree = async (projectId: string, opId?: string): Promise<void> => {
+    const root = rootForId(projectId);
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (!index.projects.some((project) => project.id === projectId)) {
+        await flushThenPublish(opId);
+        return { status: 'noop' };
       }
-      throw new Error(`saveScratchAsProject: project ${id} already exists at ${rootForId(id)}`);
-    }
-    // Reconcile the scratch starter to the page's authority (see IndexSaveFrame).
-    const reconciled = index.scratch ? { ...index, scratch: { ...index.scratch, starter } } : index;
-    commitScratchProjectSave(fs, reconciled, id, name);
-    const committed = publish(); // sync commit applied; durability ack still waits for flush below
-    applied(opId, committed);
-    void (async (): Promise<void> => {
-      await flushThenPublish(opId); // saved project + index durable before a switch respawns
-      cleanupScratchAfterCommittedSave(); // recoverable stale source, do not block Save ack
-    })();
+      const projects = index.projects.filter((p) => p.id !== projectId);
+      // Defensive: a delete of the ACTIVE project re-points activeId — scratch if a
+      // draft exists, else the first remaining project, else 'scratch' (empty).
+      const activeId =
+        index.activeId === projectId
+          ? index.scratch
+            ? 'scratch'
+            : (projects[0]?.id ?? 'scratch')
+          : index.activeId;
+      return {
+        status: 'ready',
+        mutate: async () => {
+          writeIndex(fs, base, { ...index, activeId, projects }); // commit FIRST
+          fs.rmSync(root, { recursive: true, force: true }); // then drop the tree
+          await flushThenPublish(opId); // durable, then every page mirror reconciles
+        },
+      };
+    });
+  };
+  // ADR-0165 §7 durable Save is one package-root mutation: FIFO preflight sees
+  // the stamp before reset revokes it, then copy → index → applied → cleanup →
+  // durable ack runs without an install/promoter or a fresh scratch between.
+  const saveScratch = async (
+    id: string,
+    name: string,
+    starter: string,
+    opId?: string,
+  ): Promise<void> => {
+    const root = rootForId('scratch');
+    const cleanupThenDurableAck = async (committed: ProjectIndex): Promise<void> => {
+      if (flush) await flushDurable();
+      assertServing();
+      cleanupCommittedScratchSource(fs, committed);
+      if (flush) await flushDurable();
+      publishCurrentAsDurable(opId);
+    };
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      const existing = index.projects.find((project) => project.id === id);
+      if (existing) {
+        if (
+          index.activeId !== id ||
+          index.scratch !== null ||
+          existing.name !== name ||
+          existing.starter !== starter ||
+          !fs.existsSync(rootForId(id))
+        ) {
+          throw new Error(`saveScratchAsProject: project ${id} already exists at ${rootForId(id)}`);
+        }
+        if (!fs.existsSync(root)) {
+          const committed = loadIndex(fs, base);
+          applied(opId, committed);
+          await flushThenPublish(opId);
+          return { status: 'noop' };
+        }
+        return {
+          status: 'ready',
+          mutate: async () => {
+            const committed = loadIndex(fs, base);
+            applied(opId, committed);
+            await cleanupThenDurableAck(committed);
+          },
+        };
+      }
+      if (!index.scratch) throw new Error('saveScratchAsProject: no scratch to save');
+      const destination = rootForId(id);
+      if (fs.existsSync(destination)) {
+        throw new Error(`saveScratchAsProject: project ${id} already exists at ${destination}`);
+      }
+      const reconciled = { ...index, scratch: { ...index.scratch, starter } };
+      return {
+        status: 'ready',
+        mutate: async () => {
+          const committed = commitScratchProjectSave(fs, reconciled, id, name);
+          applied(opId, committed);
+          await cleanupThenDurableAck(committed);
+        },
+      };
+    });
   };
   // ADR-0165 §9 rename: load → rename that project's `name` → persist → publish.
   // Unknown id = idempotent no-op publish (mirrors deleteTree), no throw.
-  const renameProject = (projectId: string, name: string, opId?: string): void => {
+  const renameProject = async (projectId: string, name: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     const projects = index.projects.map((p) => (p.id === projectId ? { ...p, name } : p));
     writeIndex(fs, base, { ...index, projects });
-    void flushThenPublish(opId);
+    await flushThenPublish(opId);
   };
   // ADR-0165 §6 reset: re-seed the ACTIVE scratch from its starter baseline
   // (whole-workspace wipe + re-derive, equivalent to re-picking the starter),
   // clear scratch.dirty, persist, refresh the live snapshot, publish. No-op
   // publish when there is no scratch.
-  const resetScratch = (starter: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
+  const resetScratch = async (starter: string, opId?: string): Promise<void> => {
     const root = rootForId('scratch');
-    if (!index.scratch) {
-      void flushRefreshPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
-    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-    writeIndex(fs, base, {
-      ...index,
-      scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (!index.scratch) {
+        await flushRefreshPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
+          resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
+          writeIndex(fs, base, {
+            ...index,
+            scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
+          });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
+        },
+      };
     });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
-    })();
   };
   // ADR-0165 §6 reset (named project): wipe + re-derive `/projects/<id>` from the
   // project's own starter (read from the index — authoritative), bump editedAt,
   // persist, refresh the live snapshot, publish. Honest on-disk restore, not a
   // page-mirror no-op. Unknown id = idempotent no-op publish (no throw).
-  const resetProjectTree = (projectId: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const target = index.projects.find((p) => p.id === projectId);
+  const resetProjectTree = async (projectId: string, opId?: string): Promise<void> => {
     const root = rootForId(projectId);
-    if (!target) {
-      void flushRefreshPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(target.starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
-    const projects = index.projects.map((p) =>
-      p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
-    );
-    writeIndex(fs, base, { ...index, projects });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
-    })();
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      const target = index.projects.find((p) => p.id === projectId);
+      if (!target) {
+        await flushRefreshPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(target.starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
+          const projects = index.projects.map((p) =>
+            p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
+          );
+          writeIndex(fs, base, { ...index, projects });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
+        },
+      };
+    });
   };
   // ADR-0165 §6 fresh scratch from a starter: (re)create the scratch entry +
   // re-point activeId='scratch' + re-seed /scratch from the bundle. Unlike reset,
   // this works when index.scratch is null (post-Save), restoring the Save
   // precondition for the NEXT save. The prior project entries are untouched.
-  const newScratch = (
+  const newScratch = async (
     starter: string,
     opId?: string,
     opts: { readonly preserveDirtySameStarter?: boolean } = {},
-  ): void => {
+  ): Promise<void> => {
     const root = rootForId('scratch');
-    const index = loadIndex(fs, base);
-    if (
-      opts.preserveDirtySameStarter === true &&
-      index.activeId === 'scratch' &&
-      index.scratch?.dirty === true &&
-      index.scratch.starter === starter
-    ) {
-      void flushThenPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-    writeIndex(fs, base, {
-      ...index,
-      activeId: 'scratch',
-      scratch: { starter, dirty: false, editedAt: 'no edits yet' },
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (
+        opts.preserveDirtySameStarter === true &&
+        index.activeId === 'scratch' &&
+        index.scratch?.dirty === true &&
+        index.scratch.starter === starter
+      ) {
+        await flushThenPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
+          writeIndex(fs, base, {
+            ...index,
+            activeId: 'scratch',
+            scratch: { starter, dirty: false, editedAt: 'no edits yet' },
+          });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushThenPublish(opId);
+        },
+      };
     });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushThenPublish(opId);
-    })();
   };
   // ADR-0165 §3 durable switch: persist the active root so the respawned owner
   // (and a later reload) reads the RIGHT activeId — without it the on-disk index
   // is stale and the page mirror reverts the switch on the owner's next publish.
-  const setActive = (activeId: string, opId?: string): void => {
+  const setActive = async (activeId: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     if (activeId !== 'scratch' && !index.projects.some((p) => p.id === activeId)) {
       throw new Error(`unknown active project ${activeId}`);
     }
     writeIndex(fs, base, { ...index, activeId });
-    void flushThenPublish(opId);
+    await flushThenPublish(opId);
   };
-  const markScratchDirty = (starter: string, opId?: string): void => {
+  const markScratchDirty = async (starter: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     if (index.activeId === 'scratch' && (index.scratch !== null || fs.existsSync('/scratch'))) {
       const scratch = index.scratch ?? { starter, dirty: false, editedAt: 'no edits yet' };
@@ -379,31 +481,81 @@ export function serveProjectIndex(
         scratch: { ...scratch, dirty: true, editedAt: new Date().toISOString() },
       });
     }
-    void flushThenPublish(opId);
+    await flushThenPublish(opId);
+  };
+  type QueuedMutation = {
+    readonly opId: string | undefined;
+    readonly mutate: () => Promise<void>;
+  };
+  const mutationQueue: QueuedMutation[] = [];
+  let drainingMutations = false;
+  let activeMutation: QueuedMutation | null = null;
+  const drainMutations = async (): Promise<void> => {
+    try {
+      while (!torn && mutationQueue.length > 0) {
+        const queued = mutationQueue.shift();
+        if (!queued) break;
+        activeMutation = queued;
+        try {
+          await queued.mutate();
+        } catch (error) {
+          nack(queued.opId, error);
+        } finally {
+          if (activeMutation === queued) activeMutation = null;
+        }
+      }
+    } finally {
+      drainingMutations = false;
+    }
+  };
+  const enqueueMutation = (opId: string | undefined, mutate: () => Promise<void>): void => {
+    if (torn) return;
+    mutationQueue.push({ opId, mutate });
+    if (drainingMutations) return;
+    drainingMutations = true;
+    void drainMutations();
   };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
-    if (frame.type === 'index-req') publish();
-    else if (frame.type === 'index-delete') deleteTree(frame.projectId, frame.opId);
+    if (frame.type === 'index-req') publishDurable();
+    else if (frame.type === 'index-delete')
+      enqueueMutation(frame.opId, () => deleteTree(frame.projectId, frame.opId));
     else if (frame.type === 'index-save')
-      saveScratch(frame.id, frame.name, frame.starter, frame.opId);
-    else if (frame.type === 'index-rename') renameProject(frame.projectId, frame.name, frame.opId);
-    else if (frame.type === 'index-reset') resetScratch(frame.starter, frame.opId);
-    else if (frame.type === 'index-reset-project') resetProjectTree(frame.projectId, frame.opId);
+      enqueueMutation(frame.opId, () =>
+        saveScratch(frame.id, frame.name, frame.starter, frame.opId),
+      );
+    else if (frame.type === 'index-rename')
+      enqueueMutation(frame.opId, () => renameProject(frame.projectId, frame.name, frame.opId));
+    else if (frame.type === 'index-reset')
+      enqueueMutation(frame.opId, () => resetScratch(frame.starter, frame.opId));
+    else if (frame.type === 'index-reset-project')
+      enqueueMutation(frame.opId, () => resetProjectTree(frame.projectId, frame.opId));
     else if (frame.type === 'index-new-scratch')
-      newScratch(frame.starter, frame.opId, {
-        preserveDirtySameStarter: frame.preserveDirtySameStarter,
-      });
-    else if (frame.type === 'index-set-active') setActive(frame.activeId, frame.opId);
-    else if (frame.type === 'index-mark-scratch-dirty') markScratchDirty(frame.starter, frame.opId);
+      enqueueMutation(frame.opId, () =>
+        newScratch(frame.starter, frame.opId, {
+          preserveDirtySameStarter: frame.preserveDirtySameStarter,
+        }),
+      );
+    else if (frame.type === 'index-set-active')
+      enqueueMutation(frame.opId, () => setActive(frame.activeId, frame.opId));
+    else if (frame.type === 'index-mark-scratch-dirty')
+      enqueueMutation(frame.opId, () => markScratchDirty(frame.starter, frame.opId));
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
-  let torn = false;
   return (): void => {
     if (torn) return;
-    torn = true;
     channel.removeEventListener('message', onMessage as unknown as EventListener);
-    channel.close();
+    const pendingOperationIds = new Set<string>();
+    if (activeMutation?.opId) pendingOperationIds.add(activeMutation.opId);
+    for (const queued of mutationQueue) {
+      if (queued.opId) pendingOperationIds.add(queued.opId);
+    }
+    for (const opId of pendingOperationIds) nack(opId, closedError);
+    torn = true;
+    mutationQueue.splice(0);
+    // Broadcast delivery is asynchronous; match the other owner publishers and
+    // release only after the already-posted close NACKs enter the delivery queue.
+    queueMicrotask(() => channel.close());
   };
 }
 
@@ -414,11 +566,16 @@ function indexOpId(): string {
   return `op-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
 }
 
+function errorFromIndexNack(frame: Extract<IndexAckFrame, { readonly ok: false }>): Error {
+  const error = new Error(frame.error.message);
+  error.name = frame.error.name;
+  return error;
+}
+
 function postIndexMutation(
   key: OwnerBridgeKey,
   frame: IndexMutationFrame,
   match: (index: ProjectIndex) => boolean = () => true,
-  opts: { readonly resolveOnReply?: boolean } = {},
 ): Promise<ProjectIndex> {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const opId = indexOpId();
@@ -436,11 +593,13 @@ function postIndexMutation(
   const promise = new Promise<ProjectIndex>((resolve, reject) => {
     onMessage = (event: MessageEvent): void => {
       const reply = event.data as IndexFrame;
-      if (reply.type === 'index-ack' && reply.opId !== opId) return;
-      if (reply.type !== 'index-ack' && reply.type !== 'index-reply') return;
-      if (reply.type === 'index-reply' && opts.resolveOnReply === false) return;
+      if (reply.type !== 'index-ack' || reply.opId !== opId) return;
+      if (!reply.ok) {
+        cleanup();
+        reject(errorFromIndexNack(reply));
+        return;
+      }
       if (!match(reply.index)) {
-        if (reply.type === 'index-reply') return;
         cleanup();
         reject(new Error(`project index ${frame.type} ack did not match committed state`));
         return;
@@ -510,6 +669,18 @@ function postIndexMutationPhases(
     const reply = event.data as IndexFrame;
     if (reply.type !== 'index-applied' && reply.type !== 'index-ack') return;
     if (reply.opId !== opId) return;
+    if (reply.type === 'index-ack' && !reply.ok) {
+      const err = errorFromIndexNack(reply);
+      if (!appliedSettled) {
+        settleApplied();
+        rejectApplied(err);
+      }
+      if (!durableSettled) {
+        settleDurable();
+        rejectDurable(err);
+      }
+      return;
+    }
     if (!match(reply.index)) {
       const err = new Error(`project index ${frame.type} ack did not match committed state`);
       if (!appliedSettled) {
@@ -600,7 +771,9 @@ export function saveProjectIndex(
   name: string,
   starter: string,
 ): Promise<ProjectIndex> {
-  return saveProjectIndexPhases(key, id, name, starter).durable;
+  const phases = saveProjectIndexPhases(key, id, name, starter);
+  void phases.applied.catch(() => undefined);
+  return phases.durable;
 }
 
 export function saveProjectIndexPhases(

@@ -12,15 +12,20 @@
  */
 
 import { syncMirror } from '@riftydev/vfs';
-import { resetSyncMirror } from '@riftydev/vfs/internal';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
+import { installStampPath } from './install-stamp.ts';
 import {
   type VfsFlushAckMessage,
   applyVfsWriteFrame,
+  classifyVfsWriteFramePackageImpact,
   handleVfsFlushRequest,
+  prepareVfsWriteFrame,
   sendGuardedVfsWrite,
   sendVfsWrite,
   serveVfsWrites,
+  vfsWriteFrameTouchesPath,
 } from './vfs-write-port.ts';
 
 const enc = new TextEncoder();
@@ -42,6 +47,83 @@ async function tick(ms = 20): Promise<void> {
 }
 
 describe('serveVfsWrites + sendVfsWrite', () => {
+  it('classifies manifest, guarded-tree, and ancestor mutations directionally', () => {
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'write', path: '/workspace/package.json', data: enc.encode('{}') },
+        '/workspace',
+      ),
+    ).toBe('manifest');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'write', path: '/workspace/node_modules/pkg/index.js', data: enc.encode('x') },
+        '/workspace',
+      ),
+    ).toBe('tree');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        {
+          type: 'rm',
+          path: '/workspace',
+          recursive: true,
+          force: true,
+        },
+        '/workspace',
+      ),
+    ).toBe('tree');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'rename', from: '/workspace', to: '/archive/workspace' },
+        '/workspace',
+      ),
+    ).toBe('tree');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'copy', from: '/template', to: '/workspace' },
+        '/workspace',
+      ),
+    ).toBe('tree');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'copy', from: '/workspace', to: '/archive/workspace' },
+        '/workspace',
+      ),
+    ).toBe('none');
+    expect(
+      vfsWriteFrameTouchesPath(
+        { type: 'rm', path: '/workspace', recursive: true, force: true },
+        '/workspace/package.json',
+      ),
+    ).toBe(true);
+  });
+
+  it('preflights package no-ops and validation failures before a stamp transition', () => {
+    applyVfsWriteFrame({
+      type: 'write',
+      path: '/workspace/package.json',
+      data: enc.encode('{"name":"current"}\n'),
+    });
+
+    expect(
+      prepareVfsWriteFrame({
+        type: 'write',
+        path: '/workspace/package.json',
+        data: enc.encode('{"name":"seed"}\n'),
+        ifAbsent: true,
+      }),
+    ).toEqual({ status: 'noop' });
+    expect(() =>
+      prepareVfsWriteFrame({
+        type: 'rename',
+        from: '/workspace/missing',
+        to: '/workspace/package.json',
+      }),
+    ).toThrow();
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/package.json'))).toBe(
+      '{"name":"current"}\n',
+    );
+  });
+
   it('applies a write frame to the worker-side syncMirror', async () => {
     teardown = serveVfsWrites(7001);
 
@@ -179,6 +261,62 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/src/a.js'))).toBe('a');
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/copy/src/a.js'))).toBe('a');
     expect(dec.decode(syncMirror().readFileBytesSync('/workspace/copy/src/nested/b.js'))).toBe('b');
+  });
+
+  it('copies ordinary bytes while omitting owner install claims at every depth', () => {
+    const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(
+      new MemoryFsSync(),
+      { ownerEpoch: 'page-copy-owner' },
+    );
+    setSyncMirror(authority);
+    authority.mkdirSync('/workspace/src/nested/project', { recursive: true });
+    authority.writeFileSync('/workspace/src/a.txt', enc.encode('a'));
+    authority.writeFileSync('/workspace/src/nested/project/b.txt', enc.encode('b'));
+    installStampClaims.write('/workspace/src', enc.encode('top claim'), { mkdirTree: true });
+    installStampClaims.write('/workspace/src/nested/project', enc.encode('nested claim'), {
+      mkdirTree: true,
+    });
+
+    applyVfsWriteFrame({
+      type: 'copy',
+      from: '/workspace/src',
+      to: '/workspace/copy/src',
+    });
+
+    expect(dec.decode(authority.readFileBytesSync('/workspace/copy/src/a.txt'))).toBe('a');
+    expect(
+      dec.decode(authority.readFileBytesSync('/workspace/copy/src/nested/project/b.txt')),
+    ).toBe('b');
+    expect(authority.existsSync(installStampPath('/workspace/src'))).toBe(true);
+    expect(authority.existsSync(installStampPath('/workspace/src/nested/project'))).toBe(true);
+    expect(authority.existsSync(installStampPath('/workspace/copy/src'))).toBe(false);
+    expect(authority.existsSync(installStampPath('/workspace/copy/src/nested/project'))).toBe(
+      false,
+    );
+  });
+
+  it('rejects an exact reserved batch endpoint before applying ordinary siblings', () => {
+    const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(
+      new MemoryFsSync(),
+      { ownerEpoch: 'page-batch-owner' },
+    );
+    setSyncMirror(authority);
+    authority.mkdirSync('/workspace', { recursive: true });
+    const stamp = installStampPath('/workspace');
+    installStampClaims.write('/workspace', enc.encode('authority claim'), { mkdirTree: true });
+
+    expect(() =>
+      applyVfsWriteFrame({
+        type: 'batch',
+        frames: [
+          { type: 'write', path: '/workspace/ordinary.txt', data: enc.encode('ordinary') },
+          { type: 'write', path: stamp, data: enc.encode('forged claim') },
+        ],
+      }),
+    ).toThrow(/EPERM/);
+
+    expect(authority.existsSync('/workspace/ordinary.txt')).toBe(false);
+    expect(dec.decode(authority.readFileBytesSync(stamp))).toBe('authority claim');
   });
 
   it('applies a batch frame as one coalesced owner mutation notification', () => {

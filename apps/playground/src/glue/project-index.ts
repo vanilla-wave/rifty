@@ -38,6 +38,7 @@ export function rootForId(activeId: ActiveId): string {
 
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, normalizePath } from '@riftydev/vfs';
+import { isInstallStampPath } from './install-stamp.ts';
 
 /** The sync-VFS surface the index module needs (owner `syncMirror()`). */
 export type IndexFs = Pick<
@@ -122,50 +123,38 @@ function assertActiveIdHasProject(index: ProjectIndex, path: string): void {
   throw new Error(`corrupt project index at ${path}: activeId missing project ${index.activeId}`);
 }
 
-/**
- * Sync slug-rewrite of a moved tree's install stamp (ADR-0165). The async twin
- * is install-stamp.ts `restampSlug`; the Save move is SYNC over FsSync, so it
- * must not split across an await (a half-move window is exactly the corruption
- * §7 guards against). No-op when the tree has no stamp (a never-installed
- * scratch); a malformed stamp is treated as absent (matches readInstallStamp).
- */
-function restampSlugSync(fs: IndexFs, root: string, slug: string): void {
-  const path = `${root}/node_modules/.rifty-install-stamp.json`;
-  if (!fs.existsSync(path)) return;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(dec.decode(fs.readFileBytesSync(path)));
-  } catch {
-    return; // malformed stamp → treat as absent (matches readInstallStamp)
-  }
-  if (!parsed || typeof parsed !== 'object') return;
-  const next = { ...(parsed as Record<string, unknown>), slug };
-  fs.writeFileSync(path, enc.encode(`${JSON.stringify(next, null, 2)}\n`));
-}
-
-function hasStampedNodeModules(fs: IndexFs, root: string): boolean {
-  return fs.existsSync(`${root}/node_modules/.rifty-install-stamp.json`);
-}
+type ProjectSaveCopyEntry =
+  | { readonly kind: 'dir'; readonly target: string }
+  | { readonly kind: 'file'; readonly target: string; readonly data: Uint8Array };
 
 function copyScratchTreeForSave(fs: IndexFs, dst: string): void {
-  const skipDerivedNodeModules = hasStampedNodeModules(fs, '/scratch');
-  const copy = (from: string, to: string): void => {
+  const plan: ProjectSaveCopyEntry[] = [];
+  const visit = (from: string, to: string): void => {
+    if (isInstallStampPath(from) || isInstallStampPath(to)) return;
     const st = fs.statSyncOrNull(from);
     if (!st) throw new Error(`saveScratchAsProject: missing ${from}`);
     if (st.isDirectory) {
-      fs.mkdirSync(to, { recursive: true });
-      for (const child of fs.readdirSync(from)) {
-        if (from === '/scratch' && child.name === 'node_modules' && skipDerivedNodeModules) {
-          continue;
-        }
-        copy(joinPath(from, child.name), joinPath(to, child.name));
+      plan.push({ kind: 'dir', target: to });
+      const children = [...fs.readdirSync(from)].sort((left, right) =>
+        left.name.localeCompare(right.name),
+      );
+      for (const child of children) {
+        if (child.isDirectory && child.name === 'node_modules') continue;
+        visit(joinPath(from, child.name), joinPath(to, child.name));
       }
       return;
     }
-    fs.mkdirSync(dirname(to), { recursive: true });
-    fs.writeFileSync(to, fs.readFileBytesSync(from));
+    plan.push({ kind: 'file', target: to, data: fs.readFileBytesSync(from).slice() });
   };
-  copy('/scratch', dst);
+  visit('/scratch', dst);
+
+  for (const entry of plan) {
+    if (entry.kind === 'dir') fs.mkdirSync(entry.target, { recursive: true });
+    else {
+      fs.mkdirSync(dirname(entry.target), { recursive: true });
+      fs.writeFileSync(entry.target, entry.data);
+    }
+  }
 }
 
 /**
@@ -190,10 +179,6 @@ export function commitScratchProjectSave(
   // node_modules are derived from a baked/install snapshot and are restored on
   // boot; copying them blocks the owner on tens of MB during Save.
   copyScratchTreeForSave(fs, dst);
-
-  // If an unstamped node_modules was copied, leave it alone; if a stamped one
-  // is ever copied by a future path, re-key it before the project becomes active.
-  restampSlugSync(fs, dst, id);
 
   // 2. flip the pointer + persist — the durable commit point.
   const project: Project = {
@@ -239,20 +224,36 @@ export function saveScratchAsProject(
   return next;
 }
 
+export interface ProjectIndexRecoveryDeletion {
+  readonly root: string;
+  readonly reason: 'orphan-project' | 'stale-scratch';
+}
+
+export interface ProjectIndexRecoverySynthesis {
+  readonly base: string;
+  readonly index: ProjectIndex;
+}
+
+export interface ProjectIndexRecoveryPlan {
+  readonly index: ProjectIndex;
+  readonly deletions: readonly ProjectIndexRecoveryDeletion[];
+  readonly synthesis: ProjectIndexRecoverySynthesis | null;
+}
+
 /**
- * Boot-time reconcile of a half-completed Save (ADR-0165 §7). The Save ordering
- * is copy → flip-pointer → delete, so exactly two crash windows exist:
- *   - AFTER copy, BEFORE flip → a `/projects/<id>` tree the index never recorded.
- *     The flip never committed → the move is CANCELLED: delete the orphan.
- *   - AFTER flip, BEFORE delete → the index records `<id>` but a stale `/scratch`
- *     lingers. The commit landed → FINISH it: delete the stale source.
- * An indexed project whose tree is ABSENT is real data loss → THROW (never drop
- * the entry silently). Returns the reconciled index (disk-side fixes only).
+ * Pure boot preflight for both Save crash windows. Validates every indexed tree
+ * before exposing deterministic deletions, so callers can revoke package state
+ * for each exact root before applying it. `starter` also plans cold-scratch index
+ * synthesis; planning never writes.
  */
-export function recoverIndex(fs: IndexFs, base: string): ProjectIndex {
+export function planProjectIndexRecovery(
+  fs: IndexFs,
+  base: string,
+  options: { readonly starter?: string } = {},
+): ProjectIndexRecoveryPlan {
   const index = loadIndex(fs, base);
 
-  // (D) every indexed project MUST have its tree — absence is loud data loss.
+  // Validate the complete authoritative set before producing any action.
   for (const project of index.projects) {
     if (!fs.existsSync(rootForId(project.id))) {
       throw new Error(
@@ -261,21 +262,72 @@ export function recoverIndex(fs: IndexFs, base: string): ProjectIndex {
     }
   }
 
-  // (A) orphan /projects/<id> trees not in the index = an aborted copy → roll back.
+  const deletions: ProjectIndexRecoveryDeletion[] = [];
   const indexed = new Set(index.projects.map((p) => p.id));
   if (fs.existsSync('/projects')) {
-    for (const dirent of fs.readdirSync('/projects')) {
-      if (dirent.isDirectory && !indexed.has(dirent.name)) {
-        fs.rmSync(rootForId(dirent.name), { recursive: true, force: true });
-      }
+    const orphanIds = fs
+      .readdirSync('/projects')
+      .filter((dirent) => dirent.isDirectory && !indexed.has(dirent.name))
+      .map((dirent) => dirent.name)
+      .sort();
+    for (const id of orphanIds) {
+      deletions.push({ root: rootForId(id), reason: 'orphan-project' });
     }
   }
 
-  // (B) committed Save (activeId is a project) with a stale /scratch lingering → finish the delete.
-  cleanupCommittedScratchSource(fs, index);
+  if (index.activeId !== 'scratch' && index.scratch === null && fs.existsSync('/scratch')) {
+    deletions.push({ root: '/scratch', reason: 'stale-scratch' });
+  }
 
-  // A/B mutate disk only (the index is already correct) — return it as-loaded.
-  return index;
+  const synthesis =
+    options.starter !== undefined &&
+    index.activeId === 'scratch' &&
+    index.scratch === null &&
+    fs.existsSync('/scratch')
+      ? {
+          base,
+          index: {
+            ...index,
+            scratch: {
+              starter: options.starter,
+              dirty: false,
+              editedAt: 'no edits yet',
+            },
+          },
+        }
+      : null;
+
+  return { index, deletions, synthesis };
+}
+
+/** Apply one deletion after its caller has revoked package state for `root`. */
+export function applyProjectIndexRecoveryDeletion(
+  fs: IndexFs,
+  deletion: ProjectIndexRecoveryDeletion,
+): void {
+  fs.rmSync(deletion.root, { recursive: true, force: true });
+}
+
+/** Persist the separately planned cold-scratch index entry. */
+export function applyProjectIndexRecoverySynthesis(
+  fs: IndexFs,
+  synthesis: ProjectIndexRecoverySynthesis,
+): ProjectIndex {
+  writeIndex(fs, synthesis.base, synthesis.index);
+  return synthesis.index;
+}
+
+/**
+ * Convenience reconcile for callers that do not own package state. Production
+ * boot uses the plan/apply seam so each deletion follows package revocation.
+ */
+export function recoverIndex(fs: IndexFs, base: string): ProjectIndex {
+  const plan = planProjectIndexRecovery(fs, base);
+  for (const deletion of plan.deletions) {
+    applyProjectIndexRecoveryDeletion(fs, deletion);
+  }
+
+  return plan.index;
 }
 
 /**
@@ -291,17 +343,11 @@ export function recoverIndex(fs: IndexFs, base: string): ProjectIndex {
  * published scratch is never overwritten). Returns the reconciled index.
  */
 export function reconcileOwnerIndexAtBoot(fs: IndexFs, starter: string): ProjectIndex {
-  recoverIndex(fs, '/');
-  const index = loadIndex(fs, '/');
-  if (index.activeId === 'scratch' && index.scratch === null && fs.existsSync('/scratch')) {
-    const next: ProjectIndex = {
-      ...index,
-      scratch: { starter, dirty: false, editedAt: 'no edits yet' },
-    };
-    writeIndex(fs, '/', next);
-    return next;
+  const plan = planProjectIndexRecovery(fs, '/', { starter });
+  for (const deletion of plan.deletions) {
+    applyProjectIndexRecoveryDeletion(fs, deletion);
   }
-  return index;
+  return plan.synthesis ? applyProjectIndexRecoverySynthesis(fs, plan.synthesis) : plan.index;
 }
 
 /**

@@ -22,6 +22,18 @@ import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
 import type { OwnerBridgeKey } from './owner-bridge-key.ts';
+import {
+  decodeOwnerVfsError,
+  isOwnerVfsCommitAckMessage,
+  isOwnerVfsDurabilityAckMessage,
+} from './owner-vfs-ipc.ts';
+import type {
+  HostCommitAck,
+  HostCommitRequest,
+  OwnerEpoch,
+  OwnerVfsDurabilityReceipt,
+  TreeRevision,
+} from './owner-vfs-protocol.ts';
 import { PLAYGROUND_NODE_WORKER_RUNTIME_ENV } from './playground-node-worker-runtime.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import {
@@ -58,6 +70,10 @@ const VFS_WRITE_ACK_TIMEOUT_MS = 5_000;
 /** OPFS durability drain can trail a big write burst (post-install trees run
  *  hundreds of ms; quota-pressure retries longer) — give the barrier slack. */
 const VFS_FLUSH_ACK_TIMEOUT_MS = 30_000;
+const OWNER_VFS_COMMIT_ACK_TIMEOUT_MS = 5_000;
+// The owner OPFS watchdog reports at 30s; leave transport time to carry its
+// exact failure instead of racing it with a page timeout.
+const OWNER_VFS_DURABILITY_ACK_TIMEOUT_MS = 35_000;
 
 function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
@@ -132,6 +148,8 @@ export interface WorkspaceOwnerHandle {
    */
   readonly snapshotPort: OwnerBridgeKey;
   readonly closed: Promise<number | null>;
+  /** Owner nonce learned from the ready handshake; access before ready throws. */
+  readonly ownerEpoch: OwnerEpoch;
   /** True while the backing owner worker is still alive. */
   isAlive(): boolean;
   /**
@@ -178,6 +196,10 @@ export interface WorkspaceOwnerHandle {
    * durability tier, resolves after the drain no-op.
    */
   flushDurable(): Promise<void>;
+  /** Exact conditional host mutation transport used by VfsCommitCoordinator. */
+  applyHostCommit(request: HostCommitRequest): Promise<HostCommitAck>;
+  /** Bound owner/revision durability barrier used after reflected snapshots. */
+  durabilityBarrier(treeRevision: TreeRevision): Promise<OwnerVfsDurabilityReceipt>;
   /**
    * Download: ask the owner to serialize its whole source tree to a workspace
    * archive JSON (single-store-owner model: the PAGE keeps no authoritative store
@@ -276,14 +298,26 @@ export interface WorkspaceOwnerOptions {
 interface WorkspaceOwnerReadyMessage {
   readonly type: 'rifty:workspace-owner-ready';
   readonly port: OwnerBridgeKey;
+  readonly ownerEpoch: OwnerEpoch;
+  readonly treeRevision: TreeRevision;
 }
 
 function isWorkspaceOwnerReadyMessage(message: unknown): message is WorkspaceOwnerReadyMessage {
   if (!message || typeof message !== 'object') return false;
-  const candidate = message as { readonly type?: unknown; readonly port?: unknown };
+  const candidate = message as {
+    readonly type?: unknown;
+    readonly port?: unknown;
+    readonly ownerEpoch?: unknown;
+    readonly treeRevision?: unknown;
+  };
   return (
     candidate.type === 'rifty:workspace-owner-ready' &&
-    (typeof candidate.port === 'string' || typeof candidate.port === 'number')
+    (typeof candidate.port === 'string' || typeof candidate.port === 'number') &&
+    typeof candidate.ownerEpoch === 'string' &&
+    candidate.ownerEpoch.length > 0 &&
+    typeof candidate.treeRevision === 'number' &&
+    Number.isSafeInteger(candidate.treeRevision) &&
+    candidate.treeRevision >= 0
   );
 }
 
@@ -395,6 +429,23 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       readonly timer: ReturnType<typeof setTimeout>;
     }
   >();
+  const pendingOwnerVfsCommits = new Map<
+    string,
+    {
+      readonly resolve: (ack: HostCommitAck) => void;
+      readonly reject: (error: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  const pendingOwnerVfsDurability = new Map<
+    string,
+    {
+      readonly resolve: (receipt: OwnerVfsDurabilityReceipt) => void;
+      readonly reject: (error: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  let currentOwnerEpoch: OwnerEpoch | null = null;
   let readySettled = false;
   let resolveReady: () => void = () => {};
   let rejectReady: (err: Error) => void = () => {};
@@ -445,7 +496,38 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   worker.on('message', (message: unknown) => {
     if (isWorkspaceOwnerReadyMessage(message) && Object.is(message.port, snapshotPort)) {
+      currentOwnerEpoch = message.ownerEpoch;
       settleReady();
+      return;
+    }
+    if (isOwnerVfsCommitAckMessage(message)) {
+      const pending = pendingOwnerVfsCommits.get(message.operationId);
+      if (!pending) return;
+      pendingOwnerVfsCommits.delete(message.operationId);
+      clearTimeout(pending.timer);
+      if (message.ok) pending.resolve(message.ack);
+      else {
+        try {
+          pending.reject(decodeOwnerVfsError(message.error));
+        } catch (error) {
+          pending.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+      return;
+    }
+    if (isOwnerVfsDurabilityAckMessage(message)) {
+      const pending = pendingOwnerVfsDurability.get(message.barrierId);
+      if (!pending) return;
+      pendingOwnerVfsDurability.delete(message.barrierId);
+      clearTimeout(pending.timer);
+      if (message.ok) pending.resolve(message.receipt);
+      else {
+        try {
+          pending.reject(decodeOwnerVfsError(message.error));
+        } catch (error) {
+          pending.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
       return;
     }
     if (isVfsWriteAckMessage(message) || isVfsFlushAckMessage(message)) {
@@ -501,6 +583,18 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       pendingVfsWrites.delete(opId);
       clearTimeout(pending.timer);
       pending.reject(new Error(`workspace owner exited before VFS write ack (${opId})`));
+    }
+    for (const [operationId, pending] of pendingOwnerVfsCommits) {
+      pendingOwnerVfsCommits.delete(operationId);
+      clearTimeout(pending.timer);
+      pending.reject(
+        new Error(`workspace owner exited before conditional VFS commit ack (${operationId})`),
+      );
+    }
+    for (const [barrierId, pending] of pendingOwnerVfsDurability) {
+      pendingOwnerVfsDurability.delete(barrierId);
+      clearTimeout(pending.timer);
+      pending.reject(new Error(`workspace owner exited before VFS durability ack (${barrierId})`));
     }
     // Owner died → the co-resident dev server is gone. Synthesize a stopped
     // frame to the page so its LIVE pill leaves 'running' (Bug #4: the exit
@@ -578,6 +672,65 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       }
     });
   };
+  const applyHostCommit = (request: HostCommitRequest): Promise<HostCommitAck> => {
+    if (exited) {
+      return Promise.reject(
+        new Error('workspace owner has exited — conditional VFS commit was not applied.'),
+      );
+    }
+    if (currentOwnerEpoch === null) {
+      return Promise.reject(new Error('workspace owner is not ready for conditional VFS commits'));
+    }
+    if (pendingOwnerVfsCommits.has(request.operationId)) {
+      return Promise.reject(
+        new Error(`conditional VFS operation is already pending (${request.operationId})`),
+      );
+    }
+    return new Promise<HostCommitAck>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingOwnerVfsCommits.delete(request.operationId);
+        reject(new Error(`owner conditional VFS commit ack timed out (${request.operationId})`));
+      }, OWNER_VFS_COMMIT_ACK_TIMEOUT_MS);
+      pendingOwnerVfsCommits.set(request.operationId, { resolve, reject, timer });
+      if (!worker.send({ type: 'rifty:owner-vfs-commit', request })) {
+        pendingOwnerVfsCommits.delete(request.operationId);
+        clearTimeout(timer);
+        reject(new Error(`owner conditional VFS commit send failed (${request.operationId})`));
+      }
+    });
+  };
+  const durabilityBarrier = (treeRevision: TreeRevision): Promise<OwnerVfsDurabilityReceipt> => {
+    if (exited) {
+      return Promise.reject(
+        new Error('workspace owner has exited — VFS durability cannot be proven.'),
+      );
+    }
+    const ownerEpoch = currentOwnerEpoch;
+    if (ownerEpoch === null) {
+      return Promise.reject(new Error('workspace owner is not ready for VFS durability'));
+    }
+    const barrierId =
+      globalThis.crypto?.randomUUID?.() ?? `vfs-barrier-${Math.random().toString(36).slice(2, 10)}`;
+    return new Promise<OwnerVfsDurabilityReceipt>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingOwnerVfsDurability.delete(barrierId);
+        reject(new Error(`owner VFS durability ack timed out (${barrierId})`));
+      }, OWNER_VFS_DURABILITY_ACK_TIMEOUT_MS);
+      pendingOwnerVfsDurability.set(barrierId, { resolve, reject, timer });
+      if (
+        !worker.send({
+          type: 'rifty:owner-vfs-durability',
+          barrierId,
+          ownerEpoch,
+          treeRevision,
+        })
+      ) {
+        pendingOwnerVfsDurability.delete(barrierId);
+        clearTimeout(timer);
+        reject(new Error(`owner VFS durability send failed (${barrierId})`));
+      }
+    });
+  };
   const readFileBytes = (path: string): Promise<Uint8Array> => {
     if (exited) {
       return Promise.reject(
@@ -601,6 +754,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     previewOwnerToken,
     snapshotPort,
     closed,
+    get ownerEpoch() {
+      if (currentOwnerEpoch === null) {
+        throw new Error('workspace owner epoch is unavailable before ready');
+      }
+      return currentOwnerEpoch;
+    },
     openSession: async (sid, seed) => {
       await ready;
       return client.openSession(sid, seed);
@@ -625,6 +784,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     writeFrame,
     writeFrameAcked,
     flushDurable,
+    applyHostCommit,
+    durabilityBarrier,
     exportArchive: () => archiveBridge.export(),
     importArchive: (archiveJson) => archiveBridge.import(archiveJson),
     readFileBytes,

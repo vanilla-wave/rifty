@@ -28,12 +28,16 @@
 import { channelNameFor } from '@riftydev/net';
 import {
   type PersistFailureReport,
+  type VfsMutationIntent,
   dirname,
-  joinPath,
   normalizePath,
   syncMirror,
 } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import {
+  type PackageMutationImpact,
+  classifyVfsMutationIntentsPackageImpact,
+} from './package-mutation-executor.ts';
 
 /**
  * Synthetic URL keyed into `channelNameFor` for the VFS write channel.
@@ -53,6 +57,8 @@ function vfsWritePortChannelUrl(key: OwnerBridgeKey): string {
  */
 export interface VfsWriteServerOptions {
   onWrite?(paths: readonly string[]): void;
+  /** Optional serialized composition path; it owns applying the frame. */
+  applyFrame?(frame: VfsWriteFrame): void | Promise<void>;
 }
 
 export type VfsWriteSingleFrame =
@@ -222,9 +228,9 @@ export interface GuardedVfsWriteOptions {
   readonly fallback?: (key: OwnerBridgeKey, frame: VfsWriteFrame) => void;
 }
 
-type CopyPlanEntry =
-  | { readonly kind: 'dir'; readonly path: string }
-  | { readonly kind: 'file'; readonly path: string; readonly data: Uint8Array };
+export type PreparedVfsWriteFrame =
+  | { readonly status: 'noop' }
+  | { readonly status: 'ready'; readonly apply: () => void };
 
 function frameTarget(frame: VfsWriteFrame): string {
   if (frame.type === 'batch') return frame.frames.map(frameTarget).join(',');
@@ -238,42 +244,63 @@ function frameChangedPaths(frame: VfsWriteSingleFrame): readonly string[] {
   return [frame.to];
 }
 
+export function vfsWriteFrameTouchesPath(frame: VfsWriteFrame, path: string): boolean {
+  const target = normalizePath(path);
+  if (frame.type === 'batch') {
+    return frame.frames.some((child) => vfsWriteFrameTouchesPath(child, target));
+  }
+  if (frame.type === 'write' || frame.type === 'mkdir') {
+    return normalizePath(frame.path) === target;
+  }
+  const containsTarget = (candidate: string): boolean => {
+    const normalized = normalizePath(candidate);
+    return normalized === target || target.startsWith(`${normalized}/`);
+  };
+  if (frame.type === 'rm') return containsTarget(frame.path);
+  if (frame.type === 'rename') {
+    return containsTarget(frame.from) || containsTarget(frame.to);
+  }
+  return containsTarget(frame.to);
+}
+
+export function classifyVfsWriteFramePackageImpact(
+  frame: VfsWriteFrame,
+  root: string,
+): PackageMutationImpact {
+  return classifyVfsMutationIntentsPackageImpact(vfsWriteFrameMutationIntents(frame), root);
+}
+
+export function vfsWriteFrameMutationIntents(frame: VfsWriteFrame): readonly VfsMutationIntent[] {
+  if (frame.type === 'batch') return frame.frames.flatMap(vfsWriteFrameMutationIntents);
+  if (frame.type === 'rename' || frame.type === 'copy') {
+    return [{ kind: frame.type, sourcePath: frame.from, targetPath: frame.to }];
+  }
+  return [{ kind: frame.type, path: frame.path }];
+}
+
+function assertPortableVfsWriteFrame(frame: VfsWriteFrame): void {
+  const authority = syncMirror() as ReturnType<typeof syncMirror> & {
+    readonly assertPortablePaths?: (paths: readonly string[]) => void;
+  };
+  const paths = vfsWriteFrameMutationIntents(frame).flatMap((intent) =>
+    'path' in intent ? [intent.path] : [intent.sourcePath, intent.targetPath],
+  );
+  authority.assertPortablePaths?.(paths);
+}
+
 function isSelfOrSubtree(from: string, to: string): boolean {
   const src = normalizePath(from);
   const dst = normalizePath(to);
   return src === dst || dst.startsWith(`${src}/`);
 }
 
-function planCopyTree(from: string, to: string): CopyPlanEntry[] {
+function validateCopyTree(from: string, to: string): void {
   const fs = syncMirror();
   if (isSelfOrSubtree(from, to)) {
     throw new Error(`EINVAL: cannot copy "${from}" into itself at "${to}"`);
   }
   if (fs.existsSync(to)) throw new Error(`"${to}" already exists`);
-  const st = fs.statSync(from);
-  if (st.isDirectory) {
-    const plan: CopyPlanEntry[] = [{ kind: 'dir', path: to }];
-    for (const child of fs.readdirSync(from)) {
-      plan.push(...planCopyTree(joinPath(from, child.name), joinPath(to, child.name)));
-    }
-    return plan;
-  }
-  const data = fs.readFileBytesSync(from);
-  const copy = new Uint8Array(data.byteLength);
-  copy.set(data);
-  return [{ kind: 'file', path: to, data: copy }];
-}
-
-function applyCopyPlan(plan: readonly CopyPlanEntry[]): void {
-  const fs = syncMirror();
-  for (const entry of plan) {
-    if (entry.kind === 'dir') {
-      fs.mkdirSync(entry.path, { recursive: true });
-    } else {
-      fs.mkdirSync(dirname(entry.path), { recursive: true });
-      fs.writeFileSync(entry.path, entry.data);
-    }
-  }
+  fs.statSync(from);
 }
 
 function validateVfsWriteFrame(frame: VfsWriteSingleFrame): void {
@@ -318,7 +345,7 @@ function validateVfsWriteFrame(frame: VfsWriteSingleFrame): void {
     if (!st.isDirectory) throw new Error(`ENOTDIR: not a directory "${parent}"`);
     return;
   }
-  planCopyTree(frame.from, frame.to);
+  validateCopyTree(frame.from, frame.to);
 }
 
 function assertBatchFramesIndependent(frames: readonly VfsWriteSingleFrame[]): void {
@@ -336,7 +363,36 @@ function assertBatchFramesIndependent(frames: readonly VfsWriteSingleFrame[]): v
   }
 }
 
+function vfsWriteFrameIsNoop(frame: VfsWriteFrame): boolean {
+  const fs = syncMirror();
+  if (frame.type === 'batch') return frame.frames.every(vfsWriteFrameIsNoop);
+  if (frame.type === 'write') return frame.ifAbsent === true && fs.existsSync(frame.path);
+  if (frame.type === 'mkdir') {
+    return frame.recursive && fs.statSyncOrNull(frame.path)?.isDirectory === true;
+  }
+  if (frame.type === 'rm') return frame.force && !fs.existsSync(frame.path);
+  if (frame.type === 'rename') return normalizePath(frame.from) === normalizePath(frame.to);
+  return false;
+}
+
+/** Validate/no-op classify at the FIFO head, before any package stamp transition. */
+export function prepareVfsWriteFrame(
+  frame: VfsWriteFrame,
+  opts: VfsWriteServerOptions = {},
+): PreparedVfsWriteFrame {
+  assertPortableVfsWriteFrame(frame);
+  if (frame.type === 'batch') {
+    assertBatchFramesIndependent(frame.frames);
+    for (const child of frame.frames) validateVfsWriteFrame(child);
+  } else {
+    validateVfsWriteFrame(frame);
+  }
+  if (vfsWriteFrameIsNoop(frame)) return { status: 'noop' };
+  return { status: 'ready', apply: () => applyVfsWriteFrame(frame, opts) };
+}
+
 export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
+  assertPortableVfsWriteFrame(frame);
   if (frame.type === 'batch') {
     assertBatchFramesIndependent(frame.frames);
     for (const child of frame.frames) validateVfsWriteFrame(child);
@@ -389,8 +445,12 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
     return;
   }
   if (frame.type === 'copy') {
-    const plan = planCopyTree(frame.from, frame.to);
-    applyCopyPlan(plan);
+    validateCopyTree(frame.from, frame.to);
+    const fs = syncMirror();
+    if (fs.statSync(frame.from).isFile) {
+      fs.mkdirSync(dirname(frame.to), { recursive: true });
+    }
+    fs.cpSync(frame.from, frame.to, { recursive: true });
     opts.onWrite?.(frameChangedPaths(frame));
     return;
   }
@@ -441,7 +501,13 @@ export function serveVfsWrites(key: OwnerBridgeKey, opts: VfsWriteServerOptions 
   const channel = new BroadcastChannel(channelName);
 
   const onMessage = (event: MessageEvent): void => {
-    applyVfsWriteFrame(event.data as VfsWriteFrame, opts);
+    const frame = event.data as VfsWriteFrame;
+    void (async (): Promise<void> => {
+      if (opts.applyFrame) await opts.applyFrame(frame);
+      else applyVfsWriteFrame(frame, opts);
+    })().catch((error: unknown) => {
+      console.error('[vfs-write] owner frame failed', error);
+    });
   };
 
   channel.addEventListener('message', onMessage as unknown as EventListener);

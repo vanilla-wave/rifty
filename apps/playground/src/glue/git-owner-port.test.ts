@@ -6,7 +6,13 @@
 import { type GitIdentity, makeGit, vfsToGitFs } from '@riftydev/git';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type GitOwnerClient, bridgeGitOwnerRpc, serveGitOwnerRpc } from './git-owner-port.ts';
+import {
+  type GitOwnerClient,
+  bridgeGitOwnerRpc,
+  classifyGitOwnerPackageImpact,
+  gitOwnerMutationIntents,
+  serveGitOwnerRpc,
+} from './git-owner-port.ts';
 
 const AUTHOR: GitIdentity = {
   name: 'Test',
@@ -46,6 +52,62 @@ function page(key: string, timeoutMs = 1_000): GitOwnerClient {
 }
 
 describe('git owner RPC bridge', () => {
+  it('classifies restore pathspecs and hard reset against the full guarded package tree', () => {
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'manifest',
+        op: 'restore',
+        pathspecs: ['package.json'],
+      }),
+    ).toBe('manifest');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'derived',
+        op: 'restore',
+        pathspecs: ['node_modules/pkg/index.js'],
+      }),
+    ).toBe('tree');
+    expect(classifyGitOwnerPackageImpact({ id: 'ancestor', op: 'restore', pathspecs: ['.'] })).toBe(
+      'tree',
+    );
+    expect(
+      classifyGitOwnerPackageImpact({ id: 'source', op: 'restore', pathspecs: ['src/**'] }),
+    ).toBe('none');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'hard',
+        op: 'reset',
+        input: { target: 'HEAD', mode: 'hard' },
+      }),
+    ).toBe('tree');
+  });
+
+  it('exposes exact worktree intents while routing metadata-only Git writes through the guard', () => {
+    expect(gitOwnerMutationIntents({ id: 'read', op: 'status' }, '/repo')).toEqual([]);
+    expect(gitOwnerMutationIntents({ id: 'add', op: 'add', filepath: 'a.txt' }, '/repo')).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+    ]);
+    expect(
+      gitOwnerMutationIntents(
+        { id: 'restore', op: 'restore', pathspecs: ['package.json', 'src/**'] },
+        '/repo',
+      ),
+    ).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+      { kind: 'rm', path: '/repo/package.json' },
+      { kind: 'rm', path: '/repo/src' },
+    ]);
+    expect(
+      gitOwnerMutationIntents(
+        { id: 'hard', op: 'reset', input: { target: 'HEAD', mode: 'hard' } },
+        '/repo',
+      ),
+    ).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+      { kind: 'rm', path: '/repo' },
+    ]);
+  });
+
   it('returns status identical to the owner git engine for a known tree', async () => {
     const { vfs, g } = await seededRepo();
     await vfs.writeFile('/repo/a.txt', 'second\n');

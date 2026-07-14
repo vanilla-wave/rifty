@@ -94,13 +94,12 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('paints a picked starter before boot (ordering glue; behavior in the preset-boot core)', () => {
+  it('never fabricates an owner snapshot while a picked starter boots', () => {
     const loadPresetUi = source.match(
       /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(loadPresetUi).toBeDefined();
     expect(loadPresetUi).toContain('setActivePreset(preset.id);');
-    expect(loadPresetUi).toContain('paintPickedStarterSnapshot(preset);');
     expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
     // (a) program-write model stays deleted
     expect(source).not.toContain('discardPendingProgramWrite');

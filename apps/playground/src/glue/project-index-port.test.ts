@@ -1,6 +1,9 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { installStampPath } from './install-stamp.ts';
+import type { PackageMutationExecutor } from './package-mutation-executor.ts';
 import {
+  deleteProjectTree,
   markScratchDirtyIndex,
   newScratchIndex,
   renameProjectIndex,
@@ -8,7 +11,7 @@ import {
   resetScratchIndex,
   saveProjectIndex,
   saveProjectIndexPhases,
-  serveProjectIndex,
+  serveProjectIndex as serveProjectIndexRaw,
   setActiveIndex,
   subscribeProjectIndex,
 } from './project-index-port.ts';
@@ -16,17 +19,41 @@ import type { ProjectIndex } from './project-index.ts';
 import { loadIndex, writeIndex } from './project-index.ts';
 import { viteConfigSeedClaimPath } from './vite-config-seed.ts';
 
+const directPackageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+  reset: async (_target, prepare) => {
+    const plan = await prepare();
+    if (plan.status === 'ready') await plan.mutate();
+  },
+};
+
+const serveProjectIndex: typeof serveProjectIndexRaw = (
+  key,
+  fs,
+  base,
+  flush,
+  refresh,
+  initializeStarterGit,
+  packageMutations = directPackageMutations,
+) => serveProjectIndexRaw(key, fs, base, flush, refresh, initializeStarterGit, packageMutations);
+
 // In-process BroadcastChannel fake (node env has none): a name-keyed bus.
 class FakeChannel {
   static buses = new Map<string, Set<FakeChannel>>();
+  static postsAfterClose = 0;
+  static repeatedCloses = 0;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
   #listeners = new Set<(ev: { data: unknown }) => void>();
+  #closed = false;
   constructor(public name: string) {
     const peers = FakeChannel.buses.get(name) ?? new Set<FakeChannel>();
     peers.add(this);
     FakeChannel.buses.set(name, peers);
   }
   postMessage(data: unknown): void {
+    if (this.#closed) {
+      FakeChannel.postsAfterClose += 1;
+      throw new Error('InvalidStateError: BroadcastChannel is closed');
+    }
     for (const peer of FakeChannel.buses.get(this.name) ?? []) {
       if (peer === this) continue;
       peer.onmessage?.({ data });
@@ -40,6 +67,11 @@ class FakeChannel {
     this.#listeners.delete(cb);
   }
   close(): void {
+    if (this.#closed) {
+      FakeChannel.repeatedCloses += 1;
+      return;
+    }
+    this.#closed = true;
     FakeChannel.buses.get(this.name)?.delete(this);
   }
 }
@@ -48,14 +80,21 @@ class FakeChannel {
 // queued delivery runs drops the frame in this fake, matching the PR-red race.
 class AsyncDropOnCloseChannel {
   static buses = new Map<string, Set<AsyncDropOnCloseChannel>>();
+  static postsAfterClose = 0;
+  static repeatedCloses = 0;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
   #listeners = new Set<(ev: { data: unknown }) => void>();
+  #closed = false;
   constructor(public name: string) {
     const peers = AsyncDropOnCloseChannel.buses.get(name) ?? new Set<AsyncDropOnCloseChannel>();
     peers.add(this);
     AsyncDropOnCloseChannel.buses.set(name, peers);
   }
   postMessage(data: unknown): void {
+    if (this.#closed) {
+      AsyncDropOnCloseChannel.postsAfterClose += 1;
+      throw new Error('InvalidStateError: BroadcastChannel is closed');
+    }
     queueMicrotask(() => {
       const peers = AsyncDropOnCloseChannel.buses.get(this.name);
       if (!peers?.has(this)) return;
@@ -73,6 +112,11 @@ class AsyncDropOnCloseChannel {
     this.#listeners.delete(cb);
   }
   close(): void {
+    if (this.#closed) {
+      AsyncDropOnCloseChannel.repeatedCloses += 1;
+      return;
+    }
+    this.#closed = true;
     AsyncDropOnCloseChannel.buses.get(this.name)?.delete(this);
   }
 }
@@ -81,7 +125,11 @@ beforeEach(() => {
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
     FakeChannel as unknown as typeof BroadcastChannel;
   FakeChannel.buses.clear();
+  FakeChannel.postsAfterClose = 0;
+  FakeChannel.repeatedCloses = 0;
   AsyncDropOnCloseChannel.buses.clear();
+  AsyncDropOnCloseChannel.postsAfterClose = 0;
+  AsyncDropOnCloseChannel.repeatedCloses = 0;
 });
 afterEach(() => {
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = undefined;
@@ -194,11 +242,242 @@ function scratchOwnerFs(marker = 'scratch-marker'): MemoryFsSync {
 function readUtf8(fs: MemoryFsSync, path: string): string {
   return dec.decode(fs.readFileBytesSync(path));
 }
-async function nextTimer(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+async function settlePromptly<T>(
+  promise: Promise<T>,
+): Promise<
+  | { readonly status: 'resolved'; readonly value: T }
+  | { readonly status: 'rejected'; readonly error: unknown }
+  | { readonly status: 'timed-out' }
+> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    promise.then(
+      (value) => ({ status: 'resolved' as const, value }),
+      (error: unknown) => ({ status: 'rejected' as const, error }),
+    ),
+    new Promise<{ readonly status: 'timed-out' }>((resolve) => {
+      timer = setTimeout(() => resolve({ status: 'timed-out' }), 100);
+    }),
+  ]);
+  if (timer !== undefined) clearTimeout(timer);
+  return outcome;
+}
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
+  const durabilityPublicationScenarios: readonly {
+    readonly name: string;
+    readonly createFs: () => MemoryFsSync;
+    readonly mutate: () => Promise<ProjectIndex>;
+    readonly before: Readonly<Record<string, unknown>>;
+    readonly after: Readonly<Record<string, unknown>>;
+  }[] = [
+    {
+      name: 'rename',
+      createFs: ownerFs,
+      mutate: () => renameProjectIndex(PORT, 'p-1', 'Renamed'),
+      before: {
+        projects: [
+          { id: 'p-1', name: 'A', starter: 'project-files', editedAt: '2026-06-21T00:00:00.000Z' },
+        ],
+      },
+      after: {
+        projects: [
+          {
+            id: 'p-1',
+            name: 'Renamed',
+            starter: 'project-files',
+            editedAt: '2026-06-21T00:00:00.000Z',
+          },
+        ],
+      },
+    },
+    {
+      name: 'set-active',
+      createFs: () => {
+        const fs = ownerFs();
+        fs.mkdirSync('/projects/p-2', { recursive: true });
+        writeIndex(fs, '/', {
+          ...loadIndex(fs, '/'),
+          projects: [
+            ...loadIndex(fs, '/').projects,
+            { id: 'p-2', name: 'B', starter: 'project-files', editedAt: 'b' },
+          ],
+        });
+        return fs;
+      },
+      mutate: () => setActiveIndex(PORT, 'p-2'),
+      before: { activeId: 'p-1' },
+      after: { activeId: 'p-2' },
+    },
+    {
+      name: 'mark-scratch-dirty',
+      createFs: () => {
+        const fs = scratchOwnerFs();
+        writeIndex(fs, '/', {
+          ...loadIndex(fs, '/'),
+          scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' },
+        });
+        return fs;
+      },
+      mutate: () => markScratchDirtyIndex(PORT, 'project-files'),
+      before: { scratch: { starter: 'project-files', dirty: false, editedAt: 'no edits yet' } },
+      after: { scratch: { starter: 'project-files', dirty: true } },
+    },
+    {
+      name: 'reset-scratch',
+      createFs: scratchOwnerFs,
+      mutate: () => resetScratchIndex(PORT, 'node-worker'),
+      before: { scratch: { starter: 'project-files', dirty: true, editedAt: 'edited just now' } },
+      after: { scratch: { starter: 'node-worker', dirty: false } },
+    },
+    {
+      name: 'new-scratch',
+      createFs: ownerFs,
+      mutate: () => newScratchIndex(PORT, 'node-worker'),
+      before: { activeId: 'p-1', scratch: null },
+      after: { activeId: 'scratch', scratch: { starter: 'node-worker', dirty: false } },
+    },
+    {
+      name: 'delete',
+      createFs: () => {
+        const fs = ownerFs();
+        fs.mkdirSync('/projects/p-1', { recursive: true });
+        return fs;
+      },
+      mutate: () => deleteProjectTree(PORT, 'p-1'),
+      before: { activeId: 'p-1', projects: [{ id: 'p-1' }] },
+      after: { activeId: 'scratch', projects: [] },
+    },
+  ];
+
+  it.each(durabilityPublicationScenarios)(
+    'serves the last durable index while $name is parked before flush',
+    async ({ createFs, mutate, before, after }) => {
+      const fs = createFs();
+      const flushGate = deferred();
+      const flushStarted = deferred();
+      const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+        flushStarted.resolve();
+        await flushGate.promise;
+        return undefined;
+      });
+      const broadcasts: ProjectIndex[] = [];
+      const observer = subscribeProjectIndex(PORT, (index) => broadcasts.push(index));
+      await Promise.resolve();
+
+      const mutation = mutate();
+      await flushStarted.promise;
+      const passiveReplies: ProjectIndex[] = [];
+      const passive = subscribeProjectIndex(PORT, (index) => passiveReplies.push(index));
+      await Promise.resolve();
+
+      expect(broadcasts).toHaveLength(2);
+      for (const index of broadcasts) expect(index).toMatchObject(before);
+      expect(passiveReplies).toHaveLength(1);
+      expect(passiveReplies[0]).toMatchObject(before);
+
+      flushGate.resolve();
+      await mutation;
+      expect(broadcasts.at(-1)).toMatchObject(after);
+
+      passive.dispose();
+      observer.dispose();
+      tearOwner();
+    },
+  );
+
+  it('save emits only its correlated applied frame until both durability proofs finish', async () => {
+    const fs = scratchOwnerFs('save-durability-publication');
+    const commitFlush = deferred();
+    const cleanupFlush = deferred();
+    const commitFlushStarted = deferred();
+    const cleanupFlushStarted = deferred();
+    let flushes = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushes++;
+      if (flushes === 1) {
+        commitFlushStarted.resolve();
+        await commitFlush.promise;
+      } else {
+        cleanupFlushStarted.resolve();
+        await cleanupFlush.promise;
+      }
+      return undefined;
+    });
+    const broadcasts: ProjectIndex[] = [];
+    const observer = subscribeProjectIndex(PORT, (index) => broadcasts.push(index));
+    await Promise.resolve();
+
+    const phases = saveProjectIndexPhases(PORT, 'p-save-proof', 'Save Proof', 'project-files');
+    const applied = await phases.applied;
+    await commitFlushStarted.promise;
+    expect(applied).toMatchObject({ activeId: 'p-save-proof', projects: [{ id: 'p-save-proof' }] });
+    expect(broadcasts).toHaveLength(1);
+
+    const beforeCommitProof: ProjectIndex[] = [];
+    const passive = subscribeProjectIndex(PORT, (index) => beforeCommitProof.push(index));
+    await Promise.resolve();
+    expect(beforeCommitProof).toHaveLength(1);
+    expect(beforeCommitProof[0]).toMatchObject({ activeId: 'scratch', projects: [] });
+    expect(broadcasts).toHaveLength(2);
+    expect(broadcasts.at(-1)).toMatchObject({ activeId: 'scratch', projects: [] });
+
+    commitFlush.resolve();
+    await cleanupFlushStarted.promise;
+    expect(broadcasts).toHaveLength(2);
+    cleanupFlush.resolve();
+    await phases.durable;
+    expect(broadcasts.at(-1)).toMatchObject({
+      activeId: 'p-save-proof',
+      projects: [{ id: 'p-save-proof' }],
+    });
+
+    passive.dispose();
+    observer.dispose();
+    tearOwner();
+  });
+
+  it('keeps serving the prior durable index after a deferred flush rejects', async () => {
+    const fs = ownerFs();
+    const flushGate = deferred();
+    const flushStarted = deferred();
+    const failure = new Error('deferred index flush failed');
+    failure.name = 'IndexFlushError';
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushStarted.resolve();
+      await flushGate.promise;
+      throw failure;
+    });
+    const broadcasts: ProjectIndex[] = [];
+    const observer = subscribeProjectIndex(PORT, (index) => broadcasts.push(index));
+    await Promise.resolve();
+
+    const mutation = renameProjectIndex(PORT, 'p-1', 'Unproven');
+    await flushStarted.promise;
+    flushGate.resolve();
+    await expect(mutation).rejects.toThrow('deferred index flush failed');
+
+    const passiveReplies: ProjectIndex[] = [];
+    const passive = subscribeProjectIndex(PORT, (index) => passiveReplies.push(index));
+    await Promise.resolve();
+    expect(broadcasts).toHaveLength(2);
+    expect(broadcasts.at(-1)).toMatchObject({ projects: [{ id: 'p-1', name: 'A' }] });
+    expect(passiveReplies).toHaveLength(1);
+    expect(passiveReplies[0]).toMatchObject({ projects: [{ id: 'p-1', name: 'A' }] });
+
+    passive.dispose();
+    observer.dispose();
+    tearOwner();
+  });
+
   it('index-save commits /scratch → /projects/<id>, flips the index, then cleans stale source', async () => {
     const fs = scratchOwnerFs('alpha-bytes');
     const tearOwner = serveProjectIndex(PORT, fs, '/');
@@ -208,11 +487,11 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
 
     await saveProjectIndex(PORT, 'p-alpha', 'Alpha', 'project-files');
 
-    // Disk: the project tree + index are durable at ack time; stale /scratch is
-    // recoverable and cleaned on a later tick so huge derived deps do not hold ack.
+    // Disk: project + index are durable at ack; source cleanup ran in the same
+    // package FIFO mutation, after the crash-safe commit point.
     expect(fs.existsSync('/projects/p-alpha/marker.txt')).toBe(true);
     expect(readUtf8(fs, '/projects/p-alpha/marker.txt')).toBe('alpha-bytes');
-    expect(fs.existsSync('/scratch')).toBe(true);
+    expect(fs.existsSync('/scratch')).toBe(false);
 
     // Index: activeId = the new id, scratch cleared, project listed.
     const reply = received.at(-1);
@@ -222,10 +501,116 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       { id: 'p-alpha', name: 'Alpha', starter: 'project-files' },
     ]);
 
-    await nextTimer();
-    expect(fs.existsSync('/scratch')).toBe(false);
-
     dispose();
+    tearOwner();
+  });
+
+  it('index-save never exports a partial unstamped node_modules tree', async () => {
+    const fs = scratchOwnerFs('source');
+    fs.mkdirSync('/scratch/node_modules/partial', { recursive: true });
+    fs.writeFileSync('/scratch/node_modules/partial/index.js', enc.encode('torn-install'));
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    await saveProjectIndex(PORT, 'p-partial', 'Partial', 'project-files');
+
+    expect(fs.existsSync('/projects/p-partial/marker.txt')).toBe(true);
+    expect(fs.existsSync('/projects/p-partial/node_modules')).toBe(false);
+    tearOwner();
+  });
+
+  it('waits behind a parked package mutation and cleans Save before a following new scratch', async () => {
+    const fs = scratchOwnerFs('saved-source');
+    let releaseHead!: () => void;
+    let markHeadEntered!: () => void;
+    const headEntered = new Promise<void>((resolve) => {
+      markHeadEntered = resolve;
+    });
+    const headGate = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
+    let fifo = Promise.resolve();
+    let sequence = 0;
+    const exits: Array<{ readonly sequence: number; readonly scratchExists: boolean }> = [];
+    const packageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+      reset: (_target, prepare) => {
+        const current = ++sequence;
+        const operation = fifo.then(async () => {
+          const plan = await prepare();
+          if (plan.status === 'ready') await plan.mutate();
+          exits.push({ sequence: current, scratchExists: fs.existsSync('/scratch') });
+        });
+        fifo = operation.catch(() => undefined);
+        return operation;
+      },
+    };
+    const blocker = packageMutations.reset({ root: '/scratch' }, async () => ({
+      status: 'ready',
+      mutate: async () => {
+        markHeadEntered();
+        await headGate;
+      },
+    }));
+    await headEntered;
+    const tearOwner = serveProjectIndex(
+      PORT,
+      fs,
+      '/',
+      undefined,
+      undefined,
+      undefined,
+      packageMutations,
+    );
+
+    const save = saveProjectIndex(PORT, 'p-fifo', 'FIFO', 'project-files');
+    await Promise.resolve();
+    expect(fs.existsSync('/projects/p-fifo')).toBe(false);
+
+    releaseHead();
+    await blocker;
+    await save;
+    await newScratchIndex(PORT, 'node-worker');
+    await fifo;
+
+    expect(exits).toEqual([
+      { sequence: 1, scratchExists: true },
+      { sequence: 2, scratchExists: false },
+      { sequence: 3, scratchExists: true },
+    ]);
+    expect(readUtf8(fs, '/projects/p-fifo/marker.txt')).toBe('saved-source');
+    expect(fs.existsSync('/scratch/marker.txt')).toBe(false);
+    expect(fs.existsSync('/scratch/src/main.js')).toBe(true);
+    tearOwner();
+  });
+
+  it('excludes node_modules after package revocation removes its root marker', async () => {
+    const fs = scratchOwnerFs('saved-source');
+    fs.mkdirSync('/scratch/node_modules/vite', { recursive: true });
+    fs.writeFileSync('/scratch/node_modules/vite/package.json', enc.encode('{}\n'));
+    fs.writeFileSync(installStampPath('/scratch'), enc.encode('{}\n'));
+    let resetCalls = 0;
+    const packageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+      reset: async (_target, prepare) => {
+        resetCalls++;
+        const plan = await prepare();
+        if (plan.status === 'noop') return;
+        fs.rmSync(installStampPath('/scratch'), { force: true });
+        await plan.mutate();
+      },
+    };
+    const tearOwner = serveProjectIndex(
+      PORT,
+      fs,
+      '/',
+      undefined,
+      undefined,
+      undefined,
+      packageMutations,
+    );
+
+    await saveProjectIndex(PORT, 'p-stamped', 'Stamped', 'project-files');
+
+    expect(resetCalls).toBe(1);
+    expect(fs.existsSync('/projects/p-stamped/node_modules')).toBe(false);
     tearOwner();
   });
 
@@ -266,13 +651,19 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
 
   it('index-save applied ack resolves before a slow durable flush', async () => {
     const fs = scratchOwnerFs('alpha-slow-flush');
-    let releaseFlush!: () => void;
+    let releaseCommitFlush!: () => void;
+    let releaseCleanupFlush!: () => void;
+    const commitFlushGate = new Promise<void>((resolve) => {
+      releaseCommitFlush = resolve;
+    });
+    const cleanupFlushGate = new Promise<void>((resolve) => {
+      releaseCleanupFlush = resolve;
+    });
     let flushStarted = 0;
-    const flush = (): Promise<undefined> => {
+    const flush = async (): Promise<undefined> => {
       flushStarted++;
-      return new Promise<undefined>((resolve) => {
-        releaseFlush = () => resolve(undefined);
-      });
+      await (flushStarted === 1 ? commitFlushGate : cleanupFlushGate);
+      return undefined;
     };
     const tearOwner = serveProjectIndex(PORT, fs, '/', flush);
 
@@ -290,10 +681,49 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(flushStarted).toBe(1);
     expect(durableSettled).toBe(false);
 
-    releaseFlush();
+    releaseCommitFlush();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(flushStarted).toBe(2);
+    expect(durableSettled).toBe(false);
+    expect(fs.existsSync('/scratch')).toBe(false);
+
+    releaseCleanupFlush();
     await phases.durable;
     expect(durableSettled).toBe(true);
 
+    tearOwner();
+  });
+
+  it('index-save keeps applied but rejects durable exactly when committed-source cleanup fails', async () => {
+    const fs = scratchOwnerFs('cleanup-failure-source');
+    const realRm = fs.rmSync.bind(fs);
+    const failure = new Error('scratch cleanup rm failed');
+    failure.name = 'ScratchCleanupError';
+    fs.rmSync = ((path, options) => {
+      if (path === '/scratch') throw failure;
+      realRm(path, options);
+    }) as typeof fs.rmSync;
+    let flushCalls = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushCalls++;
+      return undefined;
+    });
+
+    const phases = saveProjectIndexPhases(PORT, 'p-cleanup-fail', 'Cleanup Fail', 'project-files');
+
+    await expect(phases.applied).resolves.toMatchObject({
+      activeId: 'p-cleanup-fail',
+      projects: [{ id: 'p-cleanup-fail' }],
+    });
+    const outcome = await settlePromptly(phases.durable);
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ScratchCleanupError', message: 'scratch cleanup rm failed' },
+    });
+    expect(flushCalls).toBe(1);
+    expect(loadIndex(fs, '/').activeId).toBe('p-cleanup-fail');
+    expect(fs.existsSync('/projects/p-cleanup-fail/marker.txt')).toBe(true);
+    expect(fs.existsSync('/scratch')).toBe(true);
     tearOwner();
   });
 
@@ -307,21 +737,20 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
 
-    saveProjectIndex(PORT, 'p-nw', 'NW', 'node-worker');
-    await Promise.resolve();
+    await saveProjectIndex(PORT, 'p-nw', 'NW', 'node-worker');
     expect(received.at(-1)?.projects).toMatchObject([{ id: 'p-nw', starter: 'node-worker' }]);
 
     dispose();
     tearOwner();
   });
 
-  it('a save with NO scratch is a LOUD throw, never a silent swallow', () => {
+  it('a save with NO scratch is a LOUD correlated rejection, never a silent swallow', async () => {
     const fs = new MemoryFsSync();
     writeIndex(fs, '/', { activeId: 'scratch', scratch: null, projects: [] });
     const tearOwner = serveProjectIndex(PORT, fs, '/');
-    // The poster fires over the channel; the owner handler runs synchronously in
-    // the same tick (FakeChannel is synchronous), so the throw surfaces here.
-    expect(() => saveProjectIndex(PORT, 'p-x', 'X', 'project-files')).toThrow(/no scratch to save/);
+    await expect(saveProjectIndex(PORT, 'p-x', 'X', 'project-files')).rejects.toThrow(
+      /no scratch to save/,
+    );
     tearOwner();
   });
 
@@ -331,19 +760,38 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const received: ProjectIndex[] = [];
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve();
-    saveProjectIndex(PORT, 'p-1', 'First', 'project-files');
-    await Promise.resolve();
+    await saveProjectIndex(PORT, 'p-1', 'First', 'project-files');
 
-    renameProjectIndex(PORT, 'p-1', 'Renamed');
-    await Promise.resolve();
+    await renameProjectIndex(PORT, 'p-1', 'Renamed');
     expect(received.at(-1)?.projects).toMatchObject([{ id: 'p-1', name: 'Renamed' }]);
 
     // Unknown id → idempotent no-op publish (no throw, state re-asserted).
-    expect(() => renameProjectIndex(PORT, 'nope', 'Z')).not.toThrow();
-    await Promise.resolve();
+    await expect(renameProjectIndex(PORT, 'nope', 'Z')).resolves.toBeDefined();
     expect(received.at(-1)?.projects).toMatchObject([{ id: 'p-1', name: 'Renamed' }]);
 
     dispose();
+    tearOwner();
+  });
+
+  it('index-rename returns an exact correlated NACK when its index write fails', async () => {
+    const fs = ownerFs();
+    const failure = new Error('rename index write failed');
+    failure.name = 'IndexWriteError';
+    fs.writeFileSync = (() => {
+      throw failure;
+    }) as typeof fs.writeFileSync;
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    let mutation: Promise<ProjectIndex> | undefined;
+
+    expect(() => {
+      mutation = renameProjectIndex(PORT, 'p-1', 'Renamed');
+    }).not.toThrow();
+    const outcome = await settlePromptly(mutation as Promise<ProjectIndex>);
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'IndexWriteError', message: 'rename index write failed' },
+    });
     tearOwner();
   });
 
@@ -376,7 +824,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
-  it('index-set-active rejects an unknown project id without corrupting the index', () => {
+  it('index-set-active rejects an unknown project id without corrupting the index', async () => {
     const fs = new MemoryFsSync();
     fs.mkdirSync('/projects/p-1', { recursive: true });
     writeIndex(fs, '/', {
@@ -386,9 +834,42 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     });
     const tearOwner = serveProjectIndex(PORT, fs, '/');
 
-    expect(() => setActiveIndex(PORT, 'p-missing')).toThrow(/unknown active project/i);
+    await expect(setActiveIndex(PORT, 'p-missing')).rejects.toThrow(/unknown active project/i);
     expect(loadIndex(fs, '/').activeId).toBe('p-1');
 
+    tearOwner();
+  });
+
+  it('index-set-active returns an exact correlated NACK when publish fails', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    fs.mkdirSync('/projects/p-2', { recursive: true });
+    writeIndex(fs, '/', {
+      activeId: 'p-1',
+      scratch: null,
+      projects: [
+        { id: 'p-1', name: 'A', starter: 'project-files', editedAt: 'a' },
+        { id: 'p-2', name: 'B', starter: 'project-files', editedAt: 'b' },
+      ],
+    });
+    const failure = new Error('active index publish failed');
+    failure.name = 'IndexPublishError';
+    class PublishFailChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if ((data as { readonly type?: string }).type === 'index-reply') throw failure;
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      PublishFailChannel as unknown as typeof BroadcastChannel;
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    const outcome = await settlePromptly(setActiveIndex(PORT, 'p-2'));
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'IndexPublishError', message: 'active index publish failed' },
+    });
     tearOwner();
   });
 
@@ -482,6 +963,23 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('index-mark-scratch-dirty returns an exact correlated NACK when durability flush fails', async () => {
+    const fs = scratchOwnerFs('user edit');
+    const failure = new Error('dirty marker flush failed');
+    failure.name = 'IndexFlushError';
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      throw failure;
+    });
+
+    const outcome = await settlePromptly(markScratchDirtyIndex(PORT, 'project-files'));
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'IndexFlushError', message: 'dirty marker flush failed' },
+    });
+    tearOwner();
+  });
+
   it('index-mark-scratch-dirty synthesizes the scratch entry when the tree exists but the index is cold-empty', async () => {
     const fs = new MemoryFsSync();
     fs.mkdirSync('/scratch/src', { recursive: true });
@@ -527,6 +1025,174 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(reply?.scratch).toMatchObject({ starter: 'project-files', dirty: false });
 
     dispose();
+    tearOwner();
+  });
+
+  it('runs scratch reset, new scratch, and named reset inside the supplied package FIFO', async () => {
+    const fs = scratchOwnerFs('user-edits');
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    fs.writeFileSync('/projects/p-1/package.json', enc.encode('{"name":"old"}\n'));
+    writeIndex(fs, '/', {
+      activeId: 'scratch',
+      scratch: { starter: 'project-files', dirty: true, editedAt: 'edited' },
+      projects: [{ id: 'p-1', name: 'A', starter: 'project-files', editedAt: 'old' }],
+    });
+    const calls: string[] = [];
+    let fifo = Promise.resolve();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: (target, prepare) => {
+        const operation = fifo.then(async () => {
+          const slug = target.root === '/scratch' ? 'scratch' : target.root.split('/').at(-1);
+          calls.push(`before:${slug}`);
+          const plan = await prepare();
+          if (plan.status === 'ready') await plan.mutate();
+          calls.push(`after:${slug}`);
+        });
+        fifo = operation.catch(() => undefined);
+        return operation;
+      },
+    });
+
+    await resetScratchIndex(PORT, 'project-files');
+    await newScratchIndex(PORT, 'node-worker');
+    await resetProjectIndex(PORT, 'p-1');
+    await fifo;
+
+    expect(calls).toEqual([
+      'before:scratch',
+      'after:scratch',
+      'before:scratch',
+      'after:scratch',
+      'before:p-1',
+      'after:p-1',
+    ]);
+    tearOwner();
+  });
+
+  it('serializes rename behind a parked reset without losing the later index mutation', async () => {
+    const fs = ownerFs();
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    let releaseReset!: () => void;
+    let markResetPrepared!: () => void;
+    const resetGate = new Promise<void>((resolve) => {
+      releaseReset = resolve;
+    });
+    const resetPrepared = new Promise<void>((resolve) => {
+      markResetPrepared = resolve;
+    });
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        const plan = await prepare();
+        markResetPrepared();
+        await resetGate;
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+
+    const reset = resetProjectIndex(PORT, 'p-1');
+    await resetPrepared;
+    const rename = renameProjectIndex(PORT, 'p-1', 'Renamed after reset');
+    await Promise.resolve();
+    releaseReset();
+    await Promise.all([reset, rename]);
+
+    expect(loadIndex(fs, '/').projects).toMatchObject([{ id: 'p-1', name: 'Renamed after reset' }]);
+    tearOwner();
+  });
+
+  it('teardown rejects parked and queued mutations, then fences every later write and post', async () => {
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      AsyncDropOnCloseChannel as unknown as typeof BroadcastChannel;
+    const fs = ownerFs();
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    fs.writeFileSync('/projects/p-1/sentinel.txt', enc.encode('must survive'));
+    const parked = deferred();
+    const release = deferred();
+    const completed = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        try {
+          const plan = await prepare();
+          parked.resolve();
+          await release.promise;
+          if (plan.status === 'ready') await plan.mutate();
+        } finally {
+          completed.resolve();
+        }
+      },
+    });
+
+    const reset = resetProjectIndex(PORT, 'p-1');
+    await parked.promise;
+    const rename = renameProjectIndex(PORT, 'p-1', 'must not land');
+    await Promise.resolve();
+
+    tearOwner();
+    const [resetOutcome, renameOutcome] = await Promise.all([
+      settlePromptly(reset),
+      settlePromptly(rename),
+    ]);
+    release.resolve();
+    await completed.promise;
+    await Promise.resolve();
+
+    expect(resetOutcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ProjectIndexBridgeClosedError' },
+    });
+    expect(renameOutcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ProjectIndexBridgeClosedError' },
+    });
+    expect(readUtf8(fs, '/projects/p-1/sentinel.txt')).toBe('must survive');
+    expect(loadIndex(fs, '/').projects).toMatchObject([{ id: 'p-1', name: 'A' }]);
+    expect(AsyncDropOnCloseChannel.postsAfterClose).toBe(0);
+    expect(AsyncDropOnCloseChannel.repeatedCloses).toBe(0);
+  });
+
+  it('rejects promptly with the exact reset revocation failure NACK', async () => {
+    const fs = scratchOwnerFs('must-survive');
+    const failure = new Error('install-stamp revoke durability check failed');
+    failure.name = 'InstallStampAuthorityError';
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async () => {
+        throw failure;
+      },
+    });
+
+    const outcome = await settlePromptly(resetScratchIndex(PORT, 'project-files'));
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: {
+        name: 'InstallStampAuthorityError',
+        message: 'install-stamp revoke durability check failed',
+      },
+    });
+    expect(readUtf8(fs, '/scratch/marker.txt')).toBe('must-survive');
+    expect(loadIndex(fs, '/').scratch?.dirty).toBe(true);
+    tearOwner();
+  });
+
+  it('rejects promptly with the exact reset mutation failure NACK', async () => {
+    const fs = scratchOwnerFs('will-be-reset');
+    const failure = new Error('starter git initialization failed');
+    failure.name = 'StarterGitMutationError';
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, async () => {
+      throw failure;
+    });
+
+    const outcome = await settlePromptly(resetScratchIndex(PORT, 'project-files'));
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: {
+        name: 'StarterGitMutationError',
+        message: 'starter git initialization failed',
+      },
+    });
+    expect(fs.existsSync('/scratch/marker.txt')).toBe(false);
+    expect(loadIndex(fs, '/').scratch).toMatchObject({ dirty: false });
     tearOwner();
   });
 
@@ -581,6 +1247,58 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('keeps a parked named reset pending across an unrelated index reply, then rejects its exact NACK', async () => {
+    const fs = ownerFs();
+    fs.mkdirSync('/projects/p-1', { recursive: true });
+    let releaseReset!: () => void;
+    let markResetParked!: () => void;
+    const resetGate = new Promise<void>((resolve) => {
+      releaseReset = resolve;
+    });
+    const resetParked = new Promise<void>((resolve) => {
+      markResetParked = resolve;
+    });
+    const failure = new Error('named reset failed after park');
+    failure.name = 'NamedResetError';
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async () => {
+        markResetParked();
+        await resetGate;
+        throw failure;
+      },
+    });
+
+    const mutation = resetProjectIndex(PORT, 'p-1');
+    await resetParked;
+    let observed:
+      | { readonly status: 'resolved' }
+      | { readonly status: 'rejected'; readonly error: unknown }
+      | undefined;
+    void mutation.then(
+      () => {
+        observed = { status: 'resolved' };
+      },
+      (error: unknown) => {
+        observed = { status: 'rejected', error };
+      },
+    );
+    const replies: ProjectIndex[] = [];
+    const subscription = subscribeProjectIndex(PORT, (index) => replies.push(index));
+    await Promise.resolve();
+
+    expect(replies).toHaveLength(1);
+    expect(observed).toBeUndefined();
+
+    releaseReset();
+    const outcome = await settlePromptly(mutation);
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'NamedResetError', message: 'named reset failed after park' },
+    });
+    subscription.dispose();
+    tearOwner();
+  });
+
   it('index-reset-project RE-SEEDS /projects/<id> from the project starter (real restore, not a no-op)', async () => {
     // A named project with user edits + a stray file + node_modules to be wiped.
     const fs = new MemoryFsSync();
@@ -620,7 +1338,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(refreshed).toBe(1);
 
     // Unknown id = idempotent no-op publish (no throw).
-    expect(() => resetProjectIndex(PORT, 'nope')).not.toThrow();
+    await expect(resetProjectIndex(PORT, 'nope')).resolves.toBeDefined();
 
     dispose();
     tearOwner();
