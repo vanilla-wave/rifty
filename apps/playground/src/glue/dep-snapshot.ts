@@ -117,7 +117,9 @@ export function parseDepSnapshot(json: string): DepSnapshotV2 {
     typeof parsed.packageJsonText !== 'string' ||
     typeof parsed.installArtifactIdentity !== 'string' ||
     !/^sha256:[0-9a-f]{64}$/.test(parsed.installArtifactIdentity) ||
-    typeof parsed.packages !== 'number'
+    typeof parsed.packages !== 'number' ||
+    !Number.isSafeInteger(parsed.packages) ||
+    parsed.packages < 0
   ) {
     throw new Error('Malformed dep snapshot: missing templateId/packages');
   }

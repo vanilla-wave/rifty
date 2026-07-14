@@ -1,5 +1,5 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildWorkspaceArchive,
   exportWorkspaceArchive,
@@ -105,6 +105,46 @@ describe('workspace archive', () => {
     expect(() => importWorkspaceArchive(fs, badArchive)).toThrow(/Unsafe archive path/);
     expect(read(fs, '/workspace/src/main.ts')).toBe('keep');
   });
+
+  it.each([
+    ['null entry', null, /file 0 must be an object/i],
+    ['array entry', [], /file 0 must be an object/i],
+    ['string entry', 'src/new.ts', /file 0 must be an object/i],
+    ['missing fields', {}, /file 0 path must be a string/i],
+    [
+      'non-string path',
+      { path: 7, encoding: 'base64', content: Buffer.from('new').toString('base64') },
+      /file 0 path must be a string/i,
+    ],
+    [
+      'wrong encoding',
+      { path: 'src/new.ts', encoding: 'utf8', content: 'new' },
+      /file 0 encoding must be base64/i,
+    ],
+    [
+      'non-string content',
+      { path: 'src/new.ts', encoding: 'base64', content: null },
+      /file 0 content must be a string/i,
+    ],
+  ])(
+    'rejects a malformed %s without resetting or changing destination bytes',
+    (_case, file, error) => {
+      const fs = new MemoryFsSync();
+      write(fs, '/workspace/src/main.ts', 'keep');
+      write(fs, '/workspace/data.bin', '\u0000\u007f');
+      const before = exportWorkspaceArchive(fs, '/workspace');
+      const rmSync = vi.spyOn(fs, 'rmSync');
+      const badArchive = JSON.stringify({
+        version: 1,
+        root: '/workspace',
+        files: [file],
+      });
+
+      expect(() => importWorkspaceArchive(fs, badArchive)).toThrow(error);
+      expect(rmSync).not.toHaveBeenCalled();
+      expect(exportWorkspaceArchive(fs, '/workspace')).toBe(before);
+    },
+  );
 
   it.each([
     ['ancestor before descendant', ['a', 'a/b']],

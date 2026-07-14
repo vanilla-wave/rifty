@@ -253,6 +253,27 @@ describe('dep snapshot (ADR-0135)', () => {
     ).toThrow('packageJsonText');
   });
 
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ])('rejects a %s package count before restore mutates destination bytes', (_case, packages) => {
+    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    const target = new MemoryFsSync();
+    write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+
+    expect(() => {
+      const parsed = parseDepSnapshot(JSON.stringify({ ...snapshot, packages }));
+      restoreDepSnapshot(target, ROOT, parsed);
+    }).toThrow(/packages/);
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe('keep');
+    expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
+  });
+
   it('does not accept a snapshot missing the current install-artifact identity when package.json is unchanged', async () => {
     const { vfs, fsSync } = createMemoryFs();
     fsSync.mkdirSync(ROOT, { recursive: true });

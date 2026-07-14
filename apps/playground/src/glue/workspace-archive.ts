@@ -73,11 +73,28 @@ function assertSafeRelativePath(path: string): void {
   }
 }
 
-function assertArchive(value: WorkspaceArchiveV1): void {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function assertArchive(value: unknown): asserts value is WorkspaceArchiveV1 {
+  if (!isRecord(value)) throw new Error('Workspace archive must be an object');
   if (value.version !== 1)
     throw new Error(`Unsupported workspace archive version ${value.version}`);
   if (typeof value.root !== 'string') throw new Error('Workspace archive root must be a string');
   if (!Array.isArray(value.files)) throw new Error('Workspace archive files must be an array');
+  for (const [index, file] of value.files.entries()) {
+    if (!isRecord(file)) throw new Error(`Workspace archive file ${index} must be an object`);
+    if (typeof file.path !== 'string') {
+      throw new Error(`Workspace archive file ${index} path must be a string`);
+    }
+    if (file.encoding !== 'base64') {
+      throw new Error(`Workspace archive file ${index} encoding must be base64`);
+    }
+    if (typeof file.content !== 'string') {
+      throw new Error(`Workspace archive file ${index} content must be a string`);
+    }
+  }
 }
 
 export function exportWorkspaceArchive(
@@ -133,7 +150,7 @@ export function importWorkspaceArchive(
   archiveJson: string,
   options: ImportWorkspaceArchiveOptions = {},
 ): void {
-  prepareWorkspaceArchiveImport(fs, JSON.parse(archiveJson) as WorkspaceArchiveV1, options).apply();
+  prepareWorkspaceArchiveImport(fs, JSON.parse(archiveJson) as unknown, options).apply();
 }
 
 /** Object-form import — dep snapshots (ADR-0135) embed the archive directly. */
@@ -148,7 +165,7 @@ export function applyWorkspaceArchive(
 /** Validate/decode without mutation; the returned apply owns the root replace. */
 export function prepareWorkspaceArchiveImport(
   fs: WorkspaceArchiveFs,
-  archive: WorkspaceArchiveV1,
+  archive: unknown,
   options: ImportWorkspaceArchiveOptions = {},
 ): PreparedWorkspaceArchiveImport {
   assertArchive(archive);
@@ -163,8 +180,6 @@ export function prepareWorkspaceArchiveImport(
   if (root === '/') throw new Error('Refusing to import a workspace archive at /');
 
   const decoded = archive.files.map((file) => {
-    if (file.encoding !== 'base64')
-      throw new Error(`Unsupported archive encoding ${file.encoding}`);
     assertSafeRelativePath(file.path);
     const target = joinPath(root, file.path);
     if (isInstallStampPath(target)) {
