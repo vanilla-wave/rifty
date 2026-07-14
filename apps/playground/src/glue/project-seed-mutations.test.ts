@@ -17,6 +17,7 @@ describe('projectSeedMutationIntents', () => {
       seedFiles: {
         '/app/package.json': '{}',
         '/app/vite.config.js': 'export default {}',
+        '/app/node_modules': 'corrupt-file',
         '/app/node_modules/@seed/types.d.ts': 'derived',
       },
       baselineFiles: {},
@@ -52,12 +53,14 @@ describe('projectSeedMutationIntents', () => {
       seedFiles: { '/app/package.json': '{}' },
       baselineFiles: {
         '/app/src/index.ts': 'source',
+        '/app/node_modules': 'corrupt-file',
         '/app/node_modules/pkg/index.js': 'derived',
       },
       freshRoot: true,
     });
 
     expect(intents).toContainEqual({ kind: 'write', path: '/app/src/index.ts' });
+    expect(intents).not.toContainEqual({ kind: 'write', path: '/app/node_modules' });
     expect(intents).not.toContainEqual({ kind: 'write', path: '/app/node_modules/pkg/index.js' });
   });
 });

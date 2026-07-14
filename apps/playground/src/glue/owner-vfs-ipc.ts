@@ -582,12 +582,39 @@ export function handleOwnerVfsCommitRequest(options: OwnerVfsCommitHandlerOption
 export interface OwnerVfsCommitReceiptHandlerOptions {
   readonly message: OwnerVfsCommitReceivedMessage;
   readonly release: (ack: HostCommitAck) => void;
-  readonly send: (message: OwnerVfsCommitReleasedMessage) => void;
+  readonly recover: (operationId: string) => HostCommitAck | null;
+  readonly send: (message: OwnerVfsCommitReleasedMessage | OwnerVfsCommitAckMessage) => void;
+  readonly reportError?: (error: Error) => void;
 }
 
 /** Same-sender ordering makes every earlier retry precede this exact receipt. */
 export function handleOwnerVfsCommitReceipt(options: OwnerVfsCommitReceiptHandlerOptions): void {
-  options.release(options.message.ack);
+  try {
+    options.release(options.message.ack);
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    if (options.reportError) options.reportError(error);
+    else console.error('[owner-vfs] rejected divergent commit receipt', error);
+    let recovered: HostCommitAck | null;
+    try {
+      recovered = options.recover(options.message.ack.operationId);
+    } catch (recoveryCause) {
+      const recoveryError =
+        recoveryCause instanceof Error ? recoveryCause : new Error(String(recoveryCause));
+      if (options.reportError) options.reportError(recoveryError);
+      else console.error('[owner-vfs] failed to recover retained commit ACK', recoveryError);
+      return;
+    }
+    if (recovered) {
+      options.send({
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: recovered.operationId,
+        ok: true,
+        ack: recovered,
+      });
+    }
+    return;
+  }
   options.send({ type: 'rifty:owner-vfs-commit-released', ack: options.message.ack });
 }
 

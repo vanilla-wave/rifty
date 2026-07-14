@@ -57,6 +57,8 @@ export interface OwnerVfsAuthority extends FsSync {
   /** Validate idempotency + CAS without mutating. A replay returns its prior ack. */
   validateHostCommit(request: HostCommitRequest): HostCommitAck | null;
   applyHostCommit(request: HostCommitRequest): HostCommitAck;
+  /** Read-only recovery after a divergent receipt; never releases retained bytes. */
+  retainedHostCommit(operationId: string): HostCommitAck | null;
   /** Exact terminal receipt ends replay ownership and releases retained request bytes. */
   releaseHostCommit(ack: HostCommitAck): void;
   /** Preflight actual absolute ingress targets before any batch mutation. */
@@ -426,6 +428,10 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     });
     this.#applied.set(request.operationId, { request: cloneRequest(request), ack });
     return ack;
+  }
+
+  retainedHostCommit(operationId: string): HostCommitAck | null {
+    return this.#applied.get(operationId)?.ack ?? null;
   }
 
   releaseHostCommit(ack: HostCommitAck): void {

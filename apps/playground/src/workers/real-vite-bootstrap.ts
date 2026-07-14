@@ -78,6 +78,7 @@ import { serveProjectIndex } from '../glue/project-index-port.ts';
 import { applyGuardedProjectIndexRecovery } from '../glue/project-index-recovery.ts';
 import { planProjectIndexRecovery } from '../glue/project-index.ts';
 import { projectSeedMutationIntents } from '../glue/project-seed-mutations.ts';
+import { withoutProjectNodeModulesFiles } from '../glue/project-seed-paths.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -203,11 +204,12 @@ async function seedProject(cfg: BootstrapConfig, starterId: string): Promise<voi
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
-  for (const [path, content] of Object.entries(
+  const seedFiles = withoutProjectNodeModulesFiles(
+    cfg.root,
     withoutViteConfigSeedFiles(cfg.root, cfg.seedFiles),
-  )) {
+  );
+  for (const [path, content] of Object.entries(seedFiles)) {
     const np = normalizePath(path);
-    if (np.startsWith(normalizePath(`${cfg.root}/node_modules/`))) continue;
     fs.mkdirSync(dirname(np), { recursive: true });
     if (!fs.existsSync(np)) {
       fs.writeFileSync(np, enc.encode(content));
@@ -230,10 +232,12 @@ async function seedProject(cfg: BootstrapConfig, starterId: string): Promise<voi
 
 function seedStarterBaseline(starter: string, root: string): void {
   const fs = syncMirror();
-  const files = withoutViteConfigSeedFiles(root, seedFilesForStarter(starterById(starter), root));
+  const files = withoutProjectNodeModulesFiles(
+    root,
+    withoutViteConfigSeedFiles(root, seedFilesForStarter(starterById(starter), root)),
+  );
   for (const [path, content] of Object.entries(files)) {
     const np = normalizePath(path);
-    if (np.startsWith(normalizePath(`${root}/node_modules/`))) continue;
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
   }
@@ -607,7 +611,11 @@ async function bootShellOwner(opts: {
       },
     },
   );
-  const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
+  const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
+    // Every installed CLI crosses this package-authority seam. The preset boot
+    // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
+    // arbitrary CLIs need the same template-seed guarantee without name dispatch.
+    await reassertActiveDevTemplateNodeModules();
     const viteCtx = withViteCliEnv(binPath, args, ctx);
     return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
   };
@@ -907,6 +915,7 @@ async function bootShellOwner(opts: {
       handleOwnerVfsCommitReceipt({
         message,
         release: (ack) => vfsAuthority.releaseHostCommit(ack),
+        recover: (operationId) => vfsAuthority.retainedHostCommit(operationId),
         send: (released) => kernelIpc.send?.(released),
       });
       return;

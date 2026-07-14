@@ -103,15 +103,14 @@ type IndexSaveConflictFrame = {
   readonly request: IndexSaveRequest;
   readonly error: { readonly name: string; readonly message: string };
 };
+type IndexSaveOutcomeFrame = IndexSaveAppliedFrame | IndexSaveTerminalFrame;
 type IndexSaveReceivedFrame = {
   readonly type: 'index-save-received';
-  readonly opId: string;
-  readonly request: IndexSaveRequest;
+  readonly candidate: IndexSaveOutcomeFrame;
 };
 type IndexSaveReleasedFrame = {
   readonly type: 'index-save-released';
-  readonly opId: string;
-  readonly request: IndexSaveRequest;
+  readonly candidate: IndexSaveOutcomeFrame;
 };
 /** Rename a named project in the index (ADR-0165 §9). */
 type IndexRenameFrame = {
@@ -195,7 +194,61 @@ function saveRequest(frame: IndexSaveRequest): IndexSaveRequest {
 }
 
 function equalSaveRequest(left: IndexSaveRequest, right: IndexSaveRequest): boolean {
-  return left.id === right.id && left.name === right.name && left.starter === right.starter;
+  return (
+    left.type === right.type &&
+    left.id === right.id &&
+    left.name === right.name &&
+    left.starter === right.starter
+  );
+}
+
+function equalProjectIndex(left: ProjectIndex, right: ProjectIndex): boolean {
+  if (left.activeId !== right.activeId || left.projects.length !== right.projects.length) {
+    return false;
+  }
+  if (left.scratch === null || right.scratch === null) {
+    if (left.scratch !== right.scratch) return false;
+  } else if (
+    left.scratch.starter !== right.scratch.starter ||
+    left.scratch.dirty !== right.scratch.dirty ||
+    left.scratch.editedAt !== right.scratch.editedAt
+  ) {
+    return false;
+  }
+  return left.projects.every((project, index) => {
+    const other = right.projects[index];
+    return (
+      other !== undefined &&
+      project.id === other.id &&
+      project.name === other.name &&
+      project.starter === other.starter &&
+      project.editedAt === other.editedAt
+    );
+  });
+}
+
+function equalSaveOutcome(left: IndexSaveOutcomeFrame, right: IndexSaveOutcomeFrame): boolean {
+  if (
+    left.type !== right.type ||
+    left.opId !== right.opId ||
+    !equalSaveRequest(left.request, right.request)
+  ) {
+    return false;
+  }
+  if (left.type === 'index-save-applied' && right.type === 'index-save-applied') {
+    return equalProjectIndex(left.index, right.index);
+  }
+  if (left.type !== 'index-save-terminal' || right.type !== 'index-save-terminal') return false;
+  if (left.ok !== right.ok) return false;
+  if (left.ok && right.ok) return equalProjectIndex(left.index, right.index);
+  if (left.ok || right.ok) return false;
+  if (left.error.name !== right.error.name || left.error.message !== right.error.message) {
+    return false;
+  }
+  if (left.applied === undefined || right.applied === undefined) {
+    return left.applied === right.applied;
+  }
+  return equalProjectIndex(left.applied, right.applied);
 }
 
 /**
@@ -706,24 +759,27 @@ export function serveProjectIndex(
       startMutationDrain();
     }
   };
-  const receiveSaveTerminal = (frame: IndexSaveReceivedFrame): void => {
-    const record = saveOperations.get(frame.opId);
-    if (record && !equalSaveRequest(record.request, frame.request)) {
-      postSaveConflict(frame.opId, frame.request);
+  const receiveSaveOutcome = (frame: IndexSaveReceivedFrame): void => {
+    const { candidate } = frame;
+    const record = saveOperations.get(candidate.opId);
+    if (!record) {
+      // A prior exact terminal receipt may have deleted the ledger before its
+      // release arrived. Same-sender request→receipt order makes this a retry.
+      postSaveFrame({ type: 'index-save-released', candidate });
       return;
     }
-    if (record && !record.terminal) return;
-    if (record) saveOperations.delete(frame.opId);
-    postSaveFrame({
-      type: 'index-save-released',
-      opId: frame.opId,
-      request: frame.request,
-    });
+    const recorded = candidate.type === 'index-save-applied' ? record.applied : record.terminal;
+    if (!recorded || !equalSaveOutcome(recorded, candidate)) {
+      replayOperation(record);
+      return;
+    }
+    postSaveFrame({ type: 'index-save-released', candidate: recorded });
+    if (recorded.type === 'index-save-terminal') saveOperations.delete(recorded.opId);
   };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
     if (frame.type === 'index-req') publishDurable();
-    else if (frame.type === 'index-save-received') receiveSaveTerminal(frame);
+    else if (frame.type === 'index-save-received') receiveSaveOutcome(frame);
     else if (frame.type === 'index-delete')
       enqueueMutation(frame, () => deleteTree(frame.projectId, frame.opId));
     else if (frame.type === 'index-save') enqueueSave(frame);
@@ -754,11 +810,10 @@ export function serveProjectIndex(
     for (const queued of pendingMutations) queued.reject(closedError);
     for (const [opId, record] of saveOperations) {
       if (!record.terminal) saveTerminal(opId, { ok: false, cause: closedError });
-      postSaveFrame({
-        type: 'index-save-released',
-        opId,
-        request: record.request,
-      });
+      else postSaveFrame(record.terminal);
+      if (record.terminal) {
+        postSaveFrame({ type: 'index-save-released', candidate: record.terminal });
+      }
     }
     saveOperations.clear();
     torn = true;
@@ -854,8 +909,9 @@ function postIndexMutationPhases(
   let durableSettled = false;
   let handedOff = false;
   let admitted = false;
-  let receiptStarted = false;
   let released = false;
+  let appliedCandidate: IndexSaveAppliedFrame | undefined;
+  let terminalCandidate: IndexSaveTerminalFrame | undefined;
 
   let onMessage: (event: MessageEvent) => void = () => {};
   let closed = false;
@@ -917,7 +973,7 @@ function postIndexMutationPhases(
   };
   const pollStatus = (): void => {
     statusPollTimeout = undefined;
-    if (closed || receiptStarted || released) return;
+    if (closed || released) return;
     try {
       channel.postMessage(mutation);
       handedOff = true;
@@ -925,37 +981,69 @@ function postIndexMutationPhases(
       // Admission proved the owner may be executing this exact operation. A
       // later local send failure cannot rewrite that outcome; keep polling.
     }
-    if (!closed && !receiptStarted && !released && statusPollTimeout === undefined) {
+    if (
+      !closed &&
+      !released &&
+      appliedCandidate === undefined &&
+      terminalCandidate === undefined &&
+      statusPollTimeout === undefined
+    ) {
       statusPollTimeout = setTimeout(pollStatus, INDEX_SAVE_STATUS_POLL_MS);
     }
   };
   const startStatusPolling = (): void => {
     stopPreAdmissionRetries();
-    if (closed || receiptStarted || released || statusPollTimeout !== undefined) return;
+    if (
+      closed ||
+      released ||
+      appliedCandidate !== undefined ||
+      terminalCandidate !== undefined ||
+      statusPollTimeout !== undefined
+    ) {
+      return;
+    }
     statusPollTimeout = setTimeout(pollStatus, INDEX_SAVE_STATUS_POLL_MS);
   };
-  const scheduleReceipt = (): void => {
+  const hasReceiptCandidate = (): boolean =>
+    appliedCandidate !== undefined || terminalCandidate !== undefined;
+  const stopReceiptRetryIfIdle = (): void => {
+    if (hasReceiptCandidate() || receiptRetryTimeout === undefined) return;
+    clearTimeout(receiptRetryTimeout);
+    receiptRetryTimeout = undefined;
+  };
+  const sendReceipts = (): void => {
     if (closed || released) return;
-    try {
-      channel.postMessage({
-        type: 'index-save-received',
-        opId,
-        request,
-      } satisfies IndexSaveReceivedFrame);
-    } catch {
-      // Mutation outcome is already terminal. Receipt retry owns only bounded
-      // owner-ledger cleanup and must not rewrite the caller's result.
+    const candidates: readonly (IndexSaveOutcomeFrame | undefined)[] = [
+      appliedCandidate,
+      terminalCandidate,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const current =
+        candidate.type === 'index-save-applied' ? appliedCandidate : terminalCandidate;
+      if (current !== candidate) continue;
+      try {
+        channel.postMessage({
+          type: 'index-save-received',
+          candidate,
+        } satisfies IndexSaveReceivedFrame);
+      } catch {
+        // Keep the exact candidate staged; retry cannot rewrite its outcome.
+      }
     }
-    if (!closed && !released) {
-      receiptRetryTimeout = setTimeout(scheduleReceipt, INDEX_APPLIED_RETRY_MS);
+    if (hasReceiptCandidate() && receiptRetryTimeout === undefined) {
+      receiptRetryTimeout = setTimeout(() => {
+        receiptRetryTimeout = undefined;
+        sendReceipts();
+      }, INDEX_APPLIED_RETRY_MS);
     }
   };
-  const startReceipt = (): void => {
-    if (receiptStarted) return;
-    receiptStarted = true;
+  const stageOutcome = (candidate: IndexSaveOutcomeFrame): void => {
     stopPreAdmissionRetries();
     stopStatusPolling();
-    scheduleReceipt();
+    if (candidate.type === 'index-save-applied') appliedCandidate = candidate;
+    else terminalCandidate = candidate;
+    sendReceipts();
   };
   const matchesRequest = (reply: {
     readonly opId: string;
@@ -967,10 +1055,44 @@ function postIndexMutationPhases(
   onMessage = (event: MessageEvent): void => {
     const reply = event.data as IndexFrame;
     if (reply.type === 'index-save-released') {
-      if (!matchesRequest(reply)) return;
+      const { candidate } = reply;
+      if (!matchesRequest(candidate)) return;
+      if (candidate.type === 'index-save-applied') {
+        if (!appliedCandidate || !equalSaveOutcome(appliedCandidate, candidate)) return;
+        appliedCandidate = undefined;
+        stopReceiptRetryIfIdle();
+        if (match(candidate.index)) resolveApplied(candidate.index);
+        else rejectBoth(mismatchError());
+        startStatusPolling();
+        return;
+      }
+      if (!terminalCandidate || !equalSaveOutcome(terminalCandidate, candidate)) return;
+      terminalCandidate = undefined;
+      appliedCandidate = undefined;
       released = true;
       stopStatusPolling();
-      if (receiptRetryTimeout !== undefined) clearTimeout(receiptRetryTimeout);
+      if (receiptRetryTimeout !== undefined) {
+        clearTimeout(receiptRetryTimeout);
+        receiptRetryTimeout = undefined;
+      }
+      if (candidate.ok) {
+        if (match(candidate.index)) {
+          resolveApplied(candidate.index);
+          resolveDurable(candidate.index);
+        } else {
+          rejectBoth(mismatchError());
+        }
+      } else {
+        const error = errorFromSaveFailure(candidate);
+        if (candidate.applied) {
+          if (match(candidate.applied)) resolveApplied(candidate.applied);
+          else if (!appliedSettled) rejectBoth(mismatchError());
+        } else if (!appliedSettled) {
+          appliedSettled = true;
+          settlements.reject(appliedId, error);
+        }
+        rejectDurable(error);
+      }
       settlements.dispose(new Error(`project index ${request.type} receipt complete`));
       return;
     }
@@ -990,35 +1112,16 @@ function postIndexMutationPhases(
     }
     if (reply.type === 'index-save-applied') {
       if (!matchesRequest(reply)) return;
-      startStatusPolling();
-      if (match(reply.index)) resolveApplied(reply.index);
-      else rejectBoth(mismatchError());
+      if (!appliedSettled) stageOutcome(reply);
+      else startStatusPolling();
       return;
     }
     if (reply.type !== 'index-save-terminal' || !matchesRequest(reply)) return;
-    startReceipt();
-    if (reply.ok) {
-      if (!match(reply.index)) {
-        rejectBoth(mismatchError());
-        return;
-      }
-      resolveApplied(reply.index);
-      resolveDurable(reply.index);
-      return;
-    }
-    const error = errorFromSaveFailure(reply);
-    if (reply.applied) {
-      if (match(reply.applied)) resolveApplied(reply.applied);
-      else if (!appliedSettled) rejectBoth(mismatchError());
-    } else if (!appliedSettled) {
-      appliedSettled = true;
-      settlements.reject(appliedId, error);
-    }
-    rejectDurable(error);
+    stageOutcome(reply);
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
   const attempt = (): void => {
-    if (closed || admitted || receiptStarted) return;
+    if (closed || admitted) return;
     try {
       channel.postMessage(mutation);
       handedOff = true;
@@ -1030,7 +1133,7 @@ function postIndexMutationPhases(
         return;
       }
     }
-    if (!closed && !admitted && !receiptStarted) {
+    if (!closed && !admitted) {
       saveRetryTimeout = setTimeout(attempt, INDEX_APPLIED_RETRY_MS);
     }
   };

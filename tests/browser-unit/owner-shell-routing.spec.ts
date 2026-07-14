@@ -156,11 +156,11 @@ test('instant preset restore gates the run; template node_modules seeds re-asser
   expect(seeds.out).toContain('index.d.ts');
 });
 
-test('TypeScript Vite dev bin sees a deleted template node_modules seed before child spawn', async ({
+test('direct TypeScript Vite boot reasserts a deleted template seed before child spawn', async ({
   page,
 }) => {
   await gotoHarness(page);
-  await bootOwner(page, { workspaceId: 'bu-vite-dev-seed', hiddenEmptyBoot: true });
+  await bootOwner(page, { workspaceId: 'bu-vite-boot-seed', hiddenEmptyBoot: true });
 
   await setDevConfig(page, { templateId: 'typescript', slug: 'scratch', setup: 'instant' });
   // Cross the real restore gate first; the regression is a later user deletion,
@@ -169,33 +169,19 @@ test('TypeScript Vite dev bin sees a deleted template node_modules seed before c
 
   await writeOwnerFile(
     page,
-    '/scratch/node_modules/.bin/seed-probe',
-    "#!/usr/bin/env node\nimport('../seed-probe/index.mjs');\n",
-  );
-  await writeOwnerFile(
-    page,
-    '/scratch/node_modules/seed-probe/index.mjs',
+    '/scratch/.rifty-vite-seed-probe.mjs',
     [
       "import { readFileSync } from 'node:fs';",
       "const seed = readFileSync('/scratch/node_modules/@rifty/example-types/index.d.ts', 'utf8');",
       "console.log('seed-visible-before-spawn=' + seed.includes('LibraryShape'));",
+      "console.log('vite-argv=' + process.argv.slice(2).join(','));",
       '',
     ].join('\n'),
   );
   await writeOwnerFile(
     page,
-    '/scratch/package.json',
-    `${JSON.stringify(
-      {
-        name: 'bu-vite-dev-seed',
-        version: '0.0.0',
-        private: true,
-        type: 'module',
-        scripts: { dev: 'seed-probe' },
-      },
-      null,
-      2,
-    )}\n`,
+    '/scratch/node_modules/.bin/vite',
+    "#!/usr/bin/env node\nimport('/scratch/.rifty-vite-seed-probe.mjs');\n",
   );
 
   const removed = await execLine(page, 'rm node_modules/@rifty/example-types/index.d.ts');
@@ -204,11 +190,12 @@ test('TypeScript Vite dev bin sees a deleted template node_modules seed before c
     (await readOwnerFile(page, '/scratch/node_modules/@rifty/example-types/index.d.ts')).ok,
   ).toBe(false);
 
-  // `dev` is a Vite-runtime lifecycle alias, but deliberately dispatches a
-  // finite real .bin child so it can prove the seed existed before spawn.
-  const dev = await execLine(page, 'npm run dev');
-  expect(dev.exit, dev.out).toBe(0);
-  expect(dev.out).toContain('seed-visible-before-spawn=true');
+  // Exact auto-boot line for the TypeScript preset. The finite replacement
+  // keeps the real direct .bin spawn seam while avoiding a long-lived server.
+  const boot = await execLine(page, 'vite --port 5174');
+  expect(boot.exit, boot.out).toBe(0);
+  expect(boot.out).toContain('seed-visible-before-spawn=true');
+  expect(boot.out).toContain('vite-argv=--port,5174');
   expect(
     (await readOwnerFile(page, '/scratch/node_modules/@rifty/example-types/index.d.ts')).ok,
   ).toBe(true);

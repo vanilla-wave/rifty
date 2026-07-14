@@ -91,6 +91,32 @@ interface SaveRequest {
   readonly starter: string;
 }
 
+interface SaveAppliedOutcome {
+  readonly type: 'index-save-applied';
+  readonly opId: string;
+  readonly request: SaveRequest;
+  readonly index: ProjectIndex;
+}
+
+type SaveTerminalOutcome =
+  | {
+      readonly type: 'index-save-terminal';
+      readonly opId: string;
+      readonly request: SaveRequest;
+      readonly ok: true;
+      readonly index: ProjectIndex;
+    }
+  | {
+      readonly type: 'index-save-terminal';
+      readonly opId: string;
+      readonly request: SaveRequest;
+      readonly ok: false;
+      readonly applied?: ProjectIndex;
+      readonly error: { readonly name: string; readonly message: string };
+    };
+
+type SaveOutcome = SaveAppliedOutcome | SaveTerminalOutcome;
+
 function frameType(data: unknown): string | undefined {
   if (!data || typeof data !== 'object') return undefined;
   const type = (data as { readonly type?: unknown }).type;
@@ -102,6 +128,21 @@ function isSaveCommand(data: unknown): data is SaveCommand {
     frameType(data) === 'index-save' &&
     typeof (data as { readonly opId?: unknown }).opId === 'string'
   );
+}
+
+function isSaveAppliedOutcome(data: unknown): data is SaveAppliedOutcome {
+  return frameType(data) === 'index-save-applied';
+}
+
+function isSaveTerminalOutcome(data: unknown): data is SaveTerminalOutcome {
+  return frameType(data) === 'index-save-terminal';
+}
+
+function saveReceipt(candidate: SaveOutcome): {
+  readonly type: 'index-save-received';
+  readonly candidate: SaveOutcome;
+} {
+  return { type: 'index-save-received', candidate };
 }
 
 function requestFromSave(command: SaveCommand): SaveRequest {
@@ -921,13 +962,21 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     await Promise.resolve();
   });
 
-  it('polls an admitted Save until a dropped terminal success is replayed exactly once', async () => {
+  it('resumes status polling after exact applied release until a dropped terminal replays', async () => {
     vi.useFakeTimers();
     let savePosts = 0;
     let droppedTerminals = 0;
+    let appliedReleases = 0;
     class DropFirstSuccessTerminalChannel extends FakeChannel {
       override postMessage(data: unknown): void {
         if (frameType(data) === 'index-save') savePosts++;
+        const candidate =
+          data && typeof data === 'object'
+            ? (data as { readonly candidate?: unknown }).candidate
+            : undefined;
+        if (frameType(data) === 'index-save-released' && isSaveAppliedOutcome(candidate)) {
+          appliedReleases++;
+        }
         if (
           frameType(data) === 'index-save-terminal' &&
           (data as { readonly ok?: unknown }).ok === true &&
@@ -971,6 +1020,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(durable).toBe('pending');
     expect(savePosts).toBe(1);
     expect(executions).toBe(1);
+    expect(appliedReleases).toBe(1);
 
     await vi.advanceTimersByTimeAsync(1_001);
     await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-dropped-terminal' });
@@ -1052,11 +1102,19 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
   it('retries a failed terminal receipt without changing the Save outcome', async () => {
     vi.useFakeTimers();
     const receiptFailure = new Error('first terminal receipt send failed');
-    let receiptPosts = 0;
+    let terminalReceiptPosts = 0;
     let closeCalls = 0;
     class ReceiptRetryChannel extends FakeChannel {
       override postMessage(data: unknown): void {
-        if (frameType(data) === 'index-save-received' && ++receiptPosts === 1) {
+        const candidate =
+          data && typeof data === 'object'
+            ? (data as { readonly candidate?: unknown }).candidate
+            : undefined;
+        if (
+          frameType(data) === 'index-save-received' &&
+          frameType(candidate) === 'index-save-terminal' &&
+          ++terminalReceiptPosts === 1
+        ) {
           throw receiptFailure;
         }
         super.postMessage(data);
@@ -1078,24 +1136,429 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     );
 
     await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-receipt-retry' });
-    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-receipt-retry' });
-    expect(receiptPosts).toBe(1);
+    let durableState = 'pending';
+    void phases.durable.then(
+      () => {
+        durableState = 'resolved';
+      },
+      () => {
+        durableState = 'rejected';
+      },
+    );
+    await Promise.resolve();
+    expect(durableState).toBe('pending');
+    expect(terminalReceiptPosts).toBe(1);
     expect(closeCalls).toBe(0);
     expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
 
     await vi.advanceTimersByTimeAsync(251);
-    expect(receiptPosts).toBe(2);
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-receipt-retry' });
+    expect(terminalReceiptPosts).toBe(2);
     expect(closeCalls).toBe(1);
     expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
     expect(FakeChannel.postsAfterClose).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
 
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(receiptPosts).toBe(2);
+    expect(terminalReceiptPosts).toBe(2);
     expect(closeCalls).toBe(1);
     tearOwner();
     await Promise.resolve();
     expect(closeCalls).toBe(2);
+  });
+
+  it('stops status polling while an exact terminal receipt retries', async () => {
+    vi.useFakeTimers();
+    let savePosts = 0;
+    let terminalReleasePosts = 0;
+    const terminalReleaseAttempted = deferred();
+    class HoldTerminalReleaseChannel extends FakeChannel {
+      static hold = true;
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save') savePosts++;
+        const candidate =
+          data && typeof data === 'object'
+            ? (data as { readonly candidate?: unknown }).candidate
+            : undefined;
+        if (frameType(data) === 'index-save-released' && isSaveTerminalOutcome(candidate)) {
+          terminalReleasePosts++;
+          terminalReleaseAttempted.resolve();
+          if (HoldTerminalReleaseChannel.hold) return;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      HoldTerminalReleaseChannel as unknown as typeof BroadcastChannel;
+    const ownerClosed = deferred();
+    const tearOwner = serveProjectIndex(PORT, scratchOwnerFs('terminal-receipt-no-poll'), '/');
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-terminal-receipt-no-poll',
+      'Terminal Receipt No Poll',
+      'project-files',
+      { ownerClosed: ownerClosed.promise },
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({
+      activeId: 'p-terminal-receipt-no-poll',
+    });
+    await terminalReleaseAttempted.promise;
+    await vi.advanceTimersByTimeAsync(1_001);
+    const savesWhileTerminalStaged = savePosts;
+
+    ownerClosed.resolve();
+    await Promise.allSettled([phases.durable]);
+    tearOwner();
+
+    expect(terminalReleasePosts).toBeGreaterThanOrEqual(1);
+    expect(savesWhileTerminalStaged).toBe(1);
+  });
+
+  it('re-emits an exact terminal release when the first release drops after ledger deletion', async () => {
+    vi.useFakeTimers();
+    let terminalReleasePosts = 0;
+    const firstTerminalRelease = deferred();
+    class DropFirstTerminalReleaseChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        const candidate =
+          data && typeof data === 'object'
+            ? (data as { readonly candidate?: unknown }).candidate
+            : undefined;
+        if (frameType(data) === 'index-save-released' && isSaveTerminalOutcome(candidate)) {
+          terminalReleasePosts++;
+          firstTerminalRelease.resolve();
+          if (terminalReleasePosts === 1) return;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropFirstTerminalReleaseChannel as unknown as typeof BroadcastChannel;
+    const ownerClosed = deferred();
+    const tearOwner = serveProjectIndex(PORT, scratchOwnerFs('dropped-terminal-release'), '/');
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-dropped-terminal-release',
+      'Dropped Terminal Release',
+      'project-files',
+      { ownerClosed: ownerClosed.promise },
+    );
+    let durableState = 'pending';
+    void phases.durable.then(
+      () => {
+        durableState = 'resolved';
+      },
+      () => {
+        durableState = 'rejected';
+      },
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-dropped-terminal-release' });
+    await firstTerminalRelease.promise;
+    await vi.advanceTimersByTimeAsync(251);
+    const afterExactReceiptRetry = durableState;
+
+    ownerClosed.resolve();
+    await Promise.allSettled([phases.durable]);
+    tearOwner();
+
+    expect(afterExactReceiptRetry).toBe('resolved');
+    expect(terminalReleasePosts).toBe(2);
+  });
+
+  it('keeps a forged same-request terminal success pending until the owner certifies its exact outcome', async () => {
+    const fs = scratchOwnerFs('forged-success');
+    const entered = deferred();
+    const gate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-forged-success',
+      'Forged Success',
+      'project-files',
+    );
+    let appliedState = 'pending';
+    let durableState = 'pending';
+    void phases.applied.then(
+      () => {
+        appliedState = 'resolved';
+      },
+      () => {
+        appliedState = 'rejected';
+      },
+    );
+    void phases.durable.then(
+      () => {
+        durableState = 'resolved';
+      },
+      () => {
+        durableState = 'rejected';
+      },
+    );
+
+    await entered.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    const forgedIndex: ProjectIndex = {
+      activeId: command.id,
+      scratch: null,
+      projects: [
+        {
+          id: command.id,
+          name: command.name,
+          starter: command.starter,
+          editedAt: 'forged terminal success',
+        },
+      ],
+    };
+    frames.length = 0;
+
+    probe.postMessage({
+      type: 'index-save-terminal',
+      opId: command.opId,
+      request: requestFromSave(command),
+      ok: true,
+      index: forgedIndex,
+    } satisfies SaveTerminalOutcome);
+    await Promise.resolve();
+    const afterForge = { appliedState, durableState };
+    const releasedAfterForge = frames.some((frame) => frameType(frame) === 'index-save-released');
+
+    gate.resolve();
+    const outcomes = await Promise.allSettled([phases.applied, phases.durable]);
+    const release = frames.find(
+      (
+        frame,
+      ): frame is {
+        readonly type: 'index-save-released';
+        readonly candidate: SaveTerminalOutcome;
+      } => {
+        if (frameType(frame) !== 'index-save-released') return false;
+        const candidate = (frame as { readonly candidate?: unknown }).candidate;
+        return isSaveTerminalOutcome(candidate);
+      },
+    );
+    probe.close();
+    tearOwner();
+
+    expect(afterForge).toEqual({ appliedState: 'pending', durableState: 'pending' });
+    expect(releasedAfterForge).toBe(false);
+    expect(outcomes).toMatchObject([
+      { status: 'fulfilled', value: { activeId: command.id } },
+      { status: 'fulfilled', value: { activeId: command.id } },
+    ]);
+    for (const outcome of outcomes) {
+      if (outcome.status === 'fulfilled') {
+        expect(outcome.value.projects[0]?.editedAt).not.toBe('forged terminal success');
+      }
+    }
+    expect(release?.candidate).toMatchObject({
+      type: 'index-save-terminal',
+      ok: true,
+      index: { activeId: command.id },
+    });
+    if (release?.candidate.ok) {
+      expect(release.candidate.index.projects[0]?.editedAt).not.toBe('forged terminal success');
+    }
+  });
+
+  it('keeps a forged same-request terminal failure pending until the exact owner success replays', async () => {
+    const fs = scratchOwnerFs('forged-failure');
+    const entered = deferred();
+    const gate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-forged-failure',
+      'Forged Failure',
+      'project-files',
+    );
+    let appliedState = 'pending';
+    let durableState = 'pending';
+    void phases.applied.then(
+      () => {
+        appliedState = 'resolved';
+      },
+      () => {
+        appliedState = 'rejected';
+      },
+    );
+    void phases.durable.then(
+      () => {
+        durableState = 'resolved';
+      },
+      () => {
+        durableState = 'rejected';
+      },
+    );
+
+    await entered.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    probe.postMessage({
+      type: 'index-save-terminal',
+      opId: command.opId,
+      request: requestFromSave(command),
+      ok: false,
+      error: { name: 'ForgedFailure', message: 'forged same-request failure' },
+    } satisfies SaveTerminalOutcome);
+    await Promise.resolve();
+    const afterForge = { appliedState, durableState };
+
+    gate.resolve();
+    const outcomes = await Promise.allSettled([phases.applied, phases.durable]);
+    probe.close();
+    tearOwner();
+
+    expect(afterForge).toEqual({ appliedState: 'pending', durableState: 'pending' });
+    expect(outcomes).toMatchObject([
+      { status: 'fulfilled', value: { activeId: command.id } },
+      { status: 'fulfilled', value: { activeId: command.id } },
+    ]);
+  });
+
+  it('does not resolve applied from a forged same-request index before exact owner release', async () => {
+    const fs = scratchOwnerFs('forged-applied');
+    const entered = deferred();
+    const gate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-forged-applied',
+      'Forged Applied',
+      'project-files',
+    );
+    let appliedState = 'pending';
+    void phases.applied.then(
+      () => {
+        appliedState = 'resolved';
+      },
+      () => {
+        appliedState = 'rejected';
+      },
+    );
+
+    await entered.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    const forgedIndex: ProjectIndex = {
+      activeId: command.id,
+      scratch: null,
+      projects: [
+        {
+          id: command.id,
+          name: command.name,
+          starter: command.starter,
+          editedAt: 'forged applied',
+        },
+      ],
+    };
+    probe.postMessage({
+      type: 'index-save-applied',
+      opId: command.opId,
+      request: requestFromSave(command),
+      index: forgedIndex,
+    } satisfies SaveAppliedOutcome);
+    await Promise.resolve();
+    const afterForge = appliedState;
+
+    gate.resolve();
+    const applied = await phases.applied;
+    await phases.durable;
+    probe.close();
+    tearOwner();
+
+    expect(afterForge).toBe('pending');
+    expect(applied).toMatchObject({ activeId: command.id });
+    expect(applied.projects[0]?.editedAt).not.toBe('forged applied');
+  });
+
+  it('retains and replays the exact owner outcome for a mismatched terminal receipt', async () => {
+    const fs = scratchOwnerFs('mismatched-receipt');
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const command: SaveCommand = {
+      type: 'index-save',
+      opId: 'mismatched-terminal-receipt',
+      id: 'p-mismatched-receipt',
+      name: 'Mismatched Receipt',
+      starter: 'project-files',
+    };
+    const terminalReached = new Promise<SaveTerminalOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
+      });
+    });
+    probe.postMessage(command);
+    const terminal = await terminalReached;
+    if (!terminal.ok) throw new Error('expected successful owner terminal');
+    const forgedTerminal: SaveTerminalOutcome = {
+      ...terminal,
+      index: {
+        ...terminal.index,
+        projects: terminal.index.projects.map((project) => ({
+          ...project,
+          editedAt: 'forged receipt',
+        })),
+      },
+    };
+    frames.length = 0;
+
+    probe.postMessage(saveReceipt(forgedTerminal));
+    const mismatchReplay = [...frames];
+    frames.length = 0;
+    probe.postMessage(command);
+    const retainedReplay = [...frames];
+    frames.length = 0;
+    probe.postMessage(saveReceipt(terminal));
+    const exactRelease = [...frames];
+    probe.close();
+    tearOwner();
+
+    expect(mismatchReplay.map(frameType)).toEqual([
+      'index-save-admitted',
+      'index-save-applied',
+      'index-save-terminal',
+    ]);
+    expect(mismatchReplay.map(frameType)).not.toContain('index-save-released');
+    expect(retainedReplay).toEqual(mismatchReplay);
+    expect(exactRelease).toContainEqual({
+      type: 'index-save-released',
+      candidate: terminal,
+    });
   });
 
   it('replays admission for queued duplicate saves without duplicating the FIFO mutation', async () => {
@@ -1194,6 +1657,11 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const probe = new FakeChannel(fakeChannelName());
     const frames: unknown[] = [];
     probe.addEventListener('message', (event) => frames.push(event.data));
+    const terminalReached = new Promise<SaveTerminalOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
+      });
+    });
 
     const phases = saveProjectIndexPhases(
       PORT,
@@ -1201,8 +1669,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       'Terminal Success',
       'project-files',
     );
-    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-terminal-success' });
-    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-terminal-success' });
+    await terminalReached;
     const command = frames.find(isSaveCommand);
     if (!command) throw new Error('expected captured index-save command');
     frames.length = 0;
@@ -1216,40 +1683,32 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     ]);
     expect(executions).toBe(1);
     expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(3);
+    const terminal = frames.find(isSaveTerminalOutcome);
+    if (!terminal) throw new Error('expected replayed index-save terminal');
 
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
-    });
+    probe.postMessage(saveReceipt(terminal));
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-terminal-success' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-terminal-success' });
     expect(frames.map(frameType)).toContain('index-save-released');
     expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
     const releases = frames.filter((frame) => frameType(frame) === 'index-save-released').length;
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
-    });
+    probe.postMessage(saveReceipt(terminal));
     expect(frames.filter((frame) => frameType(frame) === 'index-save-released')).toHaveLength(
       releases + 1,
     );
     expect(executions).toBe(1);
 
     frames.length = 0;
-    const secondTerminal = new Promise<void>((resolve) => {
+    const secondTerminal = new Promise<SaveTerminalOutcome>((resolve) => {
       probe.addEventListener('message', (event) => {
-        if (frameType(event.data) === 'index-save-terminal') resolve();
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
       });
     });
     probe.postMessage(command);
-    await secondTerminal;
+    const nextTerminal = await secondTerminal;
     expect(executions).toBe(2);
     expect(frames.map(frameType)).toContain('index-save-admitted');
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
-    });
+    probe.postMessage(saveReceipt(nextTerminal));
 
     probe.close();
     tearOwner();
@@ -1264,11 +1723,16 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const probe = new FakeChannel(fakeChannelName());
     const frames: unknown[] = [];
     probe.addEventListener('message', (event) => frames.push(event.data));
+    const terminalReached = new Promise<SaveTerminalOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
+      });
+    });
 
     const phases = saveProjectIndexPhases(PORT, 'p-pre-fail', 'Pre Fail', 'project-files');
     const applied = expect(phases.applied).rejects.toThrow(/no scratch to save/);
     const durable = expect(phases.durable).rejects.toThrow(/no scratch to save/);
-    await Promise.all([applied, durable]);
+    await terminalReached;
     const command = frames.find(isSaveCommand);
     if (!command) throw new Error('expected captured index-save command');
     frames.length = 0;
@@ -1279,11 +1743,10 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(frames.find((frame) => frameType(frame) === 'index-save-terminal')).not.toHaveProperty(
       'applied',
     );
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
-    });
+    const terminal = frames.find(isSaveTerminalOutcome);
+    if (!terminal) throw new Error('expected replayed pre-apply terminal');
+    probe.postMessage(saveReceipt(terminal));
+    await Promise.all([applied, durable]);
 
     probe.close();
     tearOwner();
@@ -1365,13 +1828,13 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       name: 'Generic Isolated',
       starter: 'project-files',
     };
-    const terminal = new Promise<void>((resolve) => {
+    const terminal = new Promise<SaveTerminalOutcome>((resolve) => {
       probe.addEventListener('message', (event) => {
-        if (frameType(event.data) === 'index-save-terminal') resolve();
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
       });
     });
     probe.postMessage(command);
-    await terminal;
+    const terminalOutcome = await terminal;
 
     expect(frames.map(frameType)).toContain('index-save-admitted');
     expect(frames.map(frameType)).toContain('index-save-applied');
@@ -1381,11 +1844,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       activeId: 'p-generic-isolated',
       projects: [{ id: 'p-generic-isolated', name: 'Generic Isolated' }],
     });
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
-    });
+    probe.postMessage(saveReceipt(terminalOutcome));
     probe.close();
     tearOwner();
   });
@@ -1421,6 +1880,53 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(FakeChannel.postsAfterClose).toBe(0);
     gate.resolve();
     await Promise.resolve();
+    expect(FakeChannel.postsAfterClose).toBe(0);
+  });
+
+  it('teardown replays a retained exact terminal before release so a dropped outcome stays finite', async () => {
+    class DropTerminalUntilTeardownChannel extends FakeChannel {
+      static dropTerminal = true;
+      override postMessage(data: unknown): void {
+        if (
+          DropTerminalUntilTeardownChannel.dropTerminal &&
+          frameType(data) === 'index-save-terminal'
+        ) {
+          return;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropTerminalUntilTeardownChannel as unknown as typeof BroadcastChannel;
+    const ownerClosed = deferred();
+    const tearOwner = serveProjectIndex(PORT, scratchOwnerFs('teardown-terminal-replay'), '/');
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-teardown-terminal',
+      'Teardown Terminal',
+      'project-files',
+      { ownerClosed: ownerClosed.promise },
+    );
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-teardown-terminal' });
+    let durableState = 'pending';
+    void phases.durable.then(
+      () => {
+        durableState = 'resolved';
+      },
+      () => {
+        durableState = 'rejected';
+      },
+    );
+    await Promise.resolve();
+
+    DropTerminalUntilTeardownChannel.dropTerminal = false;
+    tearOwner();
+    await Promise.resolve();
+    const afterTeardown = durableState;
+    ownerClosed.resolve();
+    await Promise.allSettled([phases.durable]);
+
+    expect(afterTeardown).toBe('resolved');
     expect(FakeChannel.postsAfterClose).toBe(0);
   });
 
@@ -1484,6 +1990,9 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       return undefined;
     };
     const tearOwner = serveProjectIndex(PORT, fs, '/', flush);
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
 
     const phases = saveProjectIndexPhases(PORT, 'p-alpha-slow', 'Alpha Slow', 'project-files');
     const applied = await phases.applied;
@@ -1496,6 +2005,18 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       activeId: 'p-alpha-slow',
       projects: [{ id: 'p-alpha-slow', name: 'Alpha Slow', starter: 'project-files' }],
     });
+    const appliedRelease = frames.find(
+      (
+        frame,
+      ): frame is {
+        readonly type: 'index-save-released';
+        readonly candidate: SaveAppliedOutcome;
+      } => {
+        if (frameType(frame) !== 'index-save-released') return false;
+        return isSaveAppliedOutcome((frame as { readonly candidate?: unknown }).candidate);
+      },
+    );
+    expect(appliedRelease?.candidate.index).toEqual(applied);
     expect(flushStarted).toBe(1);
     expect(durableSettled).toBe(false);
 
@@ -1509,6 +2030,7 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     await phases.durable;
     expect(durableSettled).toBe(true);
 
+    probe.close();
     tearOwner();
   });
 
@@ -1636,6 +2158,64 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('certifies both phases from an exact terminal NACK with applied when the applied frame drops', async () => {
+    class DropAppliedOutcomeChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save-applied') return;
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropAppliedOutcomeChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('terminal-nack-applied');
+    const realRm = fs.rmSync.bind(fs);
+    const failure = new Error('terminal NACK cleanup failed');
+    failure.name = 'TerminalNackCleanupError';
+    fs.rmSync = ((path, options) => {
+      if (path === '/scratch') throw failure;
+      realRm(path, options);
+    }) as typeof fs.rmSync;
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-terminal-nack-applied',
+      'Terminal NACK Applied',
+      'project-files',
+    );
+    const outcomes = await Promise.allSettled([phases.applied, phases.durable]);
+    const release = frames.find(
+      (
+        frame,
+      ): frame is {
+        readonly type: 'index-save-released';
+        readonly candidate: Extract<SaveTerminalOutcome, { readonly ok: false }>;
+      } => {
+        if (frameType(frame) !== 'index-save-released') return false;
+        const candidate = (frame as { readonly candidate?: unknown }).candidate;
+        return isSaveTerminalOutcome(candidate) && !candidate.ok;
+      },
+    );
+    probe.close();
+    tearOwner();
+
+    expect(outcomes).toMatchObject([
+      { status: 'fulfilled', value: { activeId: 'p-terminal-nack-applied' } },
+      {
+        status: 'rejected',
+        reason: { name: 'TerminalNackCleanupError', message: 'terminal NACK cleanup failed' },
+      },
+    ]);
+    expect(release?.candidate).toMatchObject({
+      ok: false,
+      applied: { activeId: 'p-terminal-nack-applied' },
+      error: { name: 'TerminalNackCleanupError', message: 'terminal NACK cleanup failed' },
+    });
+  });
+
   it('index-save keeps applied but rejects durable exactly when committed-source cleanup fails', async () => {
     (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
       HoldSaveReceiptChannel as unknown as typeof BroadcastChannel;
@@ -1655,18 +2235,26 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const probe = new FakeChannel(fakeChannelName());
     const frames: unknown[] = [];
     probe.addEventListener('message', (event) => frames.push(event.data));
+    const appliedReached = new Promise<SaveAppliedOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveAppliedOutcome(event.data)) resolve(event.data);
+      });
+    });
+    const terminalReached = new Promise<SaveTerminalOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
+      });
+    });
 
     const phases = saveProjectIndexPhases(PORT, 'p-cleanup-fail', 'Cleanup Fail', 'project-files');
 
+    const appliedOutcome = await appliedReached;
+    probe.postMessage(saveReceipt(appliedOutcome));
     await expect(phases.applied).resolves.toMatchObject({
       activeId: 'p-cleanup-fail',
       projects: [{ id: 'p-cleanup-fail' }],
     });
-    const outcome = await settlePromptly(phases.durable);
-    expect(outcome).toMatchObject({
-      status: 'rejected',
-      error: { name: 'ScratchCleanupError', message: 'scratch cleanup rm failed' },
-    });
+    await terminalReached;
     expect(flushCalls).toBe(1);
     expect(loadIndex(fs, '/').activeId).toBe('p-cleanup-fail');
     expect(fs.existsSync('/projects/p-cleanup-fail/marker.txt')).toBe(true);
@@ -1686,10 +2274,13 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       ok: false,
       applied: { activeId: 'p-cleanup-fail', projects: [{ id: 'p-cleanup-fail' }] },
     });
-    probe.postMessage({
-      type: 'index-save-received',
-      opId: command.opId,
-      request: requestFromSave(command),
+    const terminal = frames.find(isSaveTerminalOutcome);
+    if (!terminal) throw new Error('expected replayed cleanup-failure terminal');
+    probe.postMessage(saveReceipt(terminal));
+    const outcome = await settlePromptly(phases.durable);
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ScratchCleanupError', message: 'scratch cleanup rm failed' },
     });
     probe.close();
     tearOwner();

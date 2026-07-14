@@ -551,6 +551,7 @@ describe('owner VFS IPC', () => {
         expect(candidate).toBe(ack);
         events.push('release-record');
       },
+      recover: () => null,
       send: (message) => {
         expect(message).toEqual({ type: 'rifty:owner-vfs-commit-released', ack });
         events.push('release-frame');
@@ -558,6 +559,43 @@ describe('owner VFS IPC', () => {
     });
 
     expect(events).toEqual(['release-record', 'release-frame']);
+  });
+
+  it('keeps the owner alive and replays the retained ACK for a divergent receipt', () => {
+    const exact: HostCommitAck = {
+      operationId: 'received-save',
+      ownerEpoch: 'owner-a',
+      treeRevision: 8,
+      versions: [{ path: '/src/main.ts', version: 'v8' }],
+    };
+    const divergent = { ...exact, treeRevision: 7 };
+    const send = vi.fn();
+    const reportError = vi.fn();
+
+    expect(() =>
+      handleOwnerVfsCommitReceipt({
+        message: { type: 'rifty:owner-vfs-commit-received', ack: divergent },
+        release: () => {
+          throw new OperationIdReuseError(exact.operationId);
+        },
+        recover: (operationId) => (operationId === exact.operationId ? exact : null),
+        send,
+        reportError,
+      }),
+    ).not.toThrow();
+    expect(send).toHaveBeenCalledWith({
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: exact.operationId,
+      ok: true,
+      ack: exact,
+    });
+    expect(send).not.toHaveBeenCalledWith({
+      type: 'rifty:owner-vfs-commit-released',
+      ack: divergent,
+    });
+    expect(reportError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'OperationIdReuseError' }),
+    );
   });
 
   it('round-trips an exact large-file version conflict as its domain class', () => {

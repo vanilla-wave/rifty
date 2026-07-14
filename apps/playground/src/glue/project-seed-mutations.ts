@@ -1,4 +1,5 @@
 import { type FsSync, type VfsMutationIntent, normalizePath } from '@riftydev/vfs';
+import { isSegmentContained } from './project-seed-paths.ts';
 import { isViteConfigSlotPath, viteConfigSeedClaimPath } from './vite-config-seed.ts';
 
 interface ProjectSeedMutationInput {
@@ -15,12 +16,10 @@ export function projectSeedMutationIntents(
 ): readonly VfsMutationIntent[] {
   const paths = new Set<string>([viteConfigSeedClaimPath(input.root)]);
   const nodeModules = normalizePath(`${input.root}/node_modules`);
-  const isDerived = (path: string): boolean =>
-    path === nodeModules || path.startsWith(`${nodeModules}/`);
 
   for (const path of Object.keys(input.seedFiles)) {
     const normalized = normalizePath(path);
-    if (isDerived(normalized)) continue;
+    if (isSegmentContained(normalized, nodeModules)) continue;
     if (
       !fs.existsSync(normalized) ||
       input.freshRoot ||
@@ -35,7 +34,7 @@ export function projectSeedMutationIntents(
   if (input.freshRoot) {
     for (const path of Object.keys(input.baselineFiles)) {
       const normalized = normalizePath(path);
-      if (!isDerived(normalized)) paths.add(normalized);
+      if (!isSegmentContained(normalized, nodeModules)) paths.add(normalized);
     }
   }
 

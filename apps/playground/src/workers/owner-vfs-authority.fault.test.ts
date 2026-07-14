@@ -47,6 +47,28 @@ describe('owner VFS authority faults', () => {
     expect(authority.applyHostCommit({ ...request, data: request.data.slice() })).toEqual(ack);
   });
 
+  it('recovers the retained exact ACK after a divergent receipt without releasing it', () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'receipt-recovery',
+      path: '/value.txt',
+      data: encoder.encode('original'),
+      expectedVersion: null,
+    };
+    const ack = authority.applyHostCommit(request);
+
+    expect(() =>
+      authority.releaseHostCommit({ ...ack, treeRevision: ack.treeRevision + 1 }),
+    ).toThrow(OperationIdReuseError);
+    expect(authority.retainedHostCommit(request.operationId)).toEqual(ack);
+
+    authority.releaseHostCommit(ack);
+    expect(authority.retainedHostCommit(request.operationId)).toBeNull();
+  });
+
   it('does not publish a revision when the real backend rejects before mutation', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',

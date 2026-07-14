@@ -52,6 +52,7 @@ import {
   installStampAuthorityFor,
 } from './install-stamp-authority.ts';
 import { isStampedTreeDamage, readPackageJsonText } from './install-stamp.ts';
+import { isSegmentContained } from './project-seed-paths.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
 export type ProjectDepsSource = 'stamp' | 'snapshot' | 'install' | 'none';
@@ -201,7 +202,9 @@ export function prepareProjectInstallTree(
 }
 
 function isTemplateNodeModulesFile(root: string, path: string): boolean {
-  return normalizePath(path).startsWith(`${normalizePath(`${root}/node_modules`)}/`);
+  const nodeModules = normalizePath(`${root}/node_modules`);
+  const normalized = normalizePath(path);
+  return normalized !== nodeModules && isSegmentContained(normalized, nodeModules);
 }
 
 /** Exact missing template-owned files; sample only at the package FIFO head. */

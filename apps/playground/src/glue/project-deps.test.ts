@@ -171,6 +171,15 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     ).toEqual([{ kind: 'write', path: `${ROOT}/node_modules/@rifty/types/missing.d.ts` }]);
   });
 
+  it('rejects a file at the exact node_modules root from both template seed paths', () => {
+    const { fsSync } = project();
+    const corruptSeed = { [`${ROOT}/node_modules`]: 'corrupt-file' };
+
+    expect(templateNodeModulesSeedMutationIntents(fsSync, ROOT, corruptSeed)).toEqual([]);
+    seedTemplateNodeModulesFiles(fsSync, ROOT, corruptSeed);
+    expect(fsSync.existsSync(`${ROOT}/node_modules`)).toBe(false);
+  });
+
   it('reuses a stamp written under the SAME slug without fetching or installing', async () => {
     const { vfs, fsSync, log, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
