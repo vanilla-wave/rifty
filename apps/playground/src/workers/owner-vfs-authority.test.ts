@@ -274,6 +274,26 @@ describe.each(backends)('%s owner VFS revision authority', (_name, makeFs) => {
     expect(authority.readFileBytesSync(nestedStamp)).toEqual(encoder.encode('nested claim'));
   });
 
+  it('rejects a recursive cp whose ordinary source maps onto a reserved claim', () => {
+    const raw = makeFs();
+    raw.mkdirSync('/source', { recursive: true });
+    raw.mkdirSync('/project', { recursive: true });
+    raw.writeFileSync('/source/first.txt', encoder.encode('first'));
+    raw.writeFileSync('/source/.rifty-install-stamp.json', encoder.encode('ordinary source'));
+    const authority = createOwnerVfsAuthority(raw, { ownerEpoch: 'mapped-copy-owner' });
+    const before = authority.snapshot();
+
+    expect(() => authority.cpSync('/source', '/project/node_modules', { recursive: true })).toThrow(
+      /EPERM/,
+    );
+
+    expect(authority.snapshot()).toEqual(before);
+    expect(authority.readFileBytesSync('/source/.rifty-install-stamp.json')).toEqual(
+      encoder.encode('ordinary source'),
+    );
+    expect(authority.existsSync('/project/node_modules')).toBe(false);
+  });
+
   it('rejects a subtree rename carrying a claim before moving any bytes', () => {
     const raw = makeFs();
     raw.mkdirSync('/source/project/node_modules', { recursive: true });

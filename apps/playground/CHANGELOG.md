@@ -203,6 +203,11 @@
 - The hidden-empty owner is no longer treated as a prior dev template. Its first
   real config preserves a trusted user-extended dependency tree across reload
   instead of revoking it as a template switch.
+- Dev-server boot may reuse or reserve its terminal in the background, but it no
+  longer overrides a newer user-selected terminal during a starter transition.
+- Recursive copy rejects an ordinary source mapped onto a reserved install
+  claim before mutation. Broad Git directory writes recursively discover and
+  revoke inactive nested claims instead of preserving stale provenance.
 - Each conditional VFS operation has one exact request/in-flight/outcome record:
   async duplicates share one execution and divergent bytes cannot enter it.
   Success, applied failure, and pre-apply NACK all use exact retained terminal

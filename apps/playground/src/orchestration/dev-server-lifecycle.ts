@@ -98,7 +98,7 @@ export interface DevServerLifecycle<S extends DevServerSessionLike> {
   beginBoot(id: string): void;
   nextGeneration(): number;
   currentGeneration(): number;
-  /** Pick/reuse an idle visible terminal for the dev command (selects it). */
+  /** Pick/reuse an idle visible terminal without overriding the user's selection. */
   pickSession(): S;
   reserveSession(session: S): Promise<S>;
   startSession(
@@ -249,20 +249,26 @@ export function createDevServerLifecycle<S extends DevServerSessionLike>(
     if (devServerSessionId) {
       const previous = terminal.snapshot(devServerSessionId);
       if (previous.status === 'idle' && !terminal.isHidden(previous.id)) {
-        terminal.select(previous.id);
-        terminal.refreshState();
         return previous;
       }
     }
     const active = terminal.snapshot(terminal.activeSessionId());
     if (active.status === 'idle') return active;
     const idle = terminal.visibleSessions().find((session) => session.status === 'idle');
-    if (idle) {
-      terminal.select(idle.id);
+    if (idle) return idle;
+    return createBackgroundSession();
+  }
+
+  function createBackgroundSession(): S {
+    const userSessionId = terminal.activeSessionId();
+    const session = terminal.createSession();
+    // App.createSession selects by design. Dev boot owns the new session, not
+    // focus: a later user selection must win every transition race.
+    if (terminal.activeSessionId() !== userSessionId) {
+      terminal.select(userSessionId);
       terminal.refreshState();
-      return idle;
     }
-    return terminal.createSession();
+    return session;
   }
 
   function usableDevServerSession(id: string): S | undefined {
@@ -278,7 +284,7 @@ export function createDevServerLifecycle<S extends DevServerSessionLike>(
     const reserved = usableDevServerSession(session.id);
     if (reserved) return reserved;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const replacement = terminal.createSession();
+      const replacement = createBackgroundSession();
       await sleep(0);
       const usable = usableDevServerSession(replacement.id);
       if (usable) return usable;

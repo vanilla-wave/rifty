@@ -569,7 +569,8 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   #planRecursiveCopy(source: string, target: string): readonly CopyPlanEntry[] {
     const plan: CopyPlanEntry[] = [];
     const visit = (currentSource: string, currentTarget: string): void => {
-      if (isInstallStampPath(currentSource) || isInstallStampPath(currentTarget)) return;
+      if (isInstallStampPath(currentSource)) return;
+      if (isInstallStampPath(currentTarget)) throw this.#reservedClaimError(currentTarget);
       const stat = this.#fs.statSync(currentSource);
       if (stat.isFile) {
         plan.push({ source: currentSource, target: currentTarget, kind: 'file' });

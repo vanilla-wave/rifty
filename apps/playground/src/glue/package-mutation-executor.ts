@@ -306,7 +306,9 @@ export function assertPortableVfsMutationIntents(
 }
 
 function mutationScanPaths(intent: VfsMutationIntent): readonly string[] {
-  if ('path' in intent) return intent.kind === 'rm' ? [intent.path] : [];
+  if ('path' in intent) {
+    return intent.kind === 'rm' || intent.kind === 'write' ? [intent.path] : [];
+  }
   return intent.kind === 'copy' ? [intent.targetPath] : [intent.sourcePath, intent.targetPath];
 }
 
