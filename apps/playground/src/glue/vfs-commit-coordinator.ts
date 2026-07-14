@@ -8,7 +8,7 @@ import type {
   TreeRevision,
 } from './owner-vfs-protocol.ts';
 
-export type VfsCommitStage = 'apply' | 'reflection' | 'durability';
+export type VfsCommitStage = 'reflection' | 'durability';
 
 export class VfsCommitProtocolError extends Error {
   constructor(message: string) {
@@ -20,12 +20,16 @@ export class VfsCommitProtocolError extends Error {
 export class VfsCommitTimeoutError extends Error {
   readonly operationId: string;
   readonly stage: VfsCommitStage;
+  readonly ack: HostCommitAck;
 
-  constructor(operationId: string, stage: VfsCommitStage, timeoutMs: number) {
-    super(`VFS commit ${operationId} timed out during ${stage} after ${timeoutMs}ms`);
+  constructor(ack: HostCommitAck, stage: VfsCommitStage, timeoutMs: number) {
+    super(
+      `VFS commit ${ack.operationId} applied at revision ${ack.treeRevision} but ${stage} did not complete within ${timeoutMs}ms`,
+    );
     this.name = 'VfsCommitTimeoutError';
-    this.operationId = operationId;
+    this.operationId = ack.operationId;
     this.stage = stage;
+    this.ack = ack;
   }
 }
 
@@ -78,6 +82,7 @@ export interface VfsCommitCoordinator {
 
 interface PendingCommit {
   owner: VfsCommitOwner | null;
+  handedOff: boolean;
   cancel(error: Error): void;
 }
 
@@ -197,7 +202,6 @@ export function createVfsCommitCoordinator(
       return new Promise<VfsCommitReceipt>((resolve, reject) => {
         let settled = false;
         let sent = false;
-        let stage: VfsCommitStage = 'apply';
         let ack: HostCommitAck | null = null;
         let reflectedRevision = -1;
         let durabilityStarted = false;
@@ -206,6 +210,7 @@ export function createVfsCommitCoordinator(
 
         const operationState: PendingCommit = {
           owner: null,
+          handedOff: false,
           cancel(error) {
             fail(error);
           },
@@ -256,6 +261,16 @@ export function createVfsCommitCoordinator(
           resolve({ ...ack, durability: checked.durability });
         };
 
+        const armObservationTimeout = (stage: VfsCommitStage): void => {
+          if (timer !== null) clearTimeout(timer);
+          const applied = ack;
+          if (settled || applied === null) return;
+          timer = setTimeout(
+            () => fail(new VfsCommitTimeoutError(applied, stage, options.timeoutMs)),
+            options.timeoutMs,
+          );
+        };
+
         const crossDurability = (): void => {
           if (
             settled ||
@@ -266,7 +281,7 @@ export function createVfsCommitCoordinator(
             return;
           }
           durabilityStarted = true;
-          stage = 'durability';
+          armObservationTimeout('durability');
           const owner = operationState.owner;
           if (owner === null) {
             fail(new VfsOwnerExitedError(ack.ownerEpoch));
@@ -296,10 +311,6 @@ export function createVfsCommitCoordinator(
 
         // The pending claim exists before any injected callback can re-enter.
         pending.add(operationState);
-        timer = setTimeout(
-          () => fail(new VfsCommitTimeoutError(operationId, stage, options.timeoutMs)),
-          options.timeoutMs,
-        );
 
         let owner: VfsCommitOwner;
         try {
@@ -343,6 +354,7 @@ export function createVfsCommitCoordinator(
         unsubscribe = releaseSnapshots;
 
         sent = true;
+        operationState.handedOff = true;
         let applying: Promise<HostCommitAck>;
         try {
           applying = owner.applyHostCommit(request);
@@ -359,7 +371,7 @@ export function createVfsCommitCoordinator(
               fail(toError(error));
               return;
             }
-            stage = 'reflection';
+            armObservationTimeout('reflection');
             crossDurability();
           },
           (error: unknown) => fail(toError(error)),
@@ -370,8 +382,9 @@ export function createVfsCommitCoordinator(
     close(error = new VfsCommitCoordinatorClosedError()) {
       if (closedError !== null) return;
       closedError = error;
-      for (const operation of [...pending]) operation.cancel(error);
-      pending.clear();
+      for (const operation of [...pending]) {
+        if (!operation.handedOff) operation.cancel(error);
+      }
     },
   };
 

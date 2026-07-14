@@ -1,6 +1,6 @@
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type OwnerVfsAuthority, createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import { createFileAsync, renamePathAsync } from './fs-ops.ts';
 import { OwnerRpcFs } from './owner-rpc-fs.ts';
@@ -43,6 +43,7 @@ describe('OwnerRpcFs', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetSyncMirror();
   });
 
@@ -225,6 +226,38 @@ describe('OwnerRpcFs', () => {
     ]);
     await expect(created).rejects.toThrow(/did not reflect within 5ms/);
     expect(snapshot.existsSync('/workspace/never-published.txt')).toBe(false);
+  });
+
+  it('keeps an admitted write pending beyond the reflection timeout until its ACK arrives', async () => {
+    vi.useFakeTimers();
+    let ack!: () => void;
+    writer = {
+      writeFrameAcked(frame) {
+        frames.push(frame);
+        return new Promise<void>((resolve) => {
+          ack = resolve;
+        });
+      },
+    };
+    const fs = new OwnerRpcFs(snapshot, () => writer, { timeoutMs: 5 });
+    let outcome = 'pending';
+
+    const created = fs.createFile('/workspace/slow-owner.txt');
+    void created.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    expect(outcome).toBe('pending');
+
+    publish();
+    ack();
+    await expect(created).resolves.toBeUndefined();
+    expect(snapshot.existsSync('/workspace/slow-owner.txt')).toBe(true);
   });
 
   it('does not resolve a same-size write until a later owner snapshot publish is observed', async () => {

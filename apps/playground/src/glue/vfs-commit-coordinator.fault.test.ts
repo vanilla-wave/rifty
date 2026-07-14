@@ -183,7 +183,63 @@ describe('VfsCommitCoordinator fault contract', () => {
     });
   });
 
-  it('times out the current protocol stage and ignores every late message', async () => {
+  it('keeps an admitted apply pending beyond the observation timeout, then settles exactly', async () => {
+    vi.useFakeTimers();
+    const closed = deferred<unknown>();
+    const apply = deferred<HostCommitAck>();
+    const durable = deferred<OwnerVfsDurabilityReceipt>();
+    let listener = (_frame: OwnerVfsRevisionFrame): void => {};
+    let request!: HostCommitRequest;
+    let outcome = 'pending';
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: closed.promise,
+        applyHostCommit(next) {
+          request = next;
+          return apply.promise;
+        },
+        durabilityBarrier: () => durable.promise,
+      }),
+      subscribeSnapshots(next) {
+        listener = next;
+        return () => {};
+      },
+      timeoutMs: 25,
+    });
+
+    const pending = coordinator.commit({ kind: 'mkdir', path: '/a', expectedVersion: null });
+    void pending.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(outcome).toBe('pending');
+
+    apply.resolve({
+      operationId: request.operationId,
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/a', version: 'v4' }],
+    });
+    await settleMicrotasks();
+    listener({ ownerEpoch: 'owner-a', treeRevision: 4 });
+    durable.resolve({ ownerEpoch: 'owner-a', treeRevision: 4, durability: 'durable' });
+
+    await expect(pending).resolves.toMatchObject({
+      operationId: request.operationId,
+      treeRevision: 4,
+      durability: 'durable',
+    });
+  });
+
+  it('times out post-ACK reflection and ignores every late message', async () => {
     vi.useFakeTimers();
     const closed = deferred<unknown>();
     let listener = (_frame: OwnerVfsRevisionFrame): void => {};
@@ -220,6 +276,12 @@ describe('VfsCommitCoordinator fault contract', () => {
     const timedOut = expect(pending).rejects.toMatchObject({
       name: VfsCommitTimeoutError.name,
       stage: 'reflection',
+      ack: {
+        operationId: request.operationId,
+        ownerEpoch: 'owner-a',
+        treeRevision: 4,
+      },
+      message: expect.stringContaining('applied at revision 4'),
     });
     await vi.advanceTimersByTimeAsync(25);
     await timedOut;
@@ -230,27 +292,46 @@ describe('VfsCommitCoordinator fault contract', () => {
     expect(barriers).toBe(0);
   });
 
-  it('close rejects pending and future commits loudly', async () => {
+  it('close rejects future commits but an admitted apply settles from its owner outcome', async () => {
     const closed = deferred<unknown>();
     const apply = deferred<HostCommitAck>();
+    const durable = deferred<OwnerVfsDurabilityReceipt>();
+    let request!: HostCommitRequest;
+    let listener = (_frame: OwnerVfsRevisionFrame): void => {};
     const coordinator = createVfsCommitCoordinator({
       captureOwner: () => ({
         ownerEpoch: 'owner-a',
         isAlive: () => true,
         closed: closed.promise,
-        applyHostCommit: () => apply.promise,
-        durabilityBarrier: () => Promise.reject(new Error('must not flush')),
+        applyHostCommit(next) {
+          request = next;
+          return apply.promise;
+        },
+        durabilityBarrier: () => durable.promise,
       }),
-      subscribeSnapshots: () => () => {},
+      subscribeSnapshots(next) {
+        listener = next;
+        return () => {};
+      },
       timeoutMs: 100,
     });
 
     const pending = coordinator.commit({ kind: 'mkdir', path: '/a', expectedVersion: null });
     coordinator.close();
-    await expect(pending).rejects.toBeInstanceOf(VfsCommitCoordinatorClosedError);
     await expect(
       coordinator.commit({ kind: 'mkdir', path: '/b', expectedVersion: null }),
     ).rejects.toBeInstanceOf(VfsCommitCoordinatorClosedError);
+
+    apply.resolve({
+      operationId: request.operationId,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+      versions: [{ path: '/a', version: 'v3' }],
+    });
+    await settleMicrotasks();
+    listener({ ownerEpoch: 'owner-a', treeRevision: 3 });
+    durable.resolve({ ownerEpoch: 'owner-a', treeRevision: 3, durability: 'durable' });
+    await expect(pending).resolves.toMatchObject({ treeRevision: 3, durability: 'durable' });
   });
 
   it.each(['captureOwner', 'isAlive', 'subscribeSnapshots'] as const)(

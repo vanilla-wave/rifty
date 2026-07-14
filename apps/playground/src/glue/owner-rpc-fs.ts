@@ -23,6 +23,7 @@ export interface OwnerRpcFsWriter {
 }
 
 interface OwnerRpcFsOptions {
+  /** Bounds post-ACK snapshot reflection; owner apply itself has no client deadline. */
   readonly timeoutMs?: number;
 }
 
@@ -169,17 +170,18 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
       let settled = false;
       let acked = false;
       let publishedAfterSend = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
       const finish = (): void => {
         if (settled || !acked || !publishedAfterSend || !reflected()) return;
         settled = true;
-        clearTimeout(timer);
+        if (timer !== null) clearTimeout(timer);
         unsubscribe();
         resolve();
       };
       const fail = (err: Error): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        if (timer !== null) clearTimeout(timer);
         unsubscribe();
         reject(err);
       };
@@ -187,9 +189,6 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
         publishedAfterSend = true;
         finish();
       });
-      const timer = setTimeout(() => {
-        fail(new Error(`owner RPC fs write did not reflect within ${this.#timeoutMs}ms`));
-      }, this.#timeoutMs);
 
       let ack: Promise<void>;
       try {
@@ -201,6 +200,13 @@ export class OwnerRpcFs implements AsyncFsOpsTarget {
       ack.then(
         () => {
           acked = true;
+          timer = setTimeout(() => {
+            fail(
+              new Error(
+                `owner RPC fs write applied but did not reflect within ${this.#timeoutMs}ms`,
+              ),
+            );
+          }, this.#timeoutMs);
           finish();
         },
         (err: unknown) => fail(err instanceof Error ? err : new Error(String(err))),
