@@ -99,6 +99,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -311,6 +312,94 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     fakeWorker.die(137);
 
     await expect(acked).rejects.toThrow(/workspace owner exited/);
+  });
+
+  it('keeps package-sensitive VFS frames pending through the owner durability window', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+
+    const acked = handle.writeFrameAcked({
+      type: 'write',
+      path: '/workspace/package.json',
+      data: new Uint8Array([1]),
+    });
+    const writeIpc = fakeWorker.sent.find(
+      (message): message is { type: string; opId: string } =>
+        !!message &&
+        typeof message === 'object' &&
+        (message as { type?: unknown }).type === 'rifty:vfs-write' &&
+        typeof (message as { opId?: unknown }).opId === 'string',
+    );
+    if (!writeIpc) throw new Error('expected acked package-sensitive VFS frame');
+    let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void acked.then(
+      () => {
+        settlement = 'resolved';
+      },
+      () => {
+        settlement = 'rejected';
+      },
+    );
+
+    // A failed pending-claim drain can require a second 30s removal drain.
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(settlement).toBe('pending');
+
+    fakeWorker.emit('message', {
+      type: 'rifty:vfs-write-ack',
+      opId: writeIpc.opId,
+      ok: true,
+    });
+    await expect(acked).resolves.toBeUndefined();
+  });
+
+  it('keeps conditional commits pending through owner-owned durability drains', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'write',
+      operationId: 'package-save',
+      path: '/workspace/package.json',
+      data: new Uint8Array([1]),
+      expectedVersion: 'opened',
+    });
+    let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void pending.then(
+      () => {
+        settlement = 'resolved';
+      },
+      () => {
+        settlement = 'rejected';
+      },
+    );
+
+    // The owner remains the only side that knows whether this mutation applied.
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(settlement).toBe('pending');
+
+    const ack = {
+      operationId: 'package-save',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/package.json', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'package-save',
+      ok: true,
+      ack,
+    });
+    await expect(pending).resolves.toEqual(ack);
   });
 
   it('binds conditional commits to the ready owner and restores exact conflict evidence', async () => {

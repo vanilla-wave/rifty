@@ -66,11 +66,9 @@ import {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const VFS_WRITE_ACK_TIMEOUT_MS = 5_000;
 /** OPFS durability drain can trail a big write burst (post-install trees run
  *  hundreds of ms; quota-pressure retries longer) — give the barrier slack. */
 const VFS_FLUSH_ACK_TIMEOUT_MS = 30_000;
-const OWNER_VFS_COMMIT_ACK_TIMEOUT_MS = 5_000;
 // The owner OPFS watchdog reports at 30s; leave transport time to carry its
 // exact failure instead of racing it with a page timeout.
 const OWNER_VFS_DURABILITY_ACK_TIMEOUT_MS = 35_000;
@@ -426,6 +424,13 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     {
       readonly resolve: () => void;
       readonly reject: (err: Error) => void;
+    }
+  >();
+  const pendingVfsFlushes = new Map<
+    string,
+    {
+      readonly resolve: () => void;
+      readonly reject: (err: Error) => void;
       readonly timer: ReturnType<typeof setTimeout>;
     }
   >();
@@ -434,7 +439,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     {
       readonly resolve: (ack: HostCommitAck) => void;
       readonly reject: (error: Error) => void;
-      readonly timer: ReturnType<typeof setTimeout>;
     }
   >();
   const pendingOwnerVfsDurability = new Map<
@@ -504,7 +508,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       const pending = pendingOwnerVfsCommits.get(message.operationId);
       if (!pending) return;
       pendingOwnerVfsCommits.delete(message.operationId);
-      clearTimeout(pending.timer);
       if (message.ok) pending.resolve(message.ack);
       else {
         try {
@@ -530,10 +533,23 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       }
       return;
     }
-    if (isVfsWriteAckMessage(message) || isVfsFlushAckMessage(message)) {
+    if (isVfsWriteAckMessage(message)) {
       const pending = pendingVfsWrites.get(message.opId);
       if (!pending) return;
       pendingVfsWrites.delete(message.opId);
+      if (message.ok) {
+        pending.resolve();
+      } else {
+        const err = new Error(message.error.message);
+        err.name = message.error.name;
+        pending.reject(err);
+      }
+      return;
+    }
+    if (isVfsFlushAckMessage(message)) {
+      const pending = pendingVfsFlushes.get(message.opId);
+      if (!pending) return;
+      pendingVfsFlushes.delete(message.opId);
       clearTimeout(pending.timer);
       if (message.ok) {
         pending.resolve();
@@ -581,12 +597,15 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     client.disconnect(); // resolve in-flight runs nonzero — never hang
     for (const [opId, pending] of pendingVfsWrites) {
       pendingVfsWrites.delete(opId);
-      clearTimeout(pending.timer);
       pending.reject(new Error(`workspace owner exited before VFS write ack (${opId})`));
+    }
+    for (const [opId, pending] of pendingVfsFlushes) {
+      pendingVfsFlushes.delete(opId);
+      clearTimeout(pending.timer);
+      pending.reject(new Error(`workspace owner exited before VFS flush ack (${opId})`));
     }
     for (const [operationId, pending] of pendingOwnerVfsCommits) {
       pendingOwnerVfsCommits.delete(operationId);
-      clearTimeout(pending.timer);
       pending.reject(
         new Error(`workspace owner exited before conditional VFS commit ack (${operationId})`),
       );
@@ -640,14 +659,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     }
     const opId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pendingVfsWrites.delete(opId);
-        reject(new Error(`owner VFS write ack timed out (${opId})`));
-      }, VFS_WRITE_ACK_TIMEOUT_MS);
-      pendingVfsWrites.set(opId, { resolve, reject, timer });
+      // The page cannot cancel an admitted owner mutation. Only its ACK/NACK or
+      // owner exit can establish a terminal outcome without a late mutation.
+      pendingVfsWrites.set(opId, { resolve, reject });
       if (!worker.send({ type: 'rifty:vfs-write', opId, frame })) {
         pendingVfsWrites.delete(opId);
-        clearTimeout(timer);
         reject(new Error(`owner VFS write send failed (${opId})`));
       }
     });
@@ -661,12 +677,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     const opId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        pendingVfsWrites.delete(opId);
+        pendingVfsFlushes.delete(opId);
         reject(new Error(`owner VFS flush ack timed out (${opId})`));
       }, VFS_FLUSH_ACK_TIMEOUT_MS);
-      pendingVfsWrites.set(opId, { resolve, reject, timer });
+      pendingVfsFlushes.set(opId, { resolve, reject, timer });
       if (!worker.send({ type: 'rifty:vfs-flush', opId })) {
-        pendingVfsWrites.delete(opId);
+        pendingVfsFlushes.delete(opId);
         clearTimeout(timer);
         reject(new Error(`owner VFS flush send failed (${opId})`));
       }
@@ -687,14 +703,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       );
     }
     return new Promise<HostCommitAck>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pendingOwnerVfsCommits.delete(request.operationId);
-        reject(new Error(`owner conditional VFS commit ack timed out (${request.operationId})`));
-      }, OWNER_VFS_COMMIT_ACK_TIMEOUT_MS);
-      pendingOwnerVfsCommits.set(request.operationId, { resolve, reject, timer });
+      pendingOwnerVfsCommits.set(request.operationId, { resolve, reject });
       if (!worker.send({ type: 'rifty:owner-vfs-commit', request })) {
         pendingOwnerVfsCommits.delete(request.operationId);
-        clearTimeout(timer);
         reject(new Error(`owner conditional VFS commit send failed (${request.operationId})`));
       }
     });
