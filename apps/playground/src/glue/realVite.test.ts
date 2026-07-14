@@ -122,6 +122,21 @@ async function importOwner(): Promise<typeof import('./realVite.ts')> {
   return import('./realVite.ts');
 }
 
+async function captureUnhandledRejections(run: () => Promise<void>): Promise<unknown[]> {
+  const errors: unknown[] = [];
+  const onUnhandled = (error: unknown): void => {
+    errors.push(error);
+  };
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    await run();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+  return errors;
+}
+
 describe('workspace owner page→owner VFS writes (ADR-0146: owner store is the source of truth)', () => {
   it('routes editor writes over kernel worker IPC while the owner channel accepts sends', async () => {
     const { startWorkspaceOwner } = await importOwner();
@@ -154,6 +169,79 @@ describe('workspace owner page→owner VFS writes (ADR-0146: owner store is the 
       handle.snapshotPort,
       expect.objectContaining({ type: 'write', path: '/scratch/src/a.txt' }),
     );
+  });
+});
+
+describe('workspace owner PTY mutation sends', () => {
+  it('contains refused initial state-query sends after owner readiness', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.refuseSends = true;
+
+    const unhandled = await captureUnhandledRejections(async () => {
+      fakeWorker.emit('message', {
+        type: 'rifty:workspace-owner-ready',
+        port: handle.snapshotPort,
+        ownerEpoch: 'owner-ready',
+        treeRevision: 0,
+      });
+      await handle.ready;
+    });
+    fakeWorker.emit('exit', 0);
+    await handle.closed;
+
+    expect(unhandled).toEqual([]);
+  });
+
+  it('contains a refused explicit preview state-query send', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-ready',
+      treeRevision: 0,
+    });
+    await handle.ready;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fakeWorker.refuseSends = true;
+
+    const unhandled = await captureUnhandledRejections(async () => {
+      handle.requestPreview();
+    });
+    fakeWorker.emit('exit', 0);
+    await handle.closed;
+
+    expect(unhandled).toEqual([]);
+  });
+
+  it('rejects dev config when kernel IPC refuses the send', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-ready',
+      treeRevision: 0,
+    });
+    await handle.ready;
+    fakeWorker.refuseSends = true;
+    const config = handle.setDevConfig({
+      templateId: 'typescript',
+      slug: 'refused',
+      setup: 'instant',
+    });
+    const outcome = await Promise.race([
+      config.then(
+        () => 'resolved',
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve('pending'), 25)),
+    ]);
+    fakeWorker.emit('exit', 0);
+    await handle.closed;
+
+    expect(outcome).toMatch(/owner PTY send failed.*pty:dev-config/i);
   });
 });
 

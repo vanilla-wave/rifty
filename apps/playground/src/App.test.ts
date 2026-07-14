@@ -389,9 +389,7 @@ describe('App binds the orchestration cores (ADR-0197)', () => {
     // Save/switch decisions are behavioral in orchestration/save-flow.test.ts;
     // the switch-then dialog paths are e2e-covered (project-management).
     expect(source).toContain('const saveFlow = createSaveFlow({');
-    expect(source).toContain(
-      'saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),',
-    );
+    expect(source).toContain('saveProjectIndexPhases(owner.snapshotPort, id, name, starter, {');
     expect(source).toContain('onConfirmSave={() => void saveFlow.confirmSave(saveName())}');
   });
 

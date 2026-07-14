@@ -331,8 +331,9 @@ export function App(props: AppProps) {
     owner: fileWriteOwner,
     onScratchDirty: (starter) => {
       if (saveAffordance(storageMode).ephemeral) return;
-      void markScratchDirtyIndex(workspaceOwner().snapshotPort, starter).catch((err: unknown) =>
-        console.error('[project-index] mark scratch dirty failed', err),
+      const owner = workspaceOwner();
+      void markScratchDirtyIndex(owner.snapshotPort, starter, { ownerClosed: owner.closed }).catch(
+        (err: unknown) => console.error('[project-index] mark scratch dirty failed', err),
       );
     },
     // §56: the page-mirror delete + Undo is REAL (launcher updates, restore works).
@@ -614,7 +615,8 @@ export function App(props: AppProps) {
     // Memory mode has no durable index → the switch skips the activeId persist.
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
     persistActiveId: async (id) => {
-      await setActiveIndex(workspaceOwner().snapshotPort, id);
+      const owner = workspaceOwner();
+      await setActiveIndex(owner.snapshotPort, id, { ownerClosed: owner.closed });
     },
     transition: {
       begin: () => presetBoot.beginTransition(),
@@ -655,7 +657,10 @@ export function App(props: AppProps) {
     recordPresenceHint: (idx) => recordProjectPresenceHint(idx, globalThis.localStorage),
     hasPresenceHint: () => hasPersistedProjectHint(globalThis.localStorage),
     // Read the port at fire time — an owner respawn (switch) moves the live channel.
-    postDeleteProjectTree: (id) => deleteProjectTree(workspaceOwner().snapshotPort, id),
+    postDeleteProjectTree: (id) => {
+      const owner = workspaceOwner();
+      return deleteProjectTree(owner.snapshotPort, id, { ownerClosed: owner.closed });
+    },
     openLauncherOnStarters: () => {
       store.setLauncherTab('starters');
       store.openLauncher();
@@ -789,7 +794,7 @@ export function App(props: AppProps) {
     currentOwner: () => workspaceOwner(),
     ownerUnavailable: (owner) => owner.snapshotPort === UNAVAILABLE_OWNER_PORT,
     reader: ownerFileReader,
-    bridgeGit: (owner) => bridgeGitOwnerRpc(owner.snapshotPort),
+    bridgeGit: (owner) => bridgeGitOwnerRpc(owner.snapshotPort, { ownerClosed: owner.closed }),
     subscribeStatus: (owner, cb) => subscribeGitStatus(owner.snapshotPort, cb),
     requestStatus: (owner) => requestGitStatus(owner.snapshotPort),
     requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
@@ -1715,8 +1720,12 @@ export function App(props: AppProps) {
       `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`,
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     // Read the port at fire time (the live channel); memory mode never posts.
-    saveIndexPhases: (id, name, starter) =>
-      saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),
+    saveIndexPhases: (id, name, starter) => {
+      const owner = workspaceOwner();
+      return saveProjectIndexPhases(owner.snapshotPort, id, name, starter, {
+        ownerClosed: owner.closed,
+      });
+    },
     openSaveDialog,
     showSaveError: (message) => store.setToast({ kind: 'error', text: message }),
     showEphemeralSaveNotice: (name) =>
@@ -1735,9 +1744,18 @@ export function App(props: AppProps) {
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     activeStarterId,
     // Owner index posts read the port at fire time (the live channel).
-    resetScratchIndex: (starter) => resetScratchIndex(workspaceOwner().snapshotPort, starter),
-    resetProjectIndex: (id) => resetProjectIndex(workspaceOwner().snapshotPort, id),
-    renameProjectIndex: (id, name) => renameProjectIndex(workspaceOwner().snapshotPort, id, name),
+    resetScratchIndex: (starter) => {
+      const owner = workspaceOwner();
+      return resetScratchIndex(owner.snapshotPort, starter, { ownerClosed: owner.closed });
+    },
+    resetProjectIndex: (id) => {
+      const owner = workspaceOwner();
+      return resetProjectIndex(owner.snapshotPort, id, { ownerClosed: owner.closed });
+    },
+    renameProjectIndex: (id, name) => {
+      const owner = workspaceOwner();
+      return renameProjectIndex(owner.snapshotPort, id, name, { ownerClosed: owner.closed });
+    },
   });
 
   async function flushPendingEditorWrites(): Promise<void> {
@@ -1764,8 +1782,9 @@ export function App(props: AppProps) {
     opts: { readonly preserveDirtySameStarter?: boolean } = {},
   ): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
-      await newScratchIndex(workspaceOwner().snapshotPort, id, opts).catch((err: unknown) =>
-        console.error('[project-index] new scratch failed', err),
+      const owner = workspaceOwner();
+      await newScratchIndex(owner.snapshotPort, id, { ...opts, ownerClosed: owner.closed }).catch(
+        (err: unknown) => console.error('[project-index] new scratch failed', err),
       );
     }
   }

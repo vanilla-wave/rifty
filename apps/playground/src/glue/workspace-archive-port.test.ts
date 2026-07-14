@@ -141,4 +141,70 @@ describe('owner-served workspace archive bridge', () => {
   it('export rejects with a timeout when no owner is listening', async () => {
     await expect(client(9103, 50).export()).rejects.toThrow(/timeout/i);
   });
+
+  it('keeps an admitted import pending past the export timeout, then settles its reply', async () => {
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    teardowns.push(
+      serveWorkspaceArchive(9107, '/workspace', {
+        reset: async (_target, prepare) => {
+          markStarted();
+          await gate;
+          const plan = await prepare();
+          if (plan.status === 'ready') await plan.mutate();
+        },
+      }),
+    );
+    const archive: WorkspaceArchiveV1 = {
+      version: 1,
+      root: '/workspace',
+      files: [{ path: 'slow.txt', encoding: 'base64', content: btoa('late but exact') }],
+    };
+    const c = client(9107, 10);
+    const mutation = c.import(JSON.stringify(archive));
+    let outcome = 'pending';
+    void mutation.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await started;
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    expect(outcome).toBe('pending');
+
+    c.dispose();
+    await Promise.resolve();
+    expect(outcome).toBe('pending');
+    release();
+    await expect(mutation).resolves.toBeUndefined();
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/slow.txt'))).toBe(
+      'late but exact',
+    );
+    await expect(c.import(JSON.stringify(archive))).rejects.toThrow(/disposed/i);
+  });
+
+  it('rejects an admitted import when the owner exit is certified', async () => {
+    let ownerExited!: () => void;
+    const ownerClosed = new Promise<void>((resolve) => {
+      ownerExited = resolve;
+    });
+    bridge = bridgeWorkspaceArchive(9108, { timeoutMs: 10, ownerClosed });
+    const mutation = bridge.import(
+      JSON.stringify({ version: 1, root: '/workspace', files: [] } satisfies WorkspaceArchiveV1),
+    );
+
+    ownerExited();
+
+    await expect(mutation).rejects.toThrow(/owner exited/i);
+  });
 });

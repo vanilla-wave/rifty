@@ -470,7 +470,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   };
   const client = createPtyClient({
     send: (frame) => {
-      worker.send({ type: PTY_IPC_TYPE, frame });
+      if (!worker.send({ type: PTY_IPC_TYPE, frame })) {
+        throw new Error(`owner PTY send failed (${frame.type})`);
+      }
     },
     onDevServer: (frame) => {
       for (const cb of devServerListeners) cb(frame);
@@ -577,13 +579,15 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // dev-server state AND preview-port set on spawn so a `pty:dev-server` /
   // `pty:preview` push that predates our listener is recoverable (the
   // dropped-frame class the owner-resident shell hit) — never a one-shot push.
-  void ready.then(
-    () => {
-      client.requestDevServer();
-      client.requestPreview();
-    },
-    () => {},
-  );
+  void ready
+    .then(
+      () => {
+        client.requestDevServer();
+        client.requestPreview();
+      },
+      () => {},
+    )
+    .catch(() => {});
 
   let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
@@ -638,7 +642,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   // owner; the page holds no authoritative fs): the owner serializes/applies the
   // workspace against its OWN syncMirror, so the page never needs an
   // authoritative store to download/upload a workspace.
-  const archiveBridge: WorkspaceArchiveBridge = bridgeWorkspaceArchive(snapshotPort);
+  const archiveBridge: WorkspaceArchiveBridge = bridgeWorkspaceArchive(snapshotPort, {
+    ownerClosed: closed,
+  });
   const fileReadBridge: WorkspaceFileReadBridge = bridgeWorkspaceFileReads(snapshotPort);
   const writeFrame = (frame: VfsWriteFrame): void => {
     sendGuardedVfsWrite({
@@ -810,10 +816,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       return () => previewListeners.delete(cb);
     },
     requestPreview: () => {
-      void ready.then(
-        () => client.requestPreview(),
-        () => {},
-      );
+      void ready
+        .then(
+          () => client.requestPreview(),
+          () => {},
+        )
+        .catch(() => {});
     },
     setDevConfig: async (config) => {
       await ready;

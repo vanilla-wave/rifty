@@ -25,8 +25,6 @@ import type {
 const dec = new TextDecoder();
 let ridCounter = 0;
 
-const DEV_CONFIG_READY_TIMEOUT_MS = 60_000;
-
 export interface ExecOptions {
   readonly cols: number;
   readonly rows: number;
@@ -84,7 +82,6 @@ type PendingReady = DeferredVoid;
 type PendingDevConfig = {
   resolve: () => void;
   reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
 };
 type SessionState = {
   cwd: string;
@@ -453,21 +450,24 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         return Promise.reject(new Error('ClosedHandleError: owner died before dev config'));
       }
       const id = `dc${++devConfigSeq}`;
-      deps.send({
-        type: 'pty:dev-config',
-        id,
-        templateId: config.templateId,
-        slug: config.slug,
-        setup: config.setup,
-      });
       return new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
+        // Owner config assignment is a mutation: only ready/error or certified
+        // owner death can establish its terminal outcome.
+        devConfigs.set(id, { resolve, reject });
+        try {
+          deps.send({
+            type: 'pty:dev-config',
+            id,
+            templateId: config.templateId,
+            slug: config.slug,
+            setup: config.setup,
+          });
+        } catch (cause) {
+          const pending = devConfigs.get(id);
+          if (!pending) return;
           devConfigs.delete(id);
-          reject(
-            new Error(`pty:dev-config ${id} timed out after ${DEV_CONFIG_READY_TIMEOUT_MS}ms`),
-          );
-        }, DEV_CONFIG_READY_TIMEOUT_MS);
-        devConfigs.set(id, { resolve, reject, timer });
+          pending.reject(cause instanceof Error ? cause : new Error(String(cause)));
+        }
       });
     },
     snapshot(sid: string): PtySessionSnapshot {
@@ -573,7 +573,6 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           const pending = devConfigs.get(frame.id);
           if (!pending) return;
           devConfigs.delete(frame.id);
-          clearTimeout(pending.timer);
           if (frame.error) pending.reject(new Error(frame.error));
           else pending.resolve();
           return;
@@ -603,7 +602,6 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       }
       for (const [id, pending] of devConfigs) {
         devConfigs.delete(id);
-        clearTimeout(pending.timer);
         pending.reject(new Error(`ClosedHandleError: owner died during dev config ${id}`));
       }
     },

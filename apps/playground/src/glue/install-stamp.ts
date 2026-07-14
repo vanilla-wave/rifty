@@ -110,8 +110,7 @@ export function effectiveDepsFromPackageJsonText(text: string): Record<string, s
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const raw = parsed as Record<string, unknown>;
-  const dependencies =
-    raw.dependencies === undefined ? {} : readExactStringMap(raw.dependencies);
+  const dependencies = raw.dependencies === undefined ? {} : readExactStringMap(raw.dependencies);
   const devDependencies =
     raw.devDependencies === undefined ? {} : readExactStringMap(raw.devDependencies);
   const optionalDependencies =

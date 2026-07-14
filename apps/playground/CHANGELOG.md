@@ -167,7 +167,14 @@
   durable package revocation cannot overwrite a later rename, switch, dirty
   mark, Save, delete, or scratch transition with a stale captured index. Passive
   readers see only the last durability-proven index; Save's early applied phase
-  remains operation-scoped until both persistence barriers pass.
+  remains operation-scoped until both persistence barriers pass. Pre-applied
+  Save retries share one owner `opId` record and replay its phase result instead
+  of entering the FIFO twice. Admitted clients poll that record until terminal;
+  an ordered page receipt then releases the bounded owner record.
+- Page→owner mutations retain their reply path after handoff: VFS commits,
+  explorer writes, Git, archive import, project-index updates, and dev-config
+  assignment settle only on ACK/NACK, send failure, or certified owner exit.
+  Read requests and post-ACK durability observations remain bounded.
 
 ### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 

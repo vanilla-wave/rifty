@@ -237,6 +237,63 @@ describe('git owner RPC bridge', () => {
     await expect(page('git-timeout', 50).status()).rejects.toThrow(/timeout/i);
   });
 
+  it('keeps an admitted mutation pending past the read timeout, then settles its reply', async () => {
+    const { g } = await seededRepo();
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    teardowns.push(
+      serveGitOwnerRpc('git-slow-mutation', g, {
+        async execute(_request, operation) {
+          markStarted();
+          await gate;
+          return operation();
+        },
+      }),
+    );
+    const c = page('git-slow-mutation', 10);
+    const mutation = c.add('a.txt');
+    let outcome = 'pending';
+    void mutation.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await started;
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    expect(outcome).toBe('pending');
+
+    c.dispose();
+    await Promise.resolve();
+    expect(outcome).toBe('pending');
+    release();
+    await expect(mutation).resolves.toBeUndefined();
+    await expect(c.add('later.txt')).rejects.toThrow(/disposed/i);
+  });
+
+  it('rejects an admitted mutation when the owner exit is certified', async () => {
+    let ownerExited!: () => void;
+    const ownerClosed = new Promise<void>((resolve) => {
+      ownerExited = resolve;
+    });
+    const c = bridgeGitOwnerRpc('git-owner-exit', { timeoutMs: 10, ownerClosed });
+    client = c;
+    const mutation = c.add('a.txt');
+
+    ownerExited();
+
+    await expect(mutation).rejects.toThrow(/owner exited/i);
+  });
+
   it('dispose rejects in-flight requests and refuses later calls', async () => {
     const c = page('git-dispose', 5_000);
     const inFlight = c.status();

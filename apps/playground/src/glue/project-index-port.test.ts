@@ -1,5 +1,5 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installStampPath } from './install-stamp.ts';
 import type { PackageMutationExecutor } from './package-mutation-executor.ts';
 import {
@@ -76,6 +76,49 @@ class FakeChannel {
   }
 }
 
+interface SaveCommand {
+  readonly type: 'index-save';
+  readonly opId: string;
+  readonly id: string;
+  readonly name: string;
+  readonly starter: string;
+}
+
+interface SaveRequest {
+  readonly type: 'index-save';
+  readonly id: string;
+  readonly name: string;
+  readonly starter: string;
+}
+
+function frameType(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const type = (data as { readonly type?: unknown }).type;
+  return typeof type === 'string' ? type : undefined;
+}
+
+function isSaveCommand(data: unknown): data is SaveCommand {
+  return (
+    frameType(data) === 'index-save' &&
+    typeof (data as { readonly opId?: unknown }).opId === 'string'
+  );
+}
+
+function requestFromSave(command: SaveCommand): SaveRequest {
+  return {
+    type: 'index-save',
+    id: command.id,
+    name: command.name,
+    starter: command.starter,
+  };
+}
+
+function fakeChannelName(): string {
+  const name = FakeChannel.buses.keys().next().value;
+  if (typeof name !== 'string') throw new Error('expected a project-index channel');
+  return name;
+}
+
 // Browser BroadcastChannel delivery is async; closing the sender before the
 // queued delivery runs drops the frame in this fake, matching the PR-red race.
 class AsyncDropOnCloseChannel {
@@ -121,6 +164,14 @@ class AsyncDropOnCloseChannel {
   }
 }
 
+class HoldSaveReceiptChannel extends FakeChannel {
+  static hold = true;
+  override postMessage(data: unknown): void {
+    if (HoldSaveReceiptChannel.hold && frameType(data) === 'index-save-received') return;
+    super.postMessage(data);
+  }
+}
+
 beforeEach(() => {
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
     FakeChannel as unknown as typeof BroadcastChannel;
@@ -130,8 +181,10 @@ beforeEach(() => {
   AsyncDropOnCloseChannel.buses.clear();
   AsyncDropOnCloseChannel.postsAfterClose = 0;
   AsyncDropOnCloseChannel.repeatedCloses = 0;
+  HoldSaveReceiptChannel.hold = true;
 });
 afterEach(() => {
+  vi.useRealTimers();
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = undefined;
 });
 
@@ -582,6 +635,43 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('admits one owner mutation for repeated save frames with the same opId', async () => {
+    vi.useFakeTimers();
+    const fs = scratchOwnerFs('deduped-save');
+    const entered = deferred();
+    const gate = deferred();
+    let admissions = 0;
+    const packageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+      reset: async (_target, prepare) => {
+        admissions++;
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    };
+    const tearOwner = serveProjectIndex(
+      PORT,
+      fs,
+      '/',
+      undefined,
+      undefined,
+      undefined,
+      packageMutations,
+    );
+    const phases = saveProjectIndexPhases(PORT, 'p-dedupe', 'Dedupe', 'project-files');
+
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(800);
+    gate.resolve();
+    await phases.durable;
+    await renameProjectIndex(PORT, 'p-dedupe', 'After dedupe');
+
+    expect(admissions).toBe(1);
+    expect(loadIndex(fs, '/').projects).toMatchObject([{ id: 'p-dedupe', name: 'After dedupe' }]);
+    tearOwner();
+  });
+
   it('excludes node_modules after package revocation removes its root marker', async () => {
     const fs = scratchOwnerFs('saved-source');
     fs.mkdirSync('/scratch/node_modules/vite', { recursive: true });
@@ -628,8 +718,19 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       projects: [{ id: 'p-alpha-async', name: 'Alpha Async', starter: 'project-files' }],
     });
     expect(readUtf8(fs, '/projects/p-alpha-async/marker.txt')).toBe('alpha-async-bytes');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      [...AsyncDropOnCloseChannel.buses.values()].reduce((size, peers) => size + peers.size, 0),
+    ).toBe(1);
+    expect(AsyncDropOnCloseChannel.postsAfterClose).toBe(0);
+    expect(AsyncDropOnCloseChannel.repeatedCloses).toBe(0);
 
     tearOwner();
+    await Promise.resolve();
+    expect(
+      [...AsyncDropOnCloseChannel.buses.values()].reduce((size, peers) => size + peers.size, 0),
+    ).toBe(0);
   });
 
   it('index-save retries until a late owner bridge is listening', async () => {
@@ -646,6 +747,723 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(readUtf8(fs, '/projects/p-late-owner/marker.txt')).toBe('late-owner-bytes');
     await phases.durable;
 
+    tearOwner();
+  });
+
+  it('rejects both save phases with the exact initial send failure', async () => {
+    const failure = new Error('initial index save send failed exactly');
+    let closeCalls = 0;
+    class InitialSendFailChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (
+          data &&
+          typeof data === 'object' &&
+          (data as { readonly type?: unknown }).type === 'index-save'
+        ) {
+          throw failure;
+        }
+        super.postMessage(data);
+      }
+      override close(): void {
+        closeCalls++;
+        super.close();
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      InitialSendFailChannel as unknown as typeof BroadcastChannel;
+
+    const phases = saveProjectIndexPhases(PORT, 'p-initial-fail', 'Initial Fail', 'project-files');
+    const applied = expect(phases.applied).rejects.toBe(failure);
+    const durable = expect(phases.durable).rejects.toBe(failure);
+
+    await Promise.all([applied, durable]);
+    expect(closeCalls).toBe(1);
+  });
+
+  it('keeps an admitted save pending when a retry send throws, then executes it once', async () => {
+    vi.useFakeTimers();
+    const failure = new Error('index retry send failed exactly');
+    let savePosts = 0;
+    let closeCalls = 0;
+    let dropAdmission = true;
+    class RetrySendFailChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (
+          dropAdmission &&
+          data &&
+          typeof data === 'object' &&
+          (data as { readonly type?: unknown }).type === 'index-save-admitted'
+        ) {
+          dropAdmission = false;
+          return;
+        }
+        if (
+          data &&
+          typeof data === 'object' &&
+          (data as { readonly type?: unknown }).type === 'index-save' &&
+          ++savePosts === 2
+        ) {
+          throw failure;
+        }
+        super.postMessage(data);
+      }
+      override close(): void {
+        closeCalls++;
+        super.close();
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      RetrySendFailChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('retry-failure-save');
+    const entered = deferred();
+    const gate = deferred();
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(PORT, 'p-retry-fail', 'Retry Fail', 'project-files');
+    let applied = 'pending';
+    let durable = 'pending';
+    void phases.applied.then(
+      () => {
+        applied = 'resolved';
+      },
+      () => {
+        applied = 'rejected';
+      },
+    );
+    void phases.durable.then(
+      () => {
+        durable = 'resolved';
+      },
+      () => {
+        durable = 'rejected';
+      },
+    );
+
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(251);
+    expect(savePosts).toBe(2);
+    expect({ applied, durable }).toEqual({ applied: 'pending', durable: 'pending' });
+    expect(executions).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(251);
+    gate.resolve();
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-retry-fail' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-retry-fail' });
+    expect(savePosts).toBe(3);
+    expect(executions).toBe(1);
+    expect(closeCalls).toBe(1);
+    expect(failure.message).toBe('index retry send failed exactly');
+    tearOwner();
+  });
+
+  it('executes an admitted Save when its first admission notification throws', async () => {
+    vi.useFakeTimers();
+    const admissionFailure = new Error('first owner admission send failed');
+    let admissionPosts = 0;
+    let savePosts = 0;
+    class AdmissionSendFailChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save') savePosts++;
+        if (frameType(data) === 'index-save-admitted' && ++admissionPosts === 1) {
+          throw admissionFailure;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      AdmissionSendFailChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('admission-send-failure');
+    const entered = deferred();
+    const gate = deferred();
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-admission-fail',
+      'Admission Fail',
+      'project-files',
+    );
+
+    await entered.promise;
+    expect(executions).toBe(1);
+    expect(admissionPosts).toBe(1);
+    expect(savePosts).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(251);
+    expect(admissionPosts).toBe(2);
+    expect(savePosts).toBe(2);
+    expect(executions).toBe(1);
+
+    gate.resolve();
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-admission-fail' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-admission-fail' });
+    expect(executions).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
+    expect(admissionFailure.message).toBe('first owner admission send failed');
+    tearOwner();
+    await Promise.resolve();
+  });
+
+  it('polls an admitted Save until a dropped terminal success is replayed exactly once', async () => {
+    vi.useFakeTimers();
+    let savePosts = 0;
+    let droppedTerminals = 0;
+    class DropFirstSuccessTerminalChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save') savePosts++;
+        if (
+          frameType(data) === 'index-save-terminal' &&
+          (data as { readonly ok?: unknown }).ok === true &&
+          droppedTerminals++ === 0
+        ) {
+          return;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropFirstSuccessTerminalChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('dropped-terminal-success');
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-dropped-terminal',
+      'Dropped Terminal',
+      'project-files',
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-dropped-terminal' });
+    await Promise.resolve();
+    let durable = 'pending';
+    void phases.durable.then(
+      () => {
+        durable = 'resolved';
+      },
+      () => {
+        durable = 'rejected';
+      },
+    );
+    expect(droppedTerminals).toBe(1);
+    expect(durable).toBe('pending');
+    expect(savePosts).toBe(1);
+    expect(executions).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1_001);
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-dropped-terminal' });
+    expect(savePosts).toBe(2);
+    expect(executions).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(savePosts).toBe(2);
+    tearOwner();
+    await Promise.resolve();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('replays a dropped post-applied failure without re-executing Save', async () => {
+    vi.useFakeTimers();
+    let savePosts = 0;
+    let droppedTerminals = 0;
+    class DropFirstFailureTerminalChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save') savePosts++;
+        if (
+          frameType(data) === 'index-save-terminal' &&
+          (data as { readonly ok?: unknown }).ok === false &&
+          droppedTerminals++ === 0
+        ) {
+          return;
+        }
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropFirstFailureTerminalChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('dropped-terminal-failure');
+    const realRm = fs.rmSync.bind(fs);
+    const failure = new Error('dropped terminal cleanup failed');
+    failure.name = 'DroppedTerminalCleanupError';
+    fs.rmSync = ((path, options) => {
+      if (path === '/scratch') throw failure;
+      realRm(path, options);
+    }) as typeof fs.rmSync;
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-dropped-failure',
+      'Dropped Failure',
+      'project-files',
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-dropped-failure' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(droppedTerminals).toBe(1);
+    expect(savePosts).toBe(1);
+    expect(executions).toBe(1);
+
+    const durableFailure = expect(phases.durable).rejects.toMatchObject({
+      name: 'DroppedTerminalCleanupError',
+      message: 'dropped terminal cleanup failed',
+    });
+    await vi.advanceTimersByTimeAsync(1_001);
+    await durableFailure;
+    expect(savePosts).toBe(2);
+    expect(executions).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
+    tearOwner();
+    await Promise.resolve();
+  });
+
+  it('retries a failed terminal receipt without changing the Save outcome', async () => {
+    vi.useFakeTimers();
+    const receiptFailure = new Error('first terminal receipt send failed');
+    let receiptPosts = 0;
+    let closeCalls = 0;
+    class ReceiptRetryChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save-received' && ++receiptPosts === 1) {
+          throw receiptFailure;
+        }
+        super.postMessage(data);
+      }
+      override close(): void {
+        closeCalls++;
+        super.close();
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      ReceiptRetryChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('receipt-retry');
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-receipt-retry',
+      'Receipt Retry',
+      'project-files',
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-receipt-retry' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-receipt-retry' });
+    expect(receiptPosts).toBe(1);
+    expect(closeCalls).toBe(0);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(251);
+    expect(receiptPosts).toBe(2);
+    expect(closeCalls).toBe(1);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
+    expect(FakeChannel.postsAfterClose).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(receiptPosts).toBe(2);
+    expect(closeCalls).toBe(1);
+    tearOwner();
+    await Promise.resolve();
+    expect(closeCalls).toBe(2);
+  });
+
+  it('replays admission for queued duplicate saves without duplicating the FIFO mutation', async () => {
+    const fs = scratchOwnerFs('queued-replay');
+    const entered = deferred();
+    const gate = deferred();
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-queued-replay',
+      'Queued Replay',
+      'project-files',
+    );
+    await entered.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+
+    probe.postMessage(command);
+    probe.postMessage(command);
+
+    expect(frames.map(frameType)).toEqual(['index-save-admitted', 'index-save-admitted']);
+    expect(executions).toBe(1);
+
+    gate.resolve();
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-queued-replay' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-queued-replay' });
+    expect(executions).toBe(1);
+    probe.close();
+    tearOwner();
+  });
+
+  it('replays admission plus applied state while Save durability is parked', async () => {
+    const fs = scratchOwnerFs('applied-replay');
+    const flushStarted = deferred();
+    const flushGate = deferred();
+    let flushes = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushes++;
+      if (flushes === 1) {
+        flushStarted.resolve();
+        await flushGate.promise;
+      }
+      return undefined;
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-applied-replay',
+      'Applied Replay',
+      'project-files',
+    );
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-applied-replay' });
+    await flushStarted.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+
+    probe.postMessage(command);
+
+    expect(frames.map(frameType)).toEqual(['index-save-admitted', 'index-save-applied']);
+    flushGate.resolve();
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-applied-replay' });
+    probe.close();
+    tearOwner();
+  });
+
+  it('replays terminal success until receipt, then releases the bounded owner record', async () => {
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      HoldSaveReceiptChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('terminal-success-replay');
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-terminal-success',
+      'Terminal Success',
+      'project-files',
+    );
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-terminal-success' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-terminal-success' });
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+
+    probe.postMessage(command);
+
+    expect(frames.map(frameType)).toEqual([
+      'index-save-admitted',
+      'index-save-applied',
+      'index-save-terminal',
+    ]);
+    expect(executions).toBe(1);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(3);
+
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+    expect(frames.map(frameType)).toContain('index-save-released');
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
+    const releases = frames.filter((frame) => frameType(frame) === 'index-save-released').length;
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+    expect(frames.filter((frame) => frameType(frame) === 'index-save-released')).toHaveLength(
+      releases + 1,
+    );
+    expect(executions).toBe(1);
+
+    frames.length = 0;
+    const secondTerminal = new Promise<void>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (frameType(event.data) === 'index-save-terminal') resolve();
+      });
+    });
+    probe.postMessage(command);
+    await secondTerminal;
+    expect(executions).toBe(2);
+    expect(frames.map(frameType)).toContain('index-save-admitted');
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+
+    probe.close();
+    tearOwner();
+  });
+
+  it('replays a terminal pre-apply failure without inventing an applied state', async () => {
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      HoldSaveReceiptChannel as unknown as typeof BroadcastChannel;
+    const fs = new MemoryFsSync();
+    writeIndex(fs, '/', { activeId: 'scratch', scratch: null, projects: [] });
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(PORT, 'p-pre-fail', 'Pre Fail', 'project-files');
+    const applied = expect(phases.applied).rejects.toThrow(/no scratch to save/);
+    const durable = expect(phases.durable).rejects.toThrow(/no scratch to save/);
+    await Promise.all([applied, durable]);
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+
+    probe.postMessage(command);
+
+    expect(frames.map(frameType)).toEqual(['index-save-admitted', 'index-save-terminal']);
+    expect(frames.find((frame) => frameType(frame) === 'index-save-terminal')).not.toHaveProperty(
+      'applied',
+    );
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+
+    probe.close();
+    tearOwner();
+  });
+
+  it('loud-fails divergent Save reuse without poisoning the original operation', async () => {
+    const fs = scratchOwnerFs('divergent-reuse');
+    const entered = deferred();
+    const gate = deferred();
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+
+    const phases = saveProjectIndexPhases(PORT, 'p-original', 'Original', 'project-files');
+    await entered.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+    const divergent = { ...command, name: 'Divergent' } satisfies SaveCommand;
+
+    probe.postMessage(divergent);
+
+    expect(frames).toContainEqual({
+      type: 'index-save-conflict',
+      opId: command.opId,
+      request: requestFromSave(divergent),
+      error: {
+        name: 'ProjectIndexOperationIdReuseError',
+        message: `project index operation id reused with different input (${command.opId})`,
+      },
+    });
+    expect(executions).toBe(1);
+    expect(fs.existsSync('/projects/p-original')).toBe(false);
+
+    gate.resolve();
+    await expect(phases.applied).resolves.toMatchObject({
+      activeId: 'p-original',
+      projects: [{ id: 'p-original', name: 'Original' }],
+    });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-original' });
+    expect(executions).toBe(1);
+    probe.close();
+    tearOwner();
+  });
+
+  it('keeps generic mutation opIds isolated from the Save replay ledger', async () => {
+    const fs = scratchOwnerFs('generic-opid-isolation');
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const sharedOpId = 'shared-generic-save-op';
+
+    probe.postMessage({
+      type: 'index-rename',
+      opId: sharedOpId,
+      projectId: 'missing',
+      name: 'Generic',
+    });
+    await Promise.resolve();
+    expect(frames).toContainEqual(
+      expect.objectContaining({ type: 'index-ack', opId: sharedOpId, ok: true }),
+    );
+
+    const command: SaveCommand = {
+      type: 'index-save',
+      opId: sharedOpId,
+      id: 'p-generic-isolated',
+      name: 'Generic Isolated',
+      starter: 'project-files',
+    };
+    const terminal = new Promise<void>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (frameType(event.data) === 'index-save-terminal') resolve();
+      });
+    });
+    probe.postMessage(command);
+    await terminal;
+
+    expect(frames.map(frameType)).toContain('index-save-admitted');
+    expect(frames.map(frameType)).toContain('index-save-applied');
+    expect(frames.map(frameType)).toContain('index-save-terminal');
+    expect(frames.map(frameType)).not.toContain('index-save-conflict');
+    expect(loadIndex(fs, '/')).toMatchObject({
+      activeId: 'p-generic-isolated',
+      projects: [{ id: 'p-generic-isolated', name: 'Generic Isolated' }],
+    });
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+    probe.close();
+    tearOwner();
+  });
+
+  it('teardown terminally rejects and releases admitted Save state without a client timer leak', async () => {
+    vi.useFakeTimers();
+    const fs = scratchOwnerFs('teardown-release');
+    const entered = deferred();
+    const gate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(PORT, 'p-teardown', 'Teardown', 'project-files');
+    const applied = expect(phases.applied).rejects.toMatchObject({
+      name: 'ProjectIndexBridgeClosedError',
+    });
+    const durable = expect(phases.durable).rejects.toMatchObject({
+      name: 'ProjectIndexBridgeClosedError',
+    });
+    await entered.promise;
+
+    tearOwner();
+    await Promise.all([applied, durable]);
+    await Promise.resolve();
+    expect([...FakeChannel.buses.values()].reduce((size, peers) => size + peers.size, 0)).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeChannel.postsAfterClose).toBe(0);
+    gate.resolve();
+    await Promise.resolve();
+    expect(FakeChannel.postsAfterClose).toBe(0);
+  });
+
+  it('keeps both save phases pending past the former timeout before applied', async () => {
+    vi.useFakeTimers();
+    const fs = scratchOwnerFs('slow-pre-apply');
+    const entered = deferred();
+    const gate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        entered.resolve();
+        await gate.promise;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const phases = saveProjectIndexPhases(PORT, 'p-pre-apply', 'Pre Apply', 'project-files');
+    let applied = 'pending';
+    let durable = 'pending';
+    void phases.applied.then(
+      () => {
+        applied = 'resolved';
+      },
+      () => {
+        applied = 'rejected';
+      },
+    );
+    void phases.durable.then(
+      () => {
+        durable = 'resolved';
+      },
+      () => {
+        durable = 'rejected';
+      },
+    );
+
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect({ applied, durable }).toEqual({ applied: 'pending', durable: 'pending' });
+
+    gate.resolve();
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-pre-apply' });
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-pre-apply' });
     tearOwner();
   });
 
@@ -694,7 +1512,133 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('keeps durable pending past the former timeout after applied', async () => {
+    vi.useFakeTimers();
+    const fs = scratchOwnerFs('slow-post-apply');
+    const commitFlush = deferred();
+    const cleanupFlush = deferred();
+    const cleanupStarted = deferred();
+    let flushes = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushes++;
+      if (flushes === 1) await commitFlush.promise;
+      else {
+        cleanupStarted.resolve();
+        await cleanupFlush.promise;
+      }
+      return undefined;
+    });
+    const phases = saveProjectIndexPhases(PORT, 'p-post-apply', 'Post Apply', 'project-files');
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-post-apply' });
+    let durable = 'pending';
+    void phases.durable.then(
+      () => {
+        durable = 'resolved';
+      },
+      () => {
+        durable = 'rejected';
+      },
+    );
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect(durable).toBe('pending');
+
+    commitFlush.resolve();
+    await cleanupStarted.promise;
+    cleanupFlush.resolve();
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-post-apply' });
+    tearOwner();
+  });
+
+  it('preserves applied and rejects only durable on certified owner exit', async () => {
+    const fs = scratchOwnerFs('owner-exit-after-applied');
+    const commitFlush = deferred();
+    const cleanupFlush = deferred();
+    const cleanupStarted = deferred();
+    const ownerClosed = deferred();
+    let flushes = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushes++;
+      if (flushes === 1) await commitFlush.promise;
+      else {
+        cleanupStarted.resolve();
+        await cleanupFlush.promise;
+      }
+      return undefined;
+    });
+    const phases = saveProjectIndexPhases(PORT, 'p-owner-exit', 'Owner Exit', 'project-files', {
+      ownerClosed: ownerClosed.promise,
+    });
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-owner-exit' });
+    ownerClosed.resolve();
+    await expect(phases.durable).rejects.toThrow(/owner exited/i);
+
+    commitFlush.resolve();
+    await cleanupStarted.promise;
+    cleanupFlush.resolve();
+    await Promise.resolve();
+    tearOwner();
+  });
+
+  it('keeps an admitted index mutation pending past the former ack timeout', async () => {
+    vi.useFakeTimers();
+    const fs = ownerFs();
+    const flushStarted = deferred();
+    const flushGate = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushStarted.resolve();
+      await flushGate.promise;
+      return undefined;
+    });
+    const mutation = renameProjectIndex(PORT, 'p-1', 'Slow but committed');
+    let outcome = 'pending';
+    void mutation.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await flushStarted.promise;
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect(outcome).toBe('pending');
+
+    flushGate.resolve();
+    await expect(mutation).resolves.toMatchObject({
+      projects: [{ id: 'p-1', name: 'Slow but committed' }],
+    });
+    tearOwner();
+  });
+
+  it('rejects an admitted index mutation when the owner exit is certified', async () => {
+    const fs = ownerFs();
+    const flushStarted = deferred();
+    const flushGate = deferred();
+    const ownerClosed = deferred();
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushStarted.resolve();
+      await flushGate.promise;
+      return undefined;
+    });
+    const mutation = renameProjectIndex(PORT, 'p-1', 'Owner exits', {
+      ownerClosed: ownerClosed.promise,
+    });
+
+    await flushStarted.promise;
+    ownerClosed.resolve();
+    await expect(mutation).rejects.toThrow(/owner exited/i);
+
+    flushGate.resolve();
+    await Promise.resolve();
+    tearOwner();
+  });
+
   it('index-save keeps applied but rejects durable exactly when committed-source cleanup fails', async () => {
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      HoldSaveReceiptChannel as unknown as typeof BroadcastChannel;
     const fs = scratchOwnerFs('cleanup-failure-source');
     const realRm = fs.rmSync.bind(fs);
     const failure = new Error('scratch cleanup rm failed');
@@ -708,6 +1652,9 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       flushCalls++;
       return undefined;
     });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
 
     const phases = saveProjectIndexPhases(PORT, 'p-cleanup-fail', 'Cleanup Fail', 'project-files');
 
@@ -724,6 +1671,27 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(loadIndex(fs, '/').activeId).toBe('p-cleanup-fail');
     expect(fs.existsSync('/projects/p-cleanup-fail/marker.txt')).toBe(true);
     expect(fs.existsSync('/scratch')).toBe(true);
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    frames.length = 0;
+
+    probe.postMessage(command);
+
+    expect(frames.map(frameType)).toEqual([
+      'index-save-admitted',
+      'index-save-applied',
+      'index-save-terminal',
+    ]);
+    expect(frames.find((frame) => frameType(frame) === 'index-save-terminal')).toMatchObject({
+      ok: false,
+      applied: { activeId: 'p-cleanup-fail', projects: [{ id: 'p-cleanup-fail' }] },
+    });
+    probe.postMessage({
+      type: 'index-save-received',
+      opId: command.opId,
+      request: requestFromSave(command),
+    });
+    probe.close();
     tearOwner();
   });
 

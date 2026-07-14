@@ -339,11 +339,11 @@ describe('install stamp (ADR-0135)', () => {
 
   it('does not construct a trusted claim with a pending-only epoch', () => {
     expect(
-      createInstallStamp(
-        ROOT,
-        JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
-        { slug: 'real-vite', packages: 14, epoch: 'forged:1' },
-      ),
+      createInstallStamp(ROOT, JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }), {
+        slug: 'real-vite',
+        packages: 14,
+        epoch: 'forged:1',
+      }),
     ).toBeNull();
   });
 
