@@ -182,7 +182,7 @@ export function createInstallStamp(
     installArtifactIdentity,
     deps,
     packages: payload.packages,
-  };
+  } satisfies Omit<InstallStamp, 'durability' | 'epoch'>;
   if (payload.durability === 'pending') {
     if (typeof payload.epoch !== 'string' || payload.epoch.length === 0) return null;
     return { ...stamp, durability: 'pending', epoch: payload.epoch };
