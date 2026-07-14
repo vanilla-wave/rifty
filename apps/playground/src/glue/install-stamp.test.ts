@@ -11,6 +11,7 @@ import {
   installStampSatisfiedForPackageJson,
   installStampSatisfiedForPackageJsonSync,
   isInstallStampPath,
+  parseInstallStamp,
   readEffectiveDeps,
   readInstallStamp,
   readInstallStampSync,
@@ -288,6 +289,48 @@ describe('install stamp (ADR-0135)', () => {
     expect(await readInstallStamp(vfs, ROOT)).toBeNull();
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
+
+  it.each([
+    ['negative package count', 'packages', -1],
+    ['fractional package count', 'packages', 1.5],
+    ['unsafe package count', 'packages', Number.MAX_SAFE_INTEGER + 1],
+    ['non-string dependency-map member', 'deps', { vite: '^5.4.0', malformed: 42 }],
+  ] as const)('treats a v3 claim with %s as a miss', async (_case, field, value) => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const stamp = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+      string,
+      unknown
+    >;
+    stamp[field] = value;
+    const stampText = JSON.stringify(stamp);
+    await vfs.writeFile(installStampPath(ROOT), stampText);
+    const enc = new TextEncoder();
+    const fs: InstallStampSyncFs = {
+      existsSync: (path) => path === installStampPath(ROOT),
+      readFileBytesSync: () => enc.encode(stampText),
+    };
+
+    expect(parseInstallStamp(stamp, ROOT)).toBeNull();
+    await expect(readInstallStamp(vfs, ROOT)).resolves.toBeNull();
+    expect(readInstallStampSync(fs, ROOT)).toBeNull();
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+  });
+
+  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'does not construct a v3 claim with package count %s',
+    (packages) => {
+      expect(
+        createInstallStamp(
+          ROOT,
+          JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
+          { slug: 'real-vite', packages },
+        ),
+      ).toBeNull();
+    },
+  );
 
   it('is not satisfied for a different template package.json under the same slug', async () => {
     const vfs = new MemoryVfs();

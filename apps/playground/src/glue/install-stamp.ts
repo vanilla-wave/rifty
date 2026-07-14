@@ -101,6 +101,15 @@ function readStringMap(value: unknown): Record<string, string> {
   );
 }
 
+function readExactStringMap(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (!entries.every((entry): entry is [string, string] => typeof entry[1] === 'string')) {
+    return null;
+  }
+  return Object.fromEntries(entries);
+}
+
 export function effectiveDepsFromPackageJsonText(text: string): Record<string, string> | null {
   let parsed: unknown;
   try {
@@ -163,6 +172,7 @@ export function createInstallStamp(
   payload: InstallStampPayload,
 ): InstallStamp | null {
   if (!isAbsolute(root)) return null;
+  if (!Number.isSafeInteger(payload.packages) || payload.packages < 0) return null;
   const canonicalRoot = normalizePath(root);
   const deps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!deps) return null;
@@ -205,14 +215,15 @@ export function parseInstallStamp(value: unknown, root: string): InstallStamp | 
     typeof raw.packageJsonText !== 'string' ||
     typeof raw.installArtifactIdentity !== 'string' ||
     !/^sha256:[0-9a-f]{64}$/.test(raw.installArtifactIdentity) ||
-    typeof raw.packages !== 'number'
+    typeof raw.packages !== 'number' ||
+    !Number.isSafeInteger(raw.packages) ||
+    raw.packages < 0
   ) {
     return null;
   }
   const exactDeps = effectiveDepsFromPackageJsonText(raw.packageJsonText);
-  if (!exactDeps || !raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps))
-    return null;
-  const deps = readStringMap(raw.deps);
+  const deps = readExactStringMap(raw.deps);
+  if (!exactDeps || !deps) return null;
   if (!depsEqual(deps, exactDeps)) return null;
   if (raw.durability !== undefined && raw.durability !== 'pending') return null;
   if (raw.epoch !== undefined && typeof raw.epoch !== 'string') return null;
