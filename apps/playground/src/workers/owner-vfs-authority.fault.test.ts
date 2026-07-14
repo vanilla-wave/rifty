@@ -1,12 +1,25 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { OperationIdReuseError, VfsVersionConflictError } from '../glue/owner-vfs-protocol.ts';
-import { createOwnerVfsAuthority } from './owner-vfs-authority.ts';
+import {
+  type HostCommitAck,
+  OperationIdReuseError,
+  VfsVersionConflictError,
+} from '../glue/owner-vfs-protocol.ts';
+import { type OwnerVfsAuthority, createOwnerVfsAuthority } from './owner-vfs-authority.ts';
 
 const encoder = new TextEncoder();
 
+function successTerminal(ack: HostCommitAck) {
+  return {
+    type: 'rifty:owner-vfs-commit-ack' as const,
+    operationId: ack.operationId,
+    ok: true as const,
+    ack,
+  };
+}
+
 describe('owner VFS authority faults', () => {
-  it('releases retained commit bytes only after the exact terminal ACK is received', () => {
+  it('releases retained commit bytes only after exact terminal cleanup', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',
     });
@@ -18,14 +31,16 @@ describe('owner VFS authority faults', () => {
       expectedVersion: null,
     };
     const ack = authority.applyHostCommit(request);
-    authority.releaseHostCommit(ack);
+    const terminal = successTerminal(ack);
+    authority.retainHostCommitTerminal(terminal);
+    authority.cleanupHostCommitTerminal(terminal);
 
     // Once the terminal response is received, a late request enters normal CAS
     // validation instead of replaying an owner-held copy of the large payload.
     expect(() => authority.applyHostCommit(request)).toThrow(VfsVersionConflictError);
   });
 
-  it('keeps the original replay record through divergent request and receipt reuse', () => {
+  it('keeps the original replay record through divergent request and cleanup reuse', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',
     });
@@ -37,17 +52,22 @@ describe('owner VFS authority faults', () => {
       expectedVersion: null,
     };
     const ack = authority.applyHostCommit(request);
+    const terminal = successTerminal(ack);
+    authority.retainHostCommitTerminal(terminal);
 
     expect(() =>
       authority.applyHostCommit({ ...request, data: encoder.encode('divergent') }),
     ).toThrow(OperationIdReuseError);
     expect(() =>
-      authority.releaseHostCommit({ ...ack, treeRevision: ack.treeRevision + 1 }),
+      authority.cleanupHostCommitTerminal({
+        ...terminal,
+        ack: { ...ack, treeRevision: ack.treeRevision + 1 },
+      }),
     ).toThrow(OperationIdReuseError);
     expect(authority.applyHostCommit({ ...request, data: request.data.slice() })).toEqual(ack);
   });
 
-  it('recovers the retained exact ACK after a divergent receipt without releasing it', () => {
+  it('recovers the retained exact terminal after divergent cleanup without releasing it', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',
     });
@@ -59,14 +79,46 @@ describe('owner VFS authority faults', () => {
       expectedVersion: null,
     };
     const ack = authority.applyHostCommit(request);
+    const terminal = successTerminal(ack);
+    authority.retainHostCommitTerminal(terminal);
 
     expect(() =>
-      authority.releaseHostCommit({ ...ack, treeRevision: ack.treeRevision + 1 }),
+      authority.cleanupHostCommitTerminal({
+        ...terminal,
+        ack: { ...ack, treeRevision: ack.treeRevision + 1 },
+      }),
     ).toThrow(OperationIdReuseError);
-    expect(authority.retainedHostCommit(request.operationId)).toEqual(ack);
+    expect(authority.retainedHostCommitTerminal(request.operationId)).toEqual(terminal);
 
-    authority.releaseHostCommit(ack);
-    expect(authority.retainedHostCommit(request.operationId)).toBeNull();
+    authority.cleanupHostCommitTerminal(terminal);
+    expect(authority.retainedHostCommitTerminal(request.operationId)).toBeNull();
+  });
+
+  it('retains the full terminal until idempotent final cleanup after one apply', () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'full-terminal-cleanup',
+      path: '/value.txt',
+      data: encoder.encode('original'),
+      expectedVersion: null,
+    };
+    const ack = authority.applyHostCommit(request);
+    const terminal = successTerminal(ack);
+    const cleanupAuthority: OwnerVfsAuthority = authority;
+
+    cleanupAuthority.retainHostCommitTerminal(terminal);
+    expect(cleanupAuthority.retainedHostCommitTerminal(request.operationId)).toEqual(terminal);
+    expect(authority.applyHostCommit(request)).toEqual(ack);
+
+    cleanupAuthority.cleanupHostCommitTerminal(terminal);
+    expect(cleanupAuthority.retainedHostCommitTerminal(request.operationId)).toBeNull();
+    expect(() => cleanupAuthority.cleanupHostCommitTerminal(terminal)).not.toThrow();
+    expect(
+      authority.snapshot().entries.filter((entry) => entry.path === request.path),
+    ).toHaveLength(1);
   });
 
   it('does not publish a revision when the real backend rejects before mutation', () => {

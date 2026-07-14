@@ -572,6 +572,147 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     tearOwner();
   });
 
+  it('fences queued and future mutations after a durability failure without publishing poisoned state', async () => {
+    const fs = ownerFs();
+    const flushGate = deferred();
+    const flushStarted = deferred();
+    const failure = new Error('project index durability authority failed');
+    failure.name = 'ProjectIndexDurabilityError';
+    let flushCalls = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushCalls++;
+      if (flushCalls === 1) {
+        flushStarted.resolve();
+        await flushGate.promise;
+        throw failure;
+      }
+      return undefined;
+    });
+    const broadcasts: ProjectIndex[] = [];
+    const observer = subscribeProjectIndex(PORT, (index) => broadcasts.push(index));
+    await Promise.resolve();
+
+    const failed = renameProjectIndex(PORT, 'p-1', 'Poisoned Rename');
+    await flushStarted.promise;
+    const queued = markScratchDirtyIndex(PORT, 'project-files');
+    flushGate.resolve();
+    const [failedOutcome, queuedOutcome] = await Promise.allSettled([failed, queued]);
+    const futureOutcome = await settlePromptly(markScratchDirtyIndex(PORT, 'project-files'));
+    const passiveReplies: ProjectIndex[] = [];
+    const passive = subscribeProjectIndex(PORT, (index) => passiveReplies.push(index));
+    await Promise.resolve();
+
+    expect([failedOutcome, queuedOutcome]).toMatchObject([
+      {
+        status: 'rejected',
+        reason: {
+          name: 'ProjectIndexDurabilityError',
+          message: 'project index durability authority failed',
+        },
+      },
+      {
+        status: 'rejected',
+        reason: {
+          name: 'ProjectIndexDurabilityError',
+          message: 'project index durability authority failed',
+        },
+      },
+    ]);
+    expect(futureOutcome).toMatchObject({
+      status: 'rejected',
+      error: {
+        name: 'ProjectIndexDurabilityError',
+        message: 'project index durability authority failed',
+      },
+    });
+    expect(flushCalls).toBe(1);
+    expect(broadcasts.at(-1)).toMatchObject({ projects: [{ id: 'p-1', name: 'A' }] });
+    expect(passiveReplies).toHaveLength(1);
+    expect(passiveReplies[0]).toMatchObject({ projects: [{ id: 'p-1', name: 'A' }] });
+
+    passive.dispose();
+    observer.dispose();
+    tearOwner();
+  });
+
+  it.each(durabilityPublicationScenarios)(
+    'fences later mutations when $name loses its durability proof',
+    async ({ name, createFs, mutate, before }) => {
+      const fs = createFs();
+      const failure = new Error(`${name} durability proof failed`);
+      failure.name = 'ProjectIndexDurabilityError';
+      let flushCalls = 0;
+      const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+        flushCalls++;
+        throw failure;
+      });
+
+      const failedOutcome = await settlePromptly(mutate());
+      const laterOutcome = await settlePromptly(markScratchDirtyIndex(PORT, 'project-files'));
+      const passiveReplies: ProjectIndex[] = [];
+      const passive = subscribeProjectIndex(PORT, (index) => passiveReplies.push(index));
+      await Promise.resolve();
+
+      expect(failedOutcome).toMatchObject({
+        status: 'rejected',
+        error: { name: 'ProjectIndexDurabilityError', message: `${name} durability proof failed` },
+      });
+      expect(laterOutcome).toMatchObject({
+        status: 'rejected',
+        error: { name: 'ProjectIndexDurabilityError', message: `${name} durability proof failed` },
+      });
+      expect(flushCalls).toBe(1);
+      expect(passiveReplies).toHaveLength(1);
+      expect(passiveReplies[0]).toMatchObject(before);
+
+      passive.dispose();
+      tearOwner();
+    },
+  );
+
+  it('fences later mutations when Save loses durability after its applied state', async () => {
+    const fs = scratchOwnerFs('save-durability-fence');
+    const failure = new Error('Save durability proof failed');
+    failure.name = 'ProjectIndexDurabilityError';
+    let flushCalls = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', async () => {
+      flushCalls++;
+      throw failure;
+    });
+
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-save-durability-fence',
+      'Save Durability Fence',
+      'project-files',
+    );
+    const appliedOutcome = await settlePromptly(phases.applied);
+    const durableOutcome = await settlePromptly(phases.durable);
+    const laterOutcome = await settlePromptly(markScratchDirtyIndex(PORT, 'project-files'));
+    const passiveReplies: ProjectIndex[] = [];
+    const passive = subscribeProjectIndex(PORT, (index) => passiveReplies.push(index));
+    await Promise.resolve();
+
+    expect(appliedOutcome).toMatchObject({
+      status: 'resolved',
+      value: { activeId: 'p-save-durability-fence' },
+    });
+    expect(durableOutcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ProjectIndexDurabilityError', message: 'Save durability proof failed' },
+    });
+    expect(laterOutcome).toMatchObject({
+      status: 'rejected',
+      error: { name: 'ProjectIndexDurabilityError', message: 'Save durability proof failed' },
+    });
+    expect(flushCalls).toBe(1);
+    expect(passiveReplies).toHaveLength(1);
+    expect(passiveReplies[0]).toMatchObject({ activeId: 'scratch', projects: [] });
+
+    passive.dispose();
+    tearOwner();
+  });
+
   it('index-save commits /scratch → /projects/<id>, flips the index, then cleans stale source', async () => {
     const fs = scratchOwnerFs('alpha-bytes');
     const tearOwner = serveProjectIndex(PORT, fs, '/');
@@ -1167,6 +1308,58 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     expect(closeCalls).toBe(2);
   });
 
+  it('retries exact cleanup confirmation until a dropped closed frame is delivered', async () => {
+    vi.useFakeTimers();
+    let cleanupConfirmationPosts = 0;
+    let closedPosts = 0;
+    let closeCalls = 0;
+    const firstClosed = deferred();
+    class DropFirstClosedChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        if (frameType(data) === 'index-save-release-confirmed') cleanupConfirmationPosts++;
+        if (frameType(data) === 'index-save-closed') {
+          closedPosts++;
+          firstClosed.resolve();
+          if (closedPosts === 1) return;
+        }
+        super.postMessage(data);
+      }
+      override close(): void {
+        closeCalls++;
+        super.close();
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropFirstClosedChannel as unknown as typeof BroadcastChannel;
+    const tearOwner = serveProjectIndex(PORT, scratchOwnerFs('dropped-closed'), '/');
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-dropped-closed',
+      'Dropped Closed',
+      'project-files',
+    );
+
+    await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-dropped-closed' });
+    await firstClosed.promise;
+    await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-dropped-closed' });
+    expect(cleanupConfirmationPosts).toBe(1);
+    expect(closedPosts).toBe(1);
+    expect(closeCalls).toBe(0);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(251);
+    expect(cleanupConfirmationPosts).toBe(2);
+    expect(closedPosts).toBe(2);
+    expect(closeCalls).toBe(1);
+    expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(1);
+    expect(FakeChannel.postsAfterClose).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    tearOwner();
+    await Promise.resolve();
+    expect(closeCalls).toBe(2);
+  });
+
   it('stops status polling while an exact terminal receipt retries', async () => {
     vi.useFakeTimers();
     let savePosts = 0;
@@ -1265,6 +1458,77 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
 
     expect(afterExactReceiptRetry).toBe('resolved');
     expect(terminalReleasePosts).toBe(2);
+  });
+
+  it('retains the exact terminal across a dropped release and divergent same-op candidate', async () => {
+    let terminalReleasePosts = 0;
+    let closedPosts = 0;
+    const firstTerminalRelease = deferred();
+    class DropFirstExactReleaseChannel extends FakeChannel {
+      override postMessage(data: unknown): void {
+        const candidate =
+          data && typeof data === 'object'
+            ? (data as { readonly candidate?: unknown }).candidate
+            : undefined;
+        if (frameType(data) === 'index-save-released' && isSaveTerminalOutcome(candidate)) {
+          terminalReleasePosts++;
+          firstTerminalRelease.resolve();
+          if (terminalReleasePosts === 1) return;
+        }
+        if (frameType(data) === 'index-save-closed') closedPosts++;
+        super.postMessage(data);
+      }
+    }
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      DropFirstExactReleaseChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('dropped-release-divergent');
+    let executions = 0;
+    const tearOwner = serveProjectIndex(PORT, fs, '/', undefined, undefined, undefined, {
+      reset: async (_target, prepare) => {
+        executions++;
+        const plan = await prepare();
+        if (plan.status === 'ready') await plan.mutate();
+      },
+    });
+    const probe = new FakeChannel(fakeChannelName());
+    const frames: unknown[] = [];
+    probe.addEventListener('message', (event) => frames.push(event.data));
+    const phases = saveProjectIndexPhases(
+      PORT,
+      'p-dropped-release-divergent',
+      'Dropped Release Divergent',
+      'project-files',
+    );
+
+    await firstTerminalRelease.promise;
+    const command = frames.find(isSaveCommand);
+    if (!command) throw new Error('expected captured index-save command');
+    probe.postMessage({
+      type: 'index-save-terminal',
+      opId: command.opId,
+      request: requestFromSave(command),
+      ok: false,
+      error: { name: 'ForgedAfterDroppedRelease', message: 'forged after dropped release' },
+    } satisfies SaveTerminalOutcome);
+    const outcomes = await Promise.allSettled([phases.applied, phases.durable]);
+
+    const replayedTerminal = new Promise<SaveTerminalOutcome>((resolve) => {
+      probe.addEventListener('message', (event) => {
+        if (isSaveTerminalOutcome(event.data)) resolve(event.data);
+      });
+    });
+    probe.postMessage(command);
+    await replayedTerminal;
+    probe.close();
+    tearOwner();
+
+    expect(outcomes).toMatchObject([
+      { status: 'fulfilled', value: { activeId: command.id } },
+      { status: 'fulfilled', value: { activeId: command.id } },
+    ]);
+    expect(terminalReleasePosts).toBeGreaterThanOrEqual(2);
+    expect(closedPosts).toBeGreaterThanOrEqual(1);
+    expect(executions).toBe(2);
   });
 
   it('keeps a forged same-request terminal success pending until the owner certifies its exact outcome', async () => {
@@ -1690,11 +1954,12 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-terminal-success' });
     await expect(phases.durable).resolves.toMatchObject({ activeId: 'p-terminal-success' });
     expect(frames.map(frameType)).toContain('index-save-released');
+    expect(frames.map(frameType)).toContain('index-save-closed');
     expect(FakeChannel.buses.get(fakeChannelName())?.size).toBe(2);
     const releases = frames.filter((frame) => frameType(frame) === 'index-save-released').length;
     probe.postMessage(saveReceipt(terminal));
     expect(frames.filter((frame) => frameType(frame) === 'index-save-released')).toHaveLength(
-      releases + 1,
+      releases,
     );
     expect(executions).toBe(1);
 

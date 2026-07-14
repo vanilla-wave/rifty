@@ -112,6 +112,14 @@ type IndexSaveReleasedFrame = {
   readonly type: 'index-save-released';
   readonly candidate: IndexSaveOutcomeFrame;
 };
+type IndexSaveReleaseConfirmedFrame = {
+  readonly type: 'index-save-release-confirmed';
+  readonly candidate: IndexSaveTerminalFrame;
+};
+type IndexSaveClosedFrame = {
+  readonly type: 'index-save-closed';
+  readonly candidate: IndexSaveTerminalFrame;
+};
 /** Rename a named project in the index (ADR-0165 §9). */
 type IndexRenameFrame = {
   readonly type: 'index-rename';
@@ -187,6 +195,8 @@ type IndexFrame =
   | IndexSaveConflictFrame
   | IndexSaveReceivedFrame
   | IndexSaveReleasedFrame
+  | IndexSaveReleaseConfirmedFrame
+  | IndexSaveClosedFrame
   | IndexMutationFrame;
 
 function saveRequest(frame: IndexSaveRequest): IndexSaveRequest {
@@ -288,11 +298,32 @@ export function serveProjectIndex(
   // rejected. Passive readers may observe only the last index whose complete
   // operation reached its durability boundary.
   let durableIndex = loadIndex(fs, base);
+  type QueuedMutation = {
+    readonly opId: string | undefined;
+    readonly mutate: () => Promise<void>;
+    readonly reject: (cause: unknown) => void;
+    unproven: boolean;
+  };
+  const mutationQueue: QueuedMutation[] = [];
+  let drainingMutations = false;
+  let activeMutation: QueuedMutation | null = null;
+  let authorityFailure: Error | null = null;
+  const markAuthorityUnproven = (): void => {
+    if (activeMutation) activeMutation.unproven = true;
+  };
+  const proveAuthority = (): void => {
+    if (activeMutation) activeMutation.unproven = false;
+  };
+  const writeAuthorityIndex = (index: ProjectIndex): void => {
+    markAuthorityUnproven();
+    writeIndex(fs, base, index);
+  };
   type OperationRecord = {
     readonly request: IndexSaveRequest;
     readonly admitted: IndexSaveAdmittedFrame;
     applied?: IndexSaveAppliedFrame;
     terminal?: IndexSaveTerminalFrame;
+    releasing?: IndexSaveTerminalFrame;
   };
   // Only Save retransmits before admission; one record makes those frames
   // idempotent without retaining every one-shot dirty/rename/reset operation.
@@ -303,7 +334,8 @@ export function serveProjectIndex(
       | IndexSaveAppliedFrame
       | IndexSaveTerminalFrame
       | IndexSaveConflictFrame
-      | IndexSaveReleasedFrame,
+      | IndexSaveReleasedFrame
+      | IndexSaveClosedFrame,
   ): void => {
     if (!torn) channel.postMessage(frame);
   };
@@ -390,14 +422,19 @@ export function serveProjectIndex(
   };
   const publishCurrentAsDurable = (opId?: string): void => {
     durableIndex = loadIndex(fs, base);
+    proveAuthority();
     ack(opId, publishDurable());
   };
   const publishCurrentSaveAsDurable = (opId?: string): void => {
     durableIndex = loadIndex(fs, base);
+    proveAuthority();
     saveTerminal(opId, { ok: true, index: publishDurable() });
   };
   const viteConfigSeedStore = syncViteConfigSeedStore(fs, flush ?? (async () => undefined));
-  const flushDurable = (): Promise<void> => viteConfigSeedStore.flush();
+  const flushDurable = (): Promise<void> => {
+    markAuthorityUnproven();
+    return viteConfigSeedStore.flush();
+  };
   // Drain the OPFS write-through after a tree mutation, then publish. Errors
   // surface loud (rejected promise → owner worker-entry → stderr), never swallowed.
   const flushThenPublish = async (opId?: string): Promise<void> => {
@@ -426,6 +463,7 @@ export function serveProjectIndex(
       const plan = await prepare();
       assertServing();
       if (plan.status === 'noop') return plan;
+      markAuthorityUnproven();
       return {
         status: 'ready',
         mutate: async () => {
@@ -464,7 +502,7 @@ export function serveProjectIndex(
       return {
         status: 'ready',
         mutate: async () => {
-          writeIndex(fs, base, { ...index, activeId, projects }); // commit FIRST
+          writeAuthorityIndex({ ...index, activeId, projects }); // commit FIRST
           fs.rmSync(root, { recursive: true, force: true }); // then drop the tree
           await flushThenPublish(opId); // durable, then every page mirror reconciles
         },
@@ -484,6 +522,7 @@ export function serveProjectIndex(
     const cleanupThenDurableAck = async (committed: ProjectIndex): Promise<void> => {
       if (flush) await flushDurable();
       assertServing();
+      markAuthorityUnproven();
       cleanupCommittedScratchSource(fs, committed);
       if (flush) await flushDurable();
       publishCurrentSaveAsDurable(opId);
@@ -525,6 +564,7 @@ export function serveProjectIndex(
       return {
         status: 'ready',
         mutate: async () => {
+          markAuthorityUnproven();
           const committed = commitScratchProjectSave(fs, reconciled, id, name);
           saveApplied(opId, committed);
           await cleanupThenDurableAck(committed);
@@ -537,7 +577,7 @@ export function serveProjectIndex(
   const renameProject = async (projectId: string, name: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     const projects = index.projects.map((p) => (p.id === projectId ? { ...p, name } : p));
-    writeIndex(fs, base, { ...index, projects });
+    writeAuthorityIndex({ ...index, projects });
     await flushThenPublish(opId);
   };
   // ADR-0165 §6 reset: re-seed the ACTIVE scratch from its starter baseline
@@ -558,8 +598,9 @@ export function serveProjectIndex(
         status: 'ready',
         mutate: async () => {
           // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
+          markAuthorityUnproven();
           resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-          writeIndex(fs, base, {
+          writeAuthorityIndex({
             ...index,
             scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
           });
@@ -591,11 +632,12 @@ export function serveProjectIndex(
       return {
         status: 'ready',
         mutate: async () => {
+          markAuthorityUnproven();
           resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
           const projects = index.projects.map((p) =>
             p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
           );
-          writeIndex(fs, base, { ...index, projects });
+          writeAuthorityIndex({ ...index, projects });
           await claimViteConfigSeed(root, viteConfigSeedStore, {
             id: starterSpec.id,
             seedFiles,
@@ -632,8 +674,9 @@ export function serveProjectIndex(
       return {
         status: 'ready',
         mutate: async () => {
+          markAuthorityUnproven();
           resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-          writeIndex(fs, base, {
+          writeAuthorityIndex({
             ...index,
             activeId: 'scratch',
             scratch: { starter, dirty: false, editedAt: 'no edits yet' },
@@ -656,24 +699,19 @@ export function serveProjectIndex(
     if (activeId !== 'scratch' && !index.projects.some((p) => p.id === activeId)) {
       throw new Error(`unknown active project ${activeId}`);
     }
-    writeIndex(fs, base, { ...index, activeId });
+    writeAuthorityIndex({ ...index, activeId });
     await flushThenPublish(opId);
   };
   const markScratchDirty = async (starter: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     if (index.activeId === 'scratch' && (index.scratch !== null || fs.existsSync('/scratch'))) {
       const scratch = index.scratch ?? { starter, dirty: false, editedAt: 'no edits yet' };
-      writeIndex(fs, base, {
+      writeAuthorityIndex({
         ...index,
         scratch: { ...scratch, dirty: true, editedAt: new Date().toISOString() },
       });
     }
     await flushThenPublish(opId);
-  };
-  type QueuedMutation = {
-    readonly opId: string | undefined;
-    readonly mutate: () => Promise<void>;
-    readonly reject: (cause: unknown) => void;
   };
   const postSaveConflict = (opId: string, request: IndexSaveRequest): void => {
     const error = new Error(`project index operation id reused with different input (${opId})`);
@@ -685,9 +723,6 @@ export function serveProjectIndex(
       error: { name: error.name, message: error.message },
     });
   };
-  const mutationQueue: QueuedMutation[] = [];
-  let drainingMutations = false;
-  let activeMutation: QueuedMutation | null = null;
   const drainMutations = async (): Promise<void> => {
     try {
       while (!torn && mutationQueue.length > 0) {
@@ -695,9 +730,12 @@ export function serveProjectIndex(
         if (!queued) break;
         activeMutation = queued;
         try {
-          await queued.mutate();
+          if (authorityFailure) queued.reject(authorityFailure);
+          else await queued.mutate();
         } catch (error) {
-          queued.reject(error);
+          const exactError = error instanceof Error ? error : new Error(String(error));
+          if (queued.unproven && !authorityFailure) authorityFailure = exactError;
+          queued.reject(authorityFailure ?? exactError);
         } finally {
           if (activeMutation === queued) activeMutation = null;
         }
@@ -717,7 +755,7 @@ export function serveProjectIndex(
     reject: (cause: unknown) => void = (cause) => nack(frame.opId, cause),
   ): boolean => {
     if (torn) return false;
-    mutationQueue.push({ opId: frame.opId, mutate, reject });
+    mutationQueue.push({ opId: frame.opId, mutate, reject, unproven: false });
     return true;
   };
   const enqueueMutation = (frame: IndexMutationFrame, mutate: () => Promise<void>): void => {
@@ -762,24 +800,38 @@ export function serveProjectIndex(
   const receiveSaveOutcome = (frame: IndexSaveReceivedFrame): void => {
     const { candidate } = frame;
     const record = saveOperations.get(candidate.opId);
-    if (!record) {
-      // A prior exact terminal receipt may have deleted the ledger before its
-      // release arrived. Same-sender request→receipt order makes this a retry.
-      postSaveFrame({ type: 'index-save-released', candidate });
-      return;
-    }
+    if (!record) return;
     const recorded = candidate.type === 'index-save-applied' ? record.applied : record.terminal;
     if (!recorded || !equalSaveOutcome(recorded, candidate)) {
       replayOperation(record);
       return;
     }
+    if (recorded.type === 'index-save-terminal') record.releasing = recorded;
     postSaveFrame({ type: 'index-save-released', candidate: recorded });
-    if (recorded.type === 'index-save-terminal') saveOperations.delete(recorded.opId);
+  };
+  const receiveSaveReleaseConfirmation = (frame: IndexSaveReleaseConfirmedFrame): void => {
+    const { candidate } = frame;
+    const record = saveOperations.get(candidate.opId);
+    if (!record) {
+      postSaveFrame({ type: 'index-save-closed', candidate });
+      return;
+    }
+    if (!record.releasing || !equalSaveOutcome(record.releasing, candidate)) {
+      replayOperation(record);
+      if (record.releasing) {
+        postSaveFrame({ type: 'index-save-released', candidate: record.releasing });
+      }
+      return;
+    }
+    const closed = record.releasing;
+    saveOperations.delete(closed.opId);
+    postSaveFrame({ type: 'index-save-closed', candidate: closed });
   };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
     if (frame.type === 'index-req') publishDurable();
     else if (frame.type === 'index-save-received') receiveSaveOutcome(frame);
+    else if (frame.type === 'index-save-release-confirmed') receiveSaveReleaseConfirmation(frame);
     else if (frame.type === 'index-delete')
       enqueueMutation(frame, () => deleteTree(frame.projectId, frame.opId));
     else if (frame.type === 'index-save') enqueueSave(frame);
@@ -813,6 +865,7 @@ export function serveProjectIndex(
       else postSaveFrame(record.terminal);
       if (record.terminal) {
         postSaveFrame({ type: 'index-save-released', candidate: record.terminal });
+        postSaveFrame({ type: 'index-save-closed', candidate: record.terminal });
       }
     }
     saveOperations.clear();
@@ -905,6 +958,7 @@ function postIndexMutationPhases(
   let saveRetryTimeout: ReturnType<typeof setTimeout> | undefined;
   let statusPollTimeout: ReturnType<typeof setTimeout> | undefined;
   let receiptRetryTimeout: ReturnType<typeof setTimeout> | undefined;
+  let cleanupRetryTimeout: ReturnType<typeof setTimeout> | undefined;
   let appliedSettled = false;
   let durableSettled = false;
   let handedOff = false;
@@ -912,6 +966,7 @@ function postIndexMutationPhases(
   let released = false;
   let appliedCandidate: IndexSaveAppliedFrame | undefined;
   let terminalCandidate: IndexSaveTerminalFrame | undefined;
+  let releasedTerminal: IndexSaveTerminalFrame | undefined;
 
   let onMessage: (event: MessageEvent) => void = () => {};
   let closed = false;
@@ -921,6 +976,7 @@ function postIndexMutationPhases(
     if (saveRetryTimeout !== undefined) clearTimeout(saveRetryTimeout);
     if (statusPollTimeout !== undefined) clearTimeout(statusPollTimeout);
     if (receiptRetryTimeout !== undefined) clearTimeout(receiptRetryTimeout);
+    if (cleanupRetryTimeout !== undefined) clearTimeout(cleanupRetryTimeout);
     channel.removeEventListener('message', onMessage as unknown as EventListener);
     channel.close();
   };
@@ -1051,12 +1107,49 @@ function postIndexMutationPhases(
   }): boolean => reply.opId === opId && equalSaveRequest(reply.request, request);
   const mismatchError = (): Error =>
     new Error(`project index ${request.type} ack did not match committed state`);
+  const sendReleaseConfirmation = (): void => {
+    if (closed || !releasedTerminal) return;
+    try {
+      channel.postMessage({
+        type: 'index-save-release-confirmed',
+        candidate: releasedTerminal,
+      } satisfies IndexSaveReleaseConfirmedFrame);
+    } catch {
+      // Exact release already settled the caller; retry only owner-ledger cleanup.
+    }
+    if (releasedTerminal && cleanupRetryTimeout === undefined) {
+      cleanupRetryTimeout = setTimeout(() => {
+        cleanupRetryTimeout = undefined;
+        sendReleaseConfirmation();
+      }, INDEX_APPLIED_RETRY_MS);
+    }
+  };
 
   onMessage = (event: MessageEvent): void => {
     const reply = event.data as IndexFrame;
+    if (reply.type === 'index-save-closed') {
+      if (!releasedTerminal || !equalSaveOutcome(releasedTerminal, reply.candidate)) return;
+      releasedTerminal = undefined;
+      if (cleanupRetryTimeout !== undefined) {
+        clearTimeout(cleanupRetryTimeout);
+        cleanupRetryTimeout = undefined;
+      }
+      settlements.dispose(new Error(`project index ${request.type} cleanup complete`));
+      return;
+    }
     if (reply.type === 'index-save-released') {
       const { candidate } = reply;
       if (!matchesRequest(candidate)) return;
+      if (released) {
+        if (
+          candidate.type === 'index-save-terminal' &&
+          releasedTerminal &&
+          equalSaveOutcome(releasedTerminal, candidate)
+        ) {
+          sendReleaseConfirmation();
+        }
+        return;
+      }
       if (candidate.type === 'index-save-applied') {
         if (!appliedCandidate || !equalSaveOutcome(appliedCandidate, candidate)) return;
         appliedCandidate = undefined;
@@ -1070,6 +1163,7 @@ function postIndexMutationPhases(
       terminalCandidate = undefined;
       appliedCandidate = undefined;
       released = true;
+      releasedTerminal = candidate;
       stopStatusPolling();
       if (receiptRetryTimeout !== undefined) {
         clearTimeout(receiptRetryTimeout);
@@ -1093,9 +1187,10 @@ function postIndexMutationPhases(
         }
         rejectDurable(error);
       }
-      settlements.dispose(new Error(`project index ${request.type} receipt complete`));
+      sendReleaseConfirmation();
       return;
     }
+    if (released) return;
     if (reply.type === 'index-save-conflict') {
       if (!matchesRequest(reply)) return;
       stopPreAdmissionRetries();

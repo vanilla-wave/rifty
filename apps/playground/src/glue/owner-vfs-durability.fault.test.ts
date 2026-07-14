@@ -70,6 +70,7 @@ function createHarness(writeFile: (path: string, data: Uint8Array) => Promise<vo
           message: { type: 'rifty:owner-vfs-commit', request },
           apply: (candidate) => authority.applyHostCommit(candidate),
           publishSnapshot: () => mirror.update(collectSnapshot(authority, '/')),
+          retain: (terminal) => authority.retainHostCommitTerminal(terminal),
           send: (message) => {
             if (message.ok) resolve(message.ack);
             else reject(decodeOwnerVfsError(message.error));

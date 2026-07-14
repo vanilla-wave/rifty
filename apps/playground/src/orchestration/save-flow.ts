@@ -162,7 +162,7 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
   // read like a durable `Saved as <name>`.
   async function confirmSave(name: string): Promise<void> {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || pendingSaveApplied !== null) return;
     const id = deps.createProjectId();
     const ephemeral = deps.ephemeral();
     // ADR-0165 §7 durable Save: post the on-disk move FIRST (owner copies /scratch
@@ -194,6 +194,8 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
     const saveWait = ephemeral
       ? { applied: Promise.resolve(true), durable: Promise.resolve(true) }
       : trackSave(id, durableSave);
+    // Page mirror follows proved owner apply; pre-apply failure keeps scratch exact.
+    if (!ephemeral && !(await saveWait.applied)) return;
     deps.store.confirmSave(trimmed, id);
     if (ephemeral) deps.showEphemeralSaveNotice(trimmed);
     // Save-then-continue resume (ADR-0165 §9): the switch dialog stashed a target.

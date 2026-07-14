@@ -177,17 +177,20 @@
   readers see only the last durability-proven index; Save's early applied phase
   remains operation-scoped until both persistence barriers pass. Pre-applied
   Save retries share one owner `opId` record and replay its phase result instead
-  of entering the FIFO twice. Admitted clients poll that record until terminal;
-  an ordered page receipt then releases the bounded owner record.
+  of entering the FIFO twice. An unproven durability failure fences that owner
+  before any later mutation can publish its mirror; the page flips Save only
+  after owner apply. Exact receipt → release → close confirmation then removes
+  the bounded terminal record.
 - Page→owner mutations retain their reply path after handoff: VFS commits,
   explorer writes, Git, archive import, project-index updates, and dev-config
   assignment settle only on ACK/NACK, send failure, or certified owner exit.
   Read requests and post-ACK durability observations remain bounded.
-- Conditional VFS terminals carry exact already-applied evidence when snapshot
-  publication fails. Retried receipts release the owner's full-request replay
-  record only after the page has received its terminal ACK/NACK. Unsolicited,
-  malformed, wrong-owner, and divergent terminals cannot enter that receipt
-  ledger; an admitted exact request replays until valid terminal or owner exit.
+- Conditional VFS terminals carry full semantic already-applied evidence when
+  snapshot publication fails. Retried receipts certify the owner-retained
+  success or exact NACK; a separate confirmed cleanup then releases request
+  bytes. Unsolicited, malformed, wrong-owner, divergent, and same-ACK forged
+  terminals cannot settle; an admitted exact request replays until a certified
+  terminal or owner exit.
 
 ### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 

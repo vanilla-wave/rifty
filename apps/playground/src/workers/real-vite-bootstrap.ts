@@ -62,9 +62,11 @@ import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import {
+  handleOwnerVfsCommitCleanup,
   handleOwnerVfsCommitReceipt,
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
+  isOwnerVfsCommitCleanupMessage,
   isOwnerVfsCommitIpcMessage,
   isOwnerVfsCommitReceivedMessage,
   isOwnerVfsDurabilityIpcMessage,
@@ -907,6 +909,7 @@ async function bootShellOwner(opts: {
         apply: (request) =>
           applyPackageAwareHostCommit(vfsAuthority, packageMutations, cfg.root, request),
         publishSnapshot: publishOwnerState,
+        retain: (terminal) => vfsAuthority.retainHostCommitTerminal(terminal),
         send: (ack) => kernelIpc.send?.(ack),
       });
       return;
@@ -914,9 +917,16 @@ async function bootShellOwner(opts: {
     if (isOwnerVfsCommitReceivedMessage(message)) {
       handleOwnerVfsCommitReceipt({
         message,
-        release: (ack) => vfsAuthority.releaseHostCommit(ack),
-        recover: (operationId) => vfsAuthority.retainedHostCommit(operationId),
+        retained: (operationId) => vfsAuthority.retainedHostCommitTerminal(operationId),
         send: (released) => kernelIpc.send?.(released),
+      });
+      return;
+    }
+    if (isOwnerVfsCommitCleanupMessage(message)) {
+      handleOwnerVfsCommitCleanup({
+        message,
+        cleanup: (terminal) => vfsAuthority.cleanupHostCommitTerminal(terminal),
+        send: (cleaned) => kernelIpc.send?.(cleaned),
       });
       return;
     }

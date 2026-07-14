@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as ownerVfsIpc from './owner-vfs-ipc.ts';
 import {
+  type OwnerVfsAppliedCommitTerminal,
   type OwnerVfsCommitAckMessage,
   decodeOwnerVfsError,
   encodeOwnerVfsError,
@@ -7,6 +9,8 @@ import {
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
   isOwnerVfsCommitAckMessage,
+  isOwnerVfsCommitCleanedMessage,
+  isOwnerVfsCommitCleanupMessage,
   isOwnerVfsCommitIpcMessage,
   isOwnerVfsCommitReceivedMessage,
   isOwnerVfsCommitReleasedMessage,
@@ -142,7 +146,7 @@ describe('owner VFS IPC', () => {
     expect(isOwnerVfsCommitAckMessage(message)).toBe(false);
   });
 
-  it('uses the same exact ACK validator for received and released frames', () => {
+  it('uses the same full-terminal validator for every cleanup handshake frame', () => {
     const malformed = {
       operationId: 'save',
       ownerEpoch: 'owner-a',
@@ -150,16 +154,34 @@ describe('owner VFS IPC', () => {
       versions: [{ path: '/value.txt', version: '' }],
     };
 
+    const malformedTerminal = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: malformed.operationId,
+      ok: true,
+      ack: malformed,
+    };
     expect(
       isOwnerVfsCommitReceivedMessage({
         type: 'rifty:owner-vfs-commit-received',
-        ack: malformed,
+        terminal: malformedTerminal,
       }),
     ).toBe(false);
     expect(
       isOwnerVfsCommitReleasedMessage({
         type: 'rifty:owner-vfs-commit-released',
-        ack: malformed,
+        terminal: malformedTerminal,
+      }),
+    ).toBe(false);
+    expect(
+      isOwnerVfsCommitCleanupMessage({
+        type: 'rifty:owner-vfs-commit-cleanup',
+        terminal: malformedTerminal,
+      }),
+    ).toBe(false);
+    expect(
+      isOwnerVfsCommitCleanedMessage({
+        type: 'rifty:owner-vfs-commit-cleaned',
+        terminal: malformedTerminal,
       }),
     ).toBe(false);
   });
@@ -464,6 +486,7 @@ describe('owner VFS IPC', () => {
       };
       const failure = new Error('snapshot publication failed');
       const sent: unknown[] = [];
+      const retained: unknown[] = [];
 
       handleOwnerVfsCommitRequest({
         message: {
@@ -480,6 +503,7 @@ describe('owner VFS IPC', () => {
         publishSnapshot: () => {
           throw failure;
         },
+        retain: (terminal) => retained.push(terminal),
         send: (message) => sent.push(message),
       });
       await Promise.resolve();
@@ -494,6 +518,7 @@ describe('owner VFS IPC', () => {
           applied: ack,
         },
       ]);
+      expect(retained).toEqual(sent);
     },
   );
 
@@ -523,20 +548,83 @@ describe('owner VFS IPC', () => {
         return ack;
       },
       publishSnapshot: () => events.push('publish'),
+      retain: () => events.push('retain'),
       send: (message) => {
         events.push('ack');
         sent.push(message);
       },
     });
 
-    expect(events).toEqual(['apply:save-1', 'publish', 'ack']);
+    expect(events).toEqual(['apply:save-1', 'publish', 'retain', 'ack']);
     expect(sent).toEqual([
       { type: 'rifty:owner-vfs-commit-ack', operationId: 'save-1', ok: true, ack },
     ]);
     expect(isOwnerVfsCommitAckMessage(sent[0])).toBe(true);
   });
 
-  it('releases an exact terminal only after authority cleanup', () => {
+  it('moves retained certification from an applied NACK to an honest publication retry', () => {
+    const ack: HostCommitAck = {
+      operationId: 'publication-retry',
+      ownerEpoch: 'owner-a',
+      treeRevision: 7,
+      versions: [{ path: '/src/main.ts', version: 'v7' }],
+    };
+    const request: HostCommitRequest = {
+      kind: 'write',
+      operationId: ack.operationId,
+      path: '/src/main.ts',
+      data: encoder.encode('applied'),
+      expectedVersion: 'v6',
+    };
+    let publishAttempts = 0;
+    let retained: OwnerVfsAppliedCommitTerminal | null = null;
+    const sent: OwnerVfsCommitAckMessage[] = [];
+    const options = {
+      message: { type: 'rifty:owner-vfs-commit' as const, request },
+      apply: () => ack,
+      publishSnapshot: () => {
+        publishAttempts += 1;
+        if (publishAttempts === 1) throw new Error('snapshot publication failed');
+      },
+      retain: (terminal: OwnerVfsAppliedCommitTerminal) => {
+        retained = terminal;
+      },
+      send: (message: OwnerVfsCommitAckMessage) => sent.push(message),
+    };
+
+    handleOwnerVfsCommitRequest(options);
+    handleOwnerVfsCommitRequest(options);
+
+    const appliedNack = sent[0];
+    const success = sent[1];
+    if (!appliedNack || appliedNack.ok || !appliedNack.applied || !success?.ok) {
+      throw new Error('expected applied NACK followed by success');
+    }
+    const appliedTerminal: OwnerVfsAppliedCommitTerminal = {
+      ...appliedNack,
+      applied: appliedNack.applied,
+    };
+    expect(retained).toEqual(success);
+
+    const recovered: unknown[] = [];
+    handleOwnerVfsCommitReceipt({
+      message: { type: 'rifty:owner-vfs-commit-received', terminal: appliedTerminal },
+      retained: () => retained,
+      send: (message) => recovered.push(message),
+      reportError: vi.fn(),
+    });
+    expect(recovered).toEqual([success]);
+
+    recovered.length = 0;
+    handleOwnerVfsCommitReceipt({
+      message: { type: 'rifty:owner-vfs-commit-received', terminal: success },
+      retained: () => retained,
+      send: (message) => recovered.push(message),
+    });
+    expect(recovered).toEqual([{ type: 'rifty:owner-vfs-commit-released', terminal: success }]);
+  });
+
+  it('certifies an exact retained terminal without cleaning authority state', () => {
     const events: string[] = [];
     const ack: HostCommitAck = {
       operationId: 'received-save',
@@ -544,24 +632,30 @@ describe('owner VFS IPC', () => {
       treeRevision: 8,
       versions: [{ path: '/src/main.ts', version: 'v8' }],
     };
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: ack.operationId,
+      ok: true as const,
+      ack,
+    };
 
     handleOwnerVfsCommitReceipt({
-      message: { type: 'rifty:owner-vfs-commit-received', ack },
-      release: (candidate) => {
-        expect(candidate).toBe(ack);
-        events.push('release-record');
+      message: { type: 'rifty:owner-vfs-commit-received', terminal },
+      retained: (operationId) => {
+        expect(operationId).toBe(ack.operationId);
+        events.push('read-record');
+        return terminal;
       },
-      recover: () => null,
       send: (message) => {
-        expect(message).toEqual({ type: 'rifty:owner-vfs-commit-released', ack });
+        expect(message).toEqual({ type: 'rifty:owner-vfs-commit-released', terminal });
         events.push('release-frame');
       },
     });
 
-    expect(events).toEqual(['release-record', 'release-frame']);
+    expect(events).toEqual(['read-record', 'release-frame']);
   });
 
-  it('keeps the owner alive and replays the retained ACK for a divergent receipt', () => {
+  it('keeps the owner alive and replays the retained terminal for a divergent receipt', () => {
     const exact: HostCommitAck = {
       operationId: 'received-save',
       ownerEpoch: 'owner-a',
@@ -569,33 +663,162 @@ describe('owner VFS IPC', () => {
       versions: [{ path: '/src/main.ts', version: 'v8' }],
     };
     const divergent = { ...exact, treeRevision: 7 };
+    const exactTerminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: exact.operationId,
+      ok: true as const,
+      ack: exact,
+    };
+    const divergentTerminal = { ...exactTerminal, ack: divergent };
     const send = vi.fn();
     const reportError = vi.fn();
 
     expect(() =>
       handleOwnerVfsCommitReceipt({
-        message: { type: 'rifty:owner-vfs-commit-received', ack: divergent },
-        release: () => {
-          throw new OperationIdReuseError(exact.operationId);
-        },
-        recover: (operationId) => (operationId === exact.operationId ? exact : null),
+        message: { type: 'rifty:owner-vfs-commit-received', terminal: divergentTerminal },
+        retained: (operationId) => (operationId === exact.operationId ? exactTerminal : null),
         send,
         reportError,
       }),
     ).not.toThrow();
-    expect(send).toHaveBeenCalledWith({
-      type: 'rifty:owner-vfs-commit-ack',
-      operationId: exact.operationId,
-      ok: true,
-      ack: exact,
-    });
-    expect(send).not.toHaveBeenCalledWith({
-      type: 'rifty:owner-vfs-commit-released',
-      ack: divergent,
-    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(exactTerminal);
     expect(reportError).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'OperationIdReuseError' }),
+      expect.objectContaining({ name: 'VfsCommitProtocolError' }),
     );
+  });
+
+  it.each(['applied NACK vs success', 'success vs applied NACK'] as const)(
+    'certifies the retained full terminal for same-ACK semantic divergence: %s',
+    (testCase) => {
+      const ack: HostCommitAck = {
+        operationId: `semantic-${testCase}`,
+        ownerEpoch: 'owner-a',
+        treeRevision: 8,
+        versions: [{ path: '/src/main.ts', version: 'v8' }],
+      };
+      const success = {
+        type: 'rifty:owner-vfs-commit-ack' as const,
+        operationId: ack.operationId,
+        ok: true as const,
+        ack,
+      };
+      const appliedNack = {
+        type: 'rifty:owner-vfs-commit-ack' as const,
+        operationId: ack.operationId,
+        ok: false as const,
+        error: { kind: 'error' as const, name: 'Error', message: 'publication failed' },
+        applied: ack,
+      };
+      const retained = testCase.startsWith('applied') ? appliedNack : success;
+      const divergent = testCase.startsWith('applied') ? success : appliedNack;
+      const sent: unknown[] = [];
+      const reportError = vi.fn();
+      const options = {
+        message: {
+          type: 'rifty:owner-vfs-commit-received',
+          terminal: divergent,
+        },
+        retained: () => retained,
+        send: (message: unknown) => sent.push(message),
+        reportError,
+      } as unknown as Parameters<typeof handleOwnerVfsCommitReceipt>[0];
+
+      handleOwnerVfsCommitReceipt(options);
+
+      expect(sent).toEqual([retained]);
+      expect(reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'VfsCommitProtocolError' }),
+      );
+    },
+  );
+
+  it('retains the exact terminal across a dropped release and divergent receipt retry', () => {
+    const exactAck: HostCommitAck = {
+      operationId: 'dropped-release',
+      ownerEpoch: 'owner-a',
+      treeRevision: 8,
+      versions: [{ path: '/src/main.ts', version: 'v8' }],
+    };
+    const divergentAck = { ...exactAck, treeRevision: 7 };
+    const exactTerminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: exactAck.operationId,
+      ok: true as const,
+      ack: exactAck,
+    };
+    const divergentTerminal = { ...exactTerminal, ack: divergentAck };
+    const sent: unknown[] = [];
+    const reportError = vi.fn();
+    const deliver = (terminal: typeof exactTerminal): void => {
+      const options = {
+        message: { type: 'rifty:owner-vfs-commit-received', terminal },
+        retained: () => exactTerminal,
+        send: (message: unknown) => sent.push(message),
+        reportError,
+      } as unknown as Parameters<typeof handleOwnerVfsCommitReceipt>[0];
+      handleOwnerVfsCommitReceipt(options);
+    };
+
+    deliver(exactTerminal);
+    sent.length = 0; // drop the first release frame
+    deliver(divergentTerminal);
+
+    expect(sent).toEqual([exactTerminal]);
+    sent.length = 0;
+    deliver(exactTerminal);
+
+    expect(sent).toEqual([{ type: 'rifty:owner-vfs-commit-released', terminal: exactTerminal }]);
+    expect(reportError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'VfsCommitProtocolError' }),
+    );
+  });
+
+  it('acknowledges a retried cleanup after the first cleaned frame was dropped', () => {
+    const ack: HostCommitAck = {
+      operationId: 'cleanup-ack-dropped',
+      ownerEpoch: 'owner-a',
+      treeRevision: 8,
+      versions: [{ path: '/src/main.ts', version: 'v8' }],
+    };
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: ack.operationId,
+      ok: true as const,
+      ack,
+    };
+    let retained: typeof terminal | null = terminal;
+    let cleanupCount = 0;
+    const sent: unknown[] = [];
+    const handleCleanup = (
+      ownerVfsIpc as unknown as {
+        handleOwnerVfsCommitCleanup(options: {
+          readonly message: unknown;
+          readonly cleanup: (candidate: typeof terminal) => void;
+          readonly send: (message: unknown) => void;
+        }): void;
+      }
+    ).handleOwnerVfsCommitCleanup;
+    const deliver = (): void => {
+      handleCleanup({
+        message: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+        cleanup: (candidate) => {
+          if (retained === null) return;
+          expect(candidate).toEqual(retained);
+          retained = null;
+          cleanupCount += 1;
+        },
+        send: (message) => sent.push(message),
+      });
+    };
+
+    deliver();
+    sent.length = 0; // drop the first cleaned frame
+    deliver();
+
+    expect(cleanupCount).toBe(1);
+    expect(retained).toBeNull();
+    expect(sent).toEqual([{ type: 'rifty:owner-vfs-commit-cleaned', terminal }]);
   });
 
   it('round-trips an exact large-file version conflict as its domain class', () => {
@@ -631,6 +854,7 @@ describe('owner VFS IPC', () => {
         });
       },
       publishSnapshot: vi.fn(),
+      retain: vi.fn(),
       send: (message) => sent.push(message),
     });
 

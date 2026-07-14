@@ -10,6 +10,10 @@ import {
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { installStampPath, installTreeDir, isInstallStampPath } from '../glue/install-stamp.ts';
 import {
+  type OwnerVfsAppliedCommitTerminal,
+  equalOwnerVfsAppliedCommitTerminals,
+} from '../glue/owner-vfs-ipc.ts';
+import {
   type HostCommitAck,
   type HostCommitRequest,
   OperationIdReuseError,
@@ -30,6 +34,7 @@ interface TrackedEntry {
 interface AppliedCommit {
   readonly request: HostCommitRequest;
   readonly ack: HostCommitAck;
+  readonly terminal: OwnerVfsAppliedCommitTerminal | null;
 }
 
 interface CopyPlanEntry {
@@ -57,10 +62,11 @@ export interface OwnerVfsAuthority extends FsSync {
   /** Validate idempotency + CAS without mutating. A replay returns its prior ack. */
   validateHostCommit(request: HostCommitRequest): HostCommitAck | null;
   applyHostCommit(request: HostCommitRequest): HostCommitAck;
-  /** Read-only recovery after a divergent receipt; never releases retained bytes. */
-  retainedHostCommit(operationId: string): HostCommitAck | null;
-  /** Exact terminal receipt ends replay ownership and releases retained request bytes. */
-  releaseHostCommit(ack: HostCommitAck): void;
+  /** Latest honest publication outcome for the already-applied mutation. */
+  retainHostCommitTerminal(terminal: OwnerVfsAppliedCommitTerminal): void;
+  retainedHostCommitTerminal(operationId: string): OwnerVfsAppliedCommitTerminal | null;
+  /** Exact release confirmation ends replay ownership; missing is idempotent. */
+  cleanupHostCommitTerminal(terminal: OwnerVfsAppliedCommitTerminal): void;
   /** Preflight actual absolute ingress targets before any batch mutation. */
   assertPortablePaths(paths: readonly string[]): void;
   flush(): Promise<PersistFailureReport | undefined>;
@@ -426,19 +432,30 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       treeRevision: this.#treeRevision,
       versions: Object.freeze(versions.map((item) => Object.freeze({ ...item }))),
     });
-    this.#applied.set(request.operationId, { request: cloneRequest(request), ack });
+    this.#applied.set(request.operationId, { request: cloneRequest(request), ack, terminal: null });
     return ack;
   }
 
-  retainedHostCommit(operationId: string): HostCommitAck | null {
-    return this.#applied.get(operationId)?.ack ?? null;
+  retainHostCommitTerminal(terminal: OwnerVfsAppliedCommitTerminal): void {
+    const ack = terminal.ok ? terminal.ack : terminal.applied;
+    const prior = this.#applied.get(terminal.operationId);
+    if (!prior || !equalHostCommitAcks(prior.ack, ack)) {
+      throw new OperationIdReuseError(terminal.operationId);
+    }
+    this.#applied.set(terminal.operationId, { ...prior, terminal });
   }
 
-  releaseHostCommit(ack: HostCommitAck): void {
-    const prior = this.#applied.get(ack.operationId);
+  retainedHostCommitTerminal(operationId: string): OwnerVfsAppliedCommitTerminal | null {
+    return this.#applied.get(operationId)?.terminal ?? null;
+  }
+
+  cleanupHostCommitTerminal(terminal: OwnerVfsAppliedCommitTerminal): void {
+    const prior = this.#applied.get(terminal.operationId);
     if (!prior) return;
-    if (!equalHostCommitAcks(prior.ack, ack)) throw new OperationIdReuseError(ack.operationId);
-    this.#applied.delete(ack.operationId);
+    if (prior.terminal === null || !equalOwnerVfsAppliedCommitTerminals(prior.terminal, terminal)) {
+      throw new OperationIdReuseError(terminal.operationId);
+    }
+    this.#applied.delete(terminal.operationId);
   }
 
   #reservedClaimError(path: string): VfsError {

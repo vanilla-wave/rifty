@@ -1,4 +1,6 @@
+import { createRoot } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
+import { createPageStore } from '../glue/page-store.ts';
 import type { ProjectIndex } from '../glue/project-index.ts';
 import { type PendingSwitchTarget, type SaveFlowDeps, createSaveFlow } from './save-flow.ts';
 
@@ -92,6 +94,32 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
     expect(h.deps.store.confirmSave).toHaveBeenNthCalledWith(2, 'b', ids[1]);
   });
 
+  it('admits one Save while its owner apply proof is pending', async () => {
+    let savedId = '';
+    let resolveApplied: (index: ProjectIndex | null) => void = () => {};
+    const saveIndexPhases = vi.fn((id: string) => {
+      savedId = id;
+      return {
+        applied: new Promise<ProjectIndex | null>((resolve) => {
+          resolveApplied = resolve;
+        }),
+        durable: Promise.resolve(indexWith(id)),
+      };
+    });
+    const h = harness({
+      saveIndexPhases,
+    });
+
+    const first = h.flow.confirmSave('first');
+    const duplicate = h.flow.confirmSave('duplicate');
+    expect(saveIndexPhases).toHaveBeenCalledTimes(1);
+    expect(h.deps.createProjectId).toHaveBeenCalledTimes(1);
+
+    resolveApplied(indexWith(savedId));
+    await Promise.all([first, duplicate]);
+    expect(h.deps.store.confirmSave).toHaveBeenCalledWith('first', savedId);
+  });
+
   it('a blank name is a no-op (no post, no flip)', async () => {
     const h = harness();
     await h.flow.confirmSave('   ');
@@ -112,19 +140,102 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
   it('a failed apply phase surfaces a loud Save failed toast; a durability lag only warns', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const h = harness({
-      saveIndexPhases: () => ({
-        applied: Promise.reject(new Error('owner exploded')),
-        durable: Promise.reject(new Error('flush pending')),
-      }),
-    });
-    await h.flow.confirmSave('x');
-    await settle();
-    expect(h.deps.showSaveError).toHaveBeenCalledWith('Save failed: owner exploded');
-    // durable rejection is NOT a user-facing error (the apply already landed or errored)
-    expect(h.deps.showSaveError).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
-    error.mockRestore();
+    try {
+      await createRoot(async (dispose) => {
+        const store = createPageStore();
+        store.hydrateIndex({
+          activeId: 'scratch',
+          scratch: { starter: 'react', dirty: true, editedAt: 'edited just now' },
+          projects: [{ id: 'p-existing', name: 'Existing', starter: 'node', editedAt: '4m ago' }],
+        });
+        const before = {
+          activeId: store.activeId(),
+          scratch: store.scratch(),
+          projects: store.projects(),
+        };
+        const h = harness({
+          store,
+          saveIndexPhases: () => ({
+            applied: Promise.reject(new Error('owner exploded before apply')),
+            durable: Promise.reject(new Error('owner exited before durable')),
+          }),
+        });
+
+        await h.flow.confirmSave('x');
+        await settle();
+
+        expect(h.deps.showSaveError).toHaveBeenCalledWith(
+          'Save failed: owner exploded before apply',
+        );
+        // The owner never applied the Save, so the page mirror must remain exact.
+        expect({
+          activeId: store.activeId(),
+          scratch: store.scratch(),
+          projects: store.projects(),
+        }).toEqual(before);
+        // durable rejection is NOT a second user-facing error
+        expect(h.deps.showSaveError).toHaveBeenCalledTimes(1);
+        dispose();
+      });
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('flips the page at applied while durability remains pending, then preserves it on owner exit', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await createRoot(async (dispose) => {
+        const store = createPageStore();
+        store.hydrateIndex({
+          activeId: 'scratch',
+          scratch: { starter: 'react', dirty: true, editedAt: 'edited just now' },
+          projects: [],
+        });
+        let savedId = '';
+        let resolveApplied: (index: ProjectIndex | null) => void = () => {};
+        let rejectDurable: (error: Error) => void = () => {};
+        const h = harness({
+          store,
+          saveIndexPhases: (id: string) => {
+            savedId = id;
+            return {
+              applied: new Promise<ProjectIndex | null>((resolve) => {
+                resolveApplied = resolve;
+              }),
+              durable: new Promise<ProjectIndex | null>((_resolve, reject) => {
+                rejectDurable = reject;
+              }),
+            };
+          },
+        });
+
+        const saving = h.flow.confirmSave('kept');
+        await settle();
+        expect(store.activeId()).toBe('scratch');
+
+        resolveApplied(indexWith(savedId));
+        await saving;
+        expect(store.activeId()).toBe(savedId);
+        expect(store.scratch()).toBeNull();
+        expect(store.projects()).toContainEqual(
+          expect.objectContaining({ id: savedId, name: 'kept' }),
+        );
+
+        rejectDurable(new Error('workspace owner exited after apply'));
+        await settle();
+        expect(store.activeId()).toBe(savedId);
+        expect(h.deps.showSaveError).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          '[project-index] save durability still pending',
+          expect.objectContaining({ message: 'workspace owner exited after apply' }),
+        );
+        dispose();
+      });
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -390,13 +501,20 @@ describe('beginStarterPick gates', () => {
   });
 
   it('waits for the in-flight save APPLY (not durability) and aborts when it failed', async () => {
+    let resolveApplied: (index: ProjectIndex | null) => void = () => {};
     const h = harness({
       saveIndexPhases: (id: string) => ({
-        applied: Promise.resolve<ProjectIndex | null>(null),
+        applied: new Promise<ProjectIndex | null>((resolve) => {
+          resolveApplied = resolve;
+        }),
         durable: Promise.resolve(indexWith(id)),
       }),
     });
-    await h.flow.confirmSave('mine');
-    await expect(h.flow.beginStarterPick()).resolves.toBe(false);
+    const saving = h.flow.confirmSave('mine');
+    const pick = h.flow.beginStarterPick();
+    await settle();
+    resolveApplied(null);
+    await expect(pick).resolves.toBe(false);
+    await saving;
   });
 });
