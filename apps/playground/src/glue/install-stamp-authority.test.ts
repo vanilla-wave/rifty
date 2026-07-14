@@ -661,6 +661,116 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
 });
 
 describe('install-stamp authority async fencing', () => {
+  it('falls back to a durably proven removal when the pending-claim write throws', async () => {
+    const inner = new MemoryVfs();
+    await seed({ vfs: inner, dispose: () => {} });
+    let rejectPendingWrite = false;
+    let removals = 0;
+    const vfs = new Proxy(inner, {
+      get(target, property, receiver) {
+        if (property === 'writeFile') {
+          return async (path: string, data: Uint8Array | string): Promise<void> => {
+            if (rejectPendingWrite && path === installStampPath(ROOT)) {
+              rejectPendingWrite = false;
+              throw new Error('pending claim write rejected');
+            }
+            await target.writeFile(path, data);
+          };
+        }
+        if (property === 'rm') {
+          return async (path: string, options?: { recursive?: boolean; force?: boolean }) => {
+            if (path === installStampPath(ROOT)) removals += 1;
+            return target.rm(path, options);
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    }) as unknown as Vfs;
+    const a = createInstallStampAuthority({ vfs });
+    const initial = await a.demote({ root: ROOT, slug: 'scratch' });
+    await expect(
+      a.promote(
+        { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+        { epoch: initial.epoch, packages: 1 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted' });
+    rejectPendingWrite = true;
+    let flushes = 0;
+
+    await expect(
+      a.demote(
+        { root: ROOT, slug: 'scratch' },
+        {
+          flush: async () => {
+            flushes += 1;
+            return { failures: [], total: 0 };
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ root: ROOT, slug: 'scratch' });
+
+    expect(removals).toBe(1);
+    expect(flushes).toBe(1);
+    await expect(a.check({ root: ROOT, slug: 'scratch' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(readInstallStamp(inner, ROOT)).resolves.toBeNull();
+  });
+
+  it('restores prior trust when a rejected pending write cannot fall back to durable removal', async () => {
+    const inner = new MemoryVfs();
+    await seed({ vfs: inner, dispose: () => {} });
+    let rejectPendingWrite = false;
+    const vfs = new Proxy(inner, {
+      get(target, property, receiver) {
+        if (property === 'writeFile') {
+          return async (path: string, data: Uint8Array | string): Promise<void> => {
+            if (rejectPendingWrite && path === installStampPath(ROOT)) {
+              rejectPendingWrite = false;
+              throw new Error('pending claim write rejected');
+            }
+            await target.writeFile(path, data);
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    }) as unknown as Vfs;
+    const a = createInstallStampAuthority({ vfs });
+    const initial = await a.demote({ root: ROOT, slug: 'scratch' });
+    await expect(
+      a.promote(
+        { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+        { epoch: initial.epoch, packages: 1 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted' });
+    rejectPendingWrite = true;
+
+    await expect(
+      a.demote(
+        { root: ROOT, slug: 'scratch' },
+        {
+          flush: async () => ({
+            failures: [
+              {
+                path: installStampPath(ROOT),
+                op: 'rm' as const,
+                message: 'QuotaExceededError',
+              },
+            ],
+            total: 1,
+          }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'INSTALL_STAMP_DEMOTE_UNPROVEN' });
+
+    await expect(a.check({ root: ROOT, slug: 'scratch' })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+    expect((await readInstallStamp(inner, ROOT))?.durability).toBeUndefined();
+  });
+
   it('prepares only the exact current claim for tree mutation and keeps restart state untrusted', async () => {
     const vfs = new MemoryVfs();
     await seed({ vfs, dispose: () => {} });

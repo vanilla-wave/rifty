@@ -511,53 +511,78 @@ export function createInstallStampAuthority(options: {
 
     return enqueue(state, async () => {
       const prior = await readStamp(io, input.root);
+      const trustedPrior = prior && stampTrusted(prior) ? prior : null;
       const currentText = await readText(io, joinPath(input.root, 'package.json'));
       const packageJsonText = currentText ?? prior?.packageJsonText;
       const dependencyTreeExists =
         prior !== null || (await pathExists(io, installTreeDir(input.root)));
+      const flush = options.flush;
+      const restoreAndThrow = async (message: string, cause?: unknown): Promise<never> => {
+        if (trustedPrior && state.transition === transitionId) {
+          try {
+            await writeRawStamp(io, input.root, trustedPrior, false);
+            state.phase = 'trusted';
+            state.epoch = null;
+            state.slug = trustedPrior.slug;
+            state.materialized = false;
+          } catch (restoreError) {
+            throw new InstallStampAuthorityError(
+              'INSTALL_STAMP_DEMOTE_UNPROVEN',
+              `${message}; prior trusted claim could not be restored`,
+              { cause: restoreError },
+            );
+          }
+        }
+        throw new InstallStampAuthorityError('INSTALL_STAMP_DEMOTE_UNPROVEN', message, {
+          ...(cause === undefined ? {} : { cause }),
+        });
+      };
+      const removeAndProve = async (message: string, cause?: unknown): Promise<void> => {
+        if (!flush) return restoreAndThrow(`${message}; no durability check is available`, cause);
+        try {
+          await removeStamp(io, input.root);
+        } catch (error) {
+          return restoreAndThrow(`${message}; fallback removal failed`, error);
+        }
+        let removed: PersistFailureReport | undefined;
+        try {
+          removed = await flush();
+        } catch (error) {
+          return restoreAndThrow(`${message}; fallback removal durability check failed`, error);
+        }
+        if (claimFailed(removed, input.root)) {
+          return restoreAndThrow(`${message}; fallback removal was not durable`, cause);
+        }
+        if (state.epoch === epoch) state.materialized = false;
+      };
       let wrotePending = false;
+      let pendingWriteFailed = false;
       if (packageJsonText !== undefined && dependencyTreeExists) {
-        await writeRawStamp(
-          io,
-          input.root,
-          pendingStamp({ ...input, packageJsonText }, epoch),
-          true,
-        );
-        wrotePending = true;
+        try {
+          await writeRawStamp(
+            io,
+            input.root,
+            pendingStamp({ ...input, packageJsonText }, epoch),
+            true,
+          );
+          wrotePending = true;
+        } catch (error) {
+          if (!trustedPrior || !flush) throw error;
+          pendingWriteFailed = true;
+          await removeAndProve('install-stamp pending claim write failed', error);
+        }
       }
       if (state.epoch === epoch) state.materialized = wrotePending;
 
-      if (prior && stampTrusted(prior) && options.flush) {
-        const restoreAndThrow = async (message: string, cause?: unknown): Promise<never> => {
-          if (state.transition === transitionId) {
-            await writeRawStamp(io, input.root, prior, false);
-            state.phase = 'trusted';
-            state.epoch = null;
-            state.slug = prior.slug;
-            state.materialized = false;
-          }
-          throw new InstallStampAuthorityError('INSTALL_STAMP_DEMOTE_UNPROVEN', message, {
-            ...(cause === undefined ? {} : { cause }),
-          });
-        };
+      if (trustedPrior && flush && !pendingWriteFailed) {
         let report: PersistFailureReport | undefined;
         try {
-          report = await options.flush();
+          report = await flush();
         } catch (error) {
           return restoreAndThrow('install-stamp demote durability check failed', error);
         }
         if (claimFailed(report, input.root)) {
-          await removeStamp(io, input.root);
-          let removed: PersistFailureReport | undefined;
-          try {
-            removed = await options.flush();
-          } catch (error) {
-            return restoreAndThrow('install-stamp demote removal durability check failed', error);
-          }
-          if (claimFailed(removed, input.root)) {
-            return restoreAndThrow('install-stamp demote and removal were not durable');
-          }
-          if (state.epoch === epoch) state.materialized = false;
+          await removeAndProve('install-stamp demote was not durable');
         }
       }
       return {
