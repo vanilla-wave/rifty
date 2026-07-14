@@ -92,15 +92,6 @@ export function reportHasFailure(
     : report.failures.some((f) => predicate(f.path));
 }
 
-function readStringMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === 'string',
-    ),
-  );
-}
-
 function readExactStringMap(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const entries = Object.entries(value);
@@ -119,10 +110,17 @@ export function effectiveDepsFromPackageJsonText(text: string): Record<string, s
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const raw = parsed as Record<string, unknown>;
+  const dependencies =
+    raw.dependencies === undefined ? {} : readExactStringMap(raw.dependencies);
+  const devDependencies =
+    raw.devDependencies === undefined ? {} : readExactStringMap(raw.devDependencies);
+  const optionalDependencies =
+    raw.optionalDependencies === undefined ? {} : readExactStringMap(raw.optionalDependencies);
+  if (!dependencies || !devDependencies || !optionalDependencies) return null;
   return {
-    ...readStringMap(raw.dependencies),
-    ...readStringMap(raw.devDependencies),
-    ...readStringMap(raw.optionalDependencies),
+    ...dependencies,
+    ...devDependencies,
+    ...optionalDependencies,
   };
 }
 
@@ -176,7 +174,7 @@ export function createInstallStamp(
   const canonicalRoot = normalizePath(root);
   const deps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!deps) return null;
-  return {
+  const stamp = {
     version: 3,
     root: canonicalRoot,
     slug: payload.slug,
@@ -184,9 +182,13 @@ export function createInstallStamp(
     installArtifactIdentity,
     deps,
     packages: payload.packages,
-    ...(payload.durability === 'pending' ? { durability: 'pending' as const } : {}),
-    ...(payload.durability === 'pending' && payload.epoch ? { epoch: payload.epoch } : {}),
   };
+  if (payload.durability === 'pending') {
+    if (typeof payload.epoch !== 'string' || payload.epoch.length === 0) return null;
+    return { ...stamp, durability: 'pending', epoch: payload.epoch };
+  }
+  if (payload.epoch !== undefined) return null;
+  return stamp;
 }
 
 /** One parser for async and sync readers. Legacy/malformed claims are misses. */
@@ -226,8 +228,13 @@ export function parseInstallStamp(value: unknown, root: string): InstallStamp | 
   if (!exactDeps || !deps) return null;
   if (!depsEqual(deps, exactDeps)) return null;
   if (raw.durability !== undefined && raw.durability !== 'pending') return null;
-  if (raw.epoch !== undefined && typeof raw.epoch !== 'string') return null;
-  if (raw.durability !== 'pending' && raw.epoch !== undefined) return null;
+  if (
+    raw.durability === 'pending'
+      ? typeof raw.epoch !== 'string' || raw.epoch.length === 0
+      : raw.epoch !== undefined
+  ) {
+    return null;
+  }
   return {
     version: 3,
     root: raw.root,

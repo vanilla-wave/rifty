@@ -661,6 +661,156 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
 });
 
 describe('install-stamp authority async fencing', () => {
+  it('does not let an older failed demote restoration clobber a reentrant newer claim', async () => {
+    const inner = new MemoryVfs();
+    await seed({ vfs: inner, dispose: () => {} });
+    let authority!: InstallStampAuthority;
+    let rejectPendingWrite = false;
+    let startNewerOnRestore = false;
+    let newerDemotion: Promise<Awaited<ReturnType<InstallStampAuthority['demote']>>> | undefined;
+    const dec = new TextDecoder();
+    const vfs = new Proxy(inner, {
+      get(target, property, receiver) {
+        if (property === 'writeFile') {
+          return async (path: string, data: Uint8Array | string): Promise<void> => {
+            if (path === installStampPath(ROOT)) {
+              const stamp = JSON.parse(typeof data === 'string' ? data : dec.decode(data)) as {
+                durability?: unknown;
+              };
+              if (rejectPendingWrite && stamp.durability === 'pending') {
+                rejectPendingWrite = false;
+                throw new Error('pending claim write rejected');
+              }
+              if (startNewerOnRestore && stamp.durability === undefined) {
+                startNewerOnRestore = false;
+                newerDemotion = authority.demote({ root: ROOT, slug: 'newer' });
+              }
+            }
+            await target.writeFile(path, data);
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    }) as unknown as Vfs;
+    authority = createInstallStampAuthority({ vfs });
+    const initial = await authority.demote({ root: ROOT, slug: 'initial' });
+    await expect(
+      authority.promote(
+        { root: ROOT, slug: 'initial', packageJsonText: PACKAGE_JSON },
+        { epoch: initial.epoch, packages: 1 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted' });
+    rejectPendingWrite = true;
+    startNewerOnRestore = true;
+
+    await expect(
+      authority.demote(
+        { root: ROOT, slug: 'older' },
+        {
+          flush: async () => ({
+            failures: [
+              {
+                path: installStampPath(ROOT),
+                op: 'rm' as const,
+                message: 'QuotaExceededError',
+              },
+            ],
+            total: 1,
+          }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'INSTALL_STAMP_DEMOTE_UNPROVEN' });
+    if (!newerDemotion) throw new Error('test setup failed: restoration was not reached');
+    const newer = await newerDemotion;
+
+    await expect(authority.check({ root: ROOT, slug: 'newer' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(authority.prepareTreeMutation(newer)).resolves.toBeUndefined();
+    await expect(
+      authority.promote(
+        { root: ROOT, slug: 'newer', packageJsonText: PACKAGE_JSON },
+        { epoch: newer.epoch, packages: 2 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted', stamp: { slug: 'newer' } });
+  });
+
+  it.each(['throw', 'failed-report'] as const)(
+    'does not let an older revoke %s restoration clobber a reentrant newer claim',
+    async (failure) => {
+      const inner = new MemoryVfs();
+      await seed({ vfs: inner, dispose: () => {} });
+      let authority!: InstallStampAuthority;
+      let startNewerOnRestore = false;
+      let newerDemotion: Promise<Awaited<ReturnType<InstallStampAuthority['demote']>>> | undefined;
+      const dec = new TextDecoder();
+      const vfs = new Proxy(inner, {
+        get(target, property, receiver) {
+          if (property === 'writeFile') {
+            return async (path: string, data: Uint8Array | string): Promise<void> => {
+              if (path === installStampPath(ROOT)) {
+                const stamp = JSON.parse(typeof data === 'string' ? data : dec.decode(data)) as {
+                  durability?: unknown;
+                };
+                if (startNewerOnRestore && stamp.durability === undefined) {
+                  startNewerOnRestore = false;
+                  newerDemotion = authority.demote({ root: ROOT, slug: 'newer' });
+                }
+              }
+              await target.writeFile(path, data);
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+        },
+      }) as unknown as Vfs;
+      authority = createInstallStampAuthority({ vfs });
+      const initial = await authority.demote({ root: ROOT, slug: 'initial' });
+      await expect(
+        authority.promote(
+          { root: ROOT, slug: 'initial', packageJsonText: PACKAGE_JSON },
+          { epoch: initial.epoch, packages: 1 },
+        ),
+      ).resolves.toMatchObject({ status: 'trusted' });
+      startNewerOnRestore = true;
+
+      await expect(
+        authority.revoke(
+          { root: ROOT },
+          {
+            flush: async () => {
+              if (failure === 'throw') throw new Error('flush failed');
+              return {
+                failures: [
+                  {
+                    path: installStampPath(ROOT),
+                    op: 'rm' as const,
+                    message: 'QuotaExceededError',
+                  },
+                ],
+                total: 1,
+              };
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'INSTALL_STAMP_REVOKE_UNPROVEN' });
+      if (!newerDemotion) throw new Error('test setup failed: restoration was not reached');
+      const newer = await newerDemotion;
+
+      await expect(authority.check({ root: ROOT, slug: 'newer' })).resolves.toMatchObject({
+        status: 'pending',
+      });
+      await expect(authority.prepareTreeMutation(newer)).resolves.toBeUndefined();
+      await expect(
+        authority.promote(
+          { root: ROOT, slug: 'newer', packageJsonText: PACKAGE_JSON },
+          { epoch: newer.epoch, packages: 2 },
+        ),
+      ).resolves.toMatchObject({ status: 'trusted', stamp: { slug: 'newer' } });
+    },
+  );
+
   it('falls back to a durably proven removal when the pending-claim write throws', async () => {
     const inner = new MemoryVfs();
     await seed({ vfs: inner, dispose: () => {} });

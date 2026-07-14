@@ -463,6 +463,25 @@ export function createInstallStampAuthority(options: {
     state.materialized = !trusted;
   };
 
+  const restoreStampForTransition = async (
+    state: RootClaimState,
+    transitionId: number,
+    root: string,
+    stamp: InstallStamp | null,
+  ): Promise<void> => {
+    if (state.transition !== transitionId) return;
+    if (stamp) {
+      try {
+        await writeRawStamp(io, root, stamp, false);
+      } catch (error) {
+        if (state.transition !== transitionId) return;
+        throw error;
+      }
+    }
+    if (state.transition !== transitionId) return;
+    updatePhaseFromStamp(state, stamp);
+  };
+
   const check = async (rawInput: InstallStampCheckInput): Promise<InstallStampCheck> => {
     if (!isAbsolute(rawInput.root)) return { status: 'absent' };
     const input = { ...rawInput, root: canonicalAuthorityRoot(rawInput.root) };
@@ -518,13 +537,9 @@ export function createInstallStampAuthority(options: {
         prior !== null || (await pathExists(io, installTreeDir(input.root)));
       const flush = options.flush;
       const restoreAndThrow = async (message: string, cause?: unknown): Promise<never> => {
-        if (trustedPrior && state.transition === transitionId) {
+        if (trustedPrior) {
           try {
-            await writeRawStamp(io, input.root, trustedPrior, false);
-            state.phase = 'trusted';
-            state.epoch = null;
-            state.slug = trustedPrior.slug;
-            state.materialized = false;
+            await restoreStampForTransition(state, transitionId, input.root, trustedPrior);
           } catch (restoreError) {
             throw new InstallStampAuthorityError(
               'INSTALL_STAMP_DEMOTE_UNPROVEN',
@@ -772,16 +787,15 @@ export function createInstallStampAuthority(options: {
     state.materialized = false;
     return enqueue(state, async () => {
       const prior = await readStamp(io, input.root);
+      const restorePrior = (): Promise<void> =>
+        restoreStampForTransition(state, transitionId, input.root, prior);
       await removeStamp(io, input.root);
       if (!options.flush) return;
       let report: PersistFailureReport | undefined;
       try {
         report = await options.flush();
       } catch (error) {
-        if (state.transition === transitionId) {
-          if (prior) await writeRawStamp(io, input.root, prior, false);
-          updatePhaseFromStamp(state, prior);
-        }
+        await restorePrior();
         throw new InstallStampAuthorityError(
           'INSTALL_STAMP_REVOKE_UNPROVEN',
           'install-stamp revoke durability check failed',
@@ -789,10 +803,7 @@ export function createInstallStampAuthority(options: {
         );
       }
       if (claimFailed(report, input.root)) {
-        if (state.transition === transitionId) {
-          if (prior) await writeRawStamp(io, input.root, prior, false);
-          updatePhaseFromStamp(state, prior);
-        }
+        await restorePrior();
         throw new InstallStampAuthorityError(
           'INSTALL_STAMP_REVOKE_UNPROVEN',
           'install-stamp revoke was not durable',

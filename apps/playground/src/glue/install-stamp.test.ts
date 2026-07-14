@@ -6,6 +6,7 @@ import {
   type InstallStampSyncFs,
   createInstallStamp,
   depsEqual,
+  effectiveDepsFromPackageJsonText,
   installStampPath,
   installStampSatisfied,
   installStampSatisfiedForPackageJson,
@@ -51,6 +52,7 @@ async function seedPendingStamp(vfs: MemoryVfs, packages: number, slug: string):
     slug,
     packages,
     durability: 'pending',
+    epoch: 'test:pending',
   });
   if (!stamp) throw new Error('test setup failed: invalid package.json');
   await vfs.writeFile(installStampPath(ROOT), `${JSON.stringify(stamp, null, 2)}\n`);
@@ -165,6 +167,7 @@ describe('install stamp (ADR-0135)', () => {
       deps: { vite: '^5.4.0' },
       packages: 14,
       durability: 'pending',
+      epoch: 'test:pending',
     });
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
     expect(
@@ -288,6 +291,108 @@ describe('install stamp (ADR-0135)', () => {
 
     expect(await readInstallStamp(vfs, ROOT)).toBeNull();
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ] as const)('rejects a pending claim with a %s epoch at every reader', async (_case, epoch) => {
+    const packageJsonText = JSON.stringify({
+      name: 'app',
+      dependencies: { vite: '^5.4.0' },
+    });
+    expect(
+      createInstallStamp(ROOT, packageJsonText, {
+        slug: 'real-vite',
+        packages: 14,
+        durability: 'pending',
+        epoch,
+      }),
+    ).toBeNull();
+
+    const forged = {
+      version: 3,
+      root: ROOT,
+      slug: 'real-vite',
+      packageJsonText,
+      installArtifactIdentity,
+      deps: { vite: '^5.4.0' },
+      packages: 14,
+      durability: 'pending',
+      ...(epoch === undefined ? {} : { epoch }),
+    };
+    const stampText = JSON.stringify(forged);
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await vfs.writeFile(installStampPath(ROOT), stampText);
+    const enc = new TextEncoder();
+    const fs: InstallStampSyncFs = {
+      existsSync: (path) => path === installStampPath(ROOT),
+      readFileBytesSync: () => enc.encode(stampText),
+    };
+
+    expect(parseInstallStamp(forged, ROOT)).toBeNull();
+    await expect(readInstallStamp(vfs, ROOT)).resolves.toBeNull();
+    expect(readInstallStampSync(fs, ROOT)).toBeNull();
+  });
+
+  it('does not construct a trusted claim with a pending-only epoch', () => {
+    expect(
+      createInstallStamp(
+        ROOT,
+        JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
+        { slug: 'real-vite', packages: 14, epoch: 'forged:1' },
+      ),
+    ).toBeNull();
+  });
+
+  it.each(
+    (['dependencies', 'devDependencies', 'optionalDependencies'] as const).flatMap((section) => [
+      [`${section} with a non-string member`, JSON.stringify({ [section]: { vite: 42 } })],
+      [`${section} with a non-object value`, JSON.stringify({ [section]: 'vite' })],
+    ]),
+  )('treats %s as a corrupt package request at every stamp boundary', async (_case, text) => {
+    expect(effectiveDepsFromPackageJsonText(text)).toBeNull();
+    expect(createInstallStamp(ROOT, text, { slug: 'real-vite', packages: 14 })).toBeNull();
+
+    const forged = {
+      version: 3,
+      root: ROOT,
+      slug: 'real-vite',
+      packageJsonText: text,
+      installArtifactIdentity,
+      deps: {},
+      packages: 14,
+    };
+    const stampText = JSON.stringify(forged);
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await vfs.writeFile(`${ROOT}/package.json`, text);
+    await vfs.writeFile(installStampPath(ROOT), stampText);
+    const files = new Map<string, string>([
+      [`${ROOT}/package.json`, text],
+      [installStampPath(ROOT), stampText],
+    ]);
+    const enc = new TextEncoder();
+    const fs: InstallStampSyncFs = {
+      existsSync: (path) => files.has(path) || path === `${ROOT}/node_modules`,
+      readFileBytesSync: (path) => enc.encode(files.get(path) ?? ''),
+    };
+    const validTemplate = JSON.stringify({ dependencies: { vite: '^5.4.0' } });
+
+    await expect(readEffectiveDeps(vfs, ROOT)).resolves.toBeNull();
+    expect(parseInstallStamp(forged, ROOT)).toBeNull();
+    await expect(readInstallStamp(vfs, ROOT)).resolves.toBeNull();
+    expect(readInstallStampSync(fs, ROOT)).toBeNull();
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+    await expect(
+      installStampSatisfiedForPackageJson(vfs, ROOT, 'real-vite', validTemplate),
+    ).resolves.toBeNull();
+    expect(
+      installStampSatisfiedForPackageJsonSync(fs, ROOT, 'real-vite', validTemplate),
+    ).toBeNull();
   });
 
   it.each([
