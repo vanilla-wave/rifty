@@ -33,15 +33,8 @@ const PACKAGE_TREE_CONTEXTS = new Map([
   ],
   ['apps/playground/src/glue/workspace-archive.ts', new Set(['applyWorkspaceArchive'])],
   [
-    'apps/playground/src/workers/real-vite-bootstrap.ts',
-    new Set([
-      'prepareNpmInstallFor',
-      'prepareEnsure',
-      'planSnapshotRestore',
-      'install',
-      'reset',
-      'switchProject',
-    ]),
+    'apps/playground/src/workers/owner-package-state.ts',
+    new Set(['prepareEnsure', 'planSnapshotRestore', 'install', 'reset', 'switchProject']),
   ],
 ]);
 

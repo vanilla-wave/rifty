@@ -7,15 +7,11 @@ import type {
   OwnerVfsRevisionFrame,
   TreeRevision,
 } from './owner-vfs-protocol.ts';
+import { VfsCommitProtocolError } from './owner-vfs-protocol.ts';
 
 export type VfsCommitStage = 'reflection' | 'durability';
 
-export class VfsCommitProtocolError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'VfsCommitProtocolError';
-  }
-}
+export { VfsCommitProtocolError } from './owner-vfs-protocol.ts';
 
 export class VfsCommitTimeoutError extends Error {
   readonly operationId: string;

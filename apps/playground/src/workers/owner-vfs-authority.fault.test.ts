@@ -1,11 +1,52 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { VfsVersionConflictError } from '../glue/owner-vfs-protocol.ts';
+import { OperationIdReuseError, VfsVersionConflictError } from '../glue/owner-vfs-protocol.ts';
 import { createOwnerVfsAuthority } from './owner-vfs-authority.ts';
 
 const encoder = new TextEncoder();
 
 describe('owner VFS authority faults', () => {
+  it('releases retained commit bytes only after the exact terminal ACK is received', () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'bounded-replay',
+      path: '/large.bin',
+      data: new Uint8Array(512 * 1024),
+      expectedVersion: null,
+    };
+    const ack = authority.applyHostCommit(request);
+    authority.releaseHostCommit(ack);
+
+    // Once the terminal response is received, a late request enters normal CAS
+    // validation instead of replaying an owner-held copy of the large payload.
+    expect(() => authority.applyHostCommit(request)).toThrow(VfsVersionConflictError);
+  });
+
+  it('keeps the original replay record through divergent request and receipt reuse', () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'exact-replay',
+      path: '/value.txt',
+      data: encoder.encode('original'),
+      expectedVersion: null,
+    };
+    const ack = authority.applyHostCommit(request);
+
+    expect(() =>
+      authority.applyHostCommit({ ...request, data: encoder.encode('divergent') }),
+    ).toThrow(OperationIdReuseError);
+    expect(() =>
+      authority.releaseHostCommit({ ...ack, treeRevision: ack.treeRevision + 1 }),
+    ).toThrow(OperationIdReuseError);
+    expect(authority.applyHostCommit({ ...request, data: request.data.slice() })).toEqual(ack);
+  });
+
   it('does not publish a revision when the real backend rejects before mutation', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',

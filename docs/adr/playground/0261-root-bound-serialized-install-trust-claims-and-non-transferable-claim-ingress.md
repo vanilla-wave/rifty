@@ -218,7 +218,7 @@ This supersedes ADR-0194 only for its learned-pin 30-minute hard-TTL clause.
 | `lossy-aggregate` | Canonical root joins exact request/artifact identity; distinct roots cannot share a claim. |
 | `torn-state` | Transfer excludes/removes claims before bytes can become trusted at target; never safety by cleanup-after. |
 | `concurrent-same-key` | Aliases share one epoch; new demote fences old proof/final-slot promoter. |
-| `unbounded-wait` | Drain stays outside transition FIFO; install exit remains background. |
+| `quota-perm-fail` | A failed or hung persistence drain stays outside transition FIFO; install exit remains background. |
 | `poisoned-cache` | v1/v2, root mismatch, marker-bearing snapshot, and saved same-root replay cannot restore trust. |
 | `provenance-lie` | Cache serve cannot refresh age; terminal reports served manifest age. |
 | `sibling-drift` | One recursive reserved-ingress policy covers all writers, transfers, and nested markers. |

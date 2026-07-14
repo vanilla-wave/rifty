@@ -72,14 +72,18 @@ describe('install-stamp one-writer gate', () => {
   });
 
   it('allows package-tree primitives only inside acquisition adapter callbacks', () => {
-    const bootstrap = 'apps/playground/src/workers/real-vite-bootstrap.ts';
+    const bootstrap = 'apps/playground/src/workers/owner-package-state.ts';
     expect(
       findInstallStampWriterViolations(
         `
           const prepareEnsure = async () => clearProjectTree(fs, root);
-          const prepareNpmInstallFor = async () => prepareProjectInstallTree(fs, root, opts);
           const planSnapshotRestore = async () => seedTemplateNodeModulesFiles(config);
-          const install = async () => finalizePackageInstallFiles({ root });
+          const install = async () => {
+            prepareProjectInstallTree(fs, root, opts);
+            finalizePackageInstallFiles({ root });
+          };
+          const reset = async () => clearProjectTree(fs, root);
+          const switchProject = async () => clearProjectTree(fs, root);
           const boot = async () => clearProjectTree(fs, root);
           const finalize = async () => finalizePackageInstallFiles({ root });
           const retry = async () => prepareProjectInstallTree(fs, root, opts);

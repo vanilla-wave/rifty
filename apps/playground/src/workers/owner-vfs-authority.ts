@@ -19,6 +19,7 @@ import {
   type PathVersion,
   type TreeRevision,
   VfsVersionConflictError,
+  equalHostCommitAcks,
 } from '../glue/owner-vfs-protocol.ts';
 
 interface TrackedEntry {
@@ -56,6 +57,8 @@ export interface OwnerVfsAuthority extends FsSync {
   /** Validate idempotency + CAS without mutating. A replay returns its prior ack. */
   validateHostCommit(request: HostCommitRequest): HostCommitAck | null;
   applyHostCommit(request: HostCommitRequest): HostCommitAck;
+  /** Exact terminal receipt ends replay ownership and releases retained request bytes. */
+  releaseHostCommit(ack: HostCommitAck): void;
   /** Preflight actual absolute ingress targets before any batch mutation. */
   assertPortablePaths(paths: readonly string[]): void;
   flush(): Promise<PersistFailureReport | undefined>;
@@ -423,6 +426,13 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     });
     this.#applied.set(request.operationId, { request: cloneRequest(request), ack });
     return ack;
+  }
+
+  releaseHostCommit(ack: HostCommitAck): void {
+    const prior = this.#applied.get(ack.operationId);
+    if (!prior) return;
+    if (!equalHostCommitAcks(prior.ack, ack)) throw new OperationIdReuseError(ack.operationId);
+    this.#applied.delete(ack.operationId);
   }
 
   #reservedClaimError(path: string): VfsError {

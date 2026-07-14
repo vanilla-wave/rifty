@@ -1,4 +1,4 @@
-import type { PersistFailureReport } from '@riftydev/vfs';
+import { type PersistFailureReport, isAbsolute, normalizePath } from '@riftydev/vfs';
 import {
   type HostCommitAck,
   type HostCommitRequest,
@@ -7,12 +7,26 @@ import {
   type OwnerVfsDurabilityReceipt,
   type OwnerVfsSnapshotEntry,
   type TreeRevision,
+  VfsCommitAppliedError,
+  VfsCommitProtocolError,
   VfsVersionConflictError,
 } from './owner-vfs-protocol.ts';
 
 export interface OwnerVfsCommitIpcMessage {
   readonly type: 'rifty:owner-vfs-commit';
   readonly request: HostCommitRequest;
+}
+
+/** Page proves it received an applied terminal, allowing exact replay cleanup. */
+export interface OwnerVfsCommitReceivedMessage {
+  readonly type: 'rifty:owner-vfs-commit-received';
+  readonly ack: HostCommitAck;
+}
+
+/** Owner confirms the full request/ACK replay record is no longer retained. */
+export interface OwnerVfsCommitReleasedMessage {
+  readonly type: 'rifty:owner-vfs-commit-released';
+  readonly ack: HostCommitAck;
 }
 
 interface SerializedErrorBase {
@@ -48,6 +62,8 @@ export type OwnerVfsCommitAckMessage =
       readonly operationId: string;
       readonly ok: false;
       readonly error: OwnerVfsErrorFrame;
+      /** Present iff apply succeeded before a later publication step failed. */
+      readonly applied?: HostCommitAck;
     };
 
 export interface OwnerVfsDurabilityIpcMessage {
@@ -75,25 +91,209 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === 'object';
 }
 
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isNonnegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isAbsolutePath(value: unknown): value is string {
+  return isNonemptyString(value) && isAbsolute(value);
+}
+
+function isPathVersion(value: unknown): value is string {
+  return isNonemptyString(value);
+}
+
+function isNullablePathVersion(value: unknown): value is string | null {
+  return value === null || isPathVersion(value);
+}
+
+function isOwnerVfsSnapshotEntry(value: unknown): value is OwnerVfsSnapshotEntry {
+  if (
+    !isRecord(value) ||
+    !isAbsolutePath(value.path) ||
+    !isPathVersion(value.version) ||
+    !isNonnegativeSafeInteger(value.size)
+  ) {
+    return false;
+  }
+  if (value.kind === 'dir') return value.size === 0;
+  return (
+    value.kind === 'file' &&
+    value.content instanceof Uint8Array &&
+    value.content.byteLength === value.size
+  );
+}
+
+function isHostCommitRequest(value: unknown): value is HostCommitRequest {
+  if (!isRecord(value) || !isNonemptyString(value.operationId)) return false;
+  switch (value.kind) {
+    case 'write':
+      return (
+        isAbsolutePath(value.path) &&
+        value.data instanceof Uint8Array &&
+        isNullablePathVersion(value.expectedVersion)
+      );
+    case 'mkdir':
+      return isAbsolutePath(value.path) && value.expectedVersion === null;
+    case 'remove':
+      return (
+        isAbsolutePath(value.path) &&
+        isPathVersion(value.expectedVersion) &&
+        (value.recursive === undefined || typeof value.recursive === 'boolean')
+      );
+    case 'rename':
+      return (
+        isAbsolutePath(value.sourcePath) &&
+        isAbsolutePath(value.targetPath) &&
+        isPathVersion(value.expectedSourceVersion) &&
+        isNullablePathVersion(value.expectedTargetVersion)
+      );
+    default:
+      return false;
+  }
+}
+
+function isHostCommitAck(value: unknown): value is HostCommitAck {
+  if (
+    !isRecord(value) ||
+    !isNonemptyString(value.operationId) ||
+    !isNonemptyString(value.ownerEpoch) ||
+    !isNonnegativeSafeInteger(value.treeRevision) ||
+    !Array.isArray(value.versions) ||
+    value.versions.length < 1 ||
+    value.versions.length > 2
+  ) {
+    return false;
+  }
+  const paths = new Set<string>();
+  for (const version of value.versions) {
+    if (
+      !isRecord(version) ||
+      !isAbsolutePath(version.path) ||
+      !isNullablePathVersion(version.version) ||
+      paths.has(version.path)
+    ) {
+      return false;
+    }
+    paths.add(version.path);
+  }
+  return true;
+}
+
+function isOwnerVfsErrorFrame(value: unknown): value is OwnerVfsErrorFrame {
+  if (!isRecord(value) || !isNonemptyString(value.name) || typeof value.message !== 'string') {
+    return false;
+  }
+  switch (value.kind) {
+    case 'error':
+      return true;
+    case 'operation-id-reuse':
+      return value.name === 'OperationIdReuseError' && isNonemptyString(value.operationId);
+    case 'version-conflict': {
+      if (
+        value.name !== 'VfsVersionConflictError' ||
+        !isAbsolutePath(value.path) ||
+        !isNullablePathVersion(value.expectedVersion) ||
+        !isNullablePathVersion(value.actualVersion) ||
+        !isNonemptyString(value.ownerEpoch) ||
+        !isNonnegativeSafeInteger(value.treeRevision)
+      ) {
+        return false;
+      }
+      if (value.actualVersion === null) return value.actualEntry === null;
+      return (
+        isOwnerVfsSnapshotEntry(value.actualEntry) &&
+        value.actualEntry.path === value.path &&
+        value.actualEntry.version === value.actualVersion
+      );
+    }
+    default:
+      return false;
+  }
+}
+
 export function isOwnerVfsCommitIpcMessage(message: unknown): message is OwnerVfsCommitIpcMessage {
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-commit' &&
-    isRecord(message.request) &&
-    typeof message.request.operationId === 'string'
+    isHostCommitRequest(message.request)
   );
 }
 
-export function isOwnerVfsCommitAckMessage(message: unknown): message is OwnerVfsCommitAckMessage {
-  if (
-    !isRecord(message) ||
-    message.type !== 'rifty:owner-vfs-commit-ack' ||
-    typeof message.operationId !== 'string' ||
-    typeof message.ok !== 'boolean'
-  ) {
-    return false;
+export type OwnerVfsCommitTerminalValidation =
+  | { readonly kind: 'unrelated' }
+  | { readonly kind: 'valid'; readonly message: OwnerVfsCommitAckMessage }
+  | {
+      readonly kind: 'malformed';
+      readonly operationId: string | null;
+      readonly applied: HostCommitAck | null;
+      readonly error: VfsCommitProtocolError;
+    };
+
+/** Sole structural decoder for commit terminals; never leaks a raw decoder error. */
+export function validateOwnerVfsCommitTerminal(message: unknown): OwnerVfsCommitTerminalValidation {
+  if (!isRecord(message) || message.type !== 'rifty:owner-vfs-commit-ack') {
+    return { kind: 'unrelated' };
   }
-  return message.ok ? isRecord(message.ack) : isRecord(message.error);
+  const operationId = isNonemptyString(message.operationId) ? message.operationId : null;
+  const applied =
+    operationId !== null &&
+    isHostCommitAck(message.applied) &&
+    message.applied.operationId === operationId
+      ? message.applied
+      : null;
+  const malformed = (detail: string): OwnerVfsCommitTerminalValidation => ({
+    kind: 'malformed',
+    operationId,
+    applied,
+    error: new VfsCommitProtocolError(
+      `Malformed owner VFS commit terminal (${operationId ?? '<unknown>'}): ${detail}`,
+    ),
+  });
+  if (operationId === null) return malformed('invalid operation identity');
+  if (message.ok === true) {
+    if (!isHostCommitAck(message.ack)) return malformed('invalid ACK evidence');
+    if (message.ack.operationId !== operationId) return malformed('ACK operation mismatch');
+    if (message.applied !== undefined) return malformed('success carried failure evidence');
+    return { kind: 'valid', message: message as unknown as OwnerVfsCommitAckMessage };
+  }
+  if (message.ok !== false) return malformed('invalid terminal discriminator');
+  if (!isOwnerVfsErrorFrame(message.error)) return malformed('invalid error evidence');
+  if (message.error.kind === 'operation-id-reuse' && message.error.operationId !== operationId) {
+    return malformed('reuse error operation mismatch');
+  }
+  if (message.applied !== undefined && applied === null) {
+    return malformed('invalid applied evidence');
+  }
+  return { kind: 'valid', message: message as unknown as OwnerVfsCommitAckMessage };
+}
+
+export function isOwnerVfsCommitAckMessage(message: unknown): message is OwnerVfsCommitAckMessage {
+  return validateOwnerVfsCommitTerminal(message).kind === 'valid';
+}
+
+export function isOwnerVfsCommitReceivedMessage(
+  message: unknown,
+): message is OwnerVfsCommitReceivedMessage {
+  return (
+    isRecord(message) &&
+    message.type === 'rifty:owner-vfs-commit-received' &&
+    isHostCommitAck(message.ack)
+  );
+}
+
+export function isOwnerVfsCommitReleasedMessage(
+  message: unknown,
+): message is OwnerVfsCommitReleasedMessage {
+  return (
+    isRecord(message) &&
+    message.type === 'rifty:owner-vfs-commit-released' &&
+    isHostCommitAck(message.ack)
+  );
 }
 
 export function isOwnerVfsDurabilityIpcMessage(
@@ -102,9 +302,18 @@ export function isOwnerVfsDurabilityIpcMessage(
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-durability' &&
-    typeof message.barrierId === 'string' &&
-    typeof message.ownerEpoch === 'string' &&
-    typeof message.treeRevision === 'number'
+    isNonemptyString(message.barrierId) &&
+    isNonemptyString(message.ownerEpoch) &&
+    isNonnegativeSafeInteger(message.treeRevision)
+  );
+}
+
+function isOwnerVfsDurabilityReceipt(value: unknown): value is OwnerVfsDurabilityReceipt {
+  return (
+    isRecord(value) &&
+    isNonemptyString(value.ownerEpoch) &&
+    isNonnegativeSafeInteger(value.treeRevision) &&
+    (value.durability === 'durable' || value.durability === 'ephemeral')
   );
 }
 
@@ -114,12 +323,115 @@ export function isOwnerVfsDurabilityAckMessage(
   if (
     !isRecord(message) ||
     message.type !== 'rifty:owner-vfs-durability-ack' ||
-    typeof message.barrierId !== 'string' ||
+    !isNonemptyString(message.barrierId) ||
     typeof message.ok !== 'boolean'
   ) {
     return false;
   }
-  return message.ok ? isRecord(message.receipt) : isRecord(message.error);
+  return message.ok
+    ? isOwnerVfsDurabilityReceipt(message.receipt)
+    : isOwnerVfsErrorFrame(message.error);
+}
+
+function normalizedRequestPaths(request: HostCommitRequest): readonly string[] {
+  if (request.kind !== 'rename') return [normalizePath(request.path)];
+  return [normalizePath(request.sourcePath), normalizePath(request.targetPath)];
+}
+
+/** Contextual identity/evidence check after structural terminal validation. */
+export function validateHostCommitAckForRequest(
+  ack: HostCommitAck,
+  request: HostCommitRequest,
+  ownerEpoch: OwnerEpoch,
+): VfsCommitProtocolError | null {
+  if (ack.operationId !== request.operationId) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received ACK for ${ack.operationId}`,
+    );
+  }
+  if (ack.ownerEpoch !== ownerEpoch) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received ACK from owner ${ack.ownerEpoch}; expected ${ownerEpoch}`,
+    );
+  }
+  let paths: readonly string[];
+  try {
+    paths = normalizedRequestPaths(request);
+  } catch {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} has invalid request path evidence`,
+    );
+  }
+  const expected =
+    request.kind === 'rename' && paths[0] !== paths[1]
+      ? [
+          { path: paths[0] as string, absent: true },
+          { path: paths[1] as string, absent: false },
+        ]
+      : [
+          {
+            path: paths.at(-1) as string,
+            absent: request.kind === 'remove',
+          },
+        ];
+  if (ack.versions.length !== expected.length) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received divergent version evidence`,
+    );
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    const actual = ack.versions[index];
+    const wanted = expected[index];
+    if (
+      !actual ||
+      !wanted ||
+      actual.path !== wanted.path ||
+      (wanted.absent ? actual.version !== null : actual.version === null)
+    ) {
+      return new VfsCommitProtocolError(
+        `VFS commit ${request.operationId} received divergent version evidence`,
+      );
+    }
+  }
+  return null;
+}
+
+export function validateOwnerVfsCommitTerminalForRequest(
+  message: OwnerVfsCommitAckMessage,
+  request: HostCommitRequest,
+  ownerEpoch: OwnerEpoch,
+): VfsCommitProtocolError | null {
+  if (message.operationId !== request.operationId) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received terminal for ${message.operationId}`,
+    );
+  }
+  if (message.ok) return validateHostCommitAckForRequest(message.ack, request, ownerEpoch);
+  if (message.applied) {
+    return validateHostCommitAckForRequest(message.applied, request, ownerEpoch);
+  }
+  if (message.error.kind !== 'version-conflict') return null;
+  if (message.error.ownerEpoch !== ownerEpoch) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received conflict from owner ${message.error.ownerEpoch}; expected ${ownerEpoch}`,
+    );
+  }
+  let paths: readonly string[];
+  let conflictPath: string;
+  try {
+    paths = normalizedRequestPaths(request);
+    conflictPath = normalizePath(message.error.path);
+  } catch {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} has invalid request path evidence`,
+    );
+  }
+  if (!paths.includes(conflictPath)) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received conflict for divergent path ${message.error.path}`,
+    );
+  }
+  return null;
 }
 
 function cloneEntry(entry: OwnerVfsSnapshotEntry | null): OwnerVfsSnapshotEntry | null {
@@ -170,6 +482,13 @@ export function decodeOwnerVfsError(frame: OwnerVfsErrorFrame): Error {
   return error;
 }
 
+export function decodeOwnerVfsCommitFailure(
+  frame: Extract<OwnerVfsCommitAckMessage, { readonly ok: false }>,
+): Error {
+  const cause = decodeOwnerVfsError(frame.error);
+  return frame.applied ? new VfsCommitAppliedError(frame.applied, cause) : cause;
+}
+
 export interface OwnerVfsCommitHandlerOptions {
   readonly message: OwnerVfsCommitIpcMessage;
   readonly apply: (request: HostCommitRequest) => HostCommitAck | Promise<HostCommitAck>;
@@ -181,31 +500,52 @@ export interface OwnerVfsCommitHandlerOptions {
 export function handleOwnerVfsCommitRequest(options: OwnerVfsCommitHandlerOptions): void {
   const operationId = options.message.request.operationId;
   const succeed = (ack: HostCommitAck): void => {
-    options.publishSnapshot();
+    try {
+      options.publishSnapshot();
+    } catch (error) {
+      fail(error, ack);
+      return;
+    }
     options.send({ type: 'rifty:owner-vfs-commit-ack', operationId, ok: true, ack });
   };
-  const fail = (error: unknown): void => {
+  const fail = (error: unknown, applied?: HostCommitAck): void => {
     options.send({
       type: 'rifty:owner-vfs-commit-ack',
       operationId,
       ok: false,
       error: encodeOwnerVfsError(error),
+      ...(applied ? { applied } : {}),
     });
   };
+  let applied: HostCommitAck | Promise<HostCommitAck>;
+  let then: unknown;
   try {
-    const applied = options.apply(options.message.request);
-    const then =
+    applied = options.apply(options.message.request);
+    then =
       typeof applied === 'object' && applied !== null
         ? (applied as { readonly then?: unknown }).then
         : undefined;
-    if (typeof then === 'function') {
-      void Promise.resolve(applied).then(succeed, fail);
-      return;
-    }
-    succeed(applied as HostCommitAck);
   } catch (error) {
     fail(error);
+    return;
   }
+  if (typeof then === 'function') {
+    void Promise.resolve(applied).then(succeed, (error: unknown) => fail(error));
+    return;
+  }
+  succeed(applied as HostCommitAck);
+}
+
+export interface OwnerVfsCommitReceiptHandlerOptions {
+  readonly message: OwnerVfsCommitReceivedMessage;
+  readonly release: (ack: HostCommitAck) => void;
+  readonly send: (message: OwnerVfsCommitReleasedMessage) => void;
+}
+
+/** Same-sender ordering makes every earlier retry precede this exact receipt. */
+export function handleOwnerVfsCommitReceipt(options: OwnerVfsCommitReceiptHandlerOptions): void {
+  options.release(options.message.ack);
+  options.send({ type: 'rifty:owner-vfs-commit-released', ack: options.message.ack });
 }
 
 export interface OwnerVfsDurabilityHandlerOptions {

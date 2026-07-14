@@ -114,6 +114,12 @@
   node_modules is derived and omitted. User workspace archives now reject
   derived node_modules before replacing source, so crafted archives cannot
   forge a trust claim outside the authority (ADR-0261, ADR-0224).
+- Owner package composition now binds npm, instant restore, project switching,
+  mutation routing, and install claims behind one state module. A second full
+  install admitted during pending promotion preserves the first install's exact
+  manifest/tree only for the same authority-recorded project slug; same-root
+  project switches still clean. A real OPFS watchdog fault proves promotion
+  refuses the hung tree finitely and leaves the claim untrusted.
 
 - **Install exit stops awaiting the OPFS durability drain** (ADR-0261,
   supersedes ADR-0187's command-site durable-on-exit clause): one full-ledger
@@ -175,6 +181,11 @@
   explorer writes, Git, archive import, project-index updates, and dev-config
   assignment settle only on ACK/NACK, send failure, or certified owner exit.
   Read requests and post-ACK durability observations remain bounded.
+- Conditional VFS terminals carry exact already-applied evidence when snapshot
+  publication fails. Retried receipts release the owner's full-request replay
+  record only after the page has received its terminal ACK/NACK. Unsolicited,
+  malformed, wrong-owner, and divergent terminals cannot enter that receipt
+  ledger; an admitted exact request replays until valid terminal or owner exit.
 
 ### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 

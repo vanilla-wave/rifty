@@ -98,6 +98,7 @@ export interface NpmShellCommandDeps {
     info: {
       readonly fullInstall: boolean;
       readonly sessionInstallActivity: boolean;
+      readonly priorSessionSlug?: string;
       readonly priorTrustedTree: boolean;
       readonly priorSlug?: string;
     },
@@ -633,6 +634,9 @@ export async function executeNpmInstallOperation(
     await deps.prepareInstall(ctx, {
       fullInstall: pkgSpecs.length === 0,
       sessionInstallActivity: execution.sessionInstallActivity,
+      ...(execution.priorSessionSlug !== undefined
+        ? { priorSessionSlug: execution.priorSessionSlug }
+        : {}),
       priorTrustedTree: execution.priorTrustedTree,
       ...(execution.priorSlug ? { priorSlug: execution.priorSlug } : {}),
     });

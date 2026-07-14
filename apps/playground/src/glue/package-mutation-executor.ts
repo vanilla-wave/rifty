@@ -7,6 +7,7 @@ import {
   normalizePath,
 } from '@riftydev/vfs';
 import type {
+  PackageAcquisitionAuthority,
   PackageAcquisitionProject,
   PackageMutationTransition,
 } from '../workers/package-acquisition-authority.ts';
@@ -40,6 +41,98 @@ export interface PackageMutationExecutor {
     mutate: () => Promise<T>,
     preflight?: PackageEditPreflight<T>,
   ): Promise<T>;
+}
+
+export interface PackageMutationExecutorOptions {
+  readonly packages: PackageAcquisitionAuthority;
+  readonly fs: FsSync;
+  readonly assertPortablePaths: (paths: readonly string[]) => void;
+  readonly activeProject: () => PackageAcquisitionProject;
+}
+
+/** One adapter from every owner writer into the package-acquisition FIFO. */
+export function createPackageMutationExecutor(
+  options: PackageMutationExecutorOptions,
+): PackageMutationExecutor {
+  const transitions = (intents: readonly VfsMutationIntent[]): PackageMutationTransition[] => {
+    assertPortableVfsMutationIntents(options.assertPortablePaths, intents);
+    return discoverPackageMutationTransitions(
+      options.fs,
+      options.packages.knownProjects?.() ?? [],
+      intents,
+    );
+  };
+  const preflight = async <T>(
+    run: PackageEditPreflight<T> | undefined,
+    settle: (value: T) => void,
+  ): Promise<boolean> => {
+    if (!run) return true;
+    const result = await run();
+    if (result.status === 'ready') return true;
+    settle(result.value);
+    return false;
+  };
+  const settled = async <T>(
+    execute: (settle: (value: T) => void) => Promise<void>,
+    failure: string,
+  ): Promise<T> => {
+    let completed = false;
+    let value!: T;
+    await execute((next) => {
+      value = next;
+      completed = true;
+    });
+    if (!completed) throw new Error(failure);
+    return value;
+  };
+
+  return {
+    guardedMutation: <T>(
+      intents: readonly VfsMutationIntent[],
+      mutate: () => Promise<T>,
+      check?: PackageEditPreflight<T>,
+    ) =>
+      settled<T>(
+        (settle) =>
+          options.packages.dispatch({
+            type: 'guarded-mutation',
+            ...(check ? { preflight: () => preflight(check, settle) } : {}),
+            resolveTransitions: () => transitions(intents),
+            mutate: async () => settle(await mutate()),
+          }),
+        'guarded package mutation did not settle',
+      ),
+    reset: (target, prepare) =>
+      options.packages.dispatch({
+        type: 'reset',
+        target,
+        prepare,
+        resolveTransitions: () => transitions([{ kind: 'rm', path: target.root }]),
+      }),
+    packageJsonEdit: <T>(
+      target: PackageMutationTarget,
+      mutate: () => Promise<T>,
+      check?: PackageEditPreflight<T>,
+    ) =>
+      settled<T>(
+        (settle) =>
+          options.packages.dispatch({
+            type: 'package-json-edit',
+            project: () => {
+              const active = options.activeProject();
+              if (normalizePath(target.root) !== normalizePath(active.root)) {
+                throw new Error(
+                  `package.json edit target ${target.root} is not the active package root ${active.root}`,
+                );
+              }
+              return active;
+            },
+            ...(check ? { preflight: () => preflight(check, settle) } : {}),
+            mutate: async () => settle(await mutate()),
+          }),
+        `package.json edit did not run for ${target.root}`,
+      ),
+  };
 }
 
 export type PackageMutationImpact = 'none' | 'manifest' | 'tree';

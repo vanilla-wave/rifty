@@ -24,7 +24,6 @@
  */
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
-import { NotImplementedError } from '@riftydev/io';
 import {
   type SpawnWorkerSpec,
   type WorkerProcessHandle,
@@ -47,63 +46,34 @@ import {
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import {
   type VfsMutationGuard,
-  type VfsMutationIntent,
   dirname,
   initBackend,
   normalizePath,
   syncMirror,
 } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
-import { type DepSnapshotV2, prepareDepSnapshotRestore } from '../glue/dep-snapshot.ts';
-import {
-  learnedPinForPackageJsonSync,
-  readLearnedPin,
-  revalidateLearnedPin,
-  writeLearnedPin,
-} from '../glue/eddy-learned-pins.ts';
 import { flushSyncMirror } from '../glue/flush-sync-mirror.ts';
 import { gitOwnerMutationIntents, serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
-import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
-import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
-import {
-  type InstallStampClaimIo,
-  createInstallStampAuthority,
-} from '../glue/install-stamp-authority.ts';
+import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { effectiveDepsFromPackageJsonText } from '../glue/install-stamp.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
-import {
-  type NpmShellCommandDeps,
-  createNpmShellCommand,
-  executeNpmInstallOperation,
-  parseNpmInstallRequest,
-} from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import {
+  handleOwnerVfsCommitReceipt,
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
   isOwnerVfsCommitIpcMessage,
+  isOwnerVfsCommitReceivedMessage,
   isOwnerVfsDurabilityIpcMessage,
 } from '../glue/owner-vfs-ipc.ts';
 import type { OwnerVfsDurabilityReceipt } from '../glue/owner-vfs-protocol.ts';
 import {
-  type PackageEditPreflight,
-  type PackageMutationExecutor,
-  type PackageMutationTarget,
   applyPackageAwareHostCommit,
   applyPackageAwareVfsMutations,
-  assertPortableVfsMutationIntents,
-  discoverPackageAcquisitionGuardTransitions,
-  discoverPackageMutationTransitions,
 } from '../glue/package-mutation-executor.ts';
-import {
-  clearProjectTree,
-  ensureProjectDependencies,
-  prepareProjectInstallTree,
-  seedTemplateNodeModulesFiles,
-} from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
 import { applyGuardedProjectIndexRecovery } from '../glue/project-index-recovery.ts';
 import { planProjectIndexRecovery } from '../glue/project-index.ts';
@@ -115,8 +85,6 @@ import {
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
-import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
@@ -157,7 +125,6 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import { createDevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
 import {
   type NodeInvocation,
@@ -172,23 +139,14 @@ import {
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import { createOwnerPackageState } from './owner-package-state.ts';
 import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
-import {
-  type PackageAcquisitionAuthority,
-  createPackageAcquisitionAuthority,
-} from './package-acquisition-authority.ts';
-import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import {
-  binNameOf,
-  createPreviewScope,
-  prepareViteCliAcquisitionFiles,
-  withViteCliEnv,
-} from './vite-cli-prep.ts';
+import { binNameOf, createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -285,52 +243,6 @@ function ownerGitVfs(): SyncMirrorVfs {
   return new SyncMirrorVfs();
 }
 
-/**
- * INSTANT preset deps: restore the baked snapshot into the owner store — a
- * RESTORE, never a network install (the dev line stays faithful: `vite` /
- * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
- * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
- * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
- * preset's dependency-owned files and re-seeds THIS preset's package.json so the
- * snapshot matches, then restores it. User files in the root are never removed by
- * dependency restore. A missing/drifted snapshot leaves deps absent (vite fails
- * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
- * NOT come here: the explicit `npm install` boot step is their only source.
- */
-async function restoreInstantDeps(
-  cfg: BootstrapConfig,
-  templateId: string,
-  slug: string,
-  packages: PackageAcquisitionAuthority,
-): Promise<void> {
-  if (!cfg.bakedNodeModulesUrl) return;
-  const vfs = new SyncMirrorVfs();
-  const fs = syncMirror();
-  const result = await ensureProjectDependencies({
-    vfs,
-    fsSync: fs,
-    packageAcquisitionAuthority: packages,
-    root: cfg.root,
-    templateId,
-    snapshotTemplateId: cfg.bakedNodeModulesTemplateId,
-    slug,
-    snapshotUrl: cfg.bakedNodeModulesUrl,
-    packageJsonText: cfg.packageJson,
-    replaceTreeOnMiss: true,
-    // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
-    log: (line) => console.log(line.trimEnd()),
-    // Deferred stamp-durability check (never awaited on the boot path):
-    // pending stamp promotes only after a clean report; dirty reports leave
-    // the next boot to re-run arrival instead of trusting a torn tree.
-    flush: flushSyncMirror,
-  });
-  if (result.source === 'none') {
-    console.warn(
-      `[shell-owner/worker] instant snapshot unavailable/stale for ${templateId} — node_modules absent (re-run \`pnpm snapshots:bake\`)`,
-    );
-  }
-}
-
 /** `npm install` / `npm i` with NO package specs (install-all from package.json) —
  *  the from-scratch boot's cold-install trigger. `npm install <pkg>` (an add) is not. */
 function isFullInstall(args: readonly string[]): boolean {
@@ -420,392 +332,23 @@ async function bootShellOwner(opts: {
   let devFromScratch = fromScratch;
   let devConfigReady: Promise<void> = Promise.resolve();
   const vfs = new SyncMirrorVfs();
-  const registry = createProxiedRegistryClient();
-  const installStamps = createInstallStampAuthority({
-    vfs,
-    fsSync: vfsAuthority,
-    claimIo: installStampClaims,
-  });
-  let activePackageProject = {
-    projectId: slug,
-    root: cfg.root,
-    slug,
-    identity: installArtifactIdentity,
-  };
-  let activePackageTemplateId = spec.id;
-  interface PackageConfigRecord {
-    readonly cfg: BootstrapConfig;
-    readonly templateId: string;
-    readonly fromScratch: boolean;
-  }
-  const packageConfigs = new Map<string, PackageConfigRecord>();
-  const packageConfigKey = (root: string, projectSlug: string): string =>
-    `${normalizePath(root)}\0${projectSlug}`;
-  packageConfigs.set(packageConfigKey(cfg.root, slug), {
+  const initialPackageConfig = {
     cfg,
     templateId: spec.id,
+    slug,
     fromScratch,
-  });
-  const packageConfigFor = (root: string, projectSlug: string): PackageConfigRecord => {
-    const found = packageConfigs.get(packageConfigKey(root, projectSlug));
-    if (!found) {
-      throw new Error(`package acquisition config missing for ${projectSlug} at ${root}`);
-    }
-    return found;
   };
-  const packageConfigOrNull = (root: string, projectSlug: string): PackageConfigRecord | null =>
-    packageConfigs.get(packageConfigKey(root, projectSlug)) ?? null;
-
-  // Owner-boot eddy prefetch (ADR-0195), FIRST thing in the boot — before the
-  // seed/git work blocks the realm — so the bundle download runs concurrently
-  // with the rest of owner boot and the boot line's `npm install` consumes the
-  // buffered bytes (canonically keyed — a drifted package.json makes install()
-  // ignore it). Skipped when a stamp will suppress the install (reload of an
-  // installed tree). SYNC by design: an async stamp gate starves behind the
-  // busy boot loop and the prefetch fired AFTER the install it was meant to
-  // feed (measured 2026-07-02: two POSTs, 40ms apart, zero overlap).
-  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
-  let installPrefetchConfig: string | undefined;
-  function primeInstallPrefetch(): void {
-    const resolverUrl = getResolverUrl();
-    // Config = the boot identity that must invalidate an in-flight prefetch.
-    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
-    // The policy lives in a pure, unit-tested helper (`decideInstallPrefetch`);
-    // the thunks keep the deliberate ordering — stamp/pin reads (sync,
-    // `syncMirror`) run only when the cheap clear/keep gates fall through. Read
-    // SYNC: an async gate starves behind the busy boot loop and fires the
-    // prefetch AFTER the install it feeds (measured 2026-07-02: two POSTs, no
-    // overlap). Learned pin beats the coarse env pin (ADR-0194).
-    const decision = decideInstallPrefetch({
-      devFromScratch,
-      resolverUrl,
-      config,
-      hasHandle: installPrefetch !== undefined,
-      prevConfig: installPrefetchConfig,
-      isStamped: () => {
-        const checked = installStamps.checkSync({
-          root: devCfg.root,
-          slug: devSlug,
-          expectedPackageJsonText: devCfg.packageJson,
-        });
-        return (
-          checked.status === 'trusted' &&
-          checked.stamp.installArtifactIdentity === installArtifactIdentity
-        );
-      },
-      pinFor: () =>
-        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
-    });
-    if (decision.kind === 'keep') return;
-    if (decision.kind === 'clear') {
-      installPrefetch = undefined;
-      installPrefetchConfig = undefined;
-      return;
-    }
-    installPrefetchConfig = decision.config;
-    installPrefetch =
-      decision.kind === 'start'
-        ? startInstallPrefetch({
-            packageJsonText: devCfg.packageJson,
-            resolverUrl: resolverUrl as string,
-            closureHash: decision.closureHash,
-            bundleBaseUrl: getEddyBundleBaseUrl(),
-          })
-        : undefined;
-  }
-  // A hidden empty boot has no chosen starter — nothing installs until the
-  // page's `pty:dev-config` picks one (its handler re-primes with that config).
-  if (!hiddenEmptyBoot) primeInstallPrefetch();
-
-  const prepareNpmInstallFor = async (
-    project: { readonly root: string; readonly slug: string },
-    config: PackageConfigRecord,
-    ctx: CommandContext,
-    info: {
-      readonly fullInstall: boolean;
-      readonly sessionInstallActivity: boolean;
-      readonly priorTrustedTree: boolean;
-      readonly priorSlug?: string;
-    },
-  ): Promise<void> => {
-    if (!config.fromScratch || !info.fullInstall) return;
-    if (normalizePath(ctx.cwd) !== normalizePath(project.root)) return;
-    const checked = await installStamps.check({
-      root: project.root,
-      slug: project.slug,
-      expectedPackageJsonText: config.cfg.packageJson,
-    });
-    if (
-      checked.status === 'trusted' &&
-      checked.stamp.installArtifactIdentity === installArtifactIdentity
-    ) {
-      return;
-    }
-    if (
-      info.sessionInstallActivity &&
-      checked.status === 'pending' &&
-      checked.stamp?.slug === project.slug &&
-      (info.priorSlug === undefined || info.priorSlug === project.slug)
-    ) {
-      return;
-    }
-    prepareProjectInstallTree(syncMirror(), project.root, {
-      packageJsonText: config.cfg.packageJson,
-      currentSlug: project.slug,
-      ...(info.priorSlug ? { priorSlug: info.priorSlug } : {}),
-      priorTrustedTree: info.priorTrustedTree,
-    });
-  };
-
-  const npmMutationDeps: NpmShellCommandDeps = {
+  const packageState = createOwnerPackageState({
+    initial: initialPackageConfig,
+    primeInitialPrefetch: !hiddenEmptyBoot,
     vfs,
-    registry,
-    assertPortablePaths: (paths) => vfsAuthority.assertPortablePaths(paths),
+    fsSync: vfsAuthority,
+    installStampClaims,
     flush: flushSyncMirror,
-    projectSlug: (root) => {
-      const normalized = normalizePath(root);
-      return normalized === normalizePath(activePackageProject.root)
-        ? activePackageProject.slug
-        : `root:${normalized}`;
-    },
-    resolverUrl: getResolverUrl(),
-    resolverBundleBaseUrl: getEddyBundleBaseUrl(),
-    learnedPins: {
-      get: (key) => readLearnedPin(vfs, key),
-      set: async (key, hash, expectedCurrent) => {
-        await writeLearnedPin(vfs, key, hash, undefined, expectedCurrent);
-      },
-      revalidate: async (_key, request, servedHash) => {
-        const resolverUrl = getResolverUrl();
-        if (!resolverUrl) throw new Error('eddy resolver is not configured');
-        await revalidateLearnedPin({
-          vfs,
-          resolverUrl,
-          request,
-          staleClosureHash: servedHash,
-        });
-      },
-    },
-  };
-
-  const packageAcquisition = createPackageAcquisitionAuthority({
-    stamps: installStamps,
-    stampTransition: { flush: flushSyncMirror },
-    resolveTreeGuards: (root, knownProjects) =>
-      discoverPackageAcquisitionGuardTransitions(syncMirror(), knownProjects, root),
-    observe: (event) => {
-      if (event.type === 'promotion-refused') {
-        console.warn(
-          `[shell-owner/worker] package stamp promotion refused for ${event.projectId}: ${event.reason}`,
-        );
-      }
-    },
-    adapter: {
-      prepareEnsure: async (command, execution) => {
-        if (!command.replaceTreeOnMiss) return;
-        const fs = syncMirror();
-        if (execution.phase === 'snapshot-rejected') {
-          clearProjectTree(fs, command.project.root);
-          fs.writeFileSync(
-            normalizePath(`${command.project.root}/package.json`),
-            enc.encode(command.packageJsonText),
-          );
-          return;
-        }
-        prepareProjectInstallTree(fs, command.project.root, {
-          packageJsonText: command.packageJsonText,
-          currentSlug: command.project.slug,
-          ...(execution.claim.priorSlug ? { priorSlug: execution.claim.priorSlug } : {}),
-          priorTrustedTree: false,
-        });
-      },
-      planSnapshotRestore: async ({ project, snapshot }) => {
-        const payload = snapshot.payload as DepSnapshotV2 | undefined;
-        if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
-        try {
-          const prepared = prepareDepSnapshotRestore(syncMirror(), project.root, payload);
-          const config = packageConfigFor(project.root, project.slug).cfg;
-          return {
-            status: 'ready',
-            packages: payload.packages,
-            apply: async () => {
-              prepared.apply();
-              seedTemplateNodeModulesFiles(syncMirror(), config.root, config.seedFiles);
-              await prepareViteCliAcquisitionFiles(project.root);
-            },
-          };
-        } catch (error) {
-          return {
-            status: 'rejected',
-            reason: `snapshot-restore-plan-failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          };
-        }
-      },
-      install: async (request, execution) => {
-        const parsed = parseNpmInstallRequest(
-          request.type === 'terminal-install' ? request.argv : [],
-        );
-        if (parsed.status === 'rejected') throw new Error(parsed.message.trimEnd());
-        const config = packageConfigOrNull(request.project.root, request.project.slug);
-        const operationDeps: NpmShellCommandDeps = config
-          ? {
-              ...npmMutationDeps,
-              prepareInstall: (ctx, info) =>
-                prepareNpmInstallFor(request.project, config, ctx, info),
-              resolverClosureHash: () => getEddyPin(config.templateId),
-              resolverPrefetch: () =>
-                packageConfigKey(devCfg.root, devSlug) ===
-                packageConfigKey(request.project.root, request.project.slug)
-                  ? installPrefetch
-                  : undefined,
-            }
-          : npmMutationDeps;
-        const context: CommandContext =
-          request.type === 'terminal-install'
-            ? (request.context ??
-              (() => {
-                throw new Error('terminal package acquisition requires its shell context');
-              })())
-            : {
-                cwd: request.project.root,
-                env: { ...opts.nodeWorkerRuntimeEnv },
-                stdout: { write: (chunk) => log(decodeLsChunk(chunk)) },
-                stderr: { write: (chunk) => log(decodeLsChunk(chunk)) },
-              };
-        const installed = await executeNpmInstallOperation(
-          parsed.request,
-          context,
-          operationDeps,
-          execution,
-        );
-        if (installed.status !== 'noop') {
-          await finalizePackageInstallFiles({
-            root: request.project.root,
-            ...(config
-              ? {
-                  seedTemplateFiles: () =>
-                    seedTemplateNodeModulesFiles(
-                      syncMirror(),
-                      config.cfg.root,
-                      config.cfg.seedFiles,
-                    ),
-                }
-              : {}),
-          });
-        }
-        return installed;
-      },
-      reset: async (command) => {
-        clearProjectTree(syncMirror(), command.target.root);
-      },
-      switchProject: async (command) => {
-        if (command.resetPackages) {
-          if (command.packageJsonText === undefined) {
-            throw new NotImplementedError('package-acquisition.project-switch.package-json');
-          }
-          const fs = syncMirror();
-          clearProjectTree(fs, command.to.root);
-          fs.writeFileSync(
-            normalizePath(`${command.to.root}/package.json`),
-            enc.encode(command.packageJsonText),
-          );
-        }
-        activePackageProject = command.to;
-      },
-    },
+    nodeWorkerRuntimeEnv: opts.nodeWorkerRuntimeEnv,
+    log,
   });
-
-  const packageMutations: PackageMutationExecutor = {
-    async guardedMutation<T>(
-      intents: readonly VfsMutationIntent[],
-      mutate: () => Promise<T>,
-      preflight?: PackageEditPreflight<T>,
-    ): Promise<T> {
-      let completed = false;
-      let value!: T;
-      await packageAcquisition.dispatch({
-        type: 'guarded-mutation',
-        ...(preflight
-          ? {
-              preflight: async () => {
-                const result = await preflight();
-                if (result.status === 'ready') return true;
-                value = result.value;
-                completed = true;
-                return false;
-              },
-            }
-          : {}),
-        resolveTransitions: () => {
-          assertPortableVfsMutationIntents(
-            (paths) => vfsAuthority.assertPortablePaths(paths),
-            intents,
-          );
-          return discoverPackageMutationTransitions(
-            syncMirror(),
-            packageAcquisition.knownProjects?.() ?? [],
-            intents,
-          );
-        },
-        mutate: async () => {
-          value = await mutate();
-          completed = true;
-        },
-      });
-      if (!completed) throw new Error('guarded package mutation did not settle');
-      return value;
-    },
-    reset: (target, prepare) =>
-      packageAcquisition.dispatch({
-        type: 'reset',
-        target,
-        prepare,
-        resolveTransitions: () =>
-          discoverPackageMutationTransitions(
-            syncMirror(),
-            packageAcquisition.knownProjects?.() ?? [],
-            [{ kind: 'rm', path: target.root }],
-          ),
-      }),
-    async packageJsonEdit<T>(
-      target: PackageMutationTarget,
-      mutate: () => Promise<T>,
-      preflight?: PackageEditPreflight<T>,
-    ): Promise<T> {
-      let completed = false;
-      let value!: T;
-      await packageAcquisition.dispatch({
-        type: 'package-json-edit',
-        project: () => {
-          if (normalizePath(target.root) !== normalizePath(activePackageProject.root)) {
-            throw new Error(
-              `package.json edit target ${target.root} is not the active package root ${activePackageProject.root}`,
-            );
-          }
-          return activePackageProject;
-        },
-        ...(preflight
-          ? {
-              preflight: async () => {
-                const result = await preflight();
-                if (result.status === 'ready') return true;
-                value = result.value;
-                completed = true;
-                return false;
-              },
-            }
-          : {}),
-        mutate: async () => {
-          value = await mutate();
-          completed = true;
-        },
-      });
-      if (!completed) throw new Error(`package.json edit did not run for ${target.root}`);
-      return value;
-    },
-  };
+  const packageMutations = packageState.mutations;
   installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror, (intents, apply) =>
     applyPackageAwareVfsMutations(packageMutations, cfg.root, intents, apply),
   );
@@ -854,10 +397,7 @@ async function bootShellOwner(opts: {
     if (fromScratch) {
       await initialCommit;
     } else {
-      await Promise.all([
-        initialCommit,
-        restoreInstantDeps(cfg, spec.id, slug, packageAcquisition),
-      ]);
+      await Promise.all([initialCommit, packageState.restore(initialPackageConfig)]);
       await absorbPendingStarterGeneratedBaseline(cfg.root);
     }
   }
@@ -927,43 +467,13 @@ async function bootShellOwner(opts: {
     readonly fromScratch: boolean;
   }): Promise<void> {
     try {
-      const checkedInstall = target.fromScratch
-        ? await installStamps.check({
-            root: target.cfg.root,
-            slug: target.slug,
-            expectedPackageJsonText: target.cfg.packageJson,
-          })
-        : null;
-      const cleanForSwitch = shouldCleanForDevBootWithInstallState({
-        lastTemplateId: activePackageTemplateId,
-        lastRoot: activePackageProject.root,
-        nextTemplateId: target.spec.id,
-        nextRoot: target.cfg.root,
-        fromScratch: target.fromScratch,
-        installStampSatisfied:
-          checkedInstall?.status === 'trusted' &&
-          checkedInstall.stamp.installArtifactIdentity === installArtifactIdentity,
-      });
-      const nextPackageProject = {
-        projectId: target.slug,
-        root: target.cfg.root,
+      await packageState.transition({
+        cfg: target.cfg,
+        templateId: target.spec.id,
         slug: target.slug,
-        identity: installArtifactIdentity,
-      };
-      await packageAcquisition.dispatch({
-        type: 'project-switch',
-        from: activePackageProject,
-        to: nextPackageProject,
-        // A from-scratch config assignment is not the install: preserve the
-        // current package bytes until the explicit `npm install` owns the clean.
-        resetPackages: cleanForSwitch && !target.fromScratch,
-        ...(cleanForSwitch && !target.fromScratch
-          ? { packageJsonText: target.cfg.packageJson }
-          : {}),
+        fromScratch: target.fromScratch,
       });
-      activePackageTemplateId = target.spec.id;
       if (!target.fromScratch) {
-        await restoreInstantDeps(target.cfg, target.spec.id, target.slug, packageAcquisition);
         await absorbPendingStarterGeneratedBaseline(target.cfg.root);
       }
       publishOwnerState();
@@ -1166,11 +676,7 @@ async function bootShellOwner(opts: {
       }
       return runScriptCommand(command, ctx);
     };
-    const npmCommand = createNpmShellCommand({
-      ...npmMutationDeps,
-      packageAcquisitionAuthority: packageAcquisition,
-      runScript: runPackageScript,
-    });
+    const npmCommand = packageState.createNpmCommand(runPackageScript);
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
         devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
@@ -1277,14 +783,12 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
-      packageConfigs.set(packageConfigKey(devCfg.root, devSlug), {
+      packageState.configure({
         cfg: devCfg,
         templateId: devSpec.id,
+        slug: devSlug,
         fromScratch: devFromScratch,
       });
-      // Re-prime the eddy prefetch for the NEW preset (ADR-0195) — the boot
-      // line's `npm install` follows this config change.
-      primeInstallPrefetch();
       const target = {
         spec: devSpec,
         cfg: devCfg,
@@ -1377,6 +881,14 @@ async function bootShellOwner(opts: {
           applyPackageAwareHostCommit(vfsAuthority, packageMutations, cfg.root, request),
         publishSnapshot: publishOwnerState,
         send: (ack) => kernelIpc.send?.(ack),
+      });
+      return;
+    }
+    if (isOwnerVfsCommitReceivedMessage(message)) {
+      handleOwnerVfsCommitReceipt({
+        message,
+        release: (ack) => vfsAuthority.releaseHostCommit(ack),
+        send: (released) => kernelIpc.send?.(released),
       });
       return;
     }

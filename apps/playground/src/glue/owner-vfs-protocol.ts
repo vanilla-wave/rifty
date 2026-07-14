@@ -9,6 +9,14 @@ export type TreeRevision = number;
 /** Opaque token for one path state. Equality is its only supported operation. */
 export type PathVersion = string;
 
+/** Loud boundary failure for a malformed or mis-correlated VFS protocol frame. */
+export class VfsCommitProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VfsCommitProtocolError';
+  }
+}
+
 /** Minimal owner identity carried by every reflected state frame. */
 export interface OwnerVfsRevisionFrame {
   readonly ownerEpoch: OwnerEpoch;
@@ -65,6 +73,45 @@ export interface HostCommitAck {
   readonly ownerEpoch: OwnerEpoch;
   readonly treeRevision: TreeRevision;
   readonly versions: readonly PathVersionUpdate[];
+}
+
+/** Exact terminal identity echoed by the bounded commit receipt handshake. */
+export function equalHostCommitAcks(left: HostCommitAck, right: HostCommitAck): boolean {
+  if (
+    left.operationId !== right.operationId ||
+    left.ownerEpoch !== right.ownerEpoch ||
+    left.treeRevision !== right.treeRevision ||
+    left.versions.length !== right.versions.length
+  ) {
+    return false;
+  }
+  return left.versions.every((version, index) => {
+    const candidate = right.versions[index];
+    return candidate?.path === version.path && candidate.version === version.version;
+  });
+}
+
+function cloneHostCommitAck(ack: HostCommitAck): HostCommitAck {
+  return {
+    operationId: ack.operationId,
+    ownerEpoch: ack.ownerEpoch,
+    treeRevision: ack.treeRevision,
+    versions: ack.versions.map((version) => ({ ...version })),
+  };
+}
+
+/** Mutation applied, but a later owner-side observation step failed. */
+export class VfsCommitAppliedError extends Error {
+  readonly applied: HostCommitAck;
+
+  constructor(applied: HostCommitAck, cause: Error) {
+    super(
+      `VFS commit ${applied.operationId} applied at revision ${applied.treeRevision}: ${cause.message}`,
+    );
+    this.name = 'VfsCommitAppliedError';
+    this.applied = cloneHostCommitAck(applied);
+    this.cause = cause;
+  }
 }
 
 export type OwnerVfsSnapshotEntry =

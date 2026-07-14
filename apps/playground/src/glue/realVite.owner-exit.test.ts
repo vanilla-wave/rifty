@@ -402,6 +402,445 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     await expect(pending).resolves.toEqual(ack);
   });
 
+  it('receipts an exact conditional-commit terminal until the owner releases replay bytes', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'receipt-save',
+      path: '/workspace/new-dir',
+      expectedVersion: null,
+    });
+    const ack = {
+      operationId: 'receipt-save',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/new-dir', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: ack.operationId,
+      ok: true,
+      ack,
+    });
+    await expect(pending).resolves.toEqual(ack);
+
+    const receipts = (): unknown[] =>
+      fakeWorker.sent.filter(
+        (message) =>
+          !!message &&
+          typeof message === 'object' &&
+          (message as { readonly type?: unknown }).type === 'rifty:owner-vfs-commit-received',
+      );
+    expect(receipts()).toEqual([{ type: 'rifty:owner-vfs-commit-received', ack }]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(receipts().length).toBeGreaterThan(1);
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-released',
+      ack,
+    });
+    const releasedCount = receipts().length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(receipts()).toHaveLength(releasedCount);
+  });
+
+  it('ignores an unsolicited commit terminal without creating a receipt retry', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const unsolicited = {
+      operationId: 'unsolicited',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/ghost', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: unsolicited.operationId,
+      ok: true,
+      ack: unsolicited,
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(fakeWorker.sent).not.toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: unsolicited,
+    });
+  });
+
+  it('does not let wrong-owner or divergent evidence settle or mask the exact terminal', async () => {
+    vi.useFakeTimers();
+    const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'correlated-save',
+      path: '/workspace/exact',
+      expectedVersion: null,
+    });
+    let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void pending.then(
+      () => {
+        settlement = 'resolved';
+      },
+      () => {
+        settlement = 'rejected';
+      },
+    );
+    const wrongOwner = {
+      operationId: 'correlated-save',
+      ownerEpoch: 'owner-stale',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/exact', version: 'v4' }],
+    };
+    const divergent = {
+      ...wrongOwner,
+      ownerEpoch: 'owner-a',
+      versions: [{ path: '/workspace/other', version: 'v4' }],
+    };
+    for (const ack of [wrongOwner, divergent]) {
+      fakeWorker.emit('message', {
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: ack.operationId,
+        ok: true,
+        ack,
+      });
+      await Promise.resolve();
+    }
+    expect(settlement).toBe('pending');
+    expect(protocolErrors).toHaveBeenCalledTimes(2);
+    for (const call of protocolErrors.mock.calls) {
+      expect(call[1]).toMatchObject({ name: 'VfsCommitProtocolError' });
+    }
+    expect(fakeWorker.sent).not.toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: wrongOwner,
+    });
+    expect(fakeWorker.sent).not.toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: divergent,
+    });
+
+    const exact = {
+      operationId: 'correlated-save',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/exact', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: exact.operationId,
+      ok: true,
+      ack: exact,
+    });
+    await expect(pending).resolves.toEqual(exact);
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: exact,
+    });
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: exact });
+    protocolErrors.mockRestore();
+  });
+
+  it('clears terminal receipt retries when the captured owner exits', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'exit-receipt',
+      path: '/workspace/exact',
+      expectedVersion: null,
+    });
+    const ack = {
+      operationId: 'exit-receipt',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/exact', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: ack.operationId,
+      ok: true,
+      ack,
+    });
+    await expect(pending).resolves.toEqual(ack);
+    const receiptCount = (): number =>
+      fakeWorker.sent.filter(
+        (message) =>
+          !!message &&
+          typeof message === 'object' &&
+          (message as { readonly type?: unknown }).type === 'rifty:owner-vfs-commit-received',
+      ).length;
+    expect(receiptCount()).toBe(1);
+
+    fakeWorker.die(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(receiptCount()).toBe(1);
+  });
+
+  it('turns a malformed terminal into a protocol error without losing valid applied evidence', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'malformed-terminal',
+      path: '/workspace/exact',
+      expectedVersion: null,
+    });
+    const applied = {
+      operationId: 'malformed-terminal',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/exact', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: applied.operationId,
+      ok: false,
+      error: {
+        kind: 'version-conflict',
+        name: 'VfsVersionConflictError',
+        message: 'malformed bytes',
+        path: '/workspace/exact',
+        expectedVersion: null,
+        actualVersion: 'remote',
+        actualEntry: {
+          path: '/workspace/exact',
+          kind: 'file',
+          size: 2,
+          content: new Uint8Array([1]),
+          version: 'remote',
+        },
+        ownerEpoch: 'owner-a',
+        treeRevision: 4,
+      },
+      applied,
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'VfsCommitAppliedError',
+      applied,
+      cause: { name: 'VfsCommitProtocolError' },
+    });
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: applied,
+    });
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: applied });
+  });
+
+  it('replays the exact request after a malformed terminal without applied evidence', async () => {
+    vi.useFakeTimers();
+    const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const request = {
+      kind: 'mkdir' as const,
+      operationId: 'malformed-replay',
+      path: '/workspace/exact',
+      expectedVersion: null,
+    };
+    const pending = handle.applyHostCommit(request);
+    let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void pending.then(
+      () => {
+        settlement = 'resolved';
+      },
+      () => {
+        settlement = 'rejected';
+      },
+    );
+    const commitPosts = (): unknown[] =>
+      fakeWorker.sent.filter(
+        (message) =>
+          !!message &&
+          typeof message === 'object' &&
+          (message as { readonly type?: unknown }).type === 'rifty:owner-vfs-commit',
+      );
+    expect(commitPosts()).toEqual([{ type: 'rifty:owner-vfs-commit', request }]);
+
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: false,
+      error: { kind: 'error', name: '', message: 7 },
+    });
+    await Promise.resolve();
+    expect(settlement).toBe('pending');
+    expect(protocolErrors).toHaveBeenCalledWith(
+      '[real-vite/page] rejected divergent owner VFS terminal',
+      expect.objectContaining({ name: 'VfsCommitProtocolError' }),
+    );
+    expect(commitPosts().length).toBeGreaterThan(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(commitPosts().length).toBeGreaterThan(2);
+    const exact = {
+      operationId: request.operationId,
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: request.path, version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: true,
+      ack: exact,
+    });
+    await expect(pending).resolves.toEqual(exact);
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: exact,
+    });
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: exact });
+    protocolErrors.mockRestore();
+  });
+
+  it('ends malformed-terminal replay ownership on certified owner exit', async () => {
+    vi.useFakeTimers();
+    const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const request = {
+      kind: 'mkdir' as const,
+      operationId: 'malformed-exit',
+      path: '/workspace/exact',
+      expectedVersion: null,
+    };
+    const pending = handle.applyHostCommit(request);
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: false,
+      error: { kind: 'error', name: '', message: 7 },
+    });
+    const commitCount = (): number =>
+      fakeWorker.sent.filter(
+        (message) =>
+          !!message &&
+          typeof message === 'object' &&
+          (message as { readonly type?: unknown }).type === 'rifty:owner-vfs-commit',
+      ).length;
+    expect(commitCount()).toBeGreaterThan(1);
+
+    fakeWorker.die(137);
+    await expect(pending).rejects.toThrow(/owner exited/);
+    const exitedCount = commitCount();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(commitCount()).toBe(exitedCount);
+    protocolErrors.mockRestore();
+  });
+
+  it('receipts an applied NACK and rejects with exact already-applied evidence', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const pending = handle.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'publish-failed',
+      path: '/workspace/applied-dir',
+      expectedVersion: null,
+    });
+    const applied = {
+      operationId: 'publish-failed',
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: '/workspace/applied-dir', version: 'v4' }],
+    };
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: applied.operationId,
+      ok: false,
+      error: { kind: 'error', name: 'Error', message: 'snapshot publication failed' },
+      applied,
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'VfsCommitAppliedError',
+      applied,
+      cause: { message: 'snapshot publication failed' },
+    });
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: applied,
+    });
+
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-released',
+      ack: applied,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+
   it('binds conditional commits to the ready owner and restores exact conflict evidence', async () => {
     const { startWorkspaceOwner } = await importOwner();
     const { VfsVersionConflictError } = await import('./owner-vfs-protocol.ts');

@@ -145,6 +145,9 @@ export type PackageInstallAdapterResult =
 export interface PackageInstallExecution {
   /** This owner already attempted a terminal install on the same tree. */
   readonly sessionInstallActivity: boolean;
+  /** Exact project identity of that attempt; boolean activity alone cannot
+   * distinguish a same-root project switch from a same-project retry. */
+  readonly priorSessionSlug?: string;
   /** Exact pre-demote trusted state for this project/artifact identity. */
   readonly priorTrustedTree: boolean;
   /** Prior on-disk claim owner; a different slug makes the lock/tree foreign. */
@@ -301,7 +304,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
   readonly #queue: QueueEntry[] = [];
-  readonly #terminalActivityRoots = new Set<string>();
+  readonly #terminalActivity = new Map<string, string>();
   readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
   #draining = false;
 
@@ -715,12 +718,16 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
 
     let installed: PackageInstallAdapterResult;
     const rootKey = normalizePath(request.project.root);
-    const sessionInstallActivity =
-      request.type === 'terminal-install' && this.#terminalActivityRoots.has(rootKey);
-    if (request.type === 'terminal-install') this.#terminalActivityRoots.add(rootKey);
+    const priorSessionSlug =
+      request.type === 'terminal-install' ? this.#terminalActivity.get(rootKey) : undefined;
+    const sessionInstallActivity = priorSessionSlug !== undefined;
+    if (request.type === 'terminal-install') {
+      this.#terminalActivity.set(rootKey, request.project.slug);
+    }
     try {
       installed = await this.#adapter.install(request, {
         sessionInstallActivity,
+        ...(priorSessionSlug !== undefined ? { priorSessionSlug } : {}),
         priorTrustedTree,
         ...(claim.priorSlug ? { priorSlug: claim.priorSlug } : {}),
       });

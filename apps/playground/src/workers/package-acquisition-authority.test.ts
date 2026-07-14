@@ -784,12 +784,20 @@ describe('package-acquisition authority', () => {
 
   it('shares terminal session activity across normalized root aliases', async () => {
     const vfs = await seededVfs();
-    const flags: boolean[] = [];
+    const seen: Array<{
+      readonly activity: boolean;
+      readonly priorSessionSlug?: string;
+    }> = [];
     const authority = createPackageAcquisitionAuthority({
       stamps: createInstallStampAuthority({ vfs }),
       adapter: adapterWith({
         install: async (_request, execution) => {
-          flags.push(execution.sessionInstallActivity);
+          seen.push({
+            activity: execution.sessionInstallActivity,
+            ...(execution.priorSessionSlug !== undefined
+              ? { priorSessionSlug: execution.priorSessionSlug }
+              : {}),
+          });
           await writeInstalledTree(vfs);
           return { result: installResult('cache'), packageJsonText: PACKAGE_JSON };
         },
@@ -802,8 +810,17 @@ describe('package-acquisition authority', () => {
       project: { ...PROJECT, root: `${ROOT}/.` },
       argv: [],
     });
+    await authority.dispatch({
+      type: 'terminal-install',
+      project: { ...PROJECT, projectId: 'next', slug: 'next' },
+      argv: [],
+    });
 
-    expect(flags).toEqual([false, true]);
+    expect(seen).toEqual([
+      { activity: false },
+      { activity: true, priorSessionSlug: PROJECT.slug },
+      { activity: true, priorSessionSlug: PROJECT.slug },
+    ]);
   });
 
   it('serializes install -> manifest edit -> reset -> project switch in dispatch order', async () => {

@@ -14,14 +14,12 @@ import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { createInstallStamp, installStampPath } from './install-stamp.ts';
 import { VfsVersionConflictError } from './owner-vfs-protocol.ts';
 import {
-  type PackageEditPreflight,
-  type PackageMutationExecutor,
   type PackageMutationImpact,
-  type PackageMutationTarget,
   applyPackageAwareHostCommit,
   assertPortableVfsMutationIntents,
   classifyHostCommitPackageImpact,
   classifyVfsMutationIntentsPackageImpact,
+  createPackageMutationExecutor,
   discoverPackageAcquisitionGuardTransitions,
   discoverPackageMutationTransitions,
   packageMutationTransitionsForProjects,
@@ -203,67 +201,12 @@ async function harness(flush?: () => Promise<{ failures: []; total: 0 }>) {
       switchProject: async () => {},
     },
   });
-  const mutations: PackageMutationExecutor = {
-    async guardedMutation<T>(
-      intents: readonly VfsMutationIntent[],
-      mutate: () => Promise<T>,
-      preflight?: PackageEditPreflight<T>,
-    ): Promise<T> {
-      let completed = false;
-      let value!: T;
-      await packages.dispatch({
-        type: 'guarded-mutation',
-        ...(preflight
-          ? {
-              preflight: async () => {
-                const result = await preflight();
-                if (result.status === 'ready') return true;
-                value = result.value;
-                completed = true;
-                return false;
-              },
-            }
-          : {}),
-        resolveTransitions: () => packageMutationTransitionsForProjects(intents, [PROJECT]),
-        mutate: async () => {
-          value = await mutate();
-          completed = true;
-        },
-      });
-      if (!completed) throw new Error('guarded mutation did not settle');
-      return value;
-    },
-    reset: (target, prepare) => packages.dispatch({ type: 'reset', target, prepare }),
-    async packageJsonEdit<T>(
-      target: PackageMutationTarget,
-      mutate: () => Promise<T>,
-      preflight?: PackageEditPreflight<T>,
-    ): Promise<T> {
-      let completed = false;
-      let value!: T;
-      await packages.dispatch({
-        type: 'package-json-edit',
-        project: PROJECT,
-        ...(preflight
-          ? {
-              preflight: async () => {
-                const result = await preflight();
-                if (result.status === 'ready') return true;
-                value = result.value;
-                completed = true;
-                return false;
-              },
-            }
-          : {}),
-        mutate: async () => {
-          value = await mutate();
-          completed = true;
-        },
-      });
-      if (!completed) throw new Error(`package edit did not settle for ${target.root}`);
-      return value;
-    },
-  };
+  const mutations = createPackageMutationExecutor({
+    packages,
+    fs: owner,
+    assertPortablePaths: (paths) => owner.assertPortablePaths(paths),
+    activeProject: () => PROJECT,
+  });
   return { vfs, owner, stamps, mutations };
 }
 
