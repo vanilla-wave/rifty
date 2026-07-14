@@ -186,7 +186,10 @@
 - Page→owner mutations retain their reply path after handoff: VFS commits,
   explorer writes, Git, archive import, project-index updates, and dev-config
   assignment settle only on ACK/NACK, send failure, or certified owner exit.
-  Read requests and post-ACK durability observations remain bounded.
+  Read requests and post-ACK durability observations remain bounded. A generic
+  project-index mutation whose terminal ACK is lost now rejects with an explicit
+  unknown outcome after a finite bound; exact disposition recovery remains a
+  separate lifecycle-authority contract.
 - Each conditional VFS operation has one exact request/in-flight/outcome record:
   async duplicates share one execution and divergent bytes cannot enter it.
   Success, applied failure, and pre-apply NACK all use exact retained terminal

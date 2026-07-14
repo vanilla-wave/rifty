@@ -879,6 +879,8 @@ export function serveProjectIndex(
 
 const INDEX_APPLIED_RETRY_MS = 250;
 const INDEX_SAVE_STATUS_POLL_MS = 1_000;
+// TODO(backlog: playground/project-lifecycle-outcome-recovery): exact generic disposition replay.
+const INDEX_MUTATION_OUTCOME_TIMEOUT_MS = 120_000;
 
 export type ProjectIndexSaveApplication =
   | { readonly kind: 'applied'; readonly index: ProjectIndex }
@@ -907,6 +909,16 @@ export interface ProjectIndexMutationOptions {
   readonly ownerClosed?: Promise<unknown>;
 }
 
+/** The owner may have applied a one-shot mutation whose terminal ACK was lost. */
+export class ProjectIndexMutationOutcomeUnknownError extends Error {
+  constructor(operation: string) {
+    super(
+      `project index ${operation} outcome is unknown: owner did not certify it within ${INDEX_MUTATION_OUTCOME_TIMEOUT_MS}ms`,
+    );
+    this.name = 'ProjectIndexMutationOutcomeUnknownError';
+  }
+}
+
 function postIndexMutation(
   key: OwnerBridgeKey,
   frame: IndexMutationFrame,
@@ -921,6 +933,7 @@ function postIndexMutation(
   const closeChannel = (): void => {
     if (closed) return;
     closed = true;
+    clearTimeout(outcomeTimeout);
     channel.removeEventListener('message', onMessage as unknown as EventListener);
     channel.close();
   };
@@ -946,6 +959,9 @@ function postIndexMutation(
     settlements.resolve(opId, reply.index);
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
+  const outcomeTimeout = setTimeout(() => {
+    settlements.reject(opId, new ProjectIndexMutationOutcomeUnknownError(frame.type));
+  }, INDEX_MUTATION_OUTCOME_TIMEOUT_MS);
   const promise = settlements.request(opId, 'mutation', () => channel.postMessage(mutation));
   settlements.dispose(new Error(`project index ${frame.type} request disposed`));
   return promise;

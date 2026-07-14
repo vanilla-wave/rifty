@@ -76,7 +76,7 @@ async function saveScratchAs(page: Page, name: string): Promise<string> {
   await dialog.getByRole('button', { name: 'Save project' }).click();
   // Save closes the DIALOG but leaves the launcher open (the new project appears in
   // the Projects tab). Close the launcher explicitly so the editor regains focus.
-  await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  await expect(dialog).toHaveCount(0, { timeout: OWNER_DURABLE_TIMEOUT });
   const id = await projectIdForName(page, name);
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });

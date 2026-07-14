@@ -440,6 +440,18 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       after: { activeId: 'scratch', scratch: { starter: 'node-worker', dirty: false } },
     },
     {
+      name: 'reset-project',
+      createFs: () => {
+        const fs = ownerFs();
+        fs.mkdirSync('/projects/p-1', { recursive: true });
+        fs.writeFileSync('/projects/p-1/stray.txt', enc.encode('replace me'));
+        return fs;
+      },
+      mutate: () => resetProjectIndex(PORT, 'p-1'),
+      before: { activeId: 'p-1', projects: [{ id: 'p-1', name: 'A' }] },
+      after: { activeId: 'p-1', projects: [{ id: 'p-1', name: 'A' }] },
+    },
+    {
       name: 'delete',
       createFs: () => {
         const fs = ownerFs();
@@ -2425,6 +2437,48 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     });
     tearOwner();
   });
+
+  it.each(durabilityPublicationScenarios)(
+    'bounds $name when its only durable ACK is lost as an unknown outcome',
+    async ({ createFs, mutate, after }) => {
+      vi.useFakeTimers();
+      class DropIndexAckChannel extends FakeChannel {
+        override postMessage(data: unknown): void {
+          if (frameType(data) === 'index-ack') return;
+          super.postMessage(data);
+        }
+      }
+      (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+        DropIndexAckChannel as unknown as typeof BroadcastChannel;
+      const fs = createFs();
+      const tearOwner = serveProjectIndex(PORT, fs, '/');
+      const mutation = mutate();
+      let outcome:
+        | { readonly status: 'resolved' }
+        | { readonly status: 'rejected'; readonly error: unknown }
+        | undefined;
+      void mutation.then(
+        () => {
+          outcome = { status: 'resolved' };
+        },
+        (error: unknown) => {
+          outcome = { status: 'rejected', error };
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(120_001);
+
+      expect(outcome).toMatchObject({
+        status: 'rejected',
+        error: {
+          name: 'ProjectIndexMutationOutcomeUnknownError',
+          message: expect.stringMatching(/unknown/i),
+        },
+      });
+      expect(loadIndex(fs, '/')).toMatchObject(after);
+      tearOwner();
+    },
+  );
 
   it('rejects an admitted index mutation when the owner exit is certified', async () => {
     const fs = ownerFs();
