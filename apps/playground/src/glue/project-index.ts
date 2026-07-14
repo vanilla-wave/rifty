@@ -244,14 +244,17 @@ export interface ProjectIndexRecoveryPlan {
  * Pure boot preflight for both Save crash windows. Validates every indexed tree
  * before exposing deterministic deletions, so callers can revoke package state
  * for each exact root before applying it. `starter` also plans cold-scratch index
- * synthesis; planning never writes.
+ * synthesis; `protectedRoot` defers deletion of a currently-served owner root for
+ * the next boot plan. Planning never writes.
  */
 export function planProjectIndexRecovery(
   fs: IndexFs,
   base: string,
-  options: { readonly starter?: string } = {},
+  options: { readonly starter?: string; readonly protectedRoot?: string } = {},
 ): ProjectIndexRecoveryPlan {
   const index = loadIndex(fs, base);
+  const protectedRoot =
+    options.protectedRoot === undefined ? null : normalizePath(options.protectedRoot);
 
   // Validate the complete authoritative set before producing any action.
   for (const project of index.projects) {
@@ -271,11 +274,17 @@ export function planProjectIndexRecovery(
       .map((dirent) => dirent.name)
       .sort();
     for (const id of orphanIds) {
-      deletions.push({ root: rootForId(id), reason: 'orphan-project' });
+      const root = rootForId(id);
+      if (root !== protectedRoot) deletions.push({ root, reason: 'orphan-project' });
     }
   }
 
-  if (index.activeId !== 'scratch' && index.scratch === null && fs.existsSync('/scratch')) {
+  if (
+    index.activeId !== 'scratch' &&
+    index.scratch === null &&
+    protectedRoot !== '/scratch' &&
+    fs.existsSync('/scratch')
+  ) {
     deletions.push({ root: '/scratch', reason: 'stale-scratch' });
   }
 

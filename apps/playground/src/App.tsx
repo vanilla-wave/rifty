@@ -724,6 +724,17 @@ export function App(props: AppProps) {
     },
     ensureOwnerStarted: () => workspace.ensureStarted(false),
     establishScratch: (id, opts) => durableNewScratch(id, opts),
+    ensureScratchOwnerRoot: async () => {
+      if (workspaceOwner().root === rootForId('scratch')) return;
+      const switched = await workspace.trackSwitch(workspace.switchTo('scratch'));
+      if (!switched || workspaceOwner().root !== rootForId('scratch')) {
+        throw new Error('Starter boot could not establish the /scratch owner');
+      }
+    },
+    refreshStarterEditorContext: async () => {
+      await resetRefresh.waitForActiveSnapshotFrame();
+      resetEditorToActiveInitialFiles();
+    },
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
     seedWorkspace: (preset) => files.seedOwner(preset),
   });
@@ -1775,17 +1786,15 @@ export function App(props: AppProps) {
   // page-mirror flip is immediate UX; this re-creates the durable scratch entry +
   // re-seeds /scratch so the NEXT Save's `saveScratchAsProject` precondition holds
   // (after a prior Save the owner index is `scratch:null`). Read the port at fire
-  // time; skipped in memory mode (no durable index). The owner is not respawned on
-  // a pick — it stays rooted at /scratch and re-seeds the live tree.
+  // time; skipped in memory mode (no durable index). Preset boot then keeps an
+  // existing /scratch owner or respawns a named-project owner at /scratch.
   async function durableNewScratch(
     id: string,
     opts: { readonly preserveDirtySameStarter?: boolean } = {},
   ): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
       const owner = workspaceOwner();
-      await newScratchIndex(owner.snapshotPort, id, { ...opts, ownerClosed: owner.closed }).catch(
-        (err: unknown) => console.error('[project-index] new scratch failed', err),
-      );
+      await newScratchIndex(owner.snapshotPort, id, { ...opts, ownerClosed: owner.closed });
     }
   }
 

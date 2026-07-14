@@ -308,6 +308,26 @@ describe('project-index boot recovery plan', () => {
     ]);
   });
 
+  it('defers a live hidden-owner root but replans its stale deletion for the next owner', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-live', 'live');
+    tree(fs, '/scratch', 'hidden-owner-root');
+    writeIndex(fs, '/', {
+      activeId: 'p-live',
+      scratch: null,
+      projects: [{ id: 'p-live', name: 'Live', starter: 'project-files', editedAt: 'x' }],
+    });
+
+    const hiddenPlan = planProjectIndexRecovery(fs, '/', {
+      protectedRoot: '/scratch',
+    });
+    expect(hiddenPlan.deletions).toEqual([]);
+    expect(fs.existsSync('/scratch')).toBe(true);
+    expect(planProjectIndexRecovery(fs, '/').deletions).toEqual([
+      { root: '/scratch', reason: 'stale-scratch' },
+    ]);
+  });
+
   it('applies only the selected deletion action', () => {
     const fs = new MemoryFsSync();
     tree(fs, '/projects/p-live', 'live');

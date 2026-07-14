@@ -1023,7 +1023,10 @@ async function bootShellOwner(opts: {
   const indexRecovery = planProjectIndexRecovery(
     syncMirror(),
     '/',
-    hiddenEmptyBoot ? {} : { starter },
+    // The hidden owner is still serving snapshots from its frozen /scratch root.
+    // Defer deleting that stale Save source until the project-root owner respawns
+    // and replans recovery; deleting a live root makes its next request fatal.
+    hiddenEmptyBoot ? { protectedRoot: cfg.root } : { starter },
   );
   await applyGuardedProjectIndexRecovery(syncMirror(), indexRecovery, (intents, apply) =>
     packageMutations.guardedMutation(intents, async () => apply()),

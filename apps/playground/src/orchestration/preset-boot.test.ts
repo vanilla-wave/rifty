@@ -108,6 +108,12 @@ class Harness {
       establishScratch: async (id, opts) => {
         this.log.push(`scratch:${id}:${opts.preserveDirtySameStarter === true}`);
       },
+      ensureScratchOwnerRoot: async () => {
+        this.log.push('ensureScratchOwnerRoot');
+      },
+      refreshStarterEditorContext: async () => {
+        this.log.push('refreshStarterEditorContext');
+      },
       ephemeralStorage: this.ephemeral,
       seedWorkspace: async (preset) => {
         this.log.push(`seed:${preset.id}`);
@@ -299,11 +305,61 @@ describe('transition queue serialization', () => {
 });
 
 describe('gallery-pick flow', () => {
+  it('re-roots the owner after durable scratch establishment and before boot', async () => {
+    const h = new Harness();
+    const boot = createPresetBoot<Session>(h.deps());
+
+    await boot.pickStarter('real-vite', pickOpts(h));
+    await tick(20);
+
+    const scratchAt = h.log.indexOf('scratch:real-vite:true');
+    const ownerRootAt = h.log.indexOf('ensureScratchOwnerRoot');
+    const bootAt = h.log.findIndex((event) => event.startsWith('run:'));
+    expect(ownerRootAt).toBeGreaterThan(scratchAt);
+    expect(ownerRootAt).toBeLessThan(bootAt);
+  });
+
+  it('reopens same-path starter tabs only after a fresh scratch snapshot', async () => {
+    const h = new Harness();
+    const boot = createPresetBoot<Session>(h.deps());
+
+    await boot.pickStarter('real-vite', pickOpts(h));
+    await tick(20);
+
+    const rootAt = h.log.indexOf('ensureScratchOwnerRoot');
+    const editorAt = h.log.indexOf('refreshStarterEditorContext');
+    const bootAt = h.log.findIndex((event) => event.startsWith('run:'));
+    expect(editorAt).toBeGreaterThan(rootAt);
+    expect(editorAt).toBeLessThan(bootAt);
+  });
+
+  it('a failed owner re-root aborts the boot and releases the TS gate', async () => {
+    const h = new Harness();
+    const deps = h.deps();
+    deps.ensureScratchOwnerRoot = async () => {
+      h.log.push('ensureScratchOwnerRoot');
+      throw new Error('scratch owner switch failed');
+    };
+    const boot = createPresetBoot<Session>(deps);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await boot.pickStarter('real-vite', pickOpts(h));
+    let tsReady = false;
+    void boot.tsTransitionReady().then(() => {
+      tsReady = true;
+    });
+    await tick(20);
+
+    expect(h.log.some((event) => event.startsWith('run:'))).toBe(false);
+    expect(tsReady).toBe(true);
+    error.mockRestore();
+  });
+
   it('a clean pick: veil-blind commit, paint → owner → stop-before-write → scratch → boot, owner-ready flip around', async () => {
     const { h, boot } = setup();
     await boot.pickStarter('real-vite', pickOpts(h));
     await tick(20); // fresh pick is fire-and-forget — let the queued boot settle
-    expect(h.log.slice(0, 11)).toEqual([
+    expect(h.log.slice(0, 13)).toEqual([
       'warmEditor',
       'ownerReady:false',
       'commit:real-vite',
@@ -313,6 +369,8 @@ describe('gallery-pick flow', () => {
       'ensureStarted',
       'stopBeforeWrite',
       'scratch:real-vite:true',
+      'ensureScratchOwnerRoot',
+      'refreshStarterEditorContext',
       'ownerReady:true',
       'pick:t10', // runPreset takes over
     ]);

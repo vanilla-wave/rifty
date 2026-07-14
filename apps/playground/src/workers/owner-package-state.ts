@@ -109,7 +109,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const configs = new Map<string, OwnerPackageConfig>();
   let configured = options.initial;
   let activeProject = packageProject(options.initial);
-  let activeTemplateId = options.initial.templateId;
+  let activeTemplateId: string | null = null;
   configs.set(configKey(activeProject.root, activeProject.slug), options.initial);
 
   const registry = options.registry ?? createProxiedRegistryClient();

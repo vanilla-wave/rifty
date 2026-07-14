@@ -190,6 +190,19 @@
   project-index mutation whose terminal ACK is lost now rejects with an explicit
   unknown outcome after a finite bound; exact disposition recovery remains a
   separate lifecycle-authority contract.
+- Starter picks now establish durable `/scratch`, then reconcile the immutable
+  owner root to `/scratch` before publishing or booting. Picks from a saved or
+  restored project can no longer leave UI paths on scratch while snapshots and
+  the dev server still serve the named project; reconciliation failure aborts
+  the boot and releases the TS transition gate. Same-path starter tabs reopen
+  only after a fresh scratch snapshot, so they cannot retain the prior starter's
+  bytes while the explorer and preview already show the new tree.
+- Cold reload recovery no longer deletes the hidden owner's live `/scratch`
+  root while it is publishing the saved-project index. Cleanup is deferred to
+  the respawned project owner, which replans the same stale-source deletion.
+- The hidden-empty owner is no longer treated as a prior dev template. Its first
+  real config preserves a trusted user-extended dependency tree across reload
+  instead of revoking it as a template switch.
 - Each conditional VFS operation has one exact request/in-flight/outcome record:
   async duplicates share one execution and divergent bytes cannot enter it.
   Success, applied failure, and pre-apply NACK all use exact retained terminal
@@ -1493,7 +1506,7 @@
   a scratch entry keyed on the spawn `RIFTY_RFV_STARTER` when `/scratch` exists but
   the index is a cold-boot empty) — the index becomes the real source the page mirror
   hydrates from. Save/reset carry the page's CURRENT active starter so a mid-session
-  starter pick (no respawn) records the right starter. New e2e: the full
+  starter pick records the right starter. New e2e: the full
   save→switch-away→switch-back round-trip with two FRONTEND-starter projects, each
   tree intact + distinct across owner respawns, asserted straight off OPFS
   (`project-switch.spec.ts`). RED-checked: no-op the owner `index-save` handler →
