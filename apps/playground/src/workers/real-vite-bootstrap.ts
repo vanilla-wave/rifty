@@ -954,8 +954,12 @@ async function bootShellOwner(opts: {
         type: 'project-switch',
         from: activePackageProject,
         to: nextPackageProject,
-        resetPackages: cleanForSwitch,
-        ...(cleanForSwitch ? { packageJsonText: target.cfg.packageJson } : {}),
+        // A from-scratch config assignment is not the install: preserve the
+        // current package bytes until the explicit `npm install` owns the clean.
+        resetPackages: cleanForSwitch && !target.fromScratch,
+        ...(cleanForSwitch && !target.fromScratch
+          ? { packageJsonText: target.cfg.packageJson }
+          : {}),
       });
       activePackageTemplateId = target.spec.id;
       if (!target.fromScratch) {
