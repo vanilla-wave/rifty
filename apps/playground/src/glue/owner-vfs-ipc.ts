@@ -338,6 +338,34 @@ function normalizedRequestPaths(request: HostCommitRequest): readonly string[] {
   return [normalizePath(request.sourcePath), normalizePath(request.targetPath)];
 }
 
+function expectedVersionForRequestPath(
+  request: HostCommitRequest,
+  path: string,
+  actualVersion: string | null,
+): { readonly expectedVersion: string | null } | null {
+  const normalizedPath = normalizePath(path);
+  const candidates =
+    request.kind === 'rename'
+      ? [
+          {
+            path: normalizePath(request.sourcePath),
+            expectedVersion: request.expectedSourceVersion,
+          },
+          {
+            path: normalizePath(request.targetPath),
+            expectedVersion: request.expectedTargetVersion,
+          },
+        ]
+      : [{ path: normalizePath(request.path), expectedVersion: request.expectedVersion }];
+  const matches = candidates.filter((candidate) => candidate.path === normalizedPath);
+  for (const candidate of matches) {
+    if (candidate.expectedVersion !== actualVersion) {
+      return { expectedVersion: candidate.expectedVersion };
+    }
+  }
+  return null;
+}
+
 /** Contextual identity/evidence check after structural terminal validation. */
 export function validateHostCommitAckForRequest(
   ack: HostCommitAck,
@@ -408,7 +436,15 @@ export function validateOwnerVfsCommitTerminalForRequest(
   }
   if (message.ok) return validateHostCommitAckForRequest(message.ack, request, ownerEpoch);
   if (message.applied) {
-    return validateHostCommitAckForRequest(message.applied, request, ownerEpoch);
+    const appliedError = validateHostCommitAckForRequest(message.applied, request, ownerEpoch);
+    if (appliedError) return appliedError;
+  }
+  if (message.error.kind === 'operation-id-reuse') {
+    return message.error.operationId === request.operationId
+      ? null
+      : new VfsCommitProtocolError(
+          `VFS commit ${request.operationId} received reuse error for ${message.error.operationId}`,
+        );
   }
   if (message.error.kind !== 'version-conflict') return null;
   if (message.error.ownerEpoch !== ownerEpoch) {
@@ -416,19 +452,26 @@ export function validateOwnerVfsCommitTerminalForRequest(
       `VFS commit ${request.operationId} received conflict from owner ${message.error.ownerEpoch}; expected ${ownerEpoch}`,
     );
   }
-  let paths: readonly string[];
-  let conflictPath: string;
+  let expectation: { readonly expectedVersion: string | null } | null;
   try {
-    paths = normalizedRequestPaths(request);
-    conflictPath = normalizePath(message.error.path);
+    expectation = expectedVersionForRequestPath(
+      request,
+      message.error.path,
+      message.error.actualVersion,
+    );
   } catch {
     return new VfsCommitProtocolError(
       `VFS commit ${request.operationId} has invalid request path evidence`,
     );
   }
-  if (!paths.includes(conflictPath)) {
+  if (expectation === null) {
     return new VfsCommitProtocolError(
       `VFS commit ${request.operationId} received conflict for divergent path ${message.error.path}`,
+    );
+  }
+  if (message.error.expectedVersion !== expectation.expectedVersion) {
+    return new VfsCommitProtocolError(
+      `VFS commit ${request.operationId} received conflict for divergent expected version`,
     );
   }
   return null;

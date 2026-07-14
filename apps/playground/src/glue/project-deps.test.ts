@@ -13,6 +13,7 @@ import {
   ensureProjectDependencies,
   prepareProjectInstallTree,
   seedTemplateNodeModulesFiles,
+  templateNodeModulesSeedMutationIntents,
 } from './project-deps.ts';
 import { ScopedFsSync, ScopedVfs, workspaceVfsPrefix } from './scoped-vfs.ts';
 
@@ -138,6 +139,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     seedTemplateNodeModulesFiles(fsSync, ROOT, {
       [`${ROOT}/node_modules/@rifty/types/existing.d.ts`]: 'template',
       [`${ROOT}/node_modules/@rifty/types/missing.d.ts`]: 'declare const value: 1',
+      [`${ROOT}/node_modules-evil/escape.js`]: 'outside package tree',
       [`${ROOT}/src/ignored.ts`]: 'outside package tree',
     });
 
@@ -151,7 +153,22 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         fsSync.readFileBytesSync(`${ROOT}/node_modules/@rifty/types/missing.d.ts`),
       ),
     ).toBe('declare const value: 1');
+    expect(fsSync.existsSync(`${ROOT}/node_modules-evil/escape.js`)).toBe(false);
     expect(fsSync.existsSync(`${ROOT}/src/ignored.ts`)).toBe(false);
+  });
+
+  it('reports exact missing template node_modules writes without prefix siblings', () => {
+    const { fsSync } = project();
+    fsSync.mkdirSync(`${ROOT}/node_modules/@rifty/types`, { recursive: true });
+    fsSync.writeFileSync(`${ROOT}/node_modules/@rifty/types/existing.d.ts`, enc.encode('user'));
+
+    expect(
+      templateNodeModulesSeedMutationIntents(fsSync, ROOT, {
+        [`${ROOT}/node_modules/@rifty/types/existing.d.ts`]: 'template',
+        [`${ROOT}/node_modules/@rifty/types/missing.d.ts`]: 'missing',
+        [`${ROOT}/node_modules-evil/escape.js`]: 'outside package tree',
+      }),
+    ).toEqual([{ kind: 'write', path: `${ROOT}/node_modules/@rifty/types/missing.d.ts` }]);
   });
 
   it('reuses a stamp written under the SAME slug without fetching or installing', async () => {

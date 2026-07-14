@@ -29,6 +29,7 @@ import type { InstallResult } from '@riftydev/npm-client';
 import {
   type PersistFailureReport,
   type Vfs,
+  type VfsMutationIntent,
   dirname,
   joinPath,
   normalizePath,
@@ -199,17 +200,32 @@ export function prepareProjectInstallTree(
   );
 }
 
+function isTemplateNodeModulesFile(root: string, path: string): boolean {
+  return normalizePath(path).startsWith(`${normalizePath(`${root}/node_modules`)}/`);
+}
+
+/** Exact missing template-owned files; sample only at the package FIFO head. */
+export function templateNodeModulesSeedMutationIntents(
+  fsSync: Pick<WorkspaceArchiveFs, 'existsSync'>,
+  root: string,
+  seedFiles: Readonly<Record<string, string>>,
+): readonly VfsMutationIntent[] {
+  return [...new Set(Object.keys(seedFiles).map((path) => normalizePath(path)))]
+    .filter((path) => isTemplateNodeModulesFile(root, path) && !fsSync.existsSync(path))
+    .sort((left, right) => left.localeCompare(right))
+    .map((path) => ({ kind: 'write', path }));
+}
+
 /** Materialize template-owned declaration packages inside an active claim. */
 export function seedTemplateNodeModulesFiles(
   fsSync: WorkspaceArchiveFs,
   root: string,
   seedFiles: Readonly<Record<string, string>>,
 ): void {
-  const nodeModulesRoot = normalizePath(`${root}/node_modules/`);
   const encoder = new TextEncoder();
   for (const [path, content] of Object.entries(seedFiles)) {
     const normalized = normalizePath(path);
-    if (!normalized.startsWith(nodeModulesRoot)) continue;
+    if (!isTemplateNodeModulesFile(root, normalized)) continue;
     fsSync.mkdirSync(dirname(normalized), { recursive: true });
     if (!fsSync.existsSync(normalized)) {
       fsSync.writeFileSync(normalized, encoder.encode(content));

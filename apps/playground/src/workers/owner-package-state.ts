@@ -33,6 +33,7 @@ import {
   ensureProjectDependencies,
   prepareProjectInstallTree,
   seedTemplateNodeModulesFiles,
+  templateNodeModulesSeedMutationIntents,
 } from '../glue/project-deps.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
@@ -79,6 +80,8 @@ export interface OwnerPackageState {
   restore(config: OwnerPackageConfig): Promise<void>;
   /** Serialize the active-project transition and restore instant dependencies. */
   transition(config: OwnerPackageConfig): Promise<void>;
+  /** Reassert missing template-owned node_modules files under the package FIFO. */
+  reassertTemplateNodeModules(config: OwnerPackageConfig): Promise<void>;
   /** The npm command already bound to the same acquisition/stamp authority. */
   createNpmCommand(
     runScript: (name: string, command: string, ctx: CommandContext) => Promise<ShellCommandResult>,
@@ -353,6 +356,23 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     activeProject: () => activeProject,
   });
 
+  const reassertTemplateNodeModules = async (config: OwnerPackageConfig): Promise<void> => {
+    let intents: ReturnType<typeof templateNodeModulesSeedMutationIntents> = [];
+    await mutations.guardedMutation(
+      () => intents,
+      async () =>
+        seedTemplateNodeModulesFiles(options.fsSync, config.cfg.root, config.cfg.seedFiles),
+      async () => {
+        intents = templateNodeModulesSeedMutationIntents(
+          options.fsSync,
+          config.cfg.root,
+          config.cfg.seedFiles,
+        );
+        return intents.length === 0 ? { status: 'noop', value: undefined } : { status: 'ready' };
+      },
+    );
+  };
+
   const configure = (config: OwnerPackageConfig): void => {
     configured = config;
     configs.set(configKey(config.cfg.root, config.slug), config);
@@ -419,6 +439,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     configure,
     restore,
     transition,
+    reassertTemplateNodeModules,
     createNpmCommand: (runScript) =>
       createNpmShellCommand({
         ...baseNpmDeps,

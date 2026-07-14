@@ -2,6 +2,7 @@ import { type InstallOptions, type InstallResult, RegistryClient } from '@riftyd
 import { Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
+import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
@@ -44,6 +45,76 @@ function installResult(): InstallResult {
 }
 
 afterEach(resetSyncMirror);
+
+it('reasserts template node_modules inside the package authority without preserving stale trust', async () => {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-package-template-seed-test',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  authority.mkdirSync(ROOT, { recursive: true });
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  const seedPath = `${ROOT}/node_modules/@rifty/example-types/index.d.ts`;
+  const seedConfig: BootstrapConfig = {
+    ...config,
+    seedFiles: { [seedPath]: 'declare const example: true;\n' },
+  };
+  const ownerConfig = {
+    cfg: seedConfig,
+    templateId: 'vite',
+    slug: 'scratch',
+    fromScratch: true,
+  };
+  const state = createOwnerPackageState({
+    initial: ownerConfig,
+    primeInitialPrefetch: false,
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  await state.reassertTemplateNodeModules(ownerConfig);
+  expect(new TextDecoder().decode(authority.readFileBytesSync(seedPath))).toBe(
+    'declare const example: true;\n',
+  );
+
+  const stamps = createInstallStampAuthority({
+    vfs: pair.vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  const claim = await stamps.demote({ root: ROOT, slug: ownerConfig.slug });
+  const promotion = await stamps.promote(
+    { root: ROOT, slug: ownerConfig.slug, packageJsonText: BASE_PACKAGE_JSON },
+    { epoch: claim.epoch, packages: 1 },
+  );
+  expect(promotion.status).toBe('trusted');
+
+  const noOpRevision = authority.treeRevision;
+  await state.reassertTemplateNodeModules(ownerConfig);
+  expect(authority.treeRevision).toBe(noOpRevision);
+  await expect(stamps.check({ root: ROOT, slug: ownerConfig.slug })).resolves.toMatchObject({
+    status: 'trusted',
+  });
+
+  authority.rmSync(seedPath, { force: true });
+  await state.reassertTemplateNodeModules(ownerConfig);
+  expect(authority.existsSync(seedPath)).toBe(true);
+  await expect(stamps.check({ root: ROOT, slug: ownerConfig.slug })).resolves.toEqual({
+    status: 'absent',
+  });
+});
 
 it('uses exact session project identity while a full install enters during promotion', async () => {
   const pair = createMemoryFs();

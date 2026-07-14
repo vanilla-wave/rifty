@@ -620,6 +620,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         pending.ownerEpoch,
       );
       if (correlationError) {
+        if (!terminal.message.ok && terminal.message.applied) {
+          takeOwnerVfsCommit(terminal.message.operationId);
+          receiveOwnerVfsCommitTerminal(terminal.message.applied);
+          pending.reject(new VfsCommitAppliedError(terminal.message.applied, correlationError));
+          return;
+        }
         reportOwnerVfsProtocolError(correlationError);
         startOwnerVfsCommitReplay(terminal.message.operationId);
         return;

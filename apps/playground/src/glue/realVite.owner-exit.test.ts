@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OwnerVfsErrorFrame } from './owner-vfs-ipc.ts';
+import type { HostCommitAck, HostCommitRequest } from './owner-vfs-protocol.ts';
 
 // Bug #4: on owner death the UI must leave 'running' AND post-exit writes must
 // fail loudly instead of silently dropping through the snapshot-port fallback.
@@ -747,6 +749,306 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     });
     fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: exact });
     protocolErrors.mockRestore();
+  });
+
+  it('replays every divergent NACK correlation sibling until an exact terminal arrives', async () => {
+    vi.useFakeTimers();
+    const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const cases: readonly {
+      readonly request: HostCommitRequest;
+      readonly error: OwnerVfsErrorFrame;
+      readonly exact: HostCommitAck;
+    }[] = [
+      {
+        request: {
+          kind: 'mkdir',
+          operationId: 'reuse-correlation',
+          path: '/workspace/reused',
+          expectedVersion: null,
+        },
+        error: {
+          kind: 'operation-id-reuse',
+          name: 'OperationIdReuseError',
+          message: 'wrong operation',
+          operationId: 'reuse-correlation-other',
+        },
+        exact: {
+          operationId: 'reuse-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [{ path: '/workspace/reused', version: 'v4' }],
+        },
+      },
+      {
+        request: {
+          kind: 'write',
+          operationId: 'write-correlation',
+          path: '/workspace/write.txt',
+          data: new Uint8Array([1]),
+          expectedVersion: 'write-opened',
+        },
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'wrong write expectation',
+          path: '/workspace/write.txt',
+          expectedVersion: 'write-other',
+          actualVersion: null,
+          actualEntry: null,
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+        },
+        exact: {
+          operationId: 'write-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [{ path: '/workspace/write.txt', version: 'v4' }],
+        },
+      },
+      {
+        request: {
+          kind: 'mkdir',
+          operationId: 'mkdir-correlation',
+          path: '/workspace/new-dir',
+          expectedVersion: null,
+        },
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'wrong mkdir expectation',
+          path: '/workspace/new-dir',
+          expectedVersion: 'mkdir-other',
+          actualVersion: 'mkdir-actual',
+          actualEntry: {
+            path: '/workspace/new-dir',
+            kind: 'dir',
+            size: 0,
+            version: 'mkdir-actual',
+          },
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+        },
+        exact: {
+          operationId: 'mkdir-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [{ path: '/workspace/new-dir', version: 'v4' }],
+        },
+      },
+      {
+        request: {
+          kind: 'remove',
+          operationId: 'remove-correlation',
+          path: '/workspace/remove.txt',
+          expectedVersion: 'remove-opened',
+        },
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'wrong remove expectation',
+          path: '/workspace/remove.txt',
+          expectedVersion: 'remove-other',
+          actualVersion: null,
+          actualEntry: null,
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+        },
+        exact: {
+          operationId: 'remove-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [{ path: '/workspace/remove.txt', version: null }],
+        },
+      },
+      {
+        request: {
+          kind: 'rename',
+          operationId: 'rename-source-correlation',
+          sourcePath: '/workspace/source-a.txt',
+          targetPath: '/workspace/target-a.txt',
+          expectedSourceVersion: 'source-opened',
+          expectedTargetVersion: null,
+        },
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'wrong rename source expectation',
+          path: '/workspace/source-a.txt',
+          expectedVersion: 'source-other',
+          actualVersion: null,
+          actualEntry: null,
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+        },
+        exact: {
+          operationId: 'rename-source-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [
+            { path: '/workspace/source-a.txt', version: null },
+            { path: '/workspace/target-a.txt', version: 'v4' },
+          ],
+        },
+      },
+      {
+        request: {
+          kind: 'rename',
+          operationId: 'rename-target-correlation',
+          sourcePath: '/workspace/source-b.txt',
+          targetPath: '/workspace/target-b.txt',
+          expectedSourceVersion: 'source-opened',
+          expectedTargetVersion: null,
+        },
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'wrong rename target expectation',
+          path: '/workspace/target-b.txt',
+          expectedVersion: 'target-other',
+          actualVersion: 'target-actual',
+          actualEntry: {
+            path: '/workspace/target-b.txt',
+            kind: 'dir',
+            size: 0,
+            version: 'target-actual',
+          },
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+        },
+        exact: {
+          operationId: 'rename-target-correlation',
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [
+            { path: '/workspace/source-b.txt', version: null },
+            { path: '/workspace/target-b.txt', version: 'v4' },
+          ],
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const pending = handle.applyHostCommit(testCase.request);
+      let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+      void pending.then(
+        () => {
+          settlement = 'resolved';
+        },
+        () => {
+          settlement = 'rejected';
+        },
+      );
+      const commitPosts = (): unknown[] =>
+        fakeWorker.sent.filter(
+          (message) =>
+            !!message &&
+            typeof message === 'object' &&
+            (message as { readonly type?: unknown; readonly request?: { operationId?: unknown } })
+              .type === 'rifty:owner-vfs-commit' &&
+            (message as { readonly request?: { operationId?: unknown } }).request?.operationId ===
+              testCase.request.operationId,
+        );
+      expect(commitPosts()).toEqual([
+        { type: 'rifty:owner-vfs-commit', request: testCase.request },
+      ]);
+
+      fakeWorker.emit('message', {
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: testCase.request.operationId,
+        ok: false,
+        error: testCase.error,
+      });
+      await Promise.resolve();
+      expect(settlement).toBe('pending');
+      expect(commitPosts().length).toBeGreaterThan(1);
+
+      fakeWorker.emit('message', {
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: testCase.request.operationId,
+        ok: true,
+        ack: testCase.exact,
+      });
+      await expect(pending).resolves.toEqual(testCase.exact);
+      expect(fakeWorker.sent).toContainEqual({
+        type: 'rifty:owner-vfs-commit-received',
+        ack: testCase.exact,
+      });
+      fakeWorker.emit('message', {
+        type: 'rifty:owner-vfs-commit-released',
+        ack: testCase.exact,
+      });
+    }
+
+    expect(protocolErrors).toHaveBeenCalledTimes(cases.length);
+    for (const call of protocolErrors.mock.calls) {
+      expect(call[1]).toMatchObject({ name: 'VfsCommitProtocolError' });
+    }
+    protocolErrors.mockRestore();
+  });
+
+  it('preserves exact applied evidence when a NACK has divergent correlation evidence', async () => {
+    vi.useFakeTimers();
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const request: HostCommitRequest = {
+      kind: 'mkdir',
+      operationId: 'applied-divergent-correlation',
+      path: '/workspace/applied-dir',
+      expectedVersion: null,
+    };
+    const applied: HostCommitAck = {
+      operationId: request.operationId,
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: request.path, version: 'v4' }],
+    };
+    const pending = handle.applyHostCommit(request);
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: false,
+      error: {
+        kind: 'version-conflict',
+        name: 'VfsVersionConflictError',
+        message: 'wrong applied correlation',
+        path: request.path,
+        expectedVersion: 'unexpected-present-version',
+        actualVersion: null,
+        actualEntry: null,
+        ownerEpoch: 'owner-a',
+        treeRevision: 4,
+      },
+      applied,
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'VfsCommitAppliedError',
+      applied,
+      cause: { name: 'VfsCommitProtocolError' },
+    });
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      ack: applied,
+    });
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: applied });
   });
 
   it('ends malformed-terminal replay ownership on certified owner exit', async () => {

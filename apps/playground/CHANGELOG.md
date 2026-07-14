@@ -118,8 +118,10 @@
   mutation routing, and install claims behind one state module. A second full
   install admitted during pending promotion preserves the first install's exact
   manifest/tree only for the same authority-recorded project slug; same-root
-  project switches still clean. A real OPFS watchdog fault proves promotion
-  refuses the hung tree finitely and leaves the claim untrusted.
+  project switches still clean. Template-owned node_modules seeds reassert at
+  initial boot, config switch, and dev run through the same package FIFO; a
+  missing seed revokes stale trust before writing. A real OPFS watchdog fault
+  proves promotion refuses the hung tree finitely and leaves the claim untrusted.
 
 - **Install exit stops awaiting the OPFS durability drain** (ADR-0261,
   supersedes ADR-0187's command-site durable-on-exit clause): one full-ledger

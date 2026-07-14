@@ -19,6 +19,9 @@ export interface PackageMutationTarget {
 }
 
 export type PackageMutation = () => Promise<void>;
+export type PackageMutationIntents =
+  | readonly VfsMutationIntent[]
+  | (() => readonly VfsMutationIntent[]);
 export type PackageResetPlan =
   | { readonly status: 'noop' }
   | { readonly status: 'ready'; readonly mutate: PackageMutation };
@@ -31,7 +34,7 @@ export type PackageEditPreflight<T> = () => Promise<
 export interface PackageMutationExecutor {
   /** Every writer enters the package FIFO; claim discovery runs at its head. */
   guardedMutation<T>(
-    intents: readonly VfsMutationIntent[],
+    intents: PackageMutationIntents,
     mutate: () => Promise<T>,
     preflight?: PackageEditPreflight<T>,
   ): Promise<T>;
@@ -88,7 +91,7 @@ export function createPackageMutationExecutor(
 
   return {
     guardedMutation: <T>(
-      intents: readonly VfsMutationIntent[],
+      intents: PackageMutationIntents,
       mutate: () => Promise<T>,
       check?: PackageEditPreflight<T>,
     ) =>
@@ -97,7 +100,8 @@ export function createPackageMutationExecutor(
           options.packages.dispatch({
             type: 'guarded-mutation',
             ...(check ? { preflight: () => preflight(check, settle) } : {}),
-            resolveTransitions: () => transitions(intents),
+            resolveTransitions: () =>
+              transitions(typeof intents === 'function' ? intents() : intents),
             mutate: async () => settle(await mutate()),
           }),
         'guarded package mutation did not settle',

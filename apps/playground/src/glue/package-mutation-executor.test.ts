@@ -215,6 +215,26 @@ describe('package mutation routing', () => {
     expect(classifyVfsMutationIntentsPackageImpact([intent], ROOT)).toBe(expected);
   });
 
+  it('resolves lazy mutation intents after the FIFO-head preflight', async () => {
+    const { owner, stamps, mutations } = await harness();
+    const path = `${ROOT}/node_modules/pkg/index.js`;
+    let intents: readonly VfsMutationIntent[] = [];
+
+    await mutations.guardedMutation(
+      () => intents,
+      async () => owner.writeFileSync(path, enc.encode('template seed')),
+      async () => {
+        intents = [{ kind: 'write', path }];
+        return { status: 'ready' };
+      },
+    );
+
+    expect(dec.decode(owner.readFileBytesSync(path))).toBe('template seed');
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toEqual({
+      status: 'absent',
+    });
+  });
+
   it('classifies an ancestor removal against every known project root', () => {
     const projects: readonly PackageAcquisitionProject[] = [
       {

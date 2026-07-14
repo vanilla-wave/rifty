@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type OwnerVfsCommitAckMessage,
   decodeOwnerVfsError,
   encodeOwnerVfsError,
   handleOwnerVfsCommitReceipt,
@@ -11,9 +12,11 @@ import {
   isOwnerVfsCommitReleasedMessage,
   isOwnerVfsDurabilityAckMessage,
   isOwnerVfsDurabilityIpcMessage,
+  validateOwnerVfsCommitTerminalForRequest,
 } from './owner-vfs-ipc.ts';
 import {
   type HostCommitAck,
+  type HostCommitRequest,
   OperationIdReuseError,
   type OwnerVfsDurabilityReceipt,
   VfsVersionConflictError,
@@ -218,6 +221,233 @@ describe('owner VFS IPC', () => {
 
     expect(isOwnerVfsCommitAckMessage(terminal)).toBe(true);
     expect(decodeOwnerVfsError(encoded)).toBeInstanceOf(OperationIdReuseError);
+  });
+
+  it('correlates every NACK identity field to the exact request', () => {
+    const cases: readonly {
+      readonly request: HostCommitRequest;
+      readonly path: string;
+      readonly exactExpectedVersion: string | null;
+      readonly divergentExpectedVersion: string | null;
+      readonly actualVersion: string | null;
+    }[] = [
+      {
+        request: {
+          kind: 'write',
+          operationId: 'write-conflict',
+          path: '/workspace/write.txt',
+          data: new Uint8Array([1]),
+          expectedVersion: 'write-opened',
+        },
+        path: '/workspace/write.txt',
+        exactExpectedVersion: 'write-opened',
+        divergentExpectedVersion: 'write-other',
+        actualVersion: null,
+      },
+      {
+        request: {
+          kind: 'mkdir',
+          operationId: 'mkdir-conflict',
+          path: '/workspace/new-dir',
+          expectedVersion: null,
+        },
+        path: '/workspace/new-dir',
+        exactExpectedVersion: null,
+        divergentExpectedVersion: 'mkdir-other',
+        actualVersion: 'mkdir-actual',
+      },
+      {
+        request: {
+          kind: 'remove',
+          operationId: 'remove-conflict',
+          path: '/workspace/remove.txt',
+          expectedVersion: 'remove-opened',
+        },
+        path: '/workspace/remove.txt',
+        exactExpectedVersion: 'remove-opened',
+        divergentExpectedVersion: 'remove-other',
+        actualVersion: null,
+      },
+      {
+        request: {
+          kind: 'rename',
+          operationId: 'rename-source-conflict',
+          sourcePath: '/workspace/source.txt',
+          targetPath: '/workspace/target.txt',
+          expectedSourceVersion: 'source-opened',
+          expectedTargetVersion: null,
+        },
+        path: '/workspace/source.txt',
+        exactExpectedVersion: 'source-opened',
+        divergentExpectedVersion: 'source-other',
+        actualVersion: null,
+      },
+      {
+        request: {
+          kind: 'rename',
+          operationId: 'rename-target-conflict',
+          sourcePath: '/workspace/source.txt',
+          targetPath: '/workspace/target.txt',
+          expectedSourceVersion: 'source-opened',
+          expectedTargetVersion: null,
+        },
+        path: '/workspace/target.txt',
+        exactExpectedVersion: null,
+        divergentExpectedVersion: 'target-other',
+        actualVersion: 'target-actual',
+      },
+    ];
+
+    for (const testCase of cases) {
+      const terminal = {
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: testCase.request.operationId,
+        ok: false,
+        error: {
+          kind: 'version-conflict',
+          name: 'VfsVersionConflictError',
+          message: 'divergent request evidence',
+          path: testCase.path,
+          expectedVersion: testCase.divergentExpectedVersion,
+          actualVersion: testCase.actualVersion,
+          actualEntry:
+            testCase.actualVersion === null
+              ? null
+              : {
+                  path: testCase.path,
+                  kind: 'dir',
+                  size: 0,
+                  version: testCase.actualVersion,
+                },
+          ownerEpoch: 'owner-a',
+          treeRevision: 2,
+        },
+      } satisfies OwnerVfsCommitAckMessage;
+
+      expect(
+        validateOwnerVfsCommitTerminalForRequest(terminal, testCase.request, 'owner-a'),
+      ).toMatchObject({ name: 'VfsCommitProtocolError' });
+      const exactTerminal = {
+        ...terminal,
+        error: { ...terminal.error, expectedVersion: testCase.exactExpectedVersion },
+      } satisfies OwnerVfsCommitAckMessage;
+      expect(
+        validateOwnerVfsCommitTerminalForRequest(exactTerminal, testCase.request, 'owner-a'),
+      ).toBeNull();
+      if (testCase.request.operationId === 'write-conflict') {
+        const divergentSiblings: readonly OwnerVfsCommitAckMessage[] = [
+          { ...exactTerminal, operationId: 'wrong-outer-operation' },
+          {
+            ...exactTerminal,
+            error: { ...exactTerminal.error, ownerEpoch: 'owner-b' },
+          },
+          {
+            ...exactTerminal,
+            error: { ...exactTerminal.error, path: '/workspace/other.txt' },
+          },
+        ];
+        for (const sibling of divergentSiblings) {
+          expect(
+            validateOwnerVfsCommitTerminalForRequest(sibling, testCase.request, 'owner-a'),
+          ).toMatchObject({ name: 'VfsCommitProtocolError' });
+        }
+      }
+    }
+
+    const request: HostCommitRequest = {
+      kind: 'mkdir',
+      operationId: 'reuse-outer',
+      path: '/workspace/reused',
+      expectedVersion: null,
+    };
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: false,
+      error: {
+        kind: 'operation-id-reuse',
+        name: 'OperationIdReuseError',
+        message: 'divergent request evidence',
+        operationId: 'reuse-inner',
+      },
+    } satisfies OwnerVfsCommitAckMessage;
+    expect(validateOwnerVfsCommitTerminalForRequest(terminal, request, 'owner-a')).toMatchObject({
+      name: 'VfsCommitProtocolError',
+    });
+    expect(
+      validateOwnerVfsCommitTerminalForRequest(
+        { ...terminal, error: { ...terminal.error, operationId: request.operationId } },
+        request,
+        'owner-a',
+      ),
+    ).toBeNull();
+  });
+
+  it('correlates same-path rename conflicts in authority assertion order', () => {
+    const request: HostCommitRequest = {
+      kind: 'rename',
+      operationId: 'same-path-rename',
+      sourcePath: '/workspace/same.txt',
+      targetPath: '/workspace/same.txt',
+      expectedSourceVersion: 'source-opened',
+      expectedTargetVersion: null,
+    };
+    const terminal = (
+      expectedVersion: string | null,
+      actualVersion: string | null,
+    ): OwnerVfsCommitAckMessage => ({
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: false,
+      error: {
+        kind: 'version-conflict',
+        name: 'VfsVersionConflictError',
+        message: 'same-path conflict',
+        path: request.sourcePath,
+        expectedVersion,
+        actualVersion,
+        actualEntry:
+          actualVersion === null
+            ? null
+            : {
+                path: request.sourcePath,
+                kind: 'dir',
+                size: 0,
+                version: actualVersion,
+              },
+        ownerEpoch: 'owner-a',
+        treeRevision: 2,
+      },
+    });
+
+    expect(
+      validateOwnerVfsCommitTerminalForRequest(
+        terminal(request.expectedSourceVersion, null),
+        request,
+        'owner-a',
+      ),
+    ).toBeNull();
+    expect(
+      validateOwnerVfsCommitTerminalForRequest(
+        terminal(request.expectedTargetVersion, request.expectedSourceVersion),
+        request,
+        'owner-a',
+      ),
+    ).toBeNull();
+    expect(
+      validateOwnerVfsCommitTerminalForRequest(
+        terminal(request.expectedTargetVersion, null),
+        request,
+        'owner-a',
+      ),
+    ).toMatchObject({ name: 'VfsCommitProtocolError' });
+    expect(
+      validateOwnerVfsCommitTerminalForRequest(
+        terminal(request.expectedSourceVersion, request.expectedSourceVersion),
+        request,
+        'owner-a',
+      ),
+    ).toMatchObject({ name: 'VfsCommitProtocolError' });
   });
 
   it.each([

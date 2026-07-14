@@ -82,6 +82,7 @@ describe('install-stamp one-writer gate', () => {
             prepareProjectInstallTree(fs, root, opts);
             finalizePackageInstallFiles({ root });
           };
+          const reassertTemplateNodeModules = async () => seedTemplateNodeModulesFiles(config);
           const reset = async () => clearProjectTree(fs, root);
           const switchProject = async () => clearProjectTree(fs, root);
           const boot = async () => clearProjectTree(fs, root);

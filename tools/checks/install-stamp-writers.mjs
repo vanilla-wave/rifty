@@ -34,7 +34,14 @@ const PACKAGE_TREE_CONTEXTS = new Map([
   ['apps/playground/src/glue/workspace-archive.ts', new Set(['applyWorkspaceArchive'])],
   [
     'apps/playground/src/workers/owner-package-state.ts',
-    new Set(['prepareEnsure', 'planSnapshotRestore', 'install', 'reset', 'switchProject']),
+    new Set([
+      'prepareEnsure',
+      'planSnapshotRestore',
+      'install',
+      'reset',
+      'switchProject',
+      'reassertTemplateNodeModules',
+    ]),
   ],
 ]);
 

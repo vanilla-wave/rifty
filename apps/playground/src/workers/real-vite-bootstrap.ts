@@ -401,6 +401,9 @@ async function bootShellOwner(opts: {
       await absorbPendingStarterGeneratedBaseline(cfg.root);
     }
   }
+  if (!hiddenEmptyBoot) {
+    await packageState.reassertTemplateNodeModules(initialPackageConfig);
+  }
   const ownerGit = makeGit({
     fs: vfsToGitFs(ownerGitVfs()),
     dir: cfg.root,
@@ -467,12 +470,14 @@ async function bootShellOwner(opts: {
     readonly fromScratch: boolean;
   }): Promise<void> {
     try {
-      await packageState.transition({
+      const packageConfig = {
         cfg: target.cfg,
         templateId: target.spec.id,
         slug: target.slug,
         fromScratch: target.fromScratch,
-      });
+      };
+      await packageState.transition(packageConfig);
+      await packageState.reassertTemplateNodeModules(packageConfig);
       if (!target.fromScratch) {
         await absorbPendingStarterGeneratedBaseline(target.cfg.root);
       }
@@ -494,6 +499,12 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: async (devCtx, devSid) => {
+      await packageState.reassertTemplateNodeModules({
+        cfg: devCfg,
+        templateId: devSpec.id,
+        slug: devSlug,
+        fromScratch: devFromScratch,
+      });
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
