@@ -68,9 +68,12 @@ function createHarness(writeFile: (path: string, data: Uint8Array) => Promise<vo
       return new Promise<HostCommitAck>((resolve, reject) => {
         handleOwnerVfsCommitRequest({
           message: { type: 'rifty:owner-vfs-commit', request },
-          apply: (candidate) => authority.applyHostCommit(candidate),
-          publishSnapshot: () => mirror.update(collectSnapshot(authority, '/')),
-          retain: (terminal) => authority.retainHostCommitTerminal(terminal),
+          admit: (candidate) =>
+            authority.admitHostCommit(
+              candidate,
+              (owned) => authority.applyHostCommit(owned),
+              () => mirror.update(collectSnapshot(authority, '/')),
+            ),
           send: (message) => {
             if (message.ok) resolve(message.ack);
             else reject(decodeOwnerVfsError(message.error));

@@ -1,5 +1,5 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type HostCommitAck,
   OperationIdReuseError,
@@ -19,6 +19,157 @@ function successTerminal(ack: HostCommitAck) {
 }
 
 describe('owner VFS authority faults', () => {
+  it.each([
+    { first: 'NACK', late: 'success' },
+    { first: 'success', late: 'NACK' },
+  ] as const)(
+    'gives exact duplicate async admissions one retained terminal: $first before late $late',
+    async ({ first }) => {
+      const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+        ownerEpoch: 'fault-owner',
+      });
+      const request = {
+        kind: 'write' as const,
+        operationId: `one-outcome-${first}`,
+        path: '/value.txt',
+        data: encoder.encode('exact'),
+        expectedVersion: null,
+      };
+      let settleFirst: (() => void) | undefined;
+      let rejectFirst: ((error: Error) => void) | undefined;
+      const firstApply = vi.fn(async () => {
+        await new Promise<void>((resolve, reject) => {
+          settleFirst = resolve;
+          rejectFirst = reject;
+        });
+        return authority.applyHostCommit(request);
+      });
+      const lateApply = vi.fn(() => {
+        if (first === 'NACK') return authority.applyHostCommit(request);
+        throw new Error('late NACK must not replace success');
+      });
+      const firstPublish = vi.fn();
+      const firstOutcome = authority.admitHostCommit(request, firstApply, firstPublish);
+      const duplicateOutcome = authority.admitHostCommit(
+        { ...request, data: request.data.slice() },
+        lateApply,
+        vi.fn(),
+      );
+
+      expect(firstApply).toHaveBeenCalledTimes(1);
+      expect(lateApply).not.toHaveBeenCalled();
+      expect(duplicateOutcome).toBe(firstOutcome);
+
+      if (first === 'NACK') rejectFirst?.(new Error('first admission rejected'));
+      else settleFirst?.();
+
+      const terminal = await firstOutcome;
+      await expect(duplicateOutcome).resolves.toEqual(terminal);
+      expect(terminal.ok).toBe(first === 'success');
+      expect(firstPublish).toHaveBeenCalledTimes(first === 'success' ? 1 : 0);
+      expect(authority.existsSync(request.path)).toBe(first === 'success');
+      expect(authority.retainedHostCommitTerminal(request.operationId)).toEqual(terminal);
+      authority.cleanupHostCommitTerminal(terminal);
+      expect(authority.retainedHostCommitTerminal(request.operationId)).toBeNull();
+    },
+  );
+
+  it('rejects divergent bytes without admitting a second async operation', async () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'divergent-in-flight',
+      path: '/value.txt',
+      data: encoder.encode('original'),
+      expectedVersion: null,
+    };
+    let settle: (() => void) | undefined;
+    const firstApply = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      return authority.applyHostCommit(request);
+    });
+    const divergentApply = vi.fn();
+    const exactOutcome = authority.admitHostCommit(request, firstApply, vi.fn());
+    const divergentOutcome = authority.admitHostCommit(
+      { ...request, data: encoder.encode('divergent') },
+      divergentApply,
+      vi.fn(),
+    );
+
+    expect(divergentApply).not.toHaveBeenCalled();
+    await expect(divergentOutcome).resolves.toMatchObject({
+      operationId: request.operationId,
+      ok: false,
+      error: { kind: 'operation-id-reuse', operationId: request.operationId },
+    });
+    settle?.();
+    await expect(exactOutcome).resolves.toMatchObject({ ok: true });
+    expect(authority.readFileBytesSync(request.path)).toEqual(request.data);
+  });
+
+  it('retains applied evidence when the admitted executor fails after mutation', async () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'post-apply-failure',
+      path: '/value.txt',
+      data: encoder.encode('applied'),
+      expectedVersion: null,
+    };
+
+    const terminal = await authority.admitHostCommit(
+      request,
+      async (candidate) => {
+        authority.applyHostCommit(candidate);
+        throw new Error('executor failed after apply');
+      },
+      vi.fn(),
+    );
+
+    expect(terminal).toMatchObject({
+      ok: false,
+      error: { message: 'executor failed after apply' },
+      applied: { operationId: request.operationId, treeRevision: 1 },
+    });
+    expect(authority.retainedHostCommitTerminal(request.operationId)).toEqual(terminal);
+  });
+
+  it('NACKs forged executor success with the authority-owned applied ACK', async () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'fault-owner',
+    });
+    const request = {
+      kind: 'write' as const,
+      operationId: 'forged-executor-ack',
+      path: '/value.txt',
+      data: encoder.encode('applied'),
+      expectedVersion: null,
+    };
+    const publish = vi.fn();
+
+    const terminal = await authority.admitHostCommit(
+      request,
+      async (candidate) => {
+        const applied = authority.applyHostCommit(candidate);
+        return { ...applied, treeRevision: applied.treeRevision + 1 };
+      },
+      publish,
+    );
+
+    expect(terminal).toMatchObject({
+      ok: false,
+      error: { name: 'VfsCommitProtocolError' },
+      applied: { operationId: request.operationId, treeRevision: 1 },
+    });
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it('releases retained commit bytes only after exact terminal cleanup', () => {
     const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
       ownerEpoch: 'fault-owner',

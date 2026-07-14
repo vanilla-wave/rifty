@@ -943,6 +943,73 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     },
   );
 
+  it.each([
+    { honestKind: 'success', forgedOrder: 'before' },
+    { honestKind: 'success', forgedOrder: 'after' },
+    { honestKind: 'not-applied', forgedOrder: 'before' },
+    { honestKind: 'not-applied', forgedOrder: 'after' },
+  ] as const)(
+    'settles $honestKind only after its exact release when the opposite terminal arrives $forgedOrder',
+    async ({ honestKind, forgedOrder }) => {
+      const { startWorkspaceOwner } = await importOwner();
+      const handle = startWorkspaceOwner();
+      fakeWorker.emit('message', {
+        type: 'rifty:workspace-owner-ready',
+        port: handle.snapshotPort,
+        ownerEpoch: 'owner-a',
+        treeRevision: 3,
+      });
+      await handle.ready;
+
+      const request: HostCommitRequest = {
+        kind: 'mkdir',
+        operationId: `all-terminal-${honestKind}-${forgedOrder}`,
+        path: '/workspace/all-terminal',
+        expectedVersion: null,
+      };
+      const ack: HostCommitAck = {
+        operationId: request.operationId,
+        ownerEpoch: 'owner-a',
+        treeRevision: 4,
+        versions: [{ path: request.path, version: 'v4' }],
+      };
+      const success = successTerminal(ack);
+      const notApplied = {
+        type: 'rifty:owner-vfs-commit-ack' as const,
+        operationId: request.operationId,
+        ok: false as const,
+        error: { kind: 'error' as const, name: 'Error', message: 'not applied' },
+      };
+      const honest = honestKind === 'success' ? success : notApplied;
+      const forged = honestKind === 'success' ? notApplied : success;
+      const pending = handle.applyHostCommit(request);
+      let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+      void pending.then(
+        () => {
+          settlement = 'resolved';
+        },
+        () => {
+          settlement = 'rejected';
+        },
+      );
+
+      if (forgedOrder === 'before') fakeWorker.emit('message', forged);
+      fakeWorker.emit('message', honest);
+      if (forgedOrder === 'after') fakeWorker.emit('message', forged);
+      await Promise.resolve();
+      expect(settlement).toBe('pending');
+
+      fakeWorker.emit('message', honest);
+      fakeWorker.emit('message', {
+        type: 'rifty:owner-vfs-commit-released',
+        terminal: honest,
+      });
+      if (honest.ok) await expect(pending).resolves.toEqual(ack);
+      else await expect(pending).rejects.toMatchObject({ message: 'not applied' });
+      fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-cleaned', terminal: honest });
+    },
+  );
+
   it('retries final cleanup after a dropped leg, then stops with one apply', async () => {
     vi.useFakeTimers();
     const { startWorkspaceOwner } = await importOwner();
@@ -1904,11 +1971,21 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
       ownerEpoch: 'owner-a',
       treeRevision: 4,
     });
-    fakeWorker.emit('message', {
+    const terminal = {
       type: 'rifty:owner-vfs-commit-ack',
       operationId: 'host-save',
-      ok: false,
+      ok: false as const,
       error: encodeOwnerVfsError(conflict),
+    };
+    fakeWorker.emit('message', terminal);
+
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-received',
+      terminal,
+    });
+    fakeWorker.emit('message', {
+      type: 'rifty:owner-vfs-commit-released',
+      terminal,
     });
 
     await expect(pending).rejects.toMatchObject({
@@ -1920,6 +1997,60 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
       expect(error).toBeInstanceOf(VfsVersionConflictError);
       expect((error as InstanceType<typeof VfsVersionConflictError>).actualBytes).toEqual(remote);
     });
+    expect(fakeWorker.sent).toContainEqual({
+      type: 'rifty:owner-vfs-commit-cleanup',
+      terminal,
+    });
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-cleaned', terminal });
+  });
+
+  it('shares one page admission for exact duplicate bytes and rejects divergent reuse', async () => {
+    const { startWorkspaceOwner } = await importOwner();
+    const handle = startWorkspaceOwner();
+    fakeWorker.emit('message', {
+      type: 'rifty:workspace-owner-ready',
+      port: handle.snapshotPort,
+      ownerEpoch: 'owner-a',
+      treeRevision: 3,
+    });
+    await handle.ready;
+
+    const request: HostCommitRequest = {
+      kind: 'write',
+      operationId: 'shared-page-admission',
+      path: '/workspace/value.txt',
+      data: new Uint8Array([1, 2, 3]),
+      expectedVersion: null,
+    };
+    const first = handle.applyHostCommit(request);
+    const exactDuplicate = handle.applyHostCommit({ ...request, data: request.data.slice() });
+    const divergent = handle.applyHostCommit({ ...request, data: new Uint8Array([3, 2, 1]) });
+
+    expect(exactDuplicate).toBe(first);
+    await expect(divergent).rejects.toMatchObject({
+      name: 'OperationIdReuseError',
+      operationId: request.operationId,
+    });
+    expect(
+      fakeWorker.sent.filter(
+        (message) =>
+          !!message &&
+          typeof message === 'object' &&
+          (message as { readonly type?: unknown }).type === 'rifty:owner-vfs-commit',
+      ),
+    ).toEqual([{ type: 'rifty:owner-vfs-commit', request }]);
+
+    const ack: HostCommitAck = {
+      operationId: request.operationId,
+      ownerEpoch: 'owner-a',
+      treeRevision: 4,
+      versions: [{ path: request.path, version: 'v4' }],
+    };
+    const terminal = successTerminal(ack);
+    fakeWorker.emit('message', terminal);
+    fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', terminal });
+    await expect(first).resolves.toEqual(ack);
+    await expect(exactDuplicate).resolves.toEqual(ack);
   });
 
   it('returns the owner-bound durability receipt and rejects the barrier on owner exit', async () => {

@@ -184,6 +184,33 @@ describe('owner VFS IPC', () => {
         terminal: malformedTerminal,
       }),
     ).toBe(false);
+
+    const nack = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: 'non-applied',
+      ok: false as const,
+      error: { kind: 'error' as const, name: 'Error', message: 'not applied' },
+    };
+    expect(
+      [
+        isOwnerVfsCommitReceivedMessage({
+          type: 'rifty:owner-vfs-commit-received',
+          terminal: nack,
+        }),
+        isOwnerVfsCommitReleasedMessage({
+          type: 'rifty:owner-vfs-commit-released',
+          terminal: nack,
+        }),
+        isOwnerVfsCommitCleanupMessage({
+          type: 'rifty:owner-vfs-commit-cleanup',
+          terminal: nack,
+        }),
+        isOwnerVfsCommitCleanedMessage({
+          type: 'rifty:owner-vfs-commit-cleaned',
+          terminal: nack,
+        }),
+      ].every(Boolean),
+    ).toBe(true);
   });
 
   it.each([
@@ -472,57 +499,43 @@ describe('owner VFS IPC', () => {
     ).toMatchObject({ name: 'VfsCommitProtocolError' });
   });
 
-  it.each([
-    ['sync', (ack: HostCommitAck) => ack],
-    ['async', (ack: HostCommitAck) => Promise.resolve(ack)],
-  ])(
-    'NACKs an already-applied %s commit exactly when snapshot publication throws',
-    async (_kind, apply) => {
-      const ack: HostCommitAck = {
-        operationId: 'publish-failure',
-        ownerEpoch: 'owner-a',
-        treeRevision: 7,
-        versions: [{ path: '/src/main.ts', version: 'v7' }],
-      };
-      const failure = new Error('snapshot publication failed');
-      const sent: unknown[] = [];
-      const retained: unknown[] = [];
+  it('forwards the operation authority retained applied NACK', async () => {
+    const ack: HostCommitAck = {
+      operationId: 'publish-failure',
+      ownerEpoch: 'owner-a',
+      treeRevision: 7,
+      versions: [{ path: '/src/main.ts', version: 'v7' }],
+    };
+    const failure = new Error('snapshot publication failed');
+    const sent: unknown[] = [];
+    const terminal: OwnerVfsCommitAckMessage = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: ack.operationId,
+      ok: false,
+      error: encodeOwnerVfsError(failure),
+      applied: ack,
+    };
 
-      handleOwnerVfsCommitRequest({
-        message: {
-          type: 'rifty:owner-vfs-commit',
-          request: {
-            kind: 'write',
-            operationId: ack.operationId,
-            path: '/src/main.ts',
-            data: encoder.encode('applied'),
-            expectedVersion: 'v6',
-          },
-        },
-        apply: () => apply(ack),
-        publishSnapshot: () => {
-          throw failure;
-        },
-        retain: (terminal) => retained.push(terminal),
-        send: (message) => sent.push(message),
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(sent).toEqual([
-        {
-          type: 'rifty:owner-vfs-commit-ack',
+    handleOwnerVfsCommitRequest({
+      message: {
+        type: 'rifty:owner-vfs-commit',
+        request: {
+          kind: 'write',
           operationId: ack.operationId,
-          ok: false,
-          error: { kind: 'error', name: 'Error', message: failure.message },
-          applied: ack,
+          path: '/src/main.ts',
+          data: encoder.encode('applied'),
+          expectedVersion: 'v6',
         },
-      ]);
-      expect(retained).toEqual(sent);
-    },
-  );
+      },
+      admit: () => Promise.resolve(terminal),
+      send: (message) => sent.push(message),
+    });
+    await Promise.resolve();
 
-  it('publishes the applied revision before ACKing the host commit', () => {
+    expect(sent).toEqual([terminal]);
+  });
+
+  it('forwards the exact terminal resolved by the operation authority', async () => {
     const events: string[] = [];
     const ack: HostCommitAck = {
       operationId: 'save-1',
@@ -543,19 +556,23 @@ describe('owner VFS IPC', () => {
           expectedVersion: 'v6',
         },
       },
-      apply: (request) => {
-        events.push(`apply:${request.operationId}`);
-        return ack;
+      admit: (request) => {
+        events.push(`admit:${request.operationId}`);
+        return Promise.resolve({
+          type: 'rifty:owner-vfs-commit-ack',
+          operationId: request.operationId,
+          ok: true,
+          ack,
+        });
       },
-      publishSnapshot: () => events.push('publish'),
-      retain: () => events.push('retain'),
       send: (message) => {
         events.push('ack');
         sent.push(message);
       },
     });
+    await Promise.resolve();
 
-    expect(events).toEqual(['apply:save-1', 'publish', 'retain', 'ack']);
+    expect(events).toEqual(['admit:save-1', 'ack']);
     expect(sent).toEqual([
       { type: 'rifty:owner-vfs-commit-ack', operationId: 'save-1', ok: true, ack },
     ]);
@@ -569,42 +586,20 @@ describe('owner VFS IPC', () => {
       treeRevision: 7,
       versions: [{ path: '/src/main.ts', version: 'v7' }],
     };
-    const request: HostCommitRequest = {
-      kind: 'write',
-      operationId: ack.operationId,
-      path: '/src/main.ts',
-      data: encoder.encode('applied'),
-      expectedVersion: 'v6',
-    };
-    let publishAttempts = 0;
-    let retained: OwnerVfsAppliedCommitTerminal | null = null;
-    const sent: OwnerVfsCommitAckMessage[] = [];
-    const options = {
-      message: { type: 'rifty:owner-vfs-commit' as const, request },
-      apply: () => ack,
-      publishSnapshot: () => {
-        publishAttempts += 1;
-        if (publishAttempts === 1) throw new Error('snapshot publication failed');
-      },
-      retain: (terminal: OwnerVfsAppliedCommitTerminal) => {
-        retained = terminal;
-      },
-      send: (message: OwnerVfsCommitAckMessage) => sent.push(message),
-    };
-
-    handleOwnerVfsCommitRequest(options);
-    handleOwnerVfsCommitRequest(options);
-
-    const appliedNack = sent[0];
-    const success = sent[1];
-    if (!appliedNack || appliedNack.ok || !appliedNack.applied || !success?.ok) {
-      throw new Error('expected applied NACK followed by success');
-    }
     const appliedTerminal: OwnerVfsAppliedCommitTerminal = {
-      ...appliedNack,
-      applied: appliedNack.applied,
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: ack.operationId,
+      ok: false,
+      error: encodeOwnerVfsError(new Error('snapshot publication failed')),
+      applied: ack,
     };
-    expect(retained).toEqual(success);
+    const success: OwnerVfsAppliedCommitTerminal = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: ack.operationId,
+      ok: true,
+      ack,
+    };
+    const retained: OwnerVfsAppliedCommitTerminal = success;
 
     const recovered: unknown[] = [];
     handleOwnerVfsCommitReceipt({
@@ -821,7 +816,7 @@ describe('owner VFS IPC', () => {
     expect(sent).toEqual([{ type: 'rifty:owner-vfs-commit-cleaned', terminal }]);
   });
 
-  it('round-trips an exact large-file version conflict as its domain class', () => {
+  it('round-trips an exact large-file version conflict as its domain class', async () => {
     const remote = new Uint8Array(192 * 1024 + 3);
     remote.fill(0xa5);
     const sent: unknown[] = [];
@@ -837,26 +832,31 @@ describe('owner VFS IPC', () => {
           expectedVersion: 'old',
         },
       },
-      apply: () => {
-        throw new VfsVersionConflictError({
-          path: '/large.bin',
-          expectedVersion: 'old',
-          actualVersion: 'guest',
-          actualEntry: {
-            path: '/large.bin',
-            kind: 'file',
-            size: remote.byteLength,
-            content: remote,
-            version: 'guest',
-          },
-          ownerEpoch: 'owner-a',
-          treeRevision: 8,
-        });
-      },
-      publishSnapshot: vi.fn(),
-      retain: vi.fn(),
+      admit: () =>
+        Promise.resolve({
+          type: 'rifty:owner-vfs-commit-ack',
+          operationId: 'stale-save',
+          ok: false,
+          error: encodeOwnerVfsError(
+            new VfsVersionConflictError({
+              path: '/large.bin',
+              expectedVersion: 'old',
+              actualVersion: 'guest',
+              actualEntry: {
+                path: '/large.bin',
+                kind: 'file',
+                size: remote.byteLength,
+                content: remote,
+                version: 'guest',
+              },
+              ownerEpoch: 'owner-a',
+              treeRevision: 8,
+            }),
+          ),
+        }),
       send: (message) => sent.push(message),
     });
+    await Promise.resolve();
 
     expect(isOwnerVfsCommitAckMessage(sent[0])).toBe(true);
     const message = sent[0];

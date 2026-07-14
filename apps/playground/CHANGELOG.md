@@ -179,18 +179,21 @@
   Save retries share one owner `opId` record and replay its phase result instead
   of entering the FIFO twice. An unproven durability failure fences that owner
   before any later mutation can publish its mirror; the page flips Save only
-  after owner apply. Exact receipt → release → close confirmation then removes
-  the bounded terminal record.
+  after owner apply. A failed post-apply Save durability proof stays latched
+  against later owner teardown; a proved pre-apply failure does not poison a
+  switch. Exact receipt → release → close confirmation then removes the bounded
+  terminal record.
 - Page→owner mutations retain their reply path after handoff: VFS commits,
   explorer writes, Git, archive import, project-index updates, and dev-config
   assignment settle only on ACK/NACK, send failure, or certified owner exit.
   Read requests and post-ACK durability observations remain bounded.
-- Conditional VFS terminals carry full semantic already-applied evidence when
-  snapshot publication fails. Retried receipts certify the owner-retained
-  success or exact NACK; a separate confirmed cleanup then releases request
-  bytes. Unsolicited, malformed, wrong-owner, divergent, and same-ACK forged
-  terminals cannot settle; an admitted exact request replays until a certified
-  terminal or owner exit.
+- Each conditional VFS operation has one exact request/in-flight/outcome record:
+  async duplicates share one execution and divergent bytes cannot enter it.
+  Success, applied failure, and pre-apply NACK all use exact retained terminal
+  receipt → release → cleanup; snapshot-publication failure carries semantic
+  applied evidence. Unsolicited, malformed, wrong-owner, divergent, and forged
+  terminals cannot settle; an admitted request ends only at certified release or
+  owner exit.
 
 ### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 

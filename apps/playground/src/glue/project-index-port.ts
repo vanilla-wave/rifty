@@ -880,6 +880,11 @@ export function serveProjectIndex(
 const INDEX_APPLIED_RETRY_MS = 250;
 const INDEX_SAVE_STATUS_POLL_MS = 1_000;
 
+export type ProjectIndexSaveApplication =
+  | { readonly kind: 'applied'; readonly index: ProjectIndex }
+  | { readonly kind: 'not-applied'; readonly error: Error }
+  | { readonly kind: 'unknown'; readonly error: Error };
+
 function indexOpId(): string {
   return `op-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
 }
@@ -951,7 +956,11 @@ function postIndexMutationPhases(
   request: IndexSaveRequest,
   match: (index: ProjectIndex) => boolean = () => true,
   options: ProjectIndexMutationOptions = {},
-): { readonly applied: Promise<ProjectIndex>; readonly durable: Promise<ProjectIndex> } {
+): {
+  readonly applied: Promise<ProjectIndex>;
+  readonly durable: Promise<ProjectIndex>;
+  readonly application: Promise<ProjectIndexSaveApplication>;
+} {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const opId = indexOpId();
   const mutation = { ...request, opId } satisfies IndexSaveFrame;
@@ -989,10 +998,27 @@ function postIndexMutationPhases(
   const durableId = `${opId}:durable`;
   const appliedPromise = settlements.wait(appliedId, 'mutation');
   const durablePromise = settlements.wait(durableId, 'mutation');
+  let applicationSettled = false;
+  let resolveApplication: (application: ProjectIndexSaveApplication) => void = () => {};
+  const applicationPromise = new Promise<ProjectIndexSaveApplication>((resolve) => {
+    resolveApplication = resolve;
+  });
+  const settleApplication = (application: ProjectIndexSaveApplication): void => {
+    if (applicationSettled) return;
+    applicationSettled = true;
+    resolveApplication(application);
+  };
+  void appliedPromise.catch((error: unknown) => {
+    settleApplication({
+      kind: 'unknown',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+  });
 
   const resolveApplied = (index: ProjectIndex): void => {
     if (appliedSettled) return;
     appliedSettled = true;
+    settleApplication({ kind: 'applied', index });
     settlements.resolve(appliedId, index);
   };
   const resolveDurable = (index: ProjectIndex): void => {
@@ -1000,7 +1026,8 @@ function postIndexMutationPhases(
     durableSettled = true;
     settlements.resolve(durableId, index);
   };
-  const rejectBoth = (error: Error): void => {
+  const rejectBoth = (error: Error, kind: 'not-applied' | 'unknown' = 'unknown'): void => {
+    settleApplication({ kind, error });
     if (!appliedSettled) {
       appliedSettled = true;
       settlements.reject(appliedId, error);
@@ -1183,6 +1210,7 @@ function postIndexMutationPhases(
           else if (!appliedSettled) rejectBoth(mismatchError());
         } else if (!appliedSettled) {
           appliedSettled = true;
+          settleApplication({ kind: 'not-applied', error });
           settlements.reject(appliedId, error);
         }
         rejectDurable(error);
@@ -1223,7 +1251,7 @@ function postIndexMutationPhases(
     } catch (cause) {
       if (!handedOff) {
         const error = cause instanceof Error ? cause : new Error(String(cause));
-        rejectBoth(error);
+        rejectBoth(error, 'not-applied');
         settlements.dispose(error);
         return;
       }
@@ -1233,7 +1261,7 @@ function postIndexMutationPhases(
     }
   };
   attempt();
-  return { applied: appliedPromise, durable: durablePromise };
+  return { applied: appliedPromise, durable: durablePromise, application: applicationPromise };
 }
 
 /**
@@ -1278,7 +1306,11 @@ export function saveProjectIndexPhases(
   name: string,
   starter: string,
   options: ProjectIndexMutationOptions = {},
-): { readonly applied: Promise<ProjectIndex>; readonly durable: Promise<ProjectIndex> } {
+): {
+  readonly applied: Promise<ProjectIndex>;
+  readonly durable: Promise<ProjectIndex>;
+  readonly application: Promise<ProjectIndexSaveApplication>;
+} {
   return postIndexMutationPhases(
     key,
     { type: 'index-save', id, name, starter } satisfies IndexSaveRequest,

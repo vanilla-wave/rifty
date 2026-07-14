@@ -18,28 +18,28 @@ export interface OwnerVfsCommitIpcMessage {
   readonly request: HostCommitRequest;
 }
 
-/** Page proves it received one exact applied terminal candidate. */
+/** Page proves it received one exact terminal candidate. */
 export interface OwnerVfsCommitReceivedMessage {
   readonly type: 'rifty:owner-vfs-commit-received';
-  readonly terminal: OwnerVfsAppliedCommitTerminal;
+  readonly terminal: OwnerVfsCommitTerminal;
 }
 
-/** Owner certifies its currently retained full applied terminal identity. */
+/** Owner certifies its currently retained full terminal identity. */
 export interface OwnerVfsCommitReleasedMessage {
   readonly type: 'rifty:owner-vfs-commit-released';
-  readonly terminal: OwnerVfsAppliedCommitTerminal;
+  readonly terminal: OwnerVfsCommitTerminal;
 }
 
 /** Page confirms it received the exact release certificate. */
 export interface OwnerVfsCommitCleanupMessage {
   readonly type: 'rifty:owner-vfs-commit-cleanup';
-  readonly terminal: OwnerVfsAppliedCommitTerminal;
+  readonly terminal: OwnerVfsCommitTerminal;
 }
 
 /** Owner confirms the retained terminal/request record is gone. */
 export interface OwnerVfsCommitCleanedMessage {
   readonly type: 'rifty:owner-vfs-commit-cleaned';
-  readonly terminal: OwnerVfsAppliedCommitTerminal;
+  readonly terminal: OwnerVfsCommitTerminal;
 }
 
 interface SerializedErrorBase {
@@ -84,6 +84,9 @@ export type OwnerVfsAppliedCommitTerminal =
   | (Extract<OwnerVfsCommitAckMessage, { readonly ok: false }> & {
       readonly applied: HostCommitAck;
     });
+
+/** Every honest owner outcome participates in the same receipt/release lifecycle. */
+export type OwnerVfsCommitTerminal = OwnerVfsCommitAckMessage;
 
 export interface OwnerVfsDurabilityIpcMessage {
   readonly type: 'rifty:owner-vfs-durability';
@@ -351,14 +354,22 @@ export function equalOwnerVfsAppliedCommitTerminals(
   left: OwnerVfsAppliedCommitTerminal,
   right: OwnerVfsAppliedCommitTerminal,
 ): boolean {
+  return equalOwnerVfsCommitTerminals(left, right);
+}
+
+export function equalOwnerVfsCommitTerminals(
+  left: OwnerVfsCommitTerminal,
+  right: OwnerVfsCommitTerminal,
+): boolean {
   if (left.operationId !== right.operationId || left.ok !== right.ok) return false;
   if (left.ok || right.ok) {
     return left.ok && right.ok && equalHostCommitAcks(left.ack, right.ack);
   }
-  return (
-    equalHostCommitAcks(left.applied, right.applied) &&
-    equalOwnerVfsErrorFrames(left.error, right.error)
-  );
+  if (!equalOwnerVfsErrorFrames(left.error, right.error)) return false;
+  if (left.applied === undefined || right.applied === undefined) {
+    return left.applied === undefined && right.applied === undefined;
+  }
+  return equalHostCommitAcks(left.applied, right.applied);
 }
 
 export function isOwnerVfsCommitReceivedMessage(
@@ -367,7 +378,7 @@ export function isOwnerVfsCommitReceivedMessage(
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-commit-received' &&
-    isOwnerVfsAppliedCommitTerminal(message.terminal)
+    isOwnerVfsCommitAckMessage(message.terminal)
   );
 }
 
@@ -377,7 +388,7 @@ export function isOwnerVfsCommitReleasedMessage(
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-commit-released' &&
-    isOwnerVfsAppliedCommitTerminal(message.terminal)
+    isOwnerVfsCommitAckMessage(message.terminal)
   );
 }
 
@@ -387,7 +398,7 @@ export function isOwnerVfsCommitCleanupMessage(
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-commit-cleanup' &&
-    isOwnerVfsAppliedCommitTerminal(message.terminal)
+    isOwnerVfsCommitAckMessage(message.terminal)
   );
 }
 
@@ -397,7 +408,7 @@ export function isOwnerVfsCommitCleanedMessage(
   return (
     isRecord(message) &&
     message.type === 'rifty:owner-vfs-commit-cleaned' &&
-    isOwnerVfsAppliedCommitTerminal(message.terminal)
+    isOwnerVfsCommitAckMessage(message.terminal)
   );
 }
 
@@ -639,65 +650,38 @@ export function decodeOwnerVfsCommitFailure(
 
 export interface OwnerVfsCommitHandlerOptions {
   readonly message: OwnerVfsCommitIpcMessage;
-  readonly apply: (request: HostCommitRequest) => HostCommitAck | Promise<HostCommitAck>;
-  readonly publishSnapshot: () => void;
-  readonly retain: (terminal: OwnerVfsAppliedCommitTerminal) => void;
+  /** Sole operation authority; resolves every admitted request to one retained terminal. */
+  readonly admit: (request: HostCommitRequest) => Promise<OwnerVfsCommitTerminal>;
   readonly send: (message: OwnerVfsCommitAckMessage) => void;
+  readonly reportError?: (error: Error) => void;
 }
 
-/** Owner apply → publish → ACK ordering; retries reuse the authority's operation id. */
+/** Replays attach to the authority's one retained operation outcome. */
 export function handleOwnerVfsCommitRequest(options: OwnerVfsCommitHandlerOptions): void {
-  const operationId = options.message.request.operationId;
-  const succeed = (ack: HostCommitAck): void => {
-    try {
-      options.publishSnapshot();
-    } catch (error) {
-      fail(error, ack);
-      return;
-    }
-    const terminal: OwnerVfsAppliedCommitTerminal = {
-      type: 'rifty:owner-vfs-commit-ack',
-      operationId,
-      ok: true,
-      ack,
-    };
-    options.retain(terminal);
-    options.send(terminal);
-  };
-  const fail = (error: unknown, applied?: HostCommitAck): void => {
-    const terminal: OwnerVfsCommitAckMessage = {
-      type: 'rifty:owner-vfs-commit-ack',
-      operationId,
-      ok: false,
-      error: encodeOwnerVfsError(error),
-      ...(applied ? { applied } : {}),
-    };
-    if (terminal.applied) options.retain(terminal as OwnerVfsAppliedCommitTerminal);
-    options.send(terminal);
-  };
-  let applied: HostCommitAck | Promise<HostCommitAck>;
-  let then: unknown;
+  let outcome: Promise<OwnerVfsCommitTerminal>;
   try {
-    applied = options.apply(options.message.request);
-    then =
-      typeof applied === 'object' && applied !== null
-        ? (applied as { readonly then?: unknown }).then
-        : undefined;
-  } catch (error) {
-    fail(error);
+    outcome = options.admit(options.message.request);
+  } catch (cause) {
+    reportCommitHandshakeError(
+      options.reportError,
+      '[owner-vfs] operation authority rejected admission synchronously',
+      cause,
+    );
     return;
   }
-  if (typeof then === 'function') {
-    void Promise.resolve(applied).then(succeed, (error: unknown) => fail(error));
-    return;
-  }
-  succeed(applied as HostCommitAck);
+  void outcome.then(options.send, (cause: unknown) => {
+    reportCommitHandshakeError(
+      options.reportError,
+      '[owner-vfs] operation authority lost its terminal outcome',
+      cause,
+    );
+  });
 }
 
 export interface OwnerVfsCommitReceiptHandlerOptions {
   readonly message: OwnerVfsCommitReceivedMessage;
-  readonly retained: (operationId: string) => OwnerVfsAppliedCommitTerminal | null;
-  readonly send: (message: OwnerVfsAppliedCommitTerminal | OwnerVfsCommitReleasedMessage) => void;
+  readonly retained: (operationId: string) => OwnerVfsCommitTerminal | null;
+  readonly send: (message: OwnerVfsCommitTerminal | OwnerVfsCommitReleasedMessage) => void;
   readonly reportError?: (error: Error) => void;
 }
 
@@ -714,7 +698,7 @@ function reportCommitHandshakeError(
 /** Receipt certifies the owner-retained full terminal; cleanup is a later leg. */
 export function handleOwnerVfsCommitReceipt(options: OwnerVfsCommitReceiptHandlerOptions): void {
   const operationId = options.message.terminal.operationId;
-  let retained: OwnerVfsAppliedCommitTerminal | null;
+  let retained: OwnerVfsCommitTerminal | null;
   try {
     retained = options.retained(operationId);
   } catch (cause) {
@@ -733,7 +717,7 @@ export function handleOwnerVfsCommitReceipt(options: OwnerVfsCommitReceiptHandle
     );
     return;
   }
-  if (!equalOwnerVfsAppliedCommitTerminals(retained, options.message.terminal)) {
+  if (!equalOwnerVfsCommitTerminals(retained, options.message.terminal)) {
     reportCommitHandshakeError(
       options.reportError,
       '[owner-vfs] recovered divergent commit receipt',
@@ -749,7 +733,7 @@ export function handleOwnerVfsCommitReceipt(options: OwnerVfsCommitReceiptHandle
 
 export interface OwnerVfsCommitCleanupHandlerOptions {
   readonly message: OwnerVfsCommitCleanupMessage;
-  readonly cleanup: (terminal: OwnerVfsAppliedCommitTerminal) => void;
+  readonly cleanup: (terminal: OwnerVfsCommitTerminal) => void;
   readonly send: (message: OwnerVfsCommitCleanedMessage) => void;
   readonly reportError?: (error: Error) => void;
 }

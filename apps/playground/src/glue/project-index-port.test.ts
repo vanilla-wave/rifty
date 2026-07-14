@@ -959,7 +959,25 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     const durable = expect(phases.durable).rejects.toBe(failure);
 
     await Promise.all([applied, durable]);
+    await expect(phases.application).resolves.toEqual({ kind: 'not-applied', error: failure });
     expect(closeCalls).toBe(1);
+  });
+
+  it('classifies owner exit before a certified Save terminal as unknown', async () => {
+    const ownerClosed = deferred();
+    const phases = saveProjectIndexPhases(PORT, 'p-unknown', 'Unknown', 'project-files', {
+      ownerClosed: ownerClosed.promise,
+    });
+
+    ownerClosed.resolve();
+    const applied = expect(phases.applied).rejects.toThrow(/owner exited/i);
+    const durable = expect(phases.durable).rejects.toThrow(/owner exited/i);
+
+    await Promise.all([applied, durable]);
+    await expect(phases.application).resolves.toMatchObject({
+      kind: 'unknown',
+      error: { message: expect.stringMatching(/owner exited/i) },
+    });
   });
 
   it('keeps an admitted save pending when a retry send throws, then executes it once', async () => {
@@ -2012,6 +2030,10 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     if (!terminal) throw new Error('expected replayed pre-apply terminal');
     probe.postMessage(saveReceipt(terminal));
     await Promise.all([applied, durable]);
+    await expect(phases.application).resolves.toMatchObject({
+      kind: 'not-applied',
+      error: { message: expect.stringMatching(/no scratch to save/) },
+    });
 
     probe.close();
     tearOwner();
@@ -2358,6 +2380,10 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
     });
 
     await expect(phases.applied).resolves.toMatchObject({ activeId: 'p-owner-exit' });
+    await expect(phases.application).resolves.toMatchObject({
+      kind: 'applied',
+      index: { activeId: 'p-owner-exit' },
+    });
     ownerClosed.resolve();
     await expect(phases.durable).rejects.toThrow(/owner exited/i);
 

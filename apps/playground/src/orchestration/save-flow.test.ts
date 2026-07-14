@@ -2,7 +2,12 @@ import { createRoot } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
 import { createPageStore } from '../glue/page-store.ts';
 import type { ProjectIndex } from '../glue/project-index.ts';
-import { type PendingSwitchTarget, type SaveFlowDeps, createSaveFlow } from './save-flow.ts';
+import {
+  type PendingSwitchTarget,
+  type SaveApplication,
+  type SaveFlowDeps,
+  createSaveFlow,
+} from './save-flow.ts';
 
 // Behavioral heirs of the retired App.test save/switch greps (epic
 // playground-testable-core, slice 4b). Fakes are the App-side ports only
@@ -10,6 +15,14 @@ import { type PendingSwitchTarget, type SaveFlowDeps, createSaveFlow } from './s
 
 function indexWith(id: string): ProjectIndex {
   return { activeId: id, scratch: null, projects: [{ id, name: 'n', starter: 's', editedAt: '' }] };
+}
+
+function appliedOutcome(id: string): SaveApplication {
+  return { kind: 'applied', index: indexWith(id) };
+}
+
+function failedOutcome(kind: 'not-applied' | 'unknown', message: string): SaveApplication {
+  return { kind, error: new Error(message) };
 }
 
 type Harness = ReturnType<typeof harness>;
@@ -44,7 +57,7 @@ function harness(overrides: Partial<SaveFlowDeps> = {}) {
     createProjectId: vi.fn(() => `p-test-${++idSeq}`),
     ephemeral: vi.fn(() => false),
     saveIndexPhases: vi.fn((id: string, _name: string, _starter: string) => ({
-      applied: Promise.resolve<ProjectIndex | null>(indexWith(id)),
+      application: Promise.resolve(appliedOutcome(id)),
       durable: Promise.resolve<ProjectIndex | null>(indexWith(id)),
     })),
     openSaveDialog: vi.fn(),
@@ -68,7 +81,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
     h.deps.saveIndexPhases.mockImplementation((id: string, name: string, starter: string) => {
       order.push(`post:${name}:${starter}`);
       return {
-        applied: Promise.resolve(indexWith(id)),
+        application: Promise.resolve(appliedOutcome(id)),
         durable: Promise.resolve(indexWith(id)),
       };
     });
@@ -96,12 +109,12 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
 
   it('admits one Save while its owner apply proof is pending', async () => {
     let savedId = '';
-    let resolveApplied: (index: ProjectIndex | null) => void = () => {};
+    let resolveApplication: (application: SaveApplication) => void = () => {};
     const saveIndexPhases = vi.fn((id: string) => {
       savedId = id;
       return {
-        applied: new Promise<ProjectIndex | null>((resolve) => {
-          resolveApplied = resolve;
+        application: new Promise<SaveApplication>((resolve) => {
+          resolveApplication = resolve;
         }),
         durable: Promise.resolve(indexWith(id)),
       };
@@ -115,7 +128,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
     expect(saveIndexPhases).toHaveBeenCalledTimes(1);
     expect(h.deps.createProjectId).toHaveBeenCalledTimes(1);
 
-    resolveApplied(indexWith(savedId));
+    resolveApplication(appliedOutcome(savedId));
     await Promise.all([first, duplicate]);
     expect(h.deps.store.confirmSave).toHaveBeenCalledWith('first', savedId);
   });
@@ -156,7 +169,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
         const h = harness({
           store,
           saveIndexPhases: () => ({
-            applied: Promise.reject(new Error('owner exploded before apply')),
+            application: Promise.resolve(failedOutcome('unknown', 'owner exploded before apply')),
             durable: Promise.reject(new Error('owner exited before durable')),
           }),
         });
@@ -167,7 +180,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
         expect(h.deps.showSaveError).toHaveBeenCalledWith(
           'Save failed: owner exploded before apply',
         );
-        // The owner never applied the Save, so the page mirror must remain exact.
+        // Without an exact applied proof, the page mirror must remain exact.
         expect({
           activeId: store.activeId(),
           scratch: store.scratch(),
@@ -194,15 +207,15 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
           projects: [],
         });
         let savedId = '';
-        let resolveApplied: (index: ProjectIndex | null) => void = () => {};
+        let resolveApplication: (application: SaveApplication) => void = () => {};
         let rejectDurable: (error: Error) => void = () => {};
         const h = harness({
           store,
           saveIndexPhases: (id: string) => {
             savedId = id;
             return {
-              applied: new Promise<ProjectIndex | null>((resolve) => {
-                resolveApplied = resolve;
+              application: new Promise<SaveApplication>((resolve) => {
+                resolveApplication = resolve;
               }),
               durable: new Promise<ProjectIndex | null>((_resolve, reject) => {
                 rejectDurable = reject;
@@ -215,7 +228,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
         await settle();
         expect(store.activeId()).toBe('scratch');
 
-        resolveApplied(indexWith(savedId));
+        resolveApplication(appliedOutcome(savedId));
         await saving;
         expect(store.activeId()).toBe(savedId);
         expect(store.scratch()).toBeNull();
@@ -290,7 +303,7 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
   it('skips when the save never became durable (index missing the project)', async () => {
     const h = autoSwitchHarness({
       saveIndexPhases: (id: string) => ({
-        applied: Promise.resolve(indexWith(id)),
+        application: Promise.resolve(appliedOutcome(id)),
         durable: Promise.resolve<ProjectIndex | null>({
           activeId: 'scratch',
           scratch: null,
@@ -310,7 +323,7 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
       saveIndexPhases: (id: string) => {
         savedId = id;
         return {
-          applied: Promise.resolve(indexWith(id)),
+          application: Promise.resolve(appliedOutcome(id)),
           durable: new Promise<ProjectIndex | null>((resolve) => {
             releaseDurable = resolve;
           }),
@@ -334,7 +347,7 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
       saveIndexPhases: (id: string) => {
         savedId = id;
         return {
-          applied: Promise.resolve(indexWith(id)),
+          application: Promise.resolve(appliedOutcome(id)),
           durable: new Promise<ProjectIndex | null>((resolve) => {
             releaseDurable = resolve;
           }),
@@ -384,7 +397,7 @@ describe('Save-then-continue / Discard-then-continue (ADR-0165 §9)', () => {
   it('the resume waits for durability and is dropped when the save never landed', async () => {
     const h = harness({
       saveIndexPhases: (id: string) => ({
-        applied: Promise.resolve(indexWith(id)),
+        application: Promise.resolve(appliedOutcome(id)),
         durable: Promise.resolve<ProjectIndex | null>(null),
       }),
     });
@@ -469,7 +482,7 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
       saveIndexPhases: (id: string) => {
         savedId = id;
         return {
-          applied: Promise.resolve(indexWith(id)),
+          application: Promise.resolve(appliedOutcome(id)),
           durable: new Promise<ProjectIndex | null>((resolve) => {
             release = resolve;
           }),
@@ -486,6 +499,80 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
     await launcher;
     expect(order).toEqual(['switch', 'done']);
   });
+
+  it('keeps a failed post-apply durability proof latched against a later owner teardown', async () => {
+    let rejectDurable: (error: Error) => void = () => {};
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = harness({
+        saveIndexPhases: (id: string) => ({
+          application: Promise.resolve(appliedOutcome(id)),
+          durable: new Promise<ProjectIndex | null>((_resolve, reject) => {
+            rejectDurable = reject;
+          }),
+        }),
+      });
+
+      await h.flow.confirmSave('mine');
+      rejectDurable(new Error('flush failed after apply'));
+      await settle();
+
+      await h.flow.launcherSwitch('p-2');
+
+      expect(h.deps.store.requestSwitch).not.toHaveBeenCalled();
+      expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps an unknown apply rejection latched against a later owner teardown', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const h = harness({
+        saveIndexPhases: () => ({
+          application: Promise.resolve(
+            failedOutcome('unknown', 'applied ACK did not match committed state'),
+          ),
+          durable: Promise.reject(new Error('durability unknown')),
+        }),
+      });
+
+      await h.flow.confirmSave('mine');
+      await settle();
+      await h.flow.launcherSwitch('p-2');
+
+      expect(h.deps.store.requestSwitch).not.toHaveBeenCalled();
+      expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it('does not latch durability failure when the owner proved the Save never applied', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const h = harness({
+        saveIndexPhases: () => ({
+          application: Promise.resolve(failedOutcome('not-applied', 'owner proved no apply')),
+          durable: Promise.reject(new Error('owner exited before apply')),
+        }),
+      });
+
+      await h.flow.confirmSave('mine');
+      await settle();
+      await h.flow.launcherSwitch('p-2');
+
+      expect(h.deps.store.requestSwitch).toHaveBeenCalledWith('p-2');
+      expect(h.deps.workspace.switchTo).toHaveBeenCalledWith('p-2');
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
 });
 
 describe('beginStarterPick gates', () => {
@@ -501,20 +588,25 @@ describe('beginStarterPick gates', () => {
   });
 
   it('waits for the in-flight save APPLY (not durability) and aborts when it failed', async () => {
-    let resolveApplied: (index: ProjectIndex | null) => void = () => {};
-    const h = harness({
-      saveIndexPhases: (id: string) => ({
-        applied: new Promise<ProjectIndex | null>((resolve) => {
-          resolveApplied = resolve;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let resolveApplication: (application: SaveApplication) => void = () => {};
+      const h = harness({
+        saveIndexPhases: (id: string) => ({
+          application: new Promise<SaveApplication>((resolve) => {
+            resolveApplication = resolve;
+          }),
+          durable: Promise.resolve(indexWith(id)),
         }),
-        durable: Promise.resolve(indexWith(id)),
-      }),
-    });
-    const saving = h.flow.confirmSave('mine');
-    const pick = h.flow.beginStarterPick();
-    await settle();
-    resolveApplied(null);
-    await expect(pick).resolves.toBe(false);
-    await saving;
+      });
+      const saving = h.flow.confirmSave('mine');
+      const pick = h.flow.beginStarterPick();
+      await settle();
+      resolveApplication(failedOutcome('not-applied', 'owner proved no apply'));
+      await expect(pick).resolves.toBe(false);
+      await saving;
+    } finally {
+      error.mockRestore();
+    }
   });
 });

@@ -19,8 +19,13 @@ export interface PendingSwitchTarget {
 }
 
 /** ADR-0165 §7 durable Save phases (owner applies, then flushes). */
+export type SaveApplication =
+  | { readonly kind: 'applied'; readonly index: ProjectIndex }
+  | { readonly kind: 'not-applied'; readonly error: Error }
+  | { readonly kind: 'unknown'; readonly error: Error };
+
 export interface SaveIndexPhases {
-  readonly applied: Promise<ProjectIndex | null>;
+  readonly application: Promise<SaveApplication>;
   readonly durable: Promise<ProjectIndex | null>;
 }
 
@@ -100,17 +105,28 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
   // switch dialog) so the switch resumes AFTER the save commits (ADR-0165 §9).
   const [pendingAfterSave, setPendingAfterSave] = createSignal<PendingSwitchTarget | null>(null);
   let pendingSaveApplied: Promise<boolean> | null = null;
-  let pendingSaveDurability: Promise<boolean> | null = null;
+  // A proved-safe owner teardown: no Save applied, or every applied Save became durable.
+  // A false result stays latched; forgetting it would turn a later switch into data loss.
+  let pendingSaveTeardown: Promise<boolean> | null = null;
   let pendingSaveAutoSwitchId: ActiveId | null = null;
 
   function trackSave(
     id: string,
     save: SaveIndexPhases,
   ): { applied: Promise<boolean>; durable: Promise<boolean> } {
-    const appliedWait = (async (): Promise<boolean> => {
-      const index = await save.applied;
-      return index?.projects.some((p) => p.id === id) === true;
-    })();
+    const application = save.application.then((outcome): SaveApplication => {
+      if (outcome.kind === 'applied') {
+        if (outcome.index.projects.some((p) => p.id === id)) return outcome;
+        const error = new Error(`project index Save applied proof omitted ${id}`);
+        console.error('[project-index] save apply failed', error);
+        deps.showSaveError(`Save failed: ${error.message}`);
+        return { kind: 'unknown', error };
+      }
+      console.error('[project-index] save apply failed', outcome.error);
+      deps.showSaveError(`Save failed: ${outcome.error.message}`);
+      return outcome;
+    });
+    const appliedWait = application.then((outcome) => outcome.kind === 'applied');
     const applied = appliedWait.finally(() => {
       if (pendingSaveApplied === applied) pendingSaveApplied = null;
     });
@@ -120,11 +136,20 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
       const index = await save.durable;
       return index?.projects.some((p) => p.id === id) === true;
     })();
-    const durable = durableWait.finally(() => {
-      if (pendingSaveDurability === durable) pendingSaveDurability = null;
-    });
-    pendingSaveDurability = durable;
-    return { applied, durable };
+    const priorTeardown = pendingSaveTeardown ?? Promise.resolve(true);
+    const currentTeardown = application.then(
+      async (outcome) =>
+        outcome.kind === 'not-applied' || (outcome.kind === 'applied' && (await durableWait)),
+    );
+    const safeToTeardown = Promise.all([priorTeardown, currentTeardown]).then(
+      ([priorSafe, currentSafe]) => {
+        const safe = priorSafe && currentSafe;
+        if (safe && pendingSaveTeardown === safeToTeardown) pendingSaveTeardown = null;
+        return safe;
+      },
+    );
+    pendingSaveTeardown = safeToTeardown;
+    return { applied, durable: safeToTeardown };
   }
 
   async function waitForPendingSaveApplied(): Promise<boolean> {
@@ -132,7 +157,7 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
   }
 
   async function waitForPendingSaveDurable(): Promise<boolean> {
-    return (await pendingSaveDurability?.catch(() => false)) ?? true;
+    return (await pendingSaveTeardown?.catch(() => false)) ?? true;
   }
 
   // Respawn the owner at the saved project root after a plain Save-as-project —
@@ -171,29 +196,18 @@ export function createSaveFlow(deps: SaveFlowDeps): SaveFlow {
     // flips activeId to the project). The owner re-publishes only after flush;
     // waiting here prevents a late save publish from reverting a following
     // starter-pick/switch. Skipped in memory mode (EPHEMERAL — no durable tree).
-    const durableSave: SaveIndexPhases = ephemeral
-      ? {
-          applied: Promise.resolve<ProjectIndex | null>(null),
-          durable: Promise.resolve<ProjectIndex | null>(null),
-        }
+    const saveWait = ephemeral
+      ? { applied: Promise.resolve(true), durable: Promise.resolve(true) }
       : (() => {
           const phases = deps.saveIndexPhases(id, trimmed, deps.activeStarterId());
-          return {
-            applied: phases.applied.catch((err: unknown) => {
-              console.error('[project-index] save apply failed', err);
-              const message = err instanceof Error ? err.message : String(err);
-              deps.showSaveError(`Save failed: ${message}`);
-              return null;
-            }),
+          return trackSave(id, {
+            application: phases.application,
             durable: phases.durable.catch((err: unknown) => {
               console.warn('[project-index] save durability still pending', err);
               return null;
             }),
-          };
+          });
         })();
-    const saveWait = ephemeral
-      ? { applied: Promise.resolve(true), durable: Promise.resolve(true) }
-      : trackSave(id, durableSave);
     // Page mirror follows proved owner apply; pre-apply failure keeps scratch exact.
     if (!ephemeral && !(await saveWait.applied)) return;
     deps.store.confirmSave(trimmed, id);

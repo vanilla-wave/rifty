@@ -55,6 +55,49 @@ export type HostCommitRequest =
       readonly expectedTargetVersion: PathVersion | null;
     });
 
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  return left.every((byte, index) => right[index] === byte);
+}
+
+/** Exact operation identity; operation ids never collapse divergent request bytes. */
+export function equalHostCommitRequests(
+  left: HostCommitRequest,
+  right: HostCommitRequest,
+): boolean {
+  if (left.kind !== right.kind || left.operationId !== right.operationId) return false;
+  switch (left.kind) {
+    case 'write':
+      return (
+        right.kind === 'write' &&
+        left.path === right.path &&
+        left.expectedVersion === right.expectedVersion &&
+        equalBytes(left.data, right.data)
+      );
+    case 'mkdir':
+      return (
+        right.kind === 'mkdir' &&
+        left.path === right.path &&
+        left.expectedVersion === right.expectedVersion
+      );
+    case 'remove':
+      return (
+        right.kind === 'remove' &&
+        left.path === right.path &&
+        left.expectedVersion === right.expectedVersion &&
+        left.recursive === right.recursive
+      );
+    case 'rename':
+      return (
+        right.kind === 'rename' &&
+        left.sourcePath === right.sourcePath &&
+        left.targetPath === right.targetPath &&
+        left.expectedSourceVersion === right.expectedSourceVersion &&
+        left.expectedTargetVersion === right.expectedTargetVersion
+      );
+  }
+}
+
 type WithoutOperationId<Request> = Request extends HostCommitBase
   ? Omit<Request, 'operationId'>
   : never;

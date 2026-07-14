@@ -906,10 +906,13 @@ async function bootShellOwner(opts: {
     if (isOwnerVfsCommitIpcMessage(message)) {
       handleOwnerVfsCommitRequest({
         message,
-        apply: (request) =>
-          applyPackageAwareHostCommit(vfsAuthority, packageMutations, cfg.root, request),
-        publishSnapshot: publishOwnerState,
-        retain: (terminal) => vfsAuthority.retainHostCommitTerminal(terminal),
+        admit: (request) =>
+          vfsAuthority.admitHostCommit(
+            request,
+            (candidate) =>
+              applyPackageAwareHostCommit(vfsAuthority, packageMutations, cfg.root, candidate),
+            publishOwnerState,
+          ),
         send: (ack) => kernelIpc.send?.(ack),
       });
       return;
