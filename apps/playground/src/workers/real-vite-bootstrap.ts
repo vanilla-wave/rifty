@@ -492,6 +492,14 @@ async function bootShellOwner(opts: {
     }
   }
 
+  const reassertActiveDevTemplateNodeModules = (): Promise<void> =>
+    packageState.reassertTemplateNodeModules({
+      cfg: devCfg,
+      templateId: devSpec.id,
+      slug: devSlug,
+      fromScratch: devFromScratch,
+    });
+
   // Dedicated node-server lifecycle. Vite scripts bypass this controller and
   // run through the installed CLI child below.
   const devServer = createDevServerController({
@@ -499,12 +507,6 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: async (devCtx, devSid) => {
-      await packageState.reassertTemplateNodeModules({
-        cfg: devCfg,
-        templateId: devSpec.id,
-        slug: devSlug,
-        fromScratch: devFromScratch,
-      });
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -676,6 +678,12 @@ async function bootShellOwner(opts: {
         scriptCtx.stdout.write(`[cli] completed with exit code ${shellCommandExitCode(result)}\n`);
         return result;
       };
+      // One runtime-neutral dev-dispatch gate: every declared lifecycle alias
+      // reasserts template-owned node_modules through the package FIFO before
+      // Vite/bin, node-cli, or node-server can spawn. No-op keeps trusted state.
+      if (isDevScriptName(devSpec, name)) {
+        await reassertActiveDevTemplateNodeModules();
+      }
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.

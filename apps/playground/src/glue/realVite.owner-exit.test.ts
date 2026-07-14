@@ -1051,6 +1051,128 @@ describe('Bug #4 — owner death: stale running + silent write loss', () => {
     fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: applied });
   });
 
+  it.each([
+    {
+      fault: 'wrong owner',
+      operationId: 'applied-wrong-owner',
+      path: '/workspace/wrong-owner',
+      appliedOwnerEpoch: 'owner-stale',
+      appliedPath: '/workspace/wrong-owner',
+      appliedVersion: 'v4',
+    },
+    {
+      fault: 'wrong path',
+      operationId: 'applied-wrong-path',
+      path: '/workspace/right-path',
+      appliedOwnerEpoch: 'owner-a',
+      appliedPath: '/workspace/other-path',
+      appliedVersion: 'v4',
+    },
+    {
+      fault: 'divergent version evidence',
+      operationId: 'applied-divergent-version',
+      path: '/workspace/version-evidence',
+      appliedOwnerEpoch: 'owner-a',
+      appliedPath: '/workspace/version-evidence',
+      appliedVersion: null,
+    },
+  ] as const)(
+    'replays after a structurally valid NACK carries applied evidence with $fault',
+    async ({ operationId, path, appliedOwnerEpoch, appliedPath, appliedVersion }) => {
+      vi.useFakeTimers();
+      const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { startWorkspaceOwner } = await importOwner();
+        const handle = startWorkspaceOwner();
+        fakeWorker.emit('message', {
+          type: 'rifty:workspace-owner-ready',
+          port: handle.snapshotPort,
+          ownerEpoch: 'owner-a',
+          treeRevision: 3,
+        });
+        await handle.ready;
+
+        const request: HostCommitRequest = {
+          kind: 'mkdir',
+          operationId,
+          path,
+          expectedVersion: null,
+        };
+        const applied: HostCommitAck = {
+          operationId,
+          ownerEpoch: appliedOwnerEpoch,
+          treeRevision: 4,
+          versions: [{ path: appliedPath, version: appliedVersion }],
+        };
+        const exact: HostCommitAck = {
+          operationId,
+          ownerEpoch: 'owner-a',
+          treeRevision: 4,
+          versions: [{ path, version: 'v4' }],
+        };
+        const pending = handle.applyHostCommit(request);
+        let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+        void pending.then(
+          () => {
+            settlement = 'resolved';
+          },
+          () => {
+            settlement = 'rejected';
+          },
+        );
+        const commitPosts = (): unknown[] =>
+          fakeWorker.sent.filter(
+            (message) =>
+              !!message &&
+              typeof message === 'object' &&
+              (message as { readonly type?: unknown; readonly request?: { operationId?: unknown } })
+                .type === 'rifty:owner-vfs-commit' &&
+              (message as { readonly request?: { operationId?: unknown } }).request?.operationId ===
+                operationId,
+          );
+
+        expect(commitPosts()).toEqual([{ type: 'rifty:owner-vfs-commit', request }]);
+        fakeWorker.emit('message', {
+          type: 'rifty:owner-vfs-commit-ack',
+          operationId,
+          ok: false,
+          error: { kind: 'error', name: 'Error', message: 'publication failed' },
+          applied,
+        });
+        await Promise.resolve();
+
+        expect(settlement).toBe('pending');
+        expect(protocolErrors).toHaveBeenCalledWith(
+          '[real-vite/page] rejected divergent owner VFS terminal',
+          expect.objectContaining({ name: 'VfsCommitProtocolError' }),
+        );
+        expect(fakeWorker.sent).not.toContainEqual({
+          type: 'rifty:owner-vfs-commit-received',
+          ack: applied,
+        });
+        expect(commitPosts()).toEqual([
+          { type: 'rifty:owner-vfs-commit', request },
+          { type: 'rifty:owner-vfs-commit', request },
+        ]);
+
+        fakeWorker.emit('message', {
+          type: 'rifty:owner-vfs-commit-ack',
+          operationId,
+          ok: true,
+          ack: exact,
+        });
+        await expect(pending).resolves.toEqual(exact);
+        expect(fakeWorker.sent).toContainEqual({
+          type: 'rifty:owner-vfs-commit-received',
+          ack: exact,
+        });
+        fakeWorker.emit('message', { type: 'rifty:owner-vfs-commit-released', ack: exact });
+      } finally {
+        protocolErrors.mockRestore();
+      }
+    },
+  );
+
   it('ends malformed-terminal replay ownership on certified owner exit', async () => {
     vi.useFakeTimers();
     const protocolErrors = vi.spyOn(console, 'error').mockImplementation(() => {});
