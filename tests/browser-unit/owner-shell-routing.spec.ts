@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { bootOwner, execLine, gotoHarness, setDevConfig, writeOwnerFile } from './fixtures.ts';
+import {
+  bootOwner,
+  execLine,
+  gotoHarness,
+  readOwnerFile,
+  setDevConfig,
+  writeOwnerFile,
+} from './fixtures.ts';
 
 /**
  * Owner shell command routing, behaviorally against the REAL owner worker
@@ -54,6 +61,62 @@ test('npm scripts route through the real shell; vite unshadowed; node-cli dev wr
   expect(dev.out).toContain('cli: running CLI report');
   expect(dev.out).toContain('cli-dev-body-ran');
   expect(dev.out).toContain('[cli] completed with exit code 0');
+});
+
+test('terminal npm install keeps an arbitrary nested cwd outside the active preset config', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await bootOwner(page, { workspaceId: 'bu-nested-npm', hiddenEmptyBoot: true });
+  await writeOwnerFile(
+    page,
+    '/scratch/nested/package.json',
+    `${JSON.stringify({ name: 'nested', version: '0.0.0', private: true }, null, 2)}\n`,
+  );
+
+  const cd = await execLine(page, 'cd nested');
+  expect(cd.exit).toBe(0);
+  const installed = await execLine(page, 'npm install');
+
+  expect(installed.exit).toBe(0);
+  expect(installed.out).not.toContain('package acquisition config missing');
+  expect(installed.out).toContain('npm: no dependencies to install');
+});
+
+test('terminal git preflights every worktree target through the owner namespace authority', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await bootOwner(page, { workspaceId: 'bu-git-claim-preflight', hiddenEmptyBoot: true });
+  expect((await execLine(page, 'git init')).exit).toBe(0);
+  await writeOwnerFile(
+    page,
+    '/scratch/claim.patch',
+    [
+      'diff --git a/ordinary.txt b/ordinary.txt',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/ordinary.txt',
+      '@@ -0,0 +1 @@',
+      '+ordinary',
+      'diff --git a/node_modules/.rifty-install-stamp.json b/node_modules/.rifty-install-stamp.json',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/node_modules/.rifty-install-stamp.json',
+      '@@ -0,0 +1 @@',
+      '+forged',
+      '',
+    ].join('\n'),
+  );
+
+  const applied = await execLine(page, 'git apply claim.patch');
+
+  expect(applied.exit).toBe(128);
+  expect(applied.out).toContain('EPERM');
+  expect((await readOwnerFile(page, '/scratch/ordinary.txt')).ok).toBe(false);
+  expect((await readOwnerFile(page, '/scratch/node_modules/.rifty-install-stamp.json')).ok).toBe(
+    false,
+  );
 });
 
 test('instant preset restore gates the run; template node_modules seeds re-asserted post-restore', async ({

@@ -15,7 +15,7 @@ import {
   install,
   unpackEddyBundle,
 } from '@riftydev/npm-client';
-import { Shell } from '@riftydev/shell';
+import { type CommandContext, Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -24,11 +24,20 @@ import {
   revalidateLearnedPin,
   writeLearnedPin,
 } from '../../apps/playground/src/glue/eddy-learned-pins.ts';
-import { createNpmShellCommand } from '../../apps/playground/src/glue/npm-shell-command.ts';
+import { installArtifactIdentity } from '../../apps/playground/src/glue/install-artifact-identity.ts';
+import {
+  createNpmPackageAcquisitionAuthority,
+  createNpmShellCommand,
+} from '../../apps/playground/src/glue/npm-shell-command.ts';
+import { PackageAcquisitionError } from '../../apps/playground/src/workers/package-acquisition-authority.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 
 const DEPS = { debug: '^4.4.1' };
+const EXPECTED_PACKAGES = [
+  { name: 'debug', version: '4.4.1' },
+  { name: 'ms', version: '2.1.3' },
+] as const;
 
 async function seedProject(vfs: MemoryVfs): Promise<void> {
   await vfs.mkdir('/proj', { recursive: true });
@@ -79,6 +88,174 @@ afterEach(async () => {
 });
 
 describe('npm shell command → REAL install → real eddy (stub-drift tripwire)', () => {
+  it('production npm adapter preserves both original causes when Eddy and registry fail', async () => {
+    const eddyFailure = new Error('eddy connection refused');
+    const registryFailure = new Error('registry unavailable');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw eddyFailure;
+      }),
+    );
+    class FailingRegistry extends RegistryClient {
+      override async getPackument(): Promise<never> {
+        throw registryFailure;
+      }
+    }
+
+    try {
+      const vfs = new MemoryVfs();
+      await seedProject(vfs);
+      const deps = {
+        vfs,
+        registry: new FailingRegistry({
+          baseUrl: LOCAL_REGISTRY_BASE_URL,
+          fetch: makeLocalFetcher().fetch,
+        }),
+        resolverUrl: 'https://eddy.invalid/resolve',
+      };
+      const authority = createNpmPackageAcquisitionAuthority(deps);
+      const sink = { write: () => {} };
+      const context: CommandContext = { cwd: '/proj', env: {}, stdout: sink, stderr: sink };
+      let caught: unknown;
+
+      try {
+        await authority.dispatch({
+          type: 'terminal-install',
+          project: {
+            projectId: 'integration',
+            root: '/proj',
+            slug: 'integration',
+            identity: installArtifactIdentity,
+          },
+          argv: [],
+          context,
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(PackageAcquisitionError);
+      const installFailure = (caught as PackageAcquisitionError).cause;
+      expect(installFailure).toBeInstanceOf(AggregateError);
+      expect((installFailure as AggregateError).errors).toEqual([eddyFailure, registryFailure]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('real Eddy install reports lockfile resolution and per-package Eddy transport', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: makeRegistry(),
+      resolverUrl: eddyUrl,
+    });
+
+    expect(result.provenance.resolution).toBe('lockfile');
+    expect(result.provenance.eddyFallback).toBeUndefined();
+    expect(result.provenance.packages).toEqual(
+      EXPECTED_PACKAGES.map((pkg) => ({ ...pkg, transport: 'eddy' })),
+    );
+  });
+
+  it('ensure keeps a same-project covering lock and reinstalls from the real tarball cache', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await install({ vfs, cwd: '/proj', registry: makeRegistry() });
+    const packageJsonText = await vfs.readFileText('/proj/package.json');
+    await vfs.rm('/proj/node_modules', { recursive: true, force: true });
+    let registryCalls = 0;
+    const offlineRegistry = new RegistryClient({
+      baseUrl: LOCAL_REGISTRY_BASE_URL,
+      fetch: async () => {
+        registryCalls += 1;
+        throw new Error('covering lock + cache must not reach the registry');
+      },
+    });
+    let coveringLockSeen = false;
+    const authority = createNpmPackageAcquisitionAuthority({
+      vfs,
+      registry: offlineRegistry,
+      prepareInstall: async (_context, info) => {
+        coveringLockSeen = await vfs.exists('/proj/package-lock.json');
+        expect(info.priorTrustedTree).toBe(false);
+        expect(info.priorSlug).toBeUndefined();
+        await vfs.rm('/proj/node_modules', { recursive: true, force: true });
+      },
+    });
+
+    const provenance = await authority.dispatch({
+      type: 'ensure',
+      project: {
+        projectId: 'integration',
+        root: '/proj',
+        slug: 'integration',
+        identity: installArtifactIdentity,
+      },
+      packageJsonText,
+      fallback: 'install',
+      replaceTreeOnMiss: true,
+    });
+
+    expect(coveringLockSeen).toBe(true);
+    expect(registryCalls).toBe(0);
+    expect(provenance).toMatchObject({
+      outcome: 'installed',
+      resolution: 'lockfile',
+      packages: EXPECTED_PACKAGES.map((pkg) => ({ ...pkg, transport: 'cache' })),
+    });
+    expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
+  });
+
+  it.each([
+    ['HTTP 404', 'http-404', 'post: resolver returned HTTP 404'],
+    ['corrupt body', 'corrupt', 'post: truncated eddy bundle tar stream'],
+    [
+      'divergent closure',
+      'divergent',
+      'post: bundle lockfile does not cover the request (or an override forces a re-resolve)',
+    ],
+  ] as const)(
+    'records %s as an Eddy fallback before the validating registry succeeds',
+    async (_label, failure, expectedReason) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          if (failure === 'http-404') return new Response('', { status: 404 });
+          if (failure === 'corrupt') return new Response(new Uint8Array([1, 2, 3]));
+          const built = await resolveBundle(
+            { dependencies: { ms: '2.1.3' } },
+            { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+          );
+          if (built.kind !== 'bundle') throw new Error('setup: expected divergent bundle');
+          return new Response(built.bytes);
+        }),
+      );
+      try {
+        const vfs = new MemoryVfs();
+        await seedProject(vfs);
+        const result = await install({
+          vfs,
+          cwd: '/proj',
+          registry: makeRegistry(),
+          resolverUrl: 'https://eddy.invalid/resolve',
+        });
+
+        expect(result.provenance.resolution).toBe('metadata');
+        expect(result.provenance.eddyFallback?.reason).toBe(expectedReason);
+        expect(result.provenance.packages).toEqual(
+          EXPECTED_PACKAGES.map((pkg) => ({ ...pkg, transport: 'registry' })),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
   it('eddy path: real tree + stamp + learned pin carrying the eddy closure hash + provenance line', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
@@ -379,6 +556,10 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     // The bundle really arrives + verifies over the wire, yet adoption is
     // refused because the cache can't back the replay — honestly `standard`.
     expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toContain(
+      'tarball cache did not retain seeded bytes',
+    );
+    expect(result.provenance.packages.every((pkg) => pkg.transport === 'registry')).toBe(true);
     // The standard path still installs (real tree), it just isn't labelled eddy.
     expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
   });
@@ -414,6 +595,12 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     });
 
     expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toContain(
+      'tarball cache did not retain seeded bytes',
+    );
+    expect(new Set(result.provenance.packages.map((pkg) => pkg.transport))).toEqual(
+      new Set(['cache', 'registry']),
+    );
     expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
     expect(await vfs.exists('/proj/node_modules/ms/package.json')).toBe(true);
   });
@@ -449,6 +636,10 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
       });
       // Bounded → the eddy attempt declines → standard install completes.
       expect(result.source ?? 'standard').toBe('standard');
+      expect(result.provenance.eddyFallback?.reason).toContain(
+        'resolver decline body stalled or exceeded its byte cap',
+      );
+      expect(result.provenance.packages.every((pkg) => pkg.transport === 'registry')).toBe(true);
       expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
     } finally {
       vi.unstubAllGlobals();

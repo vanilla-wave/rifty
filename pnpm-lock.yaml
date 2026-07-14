@@ -303,6 +303,10 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs
+    devDependencies:
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
 
   packages/terminal:
     dependencies:

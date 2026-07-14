@@ -105,4 +105,21 @@ describe('snapshot artifact drift check', () => {
       /native\/main\.js.*pnpm snapshots:bake/,
     );
   });
+
+  it('runs installed-tree transform proof before accepting current metadata', () => {
+    const value = snapshot();
+    const input = {
+      ...expectation(value),
+      validateInstallFiles(files: ReadonlyMap<string, Uint8Array>): void {
+        const source = files.get('native/main.js');
+        if (!source || Buffer.from(source).toString('utf8') !== 'expected-transform-input') {
+          throw new Error('native/main.js is not patchable by the current transform');
+        }
+      },
+    };
+
+    expect(() => assertSnapshotArtifactCurrent(input)).toThrow(
+      /native\/main\.js is not patchable.*pnpm snapshots:bake/,
+    );
+  });
 });

@@ -44,5 +44,8 @@
     "@riftydev/io": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "@riftydev/git": "workspace:*"
+  },
+  "devDependencies": {
+    "@riftydev/net": "workspace:*"
   }
 }

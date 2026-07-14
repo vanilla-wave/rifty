@@ -1,3 +1,5 @@
+import type { VfsMutationGuard } from '@riftydev/vfs';
+
 /**
  * Public types for the shell.
  *
@@ -70,6 +72,10 @@ export interface CommandContext {
    * `130`); absent ⇒ never cancelled (ADR-0089).
    */
   readonly signal?: AbortSignal;
+  /** Host policy boundary for authoritative VFS mutations. */
+  readonly mutationGuard?: VfsMutationGuard;
+  /** Synchronous namespace policy over one complete absolute-path plan. */
+  readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 }
 
 export type ShellCommand = (args: string[], ctx: CommandContext) => Promise<ShellCommandResult>;

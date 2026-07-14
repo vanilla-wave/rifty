@@ -1,17 +1,19 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import {
   type InstallStampSyncFs,
+  createInstallStamp,
   depsEqual,
   installStampPath,
   installStampSatisfied,
   installStampSatisfiedForPackageJson,
   installStampSatisfiedForPackageJsonSync,
+  isInstallStampPath,
   readEffectiveDeps,
   readInstallStamp,
-  restampSlug,
-  writeInstallStamp,
+  readInstallStampSync,
 } from './install-stamp.ts';
 
 const ROOT = '/workspace';
@@ -31,6 +33,28 @@ async function seedNodeModules(vfs: MemoryVfs): Promise<void> {
   await vfs.mkdir(`${ROOT}/node_modules/vite`, { recursive: true });
 }
 
+async function seedTrustedStamp(vfs: MemoryVfs, packages: number, slug = ''): Promise<void> {
+  const packageJsonText = await vfs.readFileText(`${ROOT}/package.json`);
+  const authority = createInstallStampAuthority({ vfs });
+  const claim = await authority.demote({ root: ROOT, slug });
+  const result = await authority.promote(
+    { root: ROOT, slug, packageJsonText },
+    { epoch: claim.epoch, packages },
+  );
+  if (result.status !== 'trusted') throw new Error(`test setup failed: ${result.status}`);
+}
+
+async function seedPendingStamp(vfs: MemoryVfs, packages: number, slug: string): Promise<void> {
+  const packageJsonText = await vfs.readFileText(`${ROOT}/package.json`);
+  const stamp = createInstallStamp(ROOT, packageJsonText, {
+    slug,
+    packages,
+    durability: 'pending',
+  });
+  if (!stamp) throw new Error('test setup failed: invalid package.json');
+  await vfs.writeFile(installStampPath(ROOT), `${JSON.stringify(stamp, null, 2)}\n`);
+}
+
 describe('install stamp (ADR-0135)', () => {
   it('round-trips a stamp with the package.json effective dep set (deps + dev + optional)', async () => {
     const vfs = new MemoryVfs();
@@ -42,11 +66,12 @@ describe('install stamp (ADR-0135)', () => {
     });
     await seedNodeModules(vfs);
 
-    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+    await seedTrustedStamp(vfs, 14, 'real-vite');
     const stamp = await readInstallStamp(vfs, ROOT);
 
     expect(stamp).toEqual({
-      version: 2,
+      version: 3,
+      root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({
         name: 'app',
@@ -59,13 +84,49 @@ describe('install stamp (ADR-0135)', () => {
       packages: 14,
     });
     expect(await vfs.exists(installStampPath(ROOT))).toBe(true);
+    expect((await readInstallStamp(vfs, `${ROOT}/.`))?.root).toBe(ROOT);
+  });
+
+  it('treats a relative reader root as a miss before touching either VFS surface', async () => {
+    const vfs = new MemoryVfs();
+    const fs: InstallStampSyncFs = {
+      existsSync: () => {
+        throw new Error('relative root reached sync VFS');
+      },
+      readFileBytesSync: () => {
+        throw new Error('relative root reached sync VFS');
+      },
+    };
+
+    await expect(readInstallStamp(vfs, 'workspace')).resolves.toBeNull();
+    expect(readInstallStampSync(fs, 'workspace')).toBeNull();
+  });
+
+  it('recognizes exact and descendant paths in every reserved claim namespace', () => {
+    expect(isInstallStampPath('/node_modules/.rifty-install-stamp.json')).toBe(true);
+    expect(
+      isInstallStampPath('/project/node_modules/pkg/node_modules/.rifty-install-stamp.json'),
+    ).toBe(true);
+    expect(isInstallStampPath('/project/node_modules/.rifty-install-stamp.json/payload')).toBe(
+      true,
+    );
+    expect(
+      isInstallStampPath(
+        '/project/node_modules/pkg/node_modules/.rifty-install-stamp.json/payload',
+      ),
+    ).toBe(true);
+    expect(isInstallStampPath('/project/.rifty-install-stamp.json')).toBe(false);
+    expect(isInstallStampPath('/project/node_modules/.rifty-install-stamp.json.backup')).toBe(
+      false,
+    );
+    expect(isInstallStampPath('project/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
   it('is satisfied when the slug + deps match and node_modules exists', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+    await seedTrustedStamp(vfs, 14, 'real-vite');
 
     const hit = await installStampSatisfied(vfs, ROOT, 'real-vite');
     expect(hit?.packages).toBe(14);
@@ -92,10 +153,11 @@ describe('install stamp (ADR-0135)', () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'real-vite', 'pending');
+    await seedPendingStamp(vfs, 14, 'real-vite');
 
     expect(await readInstallStamp(vfs, ROOT)).toEqual({
-      version: 2,
+      version: 3,
+      root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
       installArtifactIdentity,
@@ -120,7 +182,7 @@ describe('install stamp (ADR-0135)', () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
+    await seedTrustedStamp(vfs, 8, 'project-files');
 
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
     expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
@@ -130,7 +192,7 @@ describe('install stamp (ADR-0135)', () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+    await seedTrustedStamp(vfs, 14, 'real-vite');
 
     await seedProject(vfs, {
       name: 'app',
@@ -152,7 +214,7 @@ describe('install stamp (ADR-0135)', () => {
       const vfs = new MemoryVfs();
       await seedProject(vfs);
       await seedNodeModules(vfs);
-      await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+      await seedTrustedStamp(vfs, 14, 'real-vite');
 
       await vfs.writeFile(`${ROOT}/package.json`, drifted);
 
@@ -164,7 +226,7 @@ describe('install stamp (ADR-0135)', () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
+    await seedTrustedStamp(vfs, 14, 'real-vite');
     const stamp = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
       string,
       unknown
@@ -175,6 +237,58 @@ describe('install stamp (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 
+  it('treats schema v2 as a migration miss even when every old identity field matches', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const legacy = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+      string,
+      unknown
+    >;
+    legacy.version = 2;
+    legacy.root = undefined;
+    await vfs.writeFile(installStampPath(ROOT), JSON.stringify(legacy));
+
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
+  it.each([undefined, '/copied-workspace', '/workspace/.', 'workspace'])(
+    'rejects a stamp whose embedded root is not this exact canonical location: %s',
+    async (embeddedRoot) => {
+      const vfs = new MemoryVfs();
+      await seedProject(vfs);
+      await seedNodeModules(vfs);
+      await seedTrustedStamp(vfs, 14, 'real-vite');
+      const stamp = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+        string,
+        unknown
+      >;
+      stamp.root = embeddedRoot;
+      await vfs.writeFile(installStampPath(ROOT), JSON.stringify(stamp));
+
+      expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+      expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+    },
+  );
+
+  it('rejects an epoch on a trusted claim; epochs exist only while pending', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const stamp = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+      string,
+      unknown
+    >;
+    stamp.epoch = 'forged:1';
+    await vfs.writeFile(installStampPath(ROOT), JSON.stringify(stamp));
+
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
   it('is not satisfied for a different template package.json under the same slug', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs, {
@@ -182,7 +296,7 @@ describe('install stamp (ADR-0135)', () => {
       dependencies: { vite: '^7.0.0' },
     });
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 12, 'scratch');
+    await seedTrustedStamp(vfs, 12, 'scratch');
 
     const typescriptPackageJson = JSON.stringify({
       name: 'app',
@@ -202,7 +316,7 @@ describe('install stamp (ADR-0135)', () => {
       dependencies: { vite: '^7.0.0', cowsay: '^1.6.0' },
     });
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 20, 'scratch');
+    await seedTrustedStamp(vfs, 20, 'scratch');
 
     const templatePackageJson = JSON.stringify({
       name: 'app',
@@ -219,7 +333,7 @@ describe('install stamp (ADR-0135)', () => {
     const noNodeModules = new MemoryVfs();
     await seedProject(noNodeModules);
     await noNodeModules.mkdir(`${ROOT}/node_modules`, { recursive: true });
-    await writeInstallStamp(noNodeModules, ROOT, 1);
+    await seedTrustedStamp(noNodeModules, 1);
     await noNodeModules.rm(`${ROOT}/node_modules`, { recursive: true, force: true });
     expect(await installStampSatisfied(noNodeModules, ROOT)).toBeNull();
 
@@ -231,7 +345,7 @@ describe('install stamp (ADR-0135)', () => {
     const noPackageJson = new MemoryVfs();
     await seedProject(noPackageJson);
     await seedNodeModules(noPackageJson);
-    await writeInstallStamp(noPackageJson, ROOT, 1);
+    await seedTrustedStamp(noPackageJson, 1);
     await noPackageJson.rm(`${ROOT}/package.json`, { force: true });
     expect(await installStampSatisfied(noPackageJson, ROOT)).toBeNull();
   });
@@ -254,28 +368,6 @@ describe('install stamp (ADR-0135)', () => {
     expect(depsEqual({ a: '1' }, { a: '1', b: '2' })).toBe(false);
   });
 
-  it('restampSlug rewrites the slug of a moved tree without re-reading deps', async () => {
-    const vfs = new MemoryVfs();
-    await seedProject(vfs);
-    await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'scratch');
-
-    await restampSlug(vfs, ROOT, 'proj-1');
-
-    const stamp = await readInstallStamp(vfs, ROOT);
-    expect(stamp?.slug).toBe('proj-1');
-    expect(stamp?.deps).toEqual({ vite: '^5.4.0' }); // deps unchanged by the rename
-    expect((await installStampSatisfied(vfs, ROOT, 'proj-1'))?.packages).toBe(14);
-    expect(await installStampSatisfied(vfs, ROOT, 'scratch')).toBeNull();
-  });
-
-  it('restampSlug is a no-op when there is no stamp (best-effort)', async () => {
-    const vfs = new MemoryVfs();
-    await seedProject(vfs);
-    await restampSlug(vfs, ROOT, 'proj-1'); // does not throw
-    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
-  });
-
   it('installStampSatisfiedForPackageJsonSync mirrors the async predicate (owner-boot prefetch gate)', async () => {
     // The sync twin exists so the eddy prefetch gate never awaits (an async
     // gate starves behind the busy boot loop, ADR-0195). Same verdicts as the
@@ -283,7 +375,7 @@ describe('install stamp (ADR-0135)', () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14, 'scratch');
+    await seedTrustedStamp(vfs, 14, 'scratch');
     // Structural sync fake over the SAME file contents:
     const files = new Map<string, string>();
     files.set(
@@ -300,6 +392,9 @@ describe('install stamp (ADR-0135)', () => {
     expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)?.packages).toBe(
       14,
     );
+    expect(
+      installStampSatisfiedForPackageJsonSync(fs, `${ROOT}/.`, 'scratch', pkgText)?.packages,
+    ).toBe(14);
     // Wrong slug / drifted template deps → null, same as the async predicate.
     expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'other', pkgText)).toBeNull();
     expect(
@@ -312,7 +407,15 @@ describe('install stamp (ADR-0135)', () => {
     ).toBeNull();
     expect(await installStampSatisfiedForPackageJson(vfs, ROOT, 'scratch', pkgText)).not.toBeNull();
 
-    await writeInstallStamp(vfs, ROOT, 14, 'scratch', 'pending');
+    const copiedClaim = JSON.parse(files.get(installStampPath(ROOT)) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    copiedClaim.root = '/copied-workspace';
+    files.set(installStampPath(ROOT), JSON.stringify(copiedClaim));
+    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)).toBeNull();
+
+    await seedPendingStamp(vfs, 14, 'scratch');
     files.set(installStampPath(ROOT), await vfs.readFileText(installStampPath(ROOT)));
     expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)).toBeNull();
   });

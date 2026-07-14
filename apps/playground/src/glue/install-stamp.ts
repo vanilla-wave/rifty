@@ -12,16 +12,23 @@
  *
  * Trust model: the stamp trusts the tree wholesale — no per-file verification.
  * Durability ordering (ADR-0187 Corrected): trusted stamps mean durable tree.
- * Visible `npm install` gates the stamp on a clean drain (`stampInstalledTree`).
- * Boot/restore writes a non-blocking PENDING stamp first (`project-deps.ts`);
- * pending stamps never satisfy reuse and are promoted only after a clean drain.
+ * Every transition is owned by `install-stamp-authority.ts`; pending stamps
+ * never satisfy reuse and are promoted only after a clean durability proof.
  */
 // TODO(backlog: playground/install-stamp-invalidation)
-import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
+import {
+  type PersistFailureReport,
+  type Vfs,
+  isAbsolute,
+  joinPath,
+  normalizePath,
+} from '@riftydev/vfs';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 
 export interface InstallStamp {
-  readonly version: 2;
+  readonly version: 3;
+  /** Canonical absolute project root this claim was minted for. */
+  readonly root: string;
   /** Project identity (preset slug) the tree was installed for — the reuse key. */
   readonly slug: string;
   /** Exact request bytes that produced the tree; never a flattened projection. */
@@ -35,8 +42,8 @@ export interface InstallStamp {
   readonly packages: number;
   /** Pending boot/restore stamps are visible for diagnostics but never trusted. */
   readonly durability?: 'pending';
-  /** Per-realm token so stale deferred promoters cannot trust a newer tree. */
-  readonly promotionId?: string;
+  /** Authority-issued per-claim fence; present only while pending. */
+  readonly epoch?: string;
 }
 
 /** The dependency tree the stamp attests durable: `<root>/node_modules`. The
@@ -48,8 +55,18 @@ export function installTreeDir(root: string): string {
   return joinPath(root, 'node_modules');
 }
 
+export const INSTALL_STAMP_BASENAME = '.rifty-install-stamp.json';
+
 export function installStampPath(root: string): string {
-  return joinPath(installTreeDir(root), '.rifty-install-stamp.json');
+  return joinPath(installTreeDir(root), INSTALL_STAMP_BASENAME);
+}
+
+/** True for a reserved claim location or anything structurally below it. */
+export function isInstallStampPath(path: string): boolean {
+  if (!isAbsolute(path)) return false;
+  const normalized = normalizePath(path);
+  const suffix = `/node_modules/${INSTALL_STAMP_BASENAME}`;
+  return normalized === suffix || normalized.endsWith(suffix) || normalized.includes(`${suffix}/`);
 }
 
 /** True iff `path` is inside the stamped tree AND is not the stamp file itself
@@ -136,45 +153,54 @@ export interface InstallStampPayload {
   readonly slug: string;
   readonly packages: number;
   readonly durability?: 'pending';
-  readonly promotionId?: string;
+  readonly epoch?: string;
 }
 
 /** One constructor for every async/sync stamp writer. */
 export function createInstallStamp(
+  root: string,
   packageJsonText: string,
   payload: InstallStampPayload,
 ): InstallStamp | null {
+  if (!isAbsolute(root)) return null;
+  const canonicalRoot = normalizePath(root);
   const deps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!deps) return null;
   return {
-    version: 2,
+    version: 3,
+    root: canonicalRoot,
     slug: payload.slug,
     packageJsonText,
     installArtifactIdentity,
     deps,
     packages: payload.packages,
     ...(payload.durability === 'pending' ? { durability: 'pending' as const } : {}),
-    ...(payload.durability === 'pending' && payload.promotionId
-      ? { promotionId: payload.promotionId }
-      : {}),
+    ...(payload.durability === 'pending' && payload.epoch ? { epoch: payload.epoch } : {}),
   };
 }
 
 /** One parser for async and sync readers. Legacy/malformed claims are misses. */
-export function parseInstallStamp(value: unknown): InstallStamp | null {
+export function parseInstallStamp(value: unknown, root: string): InstallStamp | null {
+  if (!isAbsolute(root)) return null;
+  const canonicalRoot = normalizePath(root);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as {
     version?: unknown;
+    root?: unknown;
     slug?: unknown;
     packageJsonText?: unknown;
     installArtifactIdentity?: unknown;
     deps?: unknown;
     packages?: unknown;
     durability?: unknown;
-    promotionId?: unknown;
+    epoch?: unknown;
   };
   if (
-    raw.version !== 2 ||
+    raw.version !== 3 ||
+    typeof raw.root !== 'string' ||
+    !isAbsolute(raw.root) ||
+    normalizePath(raw.root) !== raw.root ||
+    raw.root !== canonicalRoot ||
     typeof raw.slug !== 'string' ||
     typeof raw.packageJsonText !== 'string' ||
     typeof raw.installArtifactIdentity !== 'string' ||
@@ -189,16 +215,18 @@ export function parseInstallStamp(value: unknown): InstallStamp | null {
   const deps = readStringMap(raw.deps);
   if (!depsEqual(deps, exactDeps)) return null;
   if (raw.durability !== undefined && raw.durability !== 'pending') return null;
-  if (raw.promotionId !== undefined && typeof raw.promotionId !== 'string') return null;
+  if (raw.epoch !== undefined && typeof raw.epoch !== 'string') return null;
+  if (raw.durability !== 'pending' && raw.epoch !== undefined) return null;
   return {
-    version: 2,
+    version: 3,
+    root: raw.root,
     slug: raw.slug,
     packageJsonText: raw.packageJsonText,
     installArtifactIdentity: raw.installArtifactIdentity,
     deps,
     packages: raw.packages,
     ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
-    ...(typeof raw.promotionId === 'string' ? { promotionId: raw.promotionId } : {}),
+    ...(typeof raw.epoch === 'string' ? { epoch: raw.epoch } : {}),
   };
 }
 
@@ -210,6 +238,7 @@ function depsInclude(
 }
 
 export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallStamp | null> {
+  if (!isAbsolute(root)) return null;
   const path = installStampPath(root);
   if (!(await vfs.exists(path))) return null;
   let parsed: unknown;
@@ -218,88 +247,13 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
   } catch {
     return null;
   }
-  return parseInstallStamp(parsed);
+  return parseInstallStamp(parsed, root);
 }
 
 export function stampTrusted(stamp: InstallStamp): boolean {
   return (
     stamp.durability !== 'pending' && stamp.installArtifactIdentity === installArtifactIdentity
   );
-}
-
-/**
- * Stamp the tree for project `slug` + the package.json effective dep set —
- * the CURRENT one by default, or `precomputedDeps` when the caller snapshotted
- * it earlier (the deferred command stamp must attest the INSTALL-TIME set, not
- * whatever package.json says after the drain). No-op when package.json is
- * unreadable (nothing to match against later). `slug` defaults to `''`
- * (page-side ad-hoc installs that no boot ever reuses).
- */
-export async function writeInstallStamp(
-  vfs: Vfs,
-  root: string,
-  packages: number,
-  slug = '',
-  durability?: 'pending',
-  promotionId?: string,
-  precomputedDeps?: Record<string, string>,
-): Promise<void> {
-  const currentText = await readPackageJsonText(vfs, root);
-  const prior = currentText === null && precomputedDeps ? await readInstallStamp(vfs, root) : null;
-  const packageJsonText = currentText ?? prior?.packageJsonText;
-  if (packageJsonText === undefined) return;
-  const stamp = createInstallStamp(packageJsonText, {
-    slug,
-    packages,
-    durability,
-    promotionId,
-  });
-  if (!stamp || (precomputedDeps && !depsEqual(stamp.deps, precomputedDeps))) return;
-  // A zero-package install legitimately creates no node_modules — the stamp
-  // still must land so the next boot skips the resolver.
-  await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
-  await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
-}
-
-/**
- * The DEFERRED trusted-stamp write (command-site background sequence): unlike
- * {@link writeInstallStamp} it never mkdirs — re-creating `node_modules` here
- * would resurrect a tree the user deleted while the drain ran
- * (`npm install && rm -rf node_modules`), leaving a trusted stamp over an
- * otherwise-empty dir. A parent vanished inside the caller's check→write
- * window fails the write loudly (ENOENT) instead.
- */
-export async function writeDeferredTrustedStamp(
-  vfs: Vfs,
-  root: string,
-  packages: number,
-  slug: string,
-  deps: Record<string, string>,
-): Promise<void> {
-  const currentText = await readPackageJsonText(vfs, root);
-  const prior = currentText === null ? await readInstallStamp(vfs, root) : null;
-  const packageJsonText = currentText ?? prior?.packageJsonText;
-  if (packageJsonText === undefined)
-    throw new Error('Cannot stamp without exact package.json text');
-  const stamp = createInstallStamp(packageJsonText, { slug, packages });
-  if (!stamp || !depsEqual(stamp.deps, deps)) {
-    throw new Error('Cannot stamp: package.json request differs from install-time dependencies');
-  }
-  await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
-}
-
-/**
- * Rewrite an existing stamp's `slug` in place (ADR-0165): a Save MOVES the
- * scratch tree to `/projects/<id>/`, so its node_modules is now project <id>'s —
- * re-key the stamp so a later `installStampSatisfied(root, <id>)` reuses it. The
- * deps + package count are unchanged by a move, so no re-read. No-op when there
- * is no stamp (a fresh, never-installed scratch — best-effort).
- */
-export async function restampSlug(vfs: Vfs, root: string, slug: string): Promise<void> {
-  const stamp = await readInstallStamp(vfs, root);
-  if (!stamp) return;
-  const next: InstallStamp = { ...stamp, slug };
-  await vfs.writeFile(installStampPath(root), `${JSON.stringify(next, null, 2)}\n`);
 }
 
 /**
@@ -334,6 +288,7 @@ export async function installStampSatisfiedForPackageJson(
   slug: string,
   packageJsonText: string,
 ): Promise<InstallStamp | null> {
+  if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!expectedDeps) return null;
   const currentText = await readPackageJsonText(vfs, root);
@@ -370,6 +325,7 @@ export function installStampSatisfiedForPackageJsonSync(
   slug: string,
   packageJsonText: string,
 ): InstallStamp | null {
+  if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!expectedDeps) return null;
   const currentText = readTextSyncOrNull(fs, joinPath(root, 'package.json'));
@@ -397,6 +353,7 @@ function readTextSyncOrNull(fs: InstallStampSyncFs, path: string): string | null
 /** Sync twin of {@link readInstallStamp} — exported for write-site rechecks
  * that must be ATOMIC with a sync write (no await between read and write). */
 export function readInstallStampSync(fs: InstallStampSyncFs, root: string): InstallStamp | null {
+  if (!isAbsolute(root)) return null;
   const text = readTextSyncOrNull(fs, installStampPath(root));
   if (text === null) return null;
   let parsed: unknown;
@@ -405,5 +362,5 @@ export function readInstallStampSync(fs: InstallStampSyncFs, root: string): Inst
   } catch {
     return null;
   }
-  return parseInstallStamp(parsed);
+  return parseInstallStamp(parsed, root);
 }

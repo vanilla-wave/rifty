@@ -6,7 +6,7 @@
  * first-ever open of an instant preset is truly instant.
  *
  * Snapshot v2 carries the exact package.json text and install-artifact identity
- * that produced the tree. Restore compares both byte-for-byte (ADR-0241).
+ * that produced the tree. Restore compares both byte-for-byte (ADR-0261).
  */
 import { joinPath } from '@riftydev/vfs';
 import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
@@ -15,8 +15,8 @@ import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts'
 import {
   type WorkspaceArchiveFs,
   type WorkspaceArchiveV1,
-  applyWorkspaceArchive,
   buildWorkspaceArchive,
+  prepareWorkspaceArchiveImport,
 } from './workspace-archive.ts';
 
 export interface DepSnapshotV2 {
@@ -32,6 +32,10 @@ export interface DepSnapshotV2 {
   readonly lockfile: string;
   /** The node_modules subtree (nested copies included). */
   readonly nodeModules: WorkspaceArchiveV1;
+}
+
+export interface PreparedDepSnapshotRestore {
+  apply(): void;
 }
 
 /** One byte-stable top-level order for bake and provenance tooling. */
@@ -50,6 +54,26 @@ export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
 
 const enc = new TextEncoder();
 const SNAPSHOT_MAX_BYTES = 128 * 1024 * 1024;
+
+export type DepSnapshotFetchStage = 'fetch' | 'decompress' | 'parse';
+
+/** Exact boundary failure; acquisition records it before choosing real install. */
+export class DepSnapshotFetchError extends Error {
+  readonly code = 'DEP_SNAPSHOT_FETCH_FAILED' as const;
+
+  constructor(
+    readonly url: string,
+    readonly stage: DepSnapshotFetchStage,
+    cause: unknown,
+  ) {
+    super(`Dependency snapshot ${url} ${stage} failed: ${errorReason(cause)}`, { cause });
+    this.name = 'DepSnapshotFetchError';
+  }
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /** Serialize the installed tree at `<root>` into a snapshot (bake script). */
 export function buildDepSnapshot(
@@ -119,43 +143,66 @@ export function restoreDepSnapshot(
   root: string,
   snapshot: DepSnapshotV2,
 ): void {
-  applyWorkspaceArchive(fs, snapshot.nodeModules, {
+  prepareDepSnapshotRestore(fs, root, snapshot).apply();
+}
+
+/** Decode and validate the complete restore mapping before destination mutation. */
+export function prepareDepSnapshotRestore(
+  fs: WorkspaceArchiveFs,
+  root: string,
+  snapshot: DepSnapshotV2,
+): PreparedDepSnapshotRestore {
+  const nodeModules = prepareWorkspaceArchiveImport(fs, snapshot.nodeModules, {
     root: joinPath(root, 'node_modules'),
     replace: true,
     // ADR-0165: the snapshot is baked at one root but restored into the active
     // project root (/scratch or /projects/<id>); re-root the relative tree.
     rebase: true,
   });
-  if (snapshot.lockfile.length > 0) {
-    fs.writeFileSync(joinPath(root, 'package-lock.json'), enc.encode(snapshot.lockfile));
-  }
+  const lockfile = snapshot.lockfile.length > 0 ? enc.encode(snapshot.lockfile) : null;
+  return {
+    apply() {
+      nodeModules.apply();
+      if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
+    },
+  };
 }
 
 /**
- * Fetch + gunzip + parse a baked snapshot. Returns `null` on ANY failure
- * (missing asset, network, decompression, malformed JSON) — the caller falls
- * back to a real install; a broken asset must never brick the boot.
+ * Fetch + gunzip + parse a baked snapshot. Failure is typed and reason-bearing;
+ * the acquisition authority records it and falls back to a real install.
  *
  * Gzip is detected by MAGIC BYTES, not by URL or headers: some static servers
  * (vite dev among them) serve `.gz` with `Content-Encoding: gzip`, so the
  * browser hands us already-decoded JSON; others serve the raw gzip bytes.
  */
-export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2 | null> {
+export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2> {
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
-    const bytes = await fetchAssetBytesBounded(url, {
+    bytes = await fetchAssetBytesBounded(url, {
       label: `dependency snapshot ${url}`,
       maxBytes: SNAPSHOT_MAX_BYTES,
     });
-    const gzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-    const decoded = gzipped
-      ? await drainByteStreamBounded(
-          new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')),
-          { label: `dependency snapshot ${url} decompression`, maxBytes: SNAPSHOT_MAX_BYTES },
-        )
-      : bytes;
-    const text = new TextDecoder().decode(decoded);
-    return parseDepSnapshot(text);
-  } catch {
-    return null;
+  } catch (error) {
+    throw new DepSnapshotFetchError(url, 'fetch', error);
+  }
+
+  const gzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  let decoded: Uint8Array<ArrayBuffer> = bytes;
+  if (gzipped) {
+    try {
+      decoded = await drainByteStreamBounded(
+        new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')),
+        { label: `dependency snapshot ${url} decompression`, maxBytes: SNAPSHOT_MAX_BYTES },
+      );
+    } catch (error) {
+      throw new DepSnapshotFetchError(url, 'decompress', error);
+    }
+  }
+
+  try {
+    return parseDepSnapshot(new TextDecoder().decode(decoded));
+  } catch (error) {
+    throw new DepSnapshotFetchError(url, 'parse', error);
   }
 }

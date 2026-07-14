@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -90,6 +90,124 @@ async function makePackageTarballWithFiles(
   }
   return await gzip(concat(...chunks, TAR_TRAILER));
 }
+
+describe('install — package ingress preflight (ADR-0261)', () => {
+  it('rejects a tar entry that escapes its package before linking any bytes', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'good',
+      new Map([['1.0.0', await makeEntry('good', '1.0.0', {}, {}, { 'ok.js': 'ok' })]]),
+    );
+    db.set(
+      'evil',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry('evil', '1.0.0', {}, {}, { '../.rifty-install-stamp.json': 'forged' }),
+        ],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await expect(
+      install(
+        'root',
+        '1.0.0',
+        { good: '1.0.0', evil: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new FakeRegistry(db),
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'EINVALIDPACKAGETAR' });
+
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+
+  it('preflights every actual target through the host policy before the first link write', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'good',
+      new Map([['1.0.0', await makeEntry('good', '1.0.0', {}, {}, { 'ok.js': 'ok' })]]),
+    );
+    db.set(
+      'evil',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'evil',
+            '1.0.0',
+            {},
+            {},
+            { 'node_modules/.rifty-install-stamp.json': 'forged' },
+          ),
+        ],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const preflights: string[][] = [];
+    const options = {
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+      assertPortablePaths(paths: readonly string[]): void {
+        preflights.push([...paths]);
+        const reserved = paths.find((path) =>
+          path.endsWith('/node_modules/.rifty-install-stamp.json'),
+        );
+        if (reserved) {
+          throw Object.assign(new Error(`EPERM: reserved install claim ${reserved}`), {
+            code: 'EPERM',
+          });
+        }
+      },
+    };
+
+    await expect(
+      install('root', '1.0.0', { good: '1.0.0', evil: '1.0.0' }, options),
+    ).rejects.toMatchObject({ code: 'EPERM' });
+
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]).toContain('/proj/node_modules/good/ok.js');
+    expect(preflights[0]).toContain(
+      '/proj/node_modules/evil/node_modules/.rifty-install-stamp.json',
+    );
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
+  });
+
+  it('contains and preflights package targets when the install root is /', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'good',
+      new Map([['1.0.0', await makeEntry('good', '1.0.0', {}, {}, { 'ok.js': 'ok' })]]),
+    );
+    const vfs = new MemoryVfs();
+    const preflights: string[][] = [];
+
+    await install(
+      'root',
+      '1.0.0',
+      { good: '1.0.0' },
+      {
+        vfs,
+        cwd: '/',
+        registry: new FakeRegistry(db),
+        assertPortablePaths(paths): void {
+          preflights.push([...paths]);
+        },
+      },
+    );
+
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]).toContain('/node_modules/good/ok.js');
+    expect(await vfs.readFileText('/node_modules/good/ok.js')).toBe('ok');
+  });
+});
 
 describe('install — package.json defaults', () => {
   it('reads dependencies, devDependencies, optionalDependencies, overrides, name, and version from package.json when called with only options', async () => {
@@ -892,6 +1010,103 @@ describe('install — onPackage progress hook (ADR-0134)', () => {
 
     expect(events.map((e) => `${e.name}@${e.version}`).sort()).toEqual(['a@1.0.0', 'b@1.2.0']);
     expect(events.every((e) => e.cacheHit === true)).toBe(true);
+  });
+
+  it('returns exact metadata/registry then lockfile/cache acquisition provenance', async () => {
+    const db = await diamondDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(db);
+
+    const cold = await install('root', '1.0.0', { a: '^1.0.0' }, { vfs, cwd: '/proj', registry });
+    expect(cold.provenance).toEqual({
+      resolution: 'metadata',
+      packages: [
+        { name: 'a', version: '1.0.0', transport: 'registry' },
+        { name: 'b', version: '1.2.0', transport: 'registry' },
+      ],
+    });
+
+    const warm = await install('root', '1.0.0', { a: '^1.0.0' }, { vfs, cwd: '/proj', registry });
+    expect(warm.provenance).toEqual({
+      resolution: 'lockfile',
+      packages: [
+        { name: 'a', version: '1.0.0', transport: 'cache' },
+        { name: 'b', version: '1.2.0', transport: 'cache' },
+      ],
+    });
+  });
+
+  it('does not let the progress hook rewrite acquisition provenance', async () => {
+    const db = await diamondDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { a: '^1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(db),
+        onPackage: (event) => {
+          (event as { cacheHit: boolean }).cacheHit = true;
+        },
+      },
+    );
+
+    expect(result.provenance).toEqual({
+      resolution: 'metadata',
+      packages: [
+        { name: 'a', version: '1.0.0', transport: 'registry' },
+        { name: 'b', version: '1.2.0', transport: 'registry' },
+      ],
+    });
+  });
+
+  it('preserves Eddy and validating-registry causes when fallback also fails', async () => {
+    const eddyFailure = new Error('eddy connection refused');
+    const registryFailure = new Error('registry unavailable');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw eddyFailure;
+      }),
+    );
+    class FailingRegistry extends FakeRegistry {
+      override async getPackument(): Promise<Packument> {
+        throw registryFailure;
+      }
+    }
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      let caught: unknown;
+      try {
+        await install(
+          'root',
+          '1.0.0',
+          { missing: '1.0.0' },
+          {
+            vfs,
+            cwd: '/proj',
+            registry: new FailingRegistry(new Map()),
+            resolverUrl: 'https://eddy.invalid/resolve',
+          },
+        );
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(AggregateError);
+      expect((caught as AggregateError).errors).toEqual([eddyFailure, registryFailure]);
+    } finally {
+      console.warn = originalWarn;
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a throwing hook is warned and does not abort the install', async () => {

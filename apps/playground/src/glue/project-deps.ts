@@ -17,29 +17,40 @@
  *
  * Paths 2 and 3 finish by stamping the tree. On OPFS, boot/restore first writes
  * a PENDING stamp (visible but untrusted), then a fire-and-forget drain promotes
- * it to a trusted stamp only after the tree is clean. The dev line never waits;
- * a reload before promotion just re-runs dependency arrival. Any snapshot
+ * it to a trusted stamp only after the tree is clean. A dirty proof leaves the
+ * claim pending and untrusted. The dev line never waits; a reload before
+ * promotion just re-runs dependency arrival. Any snapshot
  * failure — fetch, deps drift, restore — degrades to install; a broken asset
  * never bricks the boot. Extracted from the worker bootstrap so the priority
  * logic is unit-testable outside a worker realm.
  */
-import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import type { InstallResult } from '@riftydev/npm-client';
+import {
+  type PersistFailureReport,
+  type Vfs,
+  dirname,
+  joinPath,
+  normalizePath,
+} from '@riftydev/vfs';
+import {
+  type AcquisitionObservation,
+  type PackageAcquisitionAuthority,
+  PackageAcquisitionError,
+  createPackageAcquisitionAuthority,
+} from '../workers/package-acquisition-authority.ts';
 import {
   type DepSnapshotV2,
+  prepareDepSnapshotRestore,
   fetchDepSnapshot as realFetchDepSnapshot,
-  restoreDepSnapshot,
 } from './dep-snapshot.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
-  createInstallStamp,
-  installStampPath,
-  installStampSatisfied,
-  isStampedTreeDamage,
-  readInstallStamp,
-  readInstallStampSync,
-  readPackageJsonText,
-  reportHasFailure,
-} from './install-stamp.ts';
+  type InstallStampAuthority,
+  type InstallStampPromotionResult,
+  installStampAuthorityFor,
+} from './install-stamp-authority.ts';
+import { isStampedTreeDamage, readPackageJsonText } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
 export type ProjectDepsSource = 'stamp' | 'snapshot' | 'install' | 'none';
@@ -63,6 +74,8 @@ export interface EnsureProjectDepsOptions {
   readonly slug: string;
   /** Baked snapshot URL; absent → no snapshot restore. */
   readonly snapshotUrl?: string;
+  /** Exact manifest this acquisition owns; defaults to the current file. */
+  readonly packageJsonText?: string;
   /**
    * Runs the real installer; returns the installed package count. OPTIONAL:
    * omit for a RESTORE-ONLY call (instant preset at owner-seed) — then a stampless,
@@ -70,65 +83,89 @@ export interface EnsureProjectDepsOptions {
    * network install. The faithful from-scratch install is the explicit `npm install`
    * command, never a dev-line side effect.
    */
-  readonly install?: () => Promise<{ readonly packages: number }>;
+  readonly install?: () => Promise<InstallResult>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
   readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV2 | null>;
   /**
    * Drains the realm's OPFS write-through and reports persist failures
    * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
-   * a PENDING stamp after a clean drain or discards it after tree damage.
+   * a PENDING stamp after a clean drain or leaves it untrusted after tree damage.
    * Optional: absent on the memory backend and in restore-only harnesses.
    */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
+  /** Shared owner-realm authority. Tests may omit it; the paired fsSync owns a
+   *  cached authority so concurrent arrivals still share one epoch/queue. */
+  readonly installStampAuthority?: InstallStampAuthority;
+  /** One owner-realm FIFO shared with terminal npm. */
+  readonly packageAcquisitionAuthority?: PackageAcquisitionAuthority;
+  /** Clear foreign dependency-owned files after durable demotion. */
+  readonly replaceTreeOnMiss?: boolean;
 }
 
-let arrivalEpochSeq = 0;
-let pendingPromotionSeq = 0;
-const arrivalEpochByRoot = new Map<string, number>();
-const stampEncoder = new TextEncoder();
-const stampDecoder = new TextDecoder('utf-8');
+function stampAuthorityFor(opts: EnsureProjectDepsOptions): InstallStampAuthority {
+  if (opts.installStampAuthority) return opts.installStampAuthority;
+  return installStampAuthorityFor(opts.fsSync as object, {
+    vfs: opts.vfs,
+    fsSync: opts.fsSync,
+  });
+}
 
 export async function ensureProjectDependencies(
   opts: EnsureProjectDepsOptions,
 ): Promise<EnsureProjectDepsResult> {
-  const stamp = await installStampSatisfied(opts.vfs, opts.root, opts.slug);
-  if (stamp) {
-    opts.log(
-      `[real-vite/worker] node_modules reused via install stamp (${stamp.packages} packages, install skipped)\n`,
-    );
-    return { source: 'stamp', packages: stamp.packages };
+  const packageJsonText =
+    opts.packageJsonText ?? (await readPackageJsonText(opts.vfs, opts.root)) ?? '';
+  const authority =
+    opts.packageAcquisitionAuthority ?? createProjectPackageAcquisitionAuthority(opts);
+  try {
+    const provenance = await authority.dispatch({
+      type: 'ensure',
+      project: {
+        projectId: opts.slug,
+        root: opts.root,
+        slug: opts.slug,
+        identity: installArtifactIdentity,
+      },
+      packageJsonText,
+      ...(opts.snapshotUrl
+        ? {
+            snapshotSource: {
+              snapshotId: opts.snapshotUrl,
+              resolve: () => resolveProjectSnapshot(opts),
+            },
+          }
+        : {}),
+      fallback: opts.install ? 'install' : 'snapshot-only',
+      replaceTreeOnMiss: opts.replaceTreeOnMiss ?? opts.install !== undefined,
+      onPromotion: (result) => reportPromotion(opts, result),
+    });
+
+    switch (provenance.outcome) {
+      case 'existing':
+        opts.log(
+          `[real-vite/worker] node_modules reused via install stamp (${provenance.packages} packages, install skipped)\n`,
+        );
+        return { source: 'stamp', packages: provenance.packages };
+      case 'snapshot':
+        opts.log(
+          `[real-vite/worker] baked node_modules restored (${provenance.packages} packages, no install needed)\n`,
+        );
+        return { source: 'snapshot', packages: provenance.packages };
+      case 'installed':
+        return { source: 'install', packages: provenance.packages.length };
+    }
+  } catch (error) {
+    if (
+      error instanceof PackageAcquisitionError &&
+      error.failure === 'snapshot-unavailable' &&
+      !opts.install
+    ) {
+      reportSnapshotFailures(opts, error.snapshotFailures);
+      return { source: 'none', packages: 0 };
+    }
+    throw error;
   }
-
-  const arrivalEpoch = beginDependencyArrival(opts.root);
-
-  if (opts.snapshotUrl) {
-    const restored = await tryRestoreSnapshot(opts, opts.snapshotUrl, arrivalEpoch);
-    if (restored) return restored;
-  }
-
-  // Restore-only mode (no `install` provided): instant deps come SOLELY from the
-  // baked snapshot. A stampless, snapshotless (or drifted) tree leaves node_modules
-  // ABSENT — the dev line never installs as a side effect; from-scratch uses the
-  // explicit `npm install` command. (Real Node: a missing dep is a loud failure.)
-  if (!opts.install) {
-    return { source: 'none', packages: 0 };
-  }
-
-  // Reaching install() means NO stamp matched this slug and NO snapshot applied —
-  // so any node_modules + lockfile on disk belong to a DIFFERENT preset (e.g.
-  // project-files' instant baked snapshot, whose lockfile omits the shimmed
-  // esbuild). A from-scratch install over that tree trips the installer's
-  // lockfile-coverage check (EBROKENLOCK) — and the owner's preset-switch clean is
-  // keyed on templateId, so it skips presets that share one (project-files /
-  // node-worker / real-vite are all `vite`). Clear the foreign tree HERE so the
-  // install is truly from-scratch — independent of the owner's in-memory switch
-  // state, so it also holds across a reload that re-boots a from-scratch preset.
-  clearProjectTree(opts.fsSync, opts.root);
-
-  const result = await opts.install();
-  await stampTree(opts, result.packages, arrivalEpoch);
-  return { source: 'install', packages: result.packages };
 }
 
 /** Drop a foreign/stale node_modules + lockfile so a from-scratch install starts
@@ -138,255 +175,227 @@ export function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void
   fsSync.rmSync(joinPath(root, 'package-lock.json'), { force: true });
 }
 
-async function tryRestoreSnapshot(
-  opts: EnsureProjectDepsOptions,
-  url: string,
-  arrivalEpoch: number,
-): Promise<EnsureProjectDepsResult | null> {
-  const fetchSnapshot = opts.fetchSnapshot ?? realFetchDepSnapshot;
-  const snapshot = await fetchSnapshot(url);
-  if (!snapshot) {
-    opts.log(`[real-vite/worker] baked snapshot unavailable (${url}) — falling back to install\n`);
-    return null;
-  }
-  const packageJsonText = await readPackageJsonText(opts.vfs, opts.root);
-  const expectedSnapshotTemplateId = opts.snapshotTemplateId ?? opts.templateId;
-  if (
-    snapshot.templateId !== expectedSnapshotTemplateId ||
-    packageJsonText === null ||
-    snapshot.packageJsonText !== packageJsonText ||
-    snapshot.installArtifactIdentity !== installArtifactIdentity
-  ) {
-    opts.log(
-      '[real-vite/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run `pnpm snapshots:bake`) — falling back to install\n',
-    );
-    return null;
-  }
-  try {
-    restoreDepSnapshot(opts.fsSync, opts.root, snapshot);
-  } catch (err) {
-    opts.log(
-      `[real-vite/worker] baked snapshot restore failed: ${(err as Error).message} — falling back to install\n`,
-    );
-    return null;
-  }
-  await stampTree(opts, snapshot.packages, arrivalEpoch);
-  opts.log(
-    `[real-vite/worker] baked node_modules restored (${snapshot.packages} packages, no install needed)\n`,
-  );
-  return { source: 'snapshot', packages: snapshot.packages };
+export interface PrepareProjectInstallTreeOptions {
+  readonly packageJsonText: string;
+  readonly currentSlug: string;
+  readonly priorSlug?: string;
+  readonly priorTrustedTree: boolean;
 }
 
-function beginDependencyArrival(root: string): number {
-  arrivalEpochSeq += 1;
-  arrivalEpochByRoot.set(root, arrivalEpochSeq);
-  return arrivalEpochSeq;
-}
-
-function arrivalStillCurrent(root: string, epoch: number): boolean {
-  return arrivalEpochByRoot.get(root) === epoch;
-}
-
-function nextPendingPromotionId(epoch: number): string {
-  pendingPromotionSeq += 1;
-  return `${epoch}:${pendingPromotionSeq}`;
-}
-
-function readPackageJsonTextSync(fsSync: WorkspaceArchiveFs, root: string): string | null {
-  const path = joinPath(root, 'package.json');
-  if (!fsSync.existsSync(path)) return null;
-  try {
-    return stampDecoder.decode(fsSync.readFileBytesSync(path));
-  } catch {
-    return null;
-  }
-}
-
-function writeInstallStampSync(
-  opts: EnsureProjectDepsOptions,
-  packages: number,
-  durability?: 'pending',
-  promotionId?: string,
-): boolean {
-  const packageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
-  if (packageJsonText === null) return false;
-  writeInstallStampForPackageJsonSync(opts, packageJsonText, packages, durability, promotionId);
-  return true;
-}
-
-function writeInstallStampForPackageJsonSync(
-  opts: EnsureProjectDepsOptions,
-  packageJsonText: string,
-  packages: number,
-  durability?: 'pending',
-  promotionId?: string,
+/** Keep a covering lock for the same project; foreign claims own neither tree nor lock. */
+export function prepareProjectInstallTree(
+  fsSync: WorkspaceArchiveFs,
+  root: string,
+  opts: PrepareProjectInstallTreeOptions,
 ): void {
-  const stamp = createInstallStamp(packageJsonText, {
-    slug: opts.slug,
-    packages,
-    ...(durability === 'pending' ? { durability } : {}),
-    ...(durability === 'pending' && promotionId ? { promotionId } : {}),
+  if (opts.priorTrustedTree) return;
+  fsSync.rmSync(joinPath(root, 'node_modules'), { recursive: true, force: true });
+  if (opts.priorSlug !== undefined && opts.priorSlug !== opts.currentSlug) {
+    fsSync.rmSync(joinPath(root, 'package-lock.json'), { force: true });
+  }
+  fsSync.writeFileSync(
+    joinPath(root, 'package.json'),
+    new TextEncoder().encode(opts.packageJsonText),
+  );
+}
+
+/** Materialize template-owned declaration packages inside an active claim. */
+export function seedTemplateNodeModulesFiles(
+  fsSync: WorkspaceArchiveFs,
+  root: string,
+  seedFiles: Readonly<Record<string, string>>,
+): void {
+  const nodeModulesRoot = normalizePath(`${root}/node_modules/`);
+  const encoder = new TextEncoder();
+  for (const [path, content] of Object.entries(seedFiles)) {
+    const normalized = normalizePath(path);
+    if (!normalized.startsWith(nodeModulesRoot)) continue;
+    fsSync.mkdirSync(dirname(normalized), { recursive: true });
+    if (!fsSync.existsSync(normalized)) {
+      fsSync.writeFileSync(normalized, encoder.encode(content));
+    }
+  }
+}
+
+async function resolveProjectSnapshot(opts: EnsureProjectDepsOptions) {
+  if (!opts.snapshotUrl) {
+    return { status: 'rejected' as const, reason: 'snapshot-not-configured' };
+  }
+  const fetchSnapshot = opts.fetchSnapshot ?? realFetchDepSnapshot;
+  const snapshot = await fetchSnapshot(opts.snapshotUrl);
+  if (!snapshot) {
+    return { status: 'rejected' as const, reason: 'snapshot-unavailable' };
+  }
+  const expectedSnapshotTemplateId = opts.snapshotTemplateId ?? opts.templateId;
+  if (snapshot.templateId !== expectedSnapshotTemplateId) {
+    return { status: 'rejected' as const, reason: 'snapshot-template-mismatch' };
+  }
+  return {
+    status: 'candidate' as const,
+    snapshot: {
+      snapshotId: opts.snapshotUrl,
+      identity: snapshot.installArtifactIdentity,
+      packageJsonText: snapshot.packageJsonText,
+      payload: snapshot,
+    },
+  };
+}
+
+function createProjectPackageAcquisitionAuthority(
+  opts: EnsureProjectDepsOptions,
+): PackageAcquisitionAuthority {
+  return createPackageAcquisitionAuthority({
+    stamps: stampAuthorityFor(opts),
+    ...(opts.flush ? { stampTransition: { flush: opts.flush } } : {}),
+    observe: (event) => reportAcquisitionObservation(opts, event),
+    adapter: {
+      prepareEnsure: async (command, execution) => {
+        if (!command.replaceTreeOnMiss) return;
+        if (execution.phase === 'snapshot-rejected') {
+          clearProjectTree(opts.fsSync, command.project.root);
+          opts.fsSync.writeFileSync(
+            joinPath(command.project.root, 'package.json'),
+            new TextEncoder().encode(command.packageJsonText),
+          );
+          return;
+        }
+        prepareProjectInstallTree(opts.fsSync, command.project.root, {
+          packageJsonText: command.packageJsonText,
+          currentSlug: command.project.slug,
+          ...(execution.claim.priorSlug ? { priorSlug: execution.claim.priorSlug } : {}),
+          priorTrustedTree: false,
+        });
+      },
+      planSnapshotRestore: async ({ project, snapshot }) => {
+        try {
+          const payload = snapshot.payload as DepSnapshotV2;
+          const prepared = prepareDepSnapshotRestore(opts.fsSync, project.root, payload);
+          return {
+            status: 'ready',
+            packages: payload.packages,
+            apply: async () => prepared.apply(),
+          };
+        } catch (error) {
+          return {
+            status: 'rejected',
+            reason: `snapshot-restore-plan-failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          };
+        }
+      },
+      install: async (request) => {
+        if (request.type !== 'ensure' || !opts.install) {
+          throw new NotImplementedError('package-acquisition.project-install');
+        }
+        const result = await opts.install();
+        return {
+          result,
+          packageJsonText: await readPackageJsonText(opts.vfs, request.project.root),
+        };
+      },
+      reset: async () => {
+        throw new NotImplementedError('package-acquisition.reset');
+      },
+      switchProject: async () => {
+        throw new NotImplementedError('package-acquisition.project-switch');
+      },
+    },
   });
-  if (!stamp) return;
-  opts.fsSync.mkdirSync(joinPath(opts.root, 'node_modules'), { recursive: true });
-  opts.fsSync.writeFileSync(
-    installStampPath(opts.root),
-    stampEncoder.encode(`${JSON.stringify(stamp, null, 2)}\n`),
-  );
 }
 
-async function pendingPromotionStillCurrent(
+function reportAcquisitionObservation(
   opts: EnsureProjectDepsOptions,
-  packages: number,
-  arrivalEpoch: number,
-  promotionId: string,
-  packageJsonText: string,
-): Promise<boolean> {
-  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
-  const stamp = await readInstallStamp(opts.vfs, opts.root);
-  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return false;
-  return (
-    stamp?.durability === 'pending' &&
-    stamp.promotionId === promotionId &&
-    stamp.slug === opts.slug &&
-    stamp.packages === packages &&
-    stamp.packageJsonText === packageJsonText &&
-    stamp.installArtifactIdentity === installArtifactIdentity
-  );
+  event: AcquisitionObservation,
+): void {
+  if (event.type !== 'snapshot-rejected') return;
+  reportSnapshotFailure(opts, event.snapshotId, event.reason);
 }
 
-/** Non-blocking stamp (ADR-0187): OPFS-backed boot/restore writes a PENDING
- * stamp first. Pending stamps are never trusted by `installStampSatisfied`, so
- * a crash/reload before the deferred drain re-runs arrival instead of trusting
- * an unproven tree. The deferred drain promotes the stamp after a clean report
- * or discards it after tree damage. Memory/no-flush harnesses have no durability
- * tier, so they keep the old immediate trusted stamp. */
-async function stampTree(
+function reportSnapshotFailures(
   opts: EnsureProjectDepsOptions,
-  packages: number,
-  arrivalEpoch: number,
-): Promise<void> {
-  if (!opts.flush) {
-    writeInstallStampSync(opts, packages);
+  failures: readonly { readonly snapshotId: string; readonly reason: string }[],
+): void {
+  if (failures.length === 0) return;
+  // Local authority observations already emitted these. An injected production
+  // authority may use a different observer, so keep restore-only failure loud.
+  if (!opts.packageAcquisitionAuthority) return;
+  for (const failure of failures) reportSnapshotFailure(opts, failure.snapshotId, failure.reason);
+}
+
+function reportSnapshotFailure(
+  opts: EnsureProjectDepsOptions,
+  snapshotId: string,
+  reason: string,
+): void {
+  const outcome = opts.install
+    ? ' — falling back to install\n'
+    : ' — dependencies remain absent (restore-only mode)\n';
+  if (reason === 'snapshot-unavailable') {
+    opts.log(`[real-vite/worker] baked snapshot unavailable (${snapshotId})${outcome}`);
     return;
   }
-  if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
-  const promotionId = nextPendingPromotionId(arrivalEpoch);
-  const packageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
-  if (packageJsonText === null) return;
-  writeInstallStampForPackageJsonSync(opts, packageJsonText, packages, 'pending', promotionId);
-  scheduleStampDurabilityCheck(opts, packages, arrivalEpoch, promotionId, packageJsonText);
+  if (reason.startsWith('snapshot-fetch-failed:')) {
+    const detail = reason.slice('snapshot-fetch-failed:'.length).trim();
+    opts.log(`[real-vite/worker] baked snapshot unavailable (${snapshotId}): ${detail}${outcome}`);
+    return;
+  }
+  if (reason.startsWith('snapshot-restore-failed:')) {
+    opts.log(
+      `[real-vite/worker] baked snapshot restore failed: ${reason.slice('snapshot-restore-failed:'.length).trim()}${outcome}`,
+    );
+    return;
+  }
+  opts.log(
+    `[real-vite/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
+  );
 }
 
-/**
- * Fire-and-forget: drain → inspect ledger → promote or discard the PENDING
- * stamp. Only failures INSIDE the stamped tree (`<root>/node_modules`, minus
- * the stamp file itself) count as tree damage: a foreign/global path failing to
- * persist (`/.rifty/eddy-learned-pins.json`, another project's tree) is not THIS
- * tree torn and must not block promotion (`isStampedTreeDamage`). A stamp-file
- * failure means the pending marker itself was not durable, so promotion is
- * skipped; a later boot will re-run arrival instead of trusting a stamp.
- */
-function scheduleStampDurabilityCheck(
+function reportPromotion(
   opts: EnsureProjectDepsOptions,
-  packages: number,
-  arrivalEpoch: number,
-  promotionId: string,
-  packageJsonText: string,
+  result: InstallStampPromotionResult,
 ): void {
-  const flush = opts.flush;
-  if (!flush) return;
-  const stampPath = installStampPath(opts.root);
-  void (async () => {
-    const report = await flush();
-    if (
-      !(await pendingPromotionStillCurrent(
-        opts,
-        packages,
-        arrivalEpoch,
-        promotionId,
-        packageJsonText,
-      ))
-    ) {
-      return;
-    }
-    // Ask the FULL ledger (`reportHasFailure`), not the 20-entry sample: foreign
-    // failures could fill the sample while `node_modules` damage sits beyond it,
-    // and trusting a stamp over a torn tree is exactly what this check exists
-    // to prevent. The example for the message comes from the sample when present.
-    if (report && reportHasFailure(report, (p) => isStampedTreeDamage(p, opts.root))) {
-      const example = report.failures.find((f) => isStampedTreeDamage(f.path, opts.root));
-      const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
-      opts.fsSync.rmSync(stampPath, { force: true });
-      opts.log(
-        `[real-vite/worker] WARNING: node_modules failed to persist${sample} — pending install stamp discarded; the next boot re-runs dependency arrival instead of trusting a torn tree\n`,
+  if (result.status === 'trusted' || result.status === 'stale') return;
+  switch (result.reason) {
+    case 'guarded-scope-not-durable': {
+      const example = result.report?.failures.find((failure) =>
+        isStampedTreeDamage(failure.path, opts.root),
       );
-      const after = await flush();
-      if (after && reportHasFailure(after, (p) => p === stampPath)) {
-        opts.log(
-          '[real-vite/worker] WARNING: pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
-        );
-      }
+      const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
+      opts.log(
+        `[real-vite/worker] WARNING: node_modules failed to persist${sample} — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n`,
+      );
       return;
     }
-    if (report && reportHasFailure(report, (p) => p === stampPath)) {
+    case 'claim-not-durable':
       opts.log(
         '[real-vite/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
       );
       return;
-    }
-
-    const currentPackageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
-    if (currentPackageJsonText !== packageJsonText) {
-      opts.fsSync.rmSync(stampPath, { force: true });
+    case 'identity-drift':
       opts.log(
-        '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — pending install stamp discarded; the next boot re-runs dependency arrival\n',
+        '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n',
       );
-      const after = await flush();
-      if (after && reportHasFailure(after, (p) => p === stampPath)) {
-        opts.log(
-          '[real-vite/worker] WARNING: stale pending install stamp delete did not reach disk — it remains untrusted and a later boot will re-run dependency arrival\n',
-        );
-      }
       return;
-    }
-    if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
-    // SYNC recheck AT the write: pendingPromotionStillCurrent's async read
-    // can resolve, then a command-site demote (a pending stamp with no
-    // promotionId) lands before this continuation runs — the stale read must
-    // not promote over it. Sync read + sync write = atomic in-realm.
-    const atWrite = readInstallStampSync(opts.fsSync, opts.root);
-    if (atWrite?.durability !== 'pending' || atWrite.promotionId !== promotionId) return;
-    writeInstallStampForPackageJsonSync(opts, packageJsonText, packages);
-    const promoted = await flush();
-    if (!arrivalStillCurrent(opts.root, arrivalEpoch)) return;
-    const promotedPackageJsonText = readPackageJsonTextSync(opts.fsSync, opts.root);
-    if (promotedPackageJsonText !== packageJsonText) {
-      opts.fsSync.rmSync(stampPath, { force: true });
+    case 'tree-missing':
       opts.log(
-        '[real-vite/worker] WARNING: package.json deps changed during install stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+        '[real-vite/worker] WARNING: node_modules vanished before install stamp promotion — the next boot re-runs dependency arrival\n',
       );
-      await flush();
       return;
-    }
-    if (promoted && reportHasFailure(promoted, (p) => isStampedTreeDamage(p, opts.root))) {
-      opts.fsSync.rmSync(stampPath, { force: true });
+    case 'claim-replaced':
       opts.log(
-        '[real-vite/worker] WARNING: node_modules failed to persist during stamp promotion — install stamp revoked; the next boot re-runs dependency arrival\n',
+        '[real-vite/worker] WARNING: install stamp claim was replaced before promotion — the next boot re-runs dependency arrival\n',
       );
-      await flush();
       return;
-    }
-    if (promoted && reportHasFailure(promoted, (p) => p === stampPath)) {
+    case 'revocation-not-durable':
       opts.log(
-        '[real-vite/worker] WARNING: trusted install stamp promotion did not reach disk — this session can reuse the tree, but a later boot will re-run dependency arrival\n',
+        '[real-vite/worker] CRITICAL: a trusted install stamp over a damaged tree could not be revoked durably; reload is unsafe until browser storage recovers\n',
       );
-    }
-  })().catch((err) => {
-    // The check itself failing (rm error, throwing flush impl) must not
-    // surface as an unhandled rejection — but it must not stay silent either.
-    opts.log(
-      `[real-vite/worker] WARNING: stamp durability check failed: ${(err as Error).message}\n`,
-    );
-  });
+      return;
+    case 'flush-failed':
+    case 'write-failed':
+      opts.log(
+        `[real-vite/worker] WARNING: stamp durability check failed: ${result.error ?? result.reason}\n`,
+      );
+  }
 }

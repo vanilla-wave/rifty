@@ -75,6 +75,11 @@ interface BlobRef {
   oid: string;
 }
 
+interface WorktreePlan {
+  current: string[];
+  target: BlobRef[];
+}
+
 /** git's binary heuristic: a NUL byte in the first 8000 bytes ⇒ binary. */
 function isBinary(bytes: Uint8Array): boolean {
   const n = Math.min(bytes.length, 8000);
@@ -155,6 +160,13 @@ export function makeGit(opts: MakeGitOptions): Git {
 
   /** Worktree absolute path for a repo-relative `path` (single-slash join). */
   const abs = (path: string): string => `${dir}/${path}`.replace(/\/+/g, '/');
+
+  /** Publish one complete, deterministic worktree plan to the host policy. */
+  const assertPortableWorktreePaths = (paths: Iterable<string>): void => {
+    if (opts.assertPortablePaths === undefined) return;
+    const absolute = [...new Set(paths)].sort().map(abs);
+    if (absolute.length > 0) opts.assertPortablePaths(absolute);
+  };
 
   /** `path` matches any of `specs` (exact or directory-prefix). */
   const specMatches = (path: string, specs: string[]): boolean =>
@@ -466,8 +478,12 @@ export function makeGit(opts: MakeGitOptions): Git {
     }
   };
 
-  const resetWorkdirTo = async (ref: string): Promise<void> => {
+  const planWorkdirTo = async (ref: string): Promise<WorktreePlan> => {
     const [current, target] = await Promise.all([git.listFiles({ fs, dir }), allTreeBlobs(ref)]);
+    return { current, target };
+  };
+
+  const applyWorkdirPlan = async ({ current, target }: WorktreePlan): Promise<void> => {
     const targetPaths = new Set(target.map((b) => b.filepath));
     for (const filepath of current) {
       if (!targetPaths.has(filepath)) {
@@ -479,6 +495,48 @@ export function makeGit(opts: MakeGitOptions): Git {
       await ensureParentDirs(filepath);
       await opts.fs.promises.writeFile(abs(filepath), blob);
     }
+  };
+
+  const resetWorkdirTo = async (ref: string, preflight = true): Promise<void> => {
+    const plan = await planWorkdirTo(ref);
+    if (preflight) {
+      assertPortableWorktreePaths([
+        ...plan.current,
+        ...plan.target.map(({ filepath }) => filepath),
+      ]);
+    }
+    await applyWorkdirPlan(plan);
+  };
+
+  /** Conservative path-name closure for tree-merging porcelain. */
+  const preflightTreeUnion = async (refs: string[]): Promise<void> => {
+    if (opts.assertPortablePaths === undefined) return;
+    const [current, ...trees] = await Promise.all([
+      git.listFiles({ fs, dir }),
+      ...refs.map((ref) => allTreeBlobs(ref)),
+    ]);
+    assertPortableWorktreePaths([
+      ...current,
+      ...trees.flatMap((tree) => tree.map(({ filepath }) => filepath)),
+    ]);
+  };
+
+  /** Match isomorphic-git's clone-failure cleanup after a two-phase checkout. */
+  const removeTree = async (path: string): Promise<void> => {
+    let stat: Awaited<ReturnType<typeof opts.fs.promises.lstat>>;
+    try {
+      stat = await opts.fs.promises.lstat(path);
+    } catch {
+      return;
+    }
+    if (!stat.isDirectory()) {
+      await opts.fs.promises.unlink(path);
+      return;
+    }
+    for (const name of await opts.fs.promises.readdir(path)) {
+      await removeTree(`${path}/${name}`.replace(/\/+/g, '/'));
+    }
+    await opts.fs.promises.rmdir(path);
   };
 
   const moveHeadTo = async (oid: string): Promise<void> => {
@@ -505,6 +563,9 @@ export function makeGit(opts: MakeGitOptions): Git {
     let alreadyOn = false;
     if (create) {
       if ((await git.listBranches({ fs, dir })).includes(ref)) throw new BranchExistsError(ref);
+      if (opts.assertPortablePaths !== undefined) {
+        await preflightTreeUnion(['HEAD', startPoint ? await resolveRevision(startPoint) : 'HEAD']);
+      }
       await git.branch({
         fs,
         dir,
@@ -520,6 +581,9 @@ export function makeGit(opts: MakeGitOptions): Git {
         const checkoutRef = branches.includes(ref)
           ? ref
           : await resolveRevision(ref).catch(() => ref);
+        if (opts.assertPortablePaths !== undefined) {
+          await preflightTreeUnion(['HEAD', await resolveRevision(checkoutRef)]);
+        }
         await git.checkout({ fs, dir, ref: checkoutRef, force });
       } catch (e) {
         if (e instanceof git.Errors.CheckoutConflictError) {
@@ -557,6 +621,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       const treeFiles = await git.listFiles({ fs, dir, ref: oid });
       assertAllMatched(pathspecs, treeFiles);
       const restored = treeFiles.filter((p) => specMatches(p, pathspecs));
+      assertPortableWorktreePaths(restored);
       for (const filepath of restored) {
         const { blob } = await git.readBlob({ fs, dir, oid, filepath });
         await ensureParentDirs(filepath);
@@ -584,6 +649,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       pathspecs,
       staged.map((s) => s.filepath),
     );
+    assertPortableWorktreePaths(staged.map(({ filepath }) => filepath));
     for (const { filepath, oid } of staged) {
       const { blob } = await git.readBlob({ fs, dir, oid });
       await ensureParentDirs(filepath);
@@ -591,6 +657,28 @@ export function makeGit(opts: MakeGitOptions): Git {
     }
     return { op: 'restore', restored: staged.map((s) => s.filepath) };
   }
+
+  const selectedStashOid = async (refIdx: number): Promise<string | undefined> => {
+    let reflog: Uint8Array | string;
+    try {
+      reflog = await opts.fs.promises.readFile(abs('.git/logs/refs/stash'), 'utf8');
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined;
+      throw error;
+    }
+    const text = typeof reflog === 'string' ? reflog : new TextDecoder().decode(reflog);
+    const line = text.split('\n').filter(Boolean).reverse()[refIdx];
+    const oid = line?.trim().split(/\s+/, 3)[1];
+    return oid !== undefined && /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined;
+  };
+
+  const preflightStashApply = async (refIdx: number): Promise<void> => {
+    if (opts.assertPortablePaths === undefined) return;
+    const oid = await selectedStashOid(refIdx);
+    if (oid === undefined) return;
+    const commit = await readCommit(oid);
+    await preflightTreeUnion([oid, ...commit.parents]);
+  };
 
   return {
     async init() {
@@ -821,6 +909,9 @@ export function makeGit(opts: MakeGitOptions): Git {
       }
     },
     async merge(input) {
+      if (opts.assertPortablePaths !== undefined) {
+        await preflightTreeUnion(['HEAD', await resolveRevision(input.theirs)]);
+      }
       const res: MergeResult = await git.merge({
         fs,
         dir,
@@ -832,7 +923,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       });
       if (res.oid !== undefined) {
         await resetIndexTo(res.oid);
-        await resetWorkdirTo(res.oid);
+        await resetWorkdirTo(res.oid, false);
       }
       return {
         oid: res.oid,
@@ -841,7 +932,12 @@ export function makeGit(opts: MakeGitOptions): Git {
         mergeCommit: res.mergeCommit === true,
       };
     },
-    cherryPick(input) {
+    async cherryPick(input) {
+      if (opts.assertPortablePaths !== undefined) {
+        const oid = await resolveRevision(input.oid);
+        const commit = await readCommit(oid);
+        await preflightTreeUnion(['HEAD', oid, ...commit.parents]);
+      }
       return git.cherryPick({
         fs,
         dir,
@@ -850,6 +946,8 @@ export function makeGit(opts: MakeGitOptions): Git {
       });
     },
     async stash(op, message, refIdx) {
+      if (op === 'push') await preflightTreeUnion(['HEAD']);
+      if (op === 'apply' || op === 'pop') await preflightStashApply(refIdx ?? 0);
       const result: unknown = await git.stash({
         fs,
         dir,
@@ -877,7 +975,12 @@ export function makeGit(opts: MakeGitOptions): Git {
     async clone(args) {
       assertSupportedTransport(args.url);
       assertCorsReachable(args.url, corsProxy);
+      const gitdirExisted = await opts.fs.promises
+        .lstat(abs('.git'))
+        .then(() => true)
+        .catch(() => false);
       try {
+        const splitCheckout = opts.assertPortablePaths !== undefined && args.noCheckout !== true;
         await git.clone({
           fs,
           http,
@@ -888,10 +991,19 @@ export function makeGit(opts: MakeGitOptions): Git {
           singleBranch: args.singleBranch,
           depth: args.depth,
           noTags: args.noTags,
-          noCheckout: args.noCheckout,
+          noCheckout: splitCheckout ? true : args.noCheckout,
           onAuth,
         });
+        if (splitCheckout) {
+          const checkoutRef =
+            (await curBranch()) ?? (await git.resolveRef({ fs, dir, ref: 'HEAD' }));
+          await preflightTreeUnion([checkoutRef]);
+          await git.checkout({ fs, dir, ref: checkoutRef });
+        }
       } catch (e) {
+        if (opts.assertPortablePaths !== undefined && args.noCheckout !== true && !gitdirExisted) {
+          await removeTree(abs('.git')).catch(() => undefined);
+        }
         mapGitNetworkError(e);
       }
     },
@@ -927,21 +1039,52 @@ export function makeGit(opts: MakeGitOptions): Git {
         assertCorsReachable(args.url, corsProxy);
       }
       try {
-        await git.pull({
-          fs,
-          http,
-          dir,
-          url: args.url,
-          remote: args.remote,
-          corsProxy,
-          ref: args.ref,
-          remoteRef: args.remoteRef,
-          singleBranch: args.singleBranch,
-          prune: args.prune,
-          pruneTags: args.pruneTags,
-          author: args.author,
-          onAuth,
-        });
+        if (opts.assertPortablePaths === undefined) {
+          await git.pull({
+            fs,
+            http,
+            dir,
+            url: args.url,
+            remote: args.remote,
+            corsProxy,
+            ref: args.ref,
+            remoteRef: args.remoteRef,
+            singleBranch: args.singleBranch,
+            prune: args.prune,
+            pruneTags: args.pruneTags,
+            author: args.author,
+            onAuth,
+          });
+        } else {
+          const ref = args.ref ?? (await curBranch());
+          if (ref === undefined)
+            throw new Error('git pull requires a current branch or explicit ref');
+          const fetched = await git.fetch({
+            fs,
+            http,
+            dir,
+            url: args.url,
+            remote: args.remote,
+            corsProxy,
+            ref,
+            remoteRef: args.remoteRef,
+            singleBranch: args.singleBranch,
+            prune: args.prune,
+            pruneTags: args.pruneTags,
+            onAuth,
+          });
+          if (fetched.fetchHead === null) throw new Error('git pull fetched no head');
+          await preflightTreeUnion([await resolveRevision(ref), fetched.fetchHead]);
+          await git.merge({
+            fs,
+            dir,
+            ours: ref,
+            theirs: fetched.fetchHead,
+            message: `Merge ${fetched.fetchHeadDescription}`,
+            author: args.author,
+          });
+          await git.checkout({ fs, dir, ref, remote: args.remote });
+        }
       } catch (e) {
         mapGitNetworkError(e);
       }

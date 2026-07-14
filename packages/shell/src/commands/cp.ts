@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, basename, syncMirror } from '@riftydev/vfs';
+import { VfsError, basename, guardVfsMutations, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { resolve, strerror } from './_shared.ts';
 
@@ -104,17 +104,26 @@ export const cp: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  let exit = 0;
-  for (const src of sources) {
-    const srcResolved = resolve(ctx.cwd, src);
+  const copies = sources.map((source) => {
+    const sourcePath = resolve(ctx.cwd, source);
     // Into-directory form: copy as DIR/basename(src). Single-operand dst that is
     // itself a dir also lands inside it (GNU behavior).
-    const dstResolved = destIsDir ? resolve(destResolved, basename(srcResolved)) : destResolved;
-    const code = copyOne(srcResolved, dstResolved, opts, ctx.stderr);
-    if (code === 0 && opts.verbose) {
-      ctx.stdout.write(`'${srcResolved}' -> '${dstResolved}'\n`);
-    }
-    if (code !== 0) exit = 1;
-  }
-  return exit;
+    const targetPath = destIsDir ? resolve(destResolved, basename(sourcePath)) : destResolved;
+    return { sourcePath, targetPath };
+  });
+  return await guardVfsMutations(
+    ctx.mutationGuard,
+    copies.map(({ sourcePath, targetPath }) => ({ kind: 'copy', sourcePath, targetPath })),
+    () => {
+      let exit = 0;
+      for (const { sourcePath, targetPath } of copies) {
+        const code = copyOne(sourcePath, targetPath, opts, ctx.stderr);
+        if (code === 0 && opts.verbose) {
+          ctx.stdout.write(`'${sourcePath}' -> '${targetPath}'\n`);
+        }
+        if (code !== 0) exit = 1;
+      }
+      return exit;
+    },
+  );
 };

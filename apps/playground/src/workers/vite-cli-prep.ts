@@ -1,15 +1,11 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { applyViteCliActionPatch, viteCliActionPatchApplied } from './vite-cli-install-policy.ts';
 import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const VITE_CLI_KEEPALIVE_NEEDLE = 'this.runMatchedCommand();';
-const VITE_CLI_KEEPALIVE_PATCH = `var __riftyAction = this.runMatchedCommand();
-      if (__riftyAction && typeof __riftyAction.then === "function" && globalThis.__riftyTrackCliPromise) {
-        globalThis.__riftyTrackCliPromise(__riftyAction);
-      }`;
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 
 declare global {
@@ -56,24 +52,29 @@ export function viteCliPreparationFromEnv(options: {
       };
 }
 
-// NOT shadow-registry shims (those apply at install time, ADR-0188): these
-// patch vite's OWN dist/node/cli.js for rifty's runtime lifecycle. CAC never
-// awaits async actions, so the keepalive pin is the sole patch.
+// NOT shadow-registry shims (those apply at install time, ADR-0188): this
+// patches Vite's own CLI before package promotion. Trusted child startup only
+// validates the exact bytes below; it never repairs node_modules.
 function installCliActionPatch(vitePackageRoot: string): void {
-  globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   const fs = syncMirror();
   const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
   if (!fs.existsSync(path)) return;
-  let source = dec.decode(fs.readFileBytesSync(path));
-  let changed = false;
-  if (!source.includes('__riftyTrackCliPromise')) {
-    if (!source.includes(VITE_CLI_KEEPALIVE_NEEDLE)) {
-      throw new Error('vite CLI keepalive patch failed: runMatchedCommand call shape not found');
-    }
-    source = source.replace(VITE_CLI_KEEPALIVE_NEEDLE, VITE_CLI_KEEPALIVE_PATCH);
-    changed = true;
+  const source = dec.decode(fs.readFileBytesSync(path));
+  const prepared = applyViteCliActionPatch(source);
+  if (prepared === source) return;
+  fs.writeFileSync(path, enc.encode(prepared));
+}
+
+function validateCliActionPatch(vitePackageRoot: string): void {
+  const fs = syncMirror();
+  const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
+  if (!fs.existsSync(path)) {
+    throw new Error(`vite CLI trusted tree is missing prepared CLI: ${path}`);
   }
-  if (changed) fs.writeFileSync(path, enc.encode(source));
+  const source = dec.decode(fs.readFileBytesSync(path));
+  if (!viteCliActionPatchApplied(source)) {
+    throw new Error(`vite CLI files must be prepared by acquisition before promotion: ${path}`);
+  }
 }
 
 const VITE_BIN_SUFFIX = '/.bin/vite';
@@ -90,18 +91,24 @@ function vitePackageRoot(root: string, executedBinPath?: string): string {
   return `${nodeModules}/vite`;
 }
 
-export async function prepareViteCliFiles(root: string, executedBinPath?: string): Promise<void> {
+/** Acquisition-adapter step: patch installed Vite before its stamp promotion. */
+export async function prepareViteCliAcquisitionFiles(
+  root: string,
+  executedBinPath?: string,
+): Promise<void> {
   installCliActionPatch(vitePackageRoot(root, executedBinPath));
 }
 
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
-  await prepareViteCliFiles(options.root, options.executedBinPath);
+  const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
+  validateCliActionPatch(packageRoot);
+  globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (options.mode === 'info') return;
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({
     fs,
     cwd: options.root,
-    packageRoot: vitePackageRoot(options.root, options.executedBinPath),
+    packageRoot,
     esbuildWasmUrl: options.esbuildWasmUrl,
   });
 }

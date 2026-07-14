@@ -16,6 +16,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0072 | OPFS sync content cache + async write-through |
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
+| 0260 | Host-injected VFS mutation intents |
 
 ### kernel
 
@@ -122,6 +123,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0194 | eddy v1.2 — stateless bundle store, shared resolve caches, learned pins |
 | 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
+| 0258 | Structured install acquisition provenance |
 
 ### playground
 
@@ -154,9 +156,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
-| 0216 | Install tail latency: background command durability, generation-guarded stamps, learned-pin SWR |
-| 0241 | Install artifact identity for dependency trees |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
+| 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
 
 ### toolchain-build
 
@@ -256,6 +257,8 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 | 0169 | 0177 | workspace TypeScript rule; absent-workspace vendored fallback removed |
+| 0216 | 0261 | background durability, learned-pin SWR, and stamp fault history grafted |
+| 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
 
 ## Corrections (active)
 
@@ -295,8 +298,8 @@ superseded.
 | 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |
 | 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0182 launch speed quote | 0182 note 2026-07-07 | production `auto` browser benchmark is 1.88x; the older ~6x remains only the Node/sandbox model, and h2/h3 claims stay gated by the transport-matrix item |
-| 0187 command-site "returns only when durable" clause | 0216 | `npm install` exit no longer awaits the drain; the drain→gate→stamp sequence runs in background with pending-first demotion + generation-guarded promotion (every other 0187 clause stands) |
-| 0194 §8 learned-pin 30-min hard-TTL clause | 0216 | freshness is serve-stale-while-revalidate: fresh <1800s, stale ≤24h (served with the as-of line + one manifest-only background revalidate), dropped past 24h |
+| 0187 command-site "returns only when durable" clause | 0261 | `npm install` exit no longer awaits the drain; one stamp authority fences mutation and promotes in background (every other 0187 clause stands) |
+| 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
