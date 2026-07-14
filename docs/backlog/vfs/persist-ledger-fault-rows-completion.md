@@ -33,7 +33,7 @@ None (browser storage boundary) — honest-outcome contract per `docs/process/fa
 
 ## Out of scope
 
-- New ledger capabilities (watchdog = `vfs/opfs-persist-hang-watchdog`; this item only pins existing semantics).
+- New ledger capabilities; this item only pins existing semantics.
 - Cache eviction / size policy for the tarball cache.
 
 ## Decisions

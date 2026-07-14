@@ -1090,7 +1090,203 @@ describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp dur
 
 describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)', () => {
   beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function deferredPersist(): {
+    readonly promise: Promise<void>;
+    resolve(): void;
+    reject(error: Error): void;
+  } {
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function advanceToWatchdog(
+    flush: Promise<Awaited<ReturnType<OpfsFsSync['flush']>>>,
+  ): Promise<Awaited<ReturnType<OpfsFsSync['flush']>> | null> {
+    await vi.runAllTimersAsync();
+    return Promise.race([flush, Promise.resolve(null)]);
+  }
+
+  it('bounds a hung persist, keeps the mirror live, and heals when the operation finishes late', async () => {
+    vi.useFakeTimers();
+    const persist = deferredPersist();
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => persist.promise,
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/hung.txt', new Uint8Array([1]));
+
+    const firstFlush = fs.flush();
+    try {
+      const report = await advanceToWatchdog(firstFlush);
+
+      expect(report).not.toBeNull();
+      expect(report).toMatchObject({
+        total: 1,
+        failures: [expect.objectContaining({ path: '/hung.txt', op: 'write' })],
+      });
+      expect([...fs.readFileBytesSync('/hung.txt')]).toEqual([1]);
+
+      // Reporting is bounded independently of the FIFO operation itself:
+      // later flush callers answer dirty instead of parking behind it.
+      await expect(fs.flush()).resolves.toMatchObject({ total: 1 });
+
+      // The underlying browser operation cannot be cancelled. If it succeeds
+      // after the watchdog fired, its ordinary success path heals the ledger.
+      persist.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await expect(fs.flush()).resolves.toMatchObject({ total: 0 });
+    } finally {
+      persist.resolve();
+      await firstFlush;
+    }
+  });
+
+  it('bounds hung mkdir/rm/rename siblings through the same reporting seam', async () => {
+    vi.useFakeTimers();
+
+    const mkdirPersist = deferredPersist();
+    const mkdirRoot = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    (mkdirRoot as { getDirectoryHandle: unknown }).getDirectoryHandle = () =>
+      mkdirPersist.promise.then(() => mkdirRoot);
+    const mkdirFs = new OpfsFsSync(mkdirRoot);
+    mkdirFs.mkdirSync('/hung-dir', { recursive: true });
+    const mkdirFlush = mkdirFs.flush();
+    const mkdirReport = await advanceToWatchdog(mkdirFlush);
+    expect(mkdirReport).toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/hung-dir', op: 'mkdir' })],
+    });
+    expect(mkdirFs.existsSync('/hung-dir')).toBe(true);
+    mkdirPersist.resolve();
+    await mkdirFlush;
+    await Promise.resolve();
+    await expect(mkdirFs.flush()).resolves.toMatchObject({ total: 0 });
+
+    const rmPersist = deferredPersist();
+    const rmRoot = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const resolvedSurface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const rmFs = new OpfsFsSync(rmRoot, resolvedSurface);
+    rmFs.writeFileSync('/gone.txt', new Uint8Array([1]));
+    await rmFs.flush();
+    (rmRoot as { removeEntry: unknown }).removeEntry = () => rmPersist.promise;
+    rmFs.rmSync('/gone.txt');
+    const rmFlush = rmFs.flush();
+    const rmReport = await advanceToWatchdog(rmFlush);
+    expect(rmReport).toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/gone.txt', op: 'rm' })],
+    });
+    expect(rmFs.existsSync('/gone.txt')).toBe(false);
+    rmPersist.resolve();
+    await rmFlush;
+    await Promise.resolve();
+    await expect(rmFs.flush()).resolves.toMatchObject({ total: 0 });
+
+    const renamePersist = deferredPersist();
+    let hangRename = false;
+    const renameSurface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array([1])),
+      writeFile: (path) =>
+        hangRename && path === '/after.txt' ? renamePersist.promise : Promise.resolve(),
+      rm: () => Promise.resolve(),
+    };
+    const renameRoot = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const renameFs = new OpfsFsSync(renameRoot, renameSurface);
+    renameFs.writeFileSync('/before.txt', new Uint8Array([1]));
+    await renameFs.flush();
+    hangRename = true;
+    renameFs.renameSync('/before.txt', '/after.txt');
+    const renameFlush = renameFs.flush();
+    const renameReport = await advanceToWatchdog(renameFlush);
+    expect(renameReport).toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/after.txt', op: 'rename' })],
+    });
+    expect(renameFs.existsSync('/before.txt')).toBe(false);
+    expect([...renameFs.readFileBytesSync('/after.txt')]).toEqual([1]);
+    renamePersist.resolve();
+    await renameFlush;
+    await Promise.resolve();
+    await expect(renameFs.flush()).resolves.toMatchObject({ total: 0 });
+  });
+
+  it('replaces a hung ledger record with the eventual persist rejection', async () => {
+    vi.useFakeTimers();
+    const persist = deferredPersist();
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => persist.promise,
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/late-reject.txt', new Uint8Array([1]));
+    const firstFlush = fs.flush();
+    const hung = await advanceToWatchdog(firstFlush);
+    expect(hung?.failures[0]?.message).toMatch(/did not settle/);
+
+    persist.reject(new Error('late quota rejection'));
+    await firstFlush;
+    await Promise.resolve();
+    await expect(fs.flush()).resolves.toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ message: 'late quota rejection' })],
+    });
+  });
+
+  it('does not let an older late success erase a newer same-path watchdog failure', async () => {
+    vi.useFakeTimers();
+    const first = deferredPersist();
+    const second = deferredPersist();
+    let writes = 0;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => (++writes === 1 ? first.promise : second.promise),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/same-path.txt', new Uint8Array([1]));
+    fs.writeFileSync('/same-path.txt', new Uint8Array([2]));
+
+    const timedOut = fs.flush();
+    await vi.runAllTimersAsync();
+    await expect(timedOut).resolves.toMatchObject({ total: 1 });
+    expect(writes).toBe(1);
+
+    first.resolve();
+    await waitForMicrotaskCondition(() => writes === 2, 'second same-path write-through');
+
+    // The second write is still hung. The first write's late success must not
+    // heal the newer operation's watchdog record for the same path.
+    await expect(fs.flush()).resolves.toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/same-path.txt', op: 'write' })],
+    });
+
+    second.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(fs.flush()).resolves.toMatchObject({ total: 0 });
+  });
 
   it('flush() resolves (never rejects) and REPORTS a swallowed write-through failure; a later success HEALS it', async () => {
     let fail = true;
