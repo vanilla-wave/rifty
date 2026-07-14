@@ -174,8 +174,33 @@ export function prepareWorkspaceArchiveImport(
       throw new Error(`Workspace archive contains derived node_modules path "${file.path}"`);
     }
     if (!target.startsWith(`${root}/`)) throw new Error(`Archive path escaped root: ${file.path}`);
-    return { target, content: base64ToBytes(file.content) };
+    return { path: file.path, target, content: base64ToBytes(file.content) };
   });
+
+  const archivePathByTarget = new Map<string, string>();
+  for (const file of decoded) {
+    const priorPath = archivePathByTarget.get(file.target);
+    if (priorPath !== undefined) {
+      throw new Error(
+        `Workspace archive target collision: "${priorPath}" and "${file.path}" map to ${file.target}`,
+      );
+    }
+    archivePathByTarget.set(file.target, file.path);
+  }
+  for (const file of decoded) {
+    let parent = dirname(file.target);
+    while (parent !== root) {
+      const parentArchivePath = archivePathByTarget.get(parent);
+      if (parentArchivePath !== undefined) {
+        throw new Error(
+          `Workspace archive target collision: file "${parentArchivePath}" is an ancestor of "${file.path}"`,
+        );
+      }
+      const next = dirname(parent);
+      if (next === parent) break;
+      parent = next;
+    }
+  }
 
   return {
     root,

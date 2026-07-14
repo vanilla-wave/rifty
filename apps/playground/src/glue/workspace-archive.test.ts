@@ -106,6 +106,27 @@ describe('workspace archive', () => {
     expect(read(fs, '/workspace/src/main.ts')).toBe('keep');
   });
 
+  it.each([
+    ['ancestor before descendant', ['a', 'a/b']],
+    ['descendant before ancestor', ['a/b', 'a']],
+    ['duplicate normalized target', ['a/b', 'a//b']],
+  ])('rejects %s before mutating the destination', (_case, paths) => {
+    const fs = new MemoryFsSync();
+    write(fs, '/workspace/src/main.ts', 'keep');
+    const badArchive = JSON.stringify({
+      version: 1,
+      root: '/workspace',
+      files: paths.map((path) => ({
+        path,
+        encoding: 'base64',
+        content: Buffer.from(path).toString('base64'),
+      })),
+    });
+
+    expect(() => importWorkspaceArchive(fs, badArchive)).toThrow(/archive target collision/i);
+    expect(read(fs, '/workspace/src/main.ts')).toBe('keep');
+  });
+
   it('rejects archives for another root before replacing the workspace', () => {
     const fs = new MemoryFsSync();
     write(fs, '/workspace/src/main.ts', 'keep');
