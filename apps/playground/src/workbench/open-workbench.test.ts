@@ -157,11 +157,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   let urlContext = URL_CONTEXT;
 
   const controller = {
-    postMessage: vi.fn((_message: unknown): void => {
+    postMessage: vi.fn((_message: unknown, transfer: Transferable[]): void => {
       if (automaticPong === null) return;
-      const event = new MessageEvent('message', { data: automaticPong });
-      Object.defineProperty(event, 'source', { value: controller });
-      for (const listener of [...listeners.message]) listener(event);
+      const replyPort = transfer[0];
+      if (!(replyPort instanceof MessagePort)) throw new Error('missing SW control reply port');
+      replyPort.postMessage(automaticPong);
     }),
   };
   const serviceWorker = {
@@ -854,11 +854,14 @@ describe('openWorkbench service-worker proof', () => {
       'https://workbench.invalid/service-worker.js',
       { scope: 'https://workbench.invalid/' },
     );
-    expect(h.controller.postMessage).toHaveBeenCalledWith({
-      type: SW_PING,
-      frameVersion: SW_FRAME_VERSION,
-      routingVersion: SW_ROUTING_VERSION,
-    });
+    expect(h.controller.postMessage).toHaveBeenCalledWith(
+      {
+        type: SW_PING,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      [expect.any(MessagePort)],
+    );
     expect(h.listenerCount).toBe(0);
     expect(h.clock.pending).toBe(0);
 
@@ -901,7 +904,7 @@ describe('openWorkbench service-worker proof', () => {
     await waitUntil(
       () => h.clock.pending === 1 && h.controller.postMessage.mock.calls.length === 1,
     );
-    expect(h.listenerCount).toBe(2);
+    expect(h.listenerCount).toBe(1);
     h.clock.fireAll();
 
     await expect(opening).rejects.toThrow(/service-worker.*timed out/i);

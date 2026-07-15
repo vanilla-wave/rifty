@@ -25,6 +25,10 @@
   snapshot and bind Vite readiness, exit, and cleanup to the exact admitted PTY
   run plus routed preview proof. Run close remains claimed until preview-route
   cleanup settles and reports teardown failures instead of racing the next run.
+- A project that mounted a preview now closes only after a correlated
+  post-GOODBYE service-worker control proof. The fulfilled close therefore
+  fences stale route readiness; teardown/controller faults stay loud
+  (ADR-0271).
 - Preview-producing dev, installed-bin, and Node children capture owner-supplied
   PTY identity at shell construction. Guest environment is preserved as ordinary
   Node state—even a former `RIFTY_INTERNAL_PTY_SID` name—and cannot relabel a

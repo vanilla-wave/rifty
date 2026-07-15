@@ -506,14 +506,19 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
   expect(ownerCarrierObserved).toBe(true);
   expect(ownerEntryLoads).toBe(1);
   await expect
-    .poll(() => ownerLifecycle, { timeout: 5_000 })
-    .toEqual([
-      'owner-started',
-      'project-a-closed',
-      'project-b-closed',
-      'reopened-project-a-closed',
-      'workbench-close-started',
-      'owner-closed',
-      'workbench-closed',
-    ]);
+    .poll(() => page.workers().filter((worker) => worker.url() === workerAssets.kernel).length, {
+      timeout: 5_000,
+    })
+    .toBe(0);
+  await expect.poll(() => ownerLifecycle.length, { timeout: 5_000 }).toBe(7);
+  expect(ownerLifecycle.slice(0, 5)).toEqual([
+    'owner-started',
+    'project-a-closed',
+    'project-b-closed',
+    'reopened-project-a-closed',
+    'workbench-close-started',
+  ]);
+  // Playwright observes Worker.close on the driver event loop; its callback
+  // may run on either side of the page's already-settled close continuation.
+  expect(ownerLifecycle.slice(5).sort()).toEqual(['owner-closed', 'workbench-closed']);
 });
