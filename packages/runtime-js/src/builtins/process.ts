@@ -22,6 +22,7 @@ import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@rifty
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { readNodeEntryBootstrapIfPresent } from './node-entry-runtime-config.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
@@ -368,6 +369,39 @@ function ttyDimension(
   return value;
 }
 
+interface ProcessTerminalBootstrap {
+  readonly stdinIsTTY: boolean;
+  readonly stdoutIsTTY: boolean;
+  readonly stderrIsTTY: boolean;
+  readonly cols: number;
+  readonly rows: number;
+}
+
+function processTerminalBootstrap(
+  env: Readonly<Record<string, string | undefined>>,
+): ProcessTerminalBootstrap {
+  const bootstrap = readNodeEntryBootstrapIfPresent();
+  if (bootstrap !== null) {
+    const terminal = bootstrap.launch.kind === 'program' ? bootstrap.launch.terminal : undefined;
+    return (
+      terminal ?? {
+        stdinIsTTY: false,
+        stdoutIsTTY: false,
+        stderrIsTTY: false,
+        cols: 80,
+        rows: 24,
+      }
+    );
+  }
+  return {
+    stdinIsTTY: envFlag(env, 'RIFTY_STDIN_IS_TTY'),
+    stdoutIsTTY: envFlag(env, 'RIFTY_STDOUT_IS_TTY'),
+    stderrIsTTY: envFlag(env, 'RIFTY_STDERR_IS_TTY'),
+    cols: ttyDimension(env, 'RIFTY_TTY_COLS', 80),
+    rows: ttyDimension(env, 'RIFTY_TTY_ROWS', 24),
+  };
+}
+
 /** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
 export function toUint8ExitCode(n: number): number {
   return ((Math.trunc(n) % 256) + 256) % 256;
@@ -458,23 +492,11 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      const size = {
-        cols: ttyDimension(spec.env, 'RIFTY_TTY_COLS', 80),
-        rows: ttyDimension(spec.env, 'RIFTY_TTY_ROWS', 24),
-      };
-      this.stdout = makeStdioWriter(
-        spec.stdio.stdout,
-        1,
-        envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'),
-        size,
-      );
-      this.stderr = makeStdioWriter(
-        spec.stdio.stderr,
-        2,
-        envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'),
-        size,
-      );
-      const reader = makeStdinReader(spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
+      const terminal = processTerminalBootstrap(spec.env);
+      const size = { cols: terminal.cols, rows: terminal.rows };
+      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size);
+      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size);
+      const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
       this.#wireIpc(spec.stdio.ipc);

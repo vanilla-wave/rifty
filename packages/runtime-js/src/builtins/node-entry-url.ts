@@ -15,17 +15,28 @@ import {
   setNodeEntryWorkerUrlOnly,
 } from './node-entry-runtime-config.ts';
 
+export {
+  NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+  buildNodeEntryWorkerEntry,
+  readNodeEntryBootstrap,
+  type NodeEntryBootstrapPayload,
+  type NodeEntryLaunch,
+  type NodeEntryProgramLaunch,
+  type NodeEntryTerminalBootstrap,
+  type NodeEntryWorkerThreadLaunch,
+} from './node-entry-runtime-config.ts';
+
 /** Inject only the URL; invalidates any older host bootstrap snapshot. */
 export function setNodeEntryWorkerUrl(url: string | URL): void {
   setNodeEntryWorkerUrlOnly(url);
 }
 
-/** Atomically inject the URL plus host-owned bootstrap values. */
+/** Atomically inject the URL plus host-owned out-of-band bootstrap values. */
 export function configureNodeEntryWorker(
   url: string | URL,
-  runtimeEnv: Readonly<Record<string, string>>,
+  runtimeConfig: Readonly<Record<string, string>>,
 ): void {
-  configureNodeEntryWorkerRuntime(url, runtimeEnv);
+  configureNodeEntryWorkerRuntime(url, runtimeConfig);
 }
 
 /** The configured node-entry bootstrap worker URL, or `null` if unset. */

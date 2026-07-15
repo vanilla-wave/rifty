@@ -1,4 +1,4 @@
-import { type BinExecutor, type CommandContext, Shell } from '@riftydev/shell';
+import { type BinExecutor, Shell } from '@riftydev/shell';
 import { type VfsMutationGuard, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
@@ -7,13 +7,11 @@ import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import type { OwnerPackageConfig, OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
-  PTY_SESSION_ENV,
   createInstalledBinPreviewHooks,
   createPreviewOriginCapture,
 } from './preview-producer-bindings.ts';
 import { createPreviewRegistry } from './preview-registry.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { withViteCliEnv } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
@@ -70,19 +68,6 @@ function assertProjectRoot(options: WorkbenchProjectRuntimeOptions): string {
   return options.projectRoot;
 }
 
-function cleanGuestEnv(seed: Readonly<Record<string, string>> | undefined): Record<string, string> {
-  return Object.fromEntries(Object.entries(seed ?? {}).filter(([key]) => key !== PTY_SESSION_ENV));
-}
-
-function cleanViteControlEnv(ctx: CommandContext): CommandContext {
-  const env = Object.fromEntries(
-    Object.entries(ctx.env).filter(
-      ([key]) => key !== 'RIFTY_PREVIEW_SCOPE' && key !== 'RIFTY_VITE_CLI_MODE',
-    ),
-  );
-  return { ...ctx, env };
-}
-
 function assertCleanFlush(report: Awaited<ReturnType<OwnerVfsAuthority['flush']>>): void {
   if (report === undefined || report.total === 0) return;
   const details = report.failures
@@ -121,15 +106,11 @@ export function createWorkbenchProjectRuntime(
     );
     const executeInstalledBin: BinExecutor = async (binPath, args, ctx) => {
       await options.packageState.reassertTemplateNodeModules(options.packageConfig);
-      return childBinExecutor(
-        binPath,
-        args,
-        withViteCliEnv(binPath, args, cleanViteControlEnv(ctx)),
-      );
+      return childBinExecutor(binPath, args, ctx);
     };
     const shell = new Shell({
       cwd: reachableCwd(options.authority, seed?.cwd, projectRoot),
-      env: cleanGuestEnv(seed?.env),
+      env: { ...(seed?.env ?? {}) },
       execBin: executeInstalledBin,
       mutationGuard: ((intents, apply) =>
         options.packageState.mutations.guardedMutation(intents, async () =>

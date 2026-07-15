@@ -80,12 +80,26 @@ export interface ParityCase {
    *   mirror. The Node side runs the genuine `child_process.execSync` (a real
    *   subprocess) with no preamble — so binary stdout must be routed through a
    *   HEX channel (`out.toString('hex')`) to survive the harness's UTF-8 capture.
+   * - `'worker-env'` — physical kernel-backed `worker_threads.Worker` mode for
+   *   ADR-0267 env parity. The rifty side runs the same case in an isolated host
+   *   Worker, adapts a real native Worker to the kernel's DOM Worker boundary,
+   *   and executes the production typed entry bootstrap + Node process install.
+   *   This keeps host bootstrap metadata outside the child's guest `process.env`;
+   *   the default same-realm fallback cannot prove that boundary.
    * - `'tty-resize'` — real terminal-resize mode. Node runs under an OS PTY and
    *   changes its grid with `stty`; rifty receives the same change over its
    *   process-control MessagePort. The case prints one explicit result marker
    *   so PTY transcript noise cannot become the oracle.
    */
-  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite' | 'exec-sync' | 'tty-resize';
+  readonly kind?:
+    | 'cjs'
+    | 'esm'
+    | 'http'
+    | 'ts-esm'
+    | 'sqlite'
+    | 'exec-sync'
+    | 'worker-env'
+    | 'tty-resize';
 }
 
 /**

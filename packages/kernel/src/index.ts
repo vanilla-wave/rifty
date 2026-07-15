@@ -84,14 +84,18 @@ export { SyncRpcClient, type SyncRpcClientOptions } from './ipc/sync-client.ts';
 // ADR-0039 — `KernelProcessSpec` is the typed bootstrap descriptor the
 // higher runtime layer reads to build its own `process` object.
 export {
+  KERNEL_ENTRY_BOOTSTRAP_KEY,
   KERNEL_PROCESS_SPEC_KEY,
   KERNEL_SYNC_CALL_KEY,
+  type KernelEntryBootstrapEnvelope,
   type KernelProcessSpec,
   type KernelProcessStdioPorts,
   type KernelSyncApi,
   type KernelSyncCall,
+  publishKernelEntryBootstrap,
   publishKernelProcessSpec,
   publishKernelSyncApi,
+  readKernelEntryBootstrap,
   readKernelProcessSpec,
   readKernelSyncApi,
 } from './shared-globals.ts';

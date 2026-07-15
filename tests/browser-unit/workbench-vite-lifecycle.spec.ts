@@ -280,6 +280,12 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     const publicEntry = publicEntryModule as unknown as PublicEntry;
     const hostAssets = (hostAssetsModule as { readonly workbenchViteHostAssets: HostAssets })
       .workbenchViteHostAssets;
+    const ownerWorkerUrl = new URL(hostAssets.workers.owner, location.href);
+    const ownerWorkerBaseUrl = new URL('.', ownerWorkerUrl);
+    const ownerWorkerReference = ownerWorkerUrl.href.slice(ownerWorkerBaseUrl.href.length);
+    const baseElement = document.createElement('base');
+    baseElement.href = ownerWorkerBaseUrl.href;
+    document.head.prepend(baseElement);
 
     const defineProjectA = () =>
       publicEntry.projects.vite({
@@ -314,7 +320,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       workbench = await withTimeout(
         publicEntry.openWorkbench({
           deployment: {
-            workers: hostAssets.workers,
+            workers: { ...hostAssets.workers, owner: ownerWorkerReference },
             serviceWorker: { url: '/sw.js', scope: '/' },
             wasm: hostAssets.wasm,
             previewProbeTimeoutMs: 30_000,
@@ -439,6 +445,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       const cleanup = cleanupErrors.length === 0 ? '' : `; cleanup: ${cleanupErrors.join('; ')}`;
       throw new Error(`${error instanceof Error ? error.message : String(error)}${cleanup}`);
     } finally {
+      baseElement.remove();
       ownerCarrierProbe.restore();
     }
   }, RETAINED_BYTES);
@@ -468,7 +475,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     result.reopenedPreviewA.close,
   ]) {
     expect(closed.order).toEqual(['run-exited', 'project-closed']);
-    expect(closed.exit).toEqual({ code: null, signal: 'SIGINT' });
+    expect(closed.exit).toEqual({ code: null, signal: 'SIGTERM' });
     expect(closed.closeExit).toEqual(closed.exit);
     expect(closed.terminalClosure.default).toMatchObject({
       rejected: true,

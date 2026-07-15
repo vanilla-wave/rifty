@@ -76,12 +76,6 @@ export const ALLOWLIST = [
     why: 'RiftyTerminal is constructed in onMount (client-only, solid server runtime) — ctor-option wiring unobservable in node; values pinned via terminal-appearance module',
   },
   {
-    file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 2,
-    digest: '72006ccff761',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin spawn flags; prepare/runtime and file-watch heirs run in browser contract/e2e',
-  },
-  {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
     count: 5,
     digest: 'ceb47c6a61e8',

@@ -1,4 +1,8 @@
-import { ClosedHandleError, ProjectBusyError } from '../workbench/errors.ts';
+import {
+  ClosedHandleError,
+  ProjectBusyError,
+  serializeWorkbenchOwnerError,
+} from '../workbench/errors.ts';
 import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
@@ -129,7 +133,7 @@ export function createWorkbenchOwnerController(
   };
 
   const sendFailure = (failure: unknown, opId?: string): void => {
-    const error = serializeError(failure);
+    const error = serializeWorkbenchOwnerError(failure);
     send(
       opId === undefined
         ? { type: 'workbench:failure', error }
@@ -149,7 +153,7 @@ export function createWorkbenchOwnerController(
   const closedOwnerError = (): ClosedHandleError => new ClosedHandleError('Workbench owner');
   const inactiveTokenError = (): Error => new Error('Workbench project token is not active');
   const poisonedError = (): Error => {
-    const detail = serializeError(poison).message;
+    const detail = serializeWorkbenchOwnerError(poison).message;
     return new Error(`Workbench owner lifecycle is poisoned: ${detail}`);
   };
 
@@ -394,16 +398,6 @@ function operationId(message: PageToWorkbenchOwnerMessage): string | undefined {
     default:
       return undefined;
   }
-}
-
-function serializeError(failure: unknown): { readonly name: string; readonly message: string } {
-  if (failure instanceof Error) {
-    return Object.freeze({
-      name: failure.name.length > 0 ? failure.name : 'Error',
-      message: failure.message,
-    });
-  }
-  return Object.freeze({ name: 'Error', message: String(failure) });
 }
 
 function appendUnique(failures: unknown[], failure: unknown): void {

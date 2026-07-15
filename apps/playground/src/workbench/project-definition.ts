@@ -216,6 +216,7 @@ function normalizeManifest(
   else manifest.dependencies = dependencies;
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
+  // TODO(backlog: playground/workbench-implicit-vite-module-scope)
   files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
   return (
     viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined

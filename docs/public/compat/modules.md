@@ -38,6 +38,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | tsconfig `paths` aliases | ✅ | Explicit `paths` map (ADR-0066) or `autoDiscoverTsconfigPaths: true` (ADR-0170: nearest `tsconfig.json`, `extends`, JSONC, `baseUrl`) |
 | `require()` of a `.ts`/`.tsx` module (CJS scope) | ❌ | Throws `NotImplementedError('module-loader.ts-via-require')`; the esbuild type-strip is async, so a sync `require()` cannot transform it — load `.ts` as ESM via `import()` under a `type:module` scope (ADR-0052) |
 | `require.resolve` | ✅ | |
+| `require.extensions['.js']` / `module._compile` | ⚠️ | Loader-local and `createRequire` views share one callable JavaScript hook; replacement source executes on the same module object with filename-relative resolution (ADR-0269, parity `modules/require-extensions-compile`). Custom JSON loaders are not yet supported; native `.node` addons remain out of scope. |
 | `import.meta.url` | ✅ | File URL for the resolved ESM module id; supports `new URL('./x', import.meta.url)` |
 | `import.meta.resolve(spec)` | ✅ | Real loader resolution (v20.6, sync). Any `node:` specifier returned verbatim (not validated at resolve time); files → `file://<abs>`; a bare/relative miss throws the resolver's `MODULE_NOT_FOUND`. Was a stub returning a wrong `file://` URL for bare specifiers |
 | Import attributes (`with { type: 'json' }`) | ❌ | Deferred until needed |

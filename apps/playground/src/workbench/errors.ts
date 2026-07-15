@@ -42,3 +42,35 @@ export class StdinClosedError extends Error {
     this.name = 'StdinClosedError';
   }
 }
+
+export interface SerializedWorkbenchOwnerError {
+  readonly name: string;
+  readonly message: string;
+}
+
+/** Clone-safe owner failure payload; protocol inspection owns field validation. */
+export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenchOwnerError {
+  if (error instanceof Error) {
+    return Object.freeze({
+      name: error.name.length > 0 ? error.name : 'Error',
+      message: error.message,
+    });
+  }
+  return Object.freeze({ name: 'Error', message: String(error) });
+}
+
+/** Restore owner-crossing public domain prototypes without guessing constructor data. */
+export function deserializeWorkbenchOwnerError(value: SerializedWorkbenchOwnerError): Error {
+  const error = new Error(value.message);
+  const prototype =
+    value.name === 'ProjectDefinitionMismatchError'
+      ? ProjectDefinitionMismatchError.prototype
+      : value.name === 'ProjectBusyError'
+        ? ProjectBusyError.prototype
+        : value.name === 'ClosedHandleError'
+          ? ClosedHandleError.prototype
+          : Error.prototype;
+  Object.setPrototypeOf(error, prototype);
+  error.name = value.name;
+  return error;
+}

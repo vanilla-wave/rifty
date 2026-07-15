@@ -193,12 +193,41 @@ export function spawnKernelWorker(
   dispatcher.attach(ring);
 
   const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
-  worker.postMessage(init, [
-    childPorts.stdout,
-    childPorts.stderr,
-    childPorts.stdin,
-    childPorts.ipc,
-  ]);
+  try {
+    worker.postMessage(init, [
+      childPorts.stdout,
+      childPorts.stderr,
+      childPorts.stdin,
+      childPorts.ipc,
+    ]);
+  } catch (error) {
+    // Init is the commit point for this resource transaction. A synchronous
+    // structured-clone/transfer failure returns no handle to the caller, so
+    // roll back every resource acquired above before preserving the error.
+    dispatcher.detach(ring);
+    try {
+      worker.terminate();
+    } catch {
+      /* the worker constructor succeeded but its realm may already be gone */
+    }
+    for (const port of [
+      ports.stdout,
+      ports.stderr,
+      ports.stdin,
+      ports.ipc,
+      childPorts.stdout,
+      childPorts.stderr,
+      childPorts.stdin,
+      childPorts.ipc,
+    ]) {
+      try {
+        port.close();
+      } catch {
+        /* a failed transfer may already have disentangled the port */
+      }
+    }
+    throw error;
+  }
 
   let terminated = false;
   const exitListeners: ((code: number) => void)[] = [];

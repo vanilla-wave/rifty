@@ -1,3 +1,4 @@
+import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -56,36 +57,84 @@ function makeCtx(over: Record<string, unknown> = {}): CommandContext {
 }
 
 describe('owner-child-node-executor', () => {
-  it('builds a serve:true spec with RIFTY_BIN=0', () => {
+  it('keeps guest env exact and carries node-program metadata beside the entry', () => {
+    const env = {
+      PATH: '/x',
+      RIFTY_SQLITE_WASM_URL: 'user-poison',
+      RIFTY_BIN: 'user-bin',
+      RIFTY_REMOTE_FS: 'user-remote-fs',
+      RIFTY_NODE_SERVE: 'user-serve',
+      RIFTY_PREVIEW_SCOPE: 'user-preview',
+    };
     const spec = buildNodeChildSpawnSpec(
       '/w/app.js',
       ['a'],
-      { PATH: '/x', RIFTY_SQLITE_WASM_URL: 'user-poison' },
+      env,
       '/w',
       'URL',
       NODE_WORKER_RUNTIME_ENV,
       true,
       120,
       40,
+      'owner-preview',
     );
     expect(spec).toMatchObject({
-      entry: { kind: 'url', url: 'URL' },
-      argv: ['rifty', '/w/app.js', 'a'],
-      env: {
-        PATH: '/x',
-        RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
-        RIFTY_BIN: '0',
-        RIFTY_REMOTE_FS: '1',
-        RIFTY_NODE_SERVE: '1',
-        RIFTY_STDIN_IS_TTY: '0',
-        RIFTY_STDOUT_IS_TTY: '1',
-        RIFTY_STDERR_IS_TTY: '1',
-        RIFTY_TTY_COLS: '120',
-        RIFTY_TTY_ROWS: '40',
+      entry: {
+        kind: 'url',
+        url: 'URL',
+        bootstrap: {
+          protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+          payload: {
+            hostRuntime: NODE_WORKER_RUNTIME_ENV,
+            launch: {
+              kind: 'program',
+              bin: false,
+              remoteFs: true,
+              nodeServe: true,
+              previewScope: 'owner-preview',
+              terminal: {
+                stdinIsTTY: false,
+                stdoutIsTTY: true,
+                stderrIsTTY: true,
+                cols: 120,
+                rows: 40,
+              },
+            },
+          },
+        },
       },
+      argv: ['rifty', '/w/app.js', 'a'],
+      env,
       cwd: '/w',
       serve: true,
     });
+    expect(spec.env).toEqual(env);
+  });
+
+  it('threads the actor-minted preview scope into the node-entry launch', async () => {
+    const fake = fakeHandle();
+    const spawn = vi.fn(() => fake.h);
+    const exec = createOwnerChildNodeExecutor('URL', NODE_WORKER_RUNTIME_ENV, spawn);
+    const p = exec('/w/server.js', [], makeCtx({ env: { USER_FLAG: 'kept' } }), {
+      sid: 's1',
+      previewScope: 'owner-preview',
+      onListening: () => {},
+      onExit: () => {},
+    });
+    fake.emit('exit', 0, null);
+    expect(await p).toEqual({ code: 0, signal: null });
+    expect(spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: { USER_FLAG: 'kept' },
+        entry: expect.objectContaining({
+          bootstrap: expect.objectContaining({
+            payload: expect.objectContaining({
+              launch: expect.objectContaining({ previewScope: 'owner-preview' }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('streams stdout, reports listening, resolves on exit + removes', async () => {

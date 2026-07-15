@@ -1367,7 +1367,7 @@ describe('pty-server', () => {
     expect(seen).toEqual(['terminal-9']);
   });
 
-  it('strips internal pty env keys from persisted exit env', async () => {
+  it('round-trips guest env keys that resemble former internal PTY metadata', async () => {
     const out: OwnerToPageFrame[] = [];
     const server = createPtyServer({
       send: (f) => out.push(f),
@@ -1384,7 +1384,7 @@ describe('pty-server', () => {
       isTTY: true,
     });
     const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
-    expect(exit && exit.type === 'pty:exit' && exit.env.RIFTY_INTERNAL_PTY_SID).toBeUndefined();
+    expect(exit && exit.type === 'pty:exit' && exit.env.RIFTY_INTERNAL_PTY_SID).toBe('terminal-1');
   });
 
   it('exec on an unknown session emits pty:exit{error} instead of silently hanging the page run', async () => {

@@ -13,6 +13,7 @@ import {
   type ProcessHandle,
   type SpawnWorkerSpec,
   globalProcessManager,
+  publishKernelEntryBootstrap,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
@@ -20,6 +21,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
+import {
+  NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+  buildNodeEntryWorkerEntry,
+} from './node-entry-runtime-config.ts';
 import * as nodeEntryUrl from './node-entry-url.ts';
 import { NodeProcess, setProcessCwd } from './process.ts';
 import workerThreadsModule, {
@@ -51,6 +56,7 @@ afterEach(() => {
   warnSpy.mockRestore();
   vi.restoreAllMocks();
   (globalThis as Coi).crossOriginIsolated = false;
+  publishKernelEntryBootstrap(null);
   resetNodeEntryWorkerUrl();
   setProcessCwd('/workspace');
   resetSyncMirror();
@@ -79,7 +85,7 @@ describe('worker_threads same-realm fallback warning (no silent stubs)', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('runs ESM worker scripts with live parentPort, workerData, and onmessage', async () => {
+  it('runs ESM worker scripts with live parentPort, workerData, and Node message events', async () => {
     writeFileSync(
       '/w-esm.mjs',
       `
@@ -101,10 +107,10 @@ parentPort.on('message', (data) => {
     const messages: unknown[] = [];
     const nextMessage = () =>
       new Promise<unknown>((resolve) => {
-        worker.onmessage = ({ data }) => {
+        worker.once('message', (data) => {
           messages.push(data);
           resolve(data);
-        };
+        });
       });
 
     const readyPromise = nextMessage();
@@ -156,6 +162,89 @@ globalThis.onmessage = ({ data }) => {
     await worker.terminate();
   });
 
+  it("delivers one kernel child frame once through emnapi's Node bridge", async () => {
+    const fakeHandle = makeFakeWorkerHandle([]);
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(fakeHandle);
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker('/workspace/w-emnapi-message.mjs');
+      const online = new Promise<void>((resolve) => worker.once('online', () => resolve()));
+      const browserExpando = worker as unknown as {
+        onmessage?: (event: { readonly data: unknown }) => void;
+      };
+      const received: unknown[] = [];
+
+      // @emnapi/wasi-threads detects Node and installs this exact bridge after
+      // assigning its browser-shaped handler as an ordinary expando. Real Node
+      // emits only the EventEmitter event, so the handler runs once.
+      browserExpando.onmessage = ({ data }) => received.push(data);
+      worker.on('message', (data) => browserExpando.onmessage?.({ data }));
+
+      await online;
+      fakeHandle.emit('message', { type: 'spawn-thread', startArg: 41 });
+
+      expect(received).toEqual([{ type: 'spawn-thread', startArg: 41 }]);
+      await worker.terminate();
+    });
+  });
+
+  it('keeps kernel construction failures on the asynchronous error surface', async () => {
+    const constructionError = new Error('kernel spawn failed');
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+      throw constructionError;
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    await withProcessGlobal(parent, async () => {
+      const errors: unknown[] = [];
+      const worker = new Worker('/workspace/w-construction-error.mjs');
+      worker.on('error', (error) => errors.push(error));
+
+      expect(errors).toEqual([]);
+      await Promise.resolve();
+      expect(errors).toEqual([constructionError]);
+    });
+  });
+
+  it("delivers one kernel construction fault once through emnapi's Node bridge", async () => {
+    const constructionError = new Error('kernel spawn failed once');
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+      throw constructionError;
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker('/workspace/w-emnapi-error.mjs');
+      const browserExpando = worker as unknown as { onerror?: (error: unknown) => void };
+      const received: unknown[] = [];
+      browserExpando.onerror = (error) => received.push(error);
+      worker.on('error', (error) => browserExpando.onerror?.(error));
+
+      await Promise.resolve();
+
+      expect(received).toEqual([constructionError]);
+    });
+  });
+
   it('snapshots omitted env and cwd for a kernel-backed worker', async () => {
     const sent: unknown[] = [];
     let capturedSpec: SpawnWorkerSpec | undefined;
@@ -185,17 +274,28 @@ globalThis.onmessage = ({ data }) => {
         cwd: '/parent',
         env: {
           PARENT_ONLY: 'parent',
-          RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-          RIFTY_REMOTE_FS: '1',
-          RIFTY_WORKER_THREADS: '1',
-          RIFTY_WORKER_THREAD_ID: String(worker.threadId),
         },
       });
+      expect(capturedSpec?.env).toEqual({
+        PARENT_ONLY: 'parent',
+        RIFTY_SQLITE_WASM_URL: 'https://parent.test/sqlite.wasm',
+      });
+      expect(capturedSpec?.entry).toEqual(
+        buildNodeEntryWorkerEntry(
+          'https://rifty.test/node-entry.js',
+          { RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm' },
+          {
+            kind: 'worker-thread',
+            remoteFs: true,
+            threadId: worker.threadId,
+          },
+        ),
+      );
       await worker.terminate();
     });
   });
 
-  it('uses explicit env as a replacement and keeps host/control precedence', async () => {
+  it('uses explicit env as an exact replacement while host/control metadata stays out of band', async () => {
     const sent: unknown[] = [];
     let capturedSpec: SpawnWorkerSpec | undefined;
     const fakeHandle = makeFakeWorkerHandle(sent);
@@ -221,6 +321,7 @@ globalThis.onmessage = ({ data }) => {
         {
           env: {
             ROLLDOWN_TEST: '1',
+            RIFTY_BIN: 'guest-visible-not-authoritative',
             RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
             RIFTY_REMOTE_FS: 'user-poison',
             RIFTY_WORKER_THREADS: 'user-poison',
@@ -232,18 +333,32 @@ globalThis.onmessage = ({ data }) => {
 
       expect(warnSpy).not.toHaveBeenCalled();
       expect(capturedSpec).toMatchObject({
-        entry: { kind: 'url', url: 'https://rifty.test/node-entry.js' },
         argv: ['rifty', '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs'],
         cwd: '/project',
         serve: true,
       });
       expect(capturedSpec?.env).toEqual({
         ROLLDOWN_TEST: '1',
-        RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-        RIFTY_REMOTE_FS: '1',
-        RIFTY_WORKER_THREADS: '1',
-        RIFTY_WORKER_THREAD_ID: String(worker.threadId),
+        RIFTY_BIN: 'guest-visible-not-authoritative',
+        RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
+        RIFTY_REMOTE_FS: 'user-poison',
+        RIFTY_WORKER_THREADS: 'user-poison',
       });
+      expect(capturedSpec?.entry).toEqual(
+        buildNodeEntryWorkerEntry(
+          'https://rifty.test/node-entry.js',
+          {
+            RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+            RIFTY_REMOTE_FS: 'host-poison',
+            RIFTY_WORKER_THREADS: 'host-poison',
+          },
+          {
+            kind: 'worker-thread',
+            remoteFs: true,
+            threadId: worker.threadId,
+          },
+        ),
+      );
       expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
 
       const child = seededWorkerProcess(capturedSpec?.env ?? {});
@@ -279,7 +394,7 @@ globalThis.onmessage = ({ data }) => {
 
     expect(errors).toEqual([
       expect.objectContaining({
-        message: expect.stringMatching(/node-entry.*runtime config.*not configured/i),
+        message: expect.stringMatching(/node-entry.*bootstrap config.*not configured/i),
       }),
     ]);
     expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
@@ -344,9 +459,21 @@ globalThis.onmessage = ({ data }) => {
     const sent: unknown[] = [];
     let capturedMessageHandler: ((message: unknown) => void) | undefined;
 
-    proc.env.RIFTY_WORKER_THREADS = '1';
-    proc.env.RIFTY_WORKER_THREAD_ID = '77';
-    proc.env.RIFTY_WORKER_DATA_JSON = '{"mode":"rolldown"}';
+    proc.env.RIFTY_WORKER_THREADS = 'guest-poison';
+    proc.env.RIFTY_WORKER_THREAD_ID = '999';
+    proc.env.RIFTY_WORKER_DATA_JSON = '{"mode":"guest-poison"}';
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
+        launch: {
+          kind: 'worker-thread',
+          remoteFs: true,
+          threadId: 77,
+          workerDataJson: '{"mode":"rolldown"}',
+        },
+      },
+    });
     proc.send = (message: unknown) => {
       sent.push(message);
       return true;
@@ -384,6 +511,7 @@ globalThis.onmessage = ({ data }) => {
       proc.env.RIFTY_WORKER_THREADS = undefined;
       proc.env.RIFTY_WORKER_THREAD_ID = undefined;
       proc.env.RIFTY_WORKER_DATA_JSON = undefined;
+      publishKernelEntryBootstrap(null);
       proc.send = originalSend;
       proc.on = originalOn;
       _resetFallbackWarnState();

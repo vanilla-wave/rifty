@@ -1,5 +1,11 @@
 import type { ModuleKind } from './resolver.ts';
 
+/** CJS `module` object shared by execution, extension hooks, and cycles. */
+export interface CjsModule {
+  exports: Record<string, unknown>;
+  _compile(source: string, filename: string): void;
+}
+
 /**
  * Module registry record. `exports` is shared: CJS modules write to it as a
  * plain object; ESM modules expose it as a `null`-prototype object whose getters
@@ -14,8 +20,8 @@ export interface ModuleRecord {
   exports: Record<string, unknown>;
   /** Mutable slot table for ESM live bindings — `exports` getters read from here. */
   slots: Record<string, unknown>;
-  /** For CJS modules, the `module` object passed to the factory. */
-  cjsModule?: { exports: Record<string, unknown> };
+  /** For CJS modules, the exact `module` object passed to hooks and the factory. */
+  cjsModule?: CjsModule;
   /** Lazy ESM view of the final CJS exports. Same lifetime as this record. */
   cjsNamespace?: Record<string, unknown>;
 }

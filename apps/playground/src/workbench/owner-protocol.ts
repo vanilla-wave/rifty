@@ -5,6 +5,7 @@ import type {
   PtyPreviewReq,
 } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type { SerializedWorkbenchOwnerError } from './errors.ts';
 import {
   type ProjectDefinitionWire,
   inspectProjectDefinitionWire,
@@ -70,11 +71,11 @@ export type WorkbenchOwnerFailure =
   | {
       readonly type: 'workbench:failure';
       readonly opId: string;
-      readonly error: { readonly name: string; readonly message: string };
+      readonly error: SerializedWorkbenchOwnerError;
     }
   | {
       readonly type: 'workbench:failure';
-      readonly error: { readonly name: string; readonly message: string };
+      readonly error: SerializedWorkbenchOwnerError;
     };
 
 export type WorkbenchOwnerToPageMessage =

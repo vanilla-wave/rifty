@@ -6,10 +6,11 @@ import {
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  prepareViteBinSpawnRequest,
   prepareViteCli,
   prepareViteCliAcquisitionFiles,
   viteCliMode,
-  withViteCliEnv,
+  viteCliPreparationFromArgs,
 } from './vite-cli-prep.ts';
 import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
@@ -102,6 +103,35 @@ afterEach(() => {
   g.__riftyTrackCliPromise = savedTracker;
   g.__riftyTestCac = undefined;
   resetSyncMirror();
+});
+
+describe('viteCliPreparationFromArgs — executed entry authority', () => {
+  it('ignores Vite-shaped argv on a worker_threads entry', () => {
+    expect(
+      viteCliPreparationFromArgs({
+        root: '/app',
+        args: [],
+        executedBinPath: '/app/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs',
+        esbuildWasmUrl: ESBUILD_WASM_URL,
+      }),
+    ).toBeNull();
+  });
+
+  it('decodes the exact executed Vite shim', () => {
+    expect(
+      viteCliPreparationFromArgs({
+        root: '/app',
+        args: ['preview'],
+        executedBinPath: VITE_BIN,
+        esbuildWasmUrl: ESBUILD_WASM_URL,
+      }),
+    ).toEqual({
+      root: '/app',
+      mode: 'preview',
+      executedBinPath: VITE_BIN,
+      esbuildWasmUrl: ESBUILD_WASM_URL,
+    });
+  });
 });
 
 describe('prepareViteCliAcquisitionFiles — pre-promotion CLI keepalive patch', () => {
@@ -239,19 +269,9 @@ describe('prepareViteCliAcquisitionFiles — real Vite config ownership', () => 
 });
 
 describe('viteCliMode — CAC command matching (every case probed on REAL vite 7.3.6 CLI, 2026-07-07)', () => {
-  const ctx = {
-    cwd: '/proj',
-    env: {},
-    stdout: { write: () => {} },
-    stderr: { write: () => {} },
-  } as unknown as Parameters<typeof withViteCliEnv>[2];
   const assertMode = (args: readonly string[], expected: string): void => {
     const label = JSON.stringify(args);
     expect(viteCliMode(args), `${label} classifier`).toBe(expected);
-    expect(
-      withViteCliEnv('/proj/node_modules/.bin/vite', args, ctx).env.RIFTY_VITE_CLI_MODE,
-      `${label} env`,
-    ).toBe(expected);
   };
 
   // Real cac semantics: a command matches when the FIRST positional under THAT
@@ -364,29 +384,31 @@ describe('viteCliMode — CAC command matching (every case probed on REAL vite 7
   }
 });
 
-describe('withViteCliEnv — startup routing only', () => {
-  const ctx = {
+describe('prepareViteBinSpawnRequest — host-only preview correlation', () => {
+  const request = {
+    shimPath: '/proj/node_modules/.bin/vite',
+    args: ['--config', 'vite.custom.mjs', 'preview'],
     cwd: '/proj',
-    env: {},
-    stdout: { write: () => {} },
-    stderr: { write: () => {} },
-  } as unknown as Parameters<typeof withViteCliEnv>[2];
+    env: { USER_VALUE: 'kept', NAPI_RS_FORCE_WASI: '0' },
+    isTTY: false,
+  };
 
-  it('threads mode and preview scope without config/HMR forcing envs', () => {
-    const enved = withViteCliEnv(
-      '/proj/node_modules/.bin/vite',
-      ['--config', 'vite.custom.mjs', 'preview'],
-      ctx,
-    );
-    expect(enved.env.RIFTY_VITE_CLI_MODE).toBe('preview');
-    expect(enved.env.RIFTY_PREVIEW_SCOPE).toBeDefined();
-    expect(enved.env.RIFTY_VITE_CLI_USER_CONFIG).toBeUndefined();
-    expect(enved.env.RIFTY_VITE_CLI_HMR_OFF).toBeUndefined();
-    expect(enved.env.RIFTY_VITE_CLI_PORT).toBeUndefined();
+  it('mints preview scope and selects the installed upstream WASI binding', () => {
+    const prepared = prepareViteBinSpawnRequest(request);
+    expect(prepared.previewScope).toBeDefined();
+    expect(prepared.env).toEqual({
+      USER_VALUE: 'kept',
+      NAPI_RS_FORCE_WASI: '1',
+    });
+    expect(request.env).toEqual({
+      USER_VALUE: 'kept',
+      NAPI_RS_FORCE_WASI: '0',
+    });
   });
 
-  it('leaves non-vite command contexts unchanged', () => {
-    expect(withViteCliEnv('/proj/node_modules/.bin/webpack', ['serve'], ctx)).toBe(ctx);
+  it('leaves non-vite requests unchanged', () => {
+    const webpack = { ...request, shimPath: '/proj/node_modules/.bin/webpack' };
+    expect(prepareViteBinSpawnRequest(webpack)).toBe(webpack);
   });
 });
 

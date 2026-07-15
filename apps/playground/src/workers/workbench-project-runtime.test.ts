@@ -1,5 +1,9 @@
 import { globalProcessManager } from '@riftydev/kernel';
 import { RegistryClient } from '@riftydev/npm-client';
+import {
+  NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+  type NodeEntryBootstrapPayload,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
@@ -235,11 +239,43 @@ describe('Workbench project runtime', () => {
       argv: ['rifty', `${ROOT}/node_modules/.bin/vite`, '--port', '5173'],
       env: expect.objectContaining({
         USER_FLAG: 'preserved',
-        RIFTY_VITE_CLI_MODE: 'dev',
+        RIFTY_PREVIEW_SCOPE: 'scope-forged',
+        RIFTY_VITE_CLI_MODE: 'build',
       }),
+      entry: {
+        kind: 'url',
+        url: 'https://example.test/node-entry.js',
+        bootstrap: {
+          protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+          payload: expect.objectContaining({
+            hostRuntime: {
+              RIFTY_KERNEL_WORKER_URL: 'https://example.test/kernel.js',
+            },
+            launch: expect.objectContaining({
+              kind: 'program',
+              bin: true,
+              remoteFs: true,
+              nodeServe: true,
+              terminal: {
+                stdinIsTTY: false,
+                stdoutIsTTY: true,
+                stderrIsTTY: true,
+                cols: 90,
+                rows: 30,
+              },
+            }),
+          }),
+        },
+      },
     });
-    expect(worker.spec()?.env.RIFTY_INTERNAL_PTY_SID).toBeUndefined();
-    expect(worker.spec()?.env.RIFTY_PREVIEW_SCOPE).not.toBe('scope-forged');
+    expect(worker.spec()?.env.RIFTY_INTERNAL_PTY_SID).toBe('terminal-forged');
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected node-entry URL bootstrap');
+    }
+    const payload = entry.bootstrap.payload as NodeEntryBootstrapPayload;
+    if (payload.launch.kind !== 'program') throw new Error('expected program launch');
+    expect(payload.launch.previewScope).not.toBe('scope-forged');
 
     worker.emitMessage({
       type: 'rifty:node-listening',

@@ -183,13 +183,6 @@ export interface PtyServer {
 }
 
 const enc = new TextEncoder();
-const INTERNAL_ENV_KEYS = ['RIFTY_INTERNAL_PTY_SID'] as const;
-
-function publicEnv(env: Record<string, string>): Record<string, string> {
-  const out = { ...env };
-  for (const key of INTERNAL_ENV_KEYS) delete out[key];
-  return out;
-}
 
 /** Resolves when the signal aborts (immediately for an already-aborted one). */
 function abortSettled(signal: AbortSignal): Promise<void> {
@@ -450,7 +443,7 @@ class PtySessionActor {
       code,
       exit,
       cwd: this.#shell.cwd,
-      env: publicEnv(this.#shell.envSnapshot()),
+      env: { ...this.#shell.envSnapshot() },
       ...(error === undefined ? {} : { error }),
     });
   }
@@ -478,7 +471,7 @@ class PtySessionActor {
       code: 1,
       exit: { code: 1, signal: null },
       cwd: this.#shell.cwd,
-      env: publicEnv(this.#shell.envSnapshot()),
+      env: { ...this.#shell.envSnapshot() },
       error,
     });
   }
@@ -721,6 +714,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       }
       case 'pty:dev-config': {
         return Promise.resolve(
+          // TODO(backlog: playground/pty-dev-config-sync-throw-escapes-error-ack)
           deps.onDevConfig?.({
             templateId: frame.templateId,
             slug: frame.slug,

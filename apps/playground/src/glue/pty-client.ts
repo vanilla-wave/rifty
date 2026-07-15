@@ -354,7 +354,12 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       const pending = deferredVoid();
       s.readyWaiters.push(pending);
       try {
-        deps.send({ type: 'pty:open', sid, cwd: seed?.cwd, env: seed?.env });
+        deps.send({
+          type: 'pty:open',
+          sid,
+          ...(seed?.cwd === undefined ? {} : { cwd: seed.cwd }),
+          ...(seed?.env === undefined ? {} : { env: seed.env }),
+        });
       } catch (error) {
         const idx = s.readyWaiters.indexOf(pending);
         if (idx !== -1) s.readyWaiters.splice(idx, 1);

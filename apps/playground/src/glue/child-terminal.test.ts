@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bindChildTerminalResize, childTerminalEnv } from './child-terminal.ts';
+import {
+  bindChildTerminalResize,
+  childTerminalBootstrap,
+  childTerminalEnv,
+} from './child-terminal.ts';
 
 describe('child terminal contract', () => {
   it('shapes TTY spawn env once for node and .bin children', () => {
@@ -16,6 +20,16 @@ describe('child terminal contract', () => {
       RIFTY_STDERR_IS_TTY: '0',
       RIFTY_TTY_COLS: '80',
       RIFTY_TTY_ROWS: '24',
+    });
+  });
+
+  it('shapes node-entry TTY metadata without env strings', () => {
+    expect(childTerminalBootstrap({ isTTY: true, cols: 120, rows: 40 })).toEqual({
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 120,
+      rows: 40,
     });
   });
 

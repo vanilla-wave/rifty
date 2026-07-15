@@ -3,7 +3,7 @@
  * child worker reading the owner fs over sync-RPC; owner stays a free async
  * supervisor). Each resolved `.bin`/node
  * CLI runs in a supervised child worker-process that reads+writes the owner
- * store over `fs.*` sync-RPC (RIFTY_REMOTE_FS=1). The child is serve-capable:
+ * store over `fs.*` sync-RPC. The child is serve-capable:
  * run-to-completion CLIs still exit through node-entry lifecycle, while CLIs
  * that listen() stay alive and post their ports like `node <file>`.
  * The owner stays responsive (blocking work left its thread — ADR-0150
@@ -11,6 +11,7 @@
  */
 
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { BinExecutor } from '@riftydev/shell';
 import {
   type BinExecutorDeps,
@@ -18,7 +19,8 @@ import {
   type BinWorkerHandle,
   createBinExecutor,
 } from '../glue/bin-executor.ts';
-import { childTerminalEnv } from '../glue/child-terminal.ts';
+import { childTerminalBootstrap } from '../glue/child-terminal.ts';
+import { prepareViteBinSpawnRequest } from './vite-cli-prep.ts';
 
 /** Pure: build the spawn spec for a resolved bin request (unit-tested). */
 export function buildChildSpawnSpec(
@@ -27,19 +29,30 @@ export function buildChildSpawnSpec(
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
 ): SpawnWorkerSpec {
   return {
-    entry: { kind: 'url', url: nodeEntryUrl },
+    entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+      kind: 'program',
+      bin: true,
+      remoteFs: true,
+      nodeServe: true,
+      ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
+      terminal: childTerminalBootstrap(req),
+    }),
     argv: ['rifty', req.shimPath, ...req.args],
-    env: {
-      ...req.env,
-      ...nodeWorkerRuntimeEnv,
-      RIFTY_BIN: '1',
-      RIFTY_REMOTE_FS: '1',
-      RIFTY_NODE_SERVE: '1',
-      ...childTerminalEnv(req),
-    },
+    env: { ...req.env },
     cwd: req.cwd,
     serve: true,
   };
+}
+
+type OwnerChildBinRequestEnricher = (request: BinSpawnRequest) => BinSpawnRequest;
+
+/** Apply mandatory runtime policy before an owner may add app-local metadata. */
+export function prepareOwnerChildBinSpawnRequest(
+  request: BinSpawnRequest,
+  enrichRequest?: OwnerChildBinRequestEnricher,
+): BinSpawnRequest {
+  const prepared = prepareViteBinSpawnRequest(request);
+  return enrichRequest?.(prepared) ?? prepared;
 }
 
 /** Build the owner's child-spawning BinExecutor. `nodeEntryUrl` = node-entry bootstrap worker URL. */
@@ -47,8 +60,10 @@ export function createOwnerChildBinExecutor(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onExit'> = {},
+  enrichRequest?: OwnerChildBinRequestEnricher,
 ): BinExecutor {
   return createBinExecutor({
+    prepareRequest: (request) => prepareOwnerChildBinSpawnRequest(request, enrichRequest),
     ...hooks,
     spawn: (req): BinWorkerHandle => {
       const handle = globalProcessManager.spawnWorker(

@@ -9,7 +9,7 @@
  * VFS — the parity ADR-0137 already gives `child_process.spawn('node', …)`:
  *
  *  - {@link makeRecursiveRunner} (the BROWSER/owner seam, production default,
- *    HERE): spawns a node-entry child `kind:'url'` with `RIFTY_REMOTE_FS=1`,
+ *    HERE): spawns a node-entry child `kind:'url'` with a remote-FS launch payload,
  *    run-to-completion. The child reads the OWNER store over the P6a `fs.*`
  *    sync-RPC (ADR-0150) — SAME spawn shape as `owner-child-bin-executor`/
  *    `owner-child-node-executor`, minus `serve` (execSync captures stdout +
@@ -28,7 +28,7 @@
  */
 
 import { spawnKernelWorker } from '@riftydev/kernel';
-import { mergeNodeEntryWorkerEnv } from '../builtins/node-entry-runtime-config.ts';
+import { buildConfiguredNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
 /**
@@ -60,21 +60,16 @@ export interface RecursiveRunResult {
 /** A runner: turn a {@link NodeEntryRunSpec} into the child's stdout + exit. */
 export type NodeEntryRunner = (spec: NodeEntryRunSpec) => Promise<RecursiveRunResult>;
 
-/** One merge boundary: user env, host bootstrap snapshot, operation controls. */
+/** Node's child env snapshot. Host bootstrap and launch controls travel out of band. */
 export function buildRecursiveWorkerEnv(
   userEnv: Readonly<Record<string, string>>,
-  runtimeEnv?: Readonly<Record<string, string>>,
 ): Record<string, string> {
-  return {
-    ...mergeNodeEntryWorkerEnv(userEnv, runtimeEnv),
-    RIFTY_BIN: '0',
-    RIFTY_REMOTE_FS: '1',
-  };
+  return { ...userEnv };
 }
 
 /**
  * Browser/owner runner: spawn a node-entry child `kind:'url'` (the ADR-0137
- * bootstrap) with `RIFTY_REMOTE_FS=1`, capture its stdout, resolve on exit.
+ * bootstrap) with a typed remote-FS launch, capture its stdout, resolve on exit.
  *
  * Run-to-completion (no `serve`): the bootstrap's else-branch runs
  * `runNodeEntry` and exits on settle, so `onExit` fires and the stdout port
@@ -106,16 +101,19 @@ export function makeRecursiveRunner(): NodeEntryRunner {
       );
     }
     const env = buildRecursiveWorkerEnv(spec.env);
+    const entry = buildConfiguredNodeEntryWorkerEntry({
+      kind: 'program',
+      bin: false,
+      remoteFs: true,
+      nodeServe: false,
+    });
     const nestedPid = nextNestedPid++;
     const nested = spawnKernelWorker(
       {
-        entry: { kind: 'url', url: String(url) },
-        // RIFTY_BIN=0 → runNodeEntry(bin:false) imports the entry directly (not a
-        // .bin shim). RIFTY_REMOTE_FS=1 → the child reads the owner store over
-        // fs.* sync-RPC (ADR-0150). RIFTY_NODE_SERVE is intentionally UNSET:
-        // execSync is run-to-completion (capture stdout + exit), never a server,
-        // so the bootstrap's else-branch (plain runNodeEntry) runs and the realm
-        // reaps on settle.
+        entry,
+        // The URL-entry payload says bin:false + remoteFs:true + nodeServe:false:
+        // execSync reads the owner store, runs to completion, and never exposes
+        // these runtime controls through the guest's Node environment.
         argv: spec.argv,
         env,
         cwd: spec.cwd,
