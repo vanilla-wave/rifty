@@ -31,6 +31,11 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Owner-side Files, terminal, child, and package mutations now publish one
+  post-apply project state; Documents invalidate before Files reflection and
+  mutation replies (ADR-0275).
+- Git-owner restore and hard reset now carry exact semantic replacement
+  candidates while metadata-only changes remain ordinary writes (ADR-0276).
 - ProjectSession file/document versions are now session-local opaque CAS
   tokens; owner epochs/revisions stay private and foreign-session tokens reject
   before transport (ADR-0274).

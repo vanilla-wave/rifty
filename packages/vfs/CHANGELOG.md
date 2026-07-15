@@ -6,7 +6,9 @@
 
 - Shared non-empty `VfsMutationIntent` batches and generic
   `VfsMutationGuard`/`guardVfsMutations` contract let host policy fence the
-  exact real mutation without owning VFS behavior (ADR-0260).
+  exact real mutation without owning VFS behavior (ADR-0276).
+- `VfsMutationIntent` adds the semantic `{ kind: 'replace'; path }` candidate
+  scope for owner-proven content replacement (ADR-0276).
 
 ### Changed
 

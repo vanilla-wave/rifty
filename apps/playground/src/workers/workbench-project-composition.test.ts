@@ -6,14 +6,14 @@ import type {
   PackageMutationIntents,
 } from '../glue/package-mutation-executor.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
-import { createOwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
 const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 function realProjectVfs() {
-  const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+  const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(new MemoryFsSync(), {
     ownerEpoch: 'composition-owner',
     initialRoots: ['/'],
   });
@@ -37,9 +37,13 @@ function realProjectVfs() {
   return createWorkbenchProjectVfs({
     projectRoot: ROOT,
     authority,
+    appliedMutations,
     packageMutations,
     durability: 'ephemeral',
     emit: () => {},
+    fatal: (error) => {
+      throw error;
+    },
   });
 }
 

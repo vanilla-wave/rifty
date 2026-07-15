@@ -16,13 +16,17 @@ import {
   createProjectContentController,
 } from './project-content.ts';
 import type { ProjectDocumentReadEntry } from './project-documents.ts';
-import type { OwnerProjectFileEntry } from './project-file-boundary.ts';
+import type { ProjectDocumentsMutation } from './project-documents.ts';
+import { type OwnerProjectFileEntry, toProjectPath } from './project-file-boundary.ts';
 import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,
+  ProjectVfsAppliedMutation,
   ProjectVfsReadDirectoryResult,
   ProjectVfsReadFileResult,
+  ProjectVfsStateMessage,
 } from './project-vfs-protocol.ts';
+import { inspectOwnerProjectVfsFrame } from './project-vfs-protocol.ts';
 
 export interface ProjectContentTransportOptions {
   readonly projectRoot: string;
@@ -113,6 +117,31 @@ function cloneDirectoryRead(
   });
 }
 
+function documentMutation(
+  projectRoot: string,
+  mutation: ProjectVfsAppliedMutation,
+): ProjectDocumentsMutation {
+  switch (mutation.kind) {
+    case 'rename':
+      return Object.freeze({
+        kind: mutation.kind,
+        sourcePath: toProjectPath(projectRoot, mutation.sourcePath),
+        targetPath: toProjectPath(projectRoot, mutation.targetPath),
+      });
+    case 'remove':
+      return Object.freeze({
+        kind: mutation.kind,
+        path: toProjectPath(projectRoot, mutation.path),
+        recursive: mutation.recursive,
+      });
+    case 'reset':
+      return Object.freeze({
+        kind: mutation.kind,
+        rootPath: toProjectPath(projectRoot, mutation.rootPath),
+      });
+  }
+}
+
 /**
  * Session-local Project VFS composition. Owner identity, request correlation,
  * mirror reflection, commit replay, and durability stay behind one transport.
@@ -124,6 +153,7 @@ export function createProjectContentTransport(
   const reads = new Map<string, PendingRead>();
   const pendingCommits = new Set<Promise<unknown>>();
   let ownerEpoch: OwnerEpoch | null = null;
+  let lastAcceptedRevision: TreeRevision | null = null;
   let content: ProjectContentController | null = null;
   let closedError: Error | null = null;
   let ownerClosed = false;
@@ -342,42 +372,114 @@ export function createProjectContentTransport(
   const acceptSnapshot = (
     frame: Extract<OwnerProjectVfsFrame, { readonly type: 'workbench:project-vfs-snapshot' }>,
   ): void => {
-    if (ownerEpoch === null) {
-      if (frame.frame.root !== options.projectRoot) {
-        throw new VfsCommitProtocolError('Project VFS snapshot root mismatch');
-      }
-      ownerEpoch = frame.frame.ownerEpoch;
-      mirror.bindOwner(ownerEpoch, options.projectRoot);
-      mirror.update(frame.frame);
-      const controller = createProjectContentController({
-        projectRoot: options.projectRoot,
-        snapshots: mirror,
-        committer: trackedCommitter,
-        readVersionedFile,
-        readVersionedDirectory: async (path) => (await readVersionedDirectory(path)).entries,
-      });
-      content = Object.freeze({
-        files: controller.files,
-        documents: controller.documents,
-        preflightClose: controller.preflightClose,
-        async close() {
-          await controller.close();
-          await awaitAdmittedCommits();
-        },
-      });
-      readySettled = true;
-      resolveReady(content);
-      return;
+    if (ownerEpoch !== null) {
+      throw new VfsCommitProtocolError(
+        frame.frame.ownerEpoch === ownerEpoch
+          ? 'Project VFS received a duplicate initial snapshot'
+          : 'Project VFS initial snapshot owner mismatch',
+      );
     }
+    if (frame.frame.root !== options.projectRoot) {
+      throw new VfsCommitProtocolError('Project VFS snapshot root mismatch');
+    }
+    ownerEpoch = frame.frame.ownerEpoch;
+    mirror.bindOwner(ownerEpoch, options.projectRoot);
     mirror.update(frame.frame);
+    lastAcceptedRevision = frame.frame.treeRevision;
+    const controller = createProjectContentController({
+      projectRoot: options.projectRoot,
+      snapshots: mirror,
+      committer: trackedCommitter,
+      readVersionedFile,
+      readVersionedDirectory: async (path) => (await readVersionedDirectory(path)).entries,
+    });
+    content = Object.freeze({
+      files: controller.files,
+      documents: controller.documents,
+      invalidate: controller.invalidate,
+      invalidateAll: controller.invalidateAll,
+      preflightClose: controller.preflightClose,
+      async close() {
+        await controller.close();
+        await awaitAdmittedCommits();
+      },
+    });
+    readySettled = true;
+    resolveReady(content);
   };
 
-  const accept = (frame: OwnerProjectVfsFrame): void => {
+  const stateFailure = (error: unknown): never => {
+    const failure =
+      error instanceof VfsCommitProtocolError
+        ? error
+        : new VfsCommitProtocolError(`Project VFS state rejected: ${toError(error).message}`);
+    disconnect(failure);
+    throw failure;
+  };
+
+  const acceptState = (state: ProjectVfsStateMessage): void => {
+    try {
+      if (ownerEpoch === null || content === null || lastAcceptedRevision === null) {
+        throw new VfsCommitProtocolError('Project VFS state arrived before its initial snapshot');
+      }
+      if (state.frame.ownerEpoch !== ownerEpoch) {
+        throw new VfsCommitProtocolError('Project VFS state owner mismatch');
+      }
+      if (state.frame.root !== options.projectRoot) {
+        throw new VfsCommitProtocolError('Project VFS state root mismatch');
+      }
+      if (state.fromTreeRevision !== lastAcceptedRevision) {
+        throw new VfsCommitProtocolError(
+          `Project VFS state started at revision ${String(state.fromTreeRevision)}; expected ${String(lastAcceptedRevision)}`,
+        );
+      }
+
+      const mutations = state.mutations.map((mutation) => ({
+        mutation: documentMutation(options.projectRoot, mutation),
+        revision: mutation.treeRevision,
+      }));
+      for (const applied of mutations) {
+        content.invalidate(applied.mutation, {
+          ownerEpoch,
+          treeRevision: applied.revision,
+        });
+      }
+      mirror.update(state.frame);
+      lastAcceptedRevision = state.frame.treeRevision;
+    } catch (error) {
+      stateFailure(error);
+    }
+  };
+
+  const accept = (candidate: OwnerProjectVfsFrame): void => {
     if (closedError !== null) return;
+    let frame = candidate;
+    if (
+      candidate.type === 'workbench:project-vfs-state' ||
+      candidate.type === 'workbench:project-vfs-fatal'
+    ) {
+      try {
+        frame = inspectOwnerProjectVfsFrame(candidate);
+      } catch (error) {
+        stateFailure(error);
+      }
+    }
+    if (frame.type === 'workbench:project-vfs-fatal') {
+      disconnect(ownerReadError(frame.error));
+      return;
+    }
     if (client.accept(frame)) return;
     switch (frame.type) {
-      case 'workbench:project-vfs-snapshot':
-        acceptSnapshot(frame);
+      case 'workbench:project-vfs-snapshot': {
+        try {
+          acceptSnapshot(frame);
+        } catch (error) {
+          stateFailure(error);
+        }
+        return;
+      }
+      case 'workbench:project-vfs-state':
+        acceptState(frame);
         return;
       case 'workbench:project-vfs-read-file-result':
         acceptFileResult(frame);
@@ -401,6 +503,7 @@ export function createProjectContentTransport(
       reads.delete(requestId);
       pending.reject(error);
     }
+    content?.invalidateAll('reset');
     client.disconnect();
     if (!ownerClosed) {
       ownerClosed = true;

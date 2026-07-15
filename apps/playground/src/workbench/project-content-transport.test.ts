@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
+import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import type { VfsSnapshotFrame } from '../glue/vfs-snapshot-port.ts';
 import { ProjectFileOperationError } from './errors.ts';
 import { createProjectContentTransport } from './project-content-transport.ts';
-import type { OwnerProjectVfsFrame, PageProjectVfsFrame } from './project-vfs-protocol.ts';
+import type {
+  OwnerProjectVfsFrame,
+  PageProjectVfsFrame,
+  ProjectVfsAppliedMutation,
+} from './project-vfs-protocol.ts';
 
 const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const OWNER = 'owner-a';
@@ -58,6 +63,18 @@ function harness() {
     acceptSnapshot(frame = snapshot(1)) {
       transport.accept({ type: 'workbench:project-vfs-snapshot', frame });
     },
+    acceptState(
+      frame = snapshot(2, 'next'),
+      fromTreeRevision = 1,
+      mutations: readonly ProjectVfsAppliedMutation[] = [],
+    ) {
+      transport.accept({
+        type: 'workbench:project-vfs-state',
+        fromTreeRevision,
+        mutations,
+        frame,
+      });
+    },
   };
 }
 
@@ -73,7 +90,7 @@ function commitFrame(sent: readonly PageProjectVfsFrame[]) {
 }
 
 describe('ProjectContentTransport', () => {
-  it('requests and awaits the first exact snapshot, then ignores stale owner frames', async () => {
+  it('requests and awaits the first exact snapshot', async () => {
     const h = harness();
     expect(h.sent).toEqual([{ type: 'workbench:project-vfs-snapshot-request' }]);
     let ready = false;
@@ -97,14 +114,6 @@ describe('ProjectContentTransport', () => {
     if (initialFile === undefined) throw new Error('initial file version missing');
     expect(initialFile.version).not.toBe('file-v1');
     expect(initialFile.version).not.toContain(OWNER);
-
-    h.acceptSnapshot(snapshot(99, 'stale', 'retired-owner'));
-    expect(content.files.snapshot().entries).toContainEqual({
-      path: '/src/main.ts',
-      kind: 'file',
-      size: 7,
-      version: initialFile.version,
-    });
   });
 
   it('correlates atomic reads by request, path, owner, and revision without public leakage', async () => {
@@ -194,7 +203,7 @@ describe('ProjectContentTransport', () => {
       terminal,
     });
     h.transport.accept({ type: 'rifty:owner-vfs-commit-released', terminal });
-    h.acceptSnapshot(snapshot(2, 'next'));
+    h.acceptState(snapshot(2, 'next'));
     await Promise.resolve();
     expect(h.sent.at(-1)).toEqual({
       type: 'rifty:owner-vfs-durability',
@@ -255,7 +264,7 @@ describe('ProjectContentTransport', () => {
     } as const;
     h.transport.accept(terminal);
     h.transport.accept({ type: 'rifty:owner-vfs-commit-released', terminal });
-    h.acceptSnapshot(snapshot(2, 'next'));
+    h.acceptState(snapshot(2, 'next'));
     await Promise.resolve();
     expect(closed).toBe(false);
     expect(h.sent.at(-1)).toEqual({
@@ -298,12 +307,129 @@ describe('ProjectContentTransport', () => {
     );
   });
 
-  it('rejects a snapshot for another root before binding readiness', async () => {
+  it('fatally rejects a snapshot for another root before binding readiness', async () => {
     const h = harness();
+    let rejected = false;
+    void h.transport.ready.catch(() => {
+      rejected = true;
+    });
     const wrong: OwnerProjectVfsFrame = {
       type: 'workbench:project-vfs-snapshot',
       frame: snapshot(1, 'wrong', OWNER, '/other/project'),
     };
     expect(() => h.transport.accept(wrong)).toThrow('Project VFS snapshot root mismatch');
+    await Promise.resolve();
+    expect(rejected).toBe(true);
+  });
+
+  it.each([
+    { name: 'same owner', frame: snapshot(2, 'duplicate') },
+    { name: 'foreign owner', frame: snapshot(2, 'foreign', 'retired-owner') },
+  ])('fatally disconnects a duplicate initial snapshot from $name', async ({ frame }) => {
+    const h = harness();
+    h.acceptSnapshot();
+    const content = await h.transport.ready;
+
+    expect(() => h.acceptSnapshot(frame)).toThrow(VfsCommitProtocolError);
+    expect(content.files.snapshot().entries).toEqual([]);
+    await expect(content.files.readFile('/src/main.ts')).rejects.toBeInstanceOf(
+      ProjectFileOperationError,
+    );
+  });
+
+  it.each([
+    {
+      name: 'skipped prior revision',
+      fromTreeRevision: 0,
+      frame: snapshot(2),
+    },
+    {
+      name: 'foreign owner',
+      fromTreeRevision: 1,
+      frame: snapshot(2, 'foreign', 'retired-owner'),
+    },
+    {
+      name: 'foreign root',
+      fromTreeRevision: 1,
+      frame: snapshot(2, 'foreign', OWNER, '/other/project'),
+    },
+    {
+      name: 'final revision below prior revision',
+      fromTreeRevision: 2,
+      frame: snapshot(1),
+    },
+  ])(
+    'fatally disconnects an invalid owner state with $name',
+    async ({ frame, fromTreeRevision }) => {
+      const h = harness();
+      h.acceptSnapshot();
+      const content = await h.transport.ready;
+
+      expect(() => h.acceptState(frame, fromTreeRevision)).toThrow(VfsCommitProtocolError);
+      expect(content.files.snapshot().entries).toEqual([]);
+      await expect(content.files.readFile('/src/main.ts')).rejects.toBeInstanceOf(
+        ProjectFileOperationError,
+      );
+    },
+  );
+
+  // Fault class: corrupt-input. A malformed state uses the same fatal fence as
+  // a well-shaped but out-of-order state; the page never preserves a live mirror.
+  it('fatally disconnects a malformed owner state before applying it', async () => {
+    const h = harness();
+    h.acceptSnapshot();
+    const content = await h.transport.ready;
+    const malformed = {
+      type: 'workbench:project-vfs-state',
+      fromTreeRevision: 1,
+      mutations: [
+        {
+          kind: 'remove',
+          treeRevision: 2,
+          path: `${ROOT}/src/main.ts`,
+          recursive: 'yes',
+        },
+      ],
+      frame: snapshot(2),
+    } as unknown as OwnerProjectVfsFrame;
+
+    expect(() => h.transport.accept(malformed)).toThrow(VfsCommitProtocolError);
+    expect(content.files.snapshot().entries).toEqual([]);
+    await expect(content.files.readFile('/src/main.ts')).rejects.toBeInstanceOf(
+      ProjectFileOperationError,
+    );
+  });
+
+  it('turns an owner fatal frame into a reset fence and transport disconnect', async () => {
+    const h = harness();
+    h.acceptSnapshot();
+    const content = await h.transport.ready;
+    const opening = content.documents.open('/src/main.ts');
+    h.transport.accept({
+      type: 'workbench:project-vfs-read-file-result',
+      requestId: 'transport-1',
+      ok: true,
+      ownerEpoch: OWNER,
+      treeRevision: 1,
+      entry: {
+        path: `${ROOT}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    });
+    const document = await opening;
+
+    h.transport.accept({
+      type: 'workbench:project-vfs-fatal',
+      error: { name: 'OwnerStateError', message: 'state delivery failed' },
+    });
+
+    expect(document.snapshot()).toMatchObject({ staleReason: 'reset', closed: false });
+    expect(content.files.snapshot().entries).toEqual([]);
+    await expect(content.files.readFile('/src/main.ts')).rejects.toBeInstanceOf(
+      ProjectFileOperationError,
+    );
   });
 });

@@ -43,7 +43,7 @@ interface IntentClassifierCase {
 }
 
 const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
-  ...(['write', 'mkdir', 'rm', 'utimes'] as const).flatMap(
+  ...(['write', 'replace', 'mkdir', 'rm', 'utimes'] as const).flatMap(
     (kind) =>
       [
         {
@@ -162,7 +162,7 @@ it('preflights every endpoint in a logical batch before an earlier write can app
       (paths) => owner.assertPortablePaths(paths),
       [
         { kind: 'write', path: '/workspace/ordinary.txt' },
-        { kind: 'write', path: installStampPath('/workspace') },
+        { kind: 'replace', path: installStampPath('/workspace') },
       ],
     );
     applied = true;
@@ -328,28 +328,31 @@ describe('package mutation routing', () => {
     ]);
   });
 
-  it('recursively discovers an inactive nested trusted claim for a broad Git write', async () => {
-    const { vfs, fsSync } = createMemoryFs();
-    const nested: PackageAcquisitionProject = {
-      ...PROJECT,
-      projectId: 'inactive-tool',
-      root: '/repo/tools/inactive',
-      slug: 'inactive-tool',
-    };
-    fsSync.mkdirSync(`${nested.root}/node_modules/pkg`, { recursive: true });
-    fsSync.writeFileSync(`${nested.root}/package.json`, enc.encode(PACKAGE_JSON));
-    const stamps = createInstallStampAuthority({ vfs, fsSync });
-    const claim = await stamps.demote(nested);
-    const promoted = await stamps.promote(
-      { ...nested, packageJsonText: PACKAGE_JSON },
-      { epoch: claim.epoch, packages: 1 },
-    );
-    if (promoted.status !== 'trusted') throw new Error('test setup failed to trust nested tree');
+  it.each(['write', 'rm', 'replace'] as const)(
+    'recursively discovers an inactive nested trusted claim for a broad %s',
+    async (kind) => {
+      const { vfs, fsSync } = createMemoryFs();
+      const nested: PackageAcquisitionProject = {
+        ...PROJECT,
+        projectId: 'inactive-tool',
+        root: '/repo/tools/inactive',
+        slug: 'inactive-tool',
+      };
+      fsSync.mkdirSync(`${nested.root}/node_modules/pkg`, { recursive: true });
+      fsSync.writeFileSync(`${nested.root}/package.json`, enc.encode(PACKAGE_JSON));
+      const stamps = createInstallStampAuthority({ vfs, fsSync });
+      const claim = await stamps.demote(nested);
+      const promoted = await stamps.promote(
+        { ...nested, packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1 },
+      );
+      if (promoted.status !== 'trusted') throw new Error('test setup failed to trust nested tree');
 
-    expect(
-      discoverPackageMutationTransitions(fsSync, [], [{ kind: 'write', path: '/repo' }]),
-    ).toEqual([{ mode: 'revoke', root: nested.root }]);
-  });
+      expect(discoverPackageMutationTransitions(fsSync, [], [{ kind, path: '/repo' }])).toEqual([
+        { mode: 'revoke', root: nested.root },
+      ]);
+    },
+  );
 
   it('resolves a whole-root reset at the FIFO head and revokes nested project claims', async () => {
     const pair = createMemoryFs();

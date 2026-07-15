@@ -513,7 +513,7 @@ function mutate(
 describe.each(['rename', 'remove'] as const)(
   'ProjectSession %s ↔ document save owner ordering',
   (kind) => {
-    it('invalidates at the successful mutation ACK before reflection or durability', async () => {
+    it('invalidates from owner-applied state before reflection or durability', async () => {
       const h = harness();
       const document = await h.controller.documents.open('/src/main.ts');
       const initialPublicVersion = document.snapshot().version;
@@ -523,6 +523,17 @@ describe.each(['rename', 'remove'] as const)(
       const mutating = mutate(h, kind, initialPublicVersion);
       const saving = document.save();
       await nextTurn();
+
+      h.controller.invalidate(
+        kind === 'rename'
+          ? {
+              kind,
+              sourcePath: '/src/main.ts',
+              targetPath: '/src/renamed.ts',
+            }
+          : { kind, path: '/src/main.ts', recursive: false },
+        { ownerEpoch: OWNER_EPOCH, treeRevision: h.authority.treeRevision },
+      );
 
       expect(await isPending(mutating)).toBe(true);
       expect(h.durabilityBarrier).not.toHaveBeenCalled();

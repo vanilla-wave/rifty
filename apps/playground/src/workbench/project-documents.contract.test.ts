@@ -486,6 +486,28 @@ describe('ProjectSession documents contract', () => {
     });
   });
 
+  it('unconditionally lifecycle-invalidates tracked and admitted documents', async () => {
+    const h = harness();
+    const tracked = await h.controller.documents.open('/src/main.ts');
+    const pendingRead = deferred<VersionedEntry>();
+    h.readVersionedFile.mockImplementationOnce(() => pendingRead.promise);
+    const opening = h.controller.documents.open('/src/pending.ts');
+
+    h.controller.invalidateAll('reset');
+    expect(tracked.snapshot()).toMatchObject({ staleReason: 'reset', closed: false });
+
+    pendingRead.resolve({
+      path: `${ROOT}/src/pending.ts`,
+      kind: 'file',
+      size: 3,
+      content: encoder.encode('new'),
+      version: 'file-v99',
+      ownerEpoch: OWNER_EPOCH,
+      treeRevision: 99,
+    });
+    await expect(opening).rejects.toMatchObject({ reason: 'reset' });
+  });
+
   it('rejects every invalid public path before the atomic owner read', async () => {
     const h = harness();
 

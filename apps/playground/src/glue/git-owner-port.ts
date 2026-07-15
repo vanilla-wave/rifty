@@ -98,7 +98,7 @@ function pathspecMutationRoot(root: string, pathspec: string): string {
   return normalizePath(`${root}/${normalized}`);
 }
 
-/** Semantic write set for owner Git RPC; empty means the request is read-only. */
+/** Semantic mutation candidates for owner Git RPC; empty means read-only. */
 export function gitOwnerMutationIntents(
   request: GitOwnerRequest,
   root: string,
@@ -120,14 +120,14 @@ export function gitOwnerMutationIntents(
         gitMetadata,
         ...request.pathspecs.map(
           (pathspec): VfsMutationIntent => ({
-            kind: 'rm',
+            kind: 'replace',
             path: pathspecMutationRoot(root, pathspec),
           }),
         ),
       ];
     case 'reset':
       return request.input.mode === 'hard'
-        ? [gitMetadata, { kind: 'rm', path: normalizePath(root) }]
+        ? [gitMetadata, { kind: 'replace', path: normalizePath(root) }]
         : [gitMetadata];
     case 'add':
     case 'remove':

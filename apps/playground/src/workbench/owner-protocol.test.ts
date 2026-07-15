@@ -491,6 +491,34 @@ describe('Workbench owner protocol', () => {
         },
       ],
     } as const;
+    const state = {
+      type: 'workbench:project-vfs-state',
+      fromTreeRevision: 0,
+      mutations: [
+        {
+          kind: 'rename',
+          treeRevision: 1,
+          sourcePath: '/.rifty/workbench/projects/p-1/src/old.ts',
+          targetPath: '/.rifty/workbench/projects/p-1/src/main.ts',
+        },
+        {
+          kind: 'remove',
+          treeRevision: 2,
+          path: '/.rifty/workbench/projects/p-1/src/gone.ts',
+          recursive: false,
+        },
+        {
+          kind: 'reset',
+          treeRevision: 3,
+          rootPath: '/.rifty/workbench/projects/p-1',
+        },
+      ],
+      frame: { ...snapshot, treeRevision: 3 },
+    } as const;
+    const fatal = {
+      type: 'workbench:project-vfs-fatal',
+      error: { name: 'Error', message: 'project state delivery failed' },
+    } as const;
     const pageFrames = [
       request,
       {
@@ -580,6 +608,8 @@ describe('Workbench owner protocol', () => {
         error: { kind: 'error', name: 'Error', message: 'flush failed' },
       },
       { type: 'workbench:project-vfs-snapshot', frame: snapshot },
+      state,
+      fatal,
       {
         type: 'workbench:project-vfs-read-file-result',
         requestId: 'read-1',
@@ -712,6 +742,12 @@ describe('Workbench owner protocol', () => {
         type: 'workbench:project-vfs-snapshot',
         frame: { ...snapshot, extra: true },
       },
+      { ...state, extra: true },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], extra: true }, ...state.mutations.slice(1)],
+      },
+      { ...fatal, error: { ...fatal.error, extra: true } },
       {
         type: 'workbench:project-vfs-read-file-result',
         requestId: 'read-extra',
@@ -773,6 +809,57 @@ describe('Workbench owner protocol', () => {
       },
     ] as const;
     for (const frame of nestedOwnerExtras) {
+      expect(() =>
+        ownerMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
+      ).toThrow(TypeError);
+    }
+
+    expect(() =>
+      ownerMessage({
+        type: 'workbench:project-vfs',
+        projectToken: TOKEN,
+        frame: {
+          ...state,
+          mutations: [state.mutations[0], { ...state.mutations[1], treeRevision: 1 }],
+        },
+      }),
+    ).not.toThrow();
+
+    const invalidStates = [
+      { ...state, fromTreeRevision: -1 },
+      { ...state, fromTreeRevision: 1 },
+      {
+        ...state,
+        mutations: [
+          { ...state.mutations[0], treeRevision: 2 },
+          { ...state.mutations[1], treeRevision: 1 },
+        ],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], treeRevision: 4 }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], sourcePath: 'relative.ts' }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[1], recursive: 'yes' }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[2], rootPath: 'relative' }],
+      },
+      {
+        ...state,
+        fromTreeRevision: 2,
+        mutations: [],
+        frame: { ...state.frame, treeRevision: 1 },
+      },
+      { ...fatal, error: { ...fatal.error, name: '' } },
+    ] as const;
+    for (const frame of invalidStates) {
       expect(() =>
         ownerMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
       ).toThrow(TypeError);

@@ -27,11 +27,11 @@ const identityPathspec: PathspecMapper = (pathspec) => pathspec;
  * = files←index/source) + the pathspecs + optional tree-ish `source`. Default
  * (no `--staged`/`--worktree`) is worktree-only, matching real git.
  */
-interface RestorePlan {
-  staged: boolean;
-  worktree: boolean;
-  source?: string;
-  pathspecs: string[];
+export interface PreparedRestorePlan {
+  readonly staged: boolean;
+  readonly worktree: boolean;
+  readonly source?: string;
+  readonly pathspecs: readonly string[];
 }
 
 /**
@@ -41,7 +41,7 @@ interface RestorePlan {
  * (bounded) and a revspec in `--source` (reuse checkout's revspec ceiling) →
  * loud-throw. Unknown flags → loud-throw.
  */
-function parseRestore(args: string[]): RestorePlan {
+export function parseRestore(args: string[]): PreparedRestorePlan {
   const rest = args.slice(1);
   const dashDash = rest.indexOf('--');
   const flagTokens = dashDash === -1 ? rest : rest.slice(0, dashDash);
@@ -97,6 +97,15 @@ function parseRestore(args: string[]): RestorePlan {
   return { staged, worktree, source, pathspecs };
 }
 
+/** Parse and map restore pathspecs once for mutation planning and execution. */
+export function prepareRestore(
+  args: string[],
+  mapPathspec: PathspecMapper = identityPathspec,
+): PreparedRestorePlan {
+  const plan = parseRestore(args);
+  return { ...plan, pathspecs: plan.pathspecs.map(mapPathspec) };
+}
+
 /**
  * `git restore` — silent on success (both streams empty). `--staged` unstages
  * (index←HEAD); worktree restore reuses the checkout engine (files←index, or
@@ -108,20 +117,16 @@ export async function doRestore(
   args: string[],
   ctx: CommandContext,
   mapPathspec: PathspecMapper = identityPathspec,
+  prepared?: PreparedRestorePlan,
 ): Promise<number> {
-  let plan: RestorePlan;
+  let plan: PreparedRestorePlan;
   try {
-    plan = parseRestore(args);
+    plan = prepared ?? prepareRestore(args, mapPathspec);
   } catch (e) {
-    return renderCheckoutError(e, ctx);
+    return renderCheckoutOrFatal(e, ctx);
   }
 
-  let pathspecs: string[];
-  try {
-    pathspecs = plan.pathspecs.map(mapPathspec);
-  } catch (e) {
-    return renderCheckoutError(e, ctx);
-  }
+  const pathspecs = [...plan.pathspecs];
   if (pathspecs.length === 0) {
     // Real git: `fatal: you must specify path(s) to restore` (exit 128). Bounded
     // — loud rather than a silent no-op (that would lie about doing nothing).

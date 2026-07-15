@@ -28,6 +28,12 @@ import {
   equalHostCommitAcks,
   equalHostCommitRequests,
 } from '../glue/owner-vfs-protocol.ts';
+import {
+  type OwnerVfsAppliedJournal,
+  type OwnerVfsAppliedMutation,
+  type OwnerVfsAppliedMutations,
+  createOwnerVfsAppliedJournal,
+} from './owner-vfs-applied-journal.ts';
 
 interface TrackedEntry {
   readonly kind: 'file' | 'dir';
@@ -84,6 +90,12 @@ export interface OwnerVfsAuthority extends FsSync {
 export interface OwnerVfsAuthorityComposition {
   readonly authority: OwnerVfsAuthority;
   readonly installStampClaims: InstallStampClaimIo;
+  readonly appliedMutations: OwnerVfsAppliedMutations;
+}
+
+interface OwnerVfsCompositionCapabilities {
+  readonly installStampClaims: InstallStampClaimIo;
+  readonly appliedMutations: OwnerVfsAppliedMutations;
 }
 
 interface FlushableFsSync extends FsSync {
@@ -132,12 +144,12 @@ export function createOwnerVfsAuthorityComposition(
   fs: FsSync,
   options: OwnerVfsAuthorityOptions = {},
 ): OwnerVfsAuthorityComposition {
-  let installStampClaims: InstallStampClaimIo | undefined;
-  const authority = new OwnerVfsAuthorityImpl(fs, options, (claims) => {
-    installStampClaims = claims;
+  let capabilities: OwnerVfsCompositionCapabilities | undefined;
+  const authority = new OwnerVfsAuthorityImpl(fs, options, (constructed) => {
+    capabilities = constructed;
   });
-  if (!installStampClaims) throw new Error('owner VFS claim capability was not constructed');
-  return Object.freeze({ authority, installStampClaims });
+  if (!capabilities) throw new Error('owner VFS composition capabilities were not constructed');
+  return Object.freeze({ authority, ...capabilities });
 }
 
 class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
@@ -145,6 +157,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   readonly #initialRoots: readonly string[];
   readonly #entries = new Map<string, TrackedEntry>();
   readonly #hostCommits = new Map<string, HostCommitRecord>();
+  readonly #appliedJournal: OwnerVfsAppliedJournal;
   #treeRevision: TreeRevision = 0;
   #versionSequence = 0n;
   readonly ownerEpoch: OwnerEpoch;
@@ -152,11 +165,12 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   constructor(
     fs: FsSync,
     options: OwnerVfsAuthorityOptions,
-    receiveInstallStampClaims?: (claims: InstallStampClaimIo) => void,
+    receiveCompositionCapabilities?: (capabilities: OwnerVfsCompositionCapabilities) => void,
   ) {
     this.#fs = fs;
     this.ownerEpoch = options.ownerEpoch ?? createOwnerEpoch();
     if (this.ownerEpoch.length === 0) throw new Error('owner VFS epoch must be non-empty');
+    this.#appliedJournal = createOwnerVfsAppliedJournal(this.ownerEpoch);
     this.#initialRoots = [...new Set((options.initialRoots ?? ['/']).map(normalizeOwnerPath))].sort(
       (left, right) => pathDepth(right) - pathDepth(left),
     );
@@ -174,7 +188,12 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
         this.#writeInstallStampClaim(root, data, claimOptions),
       remove: (root: string) => this.#removeInstallStampClaim(root),
     });
-    receiveInstallStampClaims?.(installStampClaims);
+    receiveCompositionCapabilities?.(
+      Object.freeze({
+        installStampClaims,
+        appliedMutations: this.#appliedJournal.appliedMutations,
+      }),
+    );
   }
 
   get treeRevision(): TreeRevision {
@@ -211,7 +230,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     this.assertPortablePaths([normalized]);
     this.#assertRevisionAvailable();
     this.#fs.writeFileSync(normalized, data.slice());
-    this.#recordMutation([normalized]);
+    this.#recordMutation([normalized], [], [], [], [normalized]);
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
@@ -234,7 +253,15 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     const rootStillExists = this.#fs.statSyncOrNull(normalized) !== null;
     const removed = tracked.filter((item) => item !== normalized || !rootStillExists);
     if (removed.length > 0) {
-      this.#recordMutation([this.#parentWithinRoot(normalized)], removed);
+      const removedRoot = this.#entries.get(normalized);
+      const recursive =
+        removed.some((item) => descendantOf(item, normalized)) || removedRoot?.kind === 'dir';
+      this.#recordMutation(
+        [this.#parentWithinRoot(normalized)],
+        removed,
+        [],
+        [{ kind: 'remove', path: normalized, recursive }],
+      );
     }
   }
 
@@ -252,7 +279,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     this.assertPortablePaths([source, target]);
     this.#assertRevisionAvailable();
     this.#fs.copyFileSync(source, target);
-    this.#recordMutation([target]);
+    this.#recordMutation([target], [], [], [], [target]);
   }
 
   cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
@@ -299,6 +326,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       [this.#parentWithinRoot(source), this.#parentWithinRoot(target)],
       removed,
       [target],
+      [{ kind: 'rename', sourcePath: source, targetPath: target }],
     );
   }
 
@@ -673,6 +701,8 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     touched: readonly string[],
     removed: readonly string[] = [],
     refreshSubtrees: readonly string[] = [],
+    appliedMutations: readonly OwnerVfsAppliedMutation[] = [],
+    contentWritePaths: readonly string[] = [],
   ): void {
     this.#treeRevision += 1;
     const revision = this.#treeRevision;
@@ -703,6 +733,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       });
       assigned.add(path);
     }
+    this.#appliedJournal.recordOrdinaryRevision(revision, appliedMutations, contentWritePaths);
   }
 
   /** Claims are hidden authority metadata. Their revision is observable for
@@ -715,12 +746,14 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     const stat = this.#fs.statSyncOrNull(path);
     if (stat === null) {
       this.#entries.delete(path);
+      this.#appliedJournal.recordClaimRevision(revision);
       return;
     }
     this.#entries.set(path, {
       kind: stat.isDirectory ? 'dir' : 'file',
       version: this.#newVersion(revision),
     });
+    this.#appliedJournal.recordClaimRevision(revision);
   }
 
   #assignSubtree(path: string, revision: TreeRevision, assigned: Set<string>): void {

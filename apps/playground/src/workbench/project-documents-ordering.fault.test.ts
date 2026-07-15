@@ -43,7 +43,7 @@ function receipt(versions: VfsCommitReceipt['versions'], treeRevision = 2): VfsC
   };
 }
 
-function harness() {
+function harness(readTreeRevision = 1) {
   const versions = createProjectFileVersionBoundary('documents-ordering-fault');
   const readVersionedFile = vi.fn(
     async (path: string): Promise<VersionedEntry> => ({
@@ -53,7 +53,7 @@ function harness() {
       content: encoder.encode('old'),
       version: 'file-v1',
       ownerEpoch: OWNER_EPOCH,
-      treeRevision: 1,
+      treeRevision: readTreeRevision,
     }),
   );
   let commitImpl: (operation: HostCommitOperation) => Promise<VfsCommitReceipt> = async () =>
@@ -77,6 +77,87 @@ function harness() {
 }
 
 describe('ProjectSession document ordering faults', () => {
+  // Fault class: observable-order + sibling-drift. A read may overtake its
+  // matching state frame; tracked opens need the same revision gate as pending opens.
+  it('keeps a document read at the invalidation revision current, then stales it later', async () => {
+    const h = harness(2);
+    const document = await h.controller.documents.open('/src/main.ts');
+
+    h.controller.invalidate(
+      {
+        kind: 'rename',
+        sourcePath: '/src/old.ts',
+        targetPath: '/src/main.ts',
+      },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 2 },
+    );
+    expect(document.snapshot().staleReason).toBeNull();
+
+    h.controller.invalidate(
+      { kind: 'remove', path: '/src/main.ts' },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 3 },
+    );
+    expect(document.snapshot().staleReason).toBe('delete');
+  });
+
+  it('advances the invalidation gate to a successful save receipt', async () => {
+    const h = harness();
+    h.setCommit(async () => receipt([{ path: PATH, version: 'file-v2' }], 2));
+    const document = await h.controller.documents.open('/src/main.ts');
+    document.replace('saved');
+    await document.save();
+
+    h.controller.invalidate(
+      {
+        kind: 'rename',
+        sourcePath: '/src/old.ts',
+        targetPath: '/src/main.ts',
+      },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 2 },
+    );
+    expect(document.snapshot().staleReason).toBeNull();
+
+    h.controller.invalidate(
+      { kind: 'remove', path: '/src/main.ts' },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 3 },
+    );
+    expect(document.snapshot().staleReason).toBe('delete');
+  });
+
+  it('advances the invalidation gate from retained applied-failure evidence', async () => {
+    const h = harness();
+    h.setCommit(async () => {
+      throw new VfsCommitAppliedError(
+        {
+          operationId: 'save-2',
+          ownerEpoch: OWNER_EPOCH,
+          treeRevision: 2,
+          versions: [{ path: PATH, version: 'file-v2' }],
+        },
+        new Error('reflection failed'),
+      );
+    });
+    const document = await h.controller.documents.open('/src/main.ts');
+    document.replace('applied');
+    await expect(document.save()).rejects.toBeInstanceOf(ProjectFileOperationError);
+
+    h.controller.invalidate(
+      {
+        kind: 'rename',
+        sourcePath: '/src/old.ts',
+        targetPath: '/src/main.ts',
+      },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 2 },
+    );
+    expect(document.snapshot().staleReason).toBeNull();
+
+    h.controller.invalidate(
+      { kind: 'remove', path: '/src/main.ts' },
+      { ownerEpoch: OWNER_EPOCH, treeRevision: 3 },
+    );
+    expect(document.snapshot().staleReason).toBe('delete');
+  });
+
   it('preserves applied proof and its CAS base when a later invalidation precedes observation failure', async () => {
     const h = harness();
     const observing = deferred<VfsCommitReceipt>();

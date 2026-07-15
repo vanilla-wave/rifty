@@ -171,6 +171,8 @@ export interface PtyServerDeps {
    * rejection fails the run loudly (exit 1 + error) and the command never runs.
    */
   readonly beforeRun?: (emit: (chunk: string, stream: PtyStream) => void) => void | Promise<void>;
+  /** Await owner-side state publication after command settlement, before `pty:exit`. */
+  readonly beforeExit?: () => void | Promise<void>;
 }
 
 export interface PtyServer {
@@ -429,6 +431,9 @@ class PtySessionActor {
       code = 1;
       exit = { code: 1, signal: null };
       error = caught instanceof Error ? caught.message : String(caught);
+    }
+    try {
+      await this.#deps.beforeExit?.();
     } finally {
       if (this.#active === run) this.#active = null;
       run.stdin.abort(

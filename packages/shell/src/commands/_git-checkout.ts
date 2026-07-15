@@ -182,6 +182,19 @@ type CheckoutPlan =
   | { kind: 'restore-explicit'; pathspecs: string[]; source?: string }
   | { kind: 'positional'; positionals: string[]; force: boolean };
 
+/** Read-only checkout resolution shared by mutation planning and execution. */
+export type PreparedCheckoutPlan =
+  | {
+      readonly kind: 'switch';
+      readonly ref: string;
+      readonly force: boolean;
+      readonly create: boolean;
+      readonly startPoint?: string;
+    }
+  | { readonly kind: 'restore'; readonly pathspecs: readonly string[]; readonly source?: string }
+  | { readonly kind: 'noop'; readonly source?: string }
+  | { readonly kind: 'ambiguity'; readonly arg: string };
+
 /** Reflog marker remains a hard ceiling (no reflog); `~`/`^` are parsed in @riftydev/git. */
 export const REVSPEC_MARKER = /[~^]|@\{/;
 
@@ -239,7 +252,7 @@ const CEILING_FLAGS = new Map<string, string>([
  * ceiling flag/arg so the gap is loud (exit 128). `--` splits tree-ish source
  * (before, ≤1) from pathspecs (after). `-b <name> [<start>]` → create.
  */
-function parseCheckout(args: string[]): CheckoutPlan {
+export function parseCheckout(args: string[]): CheckoutPlan {
   const rest = args.slice(1);
   const dashDash = rest.indexOf('--');
   const flagTokens = dashDash === -1 ? rest : rest.slice(0, dashDash);
@@ -300,6 +313,70 @@ function parseCheckout(args: string[]): CheckoutPlan {
 }
 
 /**
+ * Resolve checkout's ref-vs-path meaning without mutating. The returned plan is
+ * the single semantic input used after the mutation guard admits the command.
+ */
+export async function prepareCheckout(
+  g: Git,
+  args: string[],
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<PreparedCheckoutPlan> {
+  const plan = parseCheckout(args);
+  if (plan.kind === 'create') {
+    return {
+      kind: 'switch',
+      ref: plan.name,
+      force: plan.force,
+      create: true,
+      ...(plan.startPoint !== undefined ? { startPoint: plan.startPoint } : {}),
+    };
+  }
+  if (plan.kind === 'restore-explicit') {
+    return plan.pathspecs.length === 0
+      ? {
+          kind: 'noop',
+          ...(plan.source !== undefined ? { source: plan.source } : {}),
+        }
+      : {
+          kind: 'restore',
+          pathspecs: plan.pathspecs.map(mapPathspec),
+          ...(plan.source !== undefined ? { source: plan.source } : {}),
+        };
+  }
+
+  const { positionals, force } = plan;
+  if (positionals.length === 0) return { kind: 'noop' };
+  if (positionals.length === 1) {
+    const arg = positionals[0] as string;
+    if (await revisionExists(g, arg)) {
+      return { kind: 'switch', ref: arg, force, create: false };
+    }
+    const pathspec = mapPathspec(arg);
+    const tracked = await g.listFiles();
+    if (tracked.some((path) => pathspecMatch(path, pathspec))) {
+      return { kind: 'restore', pathspecs: [pathspec] };
+    }
+    if (hasGlobMeta(arg)) throw new NotImplementedError('git.checkout.glob-pathspec');
+    throw new PathspecError(arg);
+  }
+
+  const first = positionals[0] as string;
+  const restSpecs = positionals.slice(1).map(mapPathspec);
+  for (const pathspec of restSpecs) {
+    if (hasGlobMeta(pathspec)) throw new NotImplementedError('git.checkout.glob-pathspec');
+  }
+  if (await revisionExists(g, first)) {
+    const firstPathspec = mapPathspec(first);
+    if ((await g.status()).some((entry) => pathspecMatch(entry.filepath, firstPathspec))) {
+      return { kind: 'ambiguity', arg: first };
+    }
+    return { kind: 'restore', pathspecs: restSpecs, source: first };
+  }
+  if (hasGlobMeta(first)) throw new NotImplementedError('git.checkout.glob-pathspec');
+  return { kind: 'restore', pathspecs: positionals.map(mapPathspec) };
+}
+
+/**
  * `git checkout` — branch-switch + file-restore over the {@link makeGit} facade,
  * byte-exact to real git 2.50.1. ALL messages go to stderr; stdout stays empty.
  * Ceiling flags/globs throw loud (exit 128); typed git user-errors map to git's
@@ -310,119 +387,54 @@ export async function doCheckout(
   args: string[],
   ctx: CommandContext,
   mapPathspec: PathspecMapper = identityPathspec,
+  prepared?: PreparedCheckoutPlan,
 ): Promise<number> {
-  let plan: CheckoutPlan;
+  let plan: PreparedCheckoutPlan;
   try {
-    plan = parseCheckout(args);
+    plan = prepared ?? (await prepareCheckout(g, args, mapPathspec));
   } catch (e) {
-    return renderCheckoutError(e, ctx);
+    return renderCheckoutOrFatal(e, ctx);
   }
 
   try {
-    if (plan.kind === 'create') {
+    if (plan.kind === 'switch') {
       const res = await g.checkout({
         op: 'switch',
-        ref: plan.name,
-        create: true,
+        ref: plan.ref,
+        ...(plan.create ? { create: true as const } : {}),
         ...(plan.startPoint !== undefined ? { startPoint: plan.startPoint } : {}),
         force: plan.force,
       });
-      if (res.op === 'switch') renderSwitch(res, plan.name, ctx);
+      if (res.op === 'switch') renderSwitch(res, plan.ref, ctx);
       return 0;
     }
 
-    if (plan.kind === 'restore-explicit') {
-      if (plan.pathspecs.length === 0) {
-        // `git checkout --` / `git checkout <ref> --` with no pathspecs. Real git
-        // 2.50.1 treats this as a no-op (exit 0, silent on a clean tree) — the
-        // "you must specify path(s) to restore" fatal belongs to `git restore`.
-        // Still validate an explicit source so `checkout BAD --` cannot false-succeed.
-        if (plan.source !== undefined) {
-          try {
-            await g.resolveRevision(plan.source);
-          } catch (e) {
-            if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
-            ctx.stderr.write(`fatal: invalid reference: ${plan.source}\n`);
-            return 128;
-          }
+    if (plan.kind === 'noop') {
+      // Explicit source still validates even though no worktree path was named.
+      if (plan.source !== undefined) {
+        try {
+          await g.resolveRevision(plan.source);
+        } catch (e) {
+          if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
+          ctx.stderr.write(`fatal: invalid reference: ${plan.source}\n`);
+          return 128;
         }
-        return 0;
       }
+      return 0;
+    }
+
+    if (plan.kind === 'ambiguity') return renderRevisionAndPathAmbiguity(plan.arg, ctx);
+
+    if (plan.kind === 'restore') {
       await g.checkout({
         op: 'restore',
-        pathspecs: plan.pathspecs.map(mapPathspec),
+        pathspecs: [...plan.pathspecs],
         ...(plan.source !== undefined ? { source: plan.source } : {}),
       });
       return 0; // restore is silent
     }
-
-    // `await` so a rejection lands in THIS try/catch (not returned unawaited).
-    return await doCheckoutPositional(g, plan.positionals, plan.force, ctx, mapPathspec);
+    throw new Error('git checkout: unhandled prepared plan');
   } catch (e) {
     return renderCheckoutOrFatal(e, ctx);
   }
-}
-
-/**
- * `git checkout` with no `--` and no `-b`: disambiguate positionals (git's
- * ref-vs-path rules). Zero → no-op (clean-tree exit 0, silent). One →
- * ref-FIRST (branch precedence), else tracked path, else pathspec miss. Many →
- * `<ref> <pathspec...>` restore-from-tree if the first resolves, else all are
- * index pathspecs.
- */
-async function doCheckoutPositional(
-  g: Git,
-  positionals: string[],
-  force: boolean,
-  ctx: CommandContext,
-  mapPathspec: PathspecMapper,
-): Promise<number> {
-  if (positionals.length === 0) {
-    // Bare `git checkout`: real git 2.50.1 is a no-op (exit 0, silent on a clean
-    // tree) — not the `git restore` "must specify path(s)" fatal.
-    return 0;
-  }
-
-  if (positionals.length === 1) {
-    const x = positionals[0] as string;
-    // Ref FIRST: a single arg that is BOTH a branch and a tracked file switches
-    // to the BRANCH (real git's ref-vs-path precedence for one arg). Only when it
-    // is NOT a ref do we treat it as an index pathspec. (The genuine 2-arg
-    // revision==path ambiguity refusal is deferred — see backlog.)
-    const isRef = await revisionExists(g, x);
-    if (isRef) {
-      const res = await g.checkout({ op: 'switch', ref: x, force });
-      if (res.op === 'switch') renderSwitch(res, x, ctx);
-      return 0;
-    }
-    const pathspec = mapPathspec(x);
-    const tracked = await g.listFiles();
-    if (tracked.some((p) => pathspecMatch(p, pathspec))) {
-      await g.checkout({ op: 'restore', pathspecs: [pathspec] });
-      return 0;
-    }
-    // Neither a ref nor a tracked path — glob-magic is a ceiling, else pathspec miss.
-    if (hasGlobMeta(x)) throw new NotImplementedError('git.checkout.glob-pathspec');
-    throw new PathspecError(x);
-  }
-
-  // Multiple positionals: `<tree-ish> <pathspec...>` if the first resolves.
-  const first = positionals[0] as string;
-  const restSpecs = positionals.slice(1).map(mapPathspec);
-  for (const p of restSpecs) {
-    if (hasGlobMeta(p)) throw new NotImplementedError('git.checkout.glob-pathspec');
-  }
-  const firstIsRef = await revisionExists(g, first);
-  if (firstIsRef) {
-    const firstPathspec = mapPathspec(first);
-    if ((await g.status()).some((entry) => pathspecMatch(entry.filepath, firstPathspec))) {
-      return renderRevisionAndPathAmbiguity(first, ctx);
-    }
-    await g.checkout({ op: 'restore', pathspecs: restSpecs, source: first });
-    return 0;
-  }
-  // First isn't a ref → treat ALL positionals as index pathspecs.
-  if (hasGlobMeta(first)) throw new NotImplementedError('git.checkout.glob-pathspec');
-  await g.checkout({ op: 'restore', pathspecs: positionals.map(mapPathspec) });
-  return 0;
 }

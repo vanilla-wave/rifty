@@ -1,8 +1,4 @@
-import type {
-  HostCommitOperation,
-  OwnerVfsRevisionFrame,
-  OwnerVfsSnapshotEntry,
-} from '../glue/owner-vfs-protocol.ts';
+import type { HostCommitOperation, OwnerVfsSnapshotEntry } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError } from '../glue/owner-vfs-protocol.ts';
 import type { SnapshotFs } from '../glue/snapshot-fs.ts';
 import type { VfsCommitCoordinator, VfsCommitReceipt } from '../glue/vfs-commit-coordinator.ts';
@@ -74,18 +70,6 @@ export interface ProjectFiles {
   subscribe(listener: ProjectFilesListener): () => void;
 }
 
-export type ProjectFilesAppliedMutation =
-  | {
-      readonly kind: 'rename';
-      readonly sourcePath: string;
-      readonly targetPath: string;
-    }
-  | {
-      readonly kind: 'remove';
-      readonly path: string;
-      readonly recursive: boolean;
-    };
-
 export interface ProjectFilesControllerOptions {
   readonly projectRoot: string;
   readonly versions: ProjectFileVersionBoundary;
@@ -93,10 +77,6 @@ export interface ProjectFilesControllerOptions {
   readonly committer: Pick<VfsCommitCoordinator, 'commit'>;
   readonly readVersionedFile: (path: string) => Promise<OwnerVfsSnapshotEntry>;
   readonly readVersionedDirectory: (path: string) => Promise<readonly OwnerProjectFileEntry[]>;
-  readonly onAppliedMutation?: (
-    mutation: ProjectFilesAppliedMutation,
-    revision: OwnerVfsRevisionFrame,
-  ) => void;
 }
 
 export interface ProjectFilesController {
@@ -213,20 +193,10 @@ export function createProjectFilesController(
     operation: HostCommitOperation,
     context: MutationFailureContext,
     finish: (receipt: VfsCommitReceipt) => Result,
-    appliedMutation?: ProjectFilesAppliedMutation,
   ): Promise<Result> => {
     let receipt: VfsCommitReceipt;
     try {
-      receipt = await options.committer.commit(
-        operation,
-        appliedMutation === undefined || options.onAppliedMutation === undefined
-          ? undefined
-          : {
-              onApplied: (revision) => {
-                options.onAppliedMutation?.(appliedMutation, revision);
-              },
-            },
-      );
+      receipt = await options.committer.commit(operation);
     } catch (error) {
       throw projectFileFailure(options.projectRoot, options.versions, error, context);
     }
@@ -396,11 +366,6 @@ export function createProjectFilesController(
             version: options.versions.toPublic(version),
           });
         },
-        Object.freeze({
-          kind: 'rename',
-          sourcePath: logicalSource,
-          targetPath: logicalTarget,
-        }),
       );
     },
 
@@ -435,7 +400,6 @@ export function createProjectFilesController(
           assertExactUpdateCount(receipt, 1);
           exactUpdate(receipt, ownerPath, 'absent');
         },
-        Object.freeze({ kind: 'remove', path: logicalPath, recursive }),
       );
     },
 

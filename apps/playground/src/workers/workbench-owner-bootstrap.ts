@@ -7,7 +7,6 @@ import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
-import { applyPackageAwareVfsMutations } from '../glue/package-mutation-executor.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -29,6 +28,7 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
   type WorkbenchOwnerProjectRuntimeOutput,
@@ -164,9 +164,12 @@ async function bootstrap(): Promise<void> {
   if (config === null) return;
 
   const storage = await installWorkbenchOwnerStorage(config.storage.persistence);
-  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(syncMirror(), {
-    initialRoots: ['/', '/.rifty'],
-  });
+  const { authority, appliedMutations, installStampClaims } = createOwnerVfsAuthorityComposition(
+    syncMirror(),
+    {
+      initialRoots: ['/', '/.rifty'],
+    },
+  );
   setSyncMirror(authority, { async: new SyncMirrorVfs() });
 
   const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig({
@@ -206,25 +209,18 @@ async function bootstrap(): Promise<void> {
 
   let activeProjectRoot: string | null = null;
   let activeProjectVfs: ReturnType<typeof createWorkbenchProjectVfs> | null = null;
+  let rejectOwnerLifetime = (error: Error): void => {
+    throw error;
+  };
   installOwnerSyncRuntimeHandlers(
     getKernelDispatcher(),
     () => authority,
-    (intents, apply) => {
-      const root = activeProjectRoot;
-      const projectVfs = activeProjectVfs;
-      if (root === null || projectVfs === null) {
-        throw new Error('ClosedHandleError: no active Workbench project owns child VFS writes');
-      }
-      return Promise.resolve(
-        applyPackageAwareVfsMutations(packageState.mutations, root, intents, apply),
-      ).then((result) => {
-        if (activeProjectRoot !== root || activeProjectVfs !== projectVfs) {
-          throw new Error('ClosedHandleError: Workbench project changed during child VFS write');
-        }
-        projectVfs.publishSnapshot();
-        return result;
-      });
-    },
+    createWorkbenchOwnerChildVfsMutationGuard({
+      activeProject: () =>
+        activeProjectRoot === null || activeProjectVfs === null
+          ? null
+          : { root: activeProjectRoot, vfs: activeProjectVfs },
+    }),
   );
 
   const controller = createWorkbenchOwnerController({
@@ -244,11 +240,13 @@ async function bootstrap(): Promise<void> {
             createWorkbenchProjectVfs({
               projectRoot,
               authority,
+              appliedMutations,
               packageMutations: packageState.mutations,
               durability: storage.durability,
               emit: (frame) => input.emit({ type: 'vfs', frame }),
+              fatal: (error) => rejectOwnerLifetime(error),
             }),
-          createRuntime: () =>
+          createRuntime: (vfs) =>
             createWorkbenchProjectRuntime({
               projectRoot,
               packageConfig: workbenchPackageConfig(input.definition, projectRoot),
@@ -257,6 +255,8 @@ async function bootstrap(): Promise<void> {
               nodeEntryWorkerUrl: config.deployment.workers.node,
               devServerWorkerUrl: config.deployment.workers.devServer,
               nodeWorkerRuntimeEnv,
+              mutationGuard: vfs.mutationGuard,
+              publicationBarrier: vfs.publicationBarrier,
               send(frame) {
                 const output: WorkbenchOwnerProjectRuntimeOutput =
                   frame.type === 'pty:preview'
@@ -304,6 +304,7 @@ async function bootstrap(): Promise<void> {
   });
 
   const fatal = new Promise<never>((_resolve, reject) => {
+    rejectOwnerLifetime = reject;
     dispatch = (message) => {
       void controller.handle(message).catch(reject);
     };

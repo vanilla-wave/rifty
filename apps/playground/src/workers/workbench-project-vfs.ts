@@ -1,4 +1,4 @@
-import { basename, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
+import { type VfsMutationGuard, basename, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
 import {
   type OwnerVfsCommitTerminal,
   handleOwnerVfsCommitCleanup,
@@ -12,6 +12,7 @@ import type {
   OwnerVfsSnapshot,
   OwnerVfsSnapshotEntry,
 } from '../glue/owner-vfs-protocol.ts';
+import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import {
   type PackageMutationExecutor,
   applyPackageAwareHostCommit,
@@ -21,21 +22,34 @@ import { ClosedHandleError } from '../workbench/errors.ts';
 import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,
+  ProjectVfsAppliedMutation,
   ProjectVfsDirectoryEntry,
 } from '../workbench/project-vfs-protocol.ts';
+import type {
+  OwnerVfsAppliedMutation,
+  OwnerVfsAppliedMutations,
+  OwnerVfsAppliedRevision,
+} from './owner-vfs-applied-journal.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 
 export interface WorkbenchProjectVfsOptions {
   readonly projectRoot: string;
   readonly authority: OwnerVfsAuthority;
+  readonly appliedMutations: OwnerVfsAppliedMutations;
   readonly packageMutations: PackageMutationExecutor;
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly emit: (frame: OwnerProjectVfsFrame) => void;
+  /** Delivery failure must end the owner lifetime; stale project state cannot continue. */
+  readonly fatal: (error: Error) => void;
 }
 
 export interface WorkbenchProjectVfs {
   handleFrame(frame: PageProjectVfsFrame): void | Promise<void>;
   publishSnapshot(): void;
+  /** Package FIFO + applied semantic evidence + publication before settlement. */
+  readonly mutationGuard: VfsMutationGuard;
+  /** Join publication of every owner revision already applied at call time. */
+  publicationBarrier(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -115,6 +129,62 @@ function readError(error: unknown): { readonly name: string; readonly message: s
   };
 }
 
+function containsPath(root: string, path: string): boolean {
+  return path === root || path.startsWith(`${root}/`);
+}
+
+function intersectsPath(left: string, right: string): boolean {
+  return containsPath(left, right) || containsPath(right, left);
+}
+
+function projectMutation(
+  projectRoot: string,
+  treeRevision: number,
+  mutation: OwnerVfsAppliedMutation,
+): ProjectVfsAppliedMutation | null {
+  switch (mutation.kind) {
+    case 'rename':
+      if (
+        containsPath(projectRoot, mutation.sourcePath) &&
+        containsPath(projectRoot, mutation.targetPath)
+      ) {
+        return Object.freeze({ treeRevision, ...mutation });
+      }
+      return intersectsPath(projectRoot, mutation.sourcePath) ||
+        intersectsPath(projectRoot, mutation.targetPath)
+        ? Object.freeze({ kind: 'reset', treeRevision, rootPath: projectRoot })
+        : null;
+    case 'remove':
+      if (containsPath(projectRoot, mutation.path)) {
+        return Object.freeze({ treeRevision, ...mutation });
+      }
+      return containsPath(mutation.path, projectRoot)
+        ? Object.freeze({ kind: 'reset', treeRevision, rootPath: projectRoot })
+        : null;
+    case 'reset':
+      if (containsPath(projectRoot, mutation.rootPath)) {
+        return Object.freeze({ treeRevision, ...mutation });
+      }
+      return containsPath(mutation.rootPath, projectRoot)
+        ? Object.freeze({ kind: 'reset', treeRevision, rootPath: projectRoot })
+        : null;
+  }
+}
+
+function projectMutations(
+  projectRoot: string,
+  records: readonly OwnerVfsAppliedRevision[],
+): readonly ProjectVfsAppliedMutation[] {
+  const mutations: ProjectVfsAppliedMutation[] = [];
+  for (const record of records) {
+    for (const mutation of record.mutations) {
+      const mapped = projectMutation(projectRoot, record.treeRevision, mutation);
+      if (mapped !== null) mutations.push(mapped);
+    }
+  }
+  return Object.freeze(mutations);
+}
+
 type AtomicFileEntry = Extract<OwnerVfsSnapshotEntry, { readonly kind: 'file' }>;
 
 function atomicFile(snapshot: OwnerVfsSnapshot, path: string): AtomicFileEntry {
@@ -155,24 +225,134 @@ export function createWorkbenchProjectVfs(
   options: WorkbenchProjectVfsOptions,
 ): WorkbenchProjectVfs {
   const projectRoot = assertProjectRoot(options);
+  const cursor = options.appliedMutations.openCursor();
   const pending = new Set<Promise<void>>();
   let accepting = true;
   let closePromise: Promise<void> | null = null;
+  let publishedRevision: number | null = null;
+  let publicationAdmissions = 0;
+  let resolvePublicationIdle: (() => void) | null = null;
+  let fatalError: Error | null = null;
+  let pump: Promise<void> | null = null;
 
   const assertAccepting = (): void => {
     if (!accepting) throw new ClosedHandleError('Workbench Project VFS');
   };
 
-  const emitSnapshot = (): void => {
+  const emitInitialSnapshot = (): void => {
+    const frame = collectSnapshot(options.authority, projectRoot);
+    options.emit({ type: 'workbench:project-vfs-snapshot', frame });
+    cursor.acknowledge(frame.treeRevision);
+    publishedRevision = frame.treeRevision;
+  };
+
+  const rawPublishCurrent = (): void => {
+    if (publishedRevision === null) throw new Error('Project VFS page baseline is not ready');
+    const fromTreeRevision = publishedRevision;
+    const records = cursor.peek();
+    if (records.some((record) => record.treeRevision <= fromTreeRevision)) {
+      throw new VfsCommitProtocolError('Project VFS journal replayed an acknowledged revision');
+    }
+    const frame = collectSnapshot(options.authority, projectRoot);
+    const finalJournalRevision = records.at(-1)?.treeRevision ?? fromTreeRevision;
+    if (frame.treeRevision !== finalJournalRevision) {
+      throw new VfsCommitProtocolError(
+        `Project VFS journal ended at ${String(finalJournalRevision)} for owner revision ${String(frame.treeRevision)}`,
+      );
+    }
     options.emit({
-      type: 'workbench:project-vfs-snapshot',
-      frame: collectSnapshot(options.authority, projectRoot),
+      type: 'workbench:project-vfs-state',
+      fromTreeRevision,
+      mutations: projectMutations(projectRoot, records),
+      frame,
     });
+    cursor.acknowledge(frame.treeRevision);
+    publishedRevision = frame.treeRevision;
+  };
+
+  const failOwner = (error: Error): void => {
+    if (fatalError !== null) return;
+    fatalError = error;
+    accepting = false;
+    try {
+      options.emit({ type: 'workbench:project-vfs-fatal', error: readError(error) });
+    } finally {
+      options.fatal(error);
+    }
+  };
+
+  const failOwnerPreserving = (error: unknown): Error => {
+    const failure = errorFrom(error);
+    try {
+      failOwner(failure);
+    } catch {
+      // Owner termination already received the source failure.
+    }
+    return failure;
   };
 
   const publishSnapshot = (): void => {
     assertAccepting();
-    emitSnapshot();
+    try {
+      if (publishedRevision === null) emitInitialSnapshot();
+      else rawPublishCurrent();
+    } catch (error) {
+      throw failOwnerPreserving(error);
+    }
+  };
+
+  const publishThroughCurrent = async (admitted: boolean): Promise<void> => {
+    if (admitted) {
+      if (fatalError !== null) throw fatalError;
+    } else {
+      assertAccepting();
+    }
+    const targetRevision = options.authority.treeRevision;
+    if (publishedRevision !== null && publishedRevision >= targetRevision) return;
+    try {
+      rawPublishCurrent();
+    } catch (error) {
+      throw failOwnerPreserving(error);
+    }
+    if (publishedRevision === null || publishedRevision < targetRevision) {
+      const error = new VfsCommitProtocolError(
+        `Project VFS publication stopped before revision ${String(targetRevision)}`,
+      );
+      throw failOwnerPreserving(error);
+    }
+  };
+
+  const publicationBarrier = async (): Promise<void> => {
+    assertAccepting();
+    while (publicationAdmissions > 0) {
+      await awaitPublicationIdle();
+      assertAccepting();
+    }
+    await publishThroughCurrent(false);
+  };
+
+  const startPublicationAdmission = (): void => {
+    assertAccepting();
+    publicationAdmissions += 1;
+  };
+
+  const awaitPublicationIdle = (): Promise<void> => {
+    if (publicationAdmissions === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const prior = resolvePublicationIdle;
+      resolvePublicationIdle = () => {
+        prior?.();
+        resolve();
+      };
+    });
+  };
+
+  const finishPublicationAdmission = (): void => {
+    publicationAdmissions -= 1;
+    if (publicationAdmissions !== 0) return;
+    const resolve = resolvePublicationIdle;
+    resolvePublicationIdle = null;
+    resolve?.();
   };
 
   const track = (task: Promise<void>): Promise<void> => {
@@ -184,9 +364,65 @@ export function createWorkbenchProjectVfs(
     return task;
   };
 
+  const activePackageMutations: PackageMutationExecutor = {
+    ...options.packageMutations,
+    guardedMutation(intents, mutate, preflight) {
+      return options.packageMutations.guardedMutation(intents, mutate, async () => {
+        if (fatalError !== null) throw fatalError;
+        return preflight ? await preflight() : { status: 'ready' };
+      });
+    },
+  };
+
+  const mutationGuard: VfsMutationGuard = (intents, apply) => {
+    startPublicationAdmission();
+    const operation = (async () => {
+      try {
+        return await activePackageMutations.guardedMutation(intents, async () => {
+          try {
+            return await options.appliedMutations.withSemanticReplacements(intents, apply);
+          } finally {
+            await publishThroughCurrent(true);
+          }
+        });
+      } finally {
+        finishPublicationAdmission();
+      }
+    })();
+    track(operation.then(() => undefined));
+    return operation;
+  };
+
+  const startPump = (): void => {
+    if (pump !== null) return;
+    pump = (async () => {
+      while (accepting) {
+        try {
+          await cursor.wait();
+        } catch (error) {
+          if (!accepting) return;
+          throw error;
+        }
+        while (publicationAdmissions > 0) await awaitPublicationIdle();
+        if (!accepting) return;
+        if (cursor.peek().length === 0) continue;
+        try {
+          rawPublishCurrent();
+        } catch (error) {
+          throw failOwnerPreserving(error);
+        }
+      }
+    })();
+    void pump.catch((error: unknown) => {
+      failOwnerPreserving(error);
+    });
+  };
+
   const handleCommit = (
     frame: Extract<PageProjectVfsFrame, { readonly type: 'rifty:owner-vfs-commit' }>,
   ): Promise<void> => {
+    startPublicationAdmission();
+    let publicationFailure: Error | null = null;
     const completed = deferredCompletion();
     const task = track(completed.promise);
     try {
@@ -198,23 +434,43 @@ export function createWorkbenchProjectVfs(
             (candidate) =>
               applyPackageAwareHostCommit(
                 options.authority,
-                options.packageMutations,
+                activePackageMutations,
                 projectRoot,
                 candidate,
               ),
-            emitSnapshot,
+            () => {
+              try {
+                rawPublishCurrent();
+              } catch (error) {
+                publicationFailure = errorFrom(error);
+                throw error;
+              }
+            },
           ),
         send: (terminal) => {
           try {
+            if (fatalError !== null) throw fatalError;
             options.emit(terminal);
+            if (publicationFailure !== null) failOwner(publicationFailure);
             completed.resolve();
           } catch (error) {
+            try {
+              failOwner(errorFrom(error));
+            } catch {
+              // The fatal callback owns owner termination after transport failure.
+            }
             completed.reject(errorFrom(error));
+          } finally {
+            finishPublicationAdmission();
           }
         },
-        reportError: (error) => completed.reject(error),
+        reportError: (error) => {
+          finishPublicationAdmission();
+          completed.reject(error);
+        },
       });
     } catch (error) {
+      finishPublicationAdmission();
       completed.reject(errorFrom(error));
     }
     return task;
@@ -316,6 +572,7 @@ export function createWorkbenchProjectVfs(
           );
         case 'workbench:project-vfs-snapshot-request':
           publishSnapshot();
+          startPump();
           return;
         case 'workbench:project-vfs-read-file':
           readFile(frame);
@@ -329,15 +586,25 @@ export function createWorkbenchProjectVfs(
         }
       }
     },
-    publishSnapshot,
+    publishSnapshot() {
+      publishSnapshot();
+      startPump();
+    },
+    mutationGuard,
+    publicationBarrier,
     close() {
       if (closePromise !== null) return closePromise;
       accepting = false;
-      const admitted = [...pending];
-      closePromise = Promise.allSettled(admitted).then((results) => {
-        const failures = results.flatMap((result) =>
-          result.status === 'rejected' ? [errorFrom(result.reason)] : [],
-        );
+      const admitted = [...pending, awaitPublicationIdle()];
+      closePromise = Promise.allSettled(admitted).then(async (results) => {
+        cursor.close();
+        const pumpResults = pump === null ? [] : await Promise.allSettled([pump]);
+        const failures: Error[] = [];
+        for (const result of [...results, ...pumpResults]) {
+          if (result.status !== 'rejected') continue;
+          const failure = errorFrom(result.reason);
+          if (!failures.includes(failure)) failures.push(failure);
+        }
         if (failures.length === 1) throw failures[0];
         if (failures.length > 1) {
           throw new AggregateError(failures, 'Workbench Project VFS close failed');

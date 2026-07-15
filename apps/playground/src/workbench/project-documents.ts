@@ -9,6 +9,7 @@ import {
   type ProjectDocumentCommitter,
   openProjectDocument,
 } from '../glue/project-document.ts';
+import { VfsCommitTimeoutError } from '../glue/vfs-commit-coordinator.ts';
 import {
   ClosedHandleError,
   DirtyProjectDocumentError,
@@ -72,7 +73,7 @@ export type ProjectDocumentsMutation =
       readonly path: string;
       readonly recursive?: boolean;
     }
-  | { readonly kind: 'reset' };
+  | { readonly kind: 'reset'; readonly rootPath: string };
 
 /** Private owner ordering evidence used only by app-local composition. */
 export interface ProjectDocumentsRevision {
@@ -86,6 +87,8 @@ export type ProjectDocumentReadEntry = Extract<OwnerVfsSnapshotEntry, { readonly
 export interface ProjectDocumentsController {
   readonly documents: ProjectDocuments;
   invalidate(mutation: ProjectDocumentsMutation, revision: ProjectDocumentsRevision): void;
+  /** Transport lifecycle fence; does not claim a new owner revision. */
+  invalidateAll(reason: ProjectDocumentInvalidation): void;
   /** Pure synchronous admission check; does not fence handles. */
   preflightClose(): void;
   close(): Promise<void>;
@@ -102,7 +105,8 @@ interface PendingDocumentOpen {
   readonly path: string;
   invalidation: {
     readonly reason: ProjectDocumentInvalidation;
-    readonly revision: ProjectDocumentsRevision;
+    /** `null` is an unconditional transport lifecycle fence. */
+    readonly revision: ProjectDocumentsRevision | null;
   } | null;
 }
 
@@ -110,6 +114,7 @@ interface TrackedDocument {
   readonly path: string;
   readonly publicDocument: ProjectDocument;
   readonly internalDocument: InternalProjectDocument;
+  provenRevision(): ProjectDocumentsRevision;
   isSaving(): boolean;
   closeClean(): Promise<void>;
 }
@@ -184,7 +189,10 @@ function lifecycleError(error: unknown, path: string): Error | null {
 }
 
 function affectedPath(path: string, root: string, recursive: boolean): boolean {
-  return path === root || (recursive && path.startsWith(`${root}/`));
+  return (
+    path === root ||
+    (recursive && (root === '/' ? path.startsWith('/') : path.startsWith(`${root}/`)))
+  );
 }
 
 function checkedRevision(revision: ProjectDocumentsRevision): ProjectDocumentsRevision {
@@ -209,6 +217,18 @@ function readPrecedesInvalidation(
   return (
     read.ownerEpoch !== invalidation.ownerEpoch || read.treeRevision < invalidation.treeRevision
   );
+}
+
+function appliedFailureRevision(error: unknown): ProjectDocumentsRevision | null {
+  const ack =
+    error instanceof VfsCommitAppliedError
+      ? error.applied
+      : error instanceof VfsCommitTimeoutError
+        ? error.ack
+        : null;
+  return ack === null
+    ? null
+    : checkedRevision({ ownerEpoch: ack.ownerEpoch, treeRevision: ack.treeRevision });
 }
 
 function closeChoice(
@@ -282,7 +302,17 @@ export function createProjectDocumentsController(
     let baseVersion: string | null = null;
     let publicConflict: ProjectDocumentConflict | null | undefined;
     let internalDocument: InternalProjectDocument;
-    let readRevision: ProjectDocumentsRevision | null = null;
+    let provenRevision: ProjectDocumentsRevision | null = null;
+    const proveRevision = (revision: ProjectDocumentsRevision): void => {
+      const candidate = checkedRevision(revision);
+      if (
+        provenRevision === null ||
+        provenRevision.ownerEpoch !== candidate.ownerEpoch ||
+        candidate.treeRevision >= provenRevision.treeRevision
+      ) {
+        provenRevision = candidate;
+      }
+    };
 
     try {
       internalDocument = await openProjectDocument(
@@ -303,10 +333,10 @@ export function createProjectDocumentsController(
             ) {
               throw new TypeError('Invalid atomic document read');
             }
-            readRevision = {
+            proveRevision({
               ownerEpoch: entry.ownerEpoch,
               treeRevision: entry.treeRevision,
-            };
+            });
             return entry;
           },
         },
@@ -325,6 +355,7 @@ export function createProjectDocumentsController(
                 new Error('Invalid project document save receipt'),
               );
             }
+            proveRevision(receipt);
             return receipt;
           },
         },
@@ -342,9 +373,10 @@ export function createProjectDocumentsController(
       throw new ClosedHandleError('Project documents');
     }
     if (
-      readRevision === null ||
+      provenRevision === null ||
       (pending.invalidation !== null &&
-        readPrecedesInvalidation(readRevision, pending.invalidation.revision))
+        (pending.invalidation.revision === null ||
+          readPrecedesInvalidation(provenRevision, pending.invalidation.revision)))
     ) {
       await internalDocument.close();
       if (pending.invalidation !== null) {
@@ -373,6 +405,8 @@ export function createProjectDocumentsController(
       if (appliedVersion !== undefined) {
         baseVersion = appliedVersion;
         publicConflict = null;
+        const appliedRevision = appliedFailureRevision(error);
+        if (appliedRevision !== null) proveRevision(appliedRevision);
       }
       const failure = projectFileFailure(options.projectRoot, options.versions, error, {
         operation: 'saveDocument',
@@ -498,6 +532,10 @@ export function createProjectDocumentsController(
       path,
       publicDocument,
       internalDocument,
+      provenRevision: () => {
+        if (provenRevision === null) throw new TypeError('Missing atomic read revision');
+        return provenRevision;
+      },
       isSaving: () => pendingSave !== null || closeSaving,
       closeClean: () => publicDocument.close(),
     };
@@ -550,19 +588,38 @@ export function createProjectDocumentsController(
           reason = 'delete';
           break;
         }
-        case 'reset':
-          affects = () => true;
+        case 'reset': {
+          const resetPath = assertProjectPath(mutation.rootPath, { allowRoot: true });
+          affects = (path) => affectedPath(path, resetPath, true);
           reason = 'reset';
           break;
+        }
       }
 
       for (const pending of admittedOpens.values()) {
-        if (affects(pending.path)) {
+        if (
+          affects(pending.path) &&
+          (pending.invalidation === null || pending.invalidation.revision !== null)
+        ) {
           pending.invalidation = { reason, revision: ownerRevision };
         }
       }
       for (const document of tracked) {
-        if (affects(document.path)) document.internalDocument.invalidate(reason, ownerRevision);
+        if (
+          affects(document.path) &&
+          readPrecedesInvalidation(document.provenRevision(), ownerRevision)
+        ) {
+          document.internalDocument.invalidate(reason, ownerRevision);
+        }
+      }
+    },
+
+    invalidateAll(reason) {
+      for (const pending of admittedOpens.values()) {
+        pending.invalidation = { reason, revision: null };
+      }
+      for (const document of tracked) {
+        document.internalDocument.invalidate(reason, document.provenRevision());
       }
     },
 

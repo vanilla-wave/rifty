@@ -14,6 +14,12 @@ const ENV: Record<string, string> = {
   GIT_COMMITTER_DATE: '1600000000',
 };
 const CLAIM = 'node_modules/.rifty-install-stamp.json';
+const REPO_REPLACEMENT_BATCH: VfsMutationIntent[][] = [
+  [
+    { kind: 'write', path: '/repo/.git' },
+    { kind: 'replace', path: '/repo' },
+  ],
+];
 
 function eperm(path: string): Error & { code: string } {
   return Object.assign(new Error(`EPERM: reserved install claim, '${path}'`), { code: 'EPERM' });
@@ -103,7 +109,7 @@ it.each([
     expect(result.exitCode).toBe(128);
     expect(result.stderr).toContain('EPERM');
     expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-    expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+    expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
     await expectMainUnchanged(head);
   },
 );
@@ -120,7 +126,7 @@ it('git checkout rejects a reserved-claim descendant before ordinary bytes, inde
   expect(result.exitCode).toBe(128);
   expect(result.stderr).toContain('EPERM');
   expect(calls).toEqual([['/repo/a.txt', `/repo/${descendant}`]]);
-  expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+  expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
   await expectMainUnchanged(head, descendant);
 });
 
@@ -135,7 +141,7 @@ it('git cherry-pick wiring rejects before changing HEAD, index, or its first ord
   expect(result.exitCode).toBe(128);
   expect(result.stderr).toContain('EPERM');
   expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-  expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+  expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
   await expectMainUnchanged(head);
 });
 
@@ -157,7 +163,7 @@ it('git stash push preflights before temporary config, index, or worktree mutati
   expect(result.exitCode).toBe(128);
   expect(result.stderr).toContain('EPERM');
   expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-  expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+  expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
   expect(await vfs.readFileText('/repo/a.txt')).toBe('dirty ordinary\n');
   expect(await vfs.readFileText(`/repo/${CLAIM}`)).toBe('dirty claim\n');
   expect(await git.resolveRef('HEAD')).toBe(head);
@@ -187,7 +193,7 @@ it.each(['apply', 'pop'])(
     expect(result.exitCode).toBe(128);
     expect(result.stderr).toContain('EPERM');
     expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-    expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+    expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
     expect(await vfs.readFileText('/repo/a.txt')).toBe('feature\n');
     expect(await vfs.readFileText(`/repo/${CLAIM}`)).toBe('foreign claim\n');
     expect(await git.resolveRef('HEAD')).toBe(head);
@@ -228,7 +234,7 @@ it('git apply rejects all planned patch targets before applying its earlier ordi
   expect(result.exitCode).toBe(128);
   expect(result.stderr).toContain('EPERM');
   expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-  expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+  expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
   expect(await vfs.readFileText('/repo/a.txt')).toBe('main\n');
   expect(await vfs.exists(`/repo/${CLAIM}`)).toBe(false);
   expect(await git.resolveRef('HEAD')).toBe(head);
@@ -251,7 +257,7 @@ it('git revert rejects its full inverse before ordinary bytes, index, or HEAD mu
   expect(result.exitCode).toBe(128);
   expect(result.stderr).toContain('EPERM');
   expect(calls).toEqual([['/repo/a.txt', `/repo/${CLAIM}`]]);
-  expect(batches).toEqual([[{ kind: 'write', path: '/repo' }]]);
+  expect(batches).toEqual(REPO_REPLACEMENT_BATCH);
   expect(await vfs.readFileText('/repo/a.txt')).toBe('feature\n');
   expect(await vfs.readFileText(`/repo/${CLAIM}`)).toBe('foreign claim\n');
   expect(await git.resolveRef('HEAD')).toBe(head);

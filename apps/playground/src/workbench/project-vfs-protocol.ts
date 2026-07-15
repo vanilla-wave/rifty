@@ -24,6 +24,7 @@ import type {
   OwnerVfsRevisionFrame,
   OwnerVfsSnapshotEntry,
   PathVersion,
+  TreeRevision,
 } from '../glue/owner-vfs-protocol.ts';
 import type { VfsSnapshotFrame } from '../glue/vfs-snapshot-port.ts';
 
@@ -46,6 +47,37 @@ export interface ProjectVfsReadDirectoryRequest {
 export interface ProjectVfsSnapshotMessage {
   readonly type: 'workbench:project-vfs-snapshot';
   readonly frame: VfsSnapshotFrame;
+}
+
+export type ProjectVfsAppliedMutation =
+  | {
+      readonly kind: 'rename';
+      readonly treeRevision: TreeRevision;
+      readonly sourcePath: string;
+      readonly targetPath: string;
+    }
+  | {
+      readonly kind: 'remove';
+      readonly treeRevision: TreeRevision;
+      readonly path: string;
+      readonly recursive: boolean;
+    }
+  | {
+      readonly kind: 'reset';
+      readonly treeRevision: TreeRevision;
+      readonly rootPath: string;
+    };
+
+export interface ProjectVfsStateMessage {
+  readonly type: 'workbench:project-vfs-state';
+  readonly fromTreeRevision: TreeRevision;
+  readonly mutations: readonly ProjectVfsAppliedMutation[];
+  readonly frame: VfsSnapshotFrame;
+}
+
+export interface ProjectVfsFatalMessage {
+  readonly type: 'workbench:project-vfs-fatal';
+  readonly error: ProjectVfsReadFailure;
 }
 
 type FileEntry = Extract<OwnerVfsSnapshotEntry, { readonly kind: 'file' }>;
@@ -105,6 +137,8 @@ export type OwnerProjectVfsFrame =
   | OwnerVfsCommitCleanedMessage
   | OwnerVfsDurabilityAckMessage
   | ProjectVfsSnapshotMessage
+  | ProjectVfsStateMessage
+  | ProjectVfsFatalMessage
   | ProjectVfsReadFileResult
   | ProjectVfsReadDirectoryResult;
 
@@ -184,6 +218,10 @@ export function inspectOwnerProjectVfsFrame(value: unknown): OwnerProjectVfsFram
       exact(frame, ['type', 'frame'], 'owner project VFS snapshot');
       inspectSnapshot(frame.frame);
       return frame as unknown as ProjectVfsSnapshotMessage;
+    case 'workbench:project-vfs-state':
+      return inspectState(frame);
+    case 'workbench:project-vfs-fatal':
+      return inspectFatal(frame);
     case 'workbench:project-vfs-read-file-result':
       return inspectReadFileResult(frame);
     case 'workbench:project-vfs-read-directory-result':
@@ -379,6 +417,69 @@ function inspectSnapshot(value: unknown): VfsSnapshotFrame {
   return snapshot as unknown as VfsSnapshotFrame;
 }
 
+function inspectState(frame: Record<string, unknown>): ProjectVfsStateMessage {
+  exact(frame, ['type', 'fromTreeRevision', 'mutations', 'frame'], 'owner project VFS state');
+  const fromTreeRevision = nonNegativeInteger(
+    frame.fromTreeRevision,
+    'owner project VFS state prior revision',
+  );
+  const snapshot = inspectSnapshot(frame.frame);
+  if (snapshot.treeRevision < fromTreeRevision) throw invalid('owner project VFS state revision');
+  if (!Array.isArray(frame.mutations)) throw invalid('owner project VFS state mutations');
+
+  let priorRevision = fromTreeRevision;
+  for (const value of frame.mutations) {
+    const mutation = record(value, 'owner project VFS applied mutation');
+    const treeRevision = nonNegativeInteger(
+      mutation.treeRevision,
+      'owner project VFS applied mutation revision',
+    );
+    if (
+      treeRevision <= fromTreeRevision ||
+      treeRevision < priorRevision ||
+      treeRevision > snapshot.treeRevision
+    ) {
+      throw invalid('owner project VFS applied mutation revision');
+    }
+    priorRevision = treeRevision;
+    switch (mutation.kind) {
+      case 'rename':
+        exact(
+          mutation,
+          ['kind', 'treeRevision', 'sourcePath', 'targetPath'],
+          'owner project VFS rename mutation',
+        );
+        absolutePath(mutation.sourcePath, 'owner project VFS rename mutation source');
+        absolutePath(mutation.targetPath, 'owner project VFS rename mutation target');
+        break;
+      case 'remove':
+        exact(
+          mutation,
+          ['kind', 'treeRevision', 'path', 'recursive'],
+          'owner project VFS remove mutation',
+        );
+        absolutePath(mutation.path, 'owner project VFS remove mutation path');
+        if (typeof mutation.recursive !== 'boolean') {
+          throw invalid('owner project VFS remove mutation recursive');
+        }
+        break;
+      case 'reset':
+        exact(mutation, ['kind', 'treeRevision', 'rootPath'], 'owner project VFS reset mutation');
+        absolutePath(mutation.rootPath, 'owner project VFS reset mutation root');
+        break;
+      default:
+        throw invalid('owner project VFS applied mutation');
+    }
+  }
+  return frame as unknown as ProjectVfsStateMessage;
+}
+
+function inspectFatal(frame: Record<string, unknown>): ProjectVfsFatalMessage {
+  exact(frame, ['type', 'error'], 'owner project VFS fatal');
+  inspectFailure(frame.error, 'owner project VFS fatal error');
+  return frame as unknown as ProjectVfsFatalMessage;
+}
+
 function inspectSnapshotEntry(value: unknown): void {
   const entry = record(value, 'owner project VFS snapshot entry');
   if (entry.kind === 'dir') {
@@ -485,11 +586,16 @@ function inspectReadDirectoryResult(frame: Record<string, unknown>): ProjectVfsR
 }
 
 function inspectReadFailure(value: unknown): ProjectVfsReadFailure {
-  const error = record(value, 'owner project VFS read failure');
-  exact(error, ['name', 'message'], 'owner project VFS read failure');
-  nonEmptyString(error.name, 'owner project VFS read failure name');
-  string(error.message, 'owner project VFS read failure message');
+  const error = inspectFailure(value, 'owner project VFS read failure');
   return error as unknown as ProjectVfsReadFailure;
+}
+
+function inspectFailure(value: unknown, label: string): Record<string, unknown> {
+  const error = record(value, label);
+  exact(error, ['name', 'message'], label);
+  nonEmptyString(error.name, `${label} name`);
+  string(error.message, `${label} message`);
+  return error;
 }
 
 function inspectRevision(value: Record<string, unknown>): void {

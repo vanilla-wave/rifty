@@ -4,7 +4,7 @@ interface CloseableProjectVfs {
 
 export interface WorkbenchProjectCompositionOptions<Vfs extends CloseableProjectVfs, Runtime> {
   readonly createVfs: () => Vfs;
-  readonly createRuntime: () => Runtime;
+  readonly createRuntime: (vfs: Vfs) => Runtime;
 }
 
 export interface WorkbenchProjectComposition<Vfs extends CloseableProjectVfs, Runtime> {
@@ -18,7 +18,7 @@ export async function createWorkbenchProjectComposition<Vfs extends CloseablePro
 ): Promise<WorkbenchProjectComposition<Vfs, Runtime>> {
   const vfs = options.createVfs();
   try {
-    return Object.freeze({ vfs, runtime: options.createRuntime() });
+    return Object.freeze({ vfs, runtime: options.createRuntime(vfs) });
   } catch (constructionError) {
     try {
       await vfs.close();

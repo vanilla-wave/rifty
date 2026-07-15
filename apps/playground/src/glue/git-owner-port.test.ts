@@ -80,6 +80,20 @@ describe('git owner RPC bridge', () => {
         input: { target: 'HEAD', mode: 'hard' },
       }),
     ).toBe('tree');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'mixed',
+        op: 'reset',
+        input: { target: 'HEAD', mode: 'mixed' },
+      }),
+    ).toBe('none');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'soft',
+        op: 'reset',
+        input: { target: 'HEAD', mode: 'soft' },
+      }),
+    ).toBe('none');
   });
 
   it('exposes exact worktree intents while routing metadata-only Git writes through the guard', () => {
@@ -94,8 +108,8 @@ describe('git owner RPC bridge', () => {
       ),
     ).toEqual([
       { kind: 'write', path: '/repo/.git' },
-      { kind: 'rm', path: '/repo/package.json' },
-      { kind: 'rm', path: '/repo/src' },
+      { kind: 'replace', path: '/repo/package.json' },
+      { kind: 'replace', path: '/repo/src' },
     ]);
     expect(
       gitOwnerMutationIntents(
@@ -104,8 +118,16 @@ describe('git owner RPC bridge', () => {
       ),
     ).toEqual([
       { kind: 'write', path: '/repo/.git' },
-      { kind: 'rm', path: '/repo' },
+      { kind: 'replace', path: '/repo' },
     ]);
+    for (const mode of ['soft', 'mixed'] as const) {
+      expect(
+        gitOwnerMutationIntents(
+          { id: mode, op: 'reset', input: { target: 'HEAD', mode } },
+          '/repo',
+        ),
+      ).toEqual([{ kind: 'write', path: '/repo/.git' }]);
+    }
   });
 
   it('returns status identical to the owner git engine for a known tree', async () => {

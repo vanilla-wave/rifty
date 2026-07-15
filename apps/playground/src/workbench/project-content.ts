@@ -1,8 +1,11 @@
 import type { SnapshotFs } from '../glue/snapshot-fs.ts';
 import type { VfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
+import type { ProjectDocumentInvalidation } from './errors.ts';
 import {
   type ProjectDocumentReadEntry,
   type ProjectDocuments,
+  type ProjectDocumentsMutation,
+  type ProjectDocumentsRevision,
   createProjectDocumentsController,
 } from './project-documents.ts';
 import {
@@ -23,6 +26,10 @@ export interface ProjectContentControllerOptions {
 export interface ProjectContentController {
   readonly files: ProjectFiles;
   readonly documents: ProjectDocuments;
+  /** Owner-applied structural fact; called before the matching Files reflection. */
+  invalidate(mutation: ProjectDocumentsMutation, revision: ProjectDocumentsRevision): void;
+  /** Transport lifecycle fence; does not claim a new owner revision. */
+  invalidateAll(reason: ProjectDocumentInvalidation): void;
   /** Pure synchronous admission check; does not fence content handles. */
   preflightClose(): void;
   /** Dirty/saving documents reject before files or the committer are fenced. */
@@ -47,9 +54,6 @@ export function createProjectContentController(
     committer: options.committer,
     readVersionedFile: options.readVersionedFile,
     readVersionedDirectory: options.readVersionedDirectory,
-    onAppliedMutation: (mutation, revision) => {
-      documentController.invalidate(mutation, revision);
-    },
   });
 
   let closeAttempt: Promise<void> | null = null;
@@ -99,6 +103,8 @@ export function createProjectContentController(
   return Object.freeze({
     files: fileController.files,
     documents: documentController.documents,
+    invalidate: documentController.invalidate,
+    invalidateAll: documentController.invalidateAll,
     preflightClose,
     close,
   });
