@@ -28,6 +28,16 @@ describe('pty-protocol', () => {
     expect(isOwnerToPage(f)).toBe(true);
     expect(isPageToOwner(f)).toBe(false);
   });
+  it('classifies owner-authoritative run admission as owner→page', () => {
+    const admitted: PtyFrame = {
+      type: 'pty:run-ready',
+      sid: 's1',
+      rid: 'r1',
+    };
+
+    expect(isOwnerToPage(admitted)).toBe(true);
+    expect(isPageToOwner(admitted)).toBe(false);
+  });
   it('chunk frames carry Uint8Array data + monotonic seq shape', () => {
     const f: PtyFrame = {
       type: 'pty:chunk',
@@ -126,6 +136,34 @@ describe('pty-protocol', () => {
 
     expect([stdin, eof, close].every(isPageToOwner)).toBe(true);
     expect([stdinAck, closeAck].every(isOwnerToPage)).toBe(true);
+  });
+
+  it('keeps idle session resize distinct from mandatory-rid live resize', () => {
+    const idle: PtyFrame = {
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'session-resize-1',
+      cols: 100,
+      rows: 30,
+    };
+    const idleAck: PtyFrame = {
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'session-resize-1',
+      ok: true,
+    };
+    const live: PtyFrame = {
+      type: 'pty:resize',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'resize-1',
+      cols: 100,
+      rows: 30,
+    };
+
+    expect(isPageToOwner(idle)).toBe(true);
+    expect(isOwnerToPage(idleAck)).toBe(true);
+    expect(live).toMatchObject({ type: 'pty:resize', rid: 'r1' });
   });
 });
 

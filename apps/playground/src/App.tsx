@@ -198,6 +198,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     execResult: (_sid, _line, opts) => unavailableResult(opts),
     writeStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     endStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    resizeSession: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     resize: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     signal: () => {},
     closeSession: () => Promise.resolve(),
