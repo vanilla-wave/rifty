@@ -10,7 +10,7 @@ sources: [DD-3, DD-4, EPIC D]
 
 ## Context
 
-2026-07-10: react atoms carved out to `distribution/react-bindings` (epic `embeddable-dev-loop`, ready); this item keeps the residual tail. All of it sits over the SAME ADR-0224 Workbench project-session handles.
+2026-07-10: react atoms carved out to `distribution/react-bindings` (epic `embeddable-dev-loop`, ready); this item keeps the residual tail. All of it sits over the SAME ADR-0263 Workbench project-session handles.
 
 ## Options / Next
 

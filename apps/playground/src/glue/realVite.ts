@@ -180,9 +180,10 @@ export interface WorkspaceOwnerHandle {
   execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult>;
   writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void>;
   endStdin(sid: string, rid: string): Promise<void>;
+  resizeSession(sid: string, cols: number, rows: number): Promise<void>;
   resize(sid: string, rid: string, cols: number, rows: number): Promise<void>;
   signal(sid: string, rid: string): void;
-  closeSession(sid: string): Promise<void>;
+  closeSession(sid: string, cancellation?: Error): Promise<void>;
   /**
    * Seed/overwrite a file in the owner realm's tree (a `rifty:vfs-write` frame,
    * ADR-0146). The owner-resident shell reads its OWN realm's `syncMirror()`, so
@@ -1087,9 +1088,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     },
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
     endStdin: (sid, rid) => client.endStdin(sid, rid),
+    resizeSession: (sid, cols, rows) => client.resizeSession(sid, cols, rows),
     resize: (sid, rid, cols, rows) => client.resize(sid, rid, cols, rows),
     signal: (sid, rid) => client.signal(sid, rid),
-    closeSession: (sid) => client.closeSession(sid),
+    closeSession: (sid, cancellation) => client.closeSession(sid, cancellation),
     isAlive: () => !exited,
     writeFile(path, content) {
       writeFrame({ type: 'write', path, data: enc.encode(content) });

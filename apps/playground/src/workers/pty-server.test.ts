@@ -2,7 +2,8 @@ import { EventEmitter } from 'node:events';
 import { Shell } from '@riftydev/shell';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
+import { createPtyClient } from '../glue/pty-client.ts';
+import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { type ForegroundChildHandle, runForegroundChild } from '../glue/run-foreground-child.ts';
 import { type DevServerChildHandle, createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createPtyServer } from './pty-server.ts';
@@ -61,9 +62,21 @@ type FutureAck =
       readonly error?: string;
     }
   | {
+      readonly type: 'pty:run-ready';
+      readonly sid: string;
+      readonly rid: string;
+    }
+  | {
       readonly type: 'pty:resize-ack';
       readonly sid: string;
       readonly rid: string;
+      readonly opId: string;
+      readonly ok: boolean;
+      readonly error?: string;
+    }
+  | {
+      readonly type: 'pty:session-resize-ack';
+      readonly sid: string;
       readonly opId: string;
       readonly ok: boolean;
       readonly error?: string;
@@ -89,6 +102,221 @@ describe('pty-server', () => {
     const { server, out } = harness();
     server.handleFrame({ type: 'pty:open', sid: 's1' });
     expect(out.some((f) => f.type === 'pty:ready' && f.sid === 's1')).toBe(true);
+  });
+
+  it('accepts idle session dimensions, rejects them while active, and accepts them after exit', async () => {
+    const { server, out } = harness();
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'idle-1',
+      cols: 100,
+      rows: 30,
+    });
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'idle-1',
+      ok: true,
+    });
+
+    const run = server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'r1',
+      line: 'sleep 5',
+      cols: 100,
+      rows: 30,
+      isTTY: true,
+    });
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'idle-busy',
+      cols: 120,
+      rows: 40,
+    });
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'idle-busy',
+      ok: false,
+      error: expect.stringMatching(/ProjectBusyError/),
+    });
+
+    server.handleFrame({ type: 'pty:signal', sid: 's1', rid: 'r1', signal: 'SIGINT' });
+    await run;
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'idle-2',
+      cols: 132,
+      rows: 43,
+    });
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'idle-2',
+      ok: true,
+    });
+  });
+
+  it('rejects invalid and unknown idle session resize without a success ACK', () => {
+    const { server, out } = harness();
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'invalid',
+      cols: 0,
+      rows: 30,
+    });
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 'missing',
+      opId: 'missing',
+      cols: 100,
+      rows: 30,
+    });
+
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'invalid',
+      ok: false,
+      error: expect.stringMatching(/RangeError/),
+    });
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 'missing',
+      opId: 'missing',
+      ok: false,
+      error: expect.stringMatching(/ClosedHandleError/),
+    });
+  });
+
+  it('round-trips idle resize through the real client and actor before the next exec', async () => {
+    const pageFrames: PageToOwnerFrame[] = [];
+    const seen: Array<{ cols: number | undefined; rows: number | undefined }> = [];
+    const client = createPtyClient({ send: (frame) => pageFrames.push(frame) });
+    const server = createPtyServer({
+      send: (frame) => client.onFrame(frame),
+      makeShell: () => {
+        const shell = new Shell({ cwd: '/', env: {} });
+        shell.registerCommand('capture-size', async (_args, ctx) => {
+          seen.push({ cols: ctx.cols, rows: ctx.rows });
+          return 0;
+        });
+        return shell;
+      },
+    });
+    const opening = client.openSession('s1');
+    await server.handleFrame(pageFrames.shift()!);
+    await opening;
+    const resized = client.resizeSession('s1', 120, 40);
+    await expect(
+      settledOr(
+        resized.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+    await server.handleFrame(pageFrames.shift()!);
+    await expect(resized).resolves.toBeUndefined();
+
+    const run = client.exec('s1', 'capture-size', {
+      cols: 120,
+      rows: 40,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    await server.handleFrame(pageFrames.shift()!);
+    await expect(run).resolves.toBe(0);
+    expect(seen).toEqual([{ cols: 120, rows: 40 }]);
+  });
+
+  it('round-trips onStart only after the owner actor admits the run', async () => {
+    const gate = deferred();
+    const pageFrames: PageToOwnerFrame[] = [];
+    const starts: string[] = [];
+    const client = createPtyClient({ send: (frame) => pageFrames.push(frame) });
+    const server = createPtyServer({
+      send: (frame) => client.onFrame(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+
+    const opening = client.openSession('s1');
+    await server.handleFrame(pageFrames.shift()!);
+    await opening;
+
+    const run = client.exec('s1', 'sleep 5', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(rid),
+    });
+    const exec = pageFrames[0] as Extract<PageToOwnerFrame, { type: 'pty:exec' }>;
+    expect(exec.type).toBe('pty:exec');
+    expect(starts).toEqual([]);
+
+    const ownerRun = Promise.resolve(server.handleFrame(pageFrames.shift()!));
+    expect(starts).toEqual([exec.rid]);
+
+    client.signal('s1', exec.rid);
+    await server.handleFrame(pageFrames.shift()!);
+    await ownerRun;
+    await expect(run).resolves.toBe(130);
+  });
+
+  it('round-trips session close before page admission through the real client and actor', async () => {
+    const gate = deferred();
+    const pageFrames: PageToOwnerFrame[] = [];
+    const ownerFrames: OwnerToPageFrame[] = [];
+    const starts: string[] = [];
+    const client = createPtyClient({ send: (frame) => pageFrames.push(frame) });
+    const server = createPtyServer({
+      send: (frame) => ownerFrames.push(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+
+    const opening = client.openSession('s1');
+    await server.handleFrame(pageFrames.shift()!);
+    client.onFrame(ownerFrames.shift()!);
+    await opening;
+
+    const run = client.execResult('s1', 'node pending.mjs', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(rid),
+    });
+    const exec = pageFrames.shift()!;
+    expect(exec.type).toBe('pty:exec');
+    const ownerRun = Promise.resolve(server.handleFrame(exec));
+    await Promise.resolve();
+    expect(ownerFrames.map((frame) => frame.type)).toEqual(['pty:run-ready']);
+
+    const closing = client.closeSession('s1');
+    const ownerClose = Promise.resolve(server.handleFrame(pageFrames.shift()!));
+    await Promise.all([ownerRun, ownerClose]);
+    expect(ownerFrames.map((frame) => frame.type)).toEqual([
+      'pty:run-ready',
+      'pty:exit',
+      'pty:close-ack',
+    ]);
+    for (const frame of ownerFrames) client.onFrame(frame);
+
+    expect(starts).toEqual([]);
+    await expect(run).resolves.toEqual({
+      exitCode: 130,
+      exit: { code: null, signal: 'SIGINT' },
+    });
+    await expect(closing).resolves.toBeUndefined();
+    gate.resolve();
   });
 
   it('claims one run synchronously before an awaited gate', async () => {
@@ -126,6 +354,10 @@ describe('pty-server', () => {
     await Promise.resolve();
 
     expect(gateCalls).toBe(1);
+    expect(wireFrames(out)).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
+    expect(
+      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2'),
+    ).toBe(false);
     expect(out).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', sid: 's1', rid: 'r2', code: 1 }),
     );
@@ -564,6 +796,59 @@ describe('pty-server', () => {
     });
   });
 
+  it('never acknowledges a run rejected while the session actor is closing', async () => {
+    const gate = deferred();
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    const first = server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'r1',
+      line: 'echo first',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    const close = server.handleFrame({ type: 'pty:close', sid: 's1', opId: 'close-1' });
+    server.handleFrame({
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'resize-closing',
+      cols: 100,
+      rows: 30,
+    });
+    const rejected = server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'r2',
+      line: 'echo too-late',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    await Promise.all([first, close, rejected]);
+    expect(wireFrames(out)).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
+    expect(
+      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2'),
+    ).toBe(false);
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'resize-closing',
+      ok: false,
+      error: expect.stringMatching(/ClosedHandleError/),
+    });
+    expect(out).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', sid: 's1', rid: 'r2', code: 1 }),
+    );
+  });
+
   it('exec echo streams chunk(s) BEFORE exit (no reorder)', async () => {
     const { server, out } = harness();
     server.handleFrame({ type: 'pty:open', sid: 's1' });
@@ -705,6 +990,9 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit').toBeTruthy();
     expect(exit && exit.type === 'pty:exit' && exit.code).not.toBe(0);
     expect(exit && exit.type === 'pty:exit' && exit.error).toBeTruthy();
+    expect(
+      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r1'),
+    ).toBe(false);
   });
 
   it('routes pty:dev-server-req to onDevServerReq (ADR-0148)', () => {

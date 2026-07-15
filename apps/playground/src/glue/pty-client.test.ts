@@ -306,6 +306,115 @@ describe('pty-client', () => {
     await first;
   });
 
+  it('publishes onStart only after the matching owner admission and fences sibling/duplicate frames', async () => {
+    const { client, sent } = harness();
+    const starts: string[] = [];
+    const first = client.exec('s1', 'first', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(`s1/${rid}`),
+    });
+    const sibling = client.exec('s2', 'sibling', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(`s2/${rid}`),
+    });
+    const execs = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    const firstExec = execs[0]!;
+    const siblingExec = execs[1]!;
+
+    expect(starts).toEqual([]);
+    client.onFrame({
+      type: 'pty:run-ready',
+      sid: 's2',
+      rid: firstExec.rid,
+    });
+    expect(starts).toEqual([]);
+
+    client.onFrame({ type: 'pty:run-ready', sid: 's2', rid: siblingExec.rid });
+    client.onFrame({ type: 'pty:run-ready', sid: 's2', rid: siblingExec.rid });
+    client.onFrame({ type: 'pty:run-ready', sid: 's1', rid: firstExec.rid });
+    expect(starts).toEqual([`s2/${siblingExec.rid}`, `s1/${firstExec.rid}`]);
+
+    for (const frame of execs) {
+      client.onFrame({
+        type: 'pty:exit',
+        sid: frame.sid,
+        rid: frame.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      });
+    }
+    await Promise.all([first, sibling]);
+  });
+
+  it.each(['stop', 'close', 'owner death'] as const)(
+    'never publishes onStart when %s settles before owner admission',
+    async (settlement) => {
+      const { client, sent } = harness();
+      const starts: string[] = [];
+      const run = client.exec('s1', 'node pending.mjs', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+        onStart: (rid) => starts.push(rid),
+      });
+      const exec = sent.find(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+          frame.type === 'pty:exec',
+      )!;
+
+      if (settlement === 'owner death') {
+        client.disconnect();
+        await expect(run).rejects.toThrow(/ClosedHandleError.*owner died/i);
+      } else {
+        let close: Promise<void> | undefined;
+        if (settlement === 'stop') client.signal('s1', exec.rid);
+        if (settlement === 'close') {
+          close = client.closeSession('s1');
+          client.onFrame({ type: 'pty:run-ready', sid: 's1', rid: exec.rid });
+          expect(starts).toEqual([]);
+        }
+        client.onFrame({
+          type: 'pty:exit',
+          sid: 's1',
+          rid: exec.rid,
+          code: 130,
+          exit: { code: null, signal: 'SIGINT' },
+          cwd: '/',
+          env: {},
+        });
+        await expect(run).resolves.toBe(130);
+        if (close) {
+          const closeFrame = sent.find(
+            (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+              frame.type === 'pty:close',
+          )!;
+          client.onFrame({
+            type: 'pty:close-ack',
+            sid: 's1',
+            opId: closeFrame.opId,
+            ok: true,
+          });
+          await close;
+        }
+      }
+
+      client.onFrame({ type: 'pty:run-ready', sid: 's1', rid: exec.rid });
+      expect(starts).toEqual([]);
+    },
+  );
+
   it('validates resize before transport and resolves only after matching owner ack', async () => {
     const { client, sent } = harness();
     const run = client.exec('s1', 'watch-size', {
@@ -366,6 +475,122 @@ describe('pty-client', () => {
       env: {},
     });
     await run;
+  });
+
+  it('validates idle resize before transport and settles only the matching session ACK', async () => {
+    const { client, sent } = harness();
+
+    expect(() => client.resizeSession('s1', 0, 30)).toThrow(RangeError);
+    expect(sent).toEqual([]);
+
+    const rejected = client.resizeSession('s1', 100, 30);
+    const first = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )!;
+    expect(first).toMatchObject({
+      type: 'pty:session-resize',
+      sid: 's1',
+      cols: 100,
+      rows: 30,
+    });
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: 'sibling',
+      opId: first.opId,
+      ok: true,
+    });
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'wrong-op',
+      ok: true,
+    });
+    await expect(
+      settledOr(
+        rejected.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: first.opId,
+      ok: false,
+      error: 'RangeError: owner rejected exact idle size',
+    });
+    await expect(rejected).rejects.toThrow('owner rejected exact idle size');
+
+    const accepted = client.resizeSession('s1', 120, 40);
+    const second = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )[1]!;
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: second.opId,
+      ok: true,
+    });
+    await expect(accepted).resolves.toBeUndefined();
+  });
+
+  it.each(['close', 'owner death'] as const)(
+    'rejects pending idle resize on %s and ignores its late ACK',
+    async (settlement) => {
+      const { client, sent } = harness();
+      const resized = client.resizeSession('s1', 100, 30);
+      const frame = sent.find(
+        (candidate): candidate is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+          candidate.type === 'pty:session-resize',
+      )!;
+
+      let close: Promise<void> | undefined;
+      if (settlement === 'close') close = client.closeSession('s1');
+      else client.disconnect();
+      await expect(resized).rejects.toThrow(/ClosedHandleError.*(?:closing|owner died)/i);
+
+      client.onFrame({
+        type: 'pty:session-resize-ack',
+        sid: 's1',
+        opId: frame.opId,
+        ok: true,
+      });
+      if (close) {
+        const closeFrame = sent.find(
+          (candidate): candidate is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+            candidate.type === 'pty:close',
+        )!;
+        client.onFrame({
+          type: 'pty:close-ack',
+          sid: 's1',
+          opId: closeFrame.opId,
+          ok: true,
+        });
+        await close;
+      }
+    },
+  );
+
+  it('uses the caller cancellation identity when close rejects a pending open waiter', async () => {
+    const { client, sent } = harness();
+    const opening = client.openSession('s1');
+    void opening.catch(() => {});
+    const cancellation = new Error('project terminal close started');
+
+    const closing = client.closeSession('s1', cancellation);
+    await expect(opening).rejects.toBe(cancellation);
+    const closeFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )!;
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: 's1',
+      opId: closeFrame.opId,
+      ok: true,
+    });
+    await expect(closing).resolves.toBeUndefined();
   });
 
   it('serializes acknowledged stdin writes, makes EOF idempotent, and rejects writes after EOF', async () => {
@@ -485,7 +710,7 @@ describe('pty-client', () => {
     expect(settled).toBe('resolved');
   });
 
-  it('does not lose a synchronous pty:exit reply during exec send', async () => {
+  it('does not fabricate owner admission when synchronous pty:exit wins during exec send', async () => {
     const ref: { client?: ReturnType<typeof createPtyClient> } = {};
     let startedRid: string | null = null;
     let sentRid: string | null = null;
@@ -520,11 +745,12 @@ describe('pty-client', () => {
       -999,
     );
     expect(settled).toBe(7);
-    expect(startedRid).toBe(sentRid);
+    expect(sentRid).not.toBeNull();
+    expect(startedRid).toBeNull();
     expect(client.snapshot('s1')).toEqual({ cwd: '/after', env: { DONE: '1' } });
   });
 
-  it('sends exec before onStart and releases the claim when onStart throws', async () => {
+  it('keeps the owner-admitted claim until exit when onStart throws', async () => {
     const order: string[] = [];
     const sent: PageToOwnerFrame[] = [];
     const client = createPtyClient({
@@ -544,8 +770,32 @@ describe('pty-client', () => {
         throw new Error('start callback failed');
       },
     });
+    const firstExec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    expect(order).toEqual(['pty:exec']);
+    client.onFrame({ type: 'pty:run-ready', sid: 's1', rid: firstExec.rid });
     await expect(failed).rejects.toThrow('start callback failed');
     expect(order).toEqual(['pty:exec', 'onStart', 'pty:signal']);
+
+    expect(() =>
+      client.exec('s1', 'too-early', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+    ).toThrow(/busy|already running/i);
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: firstExec.rid,
+      code: 130,
+      exit: { code: null, signal: 'SIGINT' },
+      cwd: '/',
+      env: {},
+    });
 
     const next = client.exec('s1', 'second', {
       cols: 80,
@@ -652,6 +902,9 @@ describe('pty-client', () => {
       /ClosedHandleError/,
     );
     await expect(client.endStdin('s1', 'r1')).rejects.toThrow(/ClosedHandleError/);
+    await expect(client.resizeSession('s1', 80, 24)).rejects.toThrow(
+      /ClosedHandleError.*owner died/i,
+    );
     expect(() => client.resize('s1', 'r1', 80, 24)).toThrow(/ClosedHandleError/);
     expect(() => client.signal('s1', 'r1')).toThrow(/ClosedHandleError.*owner died/i);
     expect(() => client.requestDevServer()).toThrow(/ClosedHandleError.*owner died/i);

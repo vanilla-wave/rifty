@@ -7,12 +7,12 @@ why: React is the anchor SaaS stack; without ready components every embedder han
 user_story: As a SaaS developer on React, I want `<RiftyProvider>` + `<RiftyEditor/>`/`<RiftyTerminal/>`/`<RiftyPreview/>` atoms I can place in my own layout and brand, but today only the internal Solid playground exists.
 epic: embeddable-dev-loop
 blocked_by: [distribution/workbench-controllers]
-sources: [ADR-0224, DD-4]
+sources: [ADR-0263, DD-4]
 ---
 
 ## Context
 
-Thin React binding over ADR-0224's `@riftydev/workbench` project-session handles (carved out of the old EPIC D kit; vue/`<RiftyIDE/>`/default theme stay in the residual `distribution/framework-bindings-kit`). Consumer owns layout and styling; components auto-wire through provider context without exposing Workbench internals.
+Thin React binding over ADR-0263's `@riftydev/workbench` project-session handles (carved out of the old EPIC D kit; vue/`<RiftyIDE/>`/default theme stay in the residual `distribution/framework-bindings-kit`). Consumer owns layout and styling; components auto-wire through provider context without exposing Workbench internals.
 
 ## Acceptance
 

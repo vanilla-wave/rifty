@@ -233,12 +233,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0122 | Raw stdin and mouse reporting |
 | 0225 | Cross-realm PTY resize control plane |
 | 0230 | Owner PTY stdin pump for supervised Node children |
+| 0264 | Owner-acknowledged idle PTY dimensions |
 
 ### distribution
 
 | # | Title |
 |---|---|
-| 0224 | Deep Workbench project sessions over generic runtimes |
+| 0263 | Workbench Playground companion subpath |
 
 ## Superseded (removed)
 
@@ -258,6 +259,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 | 0169 | 0177 | workspace TypeScript rule; absent-workspace vendored fallback removed |
 | 0216 | 0261 | background durability, learned-pin SWR, and stamp fault history grafted |
+| 0224 | 0263 | sealed root retained; finite Playground companion owns first-party plans/tools without exposing the owner |
 | 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
 
 ## Corrections (active)

@@ -6,7 +6,7 @@ created: 2026-06-08
 why: embedders need one package that owns real project lifecycle, files, packages, terminals, and preview; exporting playground controllers would export their coordination burden and keep Vite above the correct seam
 user_story: As a SaaS developer embedding rifty with my own UI, I want to provide project files and call `.run()` on a durable browser project, while Workbench owns the real Node/VFS/PTY lifecycle and exposes no playground or Vite-host internals.
 epic: embeddable-dev-loop
-sources: [ADR-0224, ADR-0225, ADR-0230, ADR-0231, ADR-0078, ADR-0135]
+sources: [ADR-0263, ADR-0264, ADR-0225, ADR-0230, ADR-0231, ADR-0078, ADR-0135, ADR-0185]
 code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src]
 ---
 
@@ -44,6 +44,17 @@ Worker entries are documented subpath exports:
 @riftydev/workbench/node-worker
 @riftydev/workbench/dev-server-worker
 ```
+
+One additional published companion subpath is finite and first-party:
+
+```text
+@riftydev/workbench/playground
+```
+
+It exports `openPlaygroundWorkbench`, neutral `PlaygroundProjectPlan` types,
+and lifetime-scoped semantic Playground tools. It never exports an owner
+handle/key/port, protocol frame, `ProjectSpec`, UI type, callback registry, or
+custom runtime hook. The generic root remains unchanged.
 
 No controller factory/options, `ProjectSpec`, `ProjectRuntime`, adapter
 registry, owner port, worker protocol, Vite server option, glue module, or
@@ -94,7 +105,7 @@ type WorkbenchOptions = {
       sqlite: string
       esbuild: string
     }
-    previewProbeTimeoutMs?: number
+    previewProbeTimeoutMs?: number // defaults to 3_000
   }
   packageAcquisition: {
     registryUrl: string
@@ -117,6 +128,9 @@ configuration rejects at open. Runtime Eddy failure is observable, then falls
 through to registry; it never converts a failed verification into success.
 Learned pins are internal profile state; `presetPins` contains only host-seeded
 initial pins.
+
+`previewProbeTimeoutMs` defaults to the service-worker readiness default of
+`3_000`; one bound covers the controlling-worker and routed-HTTP proofs.
 
 Storage behavior is exact:
 
@@ -145,9 +159,9 @@ declare Vite; two sections reject. If neither does, the factory adds pinned
 exposing server construction knobs.
 
 Node-server and Node-CLI definitions exercise the same lifecycle in the first
-release as package-internal adapters used by the Playground and acceptance
-fixtures. They are not public factories in v0 and are not fake one-consumer
-implementations.
+release as package-internal adapters used by the companion and acceptance
+fixtures. They are not root factories in v0. Only the finite companion
+`define(plan)` path can construct them; there is no generic adapter registry.
 
 `id` is a non-empty host string, injectively encoded into one storage segment;
 it is never interpolated as a path. Workbench stores a definition identity over
@@ -330,8 +344,9 @@ later writes reject `StdinClosedError`. Stop/close before child attach cancel
 queued data loudly and do not affect the physical process-control channel.
 
 ADR-0230 supplies real ordered data, pause/resume, split UTF-8, and EOF.
-ADR-0225 supplies live dimensions/`SIGWINCH`. Logical Node IPC disconnect never
-closes the physical process-control channel; resize/control remains until exit.
+ADR-0264 supplies owner-ACKed idle dimensions; ADR-0225 supplies live
+dimensions/`SIGWINCH`. Logical Node IPC disconnect never closes the physical
+process-control channel; resize/control remains until exit.
 
 ### Package acquisition
 
@@ -369,25 +384,31 @@ ADR-0078 and ADR-0135 remain active. Migration uses one adapter:
 ```text
 Playground ProjectSpec + Starter/Preset.setup
                        ↓
+              PlaygroundProjectPlan
+                       ↓
             Workbench ProjectDefinition
                        ↓
                  ProjectRuntime
 ```
 
-`setup: instant | from-scratch` stays Playground-internal product policy; it is
-not Workbench configuration. Instant may provide a trusted snapshot descriptor.
-From-scratch preserves its explicit first materialization/install behavior and
-persisted-project reuse. ADR-0165 whole-workspace reset is not renamed to
-"cold install". The adapter is removed from mutable ownership: all live state
-belongs to the Workbench session.
+`setup: instant | from-scratch` stays Playground product policy mapped by the
+one-way app adapter; it is not generic root configuration. Instant may provide
+an exact trusted snapshot descriptor in its companion plan. From-scratch never
+requests one and preserves explicit first install/reuse. ADR-0165 whole-project
+reset is not renamed to "cold install". The companion exposes high-level
+catalog/TS/SCM/archive handles over the same captured owner; raw ownership never
+crosses the boundary.
 
 ## Decisions
 
-- ADR-0224 ratifies the package, sealed root, vocabulary, exact configuration,
-  origin/project cardinality, state authorities, generic runtime seam, and
-  Playground mapping. The implementer does not create another Workbench ADR.
+- ADR-0263 supersedes ADR-0224 and ratifies the sealed generic root, finite
+  published Playground companion, vocabulary, exact configuration,
+  cardinality, state authorities, and runtime seam. The implementer does not
+  create another Workbench surface.
 - ADR-0225/0230/0231 own live resize, stdin/EOF flow, and recursive worker
   bootstrap. Their Node-visible behavior is parity-gated before extraction.
+- ADR-0264 owns truthful pre-run resize and preserves ADR-0225's mandatory-rid
+  live fence.
 - Vite `8.0.16` is the initial built-in default and Vite is the only verified
   host bundler; consumers may explicitly supply another project Vite version.
 - Workbench verifies/applies trusted snapshot descriptors but does not expose a
@@ -407,7 +428,7 @@ class, a RED test, and a sibling sweep. Repeated class/state owner stops point
 fixes and forces redesign/split. Each merged SHA is green; file moves are
 mechanical commits separate from behavior.
 
-0. **Decision contract (this docs commit).** Land ADR-0224/0225/0230/0231,
+0. **Decision contract (this docs commit).** Land ADR-0263/0264/0225/0230/0231,
    this ready item, and aligned epic/downstream contracts. No extraction.
 1. **Parallel prerequisites.** (A) Restore runtime-js/kernel stdin EOF,
    pause/resume, logical IPC/process-control separation, and recursive bootstrap
@@ -458,8 +479,8 @@ mechanical commits separate from behavior.
   exact verified snapshot and falls back safely on corruption/mismatch;
   from-scratch first materialization skips snapshot and shows the owner install;
   same project reuses a valid tree, while two project ids never share a stamp.
-- Playground imports only the public root/worker subpaths; no duplicate mutable
-  implementation remains.
+- Playground imports only the public root, `playground`, and worker subpaths;
+  no duplicate mutable implementation or raw owner surface remains.
 - Packed consumer installs tarballs without workspace resolution, performs a
   Vite production build, and passes Chromium acceptance.
 - `pnpm pr:check`, browser-unit, e2e, prod-e2e, publish dry-run, and the packed

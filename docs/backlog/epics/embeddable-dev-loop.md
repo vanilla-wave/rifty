@@ -6,7 +6,7 @@ created: 2026-07-10
 value: A SaaS team embeds a full rifty dev-loop (editor + terminal + npm install + live preview) into its existing React app under its own layout/branding — from published packages, no playground fork.
 user_story: As a SaaS developer, I want to mount a runnable Node sandbox (edit → npm install → vite dev → live preview) inside my existing React app with my own UI, but today that wiring is locked inside the Solid playground app — my only option is forking it.
 items: [distribution/workbench-controllers, distribution/react-bindings, distribution/embed-host-vite-example]
-sources: [ADR-0224]
+sources: [ADR-0263]
 ---
 
 ## Outcome

@@ -63,6 +63,7 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
   const stdin: Array<{ sid: string; rid: string; data: Uint8Array }> = [];
   const stdinEof: Array<{ sid: string; rid: string }> = [];
   const resizes: Array<{ sid: string; rid: string; cols: number; rows: number }> = [];
+  const sessionResizes: Array<{ sid: string; cols: number; rows: number }> = [];
   const signalled: Array<{ sid: string; rid: string }> = [];
   const writes: Array<{ path: string; content: string }> = [];
   const execs: ExecCall[] = [];
@@ -115,6 +116,10 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     },
     resize(sid: string, rid: string, cols: number, rows: number): Promise<void> {
       resizes.push({ sid, rid, cols, rows });
+      return Promise.resolve();
+    },
+    resizeSession(sid: string, cols: number, rows: number): Promise<void> {
+      sessionResizes.push({ sid, cols, rows });
       return Promise.resolve();
     },
     signal(sid: string, rid: string): void {
@@ -180,6 +185,7 @@ function makeFakeOwner(opts: { readonly root?: string } = {}) {
     stdin,
     stdinEof,
     resizes,
+    sessionResizes,
     signalled,
     writes,
     execs,
@@ -203,6 +209,59 @@ describe('createTerminalManager (pty port client)', () => {
     manager.select(second.id);
     expect(manager.activeSessionId()).toBe(second.id);
 
+    manager.dispose();
+  });
+
+  it('replaces idle fake success with owner-ACKed session resize and gates the next run', async () => {
+    const fake = makeFakeOwner();
+    const resizeAck = deferred<void>();
+    fake.owner.resizeSession = (sid, cols, rows) => {
+      fake.sessionResizes.push({ sid, cols, rows });
+      return resizeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    const resized = manager.resize(session.id, { cols: 120, rows: 40 });
+    const run = manager.runLine(session.id, 'node sized.mjs');
+    await vi.waitFor(() =>
+      expect(fake.sessionResizes).toEqual([{ sid: session.id, cols: 120, rows: 40 }]),
+    );
+    expect(fake.execs).toEqual([]);
+    await expect(
+      settledOr(
+        resized.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+
+    resizeAck.resolve();
+    await resized;
+    await waitForExecs(fake.execs, 1);
+    expect(fake.execs[0]!.opts).toMatchObject({ cols: 120, rows: 40 });
+    fake.execs[0]!.resolve(0);
+    await run;
+    manager.dispose();
+  });
+
+  it('rejects a run behind a failed idle session resize without sending exec', async () => {
+    const fake = makeFakeOwner();
+    const resizeAck = deferred<void>();
+    void resizeAck.promise.catch(() => {});
+    fake.owner.resizeSession = (sid, cols, rows) => {
+      fake.sessionResizes.push({ sid, cols, rows });
+      return resizeAck.promise;
+    };
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const resized = manager.resize(session.id, { cols: 120, rows: 40 });
+    const run = manager.runLine(session.id, 'node must-not-start.mjs');
+    const failure = new Error('idle resize owner NACK');
+    resizeAck.reject(failure);
+
+    await expect(resized).rejects.toBe(failure);
+    await expect(run).rejects.toBe(failure);
+    expect(fake.execs).toEqual([]);
     manager.dispose();
   });
 

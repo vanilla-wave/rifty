@@ -197,6 +197,7 @@ class PtySessionActor {
   readonly #sid: string;
   readonly #shell: Shell;
   readonly #deps: PtyServerDeps;
+  #dimensions: TerminalSize = { cols: 80, rows: 24 };
   #active: RunState | null = null;
   #state: 'open' | 'closing' | 'closed' = 'open';
   #shutdownPromise: Promise<void> | undefined;
@@ -233,18 +234,52 @@ class PtySessionActor {
       return Promise.resolve();
     }
 
+    this.#dimensions = { cols: frame.cols, rows: frame.rows };
     const run: RunState = {
       rid: frame.rid,
       stdin: new StdinQueue(),
       controller: new AbortController(),
-      terminal: new MutableTerminalResizeSource(frame.cols, frame.rows),
+      terminal: new MutableTerminalResizeSource(this.#dimensions.cols, this.#dimensions.rows),
       stdinEnded: false,
       seq: 0,
     };
     this.#active = run;
-    const done = this.#execute(run, frame);
+    // The actor owns admission: publish it only after the run is registered.
+    // Defer execution one microtask so `run.done` also exists if a loopback
+    // transport delivers stop/close re-entrantly from the admission callback.
+    const done = Promise.resolve().then(() => this.#execute(run, frame));
     run.done = done;
+    this.#deps.send({ type: 'pty:run-ready', sid: this.#sid, rid: frame.rid });
     return done;
+  }
+
+  resizeSession(frame: Extract<PageToOwnerFrame, { type: 'pty:session-resize' }>): void {
+    let error: string | undefined;
+    if (this.#state !== 'open') {
+      error = `ClosedHandleError: pty session ${this.#sid} is ${this.#state}`;
+    } else if (this.#active) {
+      error = `ProjectBusyError: pty session ${this.#sid} already running ${this.#active.rid}`;
+    } else if (!validDimension(frame.cols) || !validDimension(frame.rows)) {
+      error = 'RangeError: terminal dimensions must be positive safe integers';
+    } else {
+      this.#dimensions = { cols: frame.cols, rows: frame.rows };
+    }
+    this.#deps.send(
+      error === undefined
+        ? {
+            type: 'pty:session-resize-ack',
+            sid: this.#sid,
+            opId: frame.opId,
+            ok: true,
+          }
+        : {
+            type: 'pty:session-resize-ack',
+            sid: this.#sid,
+            opId: frame.opId,
+            ok: false,
+            error,
+          },
+    );
   }
 
   resize(frame: Extract<PageToOwnerFrame, { type: 'pty:resize' }>): void {
@@ -273,6 +308,7 @@ class PtySessionActor {
     }
     try {
       run.terminal.resize(frame.cols, frame.rows);
+      this.#dimensions = { cols: frame.cols, rows: frame.rows };
       this.#deps.send({
         type: 'pty:resize-ack',
         sid: this.#sid,
@@ -537,6 +573,20 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         const actor = sessions.get(frame.sid);
         if (actor) actor.resize(frame);
         else missingRunAck(frame);
+        return;
+      }
+      case 'pty:session-resize': {
+        const actor = sessions.get(frame.sid);
+        if (actor) actor.resizeSession(frame);
+        else {
+          deps.send({
+            type: 'pty:session-resize-ack',
+            sid: frame.sid,
+            opId: frame.opId,
+            ok: false,
+            error: `ClosedHandleError: no open pty session ${frame.sid}`,
+          });
+        }
         return;
       }
       case 'pty:close': {

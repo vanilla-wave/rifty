@@ -8,7 +8,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 
 - **DD-1 — No inlining of `@riftydev/*` into each other.** io (builtin registry), kernel (globalProcessManager), vfs (syncMirror) hold shared module singletons read/written across packages; bundling duplicates state + silently breaks composition. Stay `external` + lockstep-pinned (ADR-0070 D4). **Ratified via ADR-0071.**
 - **DD-2 — Umbrella is `@riftydev/sdk`** (not `@riftydev/runtime`, not unscoped `rifty` — npm 403'd that name). Ships scoped in the `@riftydev` scope. **Ratified: ADR-0071** (EPIC B landed).
-- **DD-3 — `@riftydev/workbench` is one deep project-session module** — sealed framework-free root, owner-resident state authorities, concrete presets over generic ProjectRuntime; host-bundler wiring stays in the host composition root. **Ratified: ADR-0224.**
+- **DD-3 — `@riftydev/workbench` is one deep project-session module** — sealed framework-free root, finite first-party companion, owner-resident state authorities, concrete presets over generic ProjectRuntime; host-bundler wiring stays in the host composition root. **Ratified: ADR-0263.**
 - **DD-4 — Component atoms are headless + themeable** (Radix/Headless-UI style: minimal markup + CSS-vars/slots, optional default theme), NOT batteries-styled. Pulled by `epics/embeddable-dev-loop` via `react-bindings`; ADR at track start.
 
 ## Items
@@ -32,7 +32,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 ## Dependency map
 
 ```
-A (publish, landed) ── B (umbrella/SDK, landed) ── C (deep workbench, ADR-0224) ── react-bindings ── embed-host-vite-example   [= epics/embeddable-dev-loop]
+A (publish, landed) ── B (umbrella/SDK, landed) ── C (deep workbench, ADR-0263) ── react-bindings ── embed-host-vite-example   [= epics/embeddable-dev-loop]
                               │                                          └── D residual (vue, <RiftyIDE/>, theme)
                               └── E1/E2 (template host config)          iframe-embed (draft, independent tier)
 ```

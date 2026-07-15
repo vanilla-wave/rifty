@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added (app-local Workbench contract)
+
+- A sealed app-local Workbench core now owns immutable Vite project
+  definitions, injective project identity, serialized seed/delete durability,
+  typed project/run/terminal lifetimes, controlling-service-worker preview
+  proof, storage selection, and origin/page admission. This is the verified
+  extraction seam; no raw owner transport or controller factory is exposed.
+- Deployment and acquisition URL references resolve once against the document
+  API base and satisfy destination-specific browser rules before any lock,
+  service-worker, storage, or owner effect.
+
 ### Added (foreground Node stdin and resize)
 
 - Each owner terminal now has one `PtySessionActor` with a synchronous run
@@ -35,6 +46,9 @@
 - Owner death and session closing reject pending and future PTY operations with
   `ClosedHandleError`; terminal rebind/dispose also rejects already-forwarded
   control waiters without routing an old `rid` through a replacement owner.
+- Idle terminal dimensions now cross a distinct owner-ACKed operation before
+  `run()`. Run admission waits behind admitted idle resize, while failed live
+  resize cannot poison the next run's acknowledged dimensions (ADR-0264).
 - The hidden terminal text mirror removes xterm's ANSI cursor/style replay, so an
   idle prompt remains observable after exact foreground child settlement.
 

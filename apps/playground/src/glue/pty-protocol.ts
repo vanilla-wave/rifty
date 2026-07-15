@@ -38,9 +38,18 @@ export type PtyResize = {
   cols: number;
   rows: number;
 };
+export type PtySessionResize = {
+  type: 'pty:session-resize';
+  sid: string;
+  opId: string;
+  cols: number;
+  rows: number;
+};
 export type PtyClose = { type: 'pty:close'; sid: string; opId: string };
 
 export type PtyReady = { type: 'pty:ready'; sid: string; error?: string };
+/** Owner actor accepted `rid` as this session's one active run. */
+export type PtyRunReady = { type: 'pty:run-ready'; sid: string; rid: string };
 export type PtyChunk = {
   type: 'pty:chunk';
   sid: string;
@@ -67,6 +76,11 @@ export type PtyResizeAck = {
   type: 'pty:resize-ack';
   sid: string;
   rid: string;
+  opId: string;
+} & PtyAckResult;
+export type PtySessionResizeAck = {
+  type: 'pty:session-resize-ack';
+  sid: string;
   opId: string;
 } & PtyAckResult;
 export type PtyStdinAck = {
@@ -147,15 +161,18 @@ export type PageToOwnerFrame =
   | PtyStdinEof
   | PtySignal
   | PtyResize
+  | PtySessionResize
   | PtyClose
   | PtyDevServerReq
   | PtyDevConfig
   | PtyPreviewReq;
 export type OwnerToPageFrame =
   | PtyReady
+  | PtyRunReady
   | PtyChunk
   | PtyExit
   | PtyResizeAck
+  | PtySessionResizeAck
   | PtyStdinAck
   | PtyCloseAck
   | PtyDevServer
@@ -177,6 +194,7 @@ const PAGE_TO_OWNER = new Set([
   'pty:stdin-eof',
   'pty:signal',
   'pty:resize',
+  'pty:session-resize',
   'pty:close',
   'pty:dev-server-req',
   'pty:dev-config',
@@ -184,9 +202,11 @@ const PAGE_TO_OWNER = new Set([
 ]);
 const OWNER_TO_PAGE = new Set([
   'pty:ready',
+  'pty:run-ready',
   'pty:chunk',
   'pty:exit',
   'pty:resize-ack',
+  'pty:session-resize-ack',
   'pty:stdin-ack',
   'pty:close-ack',
   'pty:dev-server',

@@ -80,6 +80,8 @@ interface PendingInputOperation extends ControlWaiter {
 }
 
 interface PendingResize {
+  cols: number;
+  rows: number;
   readonly waiters: ControlWaiter[];
 }
 
@@ -99,6 +101,8 @@ interface TerminalSession {
   /** Resolves once the owner replies `pty:ready` for this session. */
   ready: Promise<void>;
   dimensions: TerminalDimensions;
+  idleResizeTail: Promise<void>;
+  readonly idleResizePending: Set<ControlWaiter>;
   pendingInput: PendingInputOperation[];
   pendingResize?: PendingResize;
   readonly controlWaiters: Set<ControlWaiter>;
@@ -175,6 +179,8 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       activeRid: null,
       ready: observedReady(openOwnerSession(owner, id, opts.initialState)),
       dimensions: { cols: 80, rows: 24 },
+      idleResizeTail: Promise.resolve(),
+      idleResizePending: new Set(),
       pendingInput: [],
       controlWaiters: new Set(),
       closed: false,
@@ -268,6 +274,7 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
     session.pendingInput.splice(0);
     session.pendingResize = undefined;
     for (const waiter of [...session.controlWaiters]) waiter.reject(error);
+    session.idleResizePending.clear();
     session.claimCancellation?.reject(error);
   }
 
@@ -288,6 +295,45 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
     return settleForwarded(waiter, operation);
   }
 
+  function resizeIdle(session: TerminalSession, dimensions: TerminalDimensions): Promise<void> {
+    const waiter = controlWaiter(session);
+    session.idleResizePending.add(waiter);
+    const predecessor = session.idleResizeTail.catch(() => {});
+    session.idleResizeTail = waiter.promise;
+    const generation = session.generation;
+    const claimedOwner = owner;
+    const ready = session.ready;
+    void predecessor
+      .then(async () => {
+        if (waiter.settled) return;
+        await Promise.race([ready, waiter.promise]);
+        if (waiter.settled) return;
+        if (session.generation !== generation || session.closed || disposed) {
+          throw new Error(`ClosedHandleError: terminal session ${session.id} is closed`);
+        }
+        const acknowledged = claimedOwner.resizeSession(
+          session.id,
+          dimensions.cols,
+          dimensions.rows,
+        );
+        void acknowledged.catch(() => {});
+        await Promise.race([acknowledged, waiter.promise]);
+        if (waiter.settled) return;
+        if (session.generation !== generation || session.closed || disposed) {
+          throw new Error(`ClosedHandleError: terminal session ${session.id} is closed`);
+        }
+        session.dimensions = dimensions;
+        session.idleResizePending.delete(waiter);
+        waiter.resolve();
+      })
+      .catch((error: unknown) => {
+        session.idleResizePending.delete(waiter);
+        waiter.reject(error instanceof Error ? error : new Error(String(error)));
+      })
+      .finally(() => session.idleResizePending.delete(waiter));
+    return waiter.promise;
+  }
+
   function flushPending(
     session: TerminalSession,
     rid: string,
@@ -300,12 +346,7 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
     if (resize) {
       let operation: Promise<void>;
       try {
-        operation = claimedOwner.resize(
-          session.id,
-          rid,
-          session.dimensions.cols,
-          session.dimensions.rows,
-        );
+        operation = claimedOwner.resize(session.id, rid, resize.cols, resize.rows);
       } catch (error) {
         const cause = error instanceof Error ? error : new Error(String(error));
         for (const waiter of resize.waiters) waiter.reject(cause);
@@ -313,6 +354,8 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       }
       void operation.then(
         () => {
+          if (session.generation !== generation || session.closed || disposed) return;
+          session.dimensions = { cols: resize.cols, rows: resize.rows };
           for (const waiter of resize.waiters) waiter.resolve();
         },
         (error: unknown) => {
@@ -351,10 +394,11 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       return 1;
     }
 
-    session.dimensions = {
-      cols: dims?.cols === undefined ? session.dimensions.cols : dimension(dims.cols, 'cols'),
-      rows: dims?.rows === undefined ? session.dimensions.rows : dimension(dims.rows, 'rows'),
+    const requestedDimensions = {
+      cols: dims?.cols === undefined ? undefined : dimension(dims.cols, 'cols'),
+      rows: dims?.rows === undefined ? undefined : dimension(dims.rows, 'rows'),
     };
+    const idleBarrier = Promise.all([...session.idleResizePending].map((waiter) => waiter.promise));
 
     session.status = 'running';
     session.exitCode = undefined;
@@ -364,19 +408,24 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
     session.claimCancellation = cancellation;
 
     try {
-      await Promise.race([session.ready, cancellation.promise]);
+      await Promise.race([Promise.all([session.ready, idleBarrier]), cancellation.promise]);
       if (session.closed || session.generation !== generation) {
         throw new Error(`ClosedHandleError: terminal session ${id} is closed`);
       }
+      const runDimensions = {
+        cols: requestedDimensions.cols ?? session.dimensions.cols,
+        rows: requestedDimensions.rows ?? session.dimensions.rows,
+      };
       const claimedOwner = owner;
       const exitCode = await claimedOwner.exec(id, input, {
-        cols: session.dimensions.cols,
-        rows: session.dimensions.rows,
+        cols: runDimensions.cols,
+        rows: runDimensions.rows,
         isTTY: true,
         onChunk: (chunk, stream) => {
           write(session, chunk, stream);
         },
         onStart: (rid) => {
+          session.dimensions = runDimensions;
           session.activeRid = rid;
           if (session.stopRequested) {
             claimedOwner.signal(id, rid);
@@ -482,21 +531,28 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
         return Promise.reject(new Error(`ClosedHandleError: terminal session ${id} is closed`));
       }
       if (session.stopRequested) return Promise.reject(new TerminalRunStoppedError(id));
-      session.dimensions = {
+      const dimensions = {
         cols: dimension(dims.cols, 'cols'),
         rows: dimension(dims.rows, 'rows'),
       };
       if (session.activeRid) {
         const claimedOwner = owner;
         const rid = session.activeRid;
-        const dimensions = { ...session.dimensions };
         return forwarded(session, () =>
           claimedOwner.resize(id, rid, dimensions.cols, dimensions.rows),
-        );
+        ).then(() => {
+          session.dimensions = dimensions;
+        });
       }
-      if (session.status !== 'running') return Promise.resolve();
+      if (session.status !== 'running') return resizeIdle(session, dimensions);
       const waiter = controlWaiter(session);
-      const pending = session.pendingResize ?? { waiters: [] };
+      const pending = session.pendingResize ?? {
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+        waiters: [],
+      };
+      pending.cols = dimensions.cols;
+      pending.rows = dimensions.rows;
       pending.waiters.push(waiter);
       session.pendingResize = pending;
       return waiter.promise;

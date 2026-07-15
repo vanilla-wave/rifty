@@ -31,9 +31,8 @@ export interface ExecOptions {
   readonly isTTY: boolean;
   readonly onChunk: (chunk: string, stream: PtyStream) => void;
   /**
-   * Fired with the run's `rid` immediately after the `pty:exec` frame is sent,
-   * before any chunk arrives. Lets the caller route `writeStdin`/`signal` to the
-   * in-flight run (the terminal-manager tracks the active rid per session).
+   * Fired with the run's `rid` only after the owner actor replies
+   * `pty:run-ready`. Lets the caller route controls to the admitted run.
    */
   readonly onStart?: (rid: string) => void;
 }
@@ -66,7 +65,10 @@ type PendingRun = {
   readonly resolve: (result: PtyRunResult) => void;
   readonly reject: (error: Error) => void;
   readonly onChunk: ExecOptions['onChunk'];
+  readonly onStart: ExecOptions['onStart'];
   readonly stdinQueue: StdinOperation[];
+  admitted: boolean;
+  admissionCallbackFailed: boolean;
   stdinInFlight?: StdinOperation;
   stdinEnded: boolean;
   eofPromise?: Promise<void>;
@@ -77,6 +79,7 @@ type PendingResize = {
   readonly resolve: () => void;
   readonly reject: (error: Error) => void;
 };
+type PendingSessionResize = Omit<PendingResize, 'rid'>;
 type PendingClose = DeferredVoid & { readonly opId: string };
 type PendingReady = DeferredVoid;
 type PendingDevConfig = {
@@ -127,9 +130,10 @@ export interface PtyClient {
   execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult>;
   writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void>;
   endStdin(sid: string, rid: string): Promise<void>;
+  resizeSession(sid: string, cols: number, rows: number): Promise<void>;
   resize(sid: string, rid: string, cols: number, rows: number): Promise<void>;
   signal(sid: string, rid: string): void;
-  closeSession(sid: string): Promise<void>;
+  closeSession(sid: string, cancellation?: Error): Promise<void>;
   /** Ask the owner to re-publish dev-server state (explorer-reflects-owner-tree handshake on subscribe/reload). */
   requestDevServer(): void;
   /** Ask the owner to re-publish the preview-port set (subscribe handshake, ADR-0155; never a one-shot push). */
@@ -155,6 +159,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
   const sessions = new Map<string, SessionState>();
   const runs = new Map<string, PendingRun>();
   const resizes = new Map<string, PendingResize>();
+  const sessionResizes = new Map<string, PendingSessionResize>();
   const devConfigs = new Map<string, PendingDevConfig>();
   let devConfigSeq = 0;
   let operationSeq = 0;
@@ -171,7 +176,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     return s;
   }
 
-  function operationId(prefix: 'resize' | 'stdin' | 'close'): string {
+  function operationId(prefix: 'resize' | 'session-resize' | 'stdin' | 'close'): string {
     return `${prefix}${++operationSeq}`;
   }
 
@@ -189,13 +194,21 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     const s = sessions.get(sid);
     if (!s || s.closed || s.close) return undefined;
     const run = runs.get(rid);
-    return run?.sid === sid ? run : undefined;
+    return run?.sid === sid && !run.admissionCallbackFailed ? run : undefined;
   }
 
   function rejectResizes(sid: string, rid: string, error: Error): void {
     for (const [opId, pending] of resizes) {
       if (pending.sid !== sid || pending.rid !== rid) continue;
       resizes.delete(opId);
+      pending.reject(error);
+    }
+  }
+
+  function rejectSessionResizes(sid: string, error: Error): void {
+    for (const [opId, pending] of sessionResizes) {
+      if (pending.sid !== sid) continue;
+      sessionResizes.delete(opId);
       pending.reject(error);
     }
   }
@@ -295,7 +308,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         resolve,
         reject,
         onChunk: opts.onChunk,
+        onStart: opts.onStart,
         stdinQueue: [],
+        admitted: false,
+        admissionCallbackFailed: false,
         stdinEnded: false,
       };
       runs.set(rid, run);
@@ -318,20 +334,6 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         if (s.activeRid === rid) s.activeRid = null;
         reject(error instanceof Error ? error : new Error(String(error)));
         return;
-      }
-      try {
-        opts.onStart?.(rid);
-      } catch (error) {
-        runs.delete(rid);
-        if (s.activeRid === rid) s.activeRid = null;
-        run.stdinEnded = true;
-        rejectStdin(run, new Error('ClosedHandleError: run start callback failed'));
-        try {
-          deps.send({ type: 'pty:signal', sid, rid, signal: 'SIGINT' });
-        } catch {
-          // The original callback failure is the public cause; transport is already unusable.
-        }
-        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -386,6 +388,33 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       run.eofPromise = enqueueStdin(run, { kind: 'eof' });
       return run.eofPromise;
     },
+    resizeSession(sid: string, cols: number, rows: number): Promise<void> {
+      const validCols = dimension(cols, 'cols');
+      const validRows = dimension(rows, 'rows');
+      if (disconnected) {
+        return Promise.reject(new Error(`ClosedHandleError: owner died before idle resize ${sid}`));
+      }
+      const s = session(sid);
+      if (s.closed || s.close) {
+        return Promise.reject(new Error(`ClosedHandleError: pty session ${sid} is closing`));
+      }
+      const opId = operationId('session-resize');
+      const pending = deferredVoid();
+      sessionResizes.set(opId, { sid, resolve: pending.resolve, reject: pending.reject });
+      try {
+        deps.send({
+          type: 'pty:session-resize',
+          sid,
+          opId,
+          cols: validCols,
+          rows: validRows,
+        });
+      } catch (error) {
+        sessionResizes.delete(opId);
+        pending.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+      return pending.promise;
+    },
     resize(sid: string, rid: string, cols: number, rows: number): Promise<void> {
       const validCols = dimension(cols, 'cols');
       const validRows = dimension(rows, 'rows');
@@ -412,7 +441,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       }
       deps.send({ type: 'pty:signal', sid, rid, signal: 'SIGINT' });
     },
-    closeSession(sid: string): Promise<void> {
+    closeSession(sid: string, cancellation?: Error): Promise<void> {
       const s = session(sid);
       if (s.close) return s.close.promise;
       if (disconnected) {
@@ -424,8 +453,9 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       const pending = deferredVoid();
       const close: PendingClose = { ...pending, opId: operationId('close') };
       s.close = close;
-      const error = new Error(`ClosedHandleError: pty session ${sid} is closing`);
+      const error = cancellation ?? new Error(`ClosedHandleError: pty session ${sid} is closing`);
       for (const waiter of s.readyWaiters.splice(0)) waiter.reject(error);
+      rejectSessionResizes(sid, error);
       try {
         deps.send({ type: 'pty:close', sid, opId: close.opId });
       } catch (error) {
@@ -486,6 +516,30 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           }
           return;
         }
+        case 'pty:run-ready': {
+          const run = runs.get(frame.rid);
+          const s = sessions.get(frame.sid);
+          if (run?.sid !== frame.sid || run.admitted || !s || s.closed || s.close !== undefined) {
+            return;
+          }
+          run.admitted = true;
+          try {
+            run.onStart?.(frame.rid);
+          } catch (error) {
+            run.admissionCallbackFailed = true;
+            run.stdinEnded = true;
+            const closed = new Error('ClosedHandleError: run start callback failed');
+            rejectStdin(run, closed);
+            rejectResizes(frame.sid, frame.rid, closed);
+            try {
+              deps.send({ type: 'pty:signal', sid: frame.sid, rid: frame.rid, signal: 'SIGINT' });
+            } catch {
+              // The callback failure remains the public cause.
+            }
+            run.reject(error instanceof Error ? error : new Error(String(error)));
+          }
+          return;
+        }
         case 'pty:chunk': {
           const run = runs.get(frame.rid);
           // Active run → its onChunk. A chunk that arrives AFTER its run's
@@ -524,6 +578,14 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           const pending = resizes.get(frame.opId);
           if (!pending || pending.sid !== frame.sid || pending.rid !== frame.rid) return;
           resizes.delete(frame.opId);
+          if (frame.ok) pending.resolve();
+          else pending.reject(new Error(frame.error));
+          return;
+        }
+        case 'pty:session-resize-ack': {
+          const pending = sessionResizes.get(frame.opId);
+          if (!pending || pending.sid !== frame.sid) return;
+          sessionResizes.delete(frame.opId);
           if (frame.ok) pending.resolve();
           else pending.reject(new Error(frame.error));
           return;
@@ -592,6 +654,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       for (const [opId, pending] of resizes) {
         resizes.delete(opId);
         pending.reject(new Error(`ClosedHandleError: owner died during resize ${opId}`));
+      }
+      for (const [opId, pending] of sessionResizes) {
+        sessionResizes.delete(opId);
+        pending.reject(new Error(`ClosedHandleError: owner died during idle resize ${opId}`));
       }
       for (const s of sessions.values()) {
         const error = new Error('ClosedHandleError: owner died during session operation');
