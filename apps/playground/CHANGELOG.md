@@ -22,6 +22,9 @@
 - Preview-producing dev, installed-bin, and Node children capture owner-supplied
   PTY identity at shell construction. Guest environment overrides can no longer
   relabel a late preview event as a different run.
+- Owner PTY shutdown is one idempotent awaited barrier: it fences late frames,
+  settles every run and real shell child, and reports all session failures in
+  stable identity order.
 
 ### Added (foreground Node stdin and resize)
 
