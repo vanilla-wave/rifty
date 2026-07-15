@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { inspectProjectDefinition, projects } from './project-definition.ts';
+import {
+  inspectProjectDefinition,
+  inspectProjectDefinitionWire,
+  projectDefinitionWire,
+  projects,
+} from './project-definition.ts';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -413,5 +418,96 @@ describe('ProjectDefinition', () => {
     expect(new Set(values.map((value) => value.storageSegment))).toHaveProperty('size', ids.length);
 
     expect(() => projects.vite({ id: '', files: {} })).toThrow();
+  });
+
+  describe('owner wire', () => {
+    it('round-trips through structured clone while the owner recomputes derived identity', () => {
+      const inspected = snapshot({
+        id: 'wire-round-trip',
+        files: {
+          '/index.html': '<main>real bytes</main>',
+          '/binary.dat': new Uint8Array([0, 127, 255]),
+        },
+      });
+
+      const wire = projectDefinitionWire(inspected);
+      const cloned = structuredClone(wire);
+      const ownerInspected = inspectProjectDefinitionWire(cloned);
+
+      expect(ownerInspected).toEqual(inspected);
+      expect(ownerInspected.files['/binary.dat']).not.toBe(inspected.files['/binary.dat']);
+      expect(ownerInspected.storageSegment).toBe('wire-round-trip');
+      expect(Object.isFrozen(ownerInspected)).toBe(true);
+      expect(Object.isFrozen(ownerInspected.files)).toBe(true);
+    });
+
+    // Fault class: provenance-lie. The wire carries the page claim only as a
+    // comparison value; owner ingress derives identity from exact received bytes.
+    it('rejects changed bytes even when the page identity claim is retained', () => {
+      const inspected = snapshot({ id: 'wire-bytes', files: { '/message.txt': 'before' } });
+      const wire = structuredClone(projectDefinitionWire(inspected));
+      (wire.files as Record<string, Uint8Array>)['/message.txt'] = encoder.encode('after');
+
+      expect(() => inspectProjectDefinitionWire(wire)).toThrow(/identity/i);
+    });
+
+    it('rejects a changed page identity claim instead of accepting owner-derived bytes silently', () => {
+      const inspected = snapshot({ id: 'wire-identity', files: { '/message.txt': 'same' } });
+      const wire = { ...structuredClone(projectDefinitionWire(inspected)), identity: 'forged' };
+
+      expect(() => inspectProjectDefinitionWire(wire)).toThrow(/identity/i);
+    });
+
+    it.each([
+      ['extra root field', (wire: Record<string, unknown>) => ({ ...wire, extra: true })],
+      [
+        'missing identity',
+        (wire: Record<string, unknown>) => {
+          const { identity: _identity, ...rest } = wire;
+          return rest;
+        },
+      ],
+      ['wrong kind', (wire: Record<string, unknown>) => ({ ...wire, kind: 'node' })],
+      ['empty id', (wire: Record<string, unknown>) => ({ ...wire, id: '' })],
+      ['non-record files', (wire: Record<string, unknown>) => ({ ...wire, files: [] })],
+      [
+        'non-byte file',
+        (wire: Record<string, unknown>) => ({ ...wire, files: { '/index.html': 'text' } }),
+      ],
+      [
+        'project traversal',
+        (wire: Record<string, unknown>) => ({
+          ...wire,
+          files: { '/../outside': new Uint8Array([1]) },
+        }),
+      ],
+    ])('rejects corrupt definition wire: %s', (_label, corrupt) => {
+      const inspected = snapshot({ id: 'wire-invalid', files: { '/index.html': 'ok' } });
+      const wire = structuredClone(projectDefinitionWire(inspected)) as unknown as Record<
+        string,
+        unknown
+      >;
+
+      expect(() => inspectProjectDefinitionWire(corrupt(wire))).toThrow(TypeError);
+    });
+
+    it('defensively snapshots both page egress and owner ingress bytes', () => {
+      const inspected = snapshot({
+        id: 'wire-copies',
+        files: { '/value.bin': new Uint8Array([1]) },
+      });
+      const wire = projectDefinitionWire(inspected);
+      const firstWireBytes = wire.files['/value.bin'];
+      if (firstWireBytes === undefined) throw new Error('missing wire fixture');
+      firstWireBytes[0] = 2;
+
+      const freshWire = projectDefinitionWire(inspected);
+      const ownerInspected = inspectProjectDefinitionWire(structuredClone(freshWire));
+      const freshWireBytes = freshWire.files['/value.bin'];
+      if (freshWireBytes === undefined) throw new Error('missing fresh wire fixture');
+      freshWireBytes[0] = 3;
+
+      expect(ownerInspected.files['/value.bin']).toEqual(new Uint8Array([1]));
+    });
   });
 });
