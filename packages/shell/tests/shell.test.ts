@@ -767,6 +767,20 @@ describe('Shell — word elision + exit-code (Phase-1 fixes)', () => {
     expect(r.stdout).toBe(' end\n'); // leading space from the empty quoted arg
   });
 
+  it('bare empty single and double quotes each survive as one exact argument', async () => {
+    const sh = new Shell();
+    const calls: string[][] = [];
+    sh.registerCommand('capture-argv', async (args) => {
+      calls.push([...args]);
+      return 0;
+    });
+
+    const r = await sh.run(`capture-argv '' ""`);
+
+    expect(r.exitCode).toBe(0);
+    expect(calls).toEqual([['', '']]);
+  });
+
   it('rm -rf $UNSET does NOT target the cwd (empty arg elided)', async () => {
     const sh = new Shell({ cwd: '/' });
     await sh.run('mkdir -p /keep/inner');

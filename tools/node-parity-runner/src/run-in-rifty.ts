@@ -13,7 +13,12 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import { Worker } from 'node:worker_threads';
-import { NodeProcess, getProcessCwd, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  NodeProcess,
+  applyNodeProcessTerminalBootstrap,
+  getProcessCwd,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
@@ -377,15 +382,7 @@ function installSeededProcessMode(
       pid: 2,
       ppid: 1,
       argv: ['node', '/work/main.js'],
-      env: tty
-        ? {
-            RIFTY_STDIN_IS_TTY: '1',
-            RIFTY_STDOUT_IS_TTY: '1',
-            RIFTY_STDERR_IS_TTY: '1',
-            RIFTY_TTY_COLS: '80',
-            RIFTY_TTY_ROWS: '24',
-          }
-        : {},
+      env: {},
       cwd,
       stdio: {
         stdout: stdout.port1,
@@ -394,6 +391,15 @@ function installSeededProcessMode(
         ipc: ipc.port1,
       },
     });
+    if (tty) {
+      applyNodeProcessTerminalBootstrap(seeded, {
+        stdinIsTTY: true,
+        stdoutIsTTY: true,
+        stderrIsTTY: true,
+        cols: 80,
+        rows: 24,
+      });
+    }
     // The runtime's receiver was installed by NodeProcess above. Register the
     // harness ACK second on the hidden transport port, so EOF is acknowledged
     // only after the runtime receiver processed the frame. Never observe feed

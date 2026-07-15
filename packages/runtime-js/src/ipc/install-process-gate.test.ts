@@ -15,7 +15,11 @@ import { type WorkerSpawnSpec, publishKernelEntryBootstrap } from '@riftydev/ker
 import { afterEach, describe, expect, it } from 'vitest';
 import { Buffer as RiftyBuffer } from '../builtins/buffer.ts';
 import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
-import { NodeProcess, getProcessCwd } from '../builtins/process.ts';
+import {
+  NodeProcess,
+  applyNodeProcessTerminalBootstrap,
+  getProcessCwd,
+} from '../builtins/process.ts';
 import { installNodeProcessShim, installNodeRuntime } from './install-process.ts';
 
 const NATIVE_THEN = Promise.prototype.then;
@@ -88,21 +92,22 @@ describe('pre-entry gate (ADR-0157)', () => {
     expect((globalThis as { global?: unknown }).global).toBe(globalThis);
   });
 
-  it('Node worker: maps kernel TTY metadata onto process stdio streams', () => {
-    installNodeRuntime(
-      spec({
-        RIFTY_STDIN_IS_TTY: '1',
-        RIFTY_STDOUT_IS_TTY: '1',
-        RIFTY_STDERR_IS_TTY: '1',
-      }),
-    );
+  it('Node worker: typed terminal bootstrap shapes process stdio streams', () => {
+    installNodeRuntime(spec());
     const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    applyNodeProcessTerminalBootstrap(proc, {
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 80,
+      rows: 24,
+    });
     expect(proc.stdin.isTTY).toBe(true);
     expect(proc.stdout.isTTY).toBe(true);
     expect(proc.stderr.isTTY).toBe(true);
   });
 
-  it('Node-entry terminal bootstrap wins without rewriting the guest environment', () => {
+  it('Node-entry terminal bootstrap ignores colliding guest env without rewriting it', () => {
     const entry = buildNodeEntryWorkerEntry(
       'https://host.test/node-entry.js',
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
@@ -123,21 +128,21 @@ describe('pre-entry gate (ADR-0157)', () => {
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     installNodeRuntime(
       spec({
-        RIFTY_STDIN_IS_TTY: '1',
-        RIFTY_STDOUT_IS_TTY: '0',
-        RIFTY_STDERR_IS_TTY: '0',
-        RIFTY_TTY_COLS: '1',
-        RIFTY_TTY_ROWS: '1',
+        RIFTY_STDIN_IS_TTY: 'guest-stdin',
+        RIFTY_STDOUT_IS_TTY: 'guest-stdout',
+        RIFTY_STDERR_IS_TTY: 'guest-stderr',
+        RIFTY_TTY_COLS: 'wide',
+        RIFTY_TTY_ROWS: 'tall',
       }),
     );
 
     const proc = (globalThis as { process?: unknown }).process as NodeProcess;
-    expect(proc.env).toMatchObject({
-      RIFTY_STDIN_IS_TTY: '1',
-      RIFTY_STDOUT_IS_TTY: '0',
-      RIFTY_STDERR_IS_TTY: '0',
-      RIFTY_TTY_COLS: '1',
-      RIFTY_TTY_ROWS: '1',
+    expect(proc.env).toEqual({
+      RIFTY_STDIN_IS_TTY: 'guest-stdin',
+      RIFTY_STDOUT_IS_TTY: 'guest-stdout',
+      RIFTY_STDERR_IS_TTY: 'guest-stderr',
+      RIFTY_TTY_COLS: 'wide',
+      RIFTY_TTY_ROWS: 'tall',
     });
     expect(proc.stdin.isTTY).toBe(false);
     expect(proc.stdout).toMatchObject({ isTTY: true, columns: 132, rows: 43 });
@@ -146,10 +151,17 @@ describe('pre-entry gate (ADR-0157)', () => {
 
   it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
     const stdout = new MessageChannel();
-    const s = spec({ RIFTY_STDOUT_IS_TTY: '1' });
+    const s = spec();
     const proc = installNodeProcessShim({
       ...s,
       stdio: { ...s.stdio, stdout: stdout.port1 },
+    });
+    applyNodeProcessTerminalBootstrap(proc, {
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
     });
     const stream = proc.stdout as typeof proc.stdout & {
       clearLine(dir?: number, cb?: () => void): boolean;

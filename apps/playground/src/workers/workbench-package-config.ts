@@ -1,4 +1,5 @@
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import { defineOwnEnumerableProperty } from '../workbench/internal/own-property.ts';
 import type { InspectedProjectDefinition } from '../workbench/project-definition.ts';
 import type { OwnerPackageConfig } from './owner-package-state.ts';
 
@@ -15,7 +16,7 @@ function stringMap(value: unknown, field: string): Readonly<Record<string, strin
     if (name.length === 0 || typeof version !== 'string' || version.length === 0) {
       throw new TypeError(`Workbench ${field}.${name || '<empty>'} must be a non-empty string`);
     }
-    result[name] = version;
+    defineOwnEnumerableProperty(result, name, version);
   }
   return Object.freeze(result);
 }
@@ -26,7 +27,7 @@ function manifestFrom(definition: InspectedProjectDefinition): {
 } {
   const bytes = definition.files['/package.json'];
   if (bytes === undefined) {
-    throw new TypeError('Workbench Vite definition is missing normalized /package.json');
+    throw new TypeError('Workbench definition is missing normalized /package.json');
   }
   let text: string;
   let value: unknown;
@@ -66,20 +67,39 @@ export function workbenchPackageConfig(
       ? manifest.value.version
       : '0.0.0';
 
+  const base = {
+    root: projectRoot,
+    packageName: name,
+    packageVersion: version,
+    installDeps: stringMap(manifest.value.dependencies, 'package.json dependencies'),
+    packageJson: manifest.text,
+    // The materializer already owns the complete project tree. Definition
+    // registration may touch only explicit node_modules seeds; Workbench has none.
+    seedFiles: Object.freeze({}),
+  };
+  const cfg =
+    definition.kind === 'node-server'
+      ? Object.freeze({
+          ...base,
+          runtime: 'node-server' as const,
+          port: definition.port,
+          entryPath: `${projectRoot}${definition.entryPath}`,
+        })
+      : definition.kind === 'node-cli'
+        ? Object.freeze({
+            ...base,
+            runtime: 'node-cli' as const,
+            entryPath: `${projectRoot}${definition.entryPath}`,
+          })
+        : Object.freeze({
+            ...base,
+            runtime: 'vite' as const,
+            port: DEFAULT_VITE_PORT,
+            entryPath: `${projectRoot}/index.html`,
+          });
+
   return Object.freeze({
-    cfg: Object.freeze({
-      runtime: 'vite' as const,
-      root: projectRoot,
-      port: DEFAULT_VITE_PORT,
-      entryPath: `${projectRoot}/index.html`,
-      packageName: name,
-      packageVersion: version,
-      installDeps: stringMap(manifest.value.dependencies, 'package.json dependencies'),
-      packageJson: manifest.text,
-      // The materializer already owns the complete project tree. Template
-      // reassertion may touch only explicit node_modules seeds; Workbench has none.
-      seedFiles: Object.freeze({}),
-    }),
+    cfg,
     templateId: definition.id,
     slug: definition.storageSegment,
     fromScratch: true,

@@ -2,6 +2,7 @@ import { publishKernelEntryBootstrap } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+  type NodeEntryTerminalBootstrap,
   buildConfiguredNodeEntryWorkerEntry,
   buildNodeEntryWorkerEntry,
   readNodeEntryBootstrap,
@@ -219,5 +220,48 @@ describe('node-entry host bootstrap config', () => {
         },
       ),
     ).toThrow(/terminal.*cols.*positive/i);
+  });
+
+  it('rejects inherited terminal fields at the shared exact-own boundary', () => {
+    const inherited = Object.create({
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 80,
+      rows: 24,
+    }) as NodeEntryTerminalBootstrap;
+
+    expect(() =>
+      buildNodeEntryWorkerEntry(
+        'https://host.test/node.js',
+        { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+        { ...PROGRAM_LAUNCH, terminal: inherited },
+      ),
+    ).toThrow(/terminal.*missing field/i);
+  });
+
+  it('rejects inherited required payload fields at the exact-own boundary', () => {
+    const payload = Object.create({
+      hostRuntime: HOST_RUNTIME,
+      launch: PROGRAM_LAUNCH,
+    });
+    publishKernelEntryBootstrap({ protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL, payload });
+
+    expect(() => readNodeEntryBootstrap()).toThrow(/payload.*missing field/i);
+  });
+
+  it.each([
+    ['program', PROGRAM_LAUNCH],
+    ['worker-thread', { kind: 'worker-thread' as const, remoteFs: true, threadId: 7 }],
+  ])('rejects inherited required %s launch fields', (_kind, launch) => {
+    const inherited = Object.create(launch) as typeof launch;
+
+    expect(() =>
+      buildNodeEntryWorkerEntry(
+        'https://host.test/node.js',
+        { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+        inherited,
+      ),
+    ).toThrow(/launch.*missing field/i);
   });
 });

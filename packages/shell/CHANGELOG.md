@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Explicit empty quoted words survive into argv.** Bare `''` and `""` now
+  produce one empty argument each while unquoted empty variable expansions are
+  still elided and `*''` remains glob-eligible. This keeps quoted Node CLI and
+  direct Shell arguments byte-for-byte faithful.
 - **Terminal Git checks complete worktree plans before namespace ingress.**
   `ShellOptions.assertPortablePaths` synchronously validates absolute paths for
   checkout/switch/restore/reset/merge/cherry-pick/stash/clone/pull plus direct

@@ -1,17 +1,33 @@
-import { type BinExecutor, Shell } from '@riftydev/shell';
+import { NotImplementedError } from '@riftydev/io';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
+import {
+  type BinExecutor,
+  type CommandContext,
+  type ProcessExit,
+  Shell,
+  type ShellCommandResult,
+} from '@riftydev/shell';
 import { type VfsMutationGuard, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
+import { createDevServerController } from './dev-server-controller.ts';
+import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
+import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
+import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
+import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import type { OwnerPackageConfig, OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   createInstalledBinPreviewHooks,
+  createNodePreviewRunHooks,
   createPreviewOriginCapture,
+  runPtyDevServerShellCommand,
 } from './preview-producer-bindings.ts';
 import { createPreviewRegistry } from './preview-registry.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
+import { createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
@@ -21,6 +37,7 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly authority: OwnerVfsAuthority;
   readonly packageState: OwnerPackageState;
   readonly nodeEntryWorkerUrl: string;
+  readonly devServerWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
@@ -56,9 +73,6 @@ function assertProjectRoot(options: WorkbenchProjectRuntimeOptions): string {
   ) {
     throw new TypeError('Workbench project root must be an absolute normalized owner path');
   }
-  if (options.packageConfig.cfg.runtime !== 'vite') {
-    throw new TypeError('Workbench project runtime requires a Vite package config');
-  }
   if (options.packageConfig.cfg.root !== options.projectRoot) {
     throw new TypeError('Workbench package config root does not match the owner project root');
   }
@@ -86,7 +100,49 @@ export function createWorkbenchProjectRuntime(
   const previews = createPreviewRegistry({ send: options.send });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
+  let nodeSequence = 0;
   let closePromise: Promise<void> | undefined;
+
+  const ownerNodeExecutor = createOwnerChildNodeExecutor(
+    options.nodeEntryWorkerUrl,
+    options.nodeWorkerRuntimeEnv,
+  );
+  const devServer =
+    options.packageConfig.cfg.runtime === 'node-server'
+      ? (() => {
+          const cfg = options.packageConfig.cfg;
+          const child = createOwnerChildDevServer(
+            options.devServerWorkerUrl,
+            readNodeWorkerRuntimeConfig(options.nodeWorkerRuntimeEnv, 'workbench-project-runtime'),
+          );
+          return createDevServerController({
+            lifecycle: previews,
+            boot: (ctx, origin) =>
+              child.boot({
+                signal: ctx.signal,
+                log: (chunk) => ctx.stdout.write(chunk),
+                params: {
+                  cfg,
+                  env: { ...ctx.env },
+                  previewScope: createPreviewScope(),
+                  isTTY: ctx.isTTY === true,
+                  cols: ctx.cols ?? 80,
+                  rows: ctx.rows ?? 24,
+                  terminal: ctx.terminal,
+                },
+                // Workbench has no page-owned VFS mirror: child writes already
+                // land in the sole owner authority and its revision stream.
+                onSnapshotDirty: () => {},
+                onPortsChanged: (ports, previewScope) => {
+                  const next = ports[0];
+                  if (next === undefined) previews.clearDevServer();
+                  else previews.setDevServer(next, previewScope, { origin, cwd: ctx.cwd });
+                },
+                flush: () => options.authority.flush(),
+              }),
+          });
+        })()
+      : null;
 
   const activeAdmission = (ptySid: string) => serverRef.current?.activeAdmission(ptySid) ?? null;
 
@@ -118,11 +174,62 @@ export function createWorkbenchProjectRuntime(
         )) satisfies VfsMutationGuard,
       assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
     });
-    const npm = options.packageState.createNpmCommand(async (_name, command, ctx) => {
+    const npm = options.packageState.createNpmCommand(async (name, command, ctx) => {
+      if (name === 'dev' && devServer !== null) {
+        await options.packageState.reassertTemplateNodeModules(options.packageConfig);
+        return runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
+      }
       const nested = makeShell({ cwd: ctx.cwd, env: ctx.env }, ptySid);
       return runNestedShellCommand(nested, command, ctx);
     });
     shell.registerCommand('npm', npm);
+    const spawnNodeEntry = (
+      entryPath: string,
+      scriptArgs: readonly string[],
+      ctx: CommandContext,
+    ): Promise<ProcessExit> => {
+      const sid = `workbench-node-${++nodeSequence}`;
+      const previewScope = createPreviewScope();
+      return ownerNodeExecutor(
+        entryPath,
+        scriptArgs,
+        ctx,
+        createNodePreviewRunHooks({
+          captureOrigin,
+          previews,
+          cwd: ctx.cwd,
+          sid,
+          previewScope,
+        }),
+      );
+    };
+    shell.registerCommand('node', async (args, ctx): Promise<ShellCommandResult> => {
+      const invocation = classifyNodeInvocation(args);
+      switch (invocation.kind) {
+        case 'missing': {
+          const resolved = resolveNodeEntry(ctx.cwd, undefined);
+          if (!resolved.ok) ctx.stderr.write(resolved.message);
+          return 1;
+        }
+        case 'version':
+          ctx.stdout.write(`${NODE_PROCESS_IDENTITY.version}\n`);
+          return 0;
+        case 'badOption':
+          ctx.stderr.write(`node: bad option: ${invocation.flag}\n`);
+          return 9;
+        case 'eval':
+          // TODO(backlog: runtime-js/node-cli-eval-identity-parity)
+          throw new NotImplementedError('workbench.node.eval-context');
+        case 'entry': {
+          const resolved = resolveNodeEntry(ctx.cwd, invocation.arg);
+          if (!resolved.ok) {
+            ctx.stderr.write(resolved.message);
+            return 1;
+          }
+          return spawnNodeEntry(resolved.path, invocation.scriptArgs, ctx);
+        }
+      }
+    });
     return shell;
   };
 

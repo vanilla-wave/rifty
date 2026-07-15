@@ -1,5 +1,6 @@
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { applyNodeProcessTerminalBootstrap } from '../builtins/process.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -96,13 +97,14 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     const close = vi.spyOn(ipc.port1, 'close');
     const process = installNodeProcessShim({
       ...spec(),
-      env: {
-        RIFTY_STDOUT_IS_TTY: '1',
-        RIFTY_STDERR_IS_TTY: '1',
-        RIFTY_TTY_COLS: '80',
-        RIFTY_TTY_ROWS: '24',
-      },
       stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    applyNodeProcessTerminalBootstrap(process, {
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 80,
+      rows: 24,
     });
     const disconnected = new Promise<void>((resolve) =>
       process.once('disconnect', () => resolve()),
@@ -124,8 +126,14 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     const close = vi.spyOn(ipc.port1, 'close');
     const process = installNodeProcessShim({
       ...spec(),
-      env: { RIFTY_STDOUT_IS_TTY: '1' },
       stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    applyNodeProcessTerminalBootstrap(process, {
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
     });
     const frames: unknown[] = [];
     ipc.port2.onmessage = (event) => frames.push(event.data);
@@ -145,13 +153,14 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     const ipc = new MessageChannel();
     const process = installNodeProcessShim({
       ...spec(),
-      env: {
-        RIFTY_STDOUT_IS_TTY: '1',
-        RIFTY_STDERR_IS_TTY: '1',
-        RIFTY_TTY_COLS: '80',
-        RIFTY_TTY_ROWS: '24',
-      },
       stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    applyNodeProcessTerminalBootstrap(process, {
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 80,
+      rows: 24,
     });
     type ResizableWriter = typeof process.stdout & {
       columns: number;
