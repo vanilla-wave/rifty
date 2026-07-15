@@ -18,6 +18,9 @@
 
 ### Changed (app-local Workbench Vite vertical)
 
+- The built-in Vite 8 project default now materializes the same visible
+  `vite.config.js` policy as the Vite 8 starter before project identity; any
+  caller-supplied Vite version or recognized config variant remains user-owned.
 - Workbench owner/runtime adapters now publish the owner-selected storage
   snapshot and bind Vite readiness, exit, and cleanup to the exact admitted PTY
   run plus routed preview proof. Run close remains claimed until preview-route

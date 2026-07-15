@@ -1,3 +1,9 @@
+import {
+  DEFAULT_VITE8_CONFIG_JS,
+  DEFAULT_VITE8_CONFIG_PATH,
+  DEFAULT_VITE8_VERSION,
+  VITE_CONFIG_FILENAMES,
+} from '../vite-project-policy.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 
 declare const projectDefinitionReady: unique symbol;
@@ -41,7 +47,6 @@ type StoredProjectDefinition = ProjectDefinitionData;
 const definitions = new WeakMap<object, StoredProjectDefinition>();
 const encoder = new TextEncoder();
 const manifestDecoder = new TextDecoder('utf-8', { fatal: true });
-const DEFAULT_VITE_VERSION = '8.0.16';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -180,7 +185,7 @@ function parseManifest(files: Record<string, Uint8Array>): Record<string, unknow
 function normalizeManifest(
   files: Record<string, Uint8Array>,
   options: ViteProjectDefinitionOptions,
-): void {
+): boolean {
   const manifest = parseManifest(files);
   const dependencies = mergeDependencies(
     dependencyMap(manifest.dependencies, 'package.json dependencies'),
@@ -204,7 +209,7 @@ function normalizeManifest(
   } else if (dependencyVite !== undefined && devDependencyVite !== undefined) {
     throw new TypeError('Vite must be declared in exactly one final dependency section');
   } else if (dependencyVite === undefined && devDependencyVite === undefined) {
-    devDependencies = { ...(devDependencies ?? {}), vite: DEFAULT_VITE_VERSION };
+    devDependencies = { ...(devDependencies ?? {}), vite: DEFAULT_VITE8_VERSION };
   }
 
   if (dependencies === undefined) Reflect.deleteProperty(manifest, 'dependencies');
@@ -212,6 +217,20 @@ function normalizeManifest(
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
   files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  return (
+    viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined
+  );
+}
+
+function normalizeDefaultVite8Config(
+  files: Record<string, Uint8Array>,
+  usesBuiltInDefault: boolean,
+): void {
+  if (!usesBuiltInDefault) return;
+  const configOwned = VITE_CONFIG_FILENAMES.some((name) =>
+    Object.prototype.hasOwnProperty.call(files, `/${name}`),
+  );
+  if (!configOwned) files[DEFAULT_VITE8_CONFIG_PATH] = encoder.encode(DEFAULT_VITE8_CONFIG_JS);
 }
 
 function bytesHex(bytes: Uint8Array): string {
@@ -242,7 +261,7 @@ function createViteDefinition(
   if (!isRecord(options)) throw new TypeError('projects.vite options must be an object');
   const id = assertId(options.id);
   const files = cloneFiles(options.files);
-  normalizeManifest(files, options);
+  normalizeDefaultVite8Config(files, normalizeManifest(files, options));
   const stored: StoredProjectDefinition = Object.freeze({
     kind: 'vite',
     id,

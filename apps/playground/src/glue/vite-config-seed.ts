@@ -1,17 +1,10 @@
 import { type FsSync, type PersistFailureReport, dirname, normalizePath } from '@riftydev/vfs';
+import { VITE_CONFIG_FILENAMES } from '../vite-project-policy.ts';
+
+export { VITE_CONFIG_FILENAMES } from '../vite-project-policy.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-
-// Verbatim Vite DEFAULT_CONFIG_FILES order (vite/src/node/constants.ts).
-export const VITE_CONFIG_FILENAMES = [
-  'vite.config.js',
-  'vite.config.mjs',
-  'vite.config.ts',
-  'vite.config.cjs',
-  'vite.config.mts',
-  'vite.config.cts',
-] as const;
 
 export function isViteConfigSlotPath(path: string, root: string): boolean {
   const np = normalizePath(path);
