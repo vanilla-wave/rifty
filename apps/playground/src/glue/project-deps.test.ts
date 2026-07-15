@@ -1,14 +1,20 @@
+import type { InstallResult } from '@riftydev/npm-client';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import { type DepSnapshotV2, buildDepSnapshot } from './dep-snapshot.ts';
 import {
-  createInstallStamp,
-  installStampSatisfied,
-  readInstallStamp,
-  writeInstallStamp,
-} from './install-stamp.ts';
-import { ensureProjectDependencies } from './project-deps.ts';
+  type InstallStampAuthority,
+  createInstallStampAuthority,
+} from './install-stamp-authority.ts';
+import { installStampSatisfied, readInstallStamp } from './install-stamp.ts';
+import {
+  ensureProjectDependencies,
+  prepareProjectInstallTree,
+  seedTemplateNodeModulesFiles,
+  templateNodeModulesSeedMutationIntents,
+} from './project-deps.ts';
 import { ScopedFsSync, ScopedVfs, workspaceVfsPrefix } from './scoped-vfs.ts';
 
 const ROOT = '/workspace';
@@ -16,6 +22,30 @@ const enc = new TextEncoder();
 const packageJsonText = (deps: Record<string, string>): string =>
   JSON.stringify({ name: 'app', dependencies: deps });
 const VITE_PACKAGE_JSON_TEXT = packageJsonText({ vite: '^5.4.0' });
+
+function installResult(count: number): InstallResult {
+  const packages = Array.from({ length: count }, (_, index) => ({
+    name: `package-${index}`,
+    version: '1.0.0',
+    dependencies: {},
+    files: {},
+  }));
+  return {
+    packages,
+    lockfile: {
+      name: 'app',
+      version: '0.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {},
+    },
+    conflicts: [],
+    provenance: {
+      resolution: 'metadata',
+      packages: packages.map(({ name, version }) => ({ name, version, transport: 'registry' })),
+    },
+  };
+}
 
 function viteSnapshot(): DepSnapshotV2 {
   const fs = new MemoryFsSync();
@@ -35,11 +65,125 @@ function project(deps: Record<string, string> = { vite: '^5.4.0' }) {
   return { vfs, fsSync, log, logFn: (line: string) => log.push(line) };
 }
 
+async function seedTrustedStamp(
+  target: Pick<ReturnType<typeof project>, 'vfs' | 'fsSync'>,
+  slug: string,
+  packages: number,
+): Promise<void> {
+  const authority = createInstallStampAuthority(target);
+  const packageJsonText = await target.vfs.readFileText(`${ROOT}/package.json`);
+  const claim = await authority.demote({ root: ROOT, slug });
+  const result = await authority.promote(
+    { root: ROOT, slug, packageJsonText },
+    { epoch: claim.epoch, packages },
+  );
+  if (result.status !== 'trusted') throw new Error(`test setup failed: ${result.status}`);
+}
+
 describe('ensureProjectDependencies (ADR-0135)', () => {
+  it('preserves a same-project covering lock while clearing a cold stale tree', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
+    fs.writeFileSync(`${ROOT}/node_modules/pkg/index.js`, enc.encode('stale'));
+    fs.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}\n'));
+
+    prepareProjectInstallTree(fs, ROOT, {
+      packageJsonText: VITE_PACKAGE_JSON_TEXT,
+      currentSlug: 'scratch',
+      priorSlug: 'scratch',
+      priorTrustedTree: false,
+    });
+
+    expect(fs.existsSync(`${ROOT}/node_modules`)).toBe(false);
+    expect(fs.existsSync(`${ROOT}/package-lock.json`)).toBe(true);
+  });
+
+  it('preserves a warm trusted same-project tree and covering lock', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
+    fs.writeFileSync(`${ROOT}/node_modules/pkg/index.js`, enc.encode('warm'));
+    fs.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}\n'));
+
+    prepareProjectInstallTree(fs, ROOT, {
+      packageJsonText: VITE_PACKAGE_JSON_TEXT,
+      currentSlug: 'scratch',
+      priorSlug: 'scratch',
+      priorTrustedTree: true,
+    });
+
+    expect(fs.existsSync(`${ROOT}/node_modules/pkg/index.js`)).toBe(true);
+    expect(fs.existsSync(`${ROOT}/package-lock.json`)).toBe(true);
+  });
+
+  it('clears a foreign tree and lock before project acquisition', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
+    fs.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}\n'));
+
+    prepareProjectInstallTree(fs, ROOT, {
+      packageJsonText: VITE_PACKAGE_JSON_TEXT,
+      currentSlug: 'scratch',
+      priorSlug: 'other-project',
+      priorTrustedTree: false,
+    });
+
+    expect(fs.existsSync(`${ROOT}/node_modules`)).toBe(false);
+    expect(fs.existsSync(`${ROOT}/package-lock.json`)).toBe(false);
+  });
+
+  it('seeds only missing template-owned node_modules files and preserves existing bytes', () => {
+    const { fsSync } = project();
+    fsSync.mkdirSync(`${ROOT}/node_modules/@rifty/types`, { recursive: true });
+    fsSync.writeFileSync(`${ROOT}/node_modules/@rifty/types/existing.d.ts`, enc.encode('user'));
+
+    seedTemplateNodeModulesFiles(fsSync, ROOT, {
+      [`${ROOT}/node_modules/@rifty/types/existing.d.ts`]: 'template',
+      [`${ROOT}/node_modules/@rifty/types/missing.d.ts`]: 'declare const value: 1',
+      [`${ROOT}/node_modules-evil/escape.js`]: 'outside package tree',
+      [`${ROOT}/src/ignored.ts`]: 'outside package tree',
+    });
+
+    expect(
+      new TextDecoder().decode(
+        fsSync.readFileBytesSync(`${ROOT}/node_modules/@rifty/types/existing.d.ts`),
+      ),
+    ).toBe('user');
+    expect(
+      new TextDecoder().decode(
+        fsSync.readFileBytesSync(`${ROOT}/node_modules/@rifty/types/missing.d.ts`),
+      ),
+    ).toBe('declare const value: 1');
+    expect(fsSync.existsSync(`${ROOT}/node_modules-evil/escape.js`)).toBe(false);
+    expect(fsSync.existsSync(`${ROOT}/src/ignored.ts`)).toBe(false);
+  });
+
+  it('reports exact missing template node_modules writes without prefix siblings', () => {
+    const { fsSync } = project();
+    fsSync.mkdirSync(`${ROOT}/node_modules/@rifty/types`, { recursive: true });
+    fsSync.writeFileSync(`${ROOT}/node_modules/@rifty/types/existing.d.ts`, enc.encode('user'));
+
+    expect(
+      templateNodeModulesSeedMutationIntents(fsSync, ROOT, {
+        [`${ROOT}/node_modules/@rifty/types/existing.d.ts`]: 'template',
+        [`${ROOT}/node_modules/@rifty/types/missing.d.ts`]: 'missing',
+        [`${ROOT}/node_modules-evil/escape.js`]: 'outside package tree',
+      }),
+    ).toEqual([{ kind: 'write', path: `${ROOT}/node_modules/@rifty/types/missing.d.ts` }]);
+  });
+
+  it('rejects a file at the exact node_modules root from both template seed paths', () => {
+    const { fsSync } = project();
+    const corruptSeed = { [`${ROOT}/node_modules`]: 'corrupt-file' };
+
+    expect(templateNodeModulesSeedMutationIntents(fsSync, ROOT, corruptSeed)).toEqual([]);
+    seedTemplateNodeModulesFiles(fsSync, ROOT, corruptSeed);
+    expect(fsSync.existsSync(`${ROOT}/node_modules`)).toBe(false);
+  });
+
   it('reuses a stamp written under the SAME slug without fetching or installing', async () => {
     const { vfs, fsSync, log, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
+    await seedTrustedStamp({ vfs, fsSync }, 'project-files', 8);
 
     const result = await ensureProjectDependencies({
       vfs,
@@ -66,7 +210,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     // real-vite (from-scratch, no snapshot) must still install, not reuse.
     const { vfs, fsSync, log, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
+    await seedTrustedStamp({ vfs, fsSync }, 'project-files', 8);
     let installed = false;
 
     const result = await ensureProjectDependencies({
@@ -80,7 +224,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       },
       install: async () => {
         installed = true;
-        return { packages: 8 };
+        fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
+        return installResult(8);
       },
       log: logFn,
     });
@@ -103,7 +248,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     fsSync.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
     fsSync.writeFileSync(`${ROOT}/node_modules/vite/package.json`, enc.encode('{"name":"vite"}'));
     fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}'));
-    await writeInstallStamp(vfs, ROOT, 8, 'project-files'); // a DIFFERENT slug's stamp
+    await seedTrustedStamp({ vfs, fsSync }, 'project-files', 8); // a DIFFERENT slug's stamp
 
     let treeAtInstall: { lockfile: boolean; viteDir: boolean } | null = null;
     const result = await ensureProjectDependencies({
@@ -117,7 +262,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
           lockfile: fsSync.existsSync(`${ROOT}/package-lock.json`),
           viteDir: fsSync.existsSync(`${ROOT}/node_modules/vite`),
         };
-        return { packages: 8 };
+        return installResult(8);
       },
       log: logFn,
     });
@@ -141,7 +286,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => {
         installed = true;
-        return { packages: 0 };
+        return installResult(0);
       },
       log: logFn,
     });
@@ -154,6 +299,63 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(log.join('')).toContain('baked node_modules restored');
   });
 
+  it.each([
+    ['top claim', '.rifty-install-stamp.json', 'e30='],
+    ['nested claim', 'pkg/node_modules/.rifty-install-stamp.json', 'e30='],
+    ['unsafe path', '../escape.js', 'e30='],
+    ['malformed base64', 'vite/bad.js', '***'],
+  ])(
+    'rejects %s during snapshot planning with the real Owner destination byte-identical',
+    async (_case, path, content) => {
+      const pair = createMemoryFs();
+      pair.fsSync.mkdirSync(`${ROOT}/node_modules/existing`, { recursive: true });
+      pair.fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(VITE_PACKAGE_JSON_TEXT));
+      pair.fsSync.writeFileSync(`${ROOT}/node_modules/existing/index.js`, enc.encode('keep'));
+      const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(
+        pair.fsSync,
+        { ownerEpoch: `snapshot-plan-${_case}` },
+      );
+      const stamps = createInstallStampAuthority({
+        vfs: pair.vfs,
+        fsSync: owner,
+        claimIo: installStampClaims,
+      });
+      const foreign = await stamps.demote({ root: ROOT, slug: 'foreign' });
+      await stamps.promote(
+        { root: ROOT, slug: 'foreign', packageJsonText: VITE_PACKAGE_JSON_TEXT },
+        { epoch: foreign.epoch, packages: 1 },
+      );
+      const snapshot = viteSnapshot();
+      const corrupt: DepSnapshotV2 = {
+        ...snapshot,
+        nodeModules: {
+          ...snapshot.nodeModules,
+          files: [...snapshot.nodeModules.files, { path, encoding: 'base64', content }],
+        },
+      };
+      const before = owner.snapshot();
+
+      const result = await ensureProjectDependencies({
+        vfs: pair.vfs,
+        fsSync: owner,
+        installStampAuthority: stamps,
+        root: ROOT,
+        templateId: 'vite',
+        slug: 'project-files',
+        snapshotUrl: '/snapshots/corrupt.json.gz',
+        fetchSnapshot: async () => corrupt,
+        replaceTreeOnMiss: true,
+        log: () => undefined,
+      });
+
+      expect(result).toEqual({ source: 'none', packages: 0 });
+      expect(owner.snapshot()).toEqual(before);
+      await expect(stamps.check({ root: ROOT, slug: 'foreign' })).resolves.toMatchObject({
+        status: 'trusted',
+      });
+    },
+  );
+
   it('falls back to install when the snapshot deps drift from package.json', async () => {
     const { vfs, fsSync, log, logFn } = project({ vite: '^6.0.0' });
 
@@ -165,7 +367,10 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
-      install: async () => ({ packages: 9 }),
+      install: async () => {
+        fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
+        return installResult(9);
+      },
       log: logFn,
     });
 
@@ -185,12 +390,35 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => null,
-      install: async () => ({ packages: 9 }),
+      install: async () => installResult(9),
       log: logFn,
     });
 
     expect(result).toEqual({ source: 'install', packages: 9 });
     expect(log.join('')).toContain('unavailable');
+  });
+
+  it('reports the exact snapshot fetch failure before a successful install fallback', async () => {
+    const { vfs, fsSync, log, logFn } = project();
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => {
+        throw new Error('HTTP 404 Not Found');
+      },
+      install: async () => installResult(9),
+      log: logFn,
+    });
+
+    expect(result).toEqual({ source: 'install', packages: 9 });
+    expect(log.join('')).toContain(
+      'baked snapshot unavailable (/snapshots/vite.json.gz): HTTP 404 Not Found — falling back to install',
+    );
   });
 
   it('installs directly when the template has no baked snapshot', async () => {
@@ -205,7 +433,10 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => {
         throw new Error('must not fetch without a snapshot url');
       },
-      install: async () => ({ packages: 60 }),
+      install: async () => {
+        fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
+        return installResult(60);
+      },
       log: logFn,
     });
 
@@ -230,7 +461,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
-      install: async () => ({ packages: 0 }),
+      install: async () => installResult(0),
       log: logFn,
       flush: () => new Promise(() => {}),
     });
@@ -240,7 +471,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
-  it('discards the pending stamp when the deferred drain reports tree persist failures — a later boot must not trust a torn tree (ADR-0187 Corrected)', async () => {
+  it('leaves the pending stamp untrusted when the single proof drain reports tree persist failures', async () => {
     const { vfs, fsSync, log, logFn } = project();
     type Report = {
       failures: Array<{ path: string; op: 'write'; message: string }>;
@@ -257,17 +488,13 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       log: logFn,
-      // Call 1: the controlled detection drain (proves the pending stamp landed
-      // non-blocking BEFORE it settles). Call 2: the discard-proof re-drain —
-      // CLEAN here (the pending-stamp deletion reached disk).
+      // The one controlled proof drain starts after the pending claim lands and
+      // does not block dependency arrival.
       flush: (): Promise<Report> => {
         flushCalls += 1;
-        if (flushCalls === 1) {
-          return new Promise<Report>((r) => {
-            resolveFlush = r;
-          });
-        }
-        return Promise.resolve({ failures: [], total: 0 });
+        return new Promise<Report>((r) => {
+          resolveFlush = r;
+        });
       },
     });
     expect(result.source).toBe('snapshot');
@@ -289,12 +516,13 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
-    expect(log.join('')).toContain('pending install stamp discarded');
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(log.join('')).toContain('pending claim remains untrusted');
     expect(log.join('')).not.toContain('CRITICAL');
+    expect(flushCalls).toBe(1);
   });
 
-  it('discards a scoped-workspace pending stamp when OPFS reports physical tree damage', async () => {
+  it('leaves a scoped-workspace pending stamp untrusted when OPFS reports physical tree damage', async () => {
     const { vfs: innerVfs, fsSync: innerFs } = createMemoryFs();
     const prefix = workspaceVfsPrefix('active');
     const vfs = new ScopedVfs(innerVfs, prefix);
@@ -309,19 +537,16 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     (innerFs as typeof innerFs & { flush: () => Promise<PersistFailureReport> }).flush =
       async () => {
         flushCalls += 1;
-        if (flushCalls === 1) {
-          return {
-            failures: [
-              {
-                path: `${prefix}${ROOT}/node_modules/vite/package.json`,
-                op: 'write',
-                message: 'QuotaExceededError',
-              },
-            ],
-            total: 1,
-          };
-        }
-        return { failures: [], total: 0 };
+        return {
+          failures: [
+            {
+              path: `${prefix}${ROOT}/node_modules/vite/package.json`,
+              op: 'write',
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 1,
+        };
       };
 
     const result = await ensureProjectDependencies({
@@ -339,7 +564,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(log.join('')).toContain('pending install stamp discarded');
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(flushCalls).toBe(1);
   });
 
   it('does NOT revoke on a FOREIGN persist failure — a global path (learned pins, another project) is not this tree torn', async () => {
@@ -374,10 +601,10 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
     expect(log.join('')).not.toContain('discarded');
     expect(log.join('')).not.toContain('revoked');
-    expect(flushCalls).toBe(2); // detection drain + trusted-stamp promotion drain
+    expect(flushCalls).toBe(1);
   });
 
-  it('discards on tree damage BEYOND the sampled failures — the FULL ledger gates, not the 20-entry sample', async () => {
+  it('keeps a pending claim untrusted on tree damage beyond the sample — the full ledger gates', async () => {
     // The report sample is all foreign (tree damage sits outside the first
     // PERSIST_REPORT_SAMPLE); `anyFailure` scans the whole ledger and sees the
     // node_modules failure. Scanning only `failures` would trust a torn tree.
@@ -404,10 +631,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(log.join('')).toContain('pending install stamp discarded');
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(log.join('')).toContain('pending claim remains untrusted');
   });
 
-  it('keeps a failed pending-stamp delete untrusted instead of silently trusting it', async () => {
+  it('does not delete or re-drain a pending claim after a dirty proof', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let flushCalls = 0;
     const result = await ensureProjectDependencies({
@@ -421,39 +649,26 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       log: logFn,
       flush: async () => {
         flushCalls += 1;
-        // Call 1: torn tree. Call 2 (after the pending-stamp rm): the stamp
-        // DELETE itself never reached disk. It remains untrusted because the
-        // only durable stamp could still be the pending one.
-        return flushCalls === 1
-          ? {
-              failures: [
-                {
-                  path: `${ROOT}/node_modules/vite/package.json`,
-                  op: 'write' as const,
-                  message: 'QuotaExceededError',
-                },
-              ],
-              total: 1,
-            }
-          : {
-              failures: [
-                {
-                  path: `${ROOT}/node_modules/.rifty-install-stamp.json`,
-                  op: 'rm' as const,
-                  message: 'QuotaExceededError',
-                },
-              ],
-              total: 1,
-            };
+        return {
+          failures: [
+            {
+              path: `${ROOT}/node_modules/vite/package.json`,
+              op: 'write' as const,
+              message: 'QuotaExceededError',
+            },
+          ],
+          total: 1,
+        };
       },
     });
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(log.join('')).toContain('pending install stamp discarded');
-    expect(log.join('')).toContain('pending install stamp delete did not reach disk');
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(log.join('')).not.toContain('delete');
     expect(log.join('')).not.toContain('CRITICAL');
-    expect(flushCalls).toBe(2);
+    expect(flushCalls).toBe(1);
   });
 
   it('a deferred-drain failure on the STAMP FILE ITSELF leaves the pending stamp untrusted', async () => {
@@ -507,7 +722,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBeUndefined();
-    expect(flushCalls).toBe(2);
+    expect(flushCalls).toBe(1);
   });
 
   it('does not let an older deferred promoter trust a newer pending restore', async () => {
@@ -544,62 +759,26 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     const secondPending = await readInstallStamp(vfs, ROOT);
     expect(secondPending?.durability).toBe('pending');
-    expect(secondPending?.promotionId).not.toBe(firstPending?.promotionId);
+    expect(secondPending?.epoch).not.toBe(firstPending?.epoch);
 
     resolveFirstFlush({ failures: [], total: 0 });
     await new Promise((r) => setTimeout(r, 0));
 
     const afterOldPromoter = await readInstallStamp(vfs, ROOT);
     expect(afterOldPromoter?.durability).toBe('pending');
-    expect(afterOldPromoter?.promotionId).toBe(secondPending?.promotionId);
+    expect(afterOldPromoter?.epoch).toBe(secondPending?.epoch);
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
-  it('a command-site demote landing AFTER the promoter’s async read cannot be overwritten — the promote re-checks SYNC at the write', async () => {
-    // Review round 4: pendingPromotionStillCurrent's async stamp read can
-    // resolve, then an `npm install` demote (a pending stamp with NO
-    // promotionId) lands before the promoter's continuation runs — the stale
-    // read then promoted a TRUSTED stamp right over the demote, while the
-    // command's install was mutating the tree.
+  it('a command-site demote landing during an older promoter drain cannot be overwritten', async () => {
     const { vfs, fsSync, logFn } = project();
+    const installStampAuthority = createInstallStampAuthority({ vfs, fsSync });
     let resolveFlush!: (report: PersistFailureReport) => void;
-    let injectOnce = true;
-    const stampPath = `${ROOT}/node_modules/.rifty-install-stamp.json`;
-    const trapVfs = new Proxy(vfs, {
-      get(target, prop, receiver) {
-        if (prop === 'readFileText') {
-          return async (p: string): Promise<string> => {
-            const text = await target.readFileText(p);
-            if (p === stampPath && injectOnce) {
-              injectOnce = false;
-              // The command-site demote lands right after this read resolves:
-              // a pending stamp WITHOUT a promotionId (npm-shell-command's).
-              fsSync.writeFileSync(
-                stampPath,
-                enc.encode(
-                  `${JSON.stringify(
-                    createInstallStamp(VITE_PACKAGE_JSON_TEXT, {
-                      slug: 'project-files',
-                      packages: 0,
-                      durability: 'pending',
-                    }),
-                    null,
-                    2,
-                  )}\n`,
-                ),
-              );
-            }
-            return text; // the STALE content — read before the demote
-          };
-        }
-        const value = Reflect.get(target, prop, receiver);
-        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
-      },
-    });
 
     await ensureProjectDependencies({
-      vfs: trapVfs,
+      vfs,
       fsSync,
+      installStampAuthority,
       root: ROOT,
       templateId: 'vite',
       slug: 'project-files',
@@ -611,7 +790,15 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
           resolveFlush = resolve;
         }),
     });
-    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
+    const older = await readInstallStamp(vfs, ROOT);
+    expect(older?.durability).toBe('pending');
+
+    // Same authority as the terminal command: demote issues a newer epoch
+    // immediately while the older promoter is outside the write queue.
+    const commandClaim = await installStampAuthority.demote({
+      root: ROOT,
+      slug: 'project-files',
+    });
 
     resolveFlush({ failures: [], total: 0 });
     await new Promise((r) => setTimeout(r, 0));
@@ -619,7 +806,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     // The demote survives; the stale promoter must NOT have trusted the tree.
     const after = await readInstallStamp(vfs, ROOT);
     expect(after?.durability).toBe('pending');
-    expect(after?.promotionId).toBeUndefined(); // the command's marker, not the promoter's
+    expect(after?.epoch).toBe(commandClaim.epoch);
+    expect(after?.epoch).not.toBe(older?.epoch);
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
   });
 
@@ -657,10 +845,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     resolveFirstFlush({ failures: [], total: 0 });
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect(log.join('')).toContain('package.json deps changed before install stamp promotion');
-    expect(flushCalls).toBe(2);
+    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(flushCalls).toBe(1);
   });
 
   it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {
@@ -668,7 +857,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     // come SOLELY from the explicit `npm install` command — so omitting `install`
     // leaves a stampless, snapshotless tree's deps ABSENT (`none`); it does not fetch
     // or network-install as a dev-line side effect.
-    const { vfs, fsSync, logFn } = project();
+    const { vfs, fsSync, log, logFn } = project();
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
@@ -679,6 +868,37 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       log: logFn,
     });
     expect(result).toEqual({ source: 'none', packages: 0 });
+    expect(log.join('')).toContain('dependencies remain absent (restore-only mode)');
+    expect(log.join('')).not.toContain('falling back to install');
+  });
+
+  it('restore-only with no snapshot returns none before any demote', async () => {
+    const { vfs, fsSync, logFn } = project();
+    const demoteFailure = new Error('durable revocation failed');
+    let demoteCalls = 0;
+    const installStampAuthority: InstallStampAuthority = {
+      check: async () => ({ status: 'absent' }),
+      checkSync: () => ({ status: 'absent' }),
+      demote: async () => {
+        demoteCalls += 1;
+        throw demoteFailure;
+      },
+      prepareTreeMutation: async () => {},
+      promote: async () => ({ status: 'stale' }),
+      revoke: async () => {},
+    };
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      installStampAuthority,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      log: logFn,
+    });
+
+    expect(result).toEqual({ source: 'none', packages: 0 });
+    expect(demoteCalls).toBe(0);
   });
 
   it('restore-only with a matching snapshot RESTORES (still never installs)', async () => {

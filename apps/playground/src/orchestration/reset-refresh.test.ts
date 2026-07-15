@@ -1,17 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Dialog, RenameDialog, ResetDialog } from '../glue/page-store.ts';
+import type { ActiveId } from '../glue/project-index.ts';
+import {
+  type ProjectOwnerCoordinator,
+  createProjectOwnerCoordinator,
+} from './project-owner-coordinator.ts';
 import { type ResetRefreshDeps, createResetRefresh } from './reset-refresh.ts';
 
 // Behavioral heirs of the retired App.test reset/rename greps (epic
 // playground-testable-core, slice 4b). Fakes are the App-side ports only.
 
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 function harness(overrides: Partial<ResetRefreshDeps> = {}) {
   const snapshotSubs = new Set<() => void>();
+  let dialog: Dialog = null;
   const deps = {
     store: {
       activeId: vi.fn(() => 'scratch' as string),
-      dialog: vi.fn(() => null as { kind: string; id?: string } | null),
-      confirmReset: vi.fn(),
-      confirmRename: vi.fn(),
+      dialog: vi.fn(() => dialog),
+      confirmReset: vi.fn((_id: ActiveId, intent: ResetDialog) => {
+        if (dialog === intent) dialog = null;
+      }),
+      confirmRename: vi.fn((_id: string, _name: string, intent: RenameDialog) => {
+        if (dialog === intent) dialog = null;
+      }),
     },
     devServer: {
       sessionId: vi.fn(() => 't1' as string | null),
@@ -25,6 +44,7 @@ function harness(overrides: Partial<ResetRefreshDeps> = {}) {
     }),
     requestSnapshot: vi.fn(),
     resetEditorInitialFiles: vi.fn(),
+    projectOwner: createProjectOwnerCoordinator(),
     flushEditorWrites: vi.fn(async () => {}),
     ephemeral: vi.fn(() => false),
     activeStarterId: vi.fn(() => 'react'),
@@ -36,11 +56,33 @@ function harness(overrides: Partial<ResetRefreshDeps> = {}) {
   const publishFrame = (): void => {
     for (const cb of [...snapshotSubs]) cb();
   };
-  return { deps, publishFrame, snapshotSubs, flow: createResetRefresh(deps as ResetRefreshDeps) };
+  return {
+    deps,
+    publishFrame,
+    snapshotSubs,
+    setDialog(next: Dialog): void {
+      dialog = next;
+    },
+    flow: createResetRefresh(deps as ResetRefreshDeps),
+  };
 }
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 8; i++) await Promise.resolve();
+}
+
+async function holdProjectOwner(projectOwner: ProjectOwnerCoordinator) {
+  const started = deferred();
+  const release = deferred();
+  const head = projectOwner.run(
+    () => true,
+    async () => {
+      started.resolve();
+      await release.promise;
+    },
+  );
+  await started.promise;
+  return { head, release: release.resolve };
 }
 
 beforeEach(() => {
@@ -118,44 +160,123 @@ describe('refreshActiveAfterReset (ADR-0165 §6 live refresh)', () => {
   });
 });
 
-describe('confirmReset (ADR-0165 §6 real on-disk re-seed)', () => {
+describe('confirmReset (ADR-0165 §6; concurrent-same-key fault)', () => {
+  it('queues behind the current owner operation before flushing or binding the reset post', async () => {
+    const projectOwner = createProjectOwnerCoordinator();
+    const held = await holdProjectOwner(projectOwner);
+    const h = harness({ projectOwner });
+    const intent: ResetDialog = { kind: 'reset', id: 'p-1' };
+    h.deps.store.activeId.mockReturnValue('p-other');
+    h.setDialog(intent);
+
+    h.flow.confirmReset();
+    await settle();
+    expect(h.deps.flushEditorWrites).not.toHaveBeenCalled();
+    expect(h.deps.resetProjectIndex).not.toHaveBeenCalled();
+
+    held.release();
+    await held.head;
+    await settle();
+    expect(h.deps.flushEditorWrites).toHaveBeenCalledTimes(1);
+    expect(h.deps.resetProjectIndex).toHaveBeenCalledWith('p-1');
+    expect(h.deps.store.confirmReset).toHaveBeenCalledWith('p-1', intent);
+  });
+
+  it('skips a canceled reset intent at the queue head without binding any owner port', async () => {
+    const projectOwner = createProjectOwnerCoordinator();
+    const held = await holdProjectOwner(projectOwner);
+    const h = harness({ projectOwner });
+    h.setDialog({ kind: 'reset', id: 'p-1' });
+
+    h.flow.confirmReset();
+    h.setDialog(null);
+    held.release();
+    await held.head;
+    await settle();
+
+    expect(h.deps.flushEditorWrites).not.toHaveBeenCalled();
+    expect(h.deps.resetProjectIndex).not.toHaveBeenCalled();
+    expect(h.deps.store.confirmReset).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the captured intent after the editor flush before binding the reset post', async () => {
+    const flushed = deferred();
+    const h = harness({ flushEditorWrites: vi.fn(() => flushed.promise) });
+    const intent: ResetDialog = { kind: 'reset', id: 'p-1' };
+    const replacement: ResetDialog = { kind: 'reset', id: 'p-2' };
+    h.setDialog(intent);
+
+    h.flow.confirmReset();
+    await settle();
+    expect(h.deps.flushEditorWrites).toHaveBeenCalledTimes(1);
+    h.setDialog(replacement);
+    flushed.resolve();
+    await settle();
+
+    expect(h.deps.resetProjectIndex).not.toHaveBeenCalled();
+    expect(h.deps.store.confirmReset).not.toHaveBeenCalled();
+    expect(h.deps.store.dialog()).toBe(replacement);
+  });
+
+  it('double confirm binds one reset because the first explicit commit retires the intent', async () => {
+    const h = harness();
+    const intent: ResetDialog = { kind: 'reset', id: 'p-1' };
+    h.deps.store.activeId.mockReturnValue('p-other');
+    h.setDialog(intent);
+
+    h.flow.confirmReset();
+    h.flow.confirmReset();
+    await settle();
+
+    expect(h.deps.resetProjectIndex).toHaveBeenCalledTimes(1);
+    expect(h.deps.store.confirmReset).toHaveBeenCalledTimes(1);
+    expect(h.deps.store.confirmReset).toHaveBeenCalledWith('p-1', intent);
+  });
+
   it('flushes pending edits, re-seeds the scratch index, then flips the mirror — in order', async () => {
     const order: string[] = [];
     const h = harness();
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'scratch' });
+    const intent: ResetDialog = { kind: 'reset', id: 'scratch' };
+    h.setDialog(intent);
     h.deps.flushEditorWrites.mockImplementation(async () => {
       order.push('flush');
     });
     h.deps.resetScratchIndex.mockImplementation(async (starter: string) => {
       order.push(`seed:${starter}`);
     });
-    h.deps.store.confirmReset.mockImplementation(() => order.push('flip'));
+    h.deps.store.confirmReset.mockImplementation((id, captured) => {
+      order.push(`flip:${id}:${captured === intent}`);
+    });
+
     h.flow.confirmReset();
+    await settle();
     h.publishFrame();
     await settle();
-    expect(order).toEqual(['flush', 'seed:react', 'flip']);
+    expect(order).toEqual(['flush', 'seed:react', 'flip:scratch:true']);
   });
 
-  it('a named project resets through the project index post', async () => {
+  it('a named project resets through the project index post with its captured identity', async () => {
     const h = harness();
+    const intent: ResetDialog = { kind: 'reset', id: 'p-1' };
     h.deps.store.activeId.mockReturnValue('p-other');
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'p-1' });
+    h.setDialog(intent);
     h.flow.confirmReset();
     await settle();
     expect(h.deps.resetProjectIndex).toHaveBeenCalledWith('p-1');
     expect(h.deps.resetScratchIndex).not.toHaveBeenCalled();
+    expect(h.deps.store.confirmReset).toHaveBeenCalledWith('p-1', intent);
   });
 
   it('refreshes the live editor + dev server ONLY when the reset target is the active root', async () => {
     const h = harness();
-    // Non-active target: no snapshot wait, no tab reset.
     h.deps.store.activeId.mockReturnValue('p-other');
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'p-1' });
+    h.setDialog({ kind: 'reset', id: 'p-1' });
     h.flow.confirmReset();
     await settle();
     expect(h.deps.resetEditorInitialFiles).not.toHaveBeenCalled();
-    // Active target: fresh frame → tabs reopen.
+
     h.deps.store.activeId.mockReturnValue('p-1');
+    h.setDialog({ kind: 'reset', id: 'p-1' });
     h.flow.confirmReset();
     await settle();
     h.publishFrame();
@@ -163,15 +284,16 @@ describe('confirmReset (ADR-0165 §6 real on-disk re-seed)', () => {
     expect(h.deps.resetEditorInitialFiles).toHaveBeenCalledTimes(1);
   });
 
-  it('memory mode skips the durable post but still flips the mirror + refreshes', async () => {
+  it('memory mode skips the durable post but still flips the captured mirror + refreshes', async () => {
     const h = harness({ ephemeral: () => true });
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'scratch' });
+    const intent: ResetDialog = { kind: 'reset', id: 'scratch' };
+    h.setDialog(intent);
     h.flow.confirmReset();
     await settle();
     h.publishFrame();
     await settle();
     expect(h.deps.resetScratchIndex).not.toHaveBeenCalled();
-    expect(h.deps.store.confirmReset).toHaveBeenCalled();
+    expect(h.deps.store.confirmReset).toHaveBeenCalledWith('scratch', intent);
     expect(h.deps.resetEditorInitialFiles).toHaveBeenCalled();
   });
 
@@ -182,7 +304,7 @@ describe('confirmReset (ADR-0165 §6 real on-disk re-seed)', () => {
         throw new Error('owner refused');
       },
     });
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'scratch' });
+    h.setDialog({ kind: 'reset', id: 'scratch' });
     h.flow.confirmReset();
     await settle();
     expect(h.deps.store.confirmReset).not.toHaveBeenCalled();
@@ -191,39 +313,96 @@ describe('confirmReset (ADR-0165 §6 real on-disk re-seed)', () => {
   });
 });
 
-describe('confirmRename', () => {
-  it('posts the durable rename with the dialog id BEFORE the mirror flip, trimmed', async () => {
+describe('confirmRename (concurrent-same-key fault)', () => {
+  it('queues behind the current owner operation before binding the durable rename', async () => {
+    const projectOwner = createProjectOwnerCoordinator();
+    const held = await holdProjectOwner(projectOwner);
+    const h = harness({ projectOwner });
+    const intent: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    h.setDialog(intent);
+
+    h.flow.confirmRename('New Name');
+    await settle();
+    expect(h.deps.renameProjectIndex).not.toHaveBeenCalled();
+
+    held.release();
+    await held.head;
+    await settle();
+    expect(h.deps.renameProjectIndex).toHaveBeenCalledWith('p-1', 'New Name');
+    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('p-1', 'New Name', intent);
+  });
+
+  it('commits the captured rename but preserves a dialog that replaced it after owner admission', async () => {
+    const renamed = deferred();
+    const h = harness({ renameProjectIndex: vi.fn(() => renamed.promise) });
+    const intent: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    const replacement: RenameDialog = { kind: 'rename', id: 'p-2', current: 'Other' };
+    h.setDialog(intent);
+
+    h.flow.confirmRename('  New Name ');
+    await settle();
+    expect(h.deps.renameProjectIndex).toHaveBeenCalledWith('p-1', 'New Name');
+    h.setDialog(replacement);
+    renamed.resolve();
+    await settle();
+
+    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('p-1', '  New Name ', intent);
+    expect(h.deps.store.dialog()).toBe(replacement);
+  });
+
+  it('double confirm binds one rename because the first explicit commit retires the intent', async () => {
+    const h = harness();
+    const intent: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    h.setDialog(intent);
+
+    h.flow.confirmRename('New Name');
+    h.flow.confirmRename('New Name');
+    await settle();
+
+    expect(h.deps.renameProjectIndex).toHaveBeenCalledTimes(1);
+    expect(h.deps.store.confirmRename).toHaveBeenCalledTimes(1);
+    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('p-1', 'New Name', intent);
+  });
+
+  it('posts the durable rename with the captured id before the raw-input mirror flip', async () => {
     const order: string[] = [];
     const h = harness();
-    h.deps.store.dialog.mockReturnValue({ kind: 'rename', id: 'p-1' });
+    const intent: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    h.setDialog(intent);
     h.deps.renameProjectIndex.mockImplementation(async (id: string, name: string) => {
       order.push(`post:${id}:${name}`);
     });
-    h.deps.store.confirmRename.mockImplementation((name: string) => order.push(`flip:${name}`));
+    h.deps.store.confirmRename.mockImplementation((id, name, captured) => {
+      order.push(`flip:${id}:${name}:${captured === intent}`);
+    });
     h.flow.confirmRename('  New Name ');
     await settle();
-    // durable post gets the TRIMMED name; the mirror flip receives the raw input
-    expect(order).toEqual(['post:p-1:New Name', 'flip:  New Name ']);
+    expect(order).toEqual(['post:p-1:New Name', 'flip:p-1:  New Name :true']);
   });
 
-  it('a blank name or a non-rename dialog still flips the mirror but posts nothing', async () => {
+  it('a blank rename closes only its own intent; a non-rename dialog is untouched', async () => {
     const h = harness();
-    h.deps.store.dialog.mockReturnValue({ kind: 'rename', id: 'p-1' });
+    const rename: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    h.setDialog(rename);
     h.flow.confirmRename('   ');
-    // id present but kind ≠ rename: only the RENAME dialog's target posts.
-    h.deps.store.dialog.mockReturnValue({ kind: 'reset', id: 'p-1' });
+    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('p-1', '   ', rename);
+
+    const reset: ResetDialog = { kind: 'reset', id: 'p-1' };
+    h.setDialog(reset);
     h.flow.confirmRename('name');
     await settle();
     expect(h.deps.renameProjectIndex).not.toHaveBeenCalled();
-    expect(h.deps.store.confirmRename).toHaveBeenCalledTimes(2);
+    expect(h.deps.store.confirmRename).toHaveBeenCalledTimes(1);
+    expect(h.deps.store.dialog()).toBe(reset);
   });
 
-  it('memory mode never posts a durable rename (page-mirror only)', async () => {
+  it('memory mode never posts a durable rename and flips the captured mirror only', async () => {
     const h = harness({ ephemeral: () => true });
-    h.deps.store.dialog.mockReturnValue({ kind: 'rename', id: 'p-1' });
+    const intent: RenameDialog = { kind: 'rename', id: 'p-1', current: 'Old' };
+    h.setDialog(intent);
     h.flow.confirmRename('name');
     await settle();
     expect(h.deps.renameProjectIndex).not.toHaveBeenCalled();
-    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('name');
+    expect(h.deps.store.confirmRename).toHaveBeenCalledWith('p-1', 'name', intent);
   });
 });

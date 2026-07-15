@@ -1,3 +1,4 @@
+import type { InstallResult } from '@riftydev/npm-client';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -18,6 +19,30 @@ const PACKAGE_JSON_TEXT = JSON.stringify({
   name: 'app',
   dependencies: { vite: '^5.4.0' },
 });
+
+function installResult(count: number): InstallResult {
+  const packages = Array.from({ length: count }, (_, index) => ({
+    name: `package-${index}`,
+    version: '1.0.0',
+    dependencies: {},
+    files: {},
+  }));
+  return {
+    packages,
+    lockfile: {
+      name: 'app',
+      version: '0.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {},
+    },
+    conflicts: [],
+    provenance: {
+      resolution: 'metadata',
+      packages: packages.map(({ name, version }) => ({ name, version, transport: 'registry' })),
+    },
+  };
+}
 
 function write(fs: MemoryFsSync, path: string, bytes: Uint8Array): void {
   const slash = path.lastIndexOf('/');
@@ -79,6 +104,69 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
     expect(reparsed.packageJsonText).toBe(PACKAGE_JSON_TEXT);
     expect(reparsed.installArtifactIdentity).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it('never serializes top-level or nested install-stamp claims', () => {
+    const fs = bakedFs();
+    write(
+      fs,
+      `${ROOT}/node_modules/.rifty-install-stamp.json`,
+      enc.encode('{"version":3,"root":"/workspace"}'),
+    );
+    write(
+      fs,
+      `${ROOT}/node_modules/a/node_modules/.rifty-install-stamp.json`,
+      enc.encode('{"version":3,"root":"/workspace/node_modules/a"}'),
+    );
+
+    const snapshot = buildDepSnapshot(fs, ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+
+    expect(snapshot.nodeModules.files.map((file) => file.path)).not.toContain(
+      '.rifty-install-stamp.json',
+    );
+    expect(snapshot.nodeModules.files.map((file) => file.path)).not.toContain(
+      'a/node_modules/.rifty-install-stamp.json',
+    );
+    expect(snapshot.nodeModules.files.map((file) => file.path)).toContain(
+      'a/node_modules/ms/index.js',
+    );
+  });
+
+  it.each([
+    '.rifty-install-stamp.json',
+    'a/node_modules/.rifty-install-stamp.json',
+    '.rifty-install-stamp.json/payload',
+    'a/node_modules/.rifty-install-stamp.json/payload',
+  ])('rejects marker-bearing snapshot ingress before replacing destination bytes: %s', (path) => {
+    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    const markerBearing = {
+      ...snapshot,
+      nodeModules: {
+        ...snapshot.nodeModules,
+        files: [
+          ...snapshot.nodeModules.files,
+          {
+            path,
+            encoding: 'base64' as const,
+            content: btoa('forged-claim'),
+          },
+        ],
+      },
+    } satisfies DepSnapshotV2;
+    const target = new MemoryFsSync();
+    write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+
+    expect(() => restoreDepSnapshot(target, ROOT, markerBearing)).toThrow(/install-stamp claim/);
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe('keep');
+    expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
   });
 
   it('serializes bake and migration payloads in one stable top-level order', () => {
@@ -165,6 +253,27 @@ describe('dep snapshot (ADR-0135)', () => {
     ).toThrow('packageJsonText');
   });
 
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ])('rejects a %s package count before restore mutates destination bytes', (_case, packages) => {
+    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    const target = new MemoryFsSync();
+    write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+
+    expect(() => {
+      const parsed = parseDepSnapshot(JSON.stringify({ ...snapshot, packages }));
+      restoreDepSnapshot(target, ROOT, parsed);
+    }).toThrow(/packages/);
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe('keep');
+    expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
+  });
+
   it('does not accept a snapshot missing the current install-artifact identity when package.json is unchanged', async () => {
     const { vfs, fsSync } = createMemoryFs();
     fsSync.mkdirSync(ROOT, { recursive: true });
@@ -189,7 +298,7 @@ describe('dep snapshot (ADR-0135)', () => {
       fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV2,
       install: async () => {
         installed = true;
-        return { packages: 9 };
+        return installResult(9);
       },
       log: () => undefined,
     } satisfies Parameters<typeof ensureProjectDependencies>[0];
@@ -227,7 +336,7 @@ describe('dep snapshot (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => snapshot,
-      install: async () => ({ packages: 9 }),
+      install: async () => installResult(9),
       log: () => undefined,
     });
 
@@ -255,7 +364,7 @@ describe('dep snapshot (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => snapshot,
-      install: async () => ({ packages: 9 }),
+      install: async () => installResult(9),
       log: () => undefined,
     });
 
@@ -280,22 +389,34 @@ describe('dep snapshot (ADR-0135)', () => {
       globalThis.fetch = async () => new Response(json);
       expect((await fetchDepSnapshot('/x.json.gz'))?.packages).toBe(8);
 
-      // Failure → null, never a throw.
+      // Failure preserves a typed/exact reason; acquisition owns fallback.
       globalThis.fetch = async () => new Response('nope', { status: 404 });
-      expect(await fetchDepSnapshot('/x.json.gz')).toBeNull();
+      await expect(fetchDepSnapshot('/x.json.gz')).rejects.toMatchObject({
+        code: 'DEP_SNAPSHOT_FETCH_FAILED',
+        stage: 'fetch',
+        url: '/x.json.gz',
+      });
+      await expect(fetchDepSnapshot('/x.json.gz')).rejects.toThrow('HTTP 404');
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it('fetchDepSnapshot bounds a stalled asset and falls back to null', async () => {
+  it('fetchDepSnapshot bounds a stalled asset and preserves the timeout reason', async () => {
     const originalFetch = globalThis.fetch;
     vi.useFakeTimers();
     try {
       globalThis.fetch = () => new Promise<Response>(() => {});
       const fetched = fetchDepSnapshot('/stalled.json.gz');
+      const typedFailure = expect(fetched).rejects.toMatchObject({
+        code: 'DEP_SNAPSHOT_FETCH_FAILED',
+        stage: 'fetch',
+        url: '/stalled.json.gz',
+      });
+      const exactReason = expect(fetched).rejects.toThrow('no response headers for 10000ms');
       await vi.advanceTimersByTimeAsync(10_001);
-      await expect(fetched).resolves.toBeNull();
+      await typedFailure;
+      await exactReason;
     } finally {
       globalThis.fetch = originalFetch;
       vi.useRealTimers();

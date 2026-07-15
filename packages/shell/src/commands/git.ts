@@ -21,7 +21,14 @@ import {
   vfsToGitFs,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
-import { asyncVfs, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import {
+  type VfsMutationIntent,
+  asyncVfs,
+  guardVfsMutations,
+  isAbsolute,
+  joinPath,
+  normalizePath,
+} from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 import {
   OutsideRepoPathspecError,
@@ -34,6 +41,7 @@ import {
 import { doConfig } from './_git-config.ts';
 import { doRestore } from './_git-restore.ts';
 import { doSwitch } from './_git-switch.ts';
+import { hasGlobMeta } from './_glob.ts';
 
 /** The ambient async VFS the `git` builtin binds to (never undefined past the guard). */
 type Vfs = NonNullable<ReturnType<typeof asyncVfs>>;
@@ -44,6 +52,50 @@ type Vfs = NonNullable<ReturnType<typeof asyncVfs>>;
  * (public API only — no deep import of package internals).
  */
 type Git = ReturnType<typeof makeGit>;
+
+type PortablePathAssertion = NonNullable<CommandContext['assertPortablePaths']>;
+
+interface ShellGit {
+  readonly client: Git;
+  /** Command-scoped gate; repeated subsets are already authorized. */
+  readonly assertPortablePaths?: PortablePathAssertion;
+}
+
+/** Bind Git to the Shell host's synchronous namespace authority. */
+function makeShellGit(vfs: Vfs, dir: string, ctx: CommandContext): ShellGit {
+  const hostAssertion = ctx.assertPortablePaths;
+  if (hostAssertion === undefined) {
+    return { client: makeGit({ fs: vfsToGitFs(vfs), dir }) };
+  }
+
+  let accepted: Set<string> | undefined;
+  const assertPortablePaths: PortablePathAssertion = (paths) => {
+    const plan = [...new Set(paths.map(normalizePath))].sort();
+    if (plan.length === 0) return;
+    if (accepted !== undefined) {
+      const prior = accepted;
+      if (plan.every((path) => prior.has(path))) return;
+      throw new Error('Git worktree path plan expanded after its first preflight');
+    }
+    hostAssertion(plan);
+    accepted = new Set(plan);
+  };
+  return {
+    client: makeGit({ fs: vfsToGitFs(vfs), dir, assertPortablePaths }),
+    assertPortablePaths,
+  };
+}
+
+/** Publish one complete repo-relative path set as deterministic absolutes. */
+function assertRepoPaths(
+  assertion: PortablePathAssertion | undefined,
+  root: string,
+  paths: Iterable<string>,
+): void {
+  if (assertion === undefined) return;
+  const absolute = [...new Set(paths)].map((path) => normalizePath(joinPath(root, path))).sort();
+  if (absolute.length > 0) assertion(absolute);
+}
 
 const DEFAULT_AUTHOR_NAME = 'rifty';
 const DEFAULT_AUTHOR_EMAIL = 'rifty@localhost';
@@ -1227,6 +1279,12 @@ async function doGitRm(
     }
     for (const p of matches) removals.add(p);
   }
+  try {
+    assertRepoPaths(ctx.assertPortablePaths, root, removals);
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
   for (const p of removals) {
     if (!cached) await vfs.rm(normalizePath(joinPath(root, p)), { force: true });
     await g.remove(p);
@@ -1281,6 +1339,7 @@ async function doGitMv(
       ctx.stderr.write(`fatal: destination exists, source=${src}, destination=${dst}\n`);
       return 128;
     }
+    ctx.assertPortablePaths?.([srcAbs, finalDstAbs].sort());
     const bytes = await vfs.readFile(srcAbs);
     const parent = finalDstAbs.slice(0, finalDstAbs.lastIndexOf('/')) || '/';
     await vfs.mkdir(parent, { recursive: true });
@@ -1481,6 +1540,11 @@ async function doRevert(
       return renderCheckoutError(new NotImplementedError('git.revert.non-commit'), ctx);
     }
     const actions = await planCleanRevert(g, vfs, root, oid, object);
+    assertRepoPaths(
+      ctx.assertPortablePaths,
+      root,
+      actions.map((action) => action.filepath),
+    );
     for (const action of actions) {
       if (action.kind === 'delete') {
         await removeRepoFile(vfs, root, action.filepath);
@@ -1888,6 +1952,11 @@ async function doApply(
     const scopedPatch = filterPatchTextForCwd(patch, root, ctx.cwd);
     const files = filterPatchFilesForCwd(parseUnifiedPatch(scopedPatch), root, ctx.cwd);
     const actions = await planApply(vfs, root, files);
+    assertRepoPaths(
+      ctx.assertPortablePaths,
+      root,
+      actions.map((action) => action.filepath),
+    );
     for (const action of actions) {
       if (action.kind === 'delete') {
         await removeRepoFile(vfs, root, action.filepath);
@@ -1981,23 +2050,35 @@ async function doStash(
     return renderCheckoutError(new NotImplementedError('git.stash.args'), ctx);
   }
   try {
-    const ident = await identityFrom(g, ctx.env);
-    const configPath = normalizePath(joinPath(root, '.git/config'));
-    const hadConfig = await vfs.exists(configPath);
-    const configBefore = hadConfig ? await vfs.readFile(configPath) : undefined;
+    if (op === 'push') {
+      const tracked = (await g.status())
+        .filter(({ status }) => status[0] !== '0' || status[2] !== '0')
+        .map(({ filepath }) => filepath);
+      assertRepoPaths(ctx.assertPortablePaths, root, tracked);
+    }
+    const invoke = (): ReturnType<Git['stash']> =>
+      g.stash(op as Parameters<Git['stash']>[0], message, refIdx);
     let result: Awaited<ReturnType<Git['stash']>>;
-    try {
-      if ((await g.getConfig('user.name')) === undefined)
-        await g.setConfig('user.name', ident.name);
-      if ((await g.getConfig('user.email')) === undefined)
-        await g.setConfig('user.email', ident.email);
-      result = await g.stash(op as Parameters<Git['stash']>[0], message, refIdx);
-    } finally {
-      if (configBefore !== undefined) {
-        await vfs.writeFile(configPath, configBefore);
-      } else if (!hadConfig) {
-        await vfs.rm(configPath, { force: true });
+    if (op === 'push' || op === 'create') {
+      const ident = await identityFrom(g, ctx.env);
+      const configPath = normalizePath(joinPath(root, '.git/config'));
+      const hadConfig = await vfs.exists(configPath);
+      const configBefore = hadConfig ? await vfs.readFile(configPath) : undefined;
+      try {
+        if ((await g.getConfig('user.name')) === undefined)
+          await g.setConfig('user.name', ident.name);
+        if ((await g.getConfig('user.email')) === undefined)
+          await g.setConfig('user.email', ident.email);
+        result = await invoke();
+      } finally {
+        if (configBefore !== undefined) {
+          await vfs.writeFile(configPath, configBefore);
+        } else if (!hadConfig) {
+          await vfs.rm(configPath, { force: true });
+        }
       }
+    } else {
+      result = await invoke();
     }
     if (Array.isArray(result)) {
       for (const e of result) ctx.stdout.write(`stash@{${e.index}}: ${e.message}\n`);
@@ -2044,7 +2125,7 @@ async function doLsRemote(
     return renderCheckoutError(new NotImplementedError('git.ls-remote.args'), ctx);
   const target = positionals[0] ?? 'origin';
   try {
-    const client = g ?? makeGit({ fs: vfsToGitFs(vfs), dir: ctx.cwd });
+    const client = g ?? makeShellGit(vfs, ctx.cwd, ctx).client;
     const url = isUrlLike(target)
       ? target
       : (await client.listRemotes()).find((r) => r.remote === target)?.url;
@@ -2348,7 +2429,7 @@ async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<n
     assertSupportedTransport(url); // ssh/git/… → loud, before any "Cloning into".
     await vfs.mkdir(target, { recursive: true });
     ctx.stderr.write(`Cloning into '${display}'...\n`);
-    const g = makeGit({ fs: vfsToGitFs(vfs), dir: target });
+    const g = makeShellGit(vfs, target, ctx).client;
     await g.clone({
       url,
       ...(depth !== undefined ? { depth } : {}),
@@ -2451,7 +2532,271 @@ const REPO_VERBS = new Set([
   'push',
 ]);
 
-export const git: ShellCommand = async (args, ctx) => {
+async function cloneWorktreeIntents(
+  args: string[],
+  cwd: string,
+  vfs: Vfs,
+): Promise<VfsMutationIntent[]> {
+  const positionals: string[] = [];
+  let depth: number | undefined;
+  for (let i = 1; i < args.length; i++) {
+    const token = args[i] as string;
+    if (token === '--depth') {
+      const raw = args[++i];
+      if (raw === undefined) return [];
+      depth = Number(raw);
+      continue;
+    }
+    if (token.startsWith('--depth=')) {
+      depth = Number(token.slice('--depth='.length));
+      continue;
+    }
+    if (token === '--single-branch' || token === '--no-tags') continue;
+    if (token.startsWith('-')) return [];
+    positionals.push(token);
+  }
+  const url = positionals[0];
+  if (
+    url === undefined ||
+    positionals.length > 2 ||
+    (depth !== undefined && (!Number.isFinite(depth) || depth < 1))
+  ) {
+    return [];
+  }
+  const target = cloneDestination(url, positionals[1], cwd).target;
+  try {
+    if ((await vfs.exists(target)) && (await vfs.readdir(target)).length > 0) return [];
+  } catch {
+    return [];
+  }
+  try {
+    assertSupportedTransport(url);
+  } catch {
+    return [];
+  }
+  return [{ kind: 'write', path: target }];
+}
+
+function mappedRepoPath(root: string, pathspec: string): string {
+  return pathspec === '.' ? normalizePath(root) : normalizePath(joinPath(root, pathspec));
+}
+
+type RepoMutationDescriptor =
+  | { readonly kind: 'metadata'; readonly path: 'git' | 'config' }
+  | { readonly kind: 'worktree' }
+  | { readonly kind: 'rm'; readonly cached: boolean; readonly rawSpecs: readonly string[] }
+  | { readonly kind: 'mv'; readonly rawOperands: readonly [string, string] };
+
+interface GitMutationPlan {
+  readonly intents: readonly VfsMutationIntent[];
+  readonly verifyRepoRoot: boolean;
+  readonly expectedRepoRoot: string | null;
+}
+
+function tagMayWrite(args: string[]): boolean {
+  let annotated = false;
+  let deleteMode = false;
+  let message: string | undefined;
+  const positionals: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const token = args[i] as string;
+    if (token === '-a' || token === '--annotate' || token === '-f' || token === '--force') {
+      if (token === '-a' || token === '--annotate') annotated = true;
+    } else if (token === '-d' || token === '--delete') {
+      deleteMode = true;
+    } else if (token === '-m' || token === '--message') {
+      const next = args[++i];
+      if (next === undefined) return false;
+      annotated = true;
+      message = next;
+    } else if (token.startsWith('-m')) {
+      annotated = true;
+      message = token.slice(2);
+    } else if (token.startsWith('-')) {
+      return false;
+    } else {
+      positionals.push(token);
+    }
+  }
+  if (deleteMode) return positionals.length > 0;
+  return positionals.length > 0 && positionals.length <= 2 && (!annotated || message !== undefined);
+}
+
+function describeRepoMutation(args: string[]): RepoMutationDescriptor | null {
+  const sub = args[0];
+  if (sub === undefined || !REPO_VERBS.has(sub)) return null;
+  if (sub === 'add') {
+    try {
+      const plan = parseAdd(args);
+      return plan.all || plan.update || plan.pathspecs.length > 0
+        ? { kind: 'metadata', path: 'git' }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  if (sub === 'commit') {
+    try {
+      const plan = parseCommit(args);
+      return plan.all || plan.amend || plan.messages.length > 0
+        ? { kind: 'metadata', path: 'git' }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  if (sub === 'fetch' || sub === 'push') return { kind: 'metadata', path: 'git' };
+  if (sub === 'config') {
+    const get = args.includes('--get');
+    if (args.some((arg) => arg.startsWith('-') && arg !== '--get')) return null;
+    const positionals = args.slice(1).filter((arg) => !arg.startsWith('-'));
+    return !get && positionals.length === 2 ? { kind: 'metadata', path: 'config' } : null;
+  }
+  if (sub === 'tag') return tagMayWrite(args) ? { kind: 'metadata', path: 'git' } : null;
+  if (sub === 'remote') {
+    if (args[1] === 'add' && args.length === 4) return { kind: 'metadata', path: 'git' };
+    if ((args[1] === 'remove' || args[1] === 'rm') && args.length === 3) {
+      return { kind: 'metadata', path: 'git' };
+    }
+    return null;
+  }
+  if (sub === 'checkout') return args.length > 1 ? { kind: 'worktree' } : null;
+  if (sub === 'restore') {
+    const staged = args.some((arg) => arg === '--staged' || arg === '-S');
+    const worktree = args.some((arg) => arg === '--worktree' || arg === '-W');
+    return staged && !worktree ? { kind: 'metadata', path: 'git' } : { kind: 'worktree' };
+  }
+  if (sub === 'reset') {
+    return args.includes('--hard') ? { kind: 'worktree' } : { kind: 'metadata', path: 'git' };
+  }
+  if (sub === 'rm') {
+    let cached = false;
+    const rawSpecs: string[] = [];
+    for (const arg of args.slice(1)) {
+      if (arg === '--cached') cached = true;
+      else if (arg === '--force' || arg === '--recursive') continue;
+      else if (arg.startsWith('-')) {
+        if ([...arg.slice(1)].some((flag) => flag !== 'f' && flag !== 'r')) return null;
+      } else rawSpecs.push(arg);
+    }
+    return rawSpecs.length > 0 ? { kind: 'rm', cached, rawSpecs } : null;
+  }
+  if (sub === 'mv') {
+    const rawOperands: string[] = [];
+    for (const arg of args.slice(1)) {
+      if (arg === '--' || arg === '-f' || arg === '--force') continue;
+      if (arg.startsWith('-')) return null;
+      rawOperands.push(arg);
+    }
+    return rawOperands.length === 2
+      ? { kind: 'mv', rawOperands: rawOperands as [string, string] }
+      : null;
+  }
+  if (sub === 'stash') {
+    const operation = args[1]?.startsWith('-') ? 'push' : (args[1] ?? 'push');
+    if (!['push', 'save', 'pop', 'apply', 'drop', 'list', 'clear', 'create'].includes(operation)) {
+      return null;
+    }
+    if (operation === 'list') return null;
+    return ['drop', 'clear', 'create'].includes(operation)
+      ? { kind: 'metadata', path: 'git' }
+      : { kind: 'worktree' };
+  }
+  return ['switch', 'merge', 'cherry-pick', 'revert', 'apply', 'pull'].includes(sub)
+    ? { kind: 'worktree' }
+    : null;
+}
+
+async function gitMutationPlan(
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+): Promise<GitMutationPlan | null> {
+  const sub = args[0];
+  if (sub === 'clone') {
+    const intents = await cloneWorktreeIntents(args, ctx.cwd, vfs);
+    return intents.length > 0 ? { intents, verifyRepoRoot: false, expectedRepoRoot: null } : null;
+  }
+  if (sub === 'init') {
+    return {
+      intents: [{ kind: 'write', path: normalizePath(joinPath(ctx.cwd, '.git')) }],
+      verifyRepoRoot: false,
+      expectedRepoRoot: null,
+    };
+  }
+  const descriptor = describeRepoMutation(args);
+  if (descriptor === null) return null;
+
+  const root = await findRepoRoot(vfs, ctx.cwd);
+  if (root === null) {
+    return {
+      intents: [{ kind: 'write', path: normalizePath(ctx.cwd) }],
+      verifyRepoRoot: true,
+      expectedRepoRoot: null,
+    };
+  }
+  const broad: VfsMutationIntent[] = [{ kind: 'write', path: root }];
+  const metadata: VfsMutationIntent = {
+    kind: 'write',
+    path: normalizePath(joinPath(root, '.git')),
+  };
+  const mapPathspec = makeRepoPathspecMapper(root, ctx.cwd);
+  let intents: readonly VfsMutationIntent[];
+  if (descriptor.kind === 'metadata') {
+    intents = [
+      descriptor.path === 'config'
+        ? { kind: 'write', path: normalizePath(joinPath(root, '.git/config')) }
+        : metadata,
+    ];
+  } else if (descriptor.kind === 'worktree') {
+    intents = broad;
+  } else if (descriptor.kind === 'rm') {
+    let specs: string[];
+    try {
+      specs = descriptor.rawSpecs.map(mapPathspec);
+    } catch {
+      specs = [];
+    }
+    intents = descriptor.cached
+      ? [metadata]
+      : specs.length === 0 || specs.some(hasGlobMeta)
+        ? broad
+        : [
+            metadata,
+            ...specs.map(
+              (spec): VfsMutationIntent => ({
+                kind: 'rm',
+                path: mappedRepoPath(root, spec),
+              }),
+            ),
+          ];
+  } else {
+    let operands: string[];
+    try {
+      operands = descriptor.rawOperands.map(mapPathspec);
+    } catch {
+      operands = [];
+    }
+    if (operands.length !== 2) {
+      intents = broad;
+    } else {
+      const [source, target] = operands as [string, string];
+      const sourcePath = mappedRepoPath(root, source);
+      const requestedTarget = mappedRepoPath(root, target);
+      const targetIsDirectory = await vfs
+        .readdir(requestedTarget)
+        .then(() => true)
+        .catch(() => false);
+      const targetPath = targetIsDirectory
+        ? normalizePath(joinPath(requestedTarget, source.split('/').pop() ?? source))
+        : requestedTarget;
+      intents = [metadata, { kind: 'rename', sourcePath, targetPath }];
+    }
+  }
+  return { intents, verifyRepoRoot: true, expectedRepoRoot: root };
+}
+
+const runGit: ShellCommand = async (args, ctx) => {
   if (ctx.signal?.aborted) return 130;
 
   const sub = args[0];
@@ -2463,7 +2808,7 @@ export const git: ShellCommand = async (args, ctx) => {
 
   // `init`/`clone` CREATE a repo → no repository-existence guard.
   if (sub === 'init') {
-    const g = makeGit({ fs: vfsToGitFs(vfs), dir: ctx.cwd });
+    const g = makeShellGit(vfs, ctx.cwd, ctx).client;
     await g.init();
     ctx.stdout.write('Initialized empty Git repository\n');
     return 0;
@@ -2484,7 +2829,12 @@ export const git: ShellCommand = async (args, ctx) => {
       return 128;
     }
     const mapPathspec = makeRepoPathspecMapper(root, ctx.cwd);
-    const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+    const shellGit = makeShellGit(vfs, root, ctx);
+    const g = shellGit.client;
+    const portableCtx =
+      shellGit.assertPortablePaths === undefined
+        ? ctx
+        : { ...ctx, assertPortablePaths: shellGit.assertPortablePaths };
     switch (sub) {
       case 'status':
         return doStatus(g, args, ctx);
@@ -2517,19 +2867,19 @@ export const git: ShellCommand = async (args, ctx) => {
       case 'ls-remote':
         return doLsRemote(g, vfs, args, ctx);
       case 'rm':
-        return doGitRm(g, args, ctx, vfs, root, mapPathspec);
+        return doGitRm(g, args, portableCtx, vfs, root, mapPathspec);
       case 'mv':
-        return doGitMv(g, args, ctx, vfs, root, mapPathspec);
+        return doGitMv(g, args, portableCtx, vfs, root, mapPathspec);
       case 'merge':
         return doMerge(g, args, ctx);
       case 'cherry-pick':
         return doCherryPick(g, args, ctx);
       case 'revert':
-        return doRevert(g, args, ctx, vfs, root);
+        return doRevert(g, args, portableCtx, vfs, root);
       case 'apply':
-        return doApply(args, ctx, vfs, root);
+        return doApply(args, portableCtx, vfs, root);
       case 'stash':
-        return doStash(g, args, ctx, vfs, root);
+        return doStash(g, args, portableCtx, vfs, root);
       case 'fetch':
       case 'pull':
       case 'push':
@@ -2545,4 +2895,25 @@ export const git: ShellCommand = async (args, ctx) => {
   }
   ctx.stderr.write(`git: '${sub ?? ''}' is not a git command\n`);
   return 1;
+};
+
+export const git: ShellCommand = async (args, ctx) => {
+  if (ctx.signal?.aborted) return runGit(args, ctx);
+  if (!ctx.mutationGuard) return runGit(args, ctx);
+  const vfs = asyncVfs();
+  if (!vfs) return runGit(args, ctx);
+  const plan = await gitMutationPlan(args, ctx, vfs);
+  if (plan === null) return runGit(args, ctx);
+  return await guardVfsMutations(ctx.mutationGuard, plan.intents, async () => {
+    if (plan.verifyRepoRoot) {
+      const actualRepoRoot = await findRepoRoot(vfs, ctx.cwd);
+      if (actualRepoRoot !== plan.expectedRepoRoot) {
+        ctx.stderr.write(
+          `fatal: repository root changed while waiting for mutation guard (expected ${plan.expectedRepoRoot ?? '<none>'}, found ${actualRepoRoot ?? '<none>'})\n`,
+        );
+        return 128;
+      }
+    }
+    return runGit(args, ctx);
+  });
 };

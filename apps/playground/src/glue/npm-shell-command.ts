@@ -26,9 +26,8 @@
  * The sequence runs in BACKGROUND (backlog install-stamp-background-flush):
  * install exit does not await it — real `npm install` exit does not fsync
  * node_modules either, so the durability tier (a browser-only concept) must
- * not tax the prompt. Order is intact; a later install serializes behind the
- * in-flight sequence so stamp #N always lands before install #N+1's tree
- * writes.
+ * not tax the prompt. A later install claims the FIFO immediately; its newer
+ * epoch fences any parked promoter from attesting the replacement tree.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -48,18 +47,22 @@ import {
   type ShellCommandResult,
   shellCommandExitCode,
 } from '@riftydev/shell';
-import { type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
+import { type PersistFailureReport, type Vfs, normalizePath } from '@riftydev/vfs';
 import {
-  installStampPath,
-  installTreeDir,
-  isStampedTreeDamage,
-  readEffectiveDeps,
-  readInstallStamp,
-  reportHasFailure,
-  stampTrusted,
-  writeDeferredTrustedStamp,
-  writeInstallStamp,
-} from './install-stamp.ts';
+  type PackageAcquisitionAuthority,
+  PackageAcquisitionError,
+  type PackageInstallAdapterResult,
+  type PackageInstallExecution,
+  createPackageAcquisitionAuthority,
+} from '../workers/package-acquisition-authority.ts';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
+import {
+  type InstallStampAuthority,
+  InstallStampAuthorityError,
+  type InstallStampPromotionResult,
+  installStampAuthorityFor,
+} from './install-stamp-authority.ts';
+import { isStampedTreeDamage } from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -80,17 +83,25 @@ export interface NpmShellCommandDeps {
   readonly registry: RegistryClient;
   /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
+  /** Host-owned all-target namespace preflight, before the installer links bytes. */
+  readonly assertPortablePaths?: InstallOptions['assertPortablePaths'];
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
-   *  clear/reseed) — runs INSIDE the per-tree install phase lock, before any
+   *  clear/reseed) — runs INSIDE the owner acquisition FIFO, before any
    *  read or mutation of this install: a preparation that deletes/reseeds the
-   *  tree outside the lock could raze it under ANOTHER terminal's in-flight
+   *  tree outside the FIFO could raze it under ANOTHER terminal's in-flight
    *  exclusive install. `fullInstall` = bare `npm install` (no specs);
    *  `sessionInstallActivity` = THIS realm already ran an install on this
    *  tree (its background durability may still be in flight — a PENDING
    *  stamp seen now is ours, not a foreign/torn leftover). */
   readonly prepareInstall?: (
     ctx: CommandContext,
-    info: { fullInstall: boolean; sessionInstallActivity: boolean },
+    info: {
+      readonly fullInstall: boolean;
+      readonly sessionInstallActivity: boolean;
+      readonly priorSessionSlug?: string;
+      readonly priorTrustedTree: boolean;
+      readonly priorSlug?: string;
+    },
   ) => Promise<void>;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (
@@ -106,12 +117,18 @@ export interface NpmShellCommandDeps {
    *  OPFS failed to hold); `undefined` means "no durability tier" (memory
    *  backend) and reads as clean. */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
-  /** The owner's project slug (preset id) the install stamp is keyed on so the
+  /** Shared owner-realm stamp authority. Composition injects the same instance
+   *  used by boot acquisition; unit harnesses fall back to one per Vfs. */
+  readonly installStampAuthority?: InstallStampAuthority;
+  /** Single owner-realm package mutation authority. Production injects one
+   * instance shared with boot restore; focused harnesses get a local owner. */
+  readonly packageAcquisitionAuthority?: PackageAcquisitionAuthority;
+  /** Root-aware project slug the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
-   *  user install). A getter — the active preset can change. Defaults to `''`
-   *  (page-side ad-hoc installs no boot reuses). */
-  readonly projectSlug?: () => string;
+   *  user install). The active preset can change; arbitrary cwd roots require a
+   *  deterministic root-local identity. Defaults to the canonical cwd. */
+  readonly projectSlug?: (root: string) => string;
   /** Opt-in eddy fast-install resolver URL (ADR-0182), env-config only (D-004),
    *  default OFF. When set, `install()` runs the fast path (with auto-fallback
    *  to the standard verifying install); the install line reports
@@ -177,12 +194,19 @@ interface ProjectPackageJson {
 const DEFAULT_PROJECT_NAME = 'rifty-project';
 const DEFAULT_PROJECT_VERSION = '0.0.0';
 
+function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
+  return (
+    deps.installStampAuthority ?? installStampAuthorityFor(deps.vfs as object, { vfs: deps.vfs })
+  );
+}
+
 /**
  * Build the `npm` shell command. The composition root (`App.tsx`) registers it
  * on a `ShellSession`; this factory stays Solid-free so unit tests can exercise
  * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
+  const packages = deps.packageAcquisitionAuthority ?? createNpmPackageAcquisitionAuthority(deps);
   return async (args, ctx) => {
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
@@ -202,7 +226,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(args.slice(1), ctx, deps);
+      return runInstall(args.slice(1), ctx, deps, packages);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
@@ -456,87 +480,17 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'prefer-onli
   return 'unknown';
 }
 
-/**
- * Per-TREE install coordination state. A TREE is (vfs, cwd) — the same path
- * string on two different VFS instances is two unrelated trees (two projects,
- * two test harnesses) and must never share a mutex or a generation, or
- * genuinely concurrent installs silently serialize (false sharing). Within one
- * VFS the state is cross-terminal by design (two terminals, one tree).
- *
- * - `generation`: each install bumps it at mutation start; a background
- *   durability sequence may write its TRUSTED stamp only while its generation
- *   is still current — a newer install cancels the older sequence's stamp
- *   instead of racing it (same stale-promoter guard as the boot path's
- *   `promotionId`, ADR-0187). Deliberately NOT an await-chain: waiting on the
- *   previous drain would park the next install forever behind a wedged
- *   durability layer (unbounded-wait class).
- * - `phase`: foreground-phase mutex — pending-demote → installFn's tree writes
- *   → background scheduling — of two terminals must not interleave on one
- *   tree. Only the foreground phase is chained (visible, user-interruptible
- *   work); the background drain is NOT (see `generation`).
- * - `stampWrites`: ALL stamp writes for this tree (pending demote, deferred
- *   trusted) serialize here, so chain order — not wall-clock luck — decides
- *   the final stamp; the deferred trusted write re-checks the generation
- *   SYNCHRONOUSLY inside its slot, closing the check→write TOCTOU (an older
- *   sequence can never overwrite a newer install's pending stamp). Tasks are
- *   bounded VFS writes ONLY — never a drain (a wedged flush must not park
- *   later installs or stamp writes).
- */
-interface TreeInstallState {
-  generation: number;
-  phase: Promise<void>;
-  stampWrites: Promise<void>;
+export interface ParsedNpmInstallRequest {
+  readonly target: 'dependencies' | 'devDependencies';
+  readonly prefer?: 'online';
+  readonly packageSpecs: readonly string[];
 }
 
-const installStates = new WeakMap<Vfs, Map<string, TreeInstallState>>();
+export type ParsedNpmInstallResult =
+  | { readonly status: 'ready'; readonly request: ParsedNpmInstallRequest }
+  | { readonly status: 'rejected'; readonly message: string };
 
-function installStateFor(vfs: Vfs, cwd: string): TreeInstallState {
-  let byCwd = installStates.get(vfs);
-  if (!byCwd) {
-    byCwd = new Map();
-    installStates.set(vfs, byCwd);
-  }
-  let state = byCwd.get(cwd);
-  if (!state) {
-    state = { generation: 0, phase: Promise.resolve(), stampWrites: Promise.resolve() };
-    byCwd.set(cwd, state);
-  }
-  return state;
-}
-
-/** Enqueue one bounded stamp write on the tree's chain (see
- * `TreeInstallState.stampWrites`). Rejections propagate to the caller; the
- * chain itself never wedges on them. */
-function chainStampWrite<T>(state: TreeInstallState, task: () => Promise<T>): Promise<T> {
-  const run = state.stampWrites.then(task);
-  state.stampWrites = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
-
-async function runInstall(
-  specs: string[],
-  ctx: CommandContext,
-  deps: NpmShellCommandDeps,
-): Promise<number> {
-  const state = installStateFor(deps.vfs, ctx.cwd);
-  const run = state.phase.then(() => runInstallExclusive(specs, ctx, deps));
-  state.phase = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
-
-async function runInstallExclusive(
-  specs: string[],
-  ctx: CommandContext,
-  deps: NpmShellCommandDeps,
-): Promise<number> {
-  // Partition argv into save-flags vs package specs; the flags pick the target
-  // dep map. `-g` is a directed loud throw (no global store in the sandbox).
+export function parseNpmInstallRequest(specs: readonly string[]): ParsedNpmInstallResult {
   let target: 'dependencies' | 'devDependencies' = 'dependencies';
   let prefer: 'online' | undefined;
   const pkgSpecs: string[] = [];
@@ -544,105 +498,132 @@ async function runInstallExclusive(
     if (spec.startsWith('-')) {
       const kind = installFlagKind(spec);
       if (kind === 'global') {
-        ctx.stderr.write(
-          "npm: global installs aren't supported in the browser sandbox — install into the project instead\n",
-        );
-        return 1;
+        return {
+          status: 'rejected',
+          message:
+            "npm: global installs aren't supported in the browser sandbox — install into the project instead\n",
+        };
       }
       if (kind === 'dev') target = 'devDependencies';
       else if (kind === 'prefer-online') prefer = 'online';
       else if (kind === 'unknown') {
-        ctx.stderr.write(`npm: flag '${spec}' not supported (M9 scope)\n`);
-        return 1;
+        return {
+          status: 'rejected',
+          message: `npm: flag '${spec}' not supported (M9 scope)\n`,
+        };
       }
       // `prod` (-S/--save default, -E/--save-exact) is otherwise a no-op.
       continue;
     }
     pkgSpecs.push(spec);
   }
+  return {
+    status: 'ready',
+    request: {
+      target,
+      ...(prefer ? { prefer } : {}),
+      packageSpecs: pkgSpecs,
+    },
+  };
+}
 
-  // Tree preparation INSIDE the phase lock, before this install reads
-  // Claim the tree: any in-flight background sequence of an OLDER install
-  // loses its right to write a trusted stamp the moment this generation is
-  // bumped (see TreeInstallState). `sessionInstallActivity` is sampled BEFORE
-  // this install's own claim — it answers "did a PRIOR install of this realm
-  // touch the tree".
-  const state = installStateFor(deps.vfs, ctx.cwd);
-  const sessionInstallActivity = state.generation > 0;
-  state.generation += 1;
-  const generation = state.generation;
+/** One adapter around the real npm mutation operation. Production normally
+ * supplies a broader shared authority; this is the focused-shell composition. */
+export function createNpmPackageAcquisitionAuthority(
+  deps: NpmShellCommandDeps,
+): PackageAcquisitionAuthority {
+  return createPackageAcquisitionAuthority({
+    stamps: stampAuthorityFor(deps),
+    ...(deps.flush ? { stampTransition: { flush: deps.flush } } : {}),
+    adapter: {
+      planSnapshotRestore: async () => {
+        throw new NotImplementedError('package-acquisition.snapshot-restore');
+      },
+      install: async (request, execution) => {
+        const parsed = parseNpmInstallRequest(
+          request.type === 'terminal-install' ? request.argv : [],
+        );
+        if (parsed.status === 'rejected') throw new Error(parsed.message.trimEnd());
+        const sink = { write: (_chunk: string | Uint8Array): void => {} };
+        const context: CommandContext =
+          request.type === 'terminal-install'
+            ? (request.context ??
+              (() => {
+                throw new Error('terminal package acquisition requires its shell context');
+              })())
+            : { cwd: request.project.root, env: {}, stdout: sink, stderr: sink };
+        return executeNpmInstallOperation(parsed.request, context, deps, execution);
+      },
+      reset: async () => {
+        throw new NotImplementedError('package-acquisition.reset');
+      },
+      switchProject: async () => {
+        throw new NotImplementedError('package-acquisition.project-switch');
+      },
+    },
+  });
+}
 
-  // The INSTALL-TIME project identity: sampled at mutation start, never after
-  // installFn — a preset switch during the install must not re-key this
-  // install's stamp under the NEW slug (two presets can share a dep set; the
-  // slug is exactly what keeps them from reusing each other's tree).
-  const stampSlug = deps.projectSlug?.() ?? '';
-
-  // Demote any TRUSTED stamp to PENDING before the first tree mutation —
-  // the boot path's pending-first pattern (ADR-0187) applied to the command
-  // site: a reload during this install (or its background drain) must find
-  // an untrusted marker and re-arrive, never trust a half-replaced tree. A
-  // failed install leaves it pending (self-heal: the tree may be part-
-  // mutated, the old stamp must not resurrect). Demote deps fall back to the
-  // prior stamp's own snapshot: a trusted stamp must never survive un-demoted
-  // just because package.json is missing (the silent no-op would also make
-  // the durability proof below pass vacuously). On the stamp chain: the
-  // demote must land AFTER any in-flight older sequence's trusted write,
-  // never under it.
-  const priorStamp = await readInstallStamp(deps.vfs, ctx.cwd);
-  const demoteDeps: Record<string, string> | undefined =
-    (await readEffectiveDeps(deps.vfs, ctx.cwd)) ??
-    (priorStamp ? { ...priorStamp.deps } : undefined);
-  if (demoteDeps) {
-    await chainStampWrite(state, () =>
-      writeInstallStamp(deps.vfs, ctx.cwd, 0, stampSlug, 'pending', undefined, demoteDeps),
-    );
+async function runInstall(
+  specs: string[],
+  ctx: CommandContext,
+  deps: NpmShellCommandDeps,
+  packages: PackageAcquisitionAuthority,
+): Promise<number> {
+  const parsed = parseNpmInstallRequest(specs);
+  if (parsed.status === 'rejected') {
+    ctx.stderr.write(parsed.message);
+    return 1;
   }
-  // A demote that revokes a TRUSTED stamp must be PROVEN durable before the
-  // first tree write (r17 class: a revocation that never reached disk is a
-  // lie) — else OPFS keeps the old trusted stamp while the tree mutates, and
-  // a reload after a torn mutation trusts it. The proof costs one drain, paid
-  // ONLY here (fresh/pending trees have nothing to revoke; the queue is
-  // normally idle after boot). Fallback ladder: demote persisted → proceed;
-  // failed → durable RM of the stamp; even that failing → ABORT before any
-  // mutation (tree intact, attestation still true — the only honest state
-  // left). On abort the MIRROR stamp is restored to the trusted original:
-  // OPFS still holds it, and a retry must see a trusted prior stamp so it
-  // re-runs this proof instead of skipping it (mirror/durable split).
-  if (priorStamp && stampTrusted(priorStamp) && deps.flush) {
-    const stampPath = installStampPath(ctx.cwd);
-    const failedToPersist = (report: PersistFailureReport | undefined): boolean =>
-      report !== undefined && reportHasFailure(report, (p) => p === stampPath);
-    const abortRestoringMirror = async (message: string): Promise<1> => {
-      await chainStampWrite(state, () =>
-        writeDeferredTrustedStamp(deps.vfs, ctx.cwd, priorStamp.packages, priorStamp.slug, {
-          ...priorStamp.deps,
-        }),
-      ).catch(() => {
-        // Even the in-memory restore failed — the retry then reads an
-        // untrusted (pending/absent) stamp and self-heals at boot; the abort
-        // itself is already loud.
-      });
-      ctx.stderr.write(message);
-      return 1;
-    };
-    try {
-      if (failedToPersist(await deps.flush())) {
-        await chainStampWrite(state, () => deps.vfs.rm(stampPath, { force: true }));
-        if (failedToPersist(await deps.flush())) {
-          return abortRestoringMirror(
-            'npm: install aborted: the previous install stamp could not be demoted or removed durably — installing now could let a reload trust a torn tree; check browser storage (quota) and retry\n',
-          );
-        }
-      }
-    } catch (err) {
-      return abortRestoringMirror(
-        `npm: install aborted: durability check failed (${(err as Error).message}) — cannot prove the previous install stamp was demoted\n`,
+
+  const root = normalizePath(ctx.cwd);
+  try {
+    await packages.dispatch({
+      type: 'terminal-install',
+      project: () => {
+        const slug = deps.projectSlug?.(root) ?? root;
+        return {
+          projectId: slug,
+          root,
+          slug,
+          identity: installArtifactIdentity,
+        };
+      },
+      argv: specs,
+      context: ctx,
+      onPromotion: (result) => reportInstallStampPromotion(ctx, result),
+    });
+    return 0;
+  } catch (error) {
+    if (error instanceof PackageAcquisitionError && error.failure === 'claim') {
+      const cause = error.cause;
+      const detail =
+        cause instanceof InstallStampAuthorityError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : String(cause);
+      ctx.stderr.write(
+        `npm: install aborted: ${detail} — cannot prove the previous install stamp was demoted; check browser storage (quota) and retry\n`,
       );
+      return 1;
     }
+    return reportInstallError(error instanceof PackageAcquisitionError ? error.cause : error, ctx);
   }
+}
 
-  // Tree preparation INSIDE the phase lock and AFTER the demote+proof: a
+/** The only npm tree-mutation path. The package authority owns FIFO order,
+ * demotion, session activity, and promotion; this operation owns npm behavior. */
+export async function executeNpmInstallOperation(
+  request: ParsedNpmInstallRequest,
+  ctx: CommandContext,
+  deps: NpmShellCommandDeps,
+  execution: PackageInstallExecution,
+): Promise<PackageInstallAdapterResult> {
+  const { target, prefer, packageSpecs: pkgSpecs } = request;
+  if (ctx.signal?.aborted) throw ctx.signal.reason;
+
+  // Tree preparation INSIDE the authority queue and AFTER the demote+proof: a
   // preparation that clears the tree (from-scratch clean-start) must not run
   // while OPFS could still hold a TRUSTED stamp — a clear whose rm never
   // persisted would erase the MIRROR copy while the durable one survived,
@@ -652,7 +633,12 @@ async function runInstallExclusive(
   if (deps.prepareInstall) {
     await deps.prepareInstall(ctx, {
       fullInstall: pkgSpecs.length === 0,
-      sessionInstallActivity,
+      sessionInstallActivity: execution.sessionInstallActivity,
+      ...(execution.priorSessionSlug !== undefined
+        ? { priorSessionSlug: execution.priorSessionSlug }
+        : {}),
+      priorTrustedTree: execution.priorTrustedTree,
+      ...(execution.priorSlug ? { priorSlug: execution.priorSlug } : {}),
     });
   }
 
@@ -664,8 +650,7 @@ async function runInstallExclusive(
   for (const spec of pkgSpecs) {
     const { name, range } = parseSpec(spec);
     if (!name) {
-      ctx.stderr.write(`npm: malformed package spec '${spec}'\n`);
-      return 1;
+      throw new Error(`malformed package spec '${spec}'`);
     }
     targetMap[name] = range;
   }
@@ -681,7 +666,7 @@ async function runInstallExclusive(
     // tree — untrusted is the honest resting state (the next boot re-runs
     // arrival); real npm no-ops here too.
     ctx.stdout.write('npm: no dependencies to install\n');
-    return 0;
+    return { status: 'noop' };
   }
 
   const packageJsonPath = `${ctx.cwd}/package.json`;
@@ -757,6 +742,7 @@ async function runInstallExclusive(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
       ...(prefer ? { prefer } : {}),
       ...(resolverClosureHash ? { resolverClosureHash } : {}),
@@ -775,35 +761,7 @@ async function runInstallExclusive(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    // Background (ADR-0216): the drain → gate → stamp → stamp-drain sequence
-    // runs unchanged but the command does NOT await it — the prompt returns
-    // (a `&&`-chained dev server starts) while OPFS durability settles behind
-    // it. Dirty-drain/stamp warnings arrive asynchronously (accepted: honesty
-    // stays loud, latency does not pay for it). The deferred stamp attests
-    // the request maps THIS install was fed (the same merge
-    // `readEffectiveDeps` computes) — never a re-read: a package.json edit
-    // DURING the install or the drain, or a preset switch, must not leak into
-    // a trusted stamp.
-    const stampDeps: Record<string, string> = {
-      ...dependencies,
-      ...devDependencies,
-      ...pkg.optionalDependencies,
-    };
-    void stampInstalledTree(
-      deps,
-      ctx,
-      ctx.cwd,
-      result.packages.length,
-      stampDeps,
-      stampSlug,
-      generation,
-      packageJsonTextAtInstall,
-    ).catch((err) => {
-      // stampInstalledTree reports every expected failure itself; this guard
-      // only keeps an unexpected reject from surfacing unhandled — still
-      // loud, never silent.
-      console.warn(`npm: install durability sequence failed: ${(err as Error).message}`);
-    });
+    if (ctx.signal?.aborted) throw ctx.signal.reason;
     // A STALE pin actually served this install (SWR): the tree came from a
     // ≤24h-old cached resolution — say so loudly (`as-of` = the SERVED
     // manifest's resolvedAt, never the pin file's age) and refresh in
@@ -860,7 +818,7 @@ async function runInstallExclusive(
     ctx.stdout.write(
       `npm: installed ${result.packages.length} package(s) in ${formatInstallDuration(elapsedMs)}${via}\n`,
     );
-    return 0;
+    return { result, packageJsonText: packageJsonTextAtInstall };
   } catch (err) {
     if (pkgSpecs.length > 0) {
       if (previousPackageJson) {
@@ -869,7 +827,7 @@ async function runInstallExclusive(
         await deps.vfs.rm(packageJsonPath, { force: true });
       }
     }
-    return reportInstallError(err, ctx);
+    throw err;
   }
 }
 
@@ -910,126 +868,54 @@ function persistFailureLine(report: PersistFailureReport): string {
   return `${report.total} file(s) failed to persist to OPFS${sample}`;
 }
 
-/**
- * Drain the write-through, GATE, stamp, drain the stamp (ADR-0187 Corrected).
- * FIFO order still lands the stamp after the tree, but order alone cannot
- * survive a swallowed per-op quota/perm failure — a stamped-but-torn tree
- * would be TRUSTED by the next boot's `installStampSatisfied`. So the tree
- * drain is checked FIRST and a dirty report skips the stamp (self-heal: no
- * stamp → the next boot re-installs) with a loud terminal warning. Runs in
- * BACKGROUND, un-awaited by the install command (install exit does not fsync,
- * npm parity); warnings surface on the terminal after the prompt returned. A
- * tab killed mid-sequence leaves no stamp — the next boot re-installs, never
- * trusts a torn tree.
- *
- * The stamp stays best-effort: its own write/drain failure only costs the
- * next boot's skip optimization — the TREE is already proven durable.
- */
-async function stampInstalledTree(
-  deps: NpmShellCommandDeps,
+/** Translate the authority's structured durability verdict onto the terminal.
+ * The authority owns drain gates, epochs, identity, and every stamp write. */
+function reportInstallStampPromotion(
   ctx: CommandContext,
-  cwd: string,
-  packages: number,
-  stampDeps: Record<string, string>,
-  stampSlug: string,
-  generation: number,
-  packageJsonTextAtInstall: string | null,
-): Promise<void> {
+  result: InstallStampPromotionResult,
+): void {
   const notDurable = (cause: string): void => {
     ctx.stderr.write(
       `npm: WARNING: ${cause} — the install works in this session but is NOT durable; skipping the install stamp (the next boot re-installs)\n`,
     );
   };
-  let treeReport: PersistFailureReport | undefined;
-  try {
-    treeReport = await deps.flush?.();
-  } catch (err) {
-    notDurable(`install flush failed: ${(err as Error).message}`);
-    return;
-  }
-  if (treeReport && treeReport.total > 0) {
-    // Only failures INSIDE the stamped tree (`<cwd>/node_modules`, minus the
-    // stamp file — which is about to be rewritten, healing it) gate the stamp.
-    // A global/foreign path (`/.rifty/eddy-learned-pins.json`, another project)
-    // failing to persist is not THIS tree torn and must not skip a good stamp
-    // (`isStampedTreeDamage`). Ask the FULL ledger (`reportHasFailure`), not the
-    // 20-entry sample: foreign failures could fill the sample while tree damage
-    // sits beyond it. Report the full OPFS count with a tree example (from the
-    // sample when present) as the trigger.
-    if (reportHasFailure(treeReport, (p) => isStampedTreeDamage(p, cwd))) {
-      const example = treeReport.failures.find((f) => isStampedTreeDamage(f.path, cwd));
-      notDurable(
-        persistFailureLine({ failures: example ? [example] : [], total: treeReport.total }),
-      );
+  if (result.status === 'trusted' || result.status === 'stale') return;
+  switch (result.reason) {
+    case 'guarded-scope-not-durable': {
+      const report = result.report;
+      if (!report) {
+        notDurable('node_modules failed to persist');
+        return;
+      }
+      const example = report.failures.find((failure) => isStampedTreeDamage(failure.path, ctx.cwd));
+      notDurable(persistFailureLine({ failures: example ? [example] : [], total: report.total }));
       return;
     }
-  }
-  // A NEWER install claimed this tree while the drain ran: its pending stamp
-  // is already down and only ITS sequence may promote — writing this stale
-  // trusted stamp would attest a tree the newer install is replacing. Not a
-  // failure (the newer install owns stamping now), so no warning. (Cheap
-  // early-exit; the LOAD-BEARING check is the sync re-check inside the chain
-  // slot below.)
-  const state = installStateFor(deps.vfs, cwd);
-  if (state.generation !== generation) return;
-  // The stamp writes the INSTALL-TIME snapshot, but only when package.json
-  // provably did not move since (the boot promoter's contract): the real
-  // installer re-reads package.json AFTER the eddy pin window, so a
-  // mid-install edit can put deps in the tree the snapshot never named — a
-  // trusted stamp for either set would be a provenance lie. The compare is
-  // BYTE-EXACT (never the flattened dep map: a section move or an `overrides`
-  // edit changes the installer request with an identical flat map). Moved →
-  // loud skip, self-heal (the next boot re-installs). Checked AFTER the
-  // generation guard: a newer install legitimately rewrote package.json and
-  // owns stamping — that is not an edit, no warning.
-  const currentText = (await deps.vfs.exists(joinPath(cwd, 'package.json')))
-    ? await deps.vfs.readFileText(joinPath(cwd, 'package.json')).catch(() => null)
-    : null;
-  if (currentText === null || currentText !== packageJsonTextAtInstall) {
-    ctx.stderr.write(
-      'npm: WARNING: package.json changed during the install — install stamp skipped; the next boot re-installs\n',
-    );
-    return;
-  }
-  // The tree itself vanished while the drain ran (`npm install && rm -rf
-  // node_modules`): the deferred writer must not resurrect a trusted stamp
-  // into an empty dir. The user deleted it; no stamp is the honest state. A
-  // deletion completing AFTER this read is caught by the write itself — the
-  // no-mkdir writer fails ENOENT on the vanished parent (loud, below).
-  if (!(await deps.vfs.exists(installTreeDir(cwd)))) return;
-  try {
-    const written = await chainStampWrite(state, async () => {
-      // Re-checked SYNCHRONOUSLY in the chain slot — no await between this
-      // read and the write dispatch. A newer install bumps the generation
-      // BEFORE enqueueing its pending demote on this same chain, so passing
-      // here proves that demote (if any) lands AFTER this write, never under
-      // it.
-      if (state.generation !== generation) return false;
-      await writeDeferredTrustedStamp(deps.vfs, cwd, packages, stampSlug, stampDeps);
-      return true;
-    });
-    if (!written) return;
-  } catch (err) {
-    // Terminal, not console: the user's reload behavior changes (next boot
-    // re-installs) — that must be visible where the install ran.
-    ctx.stderr.write(
-      `npm: WARNING: install stamp write failed (${(err as Error).message}) — the next boot re-installs\n`,
-    );
-    return;
-  }
-  try {
-    const stampReport = await deps.flush?.();
-    // Scope to the STAMP FILE via the FULL ledger: foreign/global failures can
-    // fill the sample while the stamp's own failure sits beyond it.
-    if (stampReport && reportHasFailure(stampReport, (p) => p === installStampPath(cwd))) {
+    case 'claim-not-durable':
       ctx.stderr.write(
         'npm: WARNING: the install stamp failed to persist — the next boot re-installs\n',
       );
-    }
-  } catch (err) {
-    ctx.stderr.write(
-      `npm: WARNING: install stamp flush failed (${(err as Error).message}) — the next boot may re-install\n`,
-    );
+      return;
+    case 'identity-drift':
+      ctx.stderr.write(
+        'npm: WARNING: package.json changed during the install — install stamp skipped; the next boot re-installs\n',
+      );
+      return;
+    case 'tree-missing':
+      return;
+    case 'claim-replaced':
+    case 'write-failed':
+      ctx.stderr.write(
+        `npm: WARNING: install stamp write failed (${result.error ?? result.reason}) — the next boot re-installs\n`,
+      );
+      return;
+    case 'flush-failed':
+      notDurable(`install flush failed: ${result.error ?? 'unknown durability error'}`);
+      return;
+    case 'revocation-not-durable':
+      ctx.stderr.write(
+        'npm: WARNING: trusted install stamp revocation failed after durability damage — browser storage must recover before reload\n',
+      );
   }
 }
 

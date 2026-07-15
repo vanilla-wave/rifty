@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Install-artifact identity now includes the exact Vite CLI patch policy, and
+  snapshot drift checks prove every baked Vite CLI is patchable before accepting
+  generated metadata.
 - Alias shims declare the exact public API version they materialize, allowing
   npm-client to reject incompatible source ranges before applying a baked
   substitution.

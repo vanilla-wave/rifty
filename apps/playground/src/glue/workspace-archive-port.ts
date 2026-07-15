@@ -12,7 +12,8 @@
  * which (unlike the 128 KB-capped snapshot) carries full file content with no
  * truncation, so the downloaded archive is faithful to owner-side writes
  * (shell/CLI-authored files included). page→owner request, owner→page reply,
- * correlated by `requestId`, with a per-request idle timeout.
+ * correlated by `requestId`. Export reads are bounded; admitted imports settle
+ * only on reply, send failure, or certified owner exit.
  *
  * Playground-local for the same reason as the sibling ports: the wire format is
  * a `Vfs`/archive concern; only `@riftydev/net`'s `channelNameFor` addressing
@@ -22,7 +23,13 @@
 import { channelNameFor } from '@riftydev/net';
 import { syncMirror } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
-import { exportWorkspaceArchive, importWorkspaceArchive } from './workspace-archive.ts';
+import { createOwnerRequestSettlements } from './owner-request-settlements.ts';
+import type { PackageMutationExecutor } from './package-mutation-executor.ts';
+import {
+  type WorkspaceArchiveV1,
+  exportWorkspaceArchive,
+  prepareWorkspaceArchiveImport,
+} from './workspace-archive.ts';
 
 /** Synthetic channel URL keyed by the owner's snapshot port — a distinct host
  *  so it never cross-talks with the write / snapshot / node_modules bridges. */
@@ -45,7 +52,11 @@ export type WorkspaceArchiveReplyFrame =
       readonly archiveJson: string;
     }
   | { readonly type: 'archive-import-reply'; readonly requestId: string }
-  | { readonly type: 'archive-error'; readonly requestId: string; readonly message: string };
+  | {
+      readonly type: 'archive-error';
+      readonly requestId: string;
+      readonly error: { readonly name: string; readonly message: string };
+    };
 
 type WorkspaceArchiveFrame = WorkspaceArchiveRequestFrame | WorkspaceArchiveReplyFrame;
 
@@ -61,14 +72,19 @@ function nextRequestId(): string {
  * single source of truth). Returns an idempotent teardown. The owner stays
  * alive to answer (ADR-0144 `serve` process).
  */
-export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => void {
+export function serveWorkspaceArchive(
+  key: OwnerBridgeKey,
+  root: string,
+  packageMutations?: Pick<PackageMutationExecutor, 'reset'>,
+): () => void {
   const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(key)));
 
-  const replyError = (requestId: string, message: string): void => {
+  const replyError = (requestId: string, cause: unknown): void => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
     channel.postMessage({
       type: 'archive-error',
       requestId,
-      message,
+      error: { name: error.name, message: error.message },
     } satisfies WorkspaceArchiveReplyFrame);
   };
 
@@ -83,20 +99,35 @@ export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => 
           archiveJson,
         } satisfies WorkspaceArchiveReplyFrame);
       } catch (err) {
-        replyError(frame.requestId, err instanceof Error ? err.message : String(err));
+        replyError(frame.requestId, err);
       }
       return;
     }
     if (frame.type === 'archive-import-req') {
-      try {
-        importWorkspaceArchive(syncMirror(), frame.archiveJson, { root });
-        channel.postMessage({
-          type: 'archive-import-reply',
-          requestId: frame.requestId,
-        } satisfies WorkspaceArchiveReplyFrame);
-      } catch (err) {
-        replyError(frame.requestId, err instanceof Error ? err.message : String(err));
-      }
+      void (async (): Promise<void> => {
+        try {
+          if (!packageMutations) {
+            throw new Error(`workspace archive package mutation executor missing for ${root}`);
+          }
+          await packageMutations.reset({ root }, async () => {
+            const prepared = prepareWorkspaceArchiveImport(
+              syncMirror(),
+              JSON.parse(frame.archiveJson) as WorkspaceArchiveV1,
+              { root },
+            );
+            return {
+              status: 'ready',
+              mutate: async () => prepared.apply(),
+            };
+          });
+          channel.postMessage({
+            type: 'archive-import-reply',
+            requestId: frame.requestId,
+          } satisfies WorkspaceArchiveReplyFrame);
+        } catch (err) {
+          replyError(frame.requestId, err);
+        }
+      })();
       return;
     }
   };
@@ -112,65 +143,67 @@ export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => 
   };
 }
 
-interface Waiter {
-  resolve(value: string): void;
-  reject(err: Error): void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 export interface WorkspaceArchiveBridge {
   /** Download: ask the owner to serialize its source tree → archive JSON. */
   export(): Promise<string>;
   /** Upload: send an archive JSON for the owner to apply to its tree. */
   import(archiveJson: string): Promise<void>;
-  /** Reject all in-flight requests and close the channel. Idempotent. */
+  /** Stop new work; drain admitted imports before closing. Idempotent. */
   dispose(): void;
 }
 
 /**
- * Page side. Posts request frames and resolves/rejects on the correlated reply,
- * each with a per-request idle timeout that REJECTS (the caller surfaces a
- * toast), never hangs.
+ * Page side. Read timeouts cannot hide writes: export is bounded, while import
+ * retains its reply path until a terminal mutation outcome is known.
  */
 export function bridgeWorkspaceArchive(
   key: OwnerBridgeKey,
-  opts: { readonly timeoutMs?: number } = {},
+  opts: { readonly timeoutMs?: number; readonly ownerClosed?: Promise<unknown> } = {},
 ): WorkspaceArchiveBridge {
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(key)));
-  const pending = new Map<string, Waiter>();
-  let torn = false;
+  let onMessage: (event: MessageEvent) => void = () => {};
+  let closed = false;
+  const closeChannel = (): void => {
+    if (closed) return;
+    closed = true;
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
+    channel.close();
+  };
+  const settlements = createOwnerRequestSettlements<string>({
+    readTimeout: {
+      ms: timeoutMs,
+      error: () => new Error(`workspace archive bridge timeout after ${timeoutMs}ms`),
+    },
+    ownerClosed: opts.ownerClosed,
+    ownerClosedError: () => new Error('workspace owner exited during archive request'),
+    onDrained: closeChannel,
+  });
 
-  const onMessage = (event: MessageEvent): void => {
+  onMessage = (event: MessageEvent): void => {
     const frame = event.data as WorkspaceArchiveFrame;
     if (frame.type === 'archive-export-req' || frame.type === 'archive-import-req') return; // not ours
-    const waiter = pending.get(frame.requestId);
-    if (!waiter) return; // unknown/late frame, or another bridge instance's
-    pending.delete(frame.requestId);
-    clearTimeout(waiter.timer);
     if (frame.type === 'archive-error') {
-      waiter.reject(new Error(frame.message));
+      const error = new Error(frame.error.message);
+      error.name = frame.error.name;
+      settlements.reject(frame.requestId, error);
       return;
     }
     if (frame.type === 'archive-export-reply') {
-      waiter.resolve(frame.archiveJson);
+      settlements.resolve(frame.requestId, frame.archiveJson);
       return;
     }
-    waiter.resolve(''); // archive-import-reply — no payload
+    settlements.resolve(frame.requestId, ''); // archive-import-reply — no payload
   };
 
   channel.addEventListener('message', onMessage as unknown as EventListener);
 
   const request = (frame: WorkspaceArchiveRequestFrame): Promise<string> => {
-    if (torn) return Promise.reject(new Error('workspace archive bridge disposed'));
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(frame.requestId);
-        reject(new Error(`workspace archive bridge timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      pending.set(frame.requestId, { resolve, reject, timer });
-      channel.postMessage(frame);
-    });
+    return settlements.request(
+      frame.requestId,
+      frame.type === 'archive-export-req' ? 'read' : 'mutation',
+      () => channel.postMessage(frame),
+    );
   };
 
   return {
@@ -181,15 +214,7 @@ export function bridgeWorkspaceArchive(
       await request({ type: 'archive-import-req', requestId: nextRequestId(), archiveJson });
     },
     dispose() {
-      if (torn) return;
-      torn = true;
-      for (const [, waiter] of pending) {
-        clearTimeout(waiter.timer);
-        waiter.reject(new Error('workspace archive bridge disposed'));
-      }
-      pending.clear();
-      channel.removeEventListener('message', onMessage as unknown as EventListener);
-      channel.close();
+      settlements.dispose(new Error('workspace archive bridge disposed'));
     },
   };
 }

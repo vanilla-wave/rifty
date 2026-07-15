@@ -139,7 +139,13 @@ describe('saveScratchAsProject (ADR-0165 §7 — copy → flip LAST → delete)'
   });
 });
 
-import { recoverIndex } from './project-index.ts';
+import {
+  type IndexFs,
+  applyProjectIndexRecoveryDeletion,
+  applyProjectIndexRecoverySynthesis,
+  planProjectIndexRecovery,
+  recoverIndex,
+} from './project-index.ts';
 
 function tree(fs: MemoryFsSync, root: string, marker: string): void {
   fs.mkdirSync(`${root}/src`, { recursive: true });
@@ -230,6 +236,137 @@ describe('recoverIndex (ADR-0165 §7 — boot-time half-move reconcile)', () => 
     };
     writeIndex(fs, '/', index);
     expect(() => recoverIndex(fs, '/')).toThrow(/project p-9 .*missing|missing.*p-9/i);
+  });
+});
+
+describe('project-index boot recovery plan', () => {
+  it('plans without calling any mutating VFS operation', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-live', 'live');
+    tree(fs, '/projects/p-orphan', 'orphan');
+    tree(fs, '/scratch', 'stale');
+    const index = {
+      activeId: 'p-live',
+      scratch: null,
+      projects: [{ id: 'p-live', name: 'Live', starter: 'project-files', editedAt: 'x' }],
+    };
+    writeIndex(fs, '/', index);
+    const mutationAttempt = (): never => {
+      throw new Error('planning attempted a mutation');
+    };
+    const planningFs: IndexFs = {
+      existsSync: (path) => fs.existsSync(path),
+      readFileBytesSync: (path) => fs.readFileBytesSync(path),
+      readdirSync: (path) => fs.readdirSync(path),
+      statSyncOrNull: (path) => fs.statSyncOrNull(path),
+      writeFileSync: mutationAttempt,
+      mkdirSync: mutationAttempt,
+      rmSync: mutationAttempt,
+      renameSync: mutationAttempt,
+    };
+
+    const plan = planProjectIndexRecovery(planningFs, '/');
+
+    expect(plan.deletions).toEqual([
+      { root: '/projects/p-orphan', reason: 'orphan-project' },
+      { root: '/scratch', reason: 'stale-scratch' },
+    ]);
+    expect(fs.existsSync('/projects/p-orphan')).toBe(true);
+    expect(fs.existsSync('/scratch')).toBe(true);
+    expect(loadIndex(fs, '/')).toEqual(index);
+  });
+
+  it('rejects an indexed-missing tree before deleting any orphan sibling', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-orphan', 'orphan');
+    writeIndex(fs, '/', {
+      activeId: 'p-missing',
+      scratch: null,
+      projects: [{ id: 'p-missing', name: 'Missing', starter: 'project-files', editedAt: 'x' }],
+    });
+
+    expect(() => planProjectIndexRecovery(fs, '/')).toThrow(/p-missing.*missing/i);
+    expect(fs.existsSync('/projects/p-orphan')).toBe(true);
+  });
+
+  it('orders multiple orphan trees before stale scratch deterministically', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-live', 'live');
+    tree(fs, '/projects/z-orphan', 'z');
+    tree(fs, '/projects/a-orphan', 'a');
+    tree(fs, '/scratch', 'stale');
+    writeIndex(fs, '/', {
+      activeId: 'p-live',
+      scratch: null,
+      projects: [{ id: 'p-live', name: 'Live', starter: 'project-files', editedAt: 'x' }],
+    });
+
+    expect(planProjectIndexRecovery(fs, '/').deletions).toEqual([
+      { root: '/projects/a-orphan', reason: 'orphan-project' },
+      { root: '/projects/z-orphan', reason: 'orphan-project' },
+      { root: '/scratch', reason: 'stale-scratch' },
+    ]);
+  });
+
+  it('defers a live hidden-owner root but replans its stale deletion for the next owner', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-live', 'live');
+    tree(fs, '/scratch', 'hidden-owner-root');
+    writeIndex(fs, '/', {
+      activeId: 'p-live',
+      scratch: null,
+      projects: [{ id: 'p-live', name: 'Live', starter: 'project-files', editedAt: 'x' }],
+    });
+
+    const hiddenPlan = planProjectIndexRecovery(fs, '/', {
+      protectedRoot: '/scratch',
+    });
+    expect(hiddenPlan.deletions).toEqual([]);
+    expect(fs.existsSync('/scratch')).toBe(true);
+    expect(planProjectIndexRecovery(fs, '/').deletions).toEqual([
+      { root: '/scratch', reason: 'stale-scratch' },
+    ]);
+  });
+
+  it('applies only the selected deletion action', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/projects/p-live', 'live');
+    tree(fs, '/projects/a-orphan', 'a');
+    tree(fs, '/projects/z-orphan', 'z');
+    tree(fs, '/scratch', 'stale');
+    writeIndex(fs, '/', {
+      activeId: 'p-live',
+      scratch: null,
+      projects: [{ id: 'p-live', name: 'Live', starter: 'project-files', editedAt: 'x' }],
+    });
+    const plan = planProjectIndexRecovery(fs, '/');
+
+    applyProjectIndexRecoveryDeletion(fs, plan.deletions[1]!);
+
+    expect(fs.existsSync('/projects/a-orphan')).toBe(true);
+    expect(fs.existsSync('/projects/z-orphan')).toBe(false);
+    expect(fs.existsSync('/scratch')).toBe(true);
+  });
+
+  it('plans scratch-index synthesis without writing and applies it separately', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/scratch', 'fresh');
+
+    const plan = planProjectIndexRecovery(fs, '/', { starter: 'node-worker' });
+
+    expect(plan.synthesis).toEqual({
+      base: '/',
+      index: {
+        activeId: 'scratch',
+        scratch: { starter: 'node-worker', dirty: false, editedAt: 'no edits yet' },
+        projects: [],
+      },
+    });
+    expect(fs.existsSync(INDEX_PATH('/'))).toBe(false);
+
+    applyProjectIndexRecoverySynthesis(fs, plan.synthesis!);
+
+    expect(loadIndex(fs, '/')).toEqual(plan.synthesis!.index);
   });
 });
 

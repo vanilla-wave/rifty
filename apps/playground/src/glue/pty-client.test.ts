@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from './pty-client.ts';
 import type { PageToOwnerFrame } from './pty-protocol.ts';
 
@@ -7,6 +7,10 @@ function harness() {
   const client = createPtyClient({ send: (f) => sent.push(f) });
   return { client, sent };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('pty-client', () => {
   it('open posts pty:open and resolves on ready', async () => {
@@ -731,6 +735,64 @@ describe('pty-client', () => {
     expect(beforeAck).toBe('pending');
     client.onFrame({ type: 'pty:dev-config-ready', id: 'dc1' });
     await expect(ready).resolves.toBeUndefined();
+  });
+
+  it('keeps an admitted dev config pending past the former readiness timeout', async () => {
+    vi.useFakeTimers();
+    const { client } = harness();
+    const ready = client.setDevConfig({
+      templateId: 'express-sqlite',
+      slug: 'slow-config',
+      setup: 'from-scratch',
+    });
+    let outcome = 'pending';
+    void ready.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(outcome).toBe('pending');
+
+    client.onFrame({ type: 'pty:dev-config-ready', id: 'dc1' });
+    await expect(ready).resolves.toBeUndefined();
+  });
+
+  it('registers dev config settlement before a synchronous owner reply', async () => {
+    const client = createPtyClient({
+      send(frame) {
+        if (frame.type === 'pty:dev-config') {
+          client.onFrame({ type: 'pty:dev-config-ready', id: frame.id });
+        }
+      },
+    });
+
+    const ready = client
+      .setDevConfig({ templateId: 'typescript', slug: 'sync', setup: 'instant' })
+      .then(
+        () => 'resolved' as const,
+        () => 'rejected' as const,
+      );
+    const outcome = await settledOr(ready, 'pending' as const);
+    client.disconnect();
+    expect(outcome).toBe('resolved');
+  });
+
+  it('rejects dev config with the exact synchronous send failure', async () => {
+    const failure = new Error('dev config send failed exactly');
+    const client = createPtyClient({
+      send() {
+        throw failure;
+      },
+    });
+
+    await expect(
+      client.setDevConfig({ templateId: 'typescript', slug: 'failed', setup: 'instant' }),
+    ).rejects.toBe(failure);
   });
 
   it('disconnect rejects pending and future setDevConfig loudly', async () => {

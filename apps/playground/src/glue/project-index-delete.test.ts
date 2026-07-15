@@ -1,12 +1,32 @@
-import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createPackageAcquisitionAuthority } from '../workers/package-acquisition-authority.ts';
+import { createInstallStampAuthority } from './install-stamp-authority.ts';
+import type { PackageMutationExecutor } from './package-mutation-executor.ts';
 import {
   deleteProjectTree,
-  serveProjectIndex,
+  serveProjectIndex as serveProjectIndexRaw,
   subscribeProjectIndex,
 } from './project-index-port.ts';
 import type { ProjectIndex } from './project-index.ts';
 import { loadIndex, rootForId, writeIndex } from './project-index.ts';
+
+const directPackageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+  reset: async (_target, prepare) => {
+    const plan = await prepare();
+    if (plan.status === 'ready') await plan.mutate();
+  },
+};
+
+const serveProjectIndex: typeof serveProjectIndexRaw = (
+  key,
+  fs,
+  base,
+  flush,
+  refresh,
+  initializeStarterGit,
+  packageMutations = directPackageMutations,
+) => serveProjectIndexRaw(key, fs, base, flush, refresh, initializeStarterGit, packageMutations);
 
 /**
  * Owner-side `index-delete` (ADR-0165 §56): the DURABLE half of delete-with-Undo.
@@ -96,8 +116,7 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     const fs = seededFs('p2');
     const tear = serveProjectIndex(PORT, fs, '/');
 
-    deleteProjectTree(PORT, 'p1');
-    await Promise.resolve();
+    await deleteProjectTree(PORT, 'p1');
 
     // (a) p1 tree GONE on disk.
     expect(fs.existsSync(rootForId('p1'))).toBe(false);
@@ -114,8 +133,7 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     const fs = seededFs('p2'); // p2 is active, and a scratch pointer exists
     const tear = serveProjectIndex(PORT, fs, '/');
 
-    deleteProjectTree(PORT, 'p2');
-    await Promise.resolve();
+    await deleteProjectTree(PORT, 'p2');
 
     expect(fs.existsSync(rootForId('p2'))).toBe(false);
     const idx = await pullIndex();
@@ -138,15 +156,14 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     });
     const tear = serveProjectIndex(PORT, fs, '/');
 
-    deleteProjectTree(PORT, 'p2');
-    await Promise.resolve();
+    await deleteProjectTree(PORT, 'p2');
 
     const idx = await pullIndex();
     expect(idx.activeId).toBe('p1'); // no scratch → first remaining project
     tear();
   });
 
-  it('COMMITS the index drop BEFORE removing the tree (crash-safe ordering, ADR-0165 §56)', () => {
+  it('COMMITS the index drop BEFORE removing the tree (crash-safe ordering, ADR-0165 §56)', async () => {
     // Inverse of the dangerous order: if the tree removal could not be torn AFTER
     // the index commit, a crash leaves an orphan tree (recoverIndex case A rolls it
     // back), never an indexed-but-missing tree (case D throws = boot brick). Proxy
@@ -160,8 +177,8 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     }) as typeof fs.rmSync;
     const tear = serveProjectIndex(PORT, fs, '/');
 
-    // The torn rm propagates loud (sync FakeChannel) — never swallowed.
-    expect(() => deleteProjectTree(PORT, 'p1')).toThrow(/torn tree-removal/);
+    // The torn rm propagates through the correlated NACK — never swallowed.
+    await expect(deleteProjectTree(PORT, 'p1')).rejects.toThrow(/torn tree-removal/);
     // …but the index was already committed WITHOUT p1, so a reboot reconcile sees
     // an orphan tree (case A), not an indexed-missing tree (case D brick).
     expect(loadIndex(fs, '/').projects.map((p) => p.id)).toEqual(['p2']);
@@ -172,14 +189,93 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     const fs = seededFs('p2');
     const tear = serveProjectIndex(PORT, fs, '/');
 
-    expect(() => deleteProjectTree(PORT, 'ghost')).not.toThrow();
-    await Promise.resolve();
+    await expect(deleteProjectTree(PORT, 'ghost')).resolves.toBeDefined();
 
     expect(fs.existsSync(rootForId('p1'))).toBe(true);
     expect(fs.existsSync(rootForId('p2'))).toBe(true);
     const idx = await pullIndex();
     expect(idx.projects.map((p) => p.id)).toEqual(['p1', 'p2']);
     expect(idx.activeId).toBe('p2');
+    tear();
+  });
+
+  it('fences a parked promoter before delete, so it cannot recreate trust or the tree', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    seedTree(fsSync, 'p1', 'one');
+    const root = rootForId('p1');
+    const packageJsonText = '{"name":"p1","dependencies":{"vite":"^5.4.0"}}\n';
+    fsSync.writeFileSync(`${root}/package.json`, enc.encode(packageJsonText));
+    fsSync.mkdirSync(`${root}/node_modules/vite`, { recursive: true });
+    fsSync.writeFileSync(`${root}/node_modules/vite/package.json`, enc.encode('{}\n'));
+    writeIndex(fsSync, '/', {
+      activeId: 'p1',
+      scratch: null,
+      projects: [{ id: 'p1', name: 'One', starter: 'project-files', editedAt: 'a' }],
+    });
+    const stamps = createInstallStampAuthority({ vfs, fsSync });
+    const claim = await stamps.demote({ root, slug: 'project-files' });
+    let releasePromotion!: () => void;
+    let markPromotionParked!: () => void;
+    const promotionGate = new Promise<void>((resolve) => {
+      releasePromotion = resolve;
+    });
+    const promotionParked = new Promise<void>((resolve) => {
+      markPromotionParked = resolve;
+    });
+    const promotion = stamps.promote(
+      { root, slug: 'project-files', packageJsonText },
+      {
+        epoch: claim.epoch,
+        packages: 1,
+        flush: async () => {
+          markPromotionParked();
+          await promotionGate;
+          return { failures: [], total: 0 };
+        },
+      },
+    );
+    await promotionParked;
+    const packageAuthority = createPackageAcquisitionAuthority({
+      stamps,
+      adapter: {
+        planSnapshotRestore: async () => ({ status: 'rejected', reason: 'unused' }),
+        install: async () => {
+          throw new Error('unexpected install');
+        },
+        reset: async () => {
+          throw new Error('unexpected adapter reset');
+        },
+        switchProject: async () => {},
+      },
+    });
+    const packageMutations: Pick<PackageMutationExecutor, 'reset'> = {
+      reset: (target, prepare) => packageAuthority.dispatch({ type: 'reset', target, prepare }),
+    };
+    const tear = serveProjectIndex(
+      PORT,
+      fsSync,
+      '/',
+      undefined,
+      undefined,
+      undefined,
+      packageMutations,
+    );
+
+    try {
+      await expect(deleteProjectTree(PORT, 'p1')).resolves.toMatchObject({
+        projects: [],
+      });
+      expect(fsSync.existsSync(root)).toBe(false);
+      expect(loadIndex(fsSync, '/').projects).toEqual([]);
+    } finally {
+      releasePromotion();
+    }
+
+    await expect(promotion).resolves.toEqual({ status: 'stale' });
+    await expect(stamps.check({ root, slug: 'project-files' })).resolves.toEqual({
+      status: 'absent',
+    });
+    expect(fsSync.existsSync(root)).toBe(false);
     tear();
   });
 });

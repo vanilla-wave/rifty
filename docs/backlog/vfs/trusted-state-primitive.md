@@ -6,8 +6,8 @@ created: 2026-07-11
 why: the platform keeps growing trust claims over multi-file state (stamp, learned pins' hand-rolled chain+CAS, future build-cache markers, multi-tab plane ownership) — each re-buys single-writer/durable-proof/fencing by hand
 user_story: As a contributor adding a trust claim over stored state (cache validity, index, plane ownership), I want a storage-layer primitive with the five invariants built in, but today I hand-roll coordination and inherit the PR #131 bug zoo.
 epic: trusted-state-authority
-blocked_by: [playground/install-stamp-authority]
-sources: [docs/adr/playground/0216-install-tail-latency-background-command-durability-generation-guarded-stamps-learned-pin-swr.md]
+blocked_by: []
+sources: [docs/adr/playground/0261-root-bound-serialized-install-trust-claims-and-non-transferable-claim-ingress.md]
 code: [apps/playground/src/glue/eddy-learned-pins.ts]
 ---
 

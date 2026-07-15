@@ -2,7 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Shared non-empty `VfsMutationIntent` batches and generic
+  `VfsMutationGuard`/`guardVfsMutations` contract let host policy fence the
+  exact real mutation without owning VFS behavior (ADR-0260).
+
 ### Changed
+
+- **OPFS persist watchdog (2026-07-13).** `OpfsFsSync.flush()` now reports a
+  never-settling write/mkdir/rm/rename as dirty within 30 seconds while the
+  uncancellable browser operation remains on the real FIFO tail. Later flushes
+  stay bounded; a late success heals the ledger and a late rejection replaces
+  the watchdog record with the real failure. Per-operation ledger fences keep
+  an older late completion from erasing a newer same-path timeout.
 
 - **PR #115 root-cause round (2026-07-06): async `OpfsVfs` re-joined the
   backend contract.** Non-recursive `mkdir` on an existing dir/file (and

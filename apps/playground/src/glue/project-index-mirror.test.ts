@@ -81,7 +81,7 @@ describe('project-index page mirror (ADR-0165 realm split)', () => {
 
   it('replaces the mirror when the owner re-publishes after a respawn', async () => {
     const fs = ownerFs(SCRATCH);
-    const tear = serveProjectIndex(PORT, fs, '/');
+    const tearInitialOwner = serveProjectIndex(PORT, fs, '/');
     const mirror = bridgeProjectIndex(PORT);
     const states: ProjectIndex[] = [];
     mirror.subscribe((i) => states.push(i));
@@ -94,12 +94,14 @@ describe('project-index page mirror (ADR-0165 realm split)', () => {
       scratch: null,
       projects: [{ id: 'p1', name: 'One', starter: 'project-files', editedAt: 'y' }],
     });
+    tearInitialOwner();
+    const tearRespawnedOwner = serveProjectIndex(PORT, fs, '/');
     await mirror.request(); // simulate post-respawn re-publish
 
     expect(states.at(-1)?.activeId).toBe('p1');
     expect(states.at(-1)?.projects).toHaveLength(1);
     expect(mirror.current()?.activeId).toBe('p1');
     mirror.dispose();
-    tear();
+    tearRespawnedOwner();
   });
 });

@@ -1,5 +1,6 @@
 import type { VfsDirent } from '@riftydev/vfs';
 import { dirname, joinPath, normalizePath } from '@riftydev/vfs';
+import { isInstallStampPath } from './install-stamp.ts';
 import { SNAPSHOT_EXCLUDE_DIRS } from './vfs-snapshot-port.ts';
 
 export interface WorkspaceArchiveFile {
@@ -40,6 +41,11 @@ export interface ImportWorkspaceArchiveOptions {
   readonly rebase?: boolean;
 }
 
+export interface PreparedWorkspaceArchiveImport {
+  readonly root: string;
+  apply(): void;
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -67,11 +73,28 @@ function assertSafeRelativePath(path: string): void {
   }
 }
 
-function assertArchive(value: WorkspaceArchiveV1): void {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function assertArchive(value: unknown): asserts value is WorkspaceArchiveV1 {
+  if (!isRecord(value)) throw new Error('Workspace archive must be an object');
   if (value.version !== 1)
     throw new Error(`Unsupported workspace archive version ${value.version}`);
   if (typeof value.root !== 'string') throw new Error('Workspace archive root must be a string');
   if (!Array.isArray(value.files)) throw new Error('Workspace archive files must be an array');
+  for (const [index, file] of value.files.entries()) {
+    if (!isRecord(file)) throw new Error(`Workspace archive file ${index} must be an object`);
+    if (typeof file.path !== 'string') {
+      throw new Error(`Workspace archive file ${index} path must be a string`);
+    }
+    if (file.encoding !== 'base64') {
+      throw new Error(`Workspace archive file ${index} encoding must be base64`);
+    }
+    if (typeof file.content !== 'string') {
+      throw new Error(`Workspace archive file ${index} content must be a string`);
+    }
+  }
 }
 
 export function exportWorkspaceArchive(
@@ -93,22 +116,23 @@ export function buildWorkspaceArchive(
   const files: WorkspaceArchiveFile[] = [];
 
   const walk = (dir: string): void => {
-    let children: readonly VfsDirent[];
-    try {
-      children = fs.readdirSync(dir);
-    } catch {
-      return;
-    }
+    const children = fs.readdirSync(dir);
     const sorted = [...children].sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
     for (const child of sorted) {
       const path = joinPath(dir, child.name);
+      // A corrupt marker may be a directory. Omit the whole authority-owned
+      // namespace before descending, not only a marker-shaped file.
+      if (isInstallStampPath(path)) continue;
       if (child.isDirectory) {
         if (!exclude.has(child.name)) walk(path);
         continue;
       }
+      // Install claims are owner authority state, never portable project or
+      // dependency bytes (ADR-0261). The absolute walk path also catches a
+      // top-level marker when `root` itself is a node_modules directory.
       files.push({
         path: relativePath(normalizedRoot, path),
         encoding: 'base64',
@@ -126,7 +150,7 @@ export function importWorkspaceArchive(
   archiveJson: string,
   options: ImportWorkspaceArchiveOptions = {},
 ): void {
-  applyWorkspaceArchive(fs, JSON.parse(archiveJson) as WorkspaceArchiveV1, options);
+  prepareWorkspaceArchiveImport(fs, JSON.parse(archiveJson) as unknown, options).apply();
 }
 
 /** Object-form import — dep snapshots (ADR-0135) embed the archive directly. */
@@ -135,6 +159,15 @@ export function applyWorkspaceArchive(
   archive: WorkspaceArchiveV1,
   options: ImportWorkspaceArchiveOptions = {},
 ): void {
+  prepareWorkspaceArchiveImport(fs, archive, options).apply();
+}
+
+/** Validate/decode without mutation; the returned apply owns the root replace. */
+export function prepareWorkspaceArchiveImport(
+  fs: WorkspaceArchiveFs,
+  archive: unknown,
+  options: ImportWorkspaceArchiveOptions = {},
+): PreparedWorkspaceArchiveImport {
   assertArchive(archive);
   const root = normalizePath(options.root ?? archive.root);
   const archiveRoot = normalizePath(archive.root);
@@ -147,22 +180,56 @@ export function applyWorkspaceArchive(
   if (root === '/') throw new Error('Refusing to import a workspace archive at /');
 
   const decoded = archive.files.map((file) => {
-    if (file.encoding !== 'base64')
-      throw new Error(`Unsupported archive encoding ${file.encoding}`);
     assertSafeRelativePath(file.path);
     const target = joinPath(root, file.path);
+    if (isInstallStampPath(target)) {
+      throw new Error(`Workspace archive contains reserved install-stamp claim "${file.path}"`);
+    }
+    if (!options.rebase && file.path.split('/').includes('node_modules')) {
+      throw new Error(`Workspace archive contains derived node_modules path "${file.path}"`);
+    }
     if (!target.startsWith(`${root}/`)) throw new Error(`Archive path escaped root: ${file.path}`);
-    return { target, content: base64ToBytes(file.content) };
+    return { path: file.path, target, content: base64ToBytes(file.content) };
   });
 
-  if (options.replace ?? true) {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-  fs.mkdirSync(root, { recursive: true });
-
+  const archivePathByTarget = new Map<string, string>();
   for (const file of decoded) {
-    const target = file.target;
-    fs.mkdirSync(dirname(target), { recursive: true });
-    fs.writeFileSync(target, file.content);
+    const priorPath = archivePathByTarget.get(file.target);
+    if (priorPath !== undefined) {
+      throw new Error(
+        `Workspace archive target collision: "${priorPath}" and "${file.path}" map to ${file.target}`,
+      );
+    }
+    archivePathByTarget.set(file.target, file.path);
   }
+  for (const file of decoded) {
+    let parent = dirname(file.target);
+    while (parent !== root) {
+      const parentArchivePath = archivePathByTarget.get(parent);
+      if (parentArchivePath !== undefined) {
+        throw new Error(
+          `Workspace archive target collision: file "${parentArchivePath}" is an ancestor of "${file.path}"`,
+        );
+      }
+      const next = dirname(parent);
+      if (next === parent) break;
+      parent = next;
+    }
+  }
+
+  return {
+    root,
+    apply() {
+      if (options.replace ?? true) {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+      fs.mkdirSync(root, { recursive: true });
+
+      for (const file of decoded) {
+        const target = file.target;
+        fs.mkdirSync(dirname(target), { recursive: true });
+        fs.writeFileSync(target, file.content);
+      }
+    },
+  };
 }

@@ -51,9 +51,13 @@ export { bundleCompletenessGap } from './installer-lockfile-reader.ts';
 export { resolveOverride, type OverrideMap, type ResolvedOverrideTarget } from './overrides.ts';
 export {
   install,
+  type InstallAcquisitionProvenance,
   type InstallOptions,
+  type InstallPackageProvenance,
   type InstallProgressEvent,
+  type InstallResolution,
   type InstallResult,
+  type PackageTransport,
   type PackumentCacheLike,
 } from './installer.ts';
 export {

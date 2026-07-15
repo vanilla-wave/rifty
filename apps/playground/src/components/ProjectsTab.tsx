@@ -18,6 +18,7 @@ export function ProjectsTab(props: {
   projects: readonly Project[];
   scratch: Scratch | null;
   activeId: ActiveId;
+  ownerBlocked: boolean;
   storage: 'opfs' | 'memory';
   menuFor: string | null;
   glyphFor(starter: string): Glyph;
@@ -61,6 +62,7 @@ export function ProjectsTab(props: {
               <button
                 type="button"
                 class="rf-btn rf-btn--outline"
+                disabled={props.ownerBlocked}
                 onClick={() => props.onSwitch('scratch')}
               >
                 {scratchActive() ? 'Open' : 'Switch to'}
@@ -101,13 +103,16 @@ export function ProjectsTab(props: {
               // a11y: the card surface is clickable yet nests its own <button>s (ellipsis menu + row-menu items), so a real <button> would be invalid; role=button + tabindex + keydown is the accessible equivalent (useSemanticElements off for this file, biome.json override — same as FileExplorer/Splitter).
               <div
                 class="rf-pcard"
-                role="button"
-                tabIndex={0}
+                role={props.ownerBlocked ? undefined : 'button'}
+                tabIndex={props.ownerBlocked ? -1 : 0}
+                data-switch-disabled={props.ownerBlocked}
                 data-project={p.id}
                 data-active={active()}
-                onClick={() => props.onSwitch(p.id)}
+                onClick={() => {
+                  if (!props.ownerBlocked) props.onSwitch(p.id);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if (!props.ownerBlocked && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
                     props.onSwitch(p.id);
                   }
@@ -150,6 +155,7 @@ export function ProjectsTab(props: {
                     <button
                       type="button"
                       class="rf-rowmenu__item"
+                      disabled={props.ownerBlocked}
                       onClick={() => props.onMenuAction(p.id, 'switch')}
                     >
                       <Icon name="play" size={13} /> Switch to project

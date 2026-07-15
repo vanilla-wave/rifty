@@ -6,7 +6,13 @@
 import { type GitIdentity, makeGit, vfsToGitFs } from '@riftydev/git';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type GitOwnerClient, bridgeGitOwnerRpc, serveGitOwnerRpc } from './git-owner-port.ts';
+import {
+  type GitOwnerClient,
+  bridgeGitOwnerRpc,
+  classifyGitOwnerPackageImpact,
+  gitOwnerMutationIntents,
+  serveGitOwnerRpc,
+} from './git-owner-port.ts';
 
 const AUTHOR: GitIdentity = {
   name: 'Test',
@@ -46,6 +52,62 @@ function page(key: string, timeoutMs = 1_000): GitOwnerClient {
 }
 
 describe('git owner RPC bridge', () => {
+  it('classifies restore pathspecs and hard reset against the full guarded package tree', () => {
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'manifest',
+        op: 'restore',
+        pathspecs: ['package.json'],
+      }),
+    ).toBe('manifest');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'derived',
+        op: 'restore',
+        pathspecs: ['node_modules/pkg/index.js'],
+      }),
+    ).toBe('tree');
+    expect(classifyGitOwnerPackageImpact({ id: 'ancestor', op: 'restore', pathspecs: ['.'] })).toBe(
+      'tree',
+    );
+    expect(
+      classifyGitOwnerPackageImpact({ id: 'source', op: 'restore', pathspecs: ['src/**'] }),
+    ).toBe('none');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'hard',
+        op: 'reset',
+        input: { target: 'HEAD', mode: 'hard' },
+      }),
+    ).toBe('tree');
+  });
+
+  it('exposes exact worktree intents while routing metadata-only Git writes through the guard', () => {
+    expect(gitOwnerMutationIntents({ id: 'read', op: 'status' }, '/repo')).toEqual([]);
+    expect(gitOwnerMutationIntents({ id: 'add', op: 'add', filepath: 'a.txt' }, '/repo')).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+    ]);
+    expect(
+      gitOwnerMutationIntents(
+        { id: 'restore', op: 'restore', pathspecs: ['package.json', 'src/**'] },
+        '/repo',
+      ),
+    ).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+      { kind: 'rm', path: '/repo/package.json' },
+      { kind: 'rm', path: '/repo/src' },
+    ]);
+    expect(
+      gitOwnerMutationIntents(
+        { id: 'hard', op: 'reset', input: { target: 'HEAD', mode: 'hard' } },
+        '/repo',
+      ),
+    ).toEqual([
+      { kind: 'write', path: '/repo/.git' },
+      { kind: 'rm', path: '/repo' },
+    ]);
+  });
+
   it('returns status identical to the owner git engine for a known tree', async () => {
     const { vfs, g } = await seededRepo();
     await vfs.writeFile('/repo/a.txt', 'second\n');
@@ -173,6 +235,63 @@ describe('git owner RPC bridge', () => {
 
   it('rejects with a timeout when no owner is listening', async () => {
     await expect(page('git-timeout', 50).status()).rejects.toThrow(/timeout/i);
+  });
+
+  it('keeps an admitted mutation pending past the read timeout, then settles its reply', async () => {
+    const { g } = await seededRepo();
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    teardowns.push(
+      serveGitOwnerRpc('git-slow-mutation', g, {
+        async execute(_request, operation) {
+          markStarted();
+          await gate;
+          return operation();
+        },
+      }),
+    );
+    const c = page('git-slow-mutation', 10);
+    const mutation = c.add('a.txt');
+    let outcome = 'pending';
+    void mutation.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+
+    await started;
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    expect(outcome).toBe('pending');
+
+    c.dispose();
+    await Promise.resolve();
+    expect(outcome).toBe('pending');
+    release();
+    await expect(mutation).resolves.toBeUndefined();
+    await expect(c.add('later.txt')).rejects.toThrow(/disposed/i);
+  });
+
+  it('rejects an admitted mutation when the owner exit is certified', async () => {
+    let ownerExited!: () => void;
+    const ownerClosed = new Promise<void>((resolve) => {
+      ownerExited = resolve;
+    });
+    const c = bridgeGitOwnerRpc('git-owner-exit', { timeoutMs: 10, ownerClosed });
+    client = c;
+    const mutation = c.add('a.txt');
+
+    ownerExited();
+
+    await expect(mutation).rejects.toThrow(/owner exited/i);
   });
 
   it('dispose rejects in-flight requests and refuses later calls', async () => {

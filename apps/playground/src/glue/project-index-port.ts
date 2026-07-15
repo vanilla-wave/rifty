@@ -10,6 +10,11 @@
 import { channelNameFor } from '@riftydev/net';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import { createOwnerRequestSettlements } from './owner-request-settlements.ts';
+import type {
+  PackageMutationExecutor,
+  PackageResetPreparation,
+} from './package-mutation-executor.ts';
 import {
   type IndexFs,
   type ProjectIndex,
@@ -34,16 +39,19 @@ export function projectIndexChannelUrl(key: OwnerBridgeKey): string {
 
 type IndexRequestFrame = { readonly type: 'index-req' };
 type IndexReplyFrame = { readonly type: 'index-reply'; readonly index: ProjectIndex };
-type IndexAppliedFrame = {
-  readonly type: 'index-applied';
-  readonly opId: string;
-  readonly index: ProjectIndex;
-};
-type IndexAckFrame = {
-  readonly type: 'index-ack';
-  readonly opId: string;
-  readonly index: ProjectIndex;
-};
+type IndexAckFrame =
+  | {
+      readonly type: 'index-ack';
+      readonly opId: string;
+      readonly ok: true;
+      readonly index: ProjectIndex;
+    }
+  | {
+      readonly type: 'index-ack';
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: { readonly name: string; readonly message: string };
+    };
 type IndexOp = { readonly opId?: string };
 type IndexDeleteFrame = IndexOp & { readonly type: 'index-delete'; readonly projectId: string };
 /**
@@ -55,12 +63,63 @@ type IndexDeleteFrame = IndexOp & { readonly type: 'index-delete'; readonly proj
  * authority, so the save reconciles scratch.starter from this frame before the
  * commit (the saved project then records the real starter).
  */
-type IndexSaveFrame = {
+type IndexSaveRequest = {
   readonly type: 'index-save';
   readonly id: string;
   readonly name: string;
   readonly starter: string;
-} & IndexOp;
+};
+type IndexSaveFrame = IndexSaveRequest & { readonly opId: string };
+type IndexSaveAdmittedFrame = {
+  readonly type: 'index-save-admitted';
+  readonly opId: string;
+  readonly request: IndexSaveRequest;
+};
+type IndexSaveAppliedFrame = {
+  readonly type: 'index-save-applied';
+  readonly opId: string;
+  readonly request: IndexSaveRequest;
+  readonly index: ProjectIndex;
+};
+type IndexSaveTerminalFrame =
+  | {
+      readonly type: 'index-save-terminal';
+      readonly opId: string;
+      readonly request: IndexSaveRequest;
+      readonly ok: true;
+      readonly index: ProjectIndex;
+    }
+  | {
+      readonly type: 'index-save-terminal';
+      readonly opId: string;
+      readonly request: IndexSaveRequest;
+      readonly ok: false;
+      readonly applied?: ProjectIndex;
+      readonly error: { readonly name: string; readonly message: string };
+    };
+type IndexSaveConflictFrame = {
+  readonly type: 'index-save-conflict';
+  readonly opId: string;
+  readonly request: IndexSaveRequest;
+  readonly error: { readonly name: string; readonly message: string };
+};
+type IndexSaveOutcomeFrame = IndexSaveAppliedFrame | IndexSaveTerminalFrame;
+type IndexSaveReceivedFrame = {
+  readonly type: 'index-save-received';
+  readonly candidate: IndexSaveOutcomeFrame;
+};
+type IndexSaveReleasedFrame = {
+  readonly type: 'index-save-released';
+  readonly candidate: IndexSaveOutcomeFrame;
+};
+type IndexSaveReleaseConfirmedFrame = {
+  readonly type: 'index-save-release-confirmed';
+  readonly candidate: IndexSaveTerminalFrame;
+};
+type IndexSaveClosedFrame = {
+  readonly type: 'index-save-closed';
+  readonly candidate: IndexSaveTerminalFrame;
+};
 /** Rename a named project in the index (ADR-0165 §9). */
 type IndexRenameFrame = {
   readonly type: 'index-rename';
@@ -129,9 +188,78 @@ type IndexMutationFrame =
 type IndexFrame =
   | IndexRequestFrame
   | IndexReplyFrame
-  | IndexAppliedFrame
   | IndexAckFrame
+  | IndexSaveAdmittedFrame
+  | IndexSaveAppliedFrame
+  | IndexSaveTerminalFrame
+  | IndexSaveConflictFrame
+  | IndexSaveReceivedFrame
+  | IndexSaveReleasedFrame
+  | IndexSaveReleaseConfirmedFrame
+  | IndexSaveClosedFrame
   | IndexMutationFrame;
+
+function saveRequest(frame: IndexSaveRequest): IndexSaveRequest {
+  return { type: 'index-save', id: frame.id, name: frame.name, starter: frame.starter };
+}
+
+function equalSaveRequest(left: IndexSaveRequest, right: IndexSaveRequest): boolean {
+  return (
+    left.type === right.type &&
+    left.id === right.id &&
+    left.name === right.name &&
+    left.starter === right.starter
+  );
+}
+
+function equalProjectIndex(left: ProjectIndex, right: ProjectIndex): boolean {
+  if (left.activeId !== right.activeId || left.projects.length !== right.projects.length) {
+    return false;
+  }
+  if (left.scratch === null || right.scratch === null) {
+    if (left.scratch !== right.scratch) return false;
+  } else if (
+    left.scratch.starter !== right.scratch.starter ||
+    left.scratch.dirty !== right.scratch.dirty ||
+    left.scratch.editedAt !== right.scratch.editedAt
+  ) {
+    return false;
+  }
+  return left.projects.every((project, index) => {
+    const other = right.projects[index];
+    return (
+      other !== undefined &&
+      project.id === other.id &&
+      project.name === other.name &&
+      project.starter === other.starter &&
+      project.editedAt === other.editedAt
+    );
+  });
+}
+
+function equalSaveOutcome(left: IndexSaveOutcomeFrame, right: IndexSaveOutcomeFrame): boolean {
+  if (
+    left.type !== right.type ||
+    left.opId !== right.opId ||
+    !equalSaveRequest(left.request, right.request)
+  ) {
+    return false;
+  }
+  if (left.type === 'index-save-applied' && right.type === 'index-save-applied') {
+    return equalProjectIndex(left.index, right.index);
+  }
+  if (left.type !== 'index-save-terminal' || right.type !== 'index-save-terminal') return false;
+  if (left.ok !== right.ok) return false;
+  if (left.ok && right.ok) return equalProjectIndex(left.index, right.index);
+  if (left.ok || right.ok) return false;
+  if (left.error.name !== right.error.name || left.error.message !== right.error.message) {
+    return false;
+  }
+  if (left.applied === undefined || right.applied === undefined) {
+    return left.applied === right.applied;
+  }
+  return equalProjectIndex(left.applied, right.applied);
+}
 
 /**
  * Owner side: replies to a page request + serves the durable on-disk
@@ -157,38 +285,195 @@ export function serveProjectIndex(
   flush?: () => Promise<PersistFailureReport | undefined>,
   refresh?: () => void,
   initializeStarterGit?: (root: string) => Promise<void>,
+  packageMutations?: Pick<PackageMutationExecutor, 'reset'>,
 ): () => void {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
-  const publish = (): ProjectIndex => {
-    const index = loadIndex(fs, base);
-    channel.postMessage({
-      type: 'index-reply',
-      index,
-    } satisfies IndexReplyFrame);
-    return index;
+  let torn = false;
+  const closedError = new Error('project index bridge is closed');
+  closedError.name = 'ProjectIndexBridgeClosedError';
+  const assertServing = (): void => {
+    if (torn) throw closedError;
+  };
+  // The sync mirror can run ahead of OPFS while a mutation's flush is parked or
+  // rejected. Passive readers may observe only the last index whose complete
+  // operation reached its durability boundary.
+  let durableIndex = loadIndex(fs, base);
+  type QueuedMutation = {
+    readonly opId: string | undefined;
+    readonly mutate: () => Promise<void>;
+    readonly reject: (cause: unknown) => void;
+    unproven: boolean;
+  };
+  const mutationQueue: QueuedMutation[] = [];
+  let drainingMutations = false;
+  let activeMutation: QueuedMutation | null = null;
+  let authorityFailure: Error | null = null;
+  const markAuthorityUnproven = (): void => {
+    if (activeMutation) activeMutation.unproven = true;
+  };
+  const proveAuthority = (): void => {
+    if (activeMutation) activeMutation.unproven = false;
+  };
+  const writeAuthorityIndex = (index: ProjectIndex): void => {
+    markAuthorityUnproven();
+    writeIndex(fs, base, index);
+  };
+  type OperationRecord = {
+    readonly request: IndexSaveRequest;
+    readonly admitted: IndexSaveAdmittedFrame;
+    applied?: IndexSaveAppliedFrame;
+    terminal?: IndexSaveTerminalFrame;
+    releasing?: IndexSaveTerminalFrame;
+  };
+  // Only Save retransmits before admission; one record makes those frames
+  // idempotent without retaining every one-shot dirty/rename/reset operation.
+  const saveOperations = new Map<string, OperationRecord>();
+  const postSaveFrame = (
+    frame:
+      | IndexSaveAdmittedFrame
+      | IndexSaveAppliedFrame
+      | IndexSaveTerminalFrame
+      | IndexSaveConflictFrame
+      | IndexSaveReleasedFrame
+      | IndexSaveClosedFrame,
+  ): void => {
+    if (!torn) channel.postMessage(frame);
+  };
+  const replayOperation = (record: OperationRecord): void => {
+    postSaveFrame(record.admitted);
+    if (record.applied) postSaveFrame(record.applied);
+    if (record.terminal) postSaveFrame(record.terminal);
+  };
+  const publishDurable = (): ProjectIndex => {
+    if (!torn) {
+      channel.postMessage({
+        type: 'index-reply',
+        index: durableIndex,
+      } satisfies IndexReplyFrame);
+    }
+    return durableIndex;
   };
   const ack = (opId: string | undefined, index: ProjectIndex): void => {
-    if (opId) channel.postMessage({ type: 'index-ack', opId, index } satisfies IndexAckFrame);
+    if (!opId) return;
+    if (!torn)
+      channel.postMessage({ type: 'index-ack', opId, ok: true, index } satisfies IndexAckFrame);
   };
-  const applied = (opId: string | undefined, index: ProjectIndex): void => {
-    if (opId)
-      channel.postMessage({ type: 'index-applied', opId, index } satisfies IndexAppliedFrame);
+  const nack = (opId: string | undefined, cause: unknown): void => {
+    if (!opId || torn) return;
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    channel.postMessage({
+      type: 'index-ack',
+      opId,
+      ok: false,
+      error: { name: error.name, message: error.message },
+    } satisfies IndexAckFrame);
+  };
+  const saveApplied = (opId: string | undefined, index: ProjectIndex): void => {
+    if (!opId) return;
+    const record = saveOperations.get(opId);
+    if (!record) return;
+    if (record.applied || record.terminal) {
+      replayOperation(record);
+      return;
+    }
+    const frame = {
+      type: 'index-save-applied',
+      opId,
+      request: record.request,
+      index,
+    } satisfies IndexSaveAppliedFrame;
+    record.applied = frame;
+    postSaveFrame(frame);
+  };
+  const saveTerminal = (
+    opId: string | undefined,
+    result:
+      | { readonly ok: true; readonly index: ProjectIndex }
+      | { readonly ok: false; cause: unknown },
+  ): void => {
+    if (!opId) return;
+    const record = saveOperations.get(opId);
+    if (!record) return;
+    if (record.terminal) {
+      postSaveFrame(record.terminal);
+      return;
+    }
+    const frame: IndexSaveTerminalFrame = result.ok
+      ? {
+          type: 'index-save-terminal',
+          opId,
+          request: record.request,
+          ok: true,
+          index: result.index,
+        }
+      : {
+          type: 'index-save-terminal',
+          opId,
+          request: record.request,
+          ok: false,
+          ...(record.applied ? { applied: record.applied.index } : {}),
+          error: {
+            name: result.cause instanceof Error ? result.cause.name : 'Error',
+            message: result.cause instanceof Error ? result.cause.message : String(result.cause),
+          },
+        };
+    record.terminal = frame;
+    postSaveFrame(frame);
+  };
+  const publishCurrentAsDurable = (opId?: string): void => {
+    durableIndex = loadIndex(fs, base);
+    proveAuthority();
+    ack(opId, publishDurable());
+  };
+  const publishCurrentSaveAsDurable = (opId?: string): void => {
+    durableIndex = loadIndex(fs, base);
+    proveAuthority();
+    saveTerminal(opId, { ok: true, index: publishDurable() });
   };
   const viteConfigSeedStore = syncViteConfigSeedStore(fs, flush ?? (async () => undefined));
-  const flushDurable = (): Promise<void> => viteConfigSeedStore.flush();
+  const flushDurable = (): Promise<void> => {
+    markAuthorityUnproven();
+    return viteConfigSeedStore.flush();
+  };
   // Drain the OPFS write-through after a tree mutation, then publish. Errors
   // surface loud (rejected promise → owner worker-entry → stderr), never swallowed.
   const flushThenPublish = async (opId?: string): Promise<void> => {
     if (flush) await flushDurable();
-    ack(opId, publish());
+    publishCurrentAsDurable(opId);
+  };
+  const flushThenPublishSave = async (opId?: string): Promise<void> => {
+    if (flush) await flushDurable();
+    publishCurrentSaveAsDurable(opId);
   };
   // As flushThenPublish, plus a snapshot republish for an IN-PLACE re-seed so the
   // live page reflects the restored files (reset only — save/delete/new-scratch
   // mutate the active root's identity, not its content in place).
   const flushRefreshPublish = async (opId?: string): Promise<void> => {
     if (flush) await flushDurable();
+    if (torn) return;
     refresh?.();
-    ack(opId, publish());
+    publishCurrentAsDurable(opId);
+  };
+  const runPackageReset = async (root: string, prepare: PackageResetPreparation): Promise<void> => {
+    if (!packageMutations) {
+      throw new Error(`project-index package mutation executor missing for reset at ${root}`);
+    }
+    const guardedPrepare: PackageResetPreparation = async () => {
+      assertServing();
+      const plan = await prepare();
+      assertServing();
+      if (plan.status === 'noop') return plan;
+      markAuthorityUnproven();
+      return {
+        status: 'ready',
+        mutate: async () => {
+          assertServing();
+          await plan.mutate();
+          assertServing();
+        },
+      };
+    };
+    await packageMutations.reset({ root }, guardedPrepare);
   };
   // ADR-0165 §56 durable delete: flip the index (drop the entry) → THEN rm the
   // tree — the COMMIT-FIRST ordering, the inverse of the dangerous one. A crash
@@ -197,382 +482,802 @@ export function serveProjectIndex(
   // (rm then write) would leave an indexed-but-missing tree → recoverIndex case (D)
   // THROWS on every boot = unrecoverable brick. Unknown id = idempotent no-op
   // publish (no throw): re-asserts state so a re-fired delete still reconciles.
-  const deleteTree = (projectId: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const projects = index.projects.filter((p) => p.id !== projectId);
-    // Defensive: a delete of the ACTIVE project re-points activeId — scratch if a
-    // draft exists, else the first remaining project, else 'scratch' (empty).
-    const activeId =
-      index.activeId === projectId
-        ? index.scratch
-          ? 'scratch'
-          : (projects[0]?.id ?? 'scratch')
-        : index.activeId;
-    writeIndex(fs, base, { ...index, activeId, projects }); // commit FIRST
-    fs.rmSync(rootForId(projectId), { recursive: true, force: true }); // then drop the tree
-    void flushThenPublish(opId); // durable on disk, then every page mirror reconciles
-  };
-  // ADR-0165 §7 durable Save: convert the active scratch into a named project
-  // (copy /scratch → /projects/<id>, flip+persist the index LAST), then delete
-  // the stale source after the durability ack. The `!index.scratch` /
-  // duplicate-id throws inside commitScratchProjectSave are the LOUD signal —
-  // never swallowed; in the owner realm they propagate to worker-entry → stderr,
-  // never a silent half-move. The throw is SYNCHRONOUS (the unit harness asserts
-  // it on the poster call); flush+publish run async after.
-  const cleanupScratchAfterCommittedSave = (): void => {
-    setTimeout(() => {
-      cleanupCommittedScratchSource(fs, loadIndex(fs, base));
-      void flushDurable().catch((err: unknown) =>
-        console.error('[project-index] committed scratch cleanup flush failed', err),
-      );
-    }, 0);
-  };
-  const saveScratch = (id: string, name: string, starter: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const existing = index.projects.find((p) => p.id === id);
-    if (existing) {
-      if (
-        index.activeId === id &&
-        index.scratch === null &&
-        existing.name === name &&
-        existing.starter === starter &&
-        fs.existsSync(rootForId(id))
-      ) {
-        const committed = publish();
-        applied(opId, committed);
-        void (async (): Promise<void> => {
-          await flushThenPublish(opId);
-          cleanupScratchAfterCommittedSave();
-        })();
-        return;
+  const deleteTree = async (projectId: string, opId?: string): Promise<void> => {
+    const root = rootForId(projectId);
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (!index.projects.some((project) => project.id === projectId)) {
+        await flushThenPublish(opId);
+        return { status: 'noop' };
       }
-      throw new Error(`saveScratchAsProject: project ${id} already exists at ${rootForId(id)}`);
-    }
-    // Reconcile the scratch starter to the page's authority (see IndexSaveFrame).
-    const reconciled = index.scratch ? { ...index, scratch: { ...index.scratch, starter } } : index;
-    commitScratchProjectSave(fs, reconciled, id, name);
-    const committed = publish(); // sync commit applied; durability ack still waits for flush below
-    applied(opId, committed);
-    void (async (): Promise<void> => {
-      await flushThenPublish(opId); // saved project + index durable before a switch respawns
-      cleanupScratchAfterCommittedSave(); // recoverable stale source, do not block Save ack
-    })();
+      const projects = index.projects.filter((p) => p.id !== projectId);
+      // Defensive: a delete of the ACTIVE project re-points activeId — scratch if a
+      // draft exists, else the first remaining project, else 'scratch' (empty).
+      const activeId =
+        index.activeId === projectId
+          ? index.scratch
+            ? 'scratch'
+            : (projects[0]?.id ?? 'scratch')
+          : index.activeId;
+      return {
+        status: 'ready',
+        mutate: async () => {
+          writeAuthorityIndex({ ...index, activeId, projects }); // commit FIRST
+          fs.rmSync(root, { recursive: true, force: true }); // then drop the tree
+          await flushThenPublish(opId); // durable, then every page mirror reconciles
+        },
+      };
+    });
+  };
+  // ADR-0165 §7 durable Save is one package-root mutation: FIFO preflight sees
+  // the stamp before reset revokes it, then copy → index → applied → cleanup →
+  // durable ack runs without an install/promoter or a fresh scratch between.
+  const saveScratch = async (
+    id: string,
+    name: string,
+    starter: string,
+    opId?: string,
+  ): Promise<void> => {
+    const root = rootForId('scratch');
+    const cleanupThenDurableAck = async (committed: ProjectIndex): Promise<void> => {
+      if (flush) await flushDurable();
+      assertServing();
+      markAuthorityUnproven();
+      cleanupCommittedScratchSource(fs, committed);
+      if (flush) await flushDurable();
+      publishCurrentSaveAsDurable(opId);
+    };
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      const existing = index.projects.find((project) => project.id === id);
+      if (existing) {
+        if (
+          index.activeId !== id ||
+          index.scratch !== null ||
+          existing.name !== name ||
+          existing.starter !== starter ||
+          !fs.existsSync(rootForId(id))
+        ) {
+          throw new Error(`saveScratchAsProject: project ${id} already exists at ${rootForId(id)}`);
+        }
+        if (!fs.existsSync(root)) {
+          const committed = loadIndex(fs, base);
+          saveApplied(opId, committed);
+          await flushThenPublishSave(opId);
+          return { status: 'noop' };
+        }
+        return {
+          status: 'ready',
+          mutate: async () => {
+            const committed = loadIndex(fs, base);
+            saveApplied(opId, committed);
+            await cleanupThenDurableAck(committed);
+          },
+        };
+      }
+      if (!index.scratch) throw new Error('saveScratchAsProject: no scratch to save');
+      const destination = rootForId(id);
+      if (fs.existsSync(destination)) {
+        throw new Error(`saveScratchAsProject: project ${id} already exists at ${destination}`);
+      }
+      const reconciled = { ...index, scratch: { ...index.scratch, starter } };
+      return {
+        status: 'ready',
+        mutate: async () => {
+          markAuthorityUnproven();
+          const committed = commitScratchProjectSave(fs, reconciled, id, name);
+          saveApplied(opId, committed);
+          await cleanupThenDurableAck(committed);
+        },
+      };
+    });
   };
   // ADR-0165 §9 rename: load → rename that project's `name` → persist → publish.
   // Unknown id = idempotent no-op publish (mirrors deleteTree), no throw.
-  const renameProject = (projectId: string, name: string, opId?: string): void => {
+  const renameProject = async (projectId: string, name: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     const projects = index.projects.map((p) => (p.id === projectId ? { ...p, name } : p));
-    writeIndex(fs, base, { ...index, projects });
-    void flushThenPublish(opId);
+    writeAuthorityIndex({ ...index, projects });
+    await flushThenPublish(opId);
   };
   // ADR-0165 §6 reset: re-seed the ACTIVE scratch from its starter baseline
   // (whole-workspace wipe + re-derive, equivalent to re-picking the starter),
   // clear scratch.dirty, persist, refresh the live snapshot, publish. No-op
   // publish when there is no scratch.
-  const resetScratch = (starter: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
+  const resetScratch = async (starter: string, opId?: string): Promise<void> => {
     const root = rootForId('scratch');
-    if (!index.scratch) {
-      void flushRefreshPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
-    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-    writeIndex(fs, base, {
-      ...index,
-      scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (!index.scratch) {
+        await flushRefreshPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          // Reconcile to the page's authority (see IndexResetFrame), then re-seed.
+          markAuthorityUnproven();
+          resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
+          writeAuthorityIndex({
+            ...index,
+            scratch: { ...index.scratch, starter, dirty: false, editedAt: 'no edits yet' },
+          });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
+        },
+      };
     });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushRefreshPublish(opId); // re-seed changed the live tree → republish snapshot
-    })();
   };
   // ADR-0165 §6 reset (named project): wipe + re-derive `/projects/<id>` from the
   // project's own starter (read from the index — authoritative), bump editedAt,
   // persist, refresh the live snapshot, publish. Honest on-disk restore, not a
   // page-mirror no-op. Unknown id = idempotent no-op publish (no throw).
-  const resetProjectTree = (projectId: string, opId?: string): void => {
-    const index = loadIndex(fs, base);
-    const target = index.projects.find((p) => p.id === projectId);
+  const resetProjectTree = async (projectId: string, opId?: string): Promise<void> => {
     const root = rootForId(projectId);
-    if (!target) {
-      void flushRefreshPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(target.starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
-    const projects = index.projects.map((p) =>
-      p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
-    );
-    writeIndex(fs, base, { ...index, projects });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
-    })();
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      const target = index.projects.find((p) => p.id === projectId);
+      if (!target) {
+        await flushRefreshPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(target.starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          markAuthorityUnproven();
+          resetProjectToStarter(fs, projectId, withoutViteConfigSeedFiles(root, seedFiles));
+          const projects = index.projects.map((p) =>
+            p.id === projectId ? { ...p, editedAt: new Date().toISOString() } : p,
+          );
+          writeAuthorityIndex({ ...index, projects });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushRefreshPublish(opId); // re-seed changed the (possibly active) tree → republish
+        },
+      };
+    });
   };
   // ADR-0165 §6 fresh scratch from a starter: (re)create the scratch entry +
   // re-point activeId='scratch' + re-seed /scratch from the bundle. Unlike reset,
   // this works when index.scratch is null (post-Save), restoring the Save
   // precondition for the NEXT save. The prior project entries are untouched.
-  const newScratch = (
+  const newScratch = async (
     starter: string,
     opId?: string,
     opts: { readonly preserveDirtySameStarter?: boolean } = {},
-  ): void => {
+  ): Promise<void> => {
     const root = rootForId('scratch');
-    const index = loadIndex(fs, base);
-    if (
-      opts.preserveDirtySameStarter === true &&
-      index.activeId === 'scratch' &&
-      index.scratch?.dirty === true &&
-      index.scratch.starter === starter
-    ) {
-      void flushThenPublish(opId);
-      return;
-    }
-    const starterSpec = starterById(starter);
-    const seedFiles = seedFilesForStarter(starterSpec, root);
-    resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
-    writeIndex(fs, base, {
-      ...index,
-      activeId: 'scratch',
-      scratch: { starter, dirty: false, editedAt: 'no edits yet' },
+    await runPackageReset(root, async () => {
+      const index = loadIndex(fs, base);
+      if (
+        opts.preserveDirtySameStarter === true &&
+        index.activeId === 'scratch' &&
+        index.scratch?.dirty === true &&
+        index.scratch.starter === starter
+      ) {
+        await flushThenPublish(opId);
+        return { status: 'noop' };
+      }
+      const starterSpec = starterById(starter);
+      const seedFiles = seedFilesForStarter(starterSpec, root);
+      return {
+        status: 'ready',
+        mutate: async () => {
+          markAuthorityUnproven();
+          resetScratchToStarter(fs, withoutViteConfigSeedFiles(root, seedFiles));
+          writeAuthorityIndex({
+            ...index,
+            activeId: 'scratch',
+            scratch: { starter, dirty: false, editedAt: 'no edits yet' },
+          });
+          await claimViteConfigSeed(root, viteConfigSeedStore, {
+            id: starterSpec.id,
+            seedFiles,
+          });
+          await initializeStarterGit?.(root);
+          await flushThenPublish(opId);
+        },
+      };
     });
-    void (async (): Promise<void> => {
-      await claimViteConfigSeed(root, viteConfigSeedStore, {
-        id: starterSpec.id,
-        seedFiles,
-      });
-      await initializeStarterGit?.(root);
-      await flushThenPublish(opId);
-    })();
   };
   // ADR-0165 §3 durable switch: persist the active root so the respawned owner
   // (and a later reload) reads the RIGHT activeId — without it the on-disk index
   // is stale and the page mirror reverts the switch on the owner's next publish.
-  const setActive = (activeId: string, opId?: string): void => {
+  const setActive = async (activeId: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     if (activeId !== 'scratch' && !index.projects.some((p) => p.id === activeId)) {
       throw new Error(`unknown active project ${activeId}`);
     }
-    writeIndex(fs, base, { ...index, activeId });
-    void flushThenPublish(opId);
+    writeAuthorityIndex({ ...index, activeId });
+    await flushThenPublish(opId);
   };
-  const markScratchDirty = (starter: string, opId?: string): void => {
+  const markScratchDirty = async (starter: string, opId?: string): Promise<void> => {
     const index = loadIndex(fs, base);
     if (index.activeId === 'scratch' && (index.scratch !== null || fs.existsSync('/scratch'))) {
       const scratch = index.scratch ?? { starter, dirty: false, editedAt: 'no edits yet' };
-      writeIndex(fs, base, {
+      writeAuthorityIndex({
         ...index,
         scratch: { ...scratch, dirty: true, editedAt: new Date().toISOString() },
       });
     }
-    void flushThenPublish(opId);
+    await flushThenPublish(opId);
+  };
+  const postSaveConflict = (opId: string, request: IndexSaveRequest): void => {
+    const error = new Error(`project index operation id reused with different input (${opId})`);
+    error.name = 'ProjectIndexOperationIdReuseError';
+    postSaveFrame({
+      type: 'index-save-conflict',
+      opId,
+      request,
+      error: { name: error.name, message: error.message },
+    });
+  };
+  const drainMutations = async (): Promise<void> => {
+    try {
+      while (!torn && mutationQueue.length > 0) {
+        const queued = mutationQueue.shift();
+        if (!queued) break;
+        activeMutation = queued;
+        try {
+          if (authorityFailure) queued.reject(authorityFailure);
+          else await queued.mutate();
+        } catch (error) {
+          const exactError = error instanceof Error ? error : new Error(String(error));
+          if (queued.unproven && !authorityFailure) authorityFailure = exactError;
+          queued.reject(authorityFailure ?? exactError);
+        } finally {
+          if (activeMutation === queued) activeMutation = null;
+        }
+      }
+    } finally {
+      drainingMutations = false;
+    }
+  };
+  const startMutationDrain = (): void => {
+    if (drainingMutations) return;
+    drainingMutations = true;
+    void drainMutations();
+  };
+  const queueMutation = (
+    frame: IndexMutationFrame,
+    mutate: () => Promise<void>,
+    reject: (cause: unknown) => void = (cause) => nack(frame.opId, cause),
+  ): boolean => {
+    if (torn) return false;
+    mutationQueue.push({ opId: frame.opId, mutate, reject, unproven: false });
+    return true;
+  };
+  const enqueueMutation = (frame: IndexMutationFrame, mutate: () => Promise<void>): void => {
+    if (!queueMutation(frame, mutate)) return;
+    startMutationDrain();
+  };
+  const enqueueSave = (frame: IndexSaveFrame): void => {
+    const request = saveRequest(frame);
+    const prior = saveOperations.get(frame.opId);
+    if (prior) {
+      if (!equalSaveRequest(prior.request, request)) {
+        postSaveConflict(frame.opId, request);
+        return;
+      }
+      replayOperation(prior);
+      return;
+    }
+    const admitted = {
+      type: 'index-save-admitted',
+      opId: frame.opId,
+      request,
+    } satisfies IndexSaveAdmittedFrame;
+    saveOperations.set(frame.opId, { request, admitted });
+    const queued = queueMutation(
+      frame,
+      () => saveScratch(frame.id, frame.name, frame.starter, frame.opId),
+      (cause) => saveTerminal(frame.opId, { ok: false, cause }),
+    );
+    if (!queued) {
+      saveOperations.delete(frame.opId);
+      return;
+    }
+    try {
+      postSaveFrame(admitted);
+    } catch {
+      // The durable owner operation is already admitted in the ledger. A
+      // notification failure cannot cancel it; an exact retry replays status.
+    } finally {
+      startMutationDrain();
+    }
+  };
+  const receiveSaveOutcome = (frame: IndexSaveReceivedFrame): void => {
+    const { candidate } = frame;
+    const record = saveOperations.get(candidate.opId);
+    if (!record) return;
+    const recorded = candidate.type === 'index-save-applied' ? record.applied : record.terminal;
+    if (!recorded || !equalSaveOutcome(recorded, candidate)) {
+      replayOperation(record);
+      return;
+    }
+    if (recorded.type === 'index-save-terminal') record.releasing = recorded;
+    postSaveFrame({ type: 'index-save-released', candidate: recorded });
+  };
+  const receiveSaveReleaseConfirmation = (frame: IndexSaveReleaseConfirmedFrame): void => {
+    const { candidate } = frame;
+    const record = saveOperations.get(candidate.opId);
+    if (!record) {
+      postSaveFrame({ type: 'index-save-closed', candidate });
+      return;
+    }
+    if (!record.releasing || !equalSaveOutcome(record.releasing, candidate)) {
+      replayOperation(record);
+      if (record.releasing) {
+        postSaveFrame({ type: 'index-save-released', candidate: record.releasing });
+      }
+      return;
+    }
+    const closed = record.releasing;
+    saveOperations.delete(closed.opId);
+    postSaveFrame({ type: 'index-save-closed', candidate: closed });
   };
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as IndexFrame;
-    if (frame.type === 'index-req') publish();
-    else if (frame.type === 'index-delete') deleteTree(frame.projectId, frame.opId);
-    else if (frame.type === 'index-save')
-      saveScratch(frame.id, frame.name, frame.starter, frame.opId);
-    else if (frame.type === 'index-rename') renameProject(frame.projectId, frame.name, frame.opId);
-    else if (frame.type === 'index-reset') resetScratch(frame.starter, frame.opId);
-    else if (frame.type === 'index-reset-project') resetProjectTree(frame.projectId, frame.opId);
+    if (frame.type === 'index-req') publishDurable();
+    else if (frame.type === 'index-save-received') receiveSaveOutcome(frame);
+    else if (frame.type === 'index-save-release-confirmed') receiveSaveReleaseConfirmation(frame);
+    else if (frame.type === 'index-delete')
+      enqueueMutation(frame, () => deleteTree(frame.projectId, frame.opId));
+    else if (frame.type === 'index-save') enqueueSave(frame);
+    else if (frame.type === 'index-rename')
+      enqueueMutation(frame, () => renameProject(frame.projectId, frame.name, frame.opId));
+    else if (frame.type === 'index-reset')
+      enqueueMutation(frame, () => resetScratch(frame.starter, frame.opId));
+    else if (frame.type === 'index-reset-project')
+      enqueueMutation(frame, () => resetProjectTree(frame.projectId, frame.opId));
     else if (frame.type === 'index-new-scratch')
-      newScratch(frame.starter, frame.opId, {
-        preserveDirtySameStarter: frame.preserveDirtySameStarter,
-      });
-    else if (frame.type === 'index-set-active') setActive(frame.activeId, frame.opId);
-    else if (frame.type === 'index-mark-scratch-dirty') markScratchDirty(frame.starter, frame.opId);
+      enqueueMutation(frame, () =>
+        newScratch(frame.starter, frame.opId, {
+          preserveDirtySameStarter: frame.preserveDirtySameStarter,
+        }),
+      );
+    else if (frame.type === 'index-set-active')
+      enqueueMutation(frame, () => setActive(frame.activeId, frame.opId));
+    else if (frame.type === 'index-mark-scratch-dirty')
+      enqueueMutation(frame, () => markScratchDirty(frame.starter, frame.opId));
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
-  let torn = false;
   return (): void => {
     if (torn) return;
-    torn = true;
     channel.removeEventListener('message', onMessage as unknown as EventListener);
-    channel.close();
+    const pendingMutations = new Set<QueuedMutation>();
+    if (activeMutation) pendingMutations.add(activeMutation);
+    for (const queued of mutationQueue) pendingMutations.add(queued);
+    for (const queued of pendingMutations) queued.reject(closedError);
+    for (const [opId, record] of saveOperations) {
+      if (!record.terminal) saveTerminal(opId, { ok: false, cause: closedError });
+      else postSaveFrame(record.terminal);
+      if (record.terminal) {
+        postSaveFrame({ type: 'index-save-released', candidate: record.terminal });
+        postSaveFrame({ type: 'index-save-closed', candidate: record.terminal });
+      }
+    }
+    saveOperations.clear();
+    torn = true;
+    mutationQueue.splice(0);
+    // Broadcast delivery is asynchronous; match the other owner publishers and
+    // release only after the already-posted close NACKs enter the delivery queue.
+    queueMicrotask(() => channel.close());
   };
 }
 
-const INDEX_ACK_TIMEOUT_MS = 90_000;
 const INDEX_APPLIED_RETRY_MS = 250;
+const INDEX_SAVE_STATUS_POLL_MS = 1_000;
+// TODO(backlog: playground/project-lifecycle-outcome-recovery): exact generic disposition replay.
+const INDEX_MUTATION_OUTCOME_TIMEOUT_MS = 120_000;
+
+export type ProjectIndexSaveApplication =
+  | { readonly kind: 'applied'; readonly index: ProjectIndex }
+  | { readonly kind: 'not-applied'; readonly error: Error }
+  | { readonly kind: 'unknown'; readonly error: Error };
 
 function indexOpId(): string {
   return `op-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
+}
+
+function errorFromIndexNack(frame: Extract<IndexAckFrame, { readonly ok: false }>): Error {
+  const error = new Error(frame.error.message);
+  error.name = frame.error.name;
+  return error;
+}
+
+function errorFromSaveFailure(
+  frame: IndexSaveConflictFrame | Extract<IndexSaveTerminalFrame, { readonly ok: false }>,
+): Error {
+  const error = new Error(frame.error.message);
+  error.name = frame.error.name;
+  return error;
+}
+
+export interface ProjectIndexMutationOptions {
+  readonly ownerClosed?: Promise<unknown>;
+}
+
+/** The owner may have applied a one-shot mutation whose terminal ACK was lost. */
+export class ProjectIndexMutationOutcomeUnknownError extends Error {
+  constructor(operation: string) {
+    super(
+      `project index ${operation} outcome is unknown: owner did not certify it within ${INDEX_MUTATION_OUTCOME_TIMEOUT_MS}ms`,
+    );
+    this.name = 'ProjectIndexMutationOutcomeUnknownError';
+  }
 }
 
 function postIndexMutation(
   key: OwnerBridgeKey,
   frame: IndexMutationFrame,
   match: (index: ProjectIndex) => boolean = () => true,
-  opts: { readonly resolveOnReply?: boolean } = {},
+  options: ProjectIndexMutationOptions = {},
 ): Promise<ProjectIndex> {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const opId = indexOpId();
   const mutation = { ...frame, opId } satisfies IndexMutationFrame;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  let settled = false;
-  let onMessage: ((event: MessageEvent) => void) | undefined;
-  const cleanup = (): void => {
-    if (settled) return;
-    settled = true;
-    if (timeout !== undefined) clearTimeout(timeout);
-    if (onMessage) channel.removeEventListener('message', onMessage as unknown as EventListener);
+  let onMessage: (event: MessageEvent) => void = () => {};
+  let closed = false;
+  const closeChannel = (): void => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(outcomeTimeout);
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
     channel.close();
   };
-  const promise = new Promise<ProjectIndex>((resolve, reject) => {
-    onMessage = (event: MessageEvent): void => {
-      const reply = event.data as IndexFrame;
-      if (reply.type === 'index-ack' && reply.opId !== opId) return;
-      if (reply.type !== 'index-ack' && reply.type !== 'index-reply') return;
-      if (reply.type === 'index-reply' && opts.resolveOnReply === false) return;
-      if (!match(reply.index)) {
-        if (reply.type === 'index-reply') return;
-        cleanup();
-        reject(new Error(`project index ${frame.type} ack did not match committed state`));
-        return;
-      }
-      cleanup();
-      resolve(reply.index);
-    };
-    channel.addEventListener('message', onMessage as unknown as EventListener);
-    timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`project index ${frame.type} ack timed out`));
-    }, INDEX_ACK_TIMEOUT_MS);
+  const settlements = createOwnerRequestSettlements<ProjectIndex>({
+    ownerClosed: options.ownerClosed,
+    ownerClosedError: () => new Error(`workspace owner exited during ${frame.type}`),
+    onDrained: closeChannel,
   });
-  try {
-    channel.postMessage(mutation);
-  } catch (err) {
-    cleanup();
-    throw err;
-  }
+  onMessage = (event: MessageEvent): void => {
+    const reply = event.data as IndexFrame;
+    if (reply.type !== 'index-ack' || reply.opId !== opId) return;
+    if (!reply.ok) {
+      settlements.reject(opId, errorFromIndexNack(reply));
+      return;
+    }
+    if (!match(reply.index)) {
+      settlements.reject(
+        opId,
+        new Error(`project index ${frame.type} ack did not match committed state`),
+      );
+      return;
+    }
+    settlements.resolve(opId, reply.index);
+  };
+  channel.addEventListener('message', onMessage as unknown as EventListener);
+  const outcomeTimeout = setTimeout(() => {
+    settlements.reject(opId, new ProjectIndexMutationOutcomeUnknownError(frame.type));
+  }, INDEX_MUTATION_OUTCOME_TIMEOUT_MS);
+  const promise = settlements.request(opId, 'mutation', () => channel.postMessage(mutation));
+  settlements.dispose(new Error(`project index ${frame.type} request disposed`));
   return promise;
 }
 
 function postIndexMutationPhases(
   key: OwnerBridgeKey,
-  frame: IndexMutationFrame,
+  request: IndexSaveRequest,
   match: (index: ProjectIndex) => boolean = () => true,
-): { readonly applied: Promise<ProjectIndex>; readonly durable: Promise<ProjectIndex> } {
+  options: ProjectIndexMutationOptions = {},
+): {
+  readonly applied: Promise<ProjectIndex>;
+  readonly durable: Promise<ProjectIndex>;
+  readonly application: Promise<ProjectIndexSaveApplication>;
+} {
   const channel = new BroadcastChannel(channelNameFor(projectIndexChannelUrl(key)));
   const opId = indexOpId();
-  const mutation = { ...frame, opId } satisfies IndexMutationFrame;
-  let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+  const mutation = { ...request, opId } satisfies IndexSaveFrame;
+  let saveRetryTimeout: ReturnType<typeof setTimeout> | undefined;
+  let statusPollTimeout: ReturnType<typeof setTimeout> | undefined;
+  let receiptRetryTimeout: ReturnType<typeof setTimeout> | undefined;
+  let cleanupRetryTimeout: ReturnType<typeof setTimeout> | undefined;
   let appliedSettled = false;
   let durableSettled = false;
+  let handedOff = false;
+  let admitted = false;
+  let released = false;
+  let appliedCandidate: IndexSaveAppliedFrame | undefined;
+  let terminalCandidate: IndexSaveTerminalFrame | undefined;
+  let releasedTerminal: IndexSaveTerminalFrame | undefined;
 
-  const cleanupIfDone = (): void => {
-    if (!appliedSettled || !durableSettled) return;
-    if (retryTimeout !== undefined) clearTimeout(retryTimeout);
-    if (onMessage) channel.removeEventListener('message', onMessage as unknown as EventListener);
+  let onMessage: (event: MessageEvent) => void = () => {};
+  let closed = false;
+  const closeChannel = (): void => {
+    if (closed) return;
+    closed = true;
+    if (saveRetryTimeout !== undefined) clearTimeout(saveRetryTimeout);
+    if (statusPollTimeout !== undefined) clearTimeout(statusPollTimeout);
+    if (receiptRetryTimeout !== undefined) clearTimeout(receiptRetryTimeout);
+    if (cleanupRetryTimeout !== undefined) clearTimeout(cleanupRetryTimeout);
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
     channel.close();
   };
-  const settleApplied = (): void => {
+  const settlements = createOwnerRequestSettlements<ProjectIndex>({
+    ownerClosed: options.ownerClosed,
+    ownerClosedError: () => new Error(`workspace owner exited during ${request.type}`),
+    onDrained: closeChannel,
+  });
+  const appliedId = `${opId}:applied`;
+  const durableId = `${opId}:durable`;
+  const appliedPromise = settlements.wait(appliedId, 'mutation');
+  const durablePromise = settlements.wait(durableId, 'mutation');
+  let applicationSettled = false;
+  let resolveApplication: (application: ProjectIndexSaveApplication) => void = () => {};
+  const applicationPromise = new Promise<ProjectIndexSaveApplication>((resolve) => {
+    resolveApplication = resolve;
+  });
+  const settleApplication = (application: ProjectIndexSaveApplication): void => {
+    if (applicationSettled) return;
+    applicationSettled = true;
+    resolveApplication(application);
+  };
+  void appliedPromise.catch((error: unknown) => {
+    settleApplication({
+      kind: 'unknown',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+  });
+
+  const resolveApplied = (index: ProjectIndex): void => {
+    if (appliedSettled) return;
     appliedSettled = true;
-    if (retryTimeout !== undefined) clearTimeout(retryTimeout);
-    if (appliedTimeout !== undefined) clearTimeout(appliedTimeout);
-    cleanupIfDone();
+    settleApplication({ kind: 'applied', index });
+    settlements.resolve(appliedId, index);
   };
-  const settleDurable = (): void => {
-    durableSettled = true;
-    if (durableTimeout !== undefined) clearTimeout(durableTimeout);
-    cleanupIfDone();
-  };
-
-  let resolveApplied!: (index: ProjectIndex) => void;
-  let rejectApplied!: (err: Error) => void;
-  let resolveDurable!: (index: ProjectIndex) => void;
-  let rejectDurable!: (err: Error) => void;
-  const appliedPromise = new Promise<ProjectIndex>((resolve, reject) => {
-    resolveApplied = resolve;
-    rejectApplied = reject;
-  });
-  const durablePromise = new Promise<ProjectIndex>((resolve, reject) => {
-    resolveDurable = resolve;
-    rejectDurable = reject;
-  });
-
-  const onMessage = (event: MessageEvent): void => {
-    const reply = event.data as IndexFrame;
-    if (reply.type !== 'index-applied' && reply.type !== 'index-ack') return;
-    if (reply.opId !== opId) return;
-    if (!match(reply.index)) {
-      const err = new Error(`project index ${frame.type} ack did not match committed state`);
-      if (!appliedSettled) {
-        settleApplied();
-        rejectApplied(err);
-      }
-      if (!durableSettled) {
-        settleDurable();
-        rejectDurable(err);
-      }
-      return;
-    }
-    if (reply.type === 'index-applied' && !appliedSettled) {
-      settleApplied();
-      resolveApplied(reply.index);
-      return;
-    }
-    if (reply.type === 'index-ack') {
-      if (!appliedSettled) {
-        settleApplied();
-        resolveApplied(reply.index);
-      }
-      if (!durableSettled) {
-        settleDurable();
-        resolveDurable(reply.index);
-      }
-    }
-  };
-  channel.addEventListener('message', onMessage as unknown as EventListener);
-  const post = (): void => {
-    channel.postMessage(mutation);
-  };
-  const scheduleRetry = (): void => {
-    if (appliedSettled) return;
-    retryTimeout = setTimeout(() => {
-      post();
-      scheduleRetry();
-    }, INDEX_APPLIED_RETRY_MS);
-  };
-  const appliedTimeout = setTimeout(() => {
-    if (appliedSettled) return;
-    settleApplied();
-    rejectApplied(new Error(`project index ${frame.type} applied ack timed out`));
-  }, INDEX_ACK_TIMEOUT_MS);
-  const durableTimeout = setTimeout(() => {
+  const resolveDurable = (index: ProjectIndex): void => {
     if (durableSettled) return;
-    settleDurable();
-    rejectDurable(new Error(`project index ${frame.type} ack timed out`));
-  }, INDEX_ACK_TIMEOUT_MS);
-  try {
-    post();
-    scheduleRetry();
-  } catch (err) {
-    if (retryTimeout !== undefined) clearTimeout(retryTimeout);
+    durableSettled = true;
+    settlements.resolve(durableId, index);
+  };
+  const rejectBoth = (error: Error, kind: 'not-applied' | 'unknown' = 'unknown'): void => {
+    settleApplication({ kind, error });
     if (!appliedSettled) {
-      settleApplied();
+      appliedSettled = true;
+      settlements.reject(appliedId, error);
     }
     if (!durableSettled) {
-      settleDurable();
+      durableSettled = true;
+      settlements.reject(durableId, error);
     }
-    throw err;
-  }
-  return { applied: appliedPromise, durable: durablePromise };
+  };
+  const rejectDurable = (error: Error): void => {
+    if (durableSettled) return;
+    durableSettled = true;
+    settlements.reject(durableId, error);
+  };
+  const stopPreAdmissionRetries = (): void => {
+    admitted = true;
+    if (saveRetryTimeout !== undefined) {
+      clearTimeout(saveRetryTimeout);
+      saveRetryTimeout = undefined;
+    }
+  };
+  const stopStatusPolling = (): void => {
+    if (statusPollTimeout === undefined) return;
+    clearTimeout(statusPollTimeout);
+    statusPollTimeout = undefined;
+  };
+  const pollStatus = (): void => {
+    statusPollTimeout = undefined;
+    if (closed || released) return;
+    try {
+      channel.postMessage(mutation);
+      handedOff = true;
+    } catch {
+      // Admission proved the owner may be executing this exact operation. A
+      // later local send failure cannot rewrite that outcome; keep polling.
+    }
+    if (
+      !closed &&
+      !released &&
+      appliedCandidate === undefined &&
+      terminalCandidate === undefined &&
+      statusPollTimeout === undefined
+    ) {
+      statusPollTimeout = setTimeout(pollStatus, INDEX_SAVE_STATUS_POLL_MS);
+    }
+  };
+  const startStatusPolling = (): void => {
+    stopPreAdmissionRetries();
+    if (
+      closed ||
+      released ||
+      appliedCandidate !== undefined ||
+      terminalCandidate !== undefined ||
+      statusPollTimeout !== undefined
+    ) {
+      return;
+    }
+    statusPollTimeout = setTimeout(pollStatus, INDEX_SAVE_STATUS_POLL_MS);
+  };
+  const hasReceiptCandidate = (): boolean =>
+    appliedCandidate !== undefined || terminalCandidate !== undefined;
+  const stopReceiptRetryIfIdle = (): void => {
+    if (hasReceiptCandidate() || receiptRetryTimeout === undefined) return;
+    clearTimeout(receiptRetryTimeout);
+    receiptRetryTimeout = undefined;
+  };
+  const sendReceipts = (): void => {
+    if (closed || released) return;
+    const candidates: readonly (IndexSaveOutcomeFrame | undefined)[] = [
+      appliedCandidate,
+      terminalCandidate,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const current =
+        candidate.type === 'index-save-applied' ? appliedCandidate : terminalCandidate;
+      if (current !== candidate) continue;
+      try {
+        channel.postMessage({
+          type: 'index-save-received',
+          candidate,
+        } satisfies IndexSaveReceivedFrame);
+      } catch {
+        // Keep the exact candidate staged; retry cannot rewrite its outcome.
+      }
+    }
+    if (hasReceiptCandidate() && receiptRetryTimeout === undefined) {
+      receiptRetryTimeout = setTimeout(() => {
+        receiptRetryTimeout = undefined;
+        sendReceipts();
+      }, INDEX_APPLIED_RETRY_MS);
+    }
+  };
+  const stageOutcome = (candidate: IndexSaveOutcomeFrame): void => {
+    stopPreAdmissionRetries();
+    stopStatusPolling();
+    if (candidate.type === 'index-save-applied') appliedCandidate = candidate;
+    else terminalCandidate = candidate;
+    sendReceipts();
+  };
+  const matchesRequest = (reply: {
+    readonly opId: string;
+    readonly request: IndexSaveRequest;
+  }): boolean => reply.opId === opId && equalSaveRequest(reply.request, request);
+  const mismatchError = (): Error =>
+    new Error(`project index ${request.type} ack did not match committed state`);
+  const sendReleaseConfirmation = (): void => {
+    if (closed || !releasedTerminal) return;
+    try {
+      channel.postMessage({
+        type: 'index-save-release-confirmed',
+        candidate: releasedTerminal,
+      } satisfies IndexSaveReleaseConfirmedFrame);
+    } catch {
+      // Exact release already settled the caller; retry only owner-ledger cleanup.
+    }
+    if (releasedTerminal && cleanupRetryTimeout === undefined) {
+      cleanupRetryTimeout = setTimeout(() => {
+        cleanupRetryTimeout = undefined;
+        sendReleaseConfirmation();
+      }, INDEX_APPLIED_RETRY_MS);
+    }
+  };
+
+  onMessage = (event: MessageEvent): void => {
+    const reply = event.data as IndexFrame;
+    if (reply.type === 'index-save-closed') {
+      if (!releasedTerminal || !equalSaveOutcome(releasedTerminal, reply.candidate)) return;
+      releasedTerminal = undefined;
+      if (cleanupRetryTimeout !== undefined) {
+        clearTimeout(cleanupRetryTimeout);
+        cleanupRetryTimeout = undefined;
+      }
+      settlements.dispose(new Error(`project index ${request.type} cleanup complete`));
+      return;
+    }
+    if (reply.type === 'index-save-released') {
+      const { candidate } = reply;
+      if (!matchesRequest(candidate)) return;
+      if (released) {
+        if (
+          candidate.type === 'index-save-terminal' &&
+          releasedTerminal &&
+          equalSaveOutcome(releasedTerminal, candidate)
+        ) {
+          sendReleaseConfirmation();
+        }
+        return;
+      }
+      if (candidate.type === 'index-save-applied') {
+        if (!appliedCandidate || !equalSaveOutcome(appliedCandidate, candidate)) return;
+        appliedCandidate = undefined;
+        stopReceiptRetryIfIdle();
+        if (match(candidate.index)) resolveApplied(candidate.index);
+        else rejectBoth(mismatchError());
+        startStatusPolling();
+        return;
+      }
+      if (!terminalCandidate || !equalSaveOutcome(terminalCandidate, candidate)) return;
+      terminalCandidate = undefined;
+      appliedCandidate = undefined;
+      released = true;
+      releasedTerminal = candidate;
+      stopStatusPolling();
+      if (receiptRetryTimeout !== undefined) {
+        clearTimeout(receiptRetryTimeout);
+        receiptRetryTimeout = undefined;
+      }
+      if (candidate.ok) {
+        if (match(candidate.index)) {
+          resolveApplied(candidate.index);
+          resolveDurable(candidate.index);
+        } else {
+          rejectBoth(mismatchError());
+        }
+      } else {
+        const error = errorFromSaveFailure(candidate);
+        if (candidate.applied) {
+          if (match(candidate.applied)) resolveApplied(candidate.applied);
+          else if (!appliedSettled) rejectBoth(mismatchError());
+        } else if (!appliedSettled) {
+          appliedSettled = true;
+          settleApplication({ kind: 'not-applied', error });
+          settlements.reject(appliedId, error);
+        }
+        rejectDurable(error);
+      }
+      sendReleaseConfirmation();
+      return;
+    }
+    if (released) return;
+    if (reply.type === 'index-save-conflict') {
+      if (!matchesRequest(reply)) return;
+      stopPreAdmissionRetries();
+      stopStatusPolling();
+      const error = errorFromSaveFailure(reply);
+      rejectBoth(error);
+      settlements.dispose(error);
+      return;
+    }
+    if (reply.type === 'index-save-admitted') {
+      if (!matchesRequest(reply)) return;
+      startStatusPolling();
+      return;
+    }
+    if (reply.type === 'index-save-applied') {
+      if (!matchesRequest(reply)) return;
+      if (!appliedSettled) stageOutcome(reply);
+      else startStatusPolling();
+      return;
+    }
+    if (reply.type !== 'index-save-terminal' || !matchesRequest(reply)) return;
+    stageOutcome(reply);
+  };
+  channel.addEventListener('message', onMessage as unknown as EventListener);
+  const attempt = (): void => {
+    if (closed || admitted) return;
+    try {
+      channel.postMessage(mutation);
+      handedOff = true;
+    } catch (cause) {
+      if (!handedOff) {
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        rejectBoth(error, 'not-applied');
+        settlements.dispose(error);
+        return;
+      }
+    }
+    if (!closed && !admitted) {
+      saveRetryTimeout = setTimeout(attempt, INDEX_APPLIED_RETRY_MS);
+    }
+  };
+  attempt();
+  return { applied: appliedPromise, durable: durablePromise, application: applicationPromise };
 }
 
 /**
@@ -580,11 +1285,16 @@ function postIndexMutationPhases(
  * owner flushes + publishes, so the sender channel outlives async browser
  * BroadcastChannel delivery.
  */
-export function deleteProjectTree(key: OwnerBridgeKey, projectId: string): Promise<ProjectIndex> {
+export function deleteProjectTree(
+  key: OwnerBridgeKey,
+  projectId: string,
+  options: ProjectIndexMutationOptions = {},
+): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
     { type: 'index-delete', projectId } satisfies IndexDeleteFrame,
     (index) => !index.projects.some((p) => p.id === projectId) && index.activeId !== projectId,
+    options,
   );
 }
 
@@ -599,8 +1309,11 @@ export function saveProjectIndex(
   id: string,
   name: string,
   starter: string,
+  options: ProjectIndexMutationOptions = {},
 ): Promise<ProjectIndex> {
-  return saveProjectIndexPhases(key, id, name, starter).durable;
+  const phases = saveProjectIndexPhases(key, id, name, starter, options);
+  void phases.applied.catch(() => undefined);
+  return phases.durable;
 }
 
 export function saveProjectIndexPhases(
@@ -608,14 +1321,20 @@ export function saveProjectIndexPhases(
   id: string,
   name: string,
   starter: string,
-): { readonly applied: Promise<ProjectIndex>; readonly durable: Promise<ProjectIndex> } {
+  options: ProjectIndexMutationOptions = {},
+): {
+  readonly applied: Promise<ProjectIndex>;
+  readonly durable: Promise<ProjectIndex>;
+  readonly application: Promise<ProjectIndexSaveApplication>;
+} {
   return postIndexMutationPhases(
     key,
-    { type: 'index-save', id, name, starter } satisfies IndexSaveFrame,
+    { type: 'index-save', id, name, starter } satisfies IndexSaveRequest,
     (index) =>
       index.activeId === id &&
       index.scratch === null &&
       index.projects.some((p) => p.id === id && p.name === name && p.starter === starter),
+    options,
   );
 }
 
@@ -624,11 +1343,16 @@ export function saveProjectIndexPhases(
  * the CURRENT owner BEFORE teardown so the on-disk `activeId` is correct when the
  * respawned owner boots + publishes (else the page reverts to the stale activeId).
  */
-export function setActiveIndex(key: OwnerBridgeKey, activeId: string): Promise<ProjectIndex> {
+export function setActiveIndex(
+  key: OwnerBridgeKey,
+  activeId: string,
+  options: ProjectIndexMutationOptions = {},
+): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
     { type: 'index-set-active', activeId } satisfies IndexSetActiveFrame,
     (index) => index.activeId === activeId,
+    options,
   );
 }
 
@@ -637,6 +1361,7 @@ export function renameProjectIndex(
   key: OwnerBridgeKey,
   projectId: string,
   name: string,
+  options: ProjectIndexMutationOptions = {},
 ): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
@@ -644,15 +1369,21 @@ export function renameProjectIndex(
     (index) =>
       !index.projects.some((p) => p.id === projectId) ||
       index.projects.some((p) => p.id === projectId && p.name === name),
+    options,
   );
 }
 
 /** Page side: post a durable scratch reset-to-starter (ADR-0165 §6); owner re-publishes. */
-export function resetScratchIndex(key: OwnerBridgeKey, starter: string): Promise<ProjectIndex> {
+export function resetScratchIndex(
+  key: OwnerBridgeKey,
+  starter: string,
+  options: ProjectIndexMutationOptions = {},
+): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
     { type: 'index-reset', starter } satisfies IndexResetFrame,
     (index) => index.activeId === 'scratch' && index.scratch?.starter === starter,
+    options,
   );
 }
 
@@ -662,11 +1393,20 @@ export function resetScratchIndex(key: OwnerBridgeKey, starter: string): Promise
  * re-publishes. The project's starter is read owner-side from the index, so the
  * frame only carries the id.
  */
-export function resetProjectIndex(key: OwnerBridgeKey, projectId: string): Promise<ProjectIndex> {
-  return postIndexMutation(key, {
-    type: 'index-reset-project',
-    projectId,
-  } satisfies IndexResetProjectFrame);
+export function resetProjectIndex(
+  key: OwnerBridgeKey,
+  projectId: string,
+  options: ProjectIndexMutationOptions = {},
+): Promise<ProjectIndex> {
+  return postIndexMutation(
+    key,
+    {
+      type: 'index-reset-project',
+      projectId,
+    } satisfies IndexResetProjectFrame,
+    () => true,
+    options,
+  );
 }
 
 /**
@@ -678,7 +1418,7 @@ export function resetProjectIndex(key: OwnerBridgeKey, projectId: string): Promi
 export function newScratchIndex(
   key: OwnerBridgeKey,
   starter: string,
-  opts: { readonly preserveDirtySameStarter?: boolean } = {},
+  opts: ProjectIndexMutationOptions & { readonly preserveDirtySameStarter?: boolean } = {},
 ): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
@@ -688,15 +1428,21 @@ export function newScratchIndex(
       preserveDirtySameStarter: opts.preserveDirtySameStarter,
     } satisfies IndexNewScratchFrame,
     (index) => index.activeId === 'scratch' && index.scratch?.starter === starter,
+    opts,
   );
 }
 
 /** Page side: persist that the active scratch has user edits (ADR-0165 §57). */
-export function markScratchDirtyIndex(key: OwnerBridgeKey, starter: string): Promise<ProjectIndex> {
+export function markScratchDirtyIndex(
+  key: OwnerBridgeKey,
+  starter: string,
+  options: ProjectIndexMutationOptions = {},
+): Promise<ProjectIndex> {
   return postIndexMutation(
     key,
     { type: 'index-mark-scratch-dirty', starter } satisfies IndexMarkScratchDirtyFrame,
     (index) => index.activeId !== 'scratch' || index.scratch?.dirty === true,
+    options,
   );
 }
 

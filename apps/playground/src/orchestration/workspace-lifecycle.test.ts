@@ -284,14 +284,10 @@ describe('switch tracking + recovery', () => {
     expect(ws.started()).toBe(false); // the old owner is closed; nothing alive
   });
 
-  it('waitForPendingSwitch resolves the tracked outcome and clears after settle', async () => {
+  it('does not expose a second switch coordinator beside trackSwitch', () => {
     const { ws } = setup();
-    const tracked = ws.trackSwitch(Promise.resolve(true));
-    expect(ws.switchPending()).toBe(true);
-    await expect(ws.waitForPendingSwitch()).resolves.toBe(true);
-    await tracked;
-    expect(ws.switchPending()).toBe(false);
-    await expect(ws.waitForPendingSwitch()).resolves.toBe(true); // none pending → true
+    expect(ws).not.toHaveProperty('waitForPendingSwitch');
+    expect(ws).not.toHaveProperty('switchPending');
   });
 });
 

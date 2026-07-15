@@ -16,7 +16,14 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  type VfsMutationGuard,
+  guardVfsMutations,
+  isAbsolute,
+  joinPath,
+  normalizePath,
+  syncMirror,
+} from '@riftydev/vfs';
 import { resolveBin } from './bin-resolver.ts';
 import { builtinCommands } from './builtins.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
@@ -53,6 +60,10 @@ export interface ShellOptions {
    * no Node runtime here") rather than the 127 of a genuine miss.
    */
   execBin?: BinExecutor;
+  /** Host policy boundary for every authoritative VFS mutation. */
+  mutationGuard?: VfsMutationGuard;
+  /** Synchronous namespace policy; never acquires the mutation FIFO. */
+  assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 }
 
 export interface RunResult {
@@ -301,11 +312,15 @@ export class Shell {
   private readonly backgroundJobs: BackgroundJob[] = [];
   private backgroundSeq = 0;
   private readonly execBin?: BinExecutor;
+  private readonly mutationGuard?: VfsMutationGuard;
+  private readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
     this.env = { ...(options.env ?? {}) };
     this.execBin = options.execBin;
+    this.mutationGuard = options.mutationGuard;
+    this.assertPortablePaths = options.assertPortablePaths;
     const builtins = builtinCommands(
       (p) => {
         this._cwd = p;
@@ -606,7 +621,13 @@ export class Shell {
   }
 
   private cloneForBackground(): Shell {
-    const shell = new Shell({ cwd: this._cwd, env: this.env, execBin: this.execBin });
+    const shell = new Shell({
+      cwd: this._cwd,
+      env: this.env,
+      execBin: this.execBin,
+      mutationGuard: this.mutationGuard,
+      assertPortablePaths: this.assertPortablePaths,
+    });
     for (const [name, command] of this.customCommands) shell.registerCommand(name, command);
     return shell;
   }
@@ -850,6 +871,8 @@ export class Shell {
       terminal,
       stdin: stageStdin,
       signal,
+      mutationGuard: this.mutationGuard,
+      assertPortablePaths: this.assertPortablePaths,
     };
 
     if (!handler) {
@@ -924,15 +947,17 @@ export class Shell {
         // The captured BYTES flow to the file verbatim (ADR-0198) — encoding
         // the display string minted U+FFFD into binary payloads.
         const payload = concatBytes(stdoutChunks);
-        if (redirectTo.append && fs.existsSync(path)) {
-          const existing = fs.readFileBytesSync(path);
-          const next = new Uint8Array(existing.length + payload.length);
-          next.set(existing, 0);
-          next.set(payload, existing.length);
-          fs.writeFileSync(path, next);
-        } else {
-          fs.writeFileSync(path, payload);
-        }
+        await guardVfsMutations(this.mutationGuard, [{ kind: 'write', path }], () => {
+          if (redirectTo.append && fs.existsSync(path)) {
+            const existing = fs.readFileBytesSync(path);
+            const next = new Uint8Array(existing.length + payload.length);
+            next.set(existing, 0);
+            next.set(payload, existing.length);
+            fs.writeFileSync(path, next);
+          } else {
+            fs.writeFileSync(path, payload);
+          }
+        });
         stdoutChunks.length = 0;
       } catch (err) {
         // Loud failure: don't silently dump the redirected payload onto stdout

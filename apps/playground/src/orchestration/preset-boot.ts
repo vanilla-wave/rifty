@@ -4,13 +4,13 @@
  * serialization queue, the TS-request gate over an in-flight transition, the
  * dev-server preset boot (fresh session vs restart-in-place, ADR-0148) and the
  * gallery-pick flow (paint → owner start → stop-before-write → scratch
- * establish → memory-mode seed → boot).
+ * establish → scratch-owner reconciliation → memory-mode seed → boot).
  *
  * No UI imports; every side effect goes through the injected ports below —
  * the behavioral-test seam (ADR-0197 §4). The dev-server core (slice 1) is
  * injected as a port (dependency spine).
  */
-import { createSignal, untrack } from 'solid-js';
+import { createSignal } from 'solid-js';
 import type { Preset } from '../presets.ts';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 
@@ -75,6 +75,10 @@ export interface PresetBootDeps<S extends PresetBootSessionLike> {
   ensureOwnerStarted(): Promise<unknown>;
   /** (Re)create the durable scratch entry + re-seed /scratch (no-op in memory mode). */
   establishScratch(id: string, opts: { preserveDirtySameStarter?: boolean }): Promise<void>;
+  /** Respawn an owner frozen to another project root; resolves only at /scratch. */
+  ensureScratchOwnerRoot(): Promise<void>;
+  /** Await a fresh /scratch snapshot, then reopen starter tabs from owner bytes. */
+  refreshStarterEditorContext(): Promise<void>;
   /** Memory mode has no durable index → the pick seeds the owner tree itself. */
   readonly ephemeralStorage: boolean;
   seedWorkspace(preset: Preset): Promise<void>;
@@ -115,9 +119,8 @@ export interface PresetBoot {
     bootLinesOverride?: readonly string[],
   ): Promise<void>;
   /**
-   * Gallery-pick flow, serialized through the transition queue. Awaits the
-   * queued boot only when a transition is already in flight (a fresh pick is
-   * fire-and-forget — the veil reports progress).
+   * Gallery-pick flow, serialized through the transition queue. Resolves only
+   * after the owner transition + preset boot reaches a terminal outcome.
    */
   pickStarter(id: string, opts: PickStarterOpts): Promise<void>;
 }
@@ -214,36 +217,41 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
   ): Promise<void> {
     const wasDirty = opts.guardDirtyScratch ? deps.dirtyScratchPick() : false;
     const tsGate = wasDirty ? undefined : (eagerGate ?? beginTsTransition());
-    if (!wasDirty) deps.setOwnerReady(false);
-    opts.commit(id); // dirty pick: the store opened the switch dialog — abort here
-    if (wasDirty) return;
-    const preset = deps.presetForId(id);
-    await deps.paintStarterUi(preset);
-    deps.markEditorContextReady();
-    deps.noteStarterBaselinePending();
-    await deps.ensureOwnerStarted();
-    // Stop a running dev server BEFORE the starter files land on the owner tree.
-    await deps.devServer.stopBeforeStarterWrite();
-    await deps.establishScratch(id, { preserveDirtySameStarter: opts.preserveDirtySameStarter });
-    // Memory mode: establishScratch is a no-op (no durable index), so this seed is
-    // the ONLY owner-tree seed — AWAIT it before runPreset boots vite, else the
-    // dev server can start over an un-seeded /scratch.
-    if (deps.ephemeralStorage) await deps.seedWorkspace(preset);
-    deps.setOwnerReady(true);
-    await runPreset(preset, tsGate);
+    let gateOwnedByRunPreset = false;
+    try {
+      if (!wasDirty) deps.setOwnerReady(false);
+      opts.commit(id); // dirty pick: the store opened the switch dialog — abort here
+      if (wasDirty) return;
+      const preset = deps.presetForId(id);
+      await deps.paintStarterUi(preset);
+      deps.markEditorContextReady();
+      deps.noteStarterBaselinePending();
+      await deps.ensureOwnerStarted();
+      // Stop a running dev server BEFORE the starter files land on the owner tree.
+      await deps.devServer.stopBeforeStarterWrite();
+      await deps.establishScratch(id, { preserveDirtySameStarter: opts.preserveDirtySameStarter });
+      // Owner roots are spawn-time immutable. A pick from a named project must
+      // respawn at the newly-established scratch before snapshots or boot resume.
+      await deps.ensureScratchOwnerRoot();
+      // Memory mode: establishScratch is a no-op (no durable index), so this seed is
+      // the ONLY owner-tree seed — AWAIT it before runPreset boots vite, else the
+      // dev server can start over an un-seeded /scratch.
+      if (deps.ephemeralStorage) await deps.seedWorkspace(preset);
+      await deps.refreshStarterEditorContext();
+      deps.setOwnerReady(true);
+      gateOwnedByRunPreset = true;
+      await runPreset(preset, tsGate);
+    } finally {
+      // runPreset owns normal/boot-fault release. Earlier transition faults must
+      // not strand every later TS request behind an unresolved gate.
+      if (!gateOwnedByRunPreset) tsGate?.resolve();
+    }
   }
 
   async function pickStarter(id: string, opts: PickStarterOpts): Promise<void> {
     const eagerGate = opts.eagerTsGate ? beginTsTransition() : undefined;
     deps.warmEditorStack();
-    const run = (): Promise<void> => bootPickedStarter(id, eagerGate, opts);
-    // Mid-transition picks QUEUE and are awaited (the caller must observe the
-    // serialized boot); a fresh pick is fire-and-forget behind the veil.
-    if (untrack(transitioning)) {
-      await queueTransition(run);
-      return;
-    }
-    void queueTransition(run);
+    await queueTransition(() => bootPickedStarter(id, eagerGate, opts));
   }
 
   return {

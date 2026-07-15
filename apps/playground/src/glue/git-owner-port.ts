@@ -4,7 +4,8 @@
  * The page snapshot deliberately excludes `.git`, so every GIT read/action must
  * call @riftydev/git in the owner realm. This bridge is playground-local glue:
  * request/reply frames are keyed by OwnerBridgeKey, correlated by request id,
- * and rejected on timeout/dispose instead of hanging.
+ * Reads are bounded; admitted mutations retain their reply path until a
+ * terminal owner outcome is known.
  */
 
 import type {
@@ -23,7 +24,13 @@ import type {
 import { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import { channelNameFor } from '@riftydev/net';
+import { type VfsMutationIntent, normalizePath } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import { createOwnerRequestSettlements } from './owner-request-settlements.ts';
+import {
+  type PackageMutationImpact,
+  classifyVfsMutationIntentsPackageImpact,
+} from './package-mutation-executor.ts';
 
 type Git = ReturnType<typeof makeGit>;
 
@@ -62,7 +69,7 @@ export type GitOwnerRequest =
     }
   | { readonly id: string; readonly op: 'reset'; readonly input: ResetInput };
 
-type GitOwnerResult =
+export type GitOwnerResult =
   | readonly StatusEntry[]
   | readonly DiffEntry[]
   | ShowObject
@@ -71,6 +78,76 @@ type GitOwnerResult =
   | readonly string[]
   | CheckoutResult
   | undefined;
+
+export interface GitOwnerRequestExecutor {
+  execute(
+    request: GitOwnerRequest,
+    operation: () => Promise<GitOwnerResult>,
+  ): Promise<GitOwnerResult>;
+}
+
+function pathspecMutationRoot(root: string, pathspec: string): string {
+  const normalized = pathspec.replace(/^\.\//, '').replace(/\/$/, '');
+  if (normalized === '' || normalized === '.') return normalizePath(root);
+  const wildcard = normalized.search(/[?*[]/);
+  if (wildcard >= 0) {
+    const prefix = normalized.slice(0, wildcard).replace(/\/$/, '');
+    if (prefix === '') return normalizePath(root);
+    return normalizePath(`${root}/${prefix}`);
+  }
+  return normalizePath(`${root}/${normalized}`);
+}
+
+/** Semantic write set for owner Git RPC; empty means the request is read-only. */
+export function gitOwnerMutationIntents(
+  request: GitOwnerRequest,
+  root: string,
+): readonly VfsMutationIntent[] {
+  const gitMetadata: VfsMutationIntent = {
+    kind: 'write',
+    path: normalizePath(`${root}/.git`),
+  };
+  switch (request.op) {
+    case 'status':
+    case 'diff':
+    case 'show':
+    case 'log':
+    case 'currentBranch':
+    case 'listBranches':
+      return [];
+    case 'restore':
+      return [
+        gitMetadata,
+        ...request.pathspecs.map(
+          (pathspec): VfsMutationIntent => ({
+            kind: 'rm',
+            path: pathspecMutationRoot(root, pathspec),
+          }),
+        ),
+      ];
+    case 'reset':
+      return request.input.mode === 'hard'
+        ? [gitMetadata, { kind: 'rm', path: normalizePath(root) }]
+        : [gitMetadata];
+    case 'add':
+    case 'remove':
+    case 'unstage':
+    case 'commit':
+    case 'commitResolvedIdentity':
+      return [gitMetadata];
+  }
+}
+
+export function classifyGitOwnerPackageImpact(
+  request: GitOwnerRequest,
+  root = '/workspace',
+): PackageMutationImpact {
+  return classifyVfsMutationIntentsPackageImpact(gitOwnerMutationIntents(request, root), root);
+}
+
+export function gitRequestMayEditPackageJson(request: GitOwnerRequest): boolean {
+  return classifyGitOwnerPackageImpact(request) !== 'none';
+}
 
 export type GitOwnerRequestFrame = {
   readonly type: typeof GIT_OWNER_RPC_TYPE;
@@ -126,15 +203,6 @@ export interface GitOwnerClient {
   restore(pathspecs: readonly string[], source?: string): Promise<CheckoutResult>;
   reset(input: ResetInput): Promise<void>;
   dispose(): void;
-}
-
-// TODO(backlog: playground/correlated-broadcast-bridge-helper) — the
-// nextRequestId + pending Map + per-request timeout + dispose-reject scaffold
-// below is the 4th/5th copy across cross-realm bridges; factor into one helper.
-interface Waiter {
-  resolve(value: GitOwnerResult): void;
-  reject(err: Error): void;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 let counter = 0;
@@ -278,7 +346,11 @@ async function dispatchGitOwnerRequest(
  * Owner side. Serves git RPC requests against the live owner `makeGit` facade.
  * Returns an idempotent teardown.
  */
-export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
+export function serveGitOwnerRpc(
+  key: OwnerBridgeKey,
+  git: Git,
+  executor?: GitOwnerRequestExecutor,
+): () => void {
   const channel = new BroadcastChannel(channelNameFor(gitOwnerChannelUrl(key)));
 
   const onMessage = (event: MessageEvent): void => {
@@ -286,12 +358,14 @@ export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
     if (isResponseFrame(frame)) return;
     void (async (): Promise<void> => {
       try {
+        const operation = (): Promise<GitOwnerResult> =>
+          dispatchGitOwnerRequest(git, frame.request);
         channel.postMessage({
           type: GIT_OWNER_RPC_TYPE,
           response: {
             id: frame.request.id,
             ok: true,
-            result: await dispatchGitOwnerRequest(git, frame.request),
+            result: executor ? await executor.execute(frame.request, operation) : await operation(),
           },
         } satisfies GitOwnerResponseFrame);
       } catch (err) {
@@ -314,46 +388,55 @@ export function serveGitOwnerRpc(key: OwnerBridgeKey, git: Git): () => void {
   };
 }
 
-/** Page side. Correlates request/reply frames and rejects on timeout/dispose. */
+/** Page side. Correlates replies without timing out admitted Git mutations. */
 export function bridgeGitOwnerRpc(
   key: OwnerBridgeKey,
-  opts: { readonly timeoutMs?: number } = {},
+  opts: { readonly timeoutMs?: number; readonly ownerClosed?: Promise<unknown> } = {},
 ): GitOwnerClient {
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const channel = new BroadcastChannel(channelNameFor(gitOwnerChannelUrl(key)));
-  const pending = new Map<string, Waiter>();
-  let torn = false;
+  let onMessage: (event: MessageEvent) => void = () => {};
+  let closed = false;
+  const closeChannel = (): void => {
+    if (closed) return;
+    closed = true;
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
+    channel.close();
+  };
+  const settlements = createOwnerRequestSettlements<GitOwnerResult>({
+    readTimeout: {
+      ms: timeoutMs,
+      error: (id) => new Error(`git owner RPC request ${id} timeout after ${timeoutMs}ms`),
+    },
+    ownerClosed: opts.ownerClosed,
+    ownerClosedError: () => new Error('workspace owner exited during Git request'),
+    onDrained: closeChannel,
+  });
 
-  const onMessage = (event: MessageEvent): void => {
+  onMessage = (event: MessageEvent): void => {
     const frame = event.data as GitOwnerFrame;
     if (!isResponseFrame(frame)) return;
-    const waiter = pending.get(frame.response.id);
-    if (!waiter) return;
-    pending.delete(frame.response.id);
-    clearTimeout(waiter.timer);
     if (!frame.response.ok) {
-      waiter.reject(errorFromWire(frame.response.error));
+      settlements.reject(frame.response.id, errorFromWire(frame.response.error));
       return;
     }
-    waiter.resolve(cloneResult(frame.response.result));
+    settlements.resolve(frame.response.id, cloneResult(frame.response.result));
   };
 
   channel.addEventListener('message', onMessage as unknown as EventListener);
 
   function request(frame: GitOwnerRequestPayload): Promise<GitOwnerResult> {
-    if (torn) return Promise.reject(new Error('git owner RPC bridge disposed'));
     const id = nextRequestId();
-    return new Promise<GitOwnerResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`git owner RPC request ${id} timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      pending.set(id, { resolve, reject, timer });
-      channel.postMessage({
-        type: GIT_OWNER_RPC_TYPE,
-        request: { ...frame, id } as GitOwnerRequest,
-      } satisfies GitOwnerRequestFrame);
-    });
+    const request = { ...frame, id } as GitOwnerRequest;
+    return settlements.request(
+      id,
+      gitOwnerMutationIntents(request, '/').length === 0 ? 'read' : 'mutation',
+      () =>
+        channel.postMessage({
+          type: GIT_OWNER_RPC_TYPE,
+          request,
+        } satisfies GitOwnerRequestFrame),
+    );
   }
 
   return {
@@ -416,15 +499,7 @@ export function bridgeGitOwnerRpc(
       await request({ op: 'reset', input });
     },
     dispose() {
-      if (torn) return;
-      torn = true;
-      for (const [, waiter] of pending) {
-        clearTimeout(waiter.timer);
-        waiter.reject(new Error('git owner RPC bridge disposed'));
-      }
-      pending.clear();
-      channel.removeEventListener('message', onMessage as unknown as EventListener);
-      channel.close();
+      settlements.dispose(new Error('git owner RPC bridge disposed'));
     },
   };
 }

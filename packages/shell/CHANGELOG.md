@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Terminal Git checks complete worktree plans before namespace ingress.**
+  `ShellOptions.assertPortablePaths` synchronously validates absolute paths for
+  checkout/switch/restore/reset/merge/cherry-pick/stash/clone/pull plus direct
+  apply/revert/rm/mv writers before their first worktree, index, or HEAD write;
+  the existing async mutation guard remains the sole outer FIFO.
 - **Supervised abort can await physical handler settlement (ADR-0230/0256).**
   `RunOptions.awaitAbortSettlement` keeps owner teardown pending after SIGINT
   until the command handler settles; background-job disposal now does the same.
@@ -64,6 +69,15 @@
 
 ### Added
 
+- **Host-owned VFS mutation guard (ADR-0260).** `ShellOptions.mutationGuard`
+  batches each logical `rm`/`mv`/`cp`/`mkdir`/`touch`, stdout redirect, and git
+  mutation through the shared `@riftydev/vfs` intent contract before bytes
+  change. Git publishes exact worktree paths where known, root-wide intents for
+  branch/tree operations, and narrow `.git`/config intents for metadata writers
+  so repositories nested under `node_modules` cannot bypass package trust;
+  read-only porcelain stays unguarded. Background Shell clones retain the same
+  guard. Guarded Git plans pin their governing repository root and abort before
+  mutation if it changes while queued. Guards: `mutation-guard.test.ts`.
 - **Exact process exits survive shell composition (ADR-0257).** Process-backed
   commands may return discriminated `{code, signal}`; `Shell.run()` retains it
   beside `exitCode` through `&&`/`||`/`;`, pipelines, nested npm hooks, and owned

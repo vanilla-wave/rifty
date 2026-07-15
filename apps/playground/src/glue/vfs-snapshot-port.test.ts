@@ -1,5 +1,8 @@
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import {
+  SNAPSHOT_MAX_CONTENT_BYTES,
   type SnapshotSource,
   type VfsSnapshotFrame,
   collectSnapshot,
@@ -42,6 +45,9 @@ function fakeFs(
     return [...out].map(([name, isDir]) => ({ name, isFile: !isDir, isDirectory: isDir }));
   };
   const fs: SnapshotSource = {
+    ownerEpoch: 'snapshot-owner',
+    treeRevision: 41,
+    versionOf: (path) => `version:${path}`,
     readdirSync: (path) => childrenOf(path),
     statSync: (path) => {
       if (dirs.has(path)) return { isFile: false, isDirectory: true, size: 0 };
@@ -70,6 +76,8 @@ describe('collectSnapshot', () => {
 
     expect(frame.type).toBe('snapshot');
     expect(frame.root).toBe('/workspace');
+    expect(frame.ownerEpoch).toBe('snapshot-owner');
+    expect(frame.treeRevision).toBe(41);
     const paths = frame.entries.map((e) => `${e.kind === 'dir' ? 'D' : 'F'} ${e.path}`);
     // `src` (dir) sorts before the root-level files; its child follows immediately.
     expect(paths).toEqual([
@@ -78,6 +86,9 @@ describe('collectSnapshot', () => {
       'F /workspace/index.html',
       'F /workspace/package.json',
     ]);
+    expect(frame.entries.map((entry) => entry.version)).toEqual(
+      frame.entries.map((entry) => `version:${entry.path}`),
+    );
     const main = frame.entries.find((e) => e.path === '/workspace/src/main.js');
     expect(main?.content && new TextDecoder().decode(main.content)).toBe('console.log(1)');
   });
@@ -108,9 +119,103 @@ describe('collectSnapshot', () => {
     expect(big?.kind).toBe('file');
     expect(big?.size).toBe(5_000_000);
     expect(big?.content).toBeUndefined();
+    expect(big?.contentOmitted).toBe('size-cap');
+    expect(big?.version).toBe('version:/workspace/big.bin');
     const small = frame.entries.find((e) => e.path === '/workspace/small.txt');
     expect(small?.content).toBeDefined();
   });
+
+  it('reflects a same-size large write by owner revision and opaque versions', () => {
+    const authority = createOwnerVfsAuthority(new MemoryFsSync(), {
+      ownerEpoch: 'real-snapshot-owner',
+    });
+    authority.mkdirSync('/workspace/src', { recursive: true });
+    const firstBytes = new Uint8Array(SNAPSHOT_MAX_CONTENT_BYTES + 1).fill(0x11);
+    authority.writeFileSync('/workspace/src/large.bin', firstBytes);
+
+    const first = collectSnapshot(authority, '/workspace');
+    const firstLarge = first.entries.find((entry) => entry.path.endsWith('/large.bin'));
+    expect(first).toMatchObject({
+      ownerEpoch: 'real-snapshot-owner',
+      treeRevision: authority.treeRevision,
+    });
+    expect(first.entries.every((entry) => entry.version === authority.versionOf(entry.path))).toBe(
+      true,
+    );
+    expect(firstLarge).toMatchObject({
+      kind: 'file',
+      size: firstBytes.byteLength,
+      contentOmitted: 'size-cap',
+    });
+    expect(firstLarge?.content).toBeUndefined();
+
+    authority.writeFileSync(
+      '/workspace/src/large.bin',
+      new Uint8Array(firstBytes.byteLength).fill(0x22),
+    );
+    const second = collectSnapshot(authority, '/workspace');
+    const secondLarge = second.entries.find((entry) => entry.path.endsWith('/large.bin'));
+    expect(second.treeRevision).toBe(first.treeRevision + 1);
+    expect(secondLarge?.version).not.toBe(firstLarge?.version);
+    expect(secondLarge?.content).toBeUndefined();
+    expect(secondLarge?.contentOmitted).toBe('size-cap');
+  });
+
+  it.each(['readdirSync', 'statSync', 'readFileBytesSync'] as const)(
+    'fails the whole collection when %s fails instead of certifying a partial revision',
+    (faultAt) => {
+      const { fs } = fakeFs({ '/workspace/state.txt': enc.encode('owner') });
+      const fault = new Error(`${faultAt} denied`);
+      const faulted: SnapshotSource = {
+        ...fs,
+        readdirSync(path) {
+          if (faultAt === 'readdirSync') throw fault;
+          return fs.readdirSync(path);
+        },
+        statSync(path) {
+          if (faultAt === 'statSync') throw fault;
+          return fs.statSync(path);
+        },
+        readFileBytesSync(path) {
+          if (faultAt === 'readFileBytesSync') throw fault;
+          return fs.readFileBytesSync(path);
+        },
+      };
+
+      expect(() => collectSnapshot(faulted, '/workspace')).toThrow(fault);
+    },
+  );
+
+  it.each(['treeRevision', 'ownerEpoch'] as const)(
+    'rejects a collection when %s changes during the synchronous walk',
+    (changedIdentity) => {
+      const { fs } = fakeFs({ '/workspace/state.txt': enc.encode('before') });
+      let ownerEpoch = 'snapshot-owner';
+      let treeRevision = 41;
+      let injected = false;
+      const reentrant: SnapshotSource = {
+        ...fs,
+        get ownerEpoch() {
+          return ownerEpoch;
+        },
+        get treeRevision() {
+          return treeRevision;
+        },
+        readFileBytesSync(path) {
+          if (!injected) {
+            injected = true;
+            if (changedIdentity === 'treeRevision') treeRevision += 1;
+            else ownerEpoch = 'replacement-owner';
+          }
+          return fs.readFileBytesSync(path);
+        },
+      };
+
+      expect(() => collectSnapshot(reentrant, '/workspace')).toThrow(
+        /owner identity changed during snapshot collection/,
+      );
+    },
+  );
 });
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
@@ -118,7 +223,17 @@ const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 
 const sampleFrame = (root: string): VfsSnapshotFrame => ({
   type: 'snapshot',
   root,
-  entries: [{ path: `${root}/x.txt`, kind: 'file', size: 1 }],
+  ownerEpoch: 'sample-owner',
+  treeRevision: 1,
+  entries: [
+    {
+      path: `${root}/x.txt`,
+      kind: 'file',
+      size: 1,
+      version: 'sample-version',
+      content: new Uint8Array([0]),
+    },
+  ],
   nodeModulesPresent: false,
 });
 

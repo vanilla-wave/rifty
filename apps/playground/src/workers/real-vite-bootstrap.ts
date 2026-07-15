@@ -44,31 +44,43 @@ import {
   shellCommandExitCode,
 } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
-import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import {
-  learnedPinForPackageJsonSync,
-  readLearnedPin,
-  revalidateLearnedPin,
-  writeLearnedPin,
-} from '../glue/eddy-learned-pins.ts';
+  type VfsMutationGuard,
+  dirname,
+  initBackend,
+  normalizePath,
+  syncMirror,
+} from '@riftydev/vfs';
+import { setSyncMirror } from '@riftydev/vfs/internal';
 import { flushSyncMirror } from '../glue/flush-sync-mirror.ts';
-import { serveGitOwnerRpc } from '../glue/git-owner-port.ts';
+import { gitOwnerMutationIntents, serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
-import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
-import {
-  effectiveDepsFromPackageJsonText,
-  installStampSatisfiedForPackageJson,
-  installStampSatisfiedForPackageJsonSync,
-  readInstallStamp,
-} from '../glue/install-stamp.ts';
+import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
+import { effectiveDepsFromPackageJsonText } from '../glue/install-stamp.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
-import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
-import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
+import {
+  handleOwnerVfsCommitCleanup,
+  handleOwnerVfsCommitReceipt,
+  handleOwnerVfsCommitRequest,
+  handleOwnerVfsDurabilityRequest,
+  isOwnerVfsCommitCleanupMessage,
+  isOwnerVfsCommitIpcMessage,
+  isOwnerVfsCommitReceivedMessage,
+  isOwnerVfsDurabilityIpcMessage,
+} from '../glue/owner-vfs-ipc.ts';
+import type { OwnerVfsDurabilityReceipt } from '../glue/owner-vfs-protocol.ts';
+import {
+  applyPackageAwareHostCommit,
+  applyPackageAwareVfsMutations,
+} from '../glue/package-mutation-executor.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
-import { reconcileOwnerIndexAtBoot, recoverIndex } from '../glue/project-index.ts';
+import { applyGuardedProjectIndexRecovery } from '../glue/project-index-recovery.ts';
+import { planProjectIndexRecovery } from '../glue/project-index.ts';
+import { projectSeedMutationIntents } from '../glue/project-seed-mutations.ts';
+import { withoutProjectNodeModulesFiles } from '../glue/project-seed-paths.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -76,8 +88,6 @@ import {
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
-import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
@@ -97,10 +107,11 @@ import {
 } from '../glue/vfs-snapshot-port.ts';
 import {
   type VfsWriteIpcMessage,
-  applyVfsWriteFrame,
   handleVfsFlushRequest,
   isVfsFlushIpcMessage,
+  prepareVfsWriteFrame,
   serveVfsWrites,
+  vfsWriteFrameMutationIntents,
 } from '../glue/vfs-write-port.ts';
 import {
   claimViteConfigSeed,
@@ -117,7 +128,6 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import { createDevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
 import {
   type NodeInvocation,
@@ -132,6 +142,11 @@ import {
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import { createOwnerPackageState } from './owner-package-state.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthorityComposition,
+} from './owner-vfs-authority.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import { binNameOf, createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
@@ -191,9 +206,11 @@ async function seedProject(cfg: BootstrapConfig, starterId: string): Promise<voi
   fs.mkdirSync(cfg.root, { recursive: true });
   // Idempotent: preset files can overwrite template defaults later; an existing
   // file (returning session) is left alone.
-  for (const [path, content] of Object.entries(
+  const seedFiles = withoutProjectNodeModulesFiles(
+    cfg.root,
     withoutViteConfigSeedFiles(cfg.root, cfg.seedFiles),
-  )) {
+  );
+  for (const [path, content] of Object.entries(seedFiles)) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
     if (!fs.existsSync(np)) {
@@ -217,7 +234,10 @@ async function seedProject(cfg: BootstrapConfig, starterId: string): Promise<voi
 
 function seedStarterBaseline(starter: string, root: string): void {
   const fs = syncMirror();
-  const files = withoutViteConfigSeedFiles(root, seedFilesForStarter(starterById(starter), root));
+  const files = withoutProjectNodeModulesFiles(
+    root,
+    withoutViteConfigSeedFiles(root, seedFilesForStarter(starterById(starter), root)),
+  );
   for (const [path, content] of Object.entries(files)) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
@@ -229,70 +249,12 @@ function ownerGitVfs(): SyncMirrorVfs {
   return new SyncMirrorVfs();
 }
 
-/**
- * INSTANT preset deps: restore the baked snapshot into the owner store — a
- * RESTORE, never a network install (the dev line stays faithful: `vite` /
- * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
- * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
- * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
- * preset's dependency-owned files and re-seeds THIS preset's package.json so the
- * snapshot matches, then restores it. User files in the root are never removed by
- * dependency restore. A missing/drifted snapshot leaves deps absent (vite fails
- * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
- * NOT come here: the explicit `npm install` boot step is their only source.
- */
-async function restoreInstantDeps(
-  cfg: BootstrapConfig,
-  templateId: string,
-  slug: string,
-): Promise<void> {
-  if (!cfg.bakedNodeModulesUrl) return;
-  const vfs = new SyncMirrorVfs();
-  if (await installStampSatisfiedForPackageJson(vfs, cfg.root, slug, cfg.packageJson)) return;
-  const fs = syncMirror();
-  fs.rmSync(`${cfg.root}/node_modules`, { recursive: true, force: true });
-  fs.rmSync(`${cfg.root}/package-lock.json`, { force: true });
-  fs.rmSync(`${cfg.root}/package.json`, { force: true });
-  fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
-  const result = await ensureProjectDependencies({
-    vfs,
-    fsSync: fs,
-    root: cfg.root,
-    templateId,
-    snapshotTemplateId: cfg.bakedNodeModulesTemplateId,
-    slug,
-    snapshotUrl: cfg.bakedNodeModulesUrl,
-    // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
-    log: (line) => console.log(line.trimEnd()),
-    // Deferred stamp-durability check (never awaited on the boot path):
-    // pending stamp promotes only after a clean report; dirty reports leave
-    // the next boot to re-run arrival instead of trusting a torn tree.
-    flush: flushSyncMirror,
-  });
-  if (result.source === 'none') {
-    console.warn(
-      `[shell-owner/worker] instant snapshot unavailable/stale for ${templateId} — node_modules absent (re-run \`pnpm snapshots:bake\`)`,
-    );
-  }
-}
-
 /** `npm install` / `npm i` with NO package specs (install-all from package.json) —
  *  the from-scratch boot's cold-install trigger. `npm install <pkg>` (an add) is not. */
 function isFullInstall(args: readonly string[]): boolean {
   const sub = args[0];
   if (sub !== 'install' && sub !== 'i') return false;
   return args.slice(1).every((a) => a.startsWith('-'));
-}
-
-function seedTemplateNodeModulesFiles(cfg: BootstrapConfig): void {
-  const fs = syncMirror();
-  const nodeModulesRoot = `${cfg.root}/node_modules/`;
-  for (const [path, content] of Object.entries(cfg.seedFiles)) {
-    const np = normalizePath(path);
-    if (!np.startsWith(nodeModulesRoot)) continue;
-    fs.mkdirSync(dirname(np), { recursive: true });
-    if (!fs.existsSync(np)) fs.writeFileSync(np, enc.encode(content));
-  }
 }
 
 function previewScopeFromEnv(env: Record<string, string | undefined>): string | undefined {
@@ -328,6 +290,9 @@ async function bootShellOwner(opts: {
   readonly port: OwnerBridgeKey;
   readonly kernelIpc: KernelIpc;
   readonly publishSnapshot: () => void;
+  readonly vfsAuthority: OwnerVfsAuthority;
+  readonly installStampClaims: InstallStampClaimIo;
+  readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly spec: ProjectSpec;
   readonly slug: string;
   /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
@@ -353,6 +318,9 @@ async function bootShellOwner(opts: {
     port,
     kernelIpc,
     publishSnapshot,
+    vfsAuthority,
+    installStampClaims,
+    durability,
     spec,
     slug,
     starter,
@@ -368,66 +336,28 @@ async function bootShellOwner(opts: {
   let devCfg = cfg;
   let devSlug = slug;
   let devFromScratch = fromScratch;
-  let lastDevTemplateId: string | null = null;
-  let lastDevRoot: string | null = null;
   let devConfigReady: Promise<void> = Promise.resolve();
-
-  // Owner-boot eddy prefetch (ADR-0195), FIRST thing in the boot — before the
-  // seed/git work blocks the realm — so the bundle download runs concurrently
-  // with the rest of owner boot and the boot line's `npm install` consumes the
-  // buffered bytes (canonically keyed — a drifted package.json makes install()
-  // ignore it). Skipped when a stamp will suppress the install (reload of an
-  // installed tree). SYNC by design: an async stamp gate starves behind the
-  // busy boot loop and the prefetch fired AFTER the install it was meant to
-  // feed (measured 2026-07-02: two POSTs, 40ms apart, zero overlap).
-  let installPrefetch: ReturnType<typeof startInstallPrefetch>;
-  let installPrefetchConfig: string | undefined;
-  function primeInstallPrefetch(): void {
-    const resolverUrl = getResolverUrl();
-    // Config = the boot identity that must invalidate an in-flight prefetch.
-    const config = JSON.stringify([devSpec.id, devCfg.root, devSlug, devCfg.packageJson]);
-    // The policy lives in a pure, unit-tested helper (`decideInstallPrefetch`);
-    // the thunks keep the deliberate ordering — stamp/pin reads (sync,
-    // `syncMirror`) run only when the cheap clear/keep gates fall through. Read
-    // SYNC: an async gate starves behind the busy boot loop and fires the
-    // prefetch AFTER the install it feeds (measured 2026-07-02: two POSTs, no
-    // overlap). Learned pin beats the coarse env pin (ADR-0194).
-    const decision = decideInstallPrefetch({
-      devFromScratch,
-      resolverUrl,
-      config,
-      hasHandle: installPrefetch !== undefined,
-      prevConfig: installPrefetchConfig,
-      isStamped: () =>
-        installStampSatisfiedForPackageJsonSync(
-          syncMirror(),
-          devCfg.root,
-          devSlug,
-          devCfg.packageJson,
-        ) !== null,
-      pinFor: () =>
-        learnedPinForPackageJsonSync(syncMirror(), devCfg.packageJson) ?? getEddyPin(devSpec.id),
-    });
-    if (decision.kind === 'keep') return;
-    if (decision.kind === 'clear') {
-      installPrefetch = undefined;
-      installPrefetchConfig = undefined;
-      return;
-    }
-    installPrefetchConfig = decision.config;
-    installPrefetch =
-      decision.kind === 'start'
-        ? startInstallPrefetch({
-            packageJsonText: devCfg.packageJson,
-            resolverUrl: resolverUrl as string,
-            closureHash: decision.closureHash,
-            bundleBaseUrl: getEddyBundleBaseUrl(),
-          })
-        : undefined;
-  }
-  // A hidden empty boot has no chosen starter — nothing installs until the
-  // page's `pty:dev-config` picks one (its handler re-primes with that config).
-  if (!hiddenEmptyBoot) primeInstallPrefetch();
+  const vfs = new SyncMirrorVfs();
+  const initialPackageConfig = {
+    cfg,
+    templateId: spec.id,
+    slug,
+    fromScratch,
+  };
+  const packageState = createOwnerPackageState({
+    initial: initialPackageConfig,
+    primeInitialPrefetch: !hiddenEmptyBoot,
+    vfs,
+    fsSync: vfsAuthority,
+    installStampClaims,
+    flush: flushSyncMirror,
+    nodeWorkerRuntimeEnv: opts.nodeWorkerRuntimeEnv,
+    log,
+  });
+  const packageMutations = packageState.mutations;
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror, (intents, apply) =>
+    applyPackageAwareVfsMutations(packageMutations, cfg.root, intents, apply),
+  );
 
   const pendingStarterGeneratedBaseline = new Set<string>();
   const markStarterGeneratedBaselinePending = (root: string): void => {
@@ -435,6 +365,7 @@ async function bootShellOwner(opts: {
   };
   const absorbPendingStarterGeneratedBaseline = async (root: string): Promise<void> => {
     if (!pendingStarterGeneratedBaseline.has(root)) return;
+    // Stages generated bytes by reading them; all mutations stay under `.git`.
     await amendStarterGeneratedBaseline(ownerGitVfs(), root);
     await flushSyncMirror();
     pendingStarterGeneratedBaseline.delete(root);
@@ -447,8 +378,16 @@ async function bootShellOwner(opts: {
   if (hiddenEmptyBoot) {
     syncMirror().mkdirSync(cfg.root, { recursive: true });
   } else {
-    await seedProject(cfg, starter);
-    if (freshRoot) seedStarterBaseline(starter, cfg.root);
+    const seedIntents = projectSeedMutationIntents(syncMirror(), {
+      root: cfg.root,
+      seedFiles: cfg.seedFiles,
+      baselineFiles: seedFilesForStarter(starterById(starter), cfg.root),
+      freshRoot,
+    });
+    await packageMutations.guardedMutation(seedIntents, async () => {
+      await seedProject(cfg, starter);
+      if (freshRoot) seedStarterBaseline(starter, cfg.root);
+    });
     // Instant presets: pre-seed node_modules from the baked snapshot into the
     // owner store NOW, before any dev line (the full fs is already present);
     // from-scratch deps come from the explicit `npm install` boot step. The
@@ -458,16 +397,24 @@ async function bootShellOwner(opts: {
     // (starter.fault.test.ts pins the race). The amend itself stays BEFORE the
     // first publish — deferring it past ready would flash a phantom
     // package-lock.json change in SCM on every fresh pick.
+    // Git baseline helpers only read the worktree and mutate `.git`; keeping
+    // them outside the package FIFO preserves the proven commit∥restore overlap.
     const initialCommit = ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
     if (fromScratch) {
       await initialCommit;
     } else {
-      await Promise.all([initialCommit, restoreInstantDeps(cfg, spec.id, slug)]);
+      await Promise.all([initialCommit, packageState.restore(initialPackageConfig)]);
       await absorbPendingStarterGeneratedBaseline(cfg.root);
     }
   }
-  if (!hiddenEmptyBoot) seedTemplateNodeModulesFiles(cfg);
-  const ownerGit = makeGit({ fs: vfsToGitFs(ownerGitVfs()), dir: cfg.root });
+  if (!hiddenEmptyBoot) {
+    await packageState.reassertTemplateNodeModules(initialPackageConfig);
+  }
+  const ownerGit = makeGit({
+    fs: vfsToGitFs(ownerGitVfs()),
+    dir: cfg.root,
+    assertPortablePaths: (paths) => vfsAuthority.assertPortablePaths(paths),
+  });
   const gitStatusFeed = serveGitStatusFeed(port, ownerGit);
   const publishOwnerState = (): void => {
     publishSnapshot();
@@ -522,13 +469,24 @@ async function bootShellOwner(opts: {
     if (devConfigRequestsWorkspaceTypeScript()) await waitForWorkspaceTypeScript(devCfg.root);
   }
 
-  async function prepareActiveDevConfigDeps(): Promise<void> {
+  async function prepareActiveDevConfigDeps(target: {
+    readonly spec: ProjectSpec;
+    readonly cfg: BootstrapConfig;
+    readonly slug: string;
+    readonly fromScratch: boolean;
+  }): Promise<void> {
     try {
-      if (!devFromScratch) {
-        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
-        await absorbPendingStarterGeneratedBaseline(devCfg.root);
+      const packageConfig = {
+        cfg: target.cfg,
+        templateId: target.spec.id,
+        slug: target.slug,
+        fromScratch: target.fromScratch,
+      };
+      await packageState.transition(packageConfig);
+      await packageState.reassertTemplateNodeModules(packageConfig);
+      if (!target.fromScratch) {
+        await absorbPendingStarterGeneratedBaseline(target.cfg.root);
       }
-      seedTemplateNodeModulesFiles(devCfg);
       publishOwnerState();
     } catch (err) {
       log(
@@ -536,8 +494,17 @@ async function bootShellOwner(opts: {
           err instanceof Error ? err.message : String(err)
         }\n`,
       );
+      throw err;
     }
   }
+
+  const reassertActiveDevTemplateNodeModules = (): Promise<void> =>
+    packageState.reassertTemplateNodeModules({
+      cfg: devCfg,
+      templateId: devSpec.id,
+      slug: devSlug,
+      fromScratch: devFromScratch,
+    });
 
   // Dedicated node-server lifecycle. Vite scripts bypass this controller and
   // run through the installed CLI child below.
@@ -546,54 +513,6 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: async (devCtx, devSid) => {
-      const cleanForSwitch = shouldCleanForDevBootWithInstallState({
-        lastTemplateId: lastDevTemplateId,
-        lastRoot: lastDevRoot,
-        nextTemplateId: devSpec.id,
-        nextRoot: devCfg.root,
-        fromScratch: devFromScratch,
-        installStampSatisfied:
-          devFromScratch &&
-          (await installStampSatisfiedForPackageJson(
-            new SyncMirrorVfs(),
-            devCfg.root,
-            devSlug,
-            devCfg.packageJson,
-          )) !== null,
-      });
-      if (cleanForSwitch) {
-        // Root OR template switched (ADR-0165 §5): a fresh worker per preset used
-        // to keep node_modules clean; the ONE persistent owner accumulates the
-        // prior project's deps, which trips the new template's lockfile coverage
-        // (EBROKENLOCK). Two projects from the SAME starter share templateId but
-        // must NOT share node_modules, so a root change also cleans. Clear
-        // node_modules + the lockfile + package.json so the new template seeds its
-        // own package.json (the child seeds it back if-absent) and installs
-        // cleanly. A same-template + same-root reload skips this — preserving the
-        // user's package.json + installed tree. Owner-realm stateful across runs:
-        // the clean runs HERE on the owner store the child reads over fs.* RPC.
-        const fs = syncMirror();
-        try {
-          fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
-          fs.rmSync(`${devCfg.root}/package-lock.json`, { force: true });
-          fs.rmSync(`${devCfg.root}/package.json`, { force: true });
-        } catch {
-          /* best-effort clean */
-        }
-      }
-      lastDevTemplateId = devSpec.id;
-      lastDevRoot = devCfg.root;
-      // instant: restore the baked snapshot before booting (stamp-checked, no-op if
-      // the owner pre-seed / a prior boot already did it; after a root/template
-      // clean it re-seeds package.json + node_modules for the active root). from-scratch
-      // deps come SOLELY from the explicit `npm install` boot step.
-      if (!devFromScratch) {
-        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
-        await absorbPendingStarterGeneratedBaseline(devCfg.root);
-      }
-      // The owner store is what the shell and TS LS read. Restore/clean may replace
-      // node_modules, so re-assert template-owned declaration packages last.
-      seedTemplateNodeModulesFiles(devCfg);
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -638,11 +557,31 @@ async function bootShellOwner(opts: {
   const onVfsWrite = (_paths: readonly string[]): void => {
     publishOwnerState();
   };
-  const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
-  const tearGitBridge = serveGitOwnerRpc(port, ownerGit);
+  const applyPackageAwareVfsFrame = async (frame: VfsWriteIpcMessage['frame']): Promise<void> => {
+    let prepared: ReturnType<typeof prepareVfsWriteFrame> | undefined;
+    await packageMutations.guardedMutation(
+      vfsWriteFrameMutationIntents(frame),
+      async () => {
+        const plan = prepared ?? prepareVfsWriteFrame(frame, { onWrite: onVfsWrite });
+        if (plan.status === 'ready') plan.apply();
+      },
+      async () => {
+        prepared = prepareVfsWriteFrame(frame, { onWrite: onVfsWrite });
+        return prepared.status === 'noop'
+          ? { status: 'noop', value: undefined }
+          : { status: 'ready' };
+      },
+    );
+  };
+  const tearVfsBridge = serveVfsWrites(port, { applyFrame: applyPackageAwareVfsFrame });
+  const tearGitBridge = serveGitOwnerRpc(port, ownerGit, {
+    execute: async (request, operation) => {
+      const intents = gitOwnerMutationIntents(request, cfg.root);
+      if (intents.length === 0) return operation();
+      return packageMutations.guardedMutation(intents, operation);
+    },
+  });
 
-  const vfs = new SyncMirrorVfs();
-  const registry = createProxiedRegistryClient();
   let binRunSeq = 0;
   const binPreviewSids = new WeakMap<object, string>();
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
@@ -674,7 +613,11 @@ async function bootShellOwner(opts: {
       },
     },
   );
-  const ownerBinExecutor: BinExecutor = (binPath, args, ctx) => {
+  const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
+    // Every installed CLI crosses this package-authority seam. The preset boot
+    // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
+    // arbitrary CLIs need the same template-seed guarantee without name dispatch.
+    await reassertActiveDevTemplateNodeModules();
     const viteCtx = withViteCliEnv(binPath, args, ctx);
     return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
   };
@@ -717,6 +660,9 @@ async function bootShellOwner(opts: {
         ...(ptySid === undefined ? {} : { [PTY_SESSION_ENV]: ptySid }),
       },
       execBin: ownerBinExecutor,
+      mutationGuard: ((intents, apply) =>
+        packageMutations.guardedMutation(intents, async () => apply())) satisfies VfsMutationGuard,
+      assertPortablePaths: (paths) => vfsAuthority.assertPortablePaths(paths),
     });
     const runPackageScript = async (
       name: string,
@@ -742,6 +688,12 @@ async function bootShellOwner(opts: {
         scriptCtx.stdout.write(`[cli] completed with exit code ${shellCommandExitCode(result)}\n`);
         return result;
       };
+      // One runtime-neutral dev-dispatch gate: every declared lifecycle alias
+      // reasserts template-owned node_modules through the package FIFO before
+      // Vite/bin, node-cli, or node-server can spawn. No-op keeps trusted state.
+      if (isDevScriptName(devSpec, name)) {
+        await reassertActiveDevTemplateNodeModules();
+      }
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.
@@ -753,95 +705,11 @@ async function bootShellOwner(opts: {
       }
       return runScriptCommand(command, ctx);
     };
-    const npmCommand = createNpmShellCommand({
-      vfs,
-      registry,
-      // Checked drains around the stamp (ADR-0187 Corrected) — a dirty persist
-      // report skips the stamp so a reload never trusts a torn tree
-      // (owner-snapshot-restore-exec). Runs in BACKGROUND after install exit
-      // (npm parity: real npm does not fsync node_modules); a reload beating
-      // the drain only costs a re-install.
-      flush: flushSyncMirror,
-      // Faithful from-scratch (INSIDE the per-tree install phase lock — a
-      // clear running outside it could raze another terminal's in-flight
-      // install): the FIRST full `npm install` of a from-scratch preset (no
-      // satisfying stamp) starts CLEAN — clear any prior preset's tree and
-      // re-seed THIS preset's package.json, so it is a real COLD install, not
-      // an EBROKENLOCK over a foreign tree. A satisfying stamp (reload)
-      // installs over the existing tree, preserving user edits. A PENDING
-      // stamp for this slug WITH session install activity is OURS — an
-      // install of this very realm still mid background-durability; clearing
-      // would reset the user's package.json and force a cold re-install
-      // inside the drain window (review round 4).
-      prepareInstall: async (ctx, info) => {
-        if (!devFromScratch || !info.fullInstall) return;
-        // The clean-start targets devCfg.root, but the phase lock is keyed by
-        // ctx.cwd — a terminal cd'ed elsewhere would clear the ROOT tree
-        // under a lock that does not serialize with the root's installs.
-        // From-scratch clean-start only makes sense AT the project root.
-        if (normalizePath(ctx.cwd) !== normalizePath(devCfg.root)) return;
-        const checkVfs = new SyncMirrorVfs();
-        if (
-          await installStampSatisfiedForPackageJson(
-            checkVfs,
-            devCfg.root,
-            devSlug,
-            devCfg.packageJson,
-          )
-        ) {
-          return;
-        }
-        if (info.sessionInstallActivity) {
-          const stamp = await readInstallStamp(checkVfs, devCfg.root);
-          if (stamp?.durability === 'pending' && stamp.slug === devSlug) return;
-        }
-        const fs = syncMirror();
-        clearProjectTree(fs, devCfg.root);
-        fs.writeFileSync(
-          normalizePath(`${devCfg.root}/package.json`),
-          enc.encode(devCfg.packageJson),
-        );
-      },
-      // Stamp the install for the CURRENT project slug (same key the dev-server
-      // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
-      // this tree — otherwise the arrival re-runs and replaces node_modules,
-      // dropping the user's `npm install` (ADR-0135).
-      projectSlug: () => devSlug,
-      runScript: runPackageScript,
-      // ADR-0182 opt-in fast install — env-config only (default OFF). When a
-      // resolver URL is configured the visible `npm install` uses eddy's bundle
-      // + auto-fallback; inert (byte-identical) when unset.
-      resolverUrl: getResolverUrl(),
-      // ADR-0195: the ACTIVE template's pinned closure hash (cacheable GET) and
-      // the owner-boot prefetch — getters, the active preset can change. Keyed
-      // on the TEMPLATE id, not the slug (the template owns the dep-set).
-      resolverClosureHash: () => getEddyPin(devSpec.id),
-      resolverBundleBaseUrl: getEddyBundleBaseUrl(),
-      resolverPrefetch: () => installPrefetch,
-      // ADR-0194: learned pins — any repeat dep set becomes a cacheable GET.
-      // A stale lookup (≤24h, SWR) is served with the as-of line; `revalidate`
-      // refreshes it via a manifest-only POST (backlog eddy-stale-pin-revalidate).
-      learnedPins: {
-        get: (key) => readLearnedPin(vfs, key),
-        set: async (key, hash, expectedCurrent) => {
-          // CAS against the install-START baseline (see the seam doc) —
-          // a skipped write means a newer install already re-learned the key.
-          await writeLearnedPin(vfs, key, hash, undefined, expectedCurrent);
-        },
-        revalidate: async (_key, request, servedHash) => {
-          const resolverUrl = getResolverUrl();
-          // Unreachable while pins are eddy-only (no resolver → no pin served);
-          // loud, not silent, if that invariant ever breaks.
-          if (!resolverUrl) throw new Error('eddy resolver is not configured');
-          await revalidateLearnedPin({ vfs, resolverUrl, request, staleClosureHash: servedHash });
-        },
-      },
-    });
+    const npmCommand = packageState.createNpmCommand(runPackageScript);
     shell.registerCommand('npm', async (args, ctx) => {
       const absorbGeneratedBaseline =
         devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
-      // The from-scratch clean-start moved into `prepareInstall` (above) — it
-      // must run INSIDE the per-tree install phase lock (review round 4).
+      // The from-scratch clean-start runs inside the shared acquisition FIFO.
       const result = await npmCommand(args, ctx);
       if (shellCommandExitCode(result) === 0 && absorbGeneratedBaseline) {
         await absorbPendingStarterGeneratedBaseline(devCfg.root);
@@ -879,12 +747,16 @@ async function bootShellOwner(opts: {
     ): Promise<ProcessExit> => {
       const fs = syncMirror();
       const evalPath = normalizePath(`${ctx.cwd}/.rifty-eval-${++nodeRunSeq}.cjs`);
-      fs.writeFileSync(evalPath, enc.encode(buildNodeEvalSource(inv.source, inv.print)));
+      await packageMutations.guardedMutation([{ kind: 'write', path: evalPath }], async () =>
+        fs.writeFileSync(evalPath, enc.encode(buildNodeEvalSource(inv.source, inv.print))),
+      );
       try {
         return await spawnNodeEntry(evalPath, inv.scriptArgs, ctx);
       } finally {
         try {
-          fs.rmSync(evalPath, { force: true });
+          await packageMutations.guardedMutation([{ kind: 'rm', path: evalPath }], async () =>
+            fs.rmSync(evalPath, { force: true }),
+          );
         } catch {
           /* best-effort cleanup of the transient eval file */
         }
@@ -940,10 +812,21 @@ async function bootShellOwner(opts: {
       devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
       devSlug = config.slug;
       devFromScratch = config.setup === 'from-scratch';
-      // Re-prime the eddy prefetch for the NEW preset (ADR-0195) — the boot
-      // line's `npm install` follows this config change.
-      primeInstallPrefetch();
-      devConfigReady = prepareActiveDevConfigDeps();
+      packageState.configure({
+        cfg: devCfg,
+        templateId: devSpec.id,
+        slug: devSlug,
+        fromScratch: devFromScratch,
+      });
+      const target = {
+        spec: devSpec,
+        cfg: devCfg,
+        slug: devSlug,
+        fromScratch: devFromScratch,
+      };
+      devConfigReady = devConfigReady
+        .catch(() => undefined)
+        .then(() => prepareActiveDevConfigDeps(target));
     },
     // Deps gate per run: every pty command waits for the active preset's deps
     // (instant snapshot restore) INSIDE the run — echo/dispatch never wait, the
@@ -1020,23 +903,70 @@ async function bootShellOwner(opts: {
       }
       return;
     }
+    if (isOwnerVfsCommitIpcMessage(message)) {
+      handleOwnerVfsCommitRequest({
+        message,
+        admit: (request) =>
+          vfsAuthority.admitHostCommit(
+            request,
+            (candidate) =>
+              applyPackageAwareHostCommit(vfsAuthority, packageMutations, cfg.root, candidate),
+            publishOwnerState,
+          ),
+        send: (ack) => kernelIpc.send?.(ack),
+      });
+      return;
+    }
+    if (isOwnerVfsCommitReceivedMessage(message)) {
+      handleOwnerVfsCommitReceipt({
+        message,
+        retained: (operationId) => vfsAuthority.retainedHostCommitTerminal(operationId),
+        send: (released) => kernelIpc.send?.(released),
+      });
+      return;
+    }
+    if (isOwnerVfsCommitCleanupMessage(message)) {
+      handleOwnerVfsCommitCleanup({
+        message,
+        cleanup: (terminal) => vfsAuthority.cleanupHostCommitTerminal(terminal),
+        send: (cleaned) => kernelIpc.send?.(cleaned),
+      });
+      return;
+    }
+    if (isOwnerVfsDurabilityIpcMessage(message)) {
+      void handleOwnerVfsDurabilityRequest({
+        message,
+        current: () => ({
+          ownerEpoch: vfsAuthority.ownerEpoch,
+          treeRevision: vfsAuthority.treeRevision,
+        }),
+        durability,
+        flush: flushSyncMirror,
+        send: (ack) => kernelIpc.send?.(ack),
+      });
+      return;
+    }
     if (isVfsWriteIpcMessage(message)) {
       if (!message.opId) {
-        applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
+        void applyPackageAwareVfsFrame(message.frame).catch((error: unknown) => {
+          console.error('[shell-owner/worker] unacked VFS write failed', error);
+        });
         return;
       }
-      try {
-        applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
-        kernelIpc.send?.({ type: 'rifty:vfs-write-ack', opId: message.opId, ok: true });
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        kernelIpc.send?.({
-          type: 'rifty:vfs-write-ack',
-          opId: message.opId,
-          ok: false,
-          error: { name: error.name, message: error.message },
-        });
-      }
+      void (async (): Promise<void> => {
+        try {
+          await applyPackageAwareVfsFrame(message.frame);
+          kernelIpc.send?.({ type: 'rifty:vfs-write-ack', opId: message.opId, ok: true });
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          kernelIpc.send?.({
+            type: 'rifty:vfs-write-ack',
+            opId: message.opId,
+            ok: false,
+            error: { name: error.name, message: error.message },
+          });
+        }
+      })();
       return;
     }
     // Durability barrier (ADR-0187): drain this realm's OPFS write-through and
@@ -1085,16 +1015,22 @@ async function bootShellOwner(opts: {
   // Workspace archive export/import (single-store-owner: one authoritative store
   // owner, the page holds no authoritative fs): the owner serializes /
   // applies its own tree so the PAGE keeps no authoritative store of its own.
-  const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root);
+  const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root, packageMutations);
   // Full-byte single-file downloads read from the owner, not the capped page snapshot.
   const tearFileReadBridge = serveWorkspaceFileReads(port, cfg.root);
-  // ADR-0165 §7 boot reconcile + scratch synthesis (BEFORE serving the index):
-  // finish/roll back a half-completed Save and synthesize a scratch entry keyed on
-  // the spawn STARTER when /scratch exists but the index is a cold-boot empty — so
-  // the owner index is the REAL hydrate source AND saveScratchAsProject's
-  // `if(!index.scratch) throw` precondition holds. See reconcileOwnerIndexAtBoot.
-  if (hiddenEmptyBoot) recoverIndex(syncMirror(), '/');
-  else reconcileOwnerIndexAtBoot(syncMirror(), starter);
+  // ADR-0165 §7: plan without writes, then put every recovery deletion through
+  // the package FIFO. All affected claims are durably revoked before bytes move.
+  const indexRecovery = planProjectIndexRecovery(
+    syncMirror(),
+    '/',
+    // The hidden owner is still serving snapshots from its frozen /scratch root.
+    // Defer deleting that stale Save source until the project-root owner respawns
+    // and replans recovery; deleting a live root makes its next request fatal.
+    hiddenEmptyBoot ? { protectedRoot: cfg.root } : { starter },
+  );
+  await applyGuardedProjectIndexRecovery(syncMirror(), indexRecovery, (intents, apply) =>
+    packageMutations.guardedMutation(intents, async () => apply()),
+  );
   // ADR-0165: the OPFS project index is worker-writable only; serve it so the page
   // launcher hydrates an in-memory mirror across owner respawns. Read against THIS
   // realm's syncMirror (the owner owns the index); base '/' = the OPFS root.
@@ -1111,8 +1047,14 @@ async function bootShellOwner(opts: {
       markStarterGeneratedBaselinePending(root);
       await ensureStarterInitialCommit(ownerGitVfs(), root);
     },
+    packageMutations,
   );
-  kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port });
+  kernelIpc.send?.({
+    type: 'rifty:workspace-owner-ready',
+    port,
+    ownerEpoch: vfsAuthority.ownerEpoch,
+    treeRevision: vfsAuthority.treeRevision,
+  });
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
@@ -1189,10 +1131,9 @@ async function bootstrap(): Promise<void> {
   // OpfsFsSync is supported, and a non-isolated host never spawns the owner.
   // Degrade to memory on a surprise OPFS failure rather than bricking boot (mirrors
   // boot.ts). seedProject is idempotent (`if !exists`) → the persisted tree stands.
+  let backend: 'opfs' | 'memory' = 'memory';
   try {
-    const backend = await initBackend();
-    const prefix = scopeActiveVfsToWorkspace(env.RIFTY_WORKSPACE_ID ?? 'default');
-    log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
+    backend = await initBackend();
   } catch (err) {
     log(
       `[shell-owner/worker] OPFS init failed, using in-memory (no persistence): ${
@@ -1200,6 +1141,19 @@ async function bootstrap(): Promise<void> {
       }\n`,
     );
   }
+  const prefix = scopeActiveVfsToWorkspace(env.RIFTY_WORKSPACE_ID ?? 'default');
+  const { authority: vfsAuthority, installStampClaims } = createOwnerVfsAuthorityComposition(
+    syncMirror(),
+    {
+      initialRoots: ['/', '/.rifty'],
+    },
+  );
+  // Every async writer (notably shell git) delegates back through the global
+  // sync authority; keeping the raw paired async backend would bypass revisions.
+  setSyncMirror(vfsAuthority, { async: new SyncMirrorVfs() });
+  const durability: OwnerVfsDurabilityReceipt['durability'] =
+    backend === 'opfs' ? 'durable' : 'ephemeral';
+  log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
   // Re-assert the spawn env onto the live process: the `await` above is the window
   // where the stray installProcessGlobals() side-effect can have swapped in a
   // fresh empty-env process (see the snapshot note). Downstream `process.env`
@@ -1209,7 +1163,7 @@ async function bootstrap(): Promise<void> {
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real project.
   const publishSnapshot = (): void => {
-    publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
+    publishVfsSnapshot(port, collectSnapshot(vfsAuthority, root));
   };
 
   // ADR-0150: the owner spawns each foreground CLI as a supervised child
@@ -1228,8 +1182,6 @@ async function bootstrap(): Promise<void> {
   const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
   // node:sqlite self-initializes at first require using the host-owned asset.
   installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
-  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror);
-
   // ADR-0148/0150: ONE unified owner — shell sessions + the dev server it spawns
   // on demand (`vite` / `npm run <script>`) as a supervised serve:true child that
   // reads this realm's installed tree over fs.* RPC. The legacy per-run preview
@@ -1239,6 +1191,9 @@ async function bootstrap(): Promise<void> {
     port,
     kernelIpc,
     publishSnapshot,
+    vfsAuthority,
+    installStampClaims,
+    durability,
     spec,
     slug,
     starter,

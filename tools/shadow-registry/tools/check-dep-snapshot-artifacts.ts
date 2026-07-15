@@ -6,6 +6,7 @@ import { serializeDepSnapshot } from '../../../apps/playground/src/glue/dep-snap
 import { effectiveDepsFromPackageJsonText } from '../../../apps/playground/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../../../apps/playground/src/templates/project-spec.ts';
 import { allProjectSpecs } from '../../../apps/playground/src/templates/registry.ts';
+import { applyViteCliActionPatch } from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
 import { internalsShims } from '../src/index.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 
@@ -37,9 +38,28 @@ async function main(): Promise<void> {
       deps,
       shims: internalsShims,
       canonicalize: serializeDepSnapshot,
+      validateInstallFiles: proveViteCliPatchInput,
     });
   }
   console.log('snapshot artifacts: current');
+}
+
+const decoder = new TextDecoder();
+function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
+  const cliPaths = [...files.keys()].filter(
+    (path) =>
+      path === 'vite/dist/node/cli.js' || path.endsWith('/node_modules/vite/dist/node/cli.js'),
+  );
+  if (cliPaths.length === 0) throw new Error('snapshot contains no Vite CLI transform input');
+  for (const path of cliPaths) {
+    try {
+      applyViteCliActionPatch(decoder.decode(files.get(path)));
+    } catch (error) {
+      throw new Error(`${path} is not patchable by the current Vite CLI transform`, {
+        cause: error,
+      });
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

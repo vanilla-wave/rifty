@@ -6,7 +6,6 @@ created: 2026-06-08
 why: embedders need one package that owns real project lifecycle, files, packages, terminals, and preview; exporting playground controllers would export their coordination burden and keep Vite above the correct seam
 user_story: As a SaaS developer embedding rifty with my own UI, I want to provide project files and call `.run()` on a durable browser project, while Workbench owns the real Node/VFS/PTY lifecycle and exposes no playground or Vite-host internals.
 epic: embeddable-dev-loop
-blocked_by: [playground/install-stamp-authority, vfs/opfs-persist-hang-watchdog]
 sources: [ADR-0224, ADR-0225, ADR-0230, ADR-0231, ADR-0078, ADR-0135]
 code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src]
 ---
@@ -412,8 +411,8 @@ mechanical commits separate from behavior.
    this ready item, and aligned epic/downstream contracts. No extraction.
 1. **Parallel prerequisites.** (A) Restore runtime-js/kernel stdin EOF,
    pause/resume, logical IPC/process-control separation, and recursive bootstrap
-   parity. (B) Complete the two `blocked_by` items: existing install-stamp
-   authority and bounded OPFS persist watchdog. No second trust mechanism.
+   parity. (B) Land the install-stamp authority and bounded OPFS persist
+   watchdog. No second trust mechanism.
 2. **Parallel state owners.** (A) Add owner-resident `PtySessionActor` and live
    resize. (B) Add owner VFS revision/CAS/durability authority plus the
    host-origin `VfsCommitCoordinator` and document conflict contract.

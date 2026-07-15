@@ -29,7 +29,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import { discardBody, fetchHeadersBounded } from './bounded-fetch.ts';
 import { closureHashOf } from './closure-hash.ts';
 import {
@@ -117,6 +117,13 @@ export interface InstallOptions {
    */
   onPackage?: (event: InstallProgressEvent) => void;
   /**
+   * Host-owned all-or-nothing namespace policy. Called once with every package
+   * root and file target after every tarball is parsed, before link creates its
+   * first directory. Rifty uses this for non-transferable authority metadata
+   * (ADR-0261); standalone clients may omit it.
+   */
+  assertPortablePaths?: (paths: readonly string[]) => void;
+  /**
    * Opt-in eddy fast path (ADR-0182). When set, and no covering lockfile
    * already gives the zero-network fast path, the client POSTs the dep-set to
    * this resolver, verifies the returned `EddyBundleV1` (bytes vs the bundle's
@@ -185,8 +192,26 @@ export interface InstallOptions {
 export interface InstallProgressEvent {
   readonly name: string;
   readonly version: string;
-  /** True when the tarball came from the tarball cache, false from network. */
+  /**
+   * True when bytes came from the local tarball cache. Lossy: cached bytes may
+   * have been seeded by Eddy, so use `InstallResult.provenance` for transport.
+   */
   readonly cacheHit: boolean;
+}
+
+export type InstallResolution = 'lockfile' | 'metadata';
+export type PackageTransport = 'cache' | 'eddy' | 'registry';
+
+export interface InstallPackageProvenance {
+  readonly name: string;
+  readonly version: string;
+  readonly transport: PackageTransport;
+}
+
+export interface InstallAcquisitionProvenance {
+  readonly resolution: InstallResolution;
+  readonly packages: readonly InstallPackageProvenance[];
+  readonly eddyFallback?: { readonly reason: string };
 }
 
 /** ResolvedPackage + lockfile provenance + peer-dep metadata for the warn pass.
@@ -210,6 +235,8 @@ export interface InstallResult {
   lockfile: Lockfile;
   /** Retained for shape compat; always empty since M11 nests conflicts (ADR-0042). */
   conflicts: { name: string; firstVersion: string; secondVersion: string }[];
+  /** Exact acquisition facts; ADR-0258. Never infer these from `source`. */
+  provenance: InstallAcquisitionProvenance;
   /**
    * Which path produced this install (ADR-0182 provenance). `'eddy'` when the
    * opt-in fast path seeded the cache + lockfile; `'standard'` otherwise
@@ -281,6 +308,7 @@ interface NormalizedInstallRequest {
 
 interface SourcePlan {
   readonly source: ResolutionSource;
+  readonly resolution: InstallResolution;
   readonly dependencies: Record<string, string>;
   readonly optionalDependencies: Record<string, string>;
 }
@@ -365,6 +393,8 @@ export async function install(
   let eddyClosureHash: string | undefined;
   let eddyResolvedAt: string | undefined;
   let eddyResolvedVia: 'get' | 'post' | undefined;
+  let eddyFallbackReason: string | undefined;
+  let eddyFallbackCause: Error | undefined;
   if (
     opts.resolverUrl &&
     !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
@@ -376,12 +406,15 @@ export async function install(
       optionalDependencies,
       tarballCache,
     );
-    if (staged !== null) {
+    if (staged.kind === 'adopted') {
       source = 'eddy';
       eddyClosureHash = staged.closureHash;
       eddyResolvedAt = staged.resolvedAt;
       eddyResolvedVia = staged.resolvedVia;
       existingLockfile = staged.lockfile;
+    } else {
+      eddyFallbackReason = staged.reason;
+      eddyFallbackCause = staged.cause;
     }
   }
 
@@ -394,19 +427,55 @@ export async function install(
     substitutions,
   );
 
-  const resolved = await walkAndPin(
-    plan.source,
-    plan.dependencies,
-    plan.optionalDependencies,
-    rootName,
-    fetchCtx,
-    opts.onPackage,
-  );
+  const cacheHits = new Map<string, boolean>();
+  let resolved: Map<string, PinnedPackage>;
+  try {
+    resolved = await walkAndPin(
+      plan.source,
+      plan.dependencies,
+      plan.optionalDependencies,
+      rootName,
+      fetchCtx,
+      (event) => {
+        cacheHits.set(`${event.name}@${event.version}`, event.cacheHit);
+        opts.onPackage?.(event);
+      },
+    );
+  } catch (error) {
+    if (eddyFallbackReason !== undefined) {
+      const registryError = error instanceof Error ? error : new Error(String(error));
+      throw new AggregateError(
+        [
+          eddyFallbackCause ?? new Error(`Eddy acquisition failed: ${eddyFallbackReason}`),
+          registryError,
+        ],
+        'npm install failed after Eddy fallback',
+      );
+    }
+    throw error;
+  }
   const packages = [...resolved.values()];
+  const provenancePackages: InstallPackageProvenance[] = [];
+  const seenProvenance = new Set<string>();
+  for (const pkg of packages) {
+    const key = `${pkg.name}@${pkg.version}`;
+    if (seenProvenance.has(key)) continue;
+    seenProvenance.add(key);
+    const cacheHit = cacheHits.get(key);
+    if (cacheHit === undefined) {
+      throw new Error(`install provenance missing fetch result for ${key}`);
+    }
+    provenancePackages.push({
+      name: pkg.name,
+      version: pkg.version,
+      transport: cacheHit ? (source === 'eddy' ? 'eddy' : 'cache') : 'registry',
+    });
+  }
 
   // Runs on both paths (D-F): lockfile entries carry `peerDependencies`, so
   // warn output is identical whichever path the install took.
   warnUnsatisfiedPeers(packages);
+  opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, packages));
   await link(opts.vfs, opts.cwd, packages);
   // ADR-0188: install-time internals shims into the actual installed dirs —
   // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
@@ -418,11 +487,57 @@ export async function install(
     packages,
     lockfile,
     conflicts: [],
+    provenance: {
+      resolution: plan.resolution,
+      packages: provenancePackages,
+      ...(eddyFallbackReason === undefined ? {} : { eddyFallback: { reason: eddyFallbackReason } }),
+    },
     source,
     ...(eddyClosureHash === undefined ? {} : { closureHash: eddyClosureHash }),
     ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
     ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
+}
+
+/** Compute and contain the complete tarball target set before link mutates. */
+function packageLinkTargets(root: string, packages: readonly ResolvedPackage[]): readonly string[] {
+  const canonicalRoot = normalizePath(root);
+  const targets = new Set<string>();
+  for (const pkg of packages) {
+    const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
+    assertSafePackageRelativePath(installPath, `install path for ${pkg.name}`);
+    const packageRoot = joinPath(canonicalRoot, installPath);
+    if (!isStrictDescendant(canonicalRoot, packageRoot)) {
+      throw invalidPackageLinkPath(installPath, `install path for ${pkg.name}`);
+    }
+    targets.add(packageRoot);
+    for (const entryPath of Object.keys(pkg.files)) {
+      assertSafePackageRelativePath(entryPath, `tar entry for ${pkg.name}`);
+      const target = joinPath(packageRoot, entryPath);
+      if (!isStrictDescendant(packageRoot, target)) {
+        throw invalidPackageLinkPath(entryPath, `tar entry for ${pkg.name}`);
+      }
+      targets.add(target);
+    }
+  }
+  return [...targets];
+}
+
+function isStrictDescendant(root: string, path: string): boolean {
+  return path !== root && path.startsWith(root === '/' ? '/' : `${root}/`);
+}
+
+function assertSafePackageRelativePath(path: string, label: string): void {
+  if (path === '' || path.startsWith('/') || path.split('/').includes('..')) {
+    throw invalidPackageLinkPath(path, label);
+  }
+}
+
+function invalidPackageLinkPath(path: string, label: string): Error {
+  return Object.assign(new Error(`Invalid package ${label}: ${path}`), {
+    code: 'EINVALIDPACKAGETAR' as const,
+    path,
+  });
 }
 
 async function normalizeInstallArgs(
@@ -663,14 +778,22 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
-): Promise<{
-  closureHash?: string;
-  resolvedAt?: string;
-  resolvedVia: 'get' | 'post';
-  lockfile: Lockfile;
-} | null> {
+): Promise<
+  | {
+      kind: 'adopted';
+      closureHash?: string;
+      resolvedAt?: string;
+      resolvedVia: 'get' | 'post';
+      lockfile: Lockfile;
+    }
+  | {
+      kind: 'declined';
+      reason: string;
+      cause: Error;
+    }
+> {
   const url = opts.resolverUrl;
-  if (!url) return null;
+  if (!url) return declineEddy('resolver URL unavailable');
 
   const online = opts.prefer === 'online';
   const body: EddyRequestBody = { dependencies, optionalDependencies };
@@ -762,6 +885,7 @@ async function tryEddyFastPath(
 
   const headersStallMs = opts.resolverStallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
   const reasons: string[] = [];
+  const causes: Error[] = [];
   for (const attempt of attempts) {
     try {
       // Header-phase bound (shared chokepoint): `resolverStallTimeoutMs` (and
@@ -783,18 +907,23 @@ async function tryEddyFastPath(
       );
       if (typeof outcome !== 'string') {
         return {
+          kind: 'adopted',
           ...(outcome.closureHash === undefined ? {} : { closureHash: outcome.closureHash }),
           ...(outcome.resolvedAt === undefined ? {} : { resolvedAt: outcome.resolvedAt }),
           resolvedVia: attempt.via,
           lockfile: outcome.lockfile,
         };
       }
-      reasons.push(`${attempt.label}: ${outcome}`);
+      const cause = new Error(`${attempt.label}: ${outcome}`);
+      reasons.push(cause.message);
+      causes.push(cause);
     } catch (err) {
-      reasons.push(`${attempt.label}: ${err instanceof Error ? err.message : String(err)}`);
+      const cause = err instanceof Error ? err : new Error(String(err));
+      reasons.push(`${attempt.label}: ${cause.message}`);
+      causes.push(cause);
     }
   }
-  return declineEddy(reasons.join('; '));
+  return declineEddy(reasons.join('; '), causes);
 }
 
 const eddyDecoder = new TextDecoder('utf-8');
@@ -996,9 +1125,18 @@ async function consumeEddyResponse(
   };
 }
 
-function declineEddy(reason: string): null {
+function declineEddy(
+  reason: string,
+  causes: readonly Error[] = [],
+): { readonly kind: 'declined'; readonly reason: string; readonly cause: Error } {
   console.warn(`npm: fast install (eddy) unavailable, using standard install — ${reason}`);
-  return null;
+  const cause =
+    causes.length === 0
+      ? new Error(reason)
+      : causes.length === 1
+        ? causes[0]!
+        : new AggregateError([...causes], `Eddy acquisition declined: ${reason}`);
+  return { kind: 'declined', reason, cause };
 }
 
 /**
@@ -1087,6 +1225,7 @@ function chooseSource(
       );
       return {
         source: createLockfileSource(existingLockfile, opts, substitutions),
+        resolution: 'lockfile',
         dependencies: effectiveDependencies,
         optionalDependencies: effectiveOptionalDependencies,
       };
@@ -1094,6 +1233,7 @@ function chooseSource(
   }
   return {
     source: createRegistrySource(opts, substitutions),
+    resolution: 'metadata',
     dependencies,
     optionalDependencies,
   };

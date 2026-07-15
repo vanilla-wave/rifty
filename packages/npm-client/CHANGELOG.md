@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Structured install acquisition provenance (ADR-0258).** Every
+  `InstallResult` now reports `lockfile | metadata` resolution, each unique
+  package's `cache | eddy | registry` transport, and the exact Eddy fallback
+  reason. A validating-registry failure after Eddy declines throws both causes;
+  legacy `source` and `onPackage.cacheHit` remain lossy compatibility fields.
+
 - **`resolveEddyClosure`** (stale-pin SWR primitive, ADR-0216): POST the
   canonical request and read the response ONLY up to the manifest member
   (early-cancel via `streamTarEntries` — the tarball tail never downloads),
@@ -26,6 +32,11 @@
   drift, same rationale as `MANIFEST_FILE`).
 
 ### Fixed
+
+- Package tarball ingress now rejects absolute/parent-traversal members before
+  linking and exposes one host batch preflight over every actual package target.
+  Rifty uses that preflight to reject reserved install claims before the first
+  `node_modules` write (ADR-0261), for registry and Eddy/cache replay alike.
 
 - Baked alias substitution now checks the caller's package range at one shared
   fresh/replay resolution boundary. An esbuild request that excludes the exact
