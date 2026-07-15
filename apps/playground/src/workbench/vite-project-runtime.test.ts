@@ -183,14 +183,25 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
   };
 }
 
-function createHarness() {
+function createHarness(options: { readonly readinessCloseGate?: Deferred<void> } = {}) {
   const pty = new PtyBoundary();
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createViteProjectRuntime({
     terminal,
     ownerToken: OWNER_TOKEN,
-    createPreviewReadiness: () => previews.create(),
+    createPreviewReadiness: () => {
+      const readiness = previews.create();
+      const gate = options.readinessCloseGate;
+      if (gate === undefined) return readiness;
+      return {
+        waitFor: (waitOptions) => readiness.waitFor(waitOptions),
+        close: async () => {
+          await gate.promise;
+          await readiness.close();
+        },
+      };
+    },
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -418,5 +429,52 @@ describe('Vite project runtime Contract+RED', () => {
     await settleMicrotasks();
     expect(h.previews.teardownCalls).toBe(1);
     await h.session.close();
+  });
+
+  it('torn-state fault: keeps the run claimed until preview cleanup settles after physical exit', async () => {
+    const readinessClose = deferred<void>();
+    const h = createHarness({ readinessCloseGate: readinessClose });
+    const run = h.session.run();
+    await admitDefaultRun(h);
+    await proveExactPreview(h);
+    await run.ready;
+
+    const exactExit = { code: 0, signal: null } as const;
+    h.pty.exit(0, exactExit);
+    const closing = run.close();
+    await settleMicrotasks();
+
+    expect(h.previews.teardownCalls).toBe(0);
+    expect(
+      await settledOr(
+        closing.then(() => 'closed'),
+        'pending',
+      ),
+    ).toBe('pending');
+    expect(() => h.session.run()).toThrowError(ProjectBusyError);
+
+    readinessClose.resolve();
+    await expect(closing).resolves.toBe(exactExit);
+    expect(h.previews.teardownCalls).toBe(1);
+    await h.session.close();
+  });
+
+  it('torn-state fault: rejects run close when preview cleanup fails', async () => {
+    const readinessClose = deferred<void>();
+    void readinessClose.promise.catch(() => {});
+    const h = createHarness({ readinessCloseGate: readinessClose });
+    const run = h.session.run();
+    await admitDefaultRun(h);
+    await proveExactPreview(h);
+    await run.ready;
+
+    const exactExit = { code: 0, signal: null } as const;
+    h.pty.exit(0, exactExit);
+    const cleanupFailure = new Error('preview route cleanup failed');
+    readinessClose.reject(cleanupFailure);
+
+    await expect(run.close()).rejects.toBe(cleanupFailure);
+    expect(h.previews.teardownCalls).toBe(0);
+    await expect(h.session.close()).rejects.toBe(cleanupFailure);
   });
 });
