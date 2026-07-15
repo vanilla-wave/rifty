@@ -33,10 +33,11 @@ could satisfy a later close barrier before the SW processed GOODBYE.
   enqueues GOODBYE, then starts the correlated proof. Its PONG therefore proves
   the controller processed the earlier revocation. If the controller changed,
   the replacement owns no stale registration and the proof targets it instead.
-- A project records a successfully mounted route independently of teardown
-  success. After terminal and owner-side project teardown, close conditionally
-  waits for the barrier before disconnecting the project transport. Teardown or
-  proof failure stays loud and aggregated; repeated close returns one promise.
+- Preview readiness records a successfully mounted route independently of
+  teardown success. Its close tears down the route, then conditionally waits for
+  the barrier. Public run close, project close, and physical run retirement all
+  compose that same close. Teardown or proof failure stays loud and aggregated;
+  repeated close returns one promise.
 - Rejected: delay/microtask heuristics; a fetch probe that can itself enter the
   stale route; an explicit GOODBYE ACK/generation (third coordination
   mechanism); a generic SW reply timeout, which could mask a real Vite response

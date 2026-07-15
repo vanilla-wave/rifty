@@ -304,12 +304,14 @@ describe('preview readiness', () => {
     const first = h.readiness.close();
     const second = h.readiness.close();
     expect(second).toBe(first);
+    expect(h.swProofs).toHaveLength(2);
+    h.swProofs[1]?.resolve();
     await expect(first).resolves.toBeUndefined();
     await expect(ready).rejects.toBeInstanceOf(PreviewReadinessClosedError);
     expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
   });
 
-  it('close revokes a route after readiness has already resolved', async () => {
+  it('close revokes a ready route and waits for a post-teardown SW control proof', async () => {
     const h = harness();
     const ready = h.readiness.waitFor({
       ownerToken: 'owner-a',
@@ -323,8 +325,42 @@ describe('preview readiness', () => {
     h.httpProofs[0]?.resolve({ ok: true, status: 200 });
     await ready;
 
-    await h.readiness.close();
+    const closing = h.readiness.close();
+    let settled = false;
+    void closing.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
 
+    expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
+    expect(h.swProofs).toHaveLength(2);
+    expect(settled).toBe(false);
+
+    h.swProofs[1]?.resolve();
+    await expect(closing).resolves.toBeUndefined();
+  });
+
+  it('keeps a failed post-teardown control proof loud', async () => {
+    const h = harness();
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
+    h.publish([advertisement()]);
+    h.swProofs[0]?.resolve();
+    await Promise.resolve();
+    h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+    await ready;
+
+    const closing = h.readiness.close();
+    const proofFailure = new Error('post-teardown SW proof failed');
+    h.swProofs[1]?.reject(proofFailure);
+
+    const failure = await closing.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([proofFailure]);
     expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
   });
 
@@ -498,7 +534,7 @@ describe('preview readiness', () => {
     await expect(ready).rejects.toBeInstanceOf(PreviewReadinessClosedError);
     await expect(closing).resolves.toBeUndefined();
     expect(teardown).toHaveBeenCalledTimes(1);
-    expect(proveServiceWorkerControl).not.toHaveBeenCalled();
+    expect(proveServiceWorkerControl).toHaveBeenCalledTimes(1);
   });
 
   it('reserves one close promise before a route disposer can reenter close', async () => {

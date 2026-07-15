@@ -463,7 +463,6 @@ export function startBrowserWorkspaceOwner(
   };
 
   const createBrowserProject = <TReady>(transport: ProjectTransport): ProjectSession<TReady> => {
-    let previewRouteMounted = false;
     const openTerminal = (): ProjectTerminal =>
       createProjectTerminal({
         id: `workbench-terminal-${String(++terminalSequence)}`,
@@ -478,15 +477,8 @@ export function startBrowserWorkspaceOwner(
           timeoutMs: input.deployment.previewProbeTimeoutMs,
           subscribe: transport.subscribePreview,
           requestSnapshot: transport.requestPreview,
-          mountRoute: (entry) => {
-            const revoke = dependencies.mountPreview(
-              entry.port,
-              entry.ownerToken,
-              entry.previewScope,
-            );
-            previewRouteMounted = true;
-            return revoke;
-          },
+          mountRoute: (entry) =>
+            dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
           proveServiceWorkerControl: (signal) =>
             proveRiftyServiceWorkerControl({
               container: dependencies.serviceWorker,
@@ -523,17 +515,6 @@ export function startBrowserWorkspaceOwner(
           const failures = results.flatMap((result) =>
             result.status === 'rejected' ? [errorFrom(result.reason)] : [],
           );
-          if (previewRouteMounted) {
-            try {
-              await proveRiftyServiceWorkerControl({
-                container: dependencies.serviceWorker,
-                timeoutMs: input.deployment.previewProbeTimeoutMs,
-                timers: dependencies.timers,
-              });
-            } catch (error) {
-              failures.push(errorFrom(error));
-            }
-          }
           transport.disconnect();
           if (activeProject === transport) activeProject = null;
           if (failures.length === 1) throw failures[0] as Error;

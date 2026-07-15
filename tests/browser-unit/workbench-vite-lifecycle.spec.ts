@@ -192,6 +192,15 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       }
     };
 
+    const closeRun = async (run: ProjectRun, previewUrl: string, label: string) => {
+      const closing = run.close();
+      const exit = await withTimeout(run.exited, `${label} exit`, 30_000);
+      const closeExit = await withTimeout(closing, `${label} close`, 30_000);
+      const revoked = await responseText(previewUrl, `${label} revoked preview`);
+      await withTimeout(run.terminal.resize(81, 25), `${label} open-project resize`, 30_000);
+      return { exit, closeExit, revoked };
+    };
+
     const closeProject = async (
       project: Project,
       run: ProjectRun,
@@ -374,7 +383,13 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       const previewB = await withTimeout(runB.ready, 'project B Vite ready', 120_000);
       const previewBRoot = new URL(previewB.url, location.href);
       const htmlB = await responseText(previewBRoot.href, 'project B HTML');
-      const closeB = await closeProject(projectB, runB, previewBRoot.href, 'project B');
+      const closeBRun = await closeRun(runB, previewBRoot.href, 'project B run');
+      const projectBStillOpen = await runTerminal(
+        projectB,
+        'printf workbench-project-b-still-open',
+        'project B after run close',
+      );
+      await withTimeout(projectB.close(), 'project B close', 60_000);
       activeProject = null;
       await (globalThis as unknown as LifecycleProbe).__recordWorkbenchLifecycle(
         'project-b-closed',
@@ -422,7 +437,12 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         storage,
         ownerCarrierConstructions: ownerCarrierProbe.constructions(),
         previewA: { port: previewA.port, html: htmlA, viteClient: viteClientA, close: closeA },
-        previewB: { port: previewB.port, html: htmlB, close: closeB },
+        previewB: {
+          port: previewB.port,
+          html: htmlB,
+          runClose: closeBRun,
+          projectStillOpen: projectBStillOpen,
+        },
         reopenedPreviewA: {
           port: reopenedPreviewA.port,
           html: reopenedHtmlA,
@@ -469,11 +489,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
   expect(result.reopenedPreviewA.html.body).toContain('workbench-owner-a');
   expect(result.previewB.port).toBe(result.previewA.port);
   expect(result.reopenedPreviewA.port).toBe(result.previewA.port);
-  for (const closed of [
-    result.previewA.close,
-    result.previewB.close,
-    result.reopenedPreviewA.close,
-  ]) {
+  for (const closed of [result.previewA.close, result.reopenedPreviewA.close]) {
     expect(closed.order).toEqual(['run-exited', 'project-closed']);
     expect(closed.exit).toEqual({ code: null, signal: 'SIGTERM' });
     expect(closed.closeExit).toEqual(closed.exit);
@@ -483,6 +499,14 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     });
     expect(closed.revoked.status).toBe(503);
   }
+  expect(result.previewB.runClose.exit).toEqual({ code: null, signal: 'SIGTERM' });
+  expect(result.previewB.runClose.closeExit).toEqual(result.previewB.runClose.exit);
+  expect(result.previewB.runClose.revoked.status).toBe(503);
+  expect(result.previewB.projectStillOpen).toEqual({
+    exit: { code: 0, signal: null },
+    closeExit: { code: 0, signal: null },
+    output: 'workbench-project-b-still-open',
+  });
   expect(result.previewA.close.sibling).toEqual({
     order: ['sibling-exited', 'project-closed'],
     exit: { code: null, signal: 'SIGINT' },
