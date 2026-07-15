@@ -1,4 +1,9 @@
-import type { DevServerStatus, OwnerToPageFrame, PreviewPortEntry } from '../glue/pty-protocol.ts';
+import type {
+  DevServerStatus,
+  OwnerPtyRunAdmission,
+  OwnerToPageFrame,
+  PreviewPortEntry,
+} from '../glue/pty-protocol.ts';
 
 const DEV_SID = 'dev-server';
 const PREVIEW_SID = 'preview';
@@ -6,27 +11,38 @@ const PREVIEW_SID = 'preview';
 export interface PreviewRegistryDeps {
   readonly send: (frame: OwnerToPageFrame) => void;
 }
+export type PreviewProducerOrigin =
+  | { readonly kind: 'pty'; readonly admission: OwnerPtyRunAdmission }
+  | { readonly kind: 'host' };
+export const HOST_PREVIEW_ORIGIN: PreviewProducerOrigin = Object.freeze({ kind: 'host' });
+
 export interface AddNodeOpts {
-  /** Owning terminal session — carried on the derived `pty:dev-server` frames. */
-  readonly ptySid?: string;
+  /** Explicit host source or actor-minted PTY identity captured at child launch. */
+  readonly origin: PreviewProducerOrigin;
   /** cwd of the command that started the server (reload-restore recording). */
   readonly cwd?: string;
   /** Display base for the switcher label (`<labelBase> :<port>`); default `node`. */
   readonly labelBase?: string;
 }
+export interface SetDevServerOpts {
+  /** Explicit host source or actor-minted PTY identity captured at child launch. */
+  readonly origin: PreviewProducerOrigin;
+  /** cwd of the command that started the server (reload-restore recording). */
+  readonly cwd?: string;
+}
 export interface PreviewRegistry {
-  setDevServer(port: number, previewScope?: string, ptySid?: string, cwd?: string): void;
+  setDevServer(port: number, previewScope: string | undefined, opts: SetDevServerOpts): void;
   clearDevServer(): void;
-  setPreview(port: number, previewScope?: string): void;
+  setPreview(port: number, previewScope: string | undefined, origin: PreviewProducerOrigin): void;
   clearPreview(): void;
-  addNode(sid: string, ports: number[], previewScope?: string, opts?: AddNodeOpts): void;
+  addNode(sid: string, ports: number[], previewScope: string | undefined, opts: AddNodeOpts): void;
   removeBySid(sid: string): void;
   /** Controller boot began — derived status reads 'starting' until a port lands. */
-  devStarting(ptySid?: string): void;
+  devStarting(origin: PreviewProducerOrigin): void;
   /** Controller run ended — clears the dev slot + the starting phase. */
   devStopped(): void;
   /** Controller boot or running child failed — removes its slot and carries `error`. */
-  devBootFailed(message: string, ptySid?: string): void;
+  devBootFailed(message: string, origin: PreviewProducerOrigin): void;
   /** Re-emit the current port set (answers pty:preview-req). */
   publish(): void;
   /** Re-emit the current derived dev-server frame (answers pty:dev-server-req). */
@@ -35,7 +51,6 @@ export interface PreviewRegistry {
 
 interface TrackedEntry {
   readonly entry: PreviewPortEntry;
-  readonly ptySid?: string;
   readonly cwd?: string;
 }
 
@@ -55,6 +70,14 @@ interface DerivedDev {
  * pre-listen phase rides `devStarting`/`devBootFailed`; a listening port wins.
  */
 export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistry {
+  const previewIdentity = (origin: PreviewProducerOrigin) =>
+    origin.kind === 'pty'
+      ? {
+          ptySid: origin.admission.ptySid,
+          ptyRid: origin.admission.ptyRid,
+        }
+      : {};
+
   // Insertion order matters for the switcher default AND the derived pill's
   // primary port (most-senior server keeps the pill): dev server keeps its slot;
   // production preview follows; node/bin entries append.
@@ -89,7 +112,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     if (primary) {
       return {
         status: 'running',
-        ...(primary.ptySid === undefined ? {} : { sid: primary.ptySid }),
+        ...(primary.entry.ptySid === undefined ? {} : { sid: primary.entry.ptySid }),
         ...(primary.cwd === undefined ? {} : { cwd: primary.cwd }),
         port: primary.entry.port,
         ...(primary.entry.previewScope === undefined
@@ -136,7 +159,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   };
 
   return {
-    setDevServer(port, previewScope, ptySid, cwd) {
+    setDevServer(port, previewScope, opts) {
       dev = {
         entry: {
           port,
@@ -144,10 +167,10 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
           label: 'npm run dev',
           source: 'dev-server',
           sid: DEV_SID,
+          ...previewIdentity(opts.origin),
           ...(previewScope === undefined ? {} : { previewScope }),
         },
-        ...(ptySid === undefined ? {} : { ptySid }),
-        ...(cwd === undefined ? {} : { cwd }),
+        ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
       };
       emit();
     },
@@ -155,7 +178,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       dev = null;
       emit();
     },
-    setPreview(port, previewScope) {
+    setPreview(port, previewScope, origin) {
       preview = {
         entry: {
           port,
@@ -163,6 +186,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
           label: 'vite preview',
           source: 'preview',
           sid: PREVIEW_SID,
+          ...previewIdentity(origin),
           ...(previewScope === undefined ? {} : { previewScope }),
         },
       };
@@ -173,7 +197,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       emit();
     },
     addNode(sid, ports, previewScope, opts) {
-      const labelBase = opts?.labelBase ?? 'node';
+      const labelBase = opts.labelBase ?? 'node';
       node.set(
         sid,
         ports.map((port) => ({
@@ -183,10 +207,10 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
             label: `${labelBase} :${port}`,
             source: 'node' as const,
             sid,
+            ...previewIdentity(opts.origin),
             ...(previewScope === undefined ? {} : { previewScope }),
           },
-          ...(opts?.ptySid === undefined ? {} : { ptySid: opts.ptySid }),
-          ...(opts?.cwd === undefined ? {} : { cwd: opts.cwd }),
+          ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
         })),
       );
       emit();
@@ -194,8 +218,10 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     removeBySid(sid) {
       if (node.delete(sid)) emit();
     },
-    devStarting(ptySid) {
-      starting = { ...(ptySid === undefined ? {} : { sid: ptySid }) };
+    devStarting(origin) {
+      starting = {
+        ...(origin.kind === 'pty' ? { sid: origin.admission.ptySid } : {}),
+      };
       emitDev();
     },
     devStopped() {
@@ -203,7 +229,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       dev = null;
       emit();
     },
-    devBootFailed(message, ptySid) {
+    devBootFailed(message, origin) {
       starting = null;
       dev = null;
       deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
@@ -214,7 +240,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       if (next.status === 'stopped') {
         const stopped: DerivedDev = {
           status: 'stopped',
-          ...(ptySid === undefined ? {} : { sid: ptySid }),
+          ...(origin.kind === 'pty' ? { sid: origin.admission.ptySid } : {}),
         };
         lastDev = stopped;
         deps.send(devFrame(stopped, message));

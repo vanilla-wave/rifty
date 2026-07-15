@@ -6,6 +6,7 @@ import {
   ProjectBusyError,
   StdinClosedError,
   createProjectTerminal,
+  projectTerminalAdmission,
 } from './project-terminal.ts';
 
 function deferred<T>() {
@@ -58,9 +59,11 @@ class TerminalPortFixture {
   readonly sessionResizeCalls: AckCall<{ sid: string; cols: number; rows: number }>[] = [];
   readonly signalCalls: { sid: string; rid: string }[] = [];
   readonly closeCalls: string[] = [];
+  readonly closeCancellations: Array<Error | undefined> = [];
   readonly closeFailures = new Map<string, Error>();
   readonly openGates = new Map<string, ReturnType<typeof deferred<void>>>();
   closeGate: ReturnType<typeof deferred<void>> | null = null;
+  execFailure: Error | null = null;
   signalFailure: Error | null = null;
   onSignal: (() => void) | null = null;
   onCloseSession: (() => void) | null = null;
@@ -84,6 +87,7 @@ class TerminalPortFixture {
   }
 
   execResult(sid: string, line: string, options: ExecOptions): Promise<ExecResult> {
+    if (this.execFailure !== null) throw this.execFailure;
     const result = deferred<ExecResult>();
     this.execCalls.push({ sid, line, options, result });
     return result.promise;
@@ -133,6 +137,7 @@ class TerminalPortFixture {
 
   closeSession(sid: string, cancellation?: Error): Promise<void> {
     this.closeCalls.push(sid);
+    this.closeCancellations.push(cancellation);
     this.onCloseSession?.();
     if (this.rejectOpenOnClose) {
       this.openGates
@@ -189,12 +194,14 @@ describe('ProjectTerminal lifecycle contract', () => {
     const resized = terminal.resize(100, 30);
     void resized.catch(() => {});
     const run = terminal.run('node must-not-start.mjs');
+    const admission = projectTerminalAdmission(run);
     port.resolveOpen('terminal-1');
     await settleMicrotasks();
     const failure = new Error('owner idle resize failed exactly');
     port.sessionResizeCalls[0]?.ack.reject(failure);
 
     await expect(resized).rejects.toBe(failure);
+    await expect(admission).rejects.toBe(failure);
     await expect(run.ready).rejects.toBe(failure);
     await expect(run.exited).rejects.toBe(failure);
     expect(port.execCalls).toEqual([]);
@@ -269,6 +276,152 @@ describe('ProjectTerminal lifecycle contract', () => {
     await terminal.close();
   });
 
+  it('provenance-lie fault: keeps admission pending until the exact owner pair', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    expect(projectTerminalAdmission(run)).toBe(admission);
+    let beforeOwnerAck: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void admission.then(
+      () => {
+        beforeOwnerAck = 'resolved';
+      },
+      () => {
+        beforeOwnerAck = 'rejected';
+      },
+    );
+    await settleMicrotasks();
+
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+    expect(beforeOwnerAck).toBe('pending');
+
+    port.admit(0, 'run-1');
+    const exactAdmission = await admission;
+    expect(exactAdmission).toEqual({ ptySid: 'terminal-1', ptyRid: 'run-1' });
+    expect(Object.isFrozen(exactAdmission)).toBe(true);
+    expect(beforeOwnerAck).toBe('resolved');
+
+    const exactExit = { code: 0, signal: null } as const;
+    port.exit(0, exactExit);
+    await run.close();
+    await terminal.close();
+  });
+
+  it('provenance-lie fault: rejects admission with the exact pre-admit transport failure', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    void admission.catch(() => undefined);
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+    const failure = new Error('owner rejected Vite admission');
+    port.execCalls[0]?.result.reject(failure);
+
+    const admissionFailure = await admission.catch((error: unknown) => error);
+    await expect(run.ready).rejects.toBe(failure);
+    await expect(run.exited).rejects.toBe(failure);
+    await expect(run.close()).rejects.toBe(failure);
+    await terminal.close();
+
+    expect(admissionFailure).toBe(failure);
+  });
+
+  it('corrupt-input fault: rejects one shared failure for an empty owner run id', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+
+    port.admit(0, '');
+    const admissionFailure = await admission.catch((error: unknown) => error);
+    const readyFailure = await run.ready.catch((error: unknown) => error);
+    const exitFailure = await run.exited.catch((error: unknown) => error);
+    expect(admissionFailure).toBeInstanceOf(Error);
+    expect(readyFailure).toBe(admissionFailure);
+    expect(exitFailure).toBe(admissionFailure);
+
+    await expect(run.close()).rejects.toBe(admissionFailure);
+    await terminal.close();
+  });
+
+  it('provenance-lie fault: preserves a synchronous pre-admit transport failure', async () => {
+    const port = new TerminalPortFixture();
+    const failure = new Error('owner exec transport threw exactly');
+    port.execFailure = failure;
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    port.resolveOpen('terminal-1');
+
+    await expect(admission).rejects.toBe(failure);
+    await expect(run.ready).rejects.toBe(failure);
+    await expect(run.exited).rejects.toBe(failure);
+    await expect(run.close()).rejects.toBe(failure);
+    await terminal.close();
+  });
+
+  it('provenance-lie fault: shares the exit-before-admit failure and ignores late ACK', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+
+    const exactExit = { code: 1, signal: null } as const;
+    port.exit(0, exactExit, 1);
+    const admissionFailure = await admission.catch((error: unknown) => error);
+    const readyFailure = await run.ready.catch((error: unknown) => error);
+    expect(admissionFailure).toBe(readyFailure);
+    await expect(run.exited).resolves.toBe(exactExit);
+
+    port.admit(0, 'late-run');
+    await expect(projectTerminalAdmission(run)).rejects.toBe(admissionFailure);
+    await expect(run.close()).resolves.toBe(exactExit);
+    await terminal.close();
+  });
+
+  it('provenance-lie fault: late run A ACK cannot relabel sequential run B', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const first = terminal.run('vite first');
+    const firstAdmission = projectTerminalAdmission(first);
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+    port.exit(0, { code: 1, signal: null }, 1);
+    const firstFailure = await firstAdmission.catch((error: unknown) => error);
+    await first.close();
+
+    const second = terminal.run('vite second');
+    const secondAdmission = projectTerminalAdmission(second);
+    let secondState: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void secondAdmission.then(
+      () => {
+        secondState = 'resolved';
+      },
+      () => {
+        secondState = 'rejected';
+      },
+    );
+    await settleMicrotasks();
+
+    port.admit(0, 'run-a-late');
+    await settleMicrotasks();
+    expect(secondState).toBe('pending');
+    await expect(firstAdmission).rejects.toBe(firstFailure);
+
+    port.admit(1, 'run-b');
+    await expect(secondAdmission).resolves.toEqual({ ptySid: 'terminal-1', ptyRid: 'run-b' });
+    port.exit(1, { code: 0, signal: null });
+    await second.close();
+    await terminal.close();
+  });
+
   it('closes every run control at physical exit before the handle is released', async () => {
     const port = new TerminalPortFixture();
     const terminal = createProjectTerminal({ id: 'terminal-1', port });
@@ -308,19 +461,56 @@ describe('ProjectTerminal lifecycle contract', () => {
     const closing = terminal.close();
     void closing.catch(() => {});
     await settleMicrotasks();
+    const cancellation = port.closeCancellations[0];
     const closeCallsBeforeExit = [...port.closeCalls];
     const signalsBeforeExit = [...port.signalCalls];
 
     const exactExit = { code: null, signal: 'SIGINT' } as const;
     port.exit(0, exactExit, 130);
     port.closeGate.resolve();
-    await expect(run.ready).rejects.toThrow(/exited before owner run admission/i);
+    await expect(run.ready).rejects.toBe(cancellation);
     await expect(run.exited).resolves.toBe(exactExit);
     await expect(closing).resolves.toBeUndefined();
 
     expect(closeCallsBeforeExit).toEqual(['terminal-1']);
     expect(signalsBeforeExit).toEqual([]);
     expect(port.signalCalls).toEqual([]);
+  });
+
+  it('provenance-lie fault: close rejects admission and ignores a late owner ACK', async () => {
+    const port = new TerminalPortFixture();
+    port.closeGate = deferred<void>();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+    const run = terminal.run('vite');
+    const admission = projectTerminalAdmission(run);
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+
+    const closing = terminal.close();
+    let closeState: 'pending' | 'resolved' | 'rejected' = 'pending';
+    void closing.then(
+      () => {
+        closeState = 'resolved';
+      },
+      () => {
+        closeState = 'rejected';
+      },
+    );
+    await settleMicrotasks();
+    const cancellation = port.closeCancellations[0];
+    expect(cancellation).toBeInstanceOf(ClosedHandleError);
+    await expect(admission).rejects.toBe(cancellation);
+    await expect(run.ready).rejects.toBe(cancellation);
+    expect(closeState).toBe('pending');
+
+    port.admit(0, 'late-run');
+    await settleMicrotasks();
+    expect(port.signalCalls).toEqual([]);
+    expect(closeState).toBe('pending');
+
+    port.closeGate.resolve();
+    await expect(run.exited).rejects.toBe(cancellation);
+    await expect(closing).resolves.toBeUndefined();
   });
 
   it('uses session close instead of a duplicate run signal for an admitted run', async () => {
@@ -368,26 +558,29 @@ describe('ProjectTerminal lifecycle contract', () => {
     await expect(closing).resolves.toBeUndefined();
   });
 
-  it('rejects terminal close when owner session cancellation fails before open', async () => {
+  it('provenance-lie fault: preserves owner session-close failure before admission', async () => {
     const port = new TerminalPortFixture();
     const ownerFailure = new Error('owner close NACK');
     port.closeFailures.set('terminal-1', ownerFailure);
     const terminal = createProjectTerminal({ id: 'terminal-1', port });
     const run = terminal.run('node never-sent.mjs');
+    const admission = projectTerminalAdmission(run);
     void run.ready.catch(() => {});
     void run.exited.catch(() => {});
 
     const closing = terminal.close();
 
+    await expect(admission).rejects.toBe(ownerFailure);
     await expect(run.ready).rejects.toBe(ownerFailure);
     await expect(run.exited).rejects.toBe(ownerFailure);
     await expect(closing).rejects.toBe(ownerFailure);
   });
 
-  it('preserves an owner open failure already rejected before close in the same tick', async () => {
+  it('observable-order fault: preserves the exact open failure before close', async () => {
     const port = new TerminalPortFixture();
     const terminal = createProjectTerminal({ id: 'terminal-1', port });
     const run = terminal.run('node never-sent.mjs');
+    const admission = projectTerminalAdmission(run);
     void run.ready.catch(() => {});
     void run.exited.catch(() => {});
     const ownerFailure = new Error('owner open failed exactly');
@@ -395,6 +588,7 @@ describe('ProjectTerminal lifecycle contract', () => {
     port.openGates.get('terminal-1')!.reject(ownerFailure);
     const closing = terminal.close();
 
+    await expect(admission).rejects.toBe(ownerFailure);
     await expect(run.ready).rejects.toBe(ownerFailure);
     await expect(run.exited).rejects.toBe(ownerFailure);
     await expect(closing).rejects.toBe(ownerFailure);
@@ -638,18 +832,23 @@ describe('ProjectTerminal lifecycle contract', () => {
     await terminal.close();
   });
 
-  it('never reports readiness when stop was requested before owner admission', async () => {
+  it('provenance-lie fault: stop rejects admission before a late owner ACK', async () => {
     const port = new TerminalPortFixture();
     const terminal = createProjectTerminal({ id: 'terminal-1', port });
     const run = terminal.run('node delayed-admission.mjs');
+    const admission = projectTerminalAdmission(run);
     port.resolveOpen('terminal-1');
     await settleMicrotasks();
     expect(port.execCalls).toHaveLength(1);
 
     const stopped = run.stop();
+    const admissionFailure = await admission.catch((error: unknown) => error);
+    const readyFailure = await run.ready.catch((error: unknown) => error);
+    expect(admissionFailure).toBe(readyFailure);
+
     port.admit(0, 'run-1');
 
-    await expect(run.ready).rejects.toBeInstanceOf(ClosedHandleError);
+    await expect(run.ready).rejects.toBe(admissionFailure);
     expect(port.signalCalls).toEqual([{ sid: 'terminal-1', rid: 'run-1' }]);
     const exactExit = { code: null, signal: 'SIGINT' } as const;
     port.exit(0, exactExit, 130);
@@ -745,10 +944,11 @@ describe('ProjectTerminal lifecycle contract', () => {
     await expect(terminal.close()).rejects.toBeInstanceOf(ClosedHandleError);
   });
 
-  it('turns owner death into a loud terminal outcome for admission, exit, queued control, and future calls', async () => {
+  it('provenance-lie fault: owner death rejects admission and every run outcome together', async () => {
     const port = new TerminalPortFixture();
     const terminal = createProjectTerminal({ id: 'terminal-1', port });
     const run = terminal.run('node never-admitted.mjs');
+    const admission = projectTerminalAdmission(run);
     const queuedWrite = terminal.write('queued');
     const queuedResize = terminal.resize(100, 30);
     void queuedWrite.catch(() => {});
@@ -756,8 +956,12 @@ describe('ProjectTerminal lifecycle contract', () => {
 
     port.die(1);
 
-    await expect(run.ready).rejects.toBeInstanceOf(ClosedHandleError);
-    await expect(run.exited).rejects.toBeInstanceOf(ClosedHandleError);
+    const admissionFailure = await admission.catch((error: unknown) => error);
+    const readyFailure = await run.ready.catch((error: unknown) => error);
+    const exitFailure = await run.exited.catch((error: unknown) => error);
+    expect(admissionFailure).toBeInstanceOf(ClosedHandleError);
+    expect(readyFailure).toBe(admissionFailure);
+    expect(exitFailure).toBe(admissionFailure);
     await expect(queuedWrite).rejects.toBeInstanceOf(ClosedHandleError);
     await expect(queuedResize).rejects.toBeInstanceOf(ClosedHandleError);
     await expect(terminal.write('after death')).rejects.toBeInstanceOf(ClosedHandleError);
