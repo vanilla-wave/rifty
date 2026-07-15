@@ -11,6 +11,12 @@ import {
   inspectProjectDefinitionWire,
   projectDefinitionWire,
 } from './project-definition.ts';
+import {
+  type OwnerProjectVfsFrame,
+  type PageProjectVfsFrame,
+  inspectOwnerProjectVfsFrame,
+  inspectPageProjectVfsFrame,
+} from './project-vfs-protocol.ts';
 
 declare const ownerProjectTokenBrand: unique symbol;
 
@@ -60,6 +66,11 @@ export type PageToWorkbenchOwnerMessage =
       readonly frame: PtyPreviewReq;
     }
   | {
+      readonly type: 'workbench:project-vfs';
+      readonly projectToken: OwnerProjectToken;
+      readonly frame: PageProjectVfsFrame;
+    }
+  | {
       readonly type: 'workbench:close-project';
       readonly opId: string;
       readonly projectToken: OwnerProjectToken;
@@ -96,6 +107,11 @@ export type WorkbenchOwnerToPageMessage =
       readonly type: 'workbench:project-preview';
       readonly projectToken: OwnerProjectToken;
       readonly frame: PtyPreview;
+    }
+  | {
+      readonly type: 'workbench:project-vfs';
+      readonly projectToken: OwnerProjectToken;
+      readonly frame: OwnerProjectVfsFrame;
     }
   | {
       readonly type: 'workbench:project-closed';
@@ -136,6 +152,14 @@ export function inspectPageToWorkbenchOwnerMessage(value: unknown): PageToWorkbe
         type: message.type,
         projectToken: ownerProjectToken(message.projectToken),
         frame: inspectPreviewRequest(message.frame),
+      });
+    }
+    case 'workbench:project-vfs': {
+      exact(message, ['type', 'projectToken', 'frame'], 'project-vfs message');
+      return Object.freeze({
+        type: message.type,
+        projectToken: ownerProjectToken(message.projectToken),
+        frame: inspectPageProjectVfsFrame(message.frame),
       });
     }
     case 'workbench:close-project': {
@@ -257,6 +281,14 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
         type: message.type,
         projectToken: ownerProjectToken(message.projectToken),
         frame: inspectPreviewSnapshot(message.frame),
+      });
+    }
+    case 'workbench:project-vfs': {
+      exact(message, ['type', 'projectToken', 'frame'], 'project-vfs message');
+      return Object.freeze({
+        type: message.type,
+        projectToken: ownerProjectToken(message.projectToken),
+        frame: inspectOwnerProjectVfsFrame(message.frame),
       });
     }
     case 'workbench:project-closed': {

@@ -1,6 +1,7 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
+import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import { type InspectedProjectDefinition, projects } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
 
@@ -199,6 +200,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     const close = vi.fn(async (): Promise<void> => {});
     ownerProjectCloses.push(close);
     return {
+      ...createUnusedOwnerProjectHandles('openWorkbench owner session'),
       run() {
         throw new Error('not used by openWorkbench tests');
       },

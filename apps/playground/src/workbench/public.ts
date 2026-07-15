@@ -3,10 +3,23 @@ import { createBrowserWorkbenchOwnerPort } from './workbench-browser-owner.ts';
 
 export {
   ClosedHandleError,
+  DirtyProjectDocumentError,
+  FileConflictError,
   ProjectBusyError,
   ProjectDefinitionMismatchError,
+  ProjectDocumentSaveInProgressError,
+  ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  StaleProjectDocumentError,
   StdinClosedError,
+} from './errors.ts';
+export type {
+  FileConflictDetails,
+  ProjectDocumentInvalidation,
+  ProjectFileEntry,
+  ProjectFileOperation,
+  ProjectFileOperationFailure,
+  ProjectMutationOutcome,
 } from './errors.ts';
 export type {
   StoragePersistence,
@@ -17,6 +30,23 @@ export type {
 } from './open-workbench.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
 export { projects } from './project-definition.ts';
+export type {
+  ProjectDocument,
+  ProjectDocumentCloseOptions,
+  ProjectDocumentConflict,
+  ProjectDocuments,
+  ProjectDocumentSnapshot,
+} from './project-documents.ts';
+export type {
+  ProjectFileMutationResult,
+  ProjectFileRead,
+  ProjectFiles,
+  ProjectFilesSnapshot,
+  ProjectMkdirOptions,
+  ProjectRemoveOptions,
+  ProjectRenameOptions,
+  ProjectWriteFileOptions,
+} from './project-files.ts';
 export type { ProjectRun, ProjectSession } from './project-session.ts';
 export type {
   ProjectTerminal,

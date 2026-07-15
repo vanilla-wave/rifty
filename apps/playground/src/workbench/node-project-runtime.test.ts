@@ -10,6 +10,7 @@ import {
   type PreviewReadiness,
   createPreviewReadiness,
 } from './preview-readiness.ts';
+import { createUnusedProjectContent } from './project-content.test-fixture.ts';
 import { createProjectSession } from './project-session.ts';
 import { type ProjectTerminalExecOptions, createProjectTerminal } from './project-terminal.ts';
 
@@ -200,6 +201,7 @@ function createServerHarness() {
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
+    content: createUnusedProjectContent('node-server-runtime-test'),
     runtime,
     terminal,
     createTerminal: () =>
@@ -218,6 +220,7 @@ function createCliHarness() {
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
+    content: createUnusedProjectContent('node-cli-runtime-test'),
     runtime,
     terminal,
     createTerminal: () =>
@@ -290,7 +293,6 @@ describe('Node server project runtime Contract+RED', () => {
 
     await proveServerPreview(h);
     await expect(run.ready).resolves.toEqual({
-      ownerToken: OWNER_TOKEN,
       port: SERVER_PORT,
       url: `/preview/${SERVER_PORT}/`,
     });

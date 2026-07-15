@@ -5,10 +5,16 @@ import {
   SW_PONG,
   SW_ROUTING_VERSION,
 } from '@riftydev/service-worker';
-import { describe, expect, it, vi } from 'vitest';
-import { ClosedHandleError, ProjectBusyError } from './errors.ts';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import {
+  ClosedHandleError,
+  DirtyProjectDocumentError,
+  ProjectBusyError,
+  ProjectDocumentSaveInProgressError,
+} from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
+import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import {
   type InspectedProjectDefinition,
   inspectProjectDefinition,
@@ -135,6 +141,7 @@ function createTestSession<TReady>(): TestSession<TReady> {
   let closeImplementation = async (): Promise<void> => {};
   const close = vi.fn(() => closeImplementation());
   const session = {
+    ...createUnusedOwnerProjectHandles('openWorkbench contract owner session'),
     run(): ProjectRun<TReady> {
       throw new Error('test session run is not used by openWorkbench tests');
     },
@@ -576,6 +583,7 @@ describe('openWorkbench normalized composition', () => {
     const opening: Promise<ProjectSession<PreviewHandle>> = workbench.openProject(vite);
     const session = await opening;
 
+    expectTypeOf<Extract<keyof PreviewHandle, 'ownerToken'>>().toEqualTypeOf<never>();
     expect(h.ownerHandle.openProject).toHaveBeenCalledWith(inspectProjectDefinition(vite));
     const typedRun: () => ProjectRun<PreviewHandle> = session.run;
     expect(typedRun).toBe(session.run);
@@ -956,6 +964,41 @@ describe('openWorkbench close fault contract', () => {
     expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
     expect(h.locks.held).toBe(false);
   });
+
+  it.each([
+    ['dirty document', new DirtyProjectDocumentError('/src/main.ts')],
+    ['document save in progress', new ProjectDocumentSaveInProgressError('/src/main.ts')],
+  ])(
+    'keeps Workbench and its active session retryable after %s preflight rejection',
+    async (_scenario, failure) => {
+      const h = harness();
+      const workbench = await h.open(validOptions());
+      const session = createTestSession<unknown>();
+      let allowClose = false;
+      session.setCloseImplementation(async () => {
+        if (!allowClose) throw failure;
+      });
+      h.setOwnerOpenProjectImplementation(async () => session.session);
+      await workbench.openProject(definition('retryable-close-preflight'));
+
+      const rejected = workbench.close();
+
+      await expect(rejected).rejects.toBe(failure);
+      expect(h.ownerHandle.close).not.toHaveBeenCalled();
+      expect(h.locks.held).toBe(true);
+      await expect(workbench.deleteProject('still-active')).rejects.toBeInstanceOf(
+        ProjectBusyError,
+      );
+
+      allowClose = true;
+      const retry = workbench.close();
+      expect(retry).not.toBe(rejected);
+      await retry;
+      expect(session.close).toHaveBeenCalledTimes(2);
+      expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
+      expect(h.locks.held).toBe(false);
+    },
+  );
 
   it('starts owner close to cancel an admitted open instead of waiting on that open', async () => {
     const h = harness();

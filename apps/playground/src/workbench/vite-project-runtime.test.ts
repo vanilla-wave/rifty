@@ -6,6 +6,7 @@ import {
   type PreviewReadiness,
   createPreviewReadiness,
 } from './preview-readiness.ts';
+import { createUnusedProjectContent } from './project-content.test-fixture.ts';
 import { createProjectSession } from './project-session.ts';
 import { type ProjectTerminalExecOptions, createProjectTerminal } from './project-terminal.ts';
 import { createViteProjectRuntime } from './vite-project-runtime.ts';
@@ -205,6 +206,7 @@ function createHarness(options: { readonly readinessCloseGate?: Deferred<void> }
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
+    content: createUnusedProjectContent('vite-runtime-test'),
     runtime,
     terminal,
     createTerminal: () =>
@@ -285,7 +287,6 @@ describe('Vite project runtime Contract+RED', () => {
     await settleMicrotasks();
     h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
     await expect(run.ready).resolves.toEqual({
-      ownerToken: OWNER_TOKEN,
       port: 5173,
       url: '/preview/5173/',
     });
@@ -342,7 +343,6 @@ describe('Vite project runtime Contract+RED', () => {
     await settleMicrotasks();
     h.previews.httpProofs[1]?.resolve({ ok: true, status: 200 });
     await expect(second.ready).resolves.toEqual({
-      ownerToken: OWNER_TOKEN,
       port: 5173,
       url: '/preview/5173/',
     });

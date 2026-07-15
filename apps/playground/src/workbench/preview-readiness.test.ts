@@ -119,7 +119,6 @@ describe('preview readiness', () => {
     h.httpProofs[0]?.resolve({ ok: true, status: 200 });
 
     await expect(ready).resolves.toEqual({
-      ownerToken: 'owner-a',
       port: 5173,
       url: '/preview/5173/',
     });
@@ -250,7 +249,6 @@ describe('preview readiness', () => {
     await Promise.resolve();
     h.httpProofs[0]?.resolve({ ok: true, status: 200 });
     await expect(ready).resolves.toMatchObject({
-      ownerToken: replacement.ownerToken,
       port: replacement.port,
       url: replacement.url,
     });
@@ -434,7 +432,6 @@ describe('preview readiness', () => {
     await readiness.close();
 
     expect(handle).toEqual({
-      ownerToken: replacement.ownerToken,
       port: replacement.port,
       url: replacement.url,
     });

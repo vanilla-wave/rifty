@@ -1,6 +1,11 @@
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import { ClosedHandleError, ProjectBusyError } from './errors.ts';
+import {
+  ClosedHandleError,
+  DirtyProjectDocumentError,
+  ProjectBusyError,
+  ProjectDocumentSaveInProgressError,
+} from './errors.ts';
 import {
   type InspectedProjectDefinition,
   type ProjectDefinition,
@@ -125,10 +130,28 @@ interface CloseableProject {
   close(): Promise<void>;
 }
 
+type ProjectClosePreflight =
+  | { readonly retryable: false }
+  | { readonly retryable: true; readonly error: unknown };
+
+interface ActiveProjectClose {
+  readonly promise: Promise<void>;
+  readonly preflight: Promise<ProjectClosePreflight>;
+}
+
+interface ActiveProject {
+  readonly session: CloseableProject;
+  beginClose(): ActiveProjectClose;
+}
+
+interface TrackedProject<TReady> extends ActiveProject {
+  readonly session: ProjectSession<TReady>;
+}
+
 type ProjectOperation =
   | { readonly kind: 'idle' }
   | { readonly kind: 'opening'; readonly ownerPromise: Promise<CloseableProject> }
-  | { readonly kind: 'active'; readonly project: CloseableProject }
+  | { readonly kind: 'active'; readonly project: ActiveProject }
   | { readonly kind: 'deleting'; readonly ownerPromise: Promise<void> }
   | { readonly kind: 'closing'; readonly promise: Promise<void> }
   | { readonly kind: 'closed'; readonly promise: Promise<void> };
@@ -220,34 +243,60 @@ function createWorkbench(
     if (state.kind !== 'idle') throw new ProjectBusyError('Workbench project operations');
   };
 
-  const trackSession = <TReady>(session: ProjectSession<TReady>): ProjectSession<TReady> => {
-    let closePromise: Promise<void> | null = null;
-    const tracked: ProjectSession<TReady> = Object.freeze({
+  const trackSession = <TReady>(session: ProjectSession<TReady>): TrackedProject<TReady> => {
+    let closeAttempt: ActiveProjectClose | null = null;
+
+    const beginClose = (): ActiveProjectClose => {
+      if (closeAttempt !== null) return closeAttempt;
+      const completion = deferred<void>();
+      const preflight = deferred<ProjectClosePreflight>();
+      let preflightSettled = false;
+      const settlePreflight = (result: ProjectClosePreflight): void => {
+        if (preflightSettled) return;
+        preflightSettled = true;
+        preflight.resolve(result);
+      };
+      const attempt = Object.freeze({ promise: completion.promise, preflight: preflight.promise });
+      closeAttempt = attempt;
+      void completion.promise.catch(() => {});
+      let rawClose: Promise<void>;
+      try {
+        rawClose = session.close();
+      } catch (error) {
+        rawClose = Promise.reject(error);
+      }
+      void rawClose.then(
+        () => {
+          settlePreflight(CLOSE_PREFLIGHT_PASSED);
+          if (state.kind === 'active' && state.project.session === trackedSession) {
+            state = { kind: 'idle' };
+          }
+          completion.resolve(undefined);
+        },
+        (error: unknown) => {
+          if (isRetryableProjectClosePreflight(error)) {
+            closeAttempt = null;
+            settlePreflight({ retryable: true, error });
+          } else {
+            settlePreflight(CLOSE_PREFLIGHT_PASSED);
+          }
+          completion.reject(error);
+        },
+      );
+      // Synchronous close preflight settles before this checkpoint; later failures are terminal.
+      queueMicrotask(() => settlePreflight(CLOSE_PREFLIGHT_PASSED));
+      return attempt;
+    };
+
+    const trackedSession: ProjectSession<TReady> = Object.freeze({
+      files: session.files,
+      documents: session.documents,
       run: () => session.run(),
       terminals: session.terminals,
-      close() {
-        if (closePromise !== null) return closePromise;
-        const completion = deferred<void>();
-        const promise = completion.promise;
-        closePromise = promise;
-        void promise.catch(() => {});
-        let rawClose: Promise<void>;
-        try {
-          rawClose = session.close();
-        } catch (error) {
-          rawClose = Promise.reject(error);
-        }
-        void rawClose.then(
-          () => {
-            if (state.kind === 'active' && state.project === tracked) state = { kind: 'idle' };
-            completion.resolve(undefined);
-          },
-          (error: unknown) => completion.reject(error),
-        );
-        return promise;
-      },
+      close: () => beginClose().promise,
     });
-    return tracked;
+    const trackedProject = Object.freeze({ session: trackedSession, beginClose });
+    return trackedProject;
   };
 
   const workbench: Workbench = {
@@ -270,7 +319,7 @@ function createWorkbench(
           if (state !== opening) throw new ClosedHandleError('Workbench project open');
           const tracked = trackSession(session);
           state = { kind: 'active', project: tracked };
-          return tracked;
+          return tracked.session;
         },
         (error: unknown) => {
           if (state === opening) state = { kind: 'idle' };
@@ -312,17 +361,35 @@ function createWorkbench(
       const promise = completion.promise;
       state = { kind: 'closing', promise };
       void promise.catch(() => {});
-      const teardown = closeWorkbench(previous, owner, lease, releasePageClaim);
-      void teardown.then(
-        () => {
-          state = { kind: 'closed', promise };
-          completion.resolve(undefined);
-        },
-        (error: unknown) => {
-          state = { kind: 'closed', promise };
-          completion.reject(error);
-        },
-      );
+
+      const finishTerminalClose = (activeClose: Promise<void> | null): void => {
+        const teardown = closeWorkbench(previous, activeClose, owner, lease, releasePageClaim);
+        void teardown.then(
+          () => {
+            state = { kind: 'closed', promise };
+            completion.resolve(undefined);
+          },
+          (error: unknown) => {
+            state = { kind: 'closed', promise };
+            completion.reject(error);
+          },
+        );
+      };
+
+      if (previous.kind !== 'active') {
+        finishTerminalClose(null);
+        return promise;
+      }
+
+      const activeClose = previous.project.beginClose();
+      void activeClose.preflight.then((preflight) => {
+        if (preflight.retryable) {
+          state = previous;
+          completion.reject(preflight.error);
+          return;
+        }
+        finishTerminalClose(activeClose.promise);
+      });
       return promise;
     },
   };
@@ -332,6 +399,7 @@ function createWorkbench(
 
 async function closeWorkbench(
   admitted: Exclude<ProjectOperation, { readonly kind: 'closing' | 'closed' }>,
+  activeClose: Promise<void> | null,
   owner: WorkbenchOwnerHandle,
   lease: OriginLease,
   releasePageClaim: () => void,
@@ -344,7 +412,8 @@ async function closeWorkbench(
       () => CLOSE_SUCCEEDED,
     );
   } else if (admitted.kind === 'active') {
-    admittedClose = attemptClose(() => admitted.project.close());
+    if (activeClose === null) throw new Error('Active project close was not admitted');
+    admittedClose = attemptClose(() => activeClose);
   } else if (admitted.kind === 'deleting') {
     admittedClose = admitted.ownerPromise.then(
       () => CLOSE_SUCCEEDED,
@@ -377,6 +446,14 @@ async function closeWorkbench(
 type CloseOutcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown };
 
 const CLOSE_SUCCEEDED = Object.freeze({ ok: true }) satisfies CloseOutcome;
+const CLOSE_PREFLIGHT_PASSED = Object.freeze({ retryable: false }) satisfies ProjectClosePreflight;
+
+function isRetryableProjectClosePreflight(error: unknown): boolean {
+  return (
+    error instanceof DirtyProjectDocumentError ||
+    error instanceof ProjectDocumentSaveInProgressError
+  );
+}
 
 function attemptClose(operation: () => Promise<void>): Promise<CloseOutcome> {
   try {

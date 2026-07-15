@@ -5,7 +5,7 @@ import type {
   OwnerVfsDurabilityReceipt,
   OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
-import { VfsVersionConflictError } from './owner-vfs-protocol.ts';
+import { VfsCommitAppliedError, VfsVersionConflictError } from './owner-vfs-protocol.ts';
 import {
   VfsCommitCoordinatorClosedError,
   VfsCommitProtocolError,
@@ -151,7 +151,12 @@ describe('VfsCommitCoordinator fault contract', () => {
       path: '/b',
       expectedVersion: null,
     });
-    await expect(durability).rejects.toThrow('persist denied');
+    const durabilityFailure = await durability.catch((error: unknown) => error);
+    expect(durabilityFailure).toBeInstanceOf(VfsCommitAppliedError);
+    expect(durabilityFailure).toMatchObject({
+      cause: expect.objectContaining({ message: 'persist denied' }),
+      applied: { ownerEpoch: 'owner-a', treeRevision: 2 },
+    });
     expect(request.operationId).toMatch(/^host-vfs:/);
     expect(barrierCalls).toBe(1);
   });
@@ -413,13 +418,23 @@ describe('VfsCommitCoordinator fault contract', () => {
       timeoutMs: 100,
     });
 
-    await expect(
-      coordinator.commit({ kind: 'mkdir', path: '/a', expectedVersion: null }),
-    ).rejects.toBeInstanceOf(VfsCommitProtocolError);
+    const wrongOwner = await coordinator
+      .commit({ kind: 'mkdir', path: '/a', expectedVersion: null })
+      .catch((error: unknown) => error);
+    expect(wrongOwner).toBeInstanceOf(VfsCommitAppliedError);
+    expect(wrongOwner).toMatchObject({
+      applied: { ownerEpoch: 'owner-a', treeRevision: 8 },
+      cause: expect.any(VfsCommitProtocolError),
+    });
 
     receipt = { ownerEpoch: 'owner-a', treeRevision: 7, durability: 'durable' };
-    await expect(
-      coordinator.commit({ kind: 'mkdir', path: '/b', expectedVersion: null }),
-    ).rejects.toBeInstanceOf(VfsCommitProtocolError);
+    const staleReceipt = await coordinator
+      .commit({ kind: 'mkdir', path: '/b', expectedVersion: null })
+      .catch((error: unknown) => error);
+    expect(staleReceipt).toBeInstanceOf(VfsCommitAppliedError);
+    expect(staleReceipt).toMatchObject({
+      applied: { ownerEpoch: 'owner-a', treeRevision: 8 },
+      cause: expect.any(VfsCommitProtocolError),
+    });
   });
 });

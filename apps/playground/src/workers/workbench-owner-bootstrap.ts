@@ -36,8 +36,10 @@ import {
 } from './workbench-owner-controller.ts';
 import { installWorkbenchOwnerStorage } from './workbench-owner-storage.ts';
 import { workbenchPackageConfig } from './workbench-package-config.ts';
+import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
+import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -203,55 +205,98 @@ async function bootstrap(): Promise<void> {
   const materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
 
   let activeProjectRoot: string | null = null;
+  let activeProjectVfs: ReturnType<typeof createWorkbenchProjectVfs> | null = null;
   installOwnerSyncRuntimeHandlers(
     getKernelDispatcher(),
     () => authority,
     (intents, apply) => {
       const root = activeProjectRoot;
-      if (root === null) {
+      const projectVfs = activeProjectVfs;
+      if (root === null || projectVfs === null) {
         throw new Error('ClosedHandleError: no active Workbench project owns child VFS writes');
       }
-      return applyPackageAwareVfsMutations(packageState.mutations, root, intents, apply);
+      return Promise.resolve(
+        applyPackageAwareVfsMutations(packageState.mutations, root, intents, apply),
+      ).then((result) => {
+        if (activeProjectRoot !== root || activeProjectVfs !== projectVfs) {
+          throw new Error('ClosedHandleError: Workbench project changed during child VFS write');
+        }
+        projectVfs.publishSnapshot();
+        return result;
+      });
     },
   );
 
   const controller = createWorkbenchOwnerController({
     materializer,
     send: (message) => sendOwnerMessage(ipc, message),
-    createProject(input) {
+    async createProject(input) {
       const projectRoot = input.materialized.projectRoot;
       if (activeProjectRoot !== null) {
         throw new Error('Workbench owner already has an active project runtime');
       }
       activeProjectRoot = projectRoot;
       let runtime: ReturnType<typeof createWorkbenchProjectRuntime>;
+      let projectVfs: ReturnType<typeof createWorkbenchProjectVfs>;
       try {
-        runtime = createWorkbenchProjectRuntime({
-          projectRoot,
-          packageConfig: workbenchPackageConfig(input.definition, projectRoot),
-          authority,
-          packageState,
-          nodeEntryWorkerUrl: config.deployment.workers.node,
-          devServerWorkerUrl: config.deployment.workers.devServer,
-          nodeWorkerRuntimeEnv,
-          send(frame) {
-            const output: WorkbenchOwnerProjectRuntimeOutput =
-              frame.type === 'pty:preview' ? { type: 'preview', frame } : { type: 'pty', frame };
-            input.emit(output);
-          },
+        const composition = await createWorkbenchProjectComposition({
+          createVfs: () =>
+            createWorkbenchProjectVfs({
+              projectRoot,
+              authority,
+              packageMutations: packageState.mutations,
+              durability: storage.durability,
+              emit: (frame) => input.emit({ type: 'vfs', frame }),
+            }),
+          createRuntime: () =>
+            createWorkbenchProjectRuntime({
+              projectRoot,
+              packageConfig: workbenchPackageConfig(input.definition, projectRoot),
+              authority,
+              packageState,
+              nodeEntryWorkerUrl: config.deployment.workers.node,
+              devServerWorkerUrl: config.deployment.workers.devServer,
+              nodeWorkerRuntimeEnv,
+              send(frame) {
+                const output: WorkbenchOwnerProjectRuntimeOutput =
+                  frame.type === 'pty:preview'
+                    ? { type: 'preview', frame }
+                    : { type: 'pty', frame };
+                input.emit(output);
+              },
+            }),
         });
+        runtime = composition.runtime;
+        projectVfs = composition.vfs;
       } catch (error) {
         activeProjectRoot = null;
         throw error;
       }
+      activeProjectVfs = projectVfs;
       return Object.freeze({
-        handleFrame: (message: Parameters<WorkbenchOwnerProjectRuntime['handleFrame']>[0]) =>
-          runtime.handlePtyFrame(message.frame),
+        handleFrame(message: Parameters<WorkbenchOwnerProjectRuntime['handleFrame']>[0]) {
+          return message.type === 'vfs'
+            ? projectVfs.handleFrame(message.frame)
+            : runtime.handlePtyFrame(message.frame);
+        },
         async close() {
+          const failures: unknown[] = [];
           try {
             await runtime.close();
+          } catch (error) {
+            failures.push(error);
+          }
+          try {
+            await projectVfs.close();
+          } catch (error) {
+            failures.push(error);
           } finally {
+            if (activeProjectVfs === projectVfs) activeProjectVfs = null;
             if (activeProjectRoot === projectRoot) activeProjectRoot = null;
+          }
+          if (failures.length === 1) throw failures[0];
+          if (failures.length > 1) {
+            throw new AggregateError(failures, 'Workbench project runtime and VFS close failed');
           }
         },
       });

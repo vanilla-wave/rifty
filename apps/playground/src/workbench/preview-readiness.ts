@@ -14,7 +14,6 @@ export type PreviewAdvertisement = PreviewAdvertisementBase &
   );
 
 export interface PreviewHandle {
-  readonly ownerToken: string;
   readonly port: number;
   readonly url: string;
 }
@@ -224,7 +223,7 @@ export function createPreviewReadiness(
         }
         pending.settled = true;
         clearTimeoutIfNeeded();
-        pending.resolve({ ownerToken: entry.ownerToken, port: entry.port, url: entry.url });
+        pending.resolve({ port: entry.port, url: entry.url });
       } catch (error) {
         if (attempt !== current || abort.signal.aborted || pending.settled || closed) return;
         fail(asError(error));

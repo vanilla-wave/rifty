@@ -31,6 +31,12 @@
 
 ### Fixed (finite Node Workbench review)
 
+- ProjectSession file/document versions are now session-local opaque CAS
+  tokens; owner epochs/revisions stay private and foreign-session tokens reject
+  before transport (ADR-0274).
+- Successful project-content close preflight now fences Documents, Files, and
+  the commit coordinator in the same tick while preserving retryable dirty/save
+  preflight and aggregate cleanup failures.
 - Node-server children preserve the shell environment, expose the exact entry
   as `process.argv[1]`, and override only the documented `PORT` and
   `NAPI_RS_FORCE_WASI` policy values.
