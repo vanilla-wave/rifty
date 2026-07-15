@@ -200,7 +200,9 @@
 - Save, Reset, Rename, reload restore, and launcher/Starter switches now share
   one FIFO project-owner lease. Canceled dialog intents never bind, late mirror
   commits retain their captured identity, and applied Save holds admission
-  through durable proof before any owner teardown.
+  through durable proof before any owner teardown. Owner-bound controls now
+  reflect that lease's busy/fenced state instead of queuing invisible actions
+  behind a terminal boot.
 - Cold reload recovery no longer deletes the hidden owner's live `/scratch`
   root while it is publishing the saved-project index. Cleanup is deferred to
   the respawned project owner, which replans the same stale-source deletion.

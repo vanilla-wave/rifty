@@ -11,6 +11,33 @@ function deferred(): { readonly promise: Promise<void>; readonly resolve: () => 
 }
 
 describe('project owner coordinator (concurrent-same-key fault)', () => {
+  it('concurrent-same-key fault: blocks admission synchronously across the whole queued batch', async () => {
+    const coordinator = createProjectOwnerCoordinator();
+    const headStarted = deferred();
+    const releaseHead = deferred();
+
+    expect(coordinator.blocked()).toBe(false);
+    const head = coordinator.run(
+      () => true,
+      async () => {
+        headStarted.resolve();
+        await releaseHead.promise;
+      },
+    );
+    expect(coordinator.blocked()).toBe(true);
+    await headStarted.promise;
+
+    const queued = coordinator.run(
+      () => true,
+      async () => 'queued',
+    );
+    releaseHead.resolve();
+    await head;
+    expect(coordinator.blocked()).toBe(true);
+    await queued;
+    expect(coordinator.blocked()).toBe(false);
+  });
+
   it('never overlaps or supersedes a current head when a later operation queues', async () => {
     const coordinator = createProjectOwnerCoordinator();
     const firstStarted = deferred();
@@ -81,6 +108,7 @@ describe('project owner coordinator (concurrent-same-key fault)', () => {
     await expect(canceled).resolves.toEqual({ kind: 'superseded' });
     await expect(replacement).resolves.toEqual({ kind: 'completed', value: 'replacement' });
     expect(bindCanceledIntent).not.toHaveBeenCalled();
+    expect(coordinator.blocked()).toBe(false);
   });
 
   it('continues with the next ticket after an ordinary operation failure', async () => {
@@ -95,9 +123,11 @@ describe('project owner coordinator (concurrent-same-key fault)', () => {
       () => true,
       async () => 'recovered',
     );
+    expect(coordinator.blocked()).toBe(true);
 
     await expect(failed).rejects.toThrow('retryable owner failure');
     await expect(retried).resolves.toEqual({ kind: 'completed', value: 'recovered' });
+    expect(coordinator.blocked()).toBe(false);
   });
 
   it('torn-state fault: rejects queued and future tickets after an unsafe outcome', async () => {
@@ -122,9 +152,11 @@ describe('project owner coordinator (concurrent-same-key fault)', () => {
     triggerFence.resolve();
     await unsafeRejection;
     await queuedRejection;
+    expect(coordinator.blocked()).toBe(true);
     await expect(coordinator.run(() => true, queuedOperation)).rejects.toThrow(
       'owner outcome is unsafe',
     );
+    expect(coordinator.blocked()).toBe(true);
     expect(queuedOperation).not.toHaveBeenCalled();
   });
 });

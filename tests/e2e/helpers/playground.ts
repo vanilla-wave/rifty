@@ -123,6 +123,7 @@ export async function openActiveProjectFromLauncher(page: Page): Promise<void> {
     name: /^(Open|Switch to)$/,
   });
   if (await scratchOpen.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await expect(scratchOpen).toBeEnabled({ timeout: 90_000 });
     await scratchOpen.click();
     await expect(launcher).toHaveCount(0, { timeout: 90_000 });
     await waitForWorkspaceOwner(page);
@@ -131,6 +132,7 @@ export async function openActiveProjectFromLauncher(page: Page): Promise<void> {
 
   const activeProject = launcher.locator('.rf-pcard[data-active="true"]').first();
   if (await activeProject.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await expect(activeProject).toHaveAttribute('role', 'button', { timeout: 90_000 });
     await activeProject.click();
     await expect(launcher).toHaveCount(0, { timeout: 90_000 });
     await waitForWorkspaceOwner(page);

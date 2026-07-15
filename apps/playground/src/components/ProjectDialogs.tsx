@@ -11,6 +11,7 @@ import { Icon } from './icons.tsx';
 
 export function ProjectDialogs(props: {
   dialog: Dialog;
+  ownerBlocked: boolean;
   saveName: string;
   renameName: string;
   targetName: string;
@@ -66,6 +67,7 @@ export function ProjectDialogs(props: {
                   <button
                     type="button"
                     class="rf-btn rf-btn--lime"
+                    disabled={props.ownerBlocked}
                     onClick={() => props.onConfirmSave()}
                   >
                     Save project
@@ -93,6 +95,7 @@ export function ProjectDialogs(props: {
                   <button
                     type="button"
                     class="rf-btn rf-btn--lime"
+                    disabled={props.ownerBlocked}
                     onClick={() => props.onConfirmRename()}
                   >
                     Rename
@@ -119,6 +122,7 @@ export function ProjectDialogs(props: {
                   <button
                     type="button"
                     class="rf-btn rf-btn--amber"
+                    disabled={props.ownerBlocked}
                     onClick={() => props.onConfirmReset()}
                   >
                     Reset files
@@ -179,6 +183,7 @@ export function ProjectDialogs(props: {
                     <button
                       type="button"
                       class="rf-btn rf-btn--danger-outline"
+                      disabled={props.ownerBlocked}
                       onClick={() => props.onSwitchDiscardThen()}
                     >
                       Discard & continue

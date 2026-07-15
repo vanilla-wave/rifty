@@ -88,6 +88,7 @@ async function switchToProject(page: Page, name: string, id: string): Promise<vo
   await openProjects(page);
   const card = page.locator(`.rf-pcard[data-project="${id}"]`, { hasText: name }).first();
   await expect(card).toBeVisible({ timeout: OPFS_POLL });
+  await expect(card).toHaveAttribute('role', 'button', { timeout: OWNER_DURABLE_TIMEOUT });
   await card.click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
     timeout: OWNER_DURABLE_TIMEOUT,

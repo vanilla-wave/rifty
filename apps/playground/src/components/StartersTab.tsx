@@ -35,6 +35,7 @@ export function StartersTab(props: {
   presets: readonly Preset[];
   q: string;
   cat: 'all' | StarterGroup;
+  ownerBlocked: boolean;
   onPick(id: string): void;
   onSearch(q: string): void;
   onCat(cat: 'all' | StarterGroup): void;
@@ -83,6 +84,7 @@ export function StartersTab(props: {
                     class="rf-starters__card"
                     data-preset={p.id}
                     data-setup={p.setup}
+                    disabled={props.ownerBlocked}
                     onClick={() => props.onPick(p.id)}
                   >
                     <span

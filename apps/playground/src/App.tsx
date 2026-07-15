@@ -2034,6 +2034,7 @@ export function App(props: AppProps) {
         label: preset.label,
         hint: preset.id,
         icon: 'layers',
+        disabled: projectOwner.blocked,
         // Route through the gallery pick path so the STORE's active starter follows
         // the chosen template (ADR-0165 §4) — keeps activeStarterId/template coherent.
         run: () => onPickStarter(preset.id),
@@ -2143,8 +2144,8 @@ export function App(props: AppProps) {
     return items;
   }
 
-  // Items snapshot, built once per palette open — not a getter, so typing in
-  // the palette doesn't re-walk the VFS on every keystroke.
+  // Items snapshot, built once per palette open, so typing doesn't re-walk the
+  // VFS. Per-item admission accessors remain live while the palette is open.
   const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
   function openPalette(): void {
     setPaletteData(paletteItems());
@@ -2544,6 +2545,7 @@ export function App(props: AppProps) {
         projects={store.projects()}
         scratch={store.scratch()}
         activeId={store.activeId()}
+        ownerBlocked={projectOwner.blocked()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}
@@ -2566,6 +2568,7 @@ export function App(props: AppProps) {
 
       <ProjectDialogs
         dialog={store.dialog()}
+        ownerBlocked={projectOwner.blocked()}
         saveName={saveName()}
         renameName={renameName()}
         targetName={dialogTargetName()}

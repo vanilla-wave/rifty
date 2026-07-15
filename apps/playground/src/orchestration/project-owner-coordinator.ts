@@ -1,3 +1,5 @@
+import { createSignal } from 'solid-js';
+
 export interface ProjectOwnerLease {
   /** Permanently reject this and every later operation after an unsafe outcome. */
   readonly fence: (error: unknown) => never;
@@ -8,6 +10,8 @@ export type ProjectOwnerRunOutcome<T> =
   | { readonly kind: 'superseded' };
 
 export interface ProjectOwnerCoordinator {
+  /** True while an owner operation is active/queued, or after a terminal fence. */
+  readonly blocked: () => boolean;
   /**
    * FIFO admission for every owner-bound mutation and replacement. The intent
    * check runs at the queue head, immediately before the operation can bind.
@@ -25,17 +29,31 @@ function asFenceError(error: unknown): Error {
 
 export function createProjectOwnerCoordinator(): ProjectOwnerCoordinator {
   let fenceError: Error | null = null;
+  let pending = 0;
   let tail: Promise<void> = Promise.resolve();
+  const [blocked, setBlocked] = createSignal(false);
+
+  const admit = (): void => {
+    pending++;
+    setBlocked(true);
+  };
+  const release = (): void => {
+    pending--;
+    if (pending === 0 && !fenceError) setBlocked(false);
+  };
 
   return {
+    blocked,
     run<T>(intentCurrent: () => boolean, operation: (lease: ProjectOwnerLease) => T | Promise<T>) {
-      const run = tail.then(async (): Promise<ProjectOwnerRunOutcome<T>> => {
+      admit();
+      const ticket = tail.then(async (): Promise<ProjectOwnerRunOutcome<T>> => {
         if (fenceError) throw fenceError;
         if (!intentCurrent()) return { kind: 'superseded' };
 
         const lease: ProjectOwnerLease = {
           fence(error): never {
             fenceError ??= asFenceError(error);
+            setBlocked(true);
             throw fenceError;
           },
         };
@@ -51,11 +69,11 @@ export function createProjectOwnerCoordinator(): ProjectOwnerCoordinator {
       });
 
       // Ordinary failure belongs to this ticket's caller; the FIFO stays live.
-      tail = run.then(
+      tail = ticket.then(
         () => {},
         () => {},
       );
-      return run;
+      return ticket.finally(release);
     },
   };
 }

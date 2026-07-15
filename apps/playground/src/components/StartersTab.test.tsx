@@ -12,6 +12,7 @@ const props = {
   presets: PRESETS,
   q: '',
   cat: 'all' as const,
+  ownerBlocked: false,
   onPick: () => {},
   onSearch: () => {},
   onCat: () => {},
@@ -63,5 +64,12 @@ describe('StartersTab — the moved gallery (ADR-0079)', () => {
     const html = renderToString(() => StartersTab({ ...props, cat: 'server' }));
     // the Server chip is active, All is not — drives the highlight + asserts onCat wiring target
     expect(html).toMatch(/data-active="true"[^>]*>Server</);
+  });
+
+  it('concurrent-same-key fault: blocks starter admission while the owner FIFO is occupied', () => {
+    const html = renderToString(() => StartersTab({ ...props, ownerBlocked: true }));
+    expect(html).toMatch(/data-preset="real-vite"[^>]*disabled/);
+    expect(html).toMatch(/data-preset="express-sqlite"[^>]*disabled/);
+    expect(html).toMatch(/class="rf-starters__cat"(?![^>]*disabled)/);
   });
 });

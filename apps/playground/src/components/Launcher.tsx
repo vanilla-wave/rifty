@@ -24,6 +24,7 @@ export function Launcher(props: {
   projects: readonly Project[];
   scratch: Scratch | null;
   activeId: ActiveId;
+  ownerBlocked: boolean;
   storage: 'opfs' | 'memory';
   menuFor: string | null;
   q: string;
@@ -101,6 +102,7 @@ export function Launcher(props: {
                 projects={props.projects}
                 scratch={props.scratch}
                 activeId={props.activeId}
+                ownerBlocked={props.ownerBlocked}
                 storage={props.storage}
                 menuFor={props.menuFor}
                 glyphFor={props.glyphFor}
@@ -118,6 +120,7 @@ export function Launcher(props: {
               presets={props.presets}
               q={props.q}
               cat={props.cat}
+              ownerBlocked={props.ownerBlocked}
               onPick={props.onPickStarter}
               onSearch={props.onSearch}
               onCat={props.onCat}
