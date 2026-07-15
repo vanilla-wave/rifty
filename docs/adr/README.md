@@ -65,6 +65,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0267 | Entry-scoped host bootstrap metadata for recursive Node workers |
 | 0269 | shared require.extensions compile hooks for CJS loaders |
 | 0270 | worker_threads.Worker parent events are EventEmitter-only |
+| 0272 | Late typed process terminal bootstrap |
 
 ### runtime-wasi
 

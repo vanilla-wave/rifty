@@ -4,7 +4,12 @@ import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service
 import { describe, expect, it, vi } from 'vitest';
 import { ProjectDefinitionMismatchError } from './errors.ts';
 import type { PageToWorkbenchOwnerMessage } from './owner-protocol.ts';
-import { inspectProjectDefinition, projects } from './project-definition.ts';
+import {
+  defineNodeCliProject,
+  defineNodeServerProject,
+  inspectProjectDefinition,
+  projects,
+} from './project-definition.ts';
 import { startBrowserWorkspaceOwner, workbenchOwnerSpawnSpec } from './workbench-browser-owner.ts';
 import type { WorkbenchOwnerStartInput } from './workbench-owner-port.ts';
 
@@ -405,5 +410,122 @@ describe('browser Workbench owner transport', () => {
     raw.close();
     worker.emit('exit', 0, null);
     await raw.closed;
+  });
+
+  it('dispatches finite Node definitions to their exact browser runtimes', async () => {
+    const files = { '/src/main.mjs': 'console.log("node");\n' };
+    const cases = [
+      {
+        definition: inspectProjectDefinition(
+          defineNodeServerProject({
+            id: 'browser-node-server',
+            files,
+            entryPath: '/src/main.mjs',
+            port: 4321,
+          }),
+        ),
+        line: 'npm run dev',
+        ready: false,
+      },
+      {
+        definition: inspectProjectDefinition(
+          defineNodeCliProject({
+            id: 'browser-node-cli',
+            files,
+            entryPath: '/src/main.mjs',
+            args: ['two words'],
+          }),
+        ),
+        line: "node ./src/main.mjs 'two words'",
+        ready: true,
+      },
+    ] as const;
+
+    for (const [index, fixture] of cases.entries()) {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject<unknown>(fixture.definition);
+      const openRequest = sentOf(worker, 'workbench:open-project')[0];
+      if (openRequest === undefined) throw new Error('missing Node open request');
+      const projectToken = `owner-token-node-${String(index)}`;
+      worker.emit('message', {
+        type: 'workbench:project-opened',
+        opId: openRequest.opId,
+        projectToken,
+        projectRoot: `/owner-born/node-${String(index)}`,
+      });
+      const project = await opening;
+      const openPty = sentOf(worker, 'workbench:project-pty').find(
+        (message) => message.frame.type === 'pty:open',
+      );
+      if (openPty?.frame.type !== 'pty:open') throw new Error('missing Node PTY open');
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken,
+        frame: { type: 'pty:ready', sid: openPty.frame.sid },
+      });
+
+      const run = project.run();
+      await settleMicrotasks();
+      const exec = sentOf(worker, 'workbench:project-pty').find(
+        (message) => message.frame.type === 'pty:exec',
+      );
+      if (exec?.frame.type !== 'pty:exec') throw new Error('missing Node PTY exec');
+      expect(exec.frame.line).toBe(fixture.line);
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken,
+        frame: { type: 'pty:run-ready', sid: exec.frame.sid, rid: exec.frame.rid },
+      });
+      if (fixture.ready) await expect(run.ready).resolves.toBeUndefined();
+
+      const closing = project.close();
+      await settleMicrotasks();
+      const closePty = sentOf(worker, 'workbench:project-pty').find(
+        (message) => message.frame.type === 'pty:close',
+      );
+      const closeProject = sentOf(worker, 'workbench:close-project')[0];
+      if (closePty?.frame.type !== 'pty:close' || closeProject === undefined) {
+        throw new Error('missing Node close frames');
+      }
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken,
+        frame: {
+          type: 'pty:exit',
+          sid: exec.frame.sid,
+          rid: exec.frame.rid,
+          code: 0,
+          exit: { code: 0, signal: null },
+          cwd: `/owner-born/node-${String(index)}`,
+          env: {},
+        },
+      });
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken,
+        frame: {
+          type: 'pty:close-ack',
+          sid: closePty.frame.sid,
+          opId: closePty.frame.opId,
+          ok: true,
+        },
+      });
+      worker.emit('message', {
+        type: 'workbench:project-closed',
+        opId: closeProject.opId,
+        projectToken,
+      });
+      await closing;
+      raw.close();
+      worker.emit('exit', 0, null);
+      await raw.closed;
+    }
   });
 });

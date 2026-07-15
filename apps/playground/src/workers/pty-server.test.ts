@@ -655,10 +655,10 @@ describe('pty-server', () => {
     const driver = createOwnerChildDevServer(
       'blob:dev-worker',
       {
-        RIFTY_KERNEL_WORKER_URL: 'blob:kernel-worker',
-        RIFTY_NODE_ENTRY_WORKER_URL: 'blob:node-worker',
-        RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
-        RIFTY_ESBUILD_WASM_URL: 'blob:esbuild-wasm',
+        kernelWorkerUrl: 'blob:kernel-worker',
+        nodeEntryWorkerUrl: 'blob:node-worker',
+        sqliteWasmUrl: 'blob:sqlite-wasm',
+        esbuildWasmUrl: 'blob:esbuild-wasm',
       },
       () => {
         spawned.resolve();
@@ -674,9 +674,18 @@ describe('pty-server', () => {
             signal: ctx.signal ?? new AbortController().signal,
             log: (chunk) => ctx.stdout.write(chunk),
             params: {
-              templateId: 'node-server',
-              root: '/',
-              devPort: 5174,
+              env: { ...ctx.env },
+              cfg: {
+                runtime: 'node-server',
+                root: '/workspace',
+                port: 5174,
+                entryPath: '/workspace/server.mjs',
+                packageName: 'node-server',
+                packageVersion: '1.0.0',
+                installDeps: {},
+                packageJson: '{"name":"node-server","version":"1.0.0"}\n',
+                seedFiles: {},
+              },
               isTTY: ctx.isTTY,
               cols: ctx.cols,
               rows: ctx.rows,

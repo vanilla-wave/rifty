@@ -8,6 +8,53 @@ export interface NodeWorkerRuntimeConfig {
   readonly esbuildWasmUrl: string;
 }
 
+function objectRecord(value: unknown, owner: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${owner} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function exactFields(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  owner: string,
+): void {
+  const actual = Reflect.ownKeys(value);
+  if (
+    actual.length !== expected.length ||
+    expected.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
+  ) {
+    throw new TypeError(`${owner} must contain exactly ${expected.join(', ')}`);
+  }
+}
+
+function nonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/** Validate and detach an entry-scoped recursive-worker host snapshot. */
+export function snapshotNodeWorkerRuntimeConfig(
+  value: unknown,
+  owner: string,
+): NodeWorkerRuntimeConfig {
+  const record = objectRecord(value, owner);
+  exactFields(
+    record,
+    ['kernelWorkerUrl', 'nodeEntryWorkerUrl', 'sqliteWasmUrl', 'esbuildWasmUrl'],
+    owner,
+  );
+  return Object.freeze({
+    kernelWorkerUrl: nonEmptyString(record.kernelWorkerUrl, `${owner}.kernelWorkerUrl`),
+    nodeEntryWorkerUrl: nonEmptyString(record.nodeEntryWorkerUrl, `${owner}.nodeEntryWorkerUrl`),
+    sqliteWasmUrl: nonEmptyString(record.sqliteWasmUrl, `${owner}.sqliteWasmUrl`),
+    esbuildWasmUrl: nonEmptyString(record.esbuildWasmUrl, `${owner}.esbuildWasmUrl`),
+  });
+}
+
 function required(
   env: Readonly<Record<string, string | undefined>>,
   key: string,
@@ -24,11 +71,12 @@ function required(
 export function buildNodeWorkerRuntimeEnv(
   config: NodeWorkerRuntimeConfig,
 ): Readonly<Record<string, string>> {
+  const snapshot = snapshotNodeWorkerRuntimeConfig(config, 'node-worker-runtime-config');
   const env = {
-    RIFTY_KERNEL_WORKER_URL: config.kernelWorkerUrl,
-    RIFTY_NODE_ENTRY_WORKER_URL: config.nodeEntryWorkerUrl,
-    RIFTY_SQLITE_WASM_URL: config.sqliteWasmUrl,
-    RIFTY_ESBUILD_WASM_URL: config.esbuildWasmUrl,
+    RIFTY_KERNEL_WORKER_URL: snapshot.kernelWorkerUrl,
+    RIFTY_NODE_ENTRY_WORKER_URL: snapshot.nodeEntryWorkerUrl,
+    RIFTY_SQLITE_WASM_URL: snapshot.sqliteWasmUrl,
+    RIFTY_ESBUILD_WASM_URL: snapshot.esbuildWasmUrl,
   };
   readNodeWorkerRuntimeConfig(env, 'node-worker-runtime-config');
   return Object.freeze(env);
@@ -59,8 +107,9 @@ export function readNodeWorkerRuntimeConfigFromProcess(
 export function installNodeWorkerRuntimeConfig(
   config: NodeWorkerRuntimeConfig,
 ): Readonly<Record<string, string>> {
-  const runtimeEnv = buildNodeWorkerRuntimeEnv(config);
-  setKernelWorkerUrl(config.kernelWorkerUrl);
-  configureNodeEntryWorker(config.nodeEntryWorkerUrl, runtimeEnv);
+  const snapshot = snapshotNodeWorkerRuntimeConfig(config, 'node-worker-runtime-config');
+  const runtimeEnv = buildNodeWorkerRuntimeEnv(snapshot);
+  setKernelWorkerUrl(snapshot.kernelWorkerUrl);
+  configureNodeEntryWorker(snapshot.nodeEntryWorkerUrl, runtimeEnv);
   return runtimeEnv;
 }

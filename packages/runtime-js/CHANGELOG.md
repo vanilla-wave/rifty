@@ -39,6 +39,13 @@
   thread id/data and TTY metadata stay out of band. Versioned payload, launch,
   and terminal records reject extra fields before use.
 
+- **Dedicated URL entries can apply validated PTY launch metadata before user
+  code without reconstructing `process` (ADR-0267/0272).** Custom entries start
+  non-TTY, then use one exact-own typed snapshot; former `RIFTY_TTY_*` names
+  remain ordinary guest data. Live resize stays intact, and a resize racing the
+  URL import is retained on the process instance and wins over the older launch
+  grid even when kernel and URL entry use separate bundle copies.
+
 - **Every Node stdin entry path keeps unsupported pull/raw APIs loud.** The
   runtime-owned seeded reader now throws surface-specific `NotImplementedError`
   for readable listeners, `read`, `pipe`, async iteration, and `setRawMode`,

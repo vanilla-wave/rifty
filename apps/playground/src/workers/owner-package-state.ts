@@ -37,7 +37,7 @@ import {
 } from '../glue/project-deps.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
+import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
@@ -50,7 +50,7 @@ import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 const enc = new TextEncoder();
 
 export interface OwnerPackageConfig {
-  readonly cfg: BootstrapConfig;
+  readonly cfg: ProjectPackageConfig;
   readonly templateId: string;
   readonly slug: string;
   readonly fromScratch: boolean;

@@ -22,9 +22,16 @@ import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@rifty
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { readNodeEntryBootstrapIfPresent } from './node-entry-runtime-config.ts';
+import {
+  type NodeEntryTerminalBootstrap,
+  readNodeEntryBootstrapIfPresent,
+  snapshotNodeEntryTerminalBootstrap,
+} from './node-entry-runtime-config.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
+const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
+  'rifty.runtime-js.process-terminal-bootstrap.v1',
+);
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
 // Head cursor instead of shift()-per-item: O(n) drain, not O(n^2) (#27, perf-audit
 // 2026-06-05). Reset to 0 only after a full drain (see drainNextTicks).
@@ -155,6 +162,27 @@ function attachTtyControls(
   };
   stream.clearScreenDown = (cb): boolean => writeControl(stream, '\x1b[0J', cb);
   return stream;
+}
+
+function detachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
+  Reflect.deleteProperty(stream, 'columns');
+  Reflect.deleteProperty(stream, 'rows');
+  Reflect.deleteProperty(stream, 'getWindowSize');
+  Reflect.deleteProperty(stream, 'clearLine');
+  Reflect.deleteProperty(stream, 'cursorTo');
+  Reflect.deleteProperty(stream, 'moveCursor');
+  Reflect.deleteProperty(stream, 'clearScreenDown');
+  return stream;
+}
+
+function applyTtyShape(
+  stream: NodeStdioWriter,
+  isTTY: boolean,
+  size: { readonly cols: number; readonly rows: number },
+): void {
+  stream.isTTY = isTTY;
+  if (isTTY) attachTtyControls(stream, size);
+  else detachTtyControls(stream);
 }
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
@@ -343,30 +371,12 @@ function makeStdinReader(
   return { stdin, push };
 }
 
-function envFlag(env: Readonly<Record<string, string | undefined>>, key: string): boolean {
-  return env[key] === '1';
-}
-
 function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
   return (
     typeof value === 'object' &&
     value !== null &&
     (value as { readonly kind?: unknown }).kind === 'stdin:eof'
   );
-}
-
-function ttyDimension(
-  env: Readonly<Record<string, string | undefined>>,
-  key: 'RIFTY_TTY_COLS' | 'RIFTY_TTY_ROWS',
-  fallback: number,
-): number {
-  const raw = env[key];
-  if (raw === undefined) return fallback;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${key} must be a positive integer; received ${raw}`);
-  }
-  return value;
 }
 
 interface ProcessTerminalBootstrap {
@@ -377,9 +387,7 @@ interface ProcessTerminalBootstrap {
   readonly rows: number;
 }
 
-function processTerminalBootstrap(
-  env: Readonly<Record<string, string | undefined>>,
-): ProcessTerminalBootstrap {
+function processTerminalBootstrap(): ProcessTerminalBootstrap {
   const bootstrap = readNodeEntryBootstrapIfPresent();
   if (bootstrap !== null) {
     const terminal = bootstrap.launch.kind === 'program' ? bootstrap.launch.terminal : undefined;
@@ -394,11 +402,11 @@ function processTerminalBootstrap(
     );
   }
   return {
-    stdinIsTTY: envFlag(env, 'RIFTY_STDIN_IS_TTY'),
-    stdoutIsTTY: envFlag(env, 'RIFTY_STDOUT_IS_TTY'),
-    stderrIsTTY: envFlag(env, 'RIFTY_STDERR_IS_TTY'),
-    cols: ttyDimension(env, 'RIFTY_TTY_COLS', 80),
-    rows: ttyDimension(env, 'RIFTY_TTY_ROWS', 24),
+    stdinIsTTY: false,
+    stdoutIsTTY: false,
+    stderrIsTTY: false,
+    cols: 80,
+    rows: 24,
   };
 }
 
@@ -478,12 +486,19 @@ export class NodeProcess extends EventEmitter {
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   #controlClosed = false;
+  #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
   // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
   readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
+      value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
     if (spec) {
       this.pid = spec.pid;
       this.ppid = spec.ppid;
@@ -492,7 +507,7 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      const terminal = processTerminalBootstrap(spec.env);
+      const terminal = processTerminalBootstrap();
       const size = { cols: terminal.cols, rows: terminal.rows };
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size);
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size);
@@ -653,6 +668,7 @@ export class NodeProcess extends EventEmitter {
     if (!Number.isSafeInteger(cols) || cols <= 0 || !Number.isSafeInteger(rows) || rows <= 0) {
       throw new RangeError(`TTY resize must use positive integer cells; received ${cols}x${rows}`);
     }
+    this.#latestTtyControlSize = { cols, rows };
     let changed = false;
     for (const stream of [this.stdout, this.stderr]) {
       if (!stream.isTTY || (stream.columns === cols && stream.rows === rows)) continue;
@@ -662,6 +678,14 @@ export class NodeProcess extends EventEmitter {
       stream.emit('resize');
     }
     if (changed) this.emit('SIGWINCH');
+  }
+
+  #applyTerminalBootstrap(terminal: unknown): void {
+    const snapshot = snapshotNodeEntryTerminalBootstrap(terminal, 'process terminal bootstrap');
+    const size = this.#latestTtyControlSize ?? { cols: snapshot.cols, rows: snapshot.rows };
+    this.stdin.isTTY = snapshot.stdinIsTTY;
+    applyTtyShape(this.stdout, snapshot.stdoutIsTTY, size);
+    applyTtyShape(this.stderr, snapshot.stderrIsTTY, size);
   }
 
   #disconnectIpc(): void {
@@ -681,6 +705,21 @@ export class NodeProcess extends EventEmitter {
     }
     this.#disconnectIpc();
   }
+}
+
+/** Apply an exact entry envelope's PTY metadata before that entry runs user code. */
+export function applyNodeProcessTerminalBootstrap(
+  process: unknown,
+  terminal: NodeEntryTerminalBootstrap,
+): void {
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('process terminal bootstrap target must be an object');
+  }
+  const receiver = Reflect.get(process, NODE_PROCESS_TERMINAL_BOOTSTRAP);
+  if (typeof receiver !== 'function') {
+    throw new TypeError('process terminal bootstrap target is not a runtime-owned NodeProcess');
+  }
+  (receiver as (value: unknown) => void)(terminal);
 }
 
 (NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>

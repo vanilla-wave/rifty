@@ -6,7 +6,13 @@ import {
   inspectPageToWorkbenchOwnerMessage,
   inspectWorkbenchOwnerToPageMessage,
 } from './owner-protocol.ts';
-import { inspectProjectDefinition, projectDefinitionWire, projects } from './project-definition.ts';
+import {
+  defineNodeCliProject,
+  defineNodeServerProject,
+  inspectProjectDefinition,
+  projectDefinitionWire,
+  projects,
+} from './project-definition.ts';
 
 const TOKEN = createOwnerProjectToken(() => 'owner-project-token-1');
 
@@ -131,6 +137,38 @@ function definitionWire() {
   );
 }
 
+function nodeServerDefinitionWire() {
+  return projectDefinitionWire(
+    inspectProjectDefinition(
+      defineNodeServerProject({
+        id: 'protocol-node-server',
+        files: {
+          '/src/main.mjs': 'console.log("main");\n',
+          '/src/other.mjs': 'console.log("other");\n',
+        },
+        entryPath: '/src/main.mjs',
+        port: 4321,
+      }),
+    ),
+  );
+}
+
+function nodeCliDefinitionWire() {
+  return projectDefinitionWire(
+    inspectProjectDefinition(
+      defineNodeCliProject({
+        id: 'protocol-node-cli',
+        files: {
+          '/src/main.mjs': 'console.log("main");\n',
+          '/src/other.mjs': 'console.log("other");\n',
+        },
+        entryPath: '/src/main.mjs',
+        args: ['--format', 'json'],
+      }),
+    ),
+  );
+}
+
 function pageMessage(value: unknown): unknown {
   return inspectPageToWorkbenchOwnerMessage(structuredClone(value));
 }
@@ -248,6 +286,71 @@ describe('Workbench owner protocol', () => {
         projectToken: 'page-selected',
       }),
     ).toThrow(TypeError);
+  });
+
+  it('admits exact clone-safe Node server and CLI definitions on the project-open ingress', () => {
+    const cases = [
+      ['server', nodeServerDefinitionWire()],
+      ['CLI', nodeCliDefinitionWire()],
+    ] as const;
+
+    for (const [label, definition] of cases) {
+      const message = pageMessage({
+        type: 'workbench:open-project',
+        opId: `open-${label}`,
+        definition,
+      }) as {
+        readonly definition: {
+          readonly kind: string;
+          readonly files: Readonly<Record<string, Uint8Array>>;
+          readonly args?: readonly string[];
+        };
+      };
+
+      expect(message.definition).toEqual(definition);
+      expect(Object.isFrozen(message.definition)).toBe(true);
+      expect(Object.isFrozen(message.definition.files)).toBe(true);
+      if (message.definition.kind === 'node-cli') {
+        expect(Object.isFrozen(message.definition.args)).toBe(true);
+      }
+    }
+  });
+
+  it('rejects additive Node wire fields and metadata tamper before opening a project', () => {
+    const serverWire = structuredClone(nodeServerDefinitionWire()) as unknown as Record<
+      string,
+      unknown
+    >;
+    const cliWire = structuredClone(nodeCliDefinitionWire()) as unknown as Record<string, unknown>;
+
+    expect(() =>
+      pageMessage({
+        type: 'workbench:open-project',
+        opId: 'open-extra-server',
+        definition: { ...serverWire, extra: true },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      pageMessage({
+        type: 'workbench:open-project',
+        opId: 'open-extra-cli',
+        definition: { ...cliWire, extra: true },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      pageMessage({
+        type: 'workbench:open-project',
+        opId: 'open-tampered-server',
+        definition: { ...serverWire, port: 4322 },
+      }),
+    ).toThrow(/identity/i);
+    expect(() =>
+      pageMessage({
+        type: 'workbench:open-project',
+        opId: 'open-tampered-cli',
+        definition: { ...cliWire, args: ['--changed'] },
+      }),
+    ).toThrow(/identity/i);
   });
 
   it.each(PAGE_PTY_FRAMES)('round-trips exact token-wrapped page PTY frame $type', (frame) => {

@@ -232,6 +232,7 @@ async function bootstrap(): Promise<void> {
           authority,
           packageState,
           nodeEntryWorkerUrl: config.deployment.workers.node,
+          devServerWorkerUrl: config.deployment.workers.devServer,
           nodeWorkerRuntimeEnv,
           send(frame) {
             const output: WorkbenchOwnerProjectRuntimeOutput =

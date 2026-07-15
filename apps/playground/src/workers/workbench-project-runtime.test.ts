@@ -17,6 +17,20 @@ import {
 } from './workbench-project-runtime.ts';
 
 const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const NODE_ENTRY_WORKER_URL = 'https://example.test/node-entry.js';
+const DEV_SERVER_WORKER_URL = 'https://example.test/dev-server.js';
+const NODE_WORKER_RUNTIME_ENV = Object.freeze({
+  RIFTY_KERNEL_WORKER_URL: 'https://example.test/kernel.js',
+  RIFTY_NODE_ENTRY_WORKER_URL: NODE_ENTRY_WORKER_URL,
+  RIFTY_SQLITE_WASM_URL: 'https://example.test/sqlite.wasm',
+  RIFTY_ESBUILD_WASM_URL: 'https://example.test/esbuild.wasm',
+});
+const NODE_WORKER_RUNTIME_CONFIG = Object.freeze({
+  kernelWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL,
+  nodeEntryWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_NODE_ENTRY_WORKER_URL,
+  sqliteWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_SQLITE_WASM_URL,
+  esbuildWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_ESBUILD_WASM_URL,
+});
 const PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-project-a',
   version: '1.0.0',
@@ -43,8 +57,53 @@ const packageConfig: OwnerPackageConfig = {
   fromScratch: true,
 };
 
+const NODE_SERVER_PACKAGE_JSON = `${JSON.stringify({
+  name: 'workbench-node-server',
+  version: '1.0.0',
+  type: 'module',
+  scripts: { dev: 'node src/server.mjs' },
+})}\n`;
+const nodeServerPackageConfig: OwnerPackageConfig = {
+  cfg: {
+    runtime: 'node-server',
+    root: ROOT,
+    port: 4317,
+    entryPath: `${ROOT}/src/server.mjs`,
+    packageName: 'workbench-node-server',
+    packageVersion: '1.0.0',
+    installDeps: {},
+    packageJson: NODE_SERVER_PACKAGE_JSON,
+    seedFiles: {},
+  },
+  templateId: 'workbench-node-server',
+  slug: 'project-a',
+  fromScratch: true,
+};
+
+const NODE_CLI_PACKAGE_JSON = `${JSON.stringify({
+  name: 'workbench-node-cli',
+  version: '1.0.0',
+  type: 'module',
+})}\n`;
+const nodeCliPackageConfig: OwnerPackageConfig = {
+  cfg: {
+    runtime: 'node-cli',
+    root: ROOT,
+    entryPath: `${ROOT}/src/cli.mjs`,
+    packageName: 'workbench-node-cli',
+    packageVersion: '1.0.0',
+    installDeps: {},
+    packageJson: NODE_CLI_PACKAGE_JSON,
+    seedFiles: {},
+  },
+  templateId: 'workbench-node-cli',
+  slug: 'project-a',
+  fromScratch: true,
+};
+
 interface BoundaryWorker {
   readonly handle: ReturnType<typeof globalProcessManager.spawnWorker>;
+  readonly command: () => Parameters<typeof globalProcessManager.spawnWorker>[0] | null;
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
   emitMessage(message: unknown): void;
@@ -67,6 +126,7 @@ function settledOr<T, TPending>(promise: Promise<T>, pending: TPending): Promise
 }
 
 function boundaryWorker(): BoundaryWorker {
+  let capturedCommand: Parameters<typeof globalProcessManager.spawnWorker>[0] | null = null;
   let capturedSpec: Parameters<typeof globalProcessManager.spawnWorker>[1] | null = null;
   let killedWith: string | null = null;
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
@@ -129,12 +189,14 @@ function boundaryWorker(): BoundaryWorker {
     setCwd: () => undefined,
   };
   const handle = rawHandle as unknown as ReturnType<typeof globalProcessManager.spawnWorker>;
-  vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, spec) => {
+  vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
+    capturedCommand = command;
     capturedSpec = spec;
     return handle;
   });
   return {
     handle,
+    command: () => capturedCommand,
     spec: () => capturedSpec,
     killedWith: () => killedWith,
     emitMessage(message) {
@@ -148,6 +210,7 @@ function boundaryWorker(): BoundaryWorker {
 
 function harness(
   onSend?: (frame: OwnerToPageFrame, runtime: () => WorkbenchProjectRuntime) => void,
+  activePackageConfig: OwnerPackageConfig = packageConfig,
 ) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -157,18 +220,29 @@ function harness(
   setSyncMirror(authority, { async: pair.vfs });
   authority.mkdirSync(`${ROOT}/src`, { recursive: true });
   authority.mkdirSync(`${ROOT}/node_modules/.bin`, { recursive: true });
-  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(PACKAGE_JSON));
+  authority.writeFileSync(
+    `${ROOT}/package.json`,
+    new TextEncoder().encode(activePackageConfig.cfg.packageJson),
+  );
+  authority.writeFileSync(
+    activePackageConfig.cfg.entryPath,
+    new TextEncoder().encode('export {};\n'),
+  );
   authority.writeFileSync(
     `${ROOT}/node_modules/.bin/vite`,
     new TextEncoder().encode('#!/usr/bin/env node\n'),
   );
+  const nodeWorkerRuntimeEnv =
+    activePackageConfig.cfg.runtime === 'vite'
+      ? { RIFTY_KERNEL_WORKER_URL: NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL }
+      : NODE_WORKER_RUNTIME_ENV;
   const packageState = createOwnerPackageState({
-    initial: packageConfig,
+    initial: activePackageConfig,
     vfs: new SyncMirrorVfs(),
     fsSync: authority,
     installStampClaims,
     flush: () => authority.flush(),
-    nodeWorkerRuntimeEnv: { RIFTY_KERNEL_WORKER_URL: 'https://example.test/kernel.js' },
+    nodeWorkerRuntimeEnv,
     log: () => {},
     registry: new RegistryClient({
       baseUrl: 'https://example.test/registry',
@@ -180,14 +254,15 @@ function harness(
   });
   const frames: OwnerToPageFrame[] = [];
   const runtimeRef: { current?: WorkbenchProjectRuntime } = {};
-  const runtime = createWorkbenchProjectRuntime({
+  const runtimeOptions = {
     projectRoot: ROOT,
-    packageConfig,
+    packageConfig: activePackageConfig,
     authority,
     packageState,
-    nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
-    nodeWorkerRuntimeEnv: { RIFTY_KERNEL_WORKER_URL: 'https://example.test/kernel.js' },
-    send: (frame) => {
+    nodeEntryWorkerUrl: NODE_ENTRY_WORKER_URL,
+    devServerWorkerUrl: DEV_SERVER_WORKER_URL,
+    nodeWorkerRuntimeEnv,
+    send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
         const current = runtimeRef.current;
@@ -195,7 +270,8 @@ function harness(
         return current;
       });
     },
-  });
+  };
+  const runtime = createWorkbenchProjectRuntime(runtimeOptions);
   runtimeRef.current = runtime;
   return { authority, frames, packageState, runtime };
 }
@@ -203,6 +279,244 @@ function harness(
 afterEach(() => {
   vi.restoreAllMocks();
   resetSyncMirror();
+});
+
+describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it('runs node-server npm dev in its dedicated entry-scoped child with PTY provenance', async () => {
+    const worker = boundaryWorker();
+    const h = harness(undefined, nodeServerPackageConfig);
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'terminal-node-server',
+      env: {
+        USER_FLAG: 'preserved',
+        RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
+        NAPI_RS_FORCE_WASI: 'guest-forged-wasi',
+        PORT: '9999',
+      },
+    });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-server',
+        rid: 'run-node-server',
+        line: 'npm run dev',
+        cols: 101,
+        rows: 41,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    expect(worker.command()).toBe('dev-server');
+    expect(worker.spec()).toMatchObject({
+      cwd: ROOT,
+      argv: ['rifty', `${ROOT}/src/server.mjs`],
+      env: {
+        USER_FLAG: 'preserved',
+        RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
+        NAPI_RS_FORCE_WASI: '1',
+        PORT: '4317',
+      },
+      serve: true,
+      entry: {
+        kind: 'url',
+        url: DEV_SERVER_WORKER_URL,
+        bootstrap: {
+          protocol: 'rifty.dev-server/v1',
+          payload: {
+            nodeWorkerRuntime: NODE_WORKER_RUNTIME_CONFIG,
+            cfg: nodeServerPackageConfig.cfg,
+            previewScope: expect.any(String),
+            terminal: {
+              stdinIsTTY: false,
+              stdoutIsTTY: true,
+              stderrIsTTY: true,
+              cols: 101,
+              rows: 41,
+            },
+          },
+        },
+      },
+    });
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected entry-scoped dev-server child bootstrap');
+    }
+    const payload = entry.bootstrap.payload as { readonly previewScope?: unknown };
+    if (typeof payload.previewScope !== 'string') {
+      throw new Error('expected owner-minted dev-server preview scope');
+    }
+    expect(payload.previewScope).not.toBe('guest-forged-scope');
+
+    worker.emitMessage({
+      type: 'rifty:dev-ready',
+      port: 4317,
+      previewScope: payload.previewScope,
+    });
+    await vi.waitFor(() =>
+      expect(h.frames.filter((frame) => frame.type === 'pty:preview').at(-1)).toEqual({
+        type: 'pty:preview',
+        ports: [
+          {
+            port: 4317,
+            url: '/preview/4317/',
+            label: 'npm run dev',
+            source: 'dev-server',
+            sid: 'dev-server',
+            ptySid: 'terminal-node-server',
+            ptyRid: 'run-node-server',
+            previewScope: payload.previewScope,
+          },
+        ],
+      }),
+    );
+    expect(h.frames.filter((frame) => frame.type === 'pty:dev-server').at(-1)).toEqual({
+      type: 'pty:dev-server',
+      status: 'running',
+      sid: 'terminal-node-server',
+      cwd: ROOT,
+      port: 4317,
+      url: '/preview/4317/',
+      previewScope: payload.previewScope,
+    });
+
+    h.runtime.handlePtyFrame({
+      type: 'pty:signal',
+      sid: 'terminal-node-server',
+      rid: 'run-node-server',
+      signal: 'SIGINT',
+    });
+    await vi.waitFor(() => expect(worker.killedWith()).toBe('SIGTERM'));
+    worker.emitExit(null, 'SIGTERM');
+    await running;
+    expect(h.frames).toContainEqual({
+      type: 'pty:exit',
+      sid: 'terminal-node-server',
+      rid: 'run-node-server',
+      code: 130,
+      exit: { code: null, signal: 'SIGTERM' },
+      cwd: ROOT,
+      env: {
+        USER_FLAG: 'preserved',
+        RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
+        NAPI_RS_FORCE_WASI: 'guest-forged-wasi',
+        PORT: '9999',
+      },
+    });
+    await h.runtime.close();
+  });
+
+  it('runs node-cli through a supervised node child with exact empty argv and physical exit', async () => {
+    const worker = boundaryWorker();
+    const h = harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'terminal-node-cli',
+      env: { USER_FLAG: 'preserved' },
+    });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-cli',
+        rid: 'run-node-cli',
+        line: "node src/cli.mjs '' 'two words'",
+        cols: 93,
+        rows: 35,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    expect(worker.command()).toBe('node');
+    expect(worker.spec()).toMatchObject({
+      cwd: ROOT,
+      argv: ['rifty', `${ROOT}/src/cli.mjs`, '', 'two words'],
+      env: { USER_FLAG: 'preserved' },
+      serve: true,
+      entry: {
+        kind: 'url',
+        url: NODE_ENTRY_WORKER_URL,
+        bootstrap: {
+          protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+          payload: {
+            hostRuntime: NODE_WORKER_RUNTIME_ENV,
+            launch: {
+              kind: 'program',
+              bin: false,
+              remoteFs: true,
+              nodeServe: true,
+              previewScope: expect.any(String),
+              terminal: {
+                stdinIsTTY: false,
+                stdoutIsTTY: true,
+                stderrIsTTY: true,
+                cols: 93,
+                rows: 35,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    worker.emitExit(7);
+    await running;
+    expect(h.frames).toContainEqual({
+      type: 'pty:exit',
+      sid: 'terminal-node-cli',
+      rid: 'run-node-cli',
+      code: 7,
+      exit: { code: 7, signal: null },
+      cwd: ROOT,
+      env: { USER_FLAG: 'preserved' },
+    });
+    await h.runtime.close();
+  });
+
+  it.each([
+    "node -e '1'",
+    "node --eval '1'",
+    'node --eval=1',
+    "node -p '1'",
+    "node --print '1'",
+    'node --print=1',
+  ])('keeps unsupported eval context loud without a temp write or child: %s', async (line) => {
+    const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+      throw new Error('unexpected Node eval child spawn');
+    });
+    const h = harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-eval',
+      rid: 'run-node-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' && frame.rid === 'run-node-eval' && frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: workbench.node.eval-context');
+    expect(spawn).not.toHaveBeenCalled();
+    expect(
+      h.authority.readdirSync(ROOT).some((entry) => entry.name.startsWith('.rifty-eval-')),
+    ).toBe(false);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 1 }),
+    );
+    await h.runtime.close();
+  });
 });
 
 describe('Workbench project runtime', () => {
@@ -470,6 +784,7 @@ describe('Workbench project runtime', () => {
         authority: h.authority,
         packageState: h.packageState,
         nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
+        devServerWorkerUrl: 'https://example.test/dev-server.js',
         nodeWorkerRuntimeEnv: {},
         send: () => {},
       }),

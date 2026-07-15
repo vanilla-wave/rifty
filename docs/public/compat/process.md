@@ -30,6 +30,7 @@ The playground terminal runs an arbitrary entry as a supervised child of the wor
 decided by what the program DOES (it called `listen()`), not a flag — Node-faithful. Backing tests:
 `tests/e2e/node-command.spec.ts`, `apps/playground/src/workers/node-program-lifecycle.test.ts`,
 `apps/playground/src/workers/owner-child-node-executor.test.ts`,
+`apps/playground/src/workers/workbench-project-runtime.test.ts`,
 `apps/playground/src/workers/preview-registry.test.ts`, and
 `tests/browser-unit/owner-node-stdio-control.spec.ts`. Run-to-completion loader parity (shebang,
 relative `import`/`require`, exit codes) reuses the existing node-entry/resolver conformance
@@ -40,6 +41,8 @@ unchanged loader, so it adds no duplicate parity case.
 | Feature | Status | Notes |
 |---|---|---|
 | `node <file> [args]` run-to-completion | ✅ | Streams stdout/stderr; exits on event-loop drain (the model above) with the program's code; Ctrl-C → exit 130 |
+| Legacy Playground `node -e/-p` eval context | ⚠️ | Executes a temporary `.cjs`, so argv, `[eval]` filename/module identity, and `require.main` differ from Node 24. See `backlog/runtime-js/node-cli-eval-identity-parity`. |
+| Workbench `node -e/-p` eval context | ❌ | Throws `NotImplementedError('workbench.node.eval-context')` rather than repeat the legacy temporary-file approximation. Same backlog. |
 | `node <server.js>` long-running server | ✅ | A `listen()` keeps the child alive (`serve:true`); the listened port is registered for preview; Ctrl-C stops it |
 | Multi-port preview + switcher | ✅ | Each live server (and `npm run dev`) appears in the preview-panel port switcher; routed via `/preview/<port>/` |
 | `Error: Cannot find module` for a missing entry (real Node `MODULE_NOT_FOUND`) | ✅ | `node ./nope.js` / `./nope.mjs` emits real Node's multi-line `Error: Cannot find module '<abs>'` + `{ code: 'MODULE_NOT_FOUND', requireStack: [] }`, exit 1 — the loader is the single producer (the owner no longer pre-checks existence), and Node runs a missing entry through its CJS loader for both extensions. The error OBJECT (`err.code` + `err.requireStack` + the `Cannot find module … Require stack:` message) is parity-proven head-to-head for a nested `require()` miss (`tools/node-parity-runner/cases/modules/module-not-found.case.ts`). Honest deltas in the PRINTED form: ALL stack frames are dropped (the `node:internal/…` loader frames have no in-browser equivalent + are version-specific; rifty also doesn't synthesize the user call-site frame Node interleaves on a nested miss), the `Node.js vX` trailer is omitted, `requireStack` uses Node's inline inspect form (long paths don't multi-line-wrap), and a deeper ancestor chain collapses to the immediate requirer. A nested ESM `import()` miss is a DIFFERENT Node error (`ERR_MODULE_NOT_FOUND`) — rifty surfaces an honest non-masquerading `ModuleLoadError` there, not yet that shape: `backlog/runtime-js/esm-import-miss-err-module-not-found` |

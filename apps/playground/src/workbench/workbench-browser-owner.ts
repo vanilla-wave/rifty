@@ -12,6 +12,10 @@ import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import { ClosedHandleError, ProjectBusyError, deserializeWorkbenchOwnerError } from './errors.ts';
 import {
+  createNodeCliProjectRuntime,
+  createNodeServerProjectRuntime,
+} from './node-project-runtime.ts';
+import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
   type WorkbenchOwnerBootConfig,
@@ -462,76 +466,107 @@ export function startBrowserWorkspaceOwner(
     };
   };
 
-  const createBrowserProject = <TReady>(transport: ProjectTransport): ProjectSession<TReady> => {
+  const createBrowserProject = <TReady>(
+    transport: ProjectTransport,
+    definition: InspectedProjectDefinition<TReady>,
+  ): ProjectSession<TReady> => {
     const openTerminal = (): ProjectTerminal =>
       createProjectTerminal({
         id: `workbench-terminal-${String(++terminalSequence)}`,
         port: transport.terminalPort,
       });
     const terminal = openTerminal();
-    const runtime = createViteProjectRuntime({
-      terminal,
-      ownerToken: transport.token,
-      createPreviewReadiness: () =>
-        createPreviewReadiness({
-          timeoutMs: input.deployment.previewProbeTimeoutMs,
-          subscribe: transport.subscribePreview,
-          requestSnapshot: transport.requestPreview,
-          mountRoute: (entry) =>
-            dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
-          proveServiceWorkerControl: (signal) =>
-            proveRiftyServiceWorkerControl({
-              container: dependencies.serviceWorker,
-              timeoutMs: input.deployment.previewProbeTimeoutMs,
-              signal,
-              timers: dependencies.timers,
-            }),
-          probe: async (url, signal) => {
-            const response = await dependencies.fetch(url, {
-              cache: 'no-store',
-              signal,
-            });
-            return { ok: response.ok, status: response.status };
-          },
-        }),
-    });
-    const core = createProjectSession<PreviewHandle>({
-      runtime,
-      terminal,
-      createTerminal: openTerminal,
-    });
-    let closePromise: Promise<void> | null = null;
-    const session: ProjectSession<PreviewHandle> = Object.freeze({
-      run: () => core.run(),
-      terminals: core.terminals,
-      close() {
-        if (closePromise !== null) return closePromise;
-        // PTY close frames enter the ordered channel before the owner token is
-        // fenced by close-project; the ACK still waits for owner-side teardown.
-        const terminalClose = core.close();
-        const ownerClose = requestCloseProject(transport.token);
-        closePromise = (async () => {
-          const results = await Promise.allSettled([terminalClose, ownerClose]);
-          const failures = results.flatMap((result) =>
-            result.status === 'rejected' ? [errorFrom(result.reason)] : [],
-          );
-          transport.disconnect();
-          if (activeProject === transport) activeProject = null;
-          if (failures.length === 1) throw failures[0] as Error;
-          if (failures.length > 1) {
-            throw new AggregateError(
-              failures,
-              `Workbench project close failed: ${failures.map((error) => error.message).join('; ')}`,
+    const previewReadiness = () =>
+      createPreviewReadiness({
+        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        subscribe: transport.subscribePreview,
+        requestSnapshot: transport.requestPreview,
+        mountRoute: (entry) =>
+          dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
+        proveServiceWorkerControl: (signal) =>
+          proveRiftyServiceWorkerControl({
+            container: dependencies.serviceWorker,
+            timeoutMs: input.deployment.previewProbeTimeoutMs,
+            signal,
+            timers: dependencies.timers,
+          }),
+        probe: async (url, signal) => {
+          const response = await dependencies.fetch(url, {
+            cache: 'no-store',
+            signal,
+          });
+          return { ok: response.ok, status: response.status };
+        },
+      });
+
+    const bindOwnerClose = <T>(core: ProjectSession<T>): ProjectSession<T> => {
+      let closePromise: Promise<void> | null = null;
+      return Object.freeze({
+        run: () => core.run(),
+        terminals: core.terminals,
+        close() {
+          if (closePromise !== null) return closePromise;
+          // PTY close frames enter the ordered channel before the owner token is
+          // fenced by close-project; the ACK still waits for owner-side teardown.
+          const terminalClose = core.close();
+          const ownerClose = requestCloseProject(transport.token);
+          closePromise = (async () => {
+            const results = await Promise.allSettled([terminalClose, ownerClose]);
+            const failures = results.flatMap((result) =>
+              result.status === 'rejected' ? [errorFrom(result.reason)] : [],
             );
-          }
-        })();
-        void closePromise.catch(() => {});
-        return closePromise;
-      },
-    });
-    // ProjectDefinition<TReady> is a package-owned phantom. The only accepted
-    // wire kind is Vite, whose constructor brands TReady as PreviewHandle.
-    return session as unknown as ProjectSession<TReady>;
+            transport.disconnect();
+            if (activeProject === transport) activeProject = null;
+            if (failures.length === 1) throw failures[0] as Error;
+            if (failures.length > 1) {
+              throw new AggregateError(
+                failures,
+                `Workbench project close failed: ${failures.map((error) => error.message).join('; ')}`,
+              );
+            }
+          })();
+          void closePromise.catch(() => {});
+          return closePromise;
+        },
+      });
+    };
+
+    const session =
+      definition.kind === 'node-cli'
+        ? bindOwnerClose(
+            createProjectSession<void>({
+              runtime: createNodeCliProjectRuntime({
+                terminal,
+                entryPath: definition.entryPath,
+                args: definition.args,
+              }),
+              terminal,
+              createTerminal: openTerminal,
+            }),
+          )
+        : bindOwnerClose(
+            createProjectSession<PreviewHandle>({
+              runtime:
+                definition.kind === 'node-server'
+                  ? createNodeServerProjectRuntime({
+                      terminal,
+                      ownerToken: transport.token,
+                      entryPath: definition.entryPath,
+                      port: definition.port,
+                      createPreviewReadiness: previewReadiness,
+                    })
+                  : createViteProjectRuntime({
+                      terminal,
+                      ownerToken: transport.token,
+                      createPreviewReadiness: previewReadiness,
+                    }),
+              terminal,
+              createTerminal: openTerminal,
+            }),
+          );
+    // ProjectDefinition<TReady> is package-branded; the exhaustive finite kind
+    // dispatch above is the sole place that maps its phantom readiness type.
+    return session as ProjectSession<TReady>;
   };
 
   return {
@@ -555,7 +590,7 @@ export function startBrowserWorkspaceOwner(
       const transport = makeProjectTransport(opened);
       activeProject = transport;
       try {
-        return createBrowserProject<TReady>(transport);
+        return createBrowserProject<TReady>(transport, definition);
       } catch (error) {
         const failures = [errorFrom(error)];
         try {

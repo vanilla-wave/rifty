@@ -15,9 +15,40 @@
 - The owner package authority now quiesces prior FIFO work through detached
   stamp settlement. Owner package state registers, activates, and ensures exact
   per-project configs in one admission without a placeholder bootstrap project.
+- Package-private finite Node-server and Node-CLI definitions now carry exact
+  entry/port/argv identity through a clone-safe owner-revalidated wire. The
+  public root still exposes only `projects.vite`; companion mapping remains the
+  sole future Node construction path (ADR-0263).
+- Node-server and Node-CLI runtime adapters now share the admitted terminal
+  lifecycle: servers require exact dev-server preview provenance and routed
+  SW/HTTP proof, while CLIs become ready at PTY admission and preserve safely
+  quoted argv plus exact physical exit.
+- The real Workbench owner now dispatches those finite Node kinds end to end:
+  server definitions derive an honest `npm run dev` entry and spawn the
+  entry-scoped dedicated child; CLI definitions spawn the supervised Node
+  child with exact argv. Project-rooted dash-prefixed entries remain paths, and
+  CLI package config carries no invented preview port.
+
+### Fixed (finite Node Workbench review)
+
+- Node-server children preserve the shell environment, expose the exact entry
+  as `process.argv[1]`, and override only the documented `PORT` and
+  `NAPI_RS_FORCE_WASI` policy values.
+- Normalized scripts and downstream dependency maps preserve every own JSON
+  key, including `__proto__`, so manifest bytes, identity, and installation
+  input cannot diverge.
+- Workbench `node -e/-p` stays a loud `NotImplementedError` until its eval
+  argv/module identity matches Node; the legacy temporary-file delta is marked
+  ⚠️ in the process compat matrix and tracked in backlog.
 
 ### Changed (app-local Workbench Vite vertical)
 
+- Dedicated Node-server children now receive one validated, detached runtime
+  config and PTY launch record on their exact Worker entry. They no longer
+  import the Playground template registry or select
+  root/runtime/deployment/preview/TTY roles through `process.env`; `PORT` and
+  `NAPI_RS_FORCE_WASI` remain intentional guest-visible settings
+  (ADR-0267/0272).
 - The built-in Vite 8 project default now materializes the same visible
   `vite.config.js` policy as the Vite 8 starter before project identity; any
   caller-supplied Vite version or recognized config variant remains user-owned.
@@ -52,9 +83,9 @@
   dimensions and unsubscribe on every exit/fault path. A closed resize control
   returns a negative PTY ACK; `kill()` false/throw settles loudly instead of
   waiting forever for an exit event (ADR-0225/0230).
-- Node-server dev children use the same child-TTY env/resize chokepoint as
-  Node/`.bin`: spawn metadata, current/live grids, and abort/stop/exit/error
-  cleanup cannot drift between the three adapters (ADR-0225).
+- Node-server dev children use the same child-TTY bootstrap/resize chokepoint as
+  Node/`.bin`: typed spawn metadata stays outside guest env, while current/live
+  grids and abort/stop/exit/error cleanup cannot drift (ADR-0225/0267).
 - Post-ready dev-child exit, error, and resize faults now converge through one
   controller terminalization path. Exact `(code, signal)` survives supervision,
   LIVE/preview state clears, and a closed resize control receives a negative ACK.
@@ -82,7 +113,7 @@
   `.bin`, recursive `execSync`, and `worker_threads`; the branch-local stdin
   guard is removed.
 
-- Page, owner, node/bin, dev-server, and recursive worker realms now propagate
+- Page, owner, node/bin, and recursive worker realms now propagate
   deployment capabilities through a versioned URL-entry bootstrap, while guest
   `process.env` remains the exact inherited/replacement Node environment.
   Program, worker-thread, PTY, and preview identities are fresh typed launch

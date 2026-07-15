@@ -55,7 +55,7 @@ function objectRecord(value: unknown, owner: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function assertExactFields(
+function assertAllowedOwnFields(
   record: Record<string, unknown>,
   allowed: readonly string[],
   owner: string,
@@ -66,6 +66,17 @@ function assertExactFields(
     const label = typeof key === 'string' ? key : String(key);
     throw new TypeError(`${owner} has unexpected field ${label}`);
   }
+}
+
+function requiredOwnField(record: Record<string, unknown>, field: string, owner: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(record, field)) {
+    throw new TypeError(`${owner} has missing field ${field}`);
+  }
+  return record[field];
+}
+
+function optionalOwnField(record: Record<string, unknown>, field: string): unknown {
+  return Object.prototype.hasOwnProperty.call(record, field) ? record[field] : undefined;
 }
 
 function snapshotHostRuntime(value: unknown): Readonly<Record<string, string>> {
@@ -86,10 +97,13 @@ function snapshotHostRuntime(value: unknown): Readonly<Record<string, string>> {
   return Object.freeze(snapshot);
 }
 
-function booleanField(record: Record<string, unknown>, key: string, owner: string): boolean {
-  const value = record[key];
+function booleanValue(value: unknown, key: string, owner: string): boolean {
   if (typeof value !== 'boolean') throw new TypeError(`${owner}.${key} must be a boolean`);
   return value;
+}
+
+function booleanOwnField(record: Record<string, unknown>, key: string, owner: string): boolean {
+  return booleanValue(requiredOwnField(record, key, owner), key, owner);
 }
 
 function positiveInteger(value: unknown, owner: string): number {
@@ -99,51 +113,67 @@ function positiveInteger(value: unknown, owner: string): number {
   return value as number;
 }
 
-function snapshotTerminal(value: unknown): NodeEntryTerminalBootstrap {
-  const record = objectRecord(value, 'node-entry bootstrap terminal');
-  assertExactFields(
-    record,
-    ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'],
-    'node-entry bootstrap terminal',
-  );
+const TERMINAL_FIELDS = ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'] as const;
+
+/** Package-internal exact-own snapshot shared by entry and late process bootstraps. */
+export function snapshotNodeEntryTerminalBootstrap(
+  value: unknown,
+  owner = 'node-entry bootstrap terminal',
+): NodeEntryTerminalBootstrap {
+  const record = objectRecord(value, owner);
+  assertAllowedOwnFields(record, TERMINAL_FIELDS, owner);
+  const stdinIsTTY = requiredOwnField(record, 'stdinIsTTY', owner);
+  const stdoutIsTTY = requiredOwnField(record, 'stdoutIsTTY', owner);
+  const stderrIsTTY = requiredOwnField(record, 'stderrIsTTY', owner);
+  const cols = requiredOwnField(record, 'cols', owner);
+  const rows = requiredOwnField(record, 'rows', owner);
   return Object.freeze({
-    stdinIsTTY: booleanField(record, 'stdinIsTTY', 'node-entry bootstrap terminal'),
-    stdoutIsTTY: booleanField(record, 'stdoutIsTTY', 'node-entry bootstrap terminal'),
-    stderrIsTTY: booleanField(record, 'stderrIsTTY', 'node-entry bootstrap terminal'),
-    cols: positiveInteger(record.cols, 'node-entry bootstrap terminal cols'),
-    rows: positiveInteger(record.rows, 'node-entry bootstrap terminal rows'),
+    stdinIsTTY: booleanValue(stdinIsTTY, 'stdinIsTTY', owner),
+    stdoutIsTTY: booleanValue(stdoutIsTTY, 'stdoutIsTTY', owner),
+    stderrIsTTY: booleanValue(stderrIsTTY, 'stderrIsTTY', owner),
+    cols: positiveInteger(cols, `${owner} cols`),
+    rows: positiveInteger(rows, `${owner} rows`),
   });
 }
 
 function snapshotLaunch(value: unknown): NodeEntryLaunch {
   const record = objectRecord(value, 'node-entry bootstrap launch');
-  if (record.kind === 'program') {
-    assertExactFields(
+  const kind = requiredOwnField(record, 'kind', 'node-entry bootstrap launch');
+  if (kind === 'program') {
+    assertAllowedOwnFields(
       record,
       ['kind', 'bin', 'remoteFs', 'nodeServe', 'previewScope', 'terminal'],
       'node-entry bootstrap program launch',
     );
-    const previewScope = record.previewScope;
+    const bin = booleanOwnField(record, 'bin', 'node-entry bootstrap launch');
+    const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
+    const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
+    const previewScope = optionalOwnField(record, 'previewScope');
     if (previewScope !== undefined && (typeof previewScope !== 'string' || previewScope === '')) {
       throw new TypeError('node-entry bootstrap launch.previewScope must be a non-empty string');
     }
-    const terminal = record.terminal;
+    const terminal = optionalOwnField(record, 'terminal');
     return Object.freeze({
       kind: 'program',
-      bin: booleanField(record, 'bin', 'node-entry bootstrap launch'),
-      remoteFs: booleanField(record, 'remoteFs', 'node-entry bootstrap launch'),
-      nodeServe: booleanField(record, 'nodeServe', 'node-entry bootstrap launch'),
+      bin,
+      remoteFs,
+      nodeServe,
       ...(previewScope === undefined ? {} : { previewScope }),
-      ...(terminal === undefined ? {} : { terminal: snapshotTerminal(terminal) }),
+      ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
     });
   }
-  if (record.kind === 'worker-thread') {
-    assertExactFields(
+  if (kind === 'worker-thread') {
+    assertAllowedOwnFields(
       record,
       ['kind', 'remoteFs', 'threadId', 'workerDataJson'],
       'node-entry bootstrap worker-thread launch',
     );
-    const workerDataJson = record.workerDataJson;
+    const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
+    const threadId = positiveInteger(
+      requiredOwnField(record, 'threadId', 'node-entry bootstrap launch'),
+      'node-entry bootstrap launch.threadId',
+    );
+    const workerDataJson = optionalOwnField(record, 'workerDataJson');
     if (workerDataJson !== undefined) {
       if (typeof workerDataJson !== 'string') {
         throw new TypeError('node-entry bootstrap launch.workerDataJson must be a string');
@@ -156,8 +186,8 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     }
     return Object.freeze({
       kind: 'worker-thread',
-      remoteFs: booleanField(record, 'remoteFs', 'node-entry bootstrap launch'),
-      threadId: positiveInteger(record.threadId, 'node-entry bootstrap launch.threadId'),
+      remoteFs,
+      threadId,
       ...(workerDataJson === undefined ? {} : { workerDataJson }),
     });
   }
@@ -166,10 +196,12 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
 
 function snapshotPayload(value: unknown): NodeEntryBootstrapPayload {
   const record = objectRecord(value, 'node-entry bootstrap payload');
-  assertExactFields(record, ['hostRuntime', 'launch'], 'node-entry bootstrap payload');
+  assertAllowedOwnFields(record, ['hostRuntime', 'launch'], 'node-entry bootstrap payload');
   return Object.freeze({
-    hostRuntime: snapshotHostRuntime(record.hostRuntime),
-    launch: snapshotLaunch(record.launch),
+    hostRuntime: snapshotHostRuntime(
+      requiredOwnField(record, 'hostRuntime', 'node-entry bootstrap payload'),
+    ),
+    launch: snapshotLaunch(requiredOwnField(record, 'launch', 'node-entry bootstrap payload')),
   });
 }
 

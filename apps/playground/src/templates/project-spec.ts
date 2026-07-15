@@ -18,6 +18,20 @@
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
 
+import type {
+  NodeCliPackageConfig,
+  NodeServerPackageConfig,
+  ProjectPackageConfig,
+  VitePackageConfig,
+} from '../workbench/internal/project-package-config.ts';
+
+export type {
+  NodeCliPackageConfig as NodeCliBootstrapConfig,
+  NodeServerPackageConfig as NodeServerBootstrapConfig,
+  ProjectPackageConfig as BootstrapConfig,
+  VitePackageConfig as ViteBootstrapConfig,
+} from '../workbench/internal/project-package-config.ts';
+
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
   readonly relativePath: string;
@@ -78,42 +92,6 @@ export interface NodeCliProjectSpec extends NodeProjectSpecBase {
 }
 
 export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec | NodeCliProjectSpec;
-
-interface BootstrapConfigBase {
-  readonly root: string;
-  readonly port: number;
-  readonly entryPath: string;
-  /** npm package name/version serialized into the seeded package.json. */
-  readonly packageName: string;
-  readonly packageVersion: string;
-  /** Dependencies serialized into package.json; npm-client reads them from VFS. */
-  readonly installDeps: Readonly<Record<string, string>>;
-  /** Serialized package.json written into the project root. */
-  readonly packageJson: string;
-  /** Absolute-path → contents map the worker seeds idempotently. */
-  readonly seedFiles: Readonly<Record<string, string>>;
-  /** Carried from {@link ProjectSpecBase.bakedNodeModulesUrl}. */
-  readonly bakedNodeModulesUrl?: string;
-  /** Carried from {@link ProjectSpecBase.bakedNodeModulesTemplateId}. */
-  readonly bakedNodeModulesTemplateId?: string;
-}
-
-export interface ViteBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'vite';
-}
-
-export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'node-server';
-}
-
-export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'node-cli';
-}
-
-export type BootstrapConfig =
-  | ViteBootstrapConfig
-  | NodeServerBootstrapConfig
-  | NodeCliBootstrapConfig;
 
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
@@ -253,12 +231,11 @@ export function resolveBootstrapConfig(
   spec: ProjectSpec,
   port: number,
   root: string,
-): BootstrapConfig {
+): ProjectPackageConfig {
   const entryPath = `${root}${spec.entry.relativePath}`;
   const pkg = buildProjectPackageJson(spec);
   const base = {
     root,
-    port,
     entryPath,
     packageName: pkg.name,
     packageVersion: pkg.version,
@@ -276,8 +253,10 @@ export function resolveBootstrapConfig(
       [`${root}/package.json`]: pkg.json,
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
-    if (spec.runtime === 'node-cli') return { ...base, runtime: 'node-cli', seedFiles };
-    return { ...base, runtime: 'node-server', seedFiles };
+    if (spec.runtime === 'node-cli') {
+      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliPackageConfig;
+    }
+    return { ...base, runtime: 'node-server', port, seedFiles } satisfies NodeServerPackageConfig;
   }
   const seedFiles: Record<string, string> = {
     ...initializedGitFiles(root),
@@ -289,6 +268,7 @@ export function resolveBootstrapConfig(
   return {
     ...base,
     runtime: 'vite',
+    port,
     seedFiles,
-  };
+  } satisfies VitePackageConfig;
 }

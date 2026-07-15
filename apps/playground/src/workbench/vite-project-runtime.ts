@@ -1,5 +1,5 @@
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
-import type { PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
+import type { PreviewAdvertisement, PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
 import type { ProjectRuntime } from './project-session.ts';
 import {
   type ProjectTerminal,
@@ -13,8 +13,14 @@ export interface ViteProjectRuntimeDependencies {
   readonly createPreviewReadiness: () => PreviewReadiness;
 }
 
-export function createViteProjectRuntime(
-  dependencies: ViteProjectRuntimeDependencies,
+export interface PreviewProjectRuntimeDependencies extends ViteProjectRuntimeDependencies {
+  readonly label: string;
+  readonly line: string;
+  readonly matches: (entry: PreviewAdvertisement) => boolean;
+}
+
+export function createPreviewProjectRuntime(
+  dependencies: PreviewProjectRuntimeDependencies,
 ): ProjectRuntime<PreviewHandle> {
   type RunState = {
     readonly run: ProjectTerminalRun;
@@ -76,10 +82,10 @@ export function createViteProjectRuntime(
 
   return Object.freeze({
     start() {
-      if (closing || closed) throw new ClosedHandleError('Vite project runtime');
-      if (active !== null) throw new ProjectBusyError('Vite project runtime');
+      if (closing || closed) throw new ClosedHandleError(dependencies.label);
+      if (active !== null) throw new ProjectBusyError(dependencies.label);
 
-      const run = dependencies.terminal.run('vite');
+      const run = dependencies.terminal.run(dependencies.line);
       const state: RunState = {
         run,
         readiness: null,
@@ -93,19 +99,19 @@ export function createViteProjectRuntime(
 
       const ready = projectTerminalAdmission(run).then(async (admission) => {
         if (state.cancelled || closing || closed) {
-          throw new ClosedHandleError('Vite project runtime run');
+          throw new ClosedHandleError(`${dependencies.label} run`);
         }
         const readiness = dependencies.createPreviewReadiness();
         state.readiness = readiness;
         if (state.cancelled || closing || closed) {
           await closeReadiness(state);
-          throw new ClosedHandleError('Vite project runtime run');
+          throw new ClosedHandleError(`${dependencies.label} run`);
         }
         return readiness.waitFor({
           ownerToken: dependencies.ownerToken,
           ptySid: admission.ptySid,
           ptyRid: admission.ptyRid,
-          matches: (entry) => entry.source === 'node',
+          matches: dependencies.matches,
         });
       });
       void ready.catch(() => {});
@@ -147,5 +153,16 @@ export function createViteProjectRuntime(
       void closePromise.catch(() => {});
       return closePromise;
     },
+  });
+}
+
+export function createViteProjectRuntime(
+  dependencies: ViteProjectRuntimeDependencies,
+): ProjectRuntime<PreviewHandle> {
+  return createPreviewProjectRuntime({
+    ...dependencies,
+    label: 'Vite project runtime',
+    line: 'vite',
+    matches: (entry) => entry.source === 'node',
   });
 }

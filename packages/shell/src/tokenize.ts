@@ -2,10 +2,11 @@
  * Minimal shell tokenizer with POSIX-ish quoting and `$VAR` expansion.
  *
  * Emits {@link Token}s, NOT bare strings: word tokens carry a `quoted` flag
- * recording whether any character came from inside `'…'`/`"…"`, and operator
- * tokens carry an `op` discriminator. Quote provenance is load-bearing for glob
- * expansion (ADR-0091): `grep '*.ts'` (quoted) must stay literal while
- * `grep *.ts` (unquoted) expands — a bare `string[]` can't distinguish them.
+ * recording whether quoting contributed to the word, and operator tokens carry
+ * an `op` discriminator. Quote provenance is load-bearing for glob expansion
+ * (ADR-0091): `grep '*.ts'` (quoted) must stay literal while `grep *.ts`
+ * (unquoted) expands — a bare `string[]` can't distinguish them. A wholly empty
+ * quoted word is also marked quoted so explicit `''`/`""` survives argv elision.
  *
  * Supported:
  *   - Whitespace splitting outside quotes.
@@ -39,7 +40,7 @@ import { NotImplementedError } from '@riftydev/io';
 /** A word token plus whether any of its characters came from inside quotes. */
 export interface WordToken {
   value: string;
-  /** `true` iff ≥1 character of `value` originated inside `'…'` or `"…"`. */
+  /** Quoted character provenance, or an explicitly empty quoted word. */
   quoted: boolean;
 }
 
@@ -145,6 +146,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     // `quoted` flips true as soon as any character originates inside quotes.
     let buf = '';
     let quoted = false;
+    let hasQuoteSyntax = false;
     while (
       i < n &&
       line[i] !== ' ' &&
@@ -158,6 +160,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       const c = line[i]!;
       if (c === "'") {
         // Single-quoted: literal, no expansion. Chars are quoted-provenance.
+        hasQuoteSyntax = true;
         i++;
         while (i < n && line[i] !== "'") {
           buf += line[i];
@@ -167,6 +170,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         if (i < n) i++;
       } else if (c === '"') {
         // Double-quoted: expand $VAR, honour limited escapes. All quoted.
+        hasQuoteSyntax = true;
         i++;
         while (i < n && line[i] !== '"') {
           const dc = line[i]!;
@@ -221,6 +225,9 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         i++;
       }
     }
+    // `''` / `""` is one real empty argv entry. Empty quotes adjacent to an
+    // unquoted value contribute no characters, so `*''` remains glob-eligible.
+    if (buf === '' && hasQuoteSyntax) quoted = true;
     tokens.push({ value: buf, quoted });
   }
   return tokens;
