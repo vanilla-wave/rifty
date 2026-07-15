@@ -47,6 +47,8 @@ export interface PreviewRegistry {
   publish(): void;
   /** Re-emit the current derived dev-server frame (answers pty:dev-server-req). */
   publishDev(): void;
+  /** Fence producers and publish the definitive empty owner snapshot. */
+  close(): void;
 }
 
 interface TrackedEntry {
@@ -86,6 +88,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   const node = new Map<string, TrackedEntry[]>();
   let starting: { readonly sid?: string } | null = null;
   let lastDev: DerivedDev = { status: 'stopped' };
+  let closed = false;
 
   // Dedup by port so a `node server.js` that picks the SAME port as the live dev
   // server (no PORT injection, ADR-0155 §4) is not double-listed (ADR-0157 review
@@ -160,6 +163,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
 
   return {
     setDevServer(port, previewScope, opts) {
+      if (closed) return;
       dev = {
         entry: {
           port,
@@ -175,10 +179,12 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       emit();
     },
     clearDevServer() {
+      if (closed) return;
       dev = null;
       emit();
     },
     setPreview(port, previewScope, origin) {
+      if (closed) return;
       preview = {
         entry: {
           port,
@@ -193,10 +199,12 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       emit();
     },
     clearPreview() {
+      if (closed) return;
       preview = null;
       emit();
     },
     addNode(sid, ports, previewScope, opts) {
+      if (closed) return;
       const labelBase = opts.labelBase ?? 'node';
       node.set(
         sid,
@@ -216,20 +224,24 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       emit();
     },
     removeBySid(sid) {
+      if (closed) return;
       if (node.delete(sid)) emit();
     },
     devStarting(origin) {
+      if (closed) return;
       starting = {
         ...(origin.kind === 'pty' ? { sid: origin.admission.ptySid } : {}),
       };
       emitDev();
     },
     devStopped() {
+      if (closed) return;
       starting = null;
       dev = null;
       emit();
     },
     devBootFailed(message, origin) {
+      if (closed) return;
       starting = null;
       dev = null;
       deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
@@ -250,10 +262,23 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       deps.send(devFrame(next, message));
     },
     publish() {
+      if (closed) return;
       deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
     },
     publishDev() {
+      if (closed) return;
       emitDev(true);
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      dev = null;
+      preview = null;
+      node.clear();
+      starting = null;
+      lastDev = { status: 'stopped' };
+      deps.send({ type: 'pty:preview', ports: [] });
+      deps.send(devFrame(lastDev));
     },
   };
 }
