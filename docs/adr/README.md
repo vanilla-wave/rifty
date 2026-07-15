@@ -101,6 +101,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0123 | Port-aware preview owner routing |
 | 0125 | Preview owner binding — async resolution, ready-window preference, clientId sentinels |
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
+| 0265 | Owner-correlated preview readiness by PTY run |
 
 ### npm-client
 

@@ -1,4 +1,5 @@
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
+import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
 import {
   type InspectedProjectDefinition,
@@ -12,8 +13,13 @@ import {
   type ServiceWorkerControlTimers,
   proveRiftyServiceWorkerControl,
 } from './service-worker-control.ts';
+import type {
+  WorkbenchOwnerHandle,
+  WorkbenchOwnerPort,
+  WorkbenchOwnerStartInput,
+} from './workbench-owner-port.ts';
 
-export type StoragePersistence = 'required' | 'preferred' | 'ephemeral';
+export type StoragePersistence = OwnerStoragePersistence;
 
 export interface WorkbenchOptions {
   readonly deployment: {
@@ -46,28 +52,7 @@ export interface WorkbenchOptions {
   };
 }
 
-export type WorkbenchStorageSnapshot =
-  | {
-      readonly policy: 'required';
-      readonly backend: 'opfs';
-      readonly durability: 'durable';
-    }
-  | {
-      readonly policy: 'preferred';
-      readonly backend: 'opfs';
-      readonly durability: 'durable';
-    }
-  | {
-      readonly policy: 'preferred';
-      readonly backend: 'memory';
-      readonly durability: 'ephemeral';
-      readonly fallback: { readonly reason: string };
-    }
-  | {
-      readonly policy: 'ephemeral';
-      readonly backend: 'memory';
-      readonly durability: 'ephemeral';
-    };
+export type WorkbenchStorageSnapshot = OwnerStorageSnapshot;
 
 export interface WorkbenchSnapshot {
   readonly storage: WorkbenchStorageSnapshot;
@@ -80,40 +65,7 @@ export interface Workbench {
   close(): Promise<void>;
 }
 
-export interface OpfsStorageBackend {
-  readonly kind: 'opfs';
-}
-
-export interface MemoryStorageBackend {
-  readonly kind: 'memory';
-}
-
-export type WorkbenchStorageBackend = OpfsStorageBackend | MemoryStorageBackend;
-
-export interface NormalizedWorkbenchOwnerInput {
-  readonly deployment: {
-    readonly workers: {
-      readonly owner: string;
-      readonly kernel: string;
-      readonly node: string;
-      readonly devServer: string;
-    };
-    readonly wasm: {
-      readonly sqlite: string;
-      readonly esbuild: string;
-    };
-    readonly previewProbeTimeoutMs: number;
-  };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl: string;
-      readonly presetPins: Readonly<Record<string, string>>;
-    };
-  };
-  readonly storage: WorkbenchStorageBackend;
-}
+export type NormalizedWorkbenchOwnerInput = WorkbenchOwnerStartInput;
 
 interface CapabilitySnapshot {
   readonly dom: boolean;
@@ -139,25 +91,6 @@ interface WorkbenchServiceWorkerPort extends ServiceWorkerControlContainer {
   register(url: string, options: { readonly scope: string }): Promise<void>;
 }
 
-interface StoragePort {
-  openOpfs(): Promise<OpfsStorageBackend>;
-  proveDurability(backend: OpfsStorageBackend): Promise<void>;
-  openMemory(): Promise<MemoryStorageBackend>;
-}
-
-interface OwnerHandle {
-  openProject<TReady>(
-    definition: InspectedProjectDefinition<TReady>,
-  ): Promise<ProjectSession<TReady>>;
-  deleteProject(id: string): Promise<void>;
-  /** Resolves or rejects only after every owned process/worker is terminated. */
-  close(): Promise<void>;
-}
-
-interface OwnerPort {
-  start(input: NormalizedWorkbenchOwnerInput): Promise<OwnerHandle>;
-}
-
 export interface OpenWorkbenchDependencies {
   readonly urlContext: () => {
     readonly apiBaseUrl: string;
@@ -166,8 +99,7 @@ export interface OpenWorkbenchDependencies {
   readonly capabilities: () => CapabilitySnapshot;
   readonly locks: LockPort;
   readonly serviceWorker: WorkbenchServiceWorkerPort;
-  readonly storage: StoragePort;
-  readonly owner: OwnerPort;
+  readonly owner: WorkbenchOwnerPort;
   readonly timers: ServiceWorkerControlTimers;
 }
 
@@ -183,11 +115,6 @@ interface ValidatedOptions {
 interface ValidatedUrlContext {
   readonly apiBaseUrl: URL;
   readonly clientUrl: URL;
-}
-
-interface SelectedStorage {
-  readonly backend: WorkbenchStorageBackend;
-  readonly snapshot: WorkbenchStorageSnapshot;
 }
 
 interface OriginLease {
@@ -237,7 +164,7 @@ async function initializeWorkbench(
   releasePageClaim: () => void,
 ): Promise<Workbench> {
   let lease: OriginLease | null = null;
-  let owner: OwnerHandle | null = null;
+  let owner: WorkbenchOwnerHandle | null = null;
   try {
     lease = await acquireOriginLease(dependencies.locks);
     await dependencies.serviceWorker.register(options.serviceWorker.url, {
@@ -248,14 +175,14 @@ async function initializeWorkbench(
       timeoutMs: options.owner.deployment.previewProbeTimeoutMs,
       timers: dependencies.timers,
     });
-    const selected = await selectStorage(dependencies.storage, options.storage);
-    owner = await dependencies.owner.start(
+    const started = await dependencies.owner.start(
       Object.freeze({
         ...options.owner,
-        storage: selected.backend,
+        storage: Object.freeze({ persistence: options.storage }),
       }),
     );
-    return createWorkbench(owner, selected.snapshot, lease, releasePageClaim);
+    owner = started.owner;
+    return createWorkbench(owner, started.storage, lease, releasePageClaim);
   } catch (error) {
     const failures: unknown[] = [error];
     if (owner !== null) {
@@ -278,7 +205,7 @@ async function initializeWorkbench(
 }
 
 function createWorkbench(
-  owner: OwnerHandle,
+  owner: WorkbenchOwnerHandle,
   storage: WorkbenchStorageSnapshot,
   lease: OriginLease,
   releasePageClaim: () => void,
@@ -405,7 +332,7 @@ function createWorkbench(
 
 async function closeWorkbench(
   admitted: Exclude<ProjectOperation, { readonly kind: 'closing' | 'closed' }>,
-  owner: OwnerHandle,
+  owner: WorkbenchOwnerHandle,
   lease: OriginLease,
   releasePageClaim: () => void,
 ): Promise<void> {
@@ -459,55 +386,6 @@ function attemptClose(operation: () => Promise<void>): Promise<CloseOutcome> {
     );
   } catch (error) {
     return Promise.resolve({ ok: false, error });
-  }
-}
-
-async function selectStorage(
-  storage: StoragePort,
-  policy: StoragePersistence,
-): Promise<SelectedStorage> {
-  if (policy === 'ephemeral') {
-    const backend = await storage.openMemory();
-    return {
-      backend,
-      snapshot: Object.freeze({
-        policy: 'ephemeral',
-        backend: 'memory',
-        durability: 'ephemeral',
-      }),
-    };
-  }
-
-  try {
-    const backend = await storage.openOpfs();
-    await storage.proveDurability(backend);
-    return {
-      backend,
-      snapshot: Object.freeze({
-        policy,
-        backend: 'opfs',
-        durability: 'durable',
-      }),
-    };
-  } catch (opfsError) {
-    if (policy === 'required') throw opfsError;
-    try {
-      const backend = await storage.openMemory();
-      return {
-        backend,
-        snapshot: Object.freeze({
-          policy: 'preferred',
-          backend: 'memory',
-          durability: 'ephemeral',
-          fallback: Object.freeze({ reason: errorMessage(opfsError) }),
-        }),
-      };
-    } catch (memoryError) {
-      throw new AggregateError(
-        [opfsError, memoryError],
-        `Preferred storage failed: ${errorMessage(opfsError)}; ${errorMessage(memoryError)}`,
-      );
-    }
   }
 }
 
@@ -858,10 +736,6 @@ function deferred<T>(): {
     reject = rejected;
   });
   return { promise, resolve, reject };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function throwFailures(failures: readonly unknown[], message: string): never {

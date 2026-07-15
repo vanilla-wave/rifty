@@ -57,7 +57,6 @@ import { gitOwnerMutationIntents, serveGitOwnerRpc } from '../glue/git-owner-por
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { effectiveDepsFromPackageJsonText } from '../glue/install-stamp.ts';
-import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
@@ -128,7 +127,7 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { createDevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
+import { createDevServerController } from './dev-server-controller.ts';
 import {
   type NodeInvocation,
   buildNodeEvalSource,
@@ -147,9 +146,16 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  PTY_SESSION_ENV,
+  createInstalledBinPreviewHooks,
+  createNodePreviewRunHooks,
+  createPreviewOriginCapture,
+  runPtyDevServerShellCommand,
+} from './preview-producer-bindings.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import { binNameOf, createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
+import { createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -161,12 +167,6 @@ const dec = new TextDecoder();
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
 const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
-const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
-
-function ptySidFromContext(ctx: CommandContext): string | undefined {
-  const sid = ctx.env[PTY_SESSION_ENV];
-  return sid && sid.length > 0 ? sid : undefined;
-}
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -255,10 +255,6 @@ function isFullInstall(args: readonly string[]): boolean {
   const sub = args[0];
   if (sub !== 'install' && sub !== 'i') return false;
   return args.slice(1).every((a) => a.startsWith('-'));
-}
-
-function previewScopeFromEnv(env: Record<string, string | undefined>): string | undefined {
-  return env.RIFTY_PREVIEW_SCOPE || undefined;
 }
 
 function withPreviewScope(ctx: CommandContext, previewScope?: string): CommandContext {
@@ -448,6 +444,7 @@ async function bootShellOwner(opts: {
   // server (vite, webpack-dev-server, bare node:http) flips it; no bin-name
   // keying.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
+  const activePtyAdmission = (ptySid: string) => server.activeAdmission(ptySid);
 
   function devConfigRequestsWorkspaceTypeScript(): boolean {
     return effectiveDepsFromPackageJsonText(devCfg.packageJson)?.typescript !== undefined;
@@ -512,7 +509,7 @@ async function bootShellOwner(opts: {
     lifecycle: previews,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: async (devCtx, devSid) => {
+    boot: async (devCtx, origin) => {
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -540,7 +537,7 @@ async function bootShellOwner(opts: {
         onPortsChanged: (ports, previewScope) => {
           const next = ports[0];
           if (next === undefined) previews.clearDevServer();
-          else previews.setDevServer(next, previewScope, devSid);
+          else previews.setDevServer(next, previewScope, { origin });
         },
         // Owner realm → real OWNER OPFS drain. The child's install writes land in
         // THIS realm's write-through queue over fs.* RPC; the child's own flush is
@@ -582,45 +579,12 @@ async function bootShellOwner(opts: {
     },
   });
 
-  let binRunSeq = 0;
-  const binPreviewSids = new WeakMap<object, string>();
   // ADR-0174: each foreground CLI runs as a server-capable supervised child over
   // the real `.bin` shim. Lifecycle is UNIFORM — the child posts its listening
   // port set (`rifty:node-listening`, sourced from the net registry's
   // register/unregister events); the preview registry derives the LIVE pill from
   // it. No bin-name dispatch: webpack-dev-server or a bare server CLI gets the
   // same preview + pill wiring vite does.
-  const childBinExecutor = createOwnerChildBinExecutor(
-    opts.nodeEntryWorkerUrl,
-    opts.nodeWorkerRuntimeEnv,
-    {
-      onStart: (req) => {
-        binPreviewSids.set(req, `bin-${++binRunSeq}`);
-      },
-      onMessage: (req, message, ctx) => {
-        if (!isNodeChildMessage(message)) return;
-        const sid = binPreviewSids.get(req);
-        if (sid === undefined) return;
-        previews.addNode(sid, message.ports, message.previewScope ?? previewScopeFromEnv(req.env), {
-          ptySid: ptySidFromContext(ctx),
-          cwd: ctx.cwd,
-          labelBase: binNameOf(req.shimPath),
-        });
-      },
-      onExit: (req) => {
-        const sid = binPreviewSids.get(req);
-        if (sid !== undefined) previews.removeBySid(sid);
-      },
-    },
-  );
-  const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
-    // Every installed CLI crosses this package-authority seam. The preset boot
-    // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
-    // arbitrary CLIs need the same template-seed guarantee without name dispatch.
-    await reassertActiveDevTemplateNodeModules();
-    const viteCtx = withViteCliEnv(binPath, args, ctx);
-    return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
-  };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
@@ -636,18 +600,38 @@ async function bootShellOwner(opts: {
     opts.nodeEntryWorkerUrl,
     opts.nodeWorkerRuntimeEnv,
   );
+  let binRunSeq = 0;
   let nodeRunSeq = 0;
-
-  // Node-server scripts use the dedicated supervised server child and block the
-  // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
-  const runDevServer = async (ctx: CommandContext): Promise<ShellCommandResult> => {
-    return runDevServerShellCommand(devServer, ctx, ptySidFromContext(ctx));
-  };
 
   const makeShell = (
     seed?: { cwd?: string; env?: Record<string, string> },
     ptySid?: string,
   ): Shell => {
+    // The PTY server supplies ptySid out of band when it constructs this session.
+    // Guest env may mirror or override the legacy marker, but never selects an actor.
+    const captureOrigin = createPreviewOriginCapture(activePtyAdmission, ptySid);
+    const childBinExecutor = createOwnerChildBinExecutor(
+      opts.nodeEntryWorkerUrl,
+      opts.nodeWorkerRuntimeEnv,
+      createInstalledBinPreviewHooks({
+        captureOrigin,
+        allocateSid: () => `bin-${++binRunSeq}`,
+        previews,
+      }),
+    );
+    const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
+      // Every installed CLI crosses this package-authority seam. The preset boot
+      // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
+      // arbitrary CLIs need the same template-seed guarantee without name dispatch.
+      await reassertActiveDevTemplateNodeModules();
+      const viteCtx = withViteCliEnv(binPath, args, ctx);
+      return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
+    };
+    // Node-server scripts use the dedicated supervised server child and block the
+    // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
+    const runDevServer = (ctx: CommandContext): Promise<ProcessExit> =>
+      runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
+
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
     // HERE against the owner's tree (single-store-owner: the page holds no
@@ -673,10 +657,7 @@ async function bootShellOwner(opts: {
         scriptCommand: string,
         scriptCtx: CommandContext,
       ): Promise<ShellCommandResult> => {
-        const scriptShell = makeShell(
-          { cwd: scriptCtx.cwd, env: scriptCtx.env },
-          ptySidFromContext(scriptCtx),
-        );
+        const scriptShell = makeShell({ cwd: scriptCtx.cwd, env: scriptCtx.env }, ptySid);
         return runNestedShellCommand(scriptShell, scriptCommand, scriptCtx);
       };
       const runNodeCliTemplate = async (
@@ -728,15 +709,18 @@ async function bootShellOwner(opts: {
     ): Promise<ProcessExit> => {
       const sid = `node-${++nodeRunSeq}`;
       const previewScope = createPreviewScope();
-      return ownerNodeExecutor(entryPath, [...scriptArgs], withPreviewScope(ctx, previewScope), {
-        sid,
-        onListening: (id, ports, scope) =>
-          previews.addNode(id, ports, scope ?? previewScope, {
-            ptySid: ptySidFromContext(ctx),
-            cwd: ctx.cwd,
-          }),
-        onExit: (id) => previews.removeBySid(id),
-      });
+      return ownerNodeExecutor(
+        entryPath,
+        [...scriptArgs],
+        withPreviewScope(ctx, previewScope),
+        createNodePreviewRunHooks({
+          captureOrigin,
+          previews,
+          cwd: ctx.cwd,
+          sid,
+          previewScope,
+        }),
+      );
     };
     // `-e`/`-p`: write the source to a temp `.cjs` in cwd (so `require` resolves
     // like real `node -e`, faithful CJS), run it through the loader realm, then

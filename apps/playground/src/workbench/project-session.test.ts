@@ -129,9 +129,14 @@ function createHarness() {
     start() {
       const ready = deferred<string>();
       readyGates.push(ready);
+      const run = defaultTerminal.run('vite --port 5173');
       return {
-        run: defaultTerminal.run('vite --port 5173'),
+        run,
         ready: ready.promise,
+        closed: run.exited.then(
+          () => undefined,
+          () => undefined,
+        ),
       };
     },
     async close(): Promise<void> {

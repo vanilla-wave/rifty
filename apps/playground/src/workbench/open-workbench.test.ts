@@ -1,14 +1,14 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
-import { createOpenWorkbench } from './open-workbench.ts';
+import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import { type InspectedProjectDefinition, projects } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
 
 type OpenWorkbench = ReturnType<typeof createOpenWorkbench>;
 type WorkbenchOptions = Parameters<OpenWorkbench>[0];
 type OpenWorkbenchDependencies = Parameters<typeof createOpenWorkbench>[0];
-type OwnerHandle = Awaited<ReturnType<OpenWorkbenchDependencies['owner']['start']>>;
-type OwnerOpenProject = OwnerHandle['openProject'];
+type OwnerStartValue = Awaited<ReturnType<OpenWorkbenchDependencies['owner']['start']>>;
+type OwnerHandle = OwnerStartValue['owner'];
 
 type CapabilityName = 'dom' | 'worker' | 'crossOriginIsolated' | 'webLocks';
 type CapabilitySnapshot = Record<CapabilityName, boolean>;
@@ -148,6 +148,12 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   };
   let opfsOpenFailure: unknown;
   let durabilityFailure: unknown;
+  let ownerStartFailure: unknown;
+  let ownerStorageSnapshot: WorkbenchStorageSnapshot = Object.freeze({
+    policy: 'required',
+    backend: 'opfs',
+    durability: 'durable',
+  });
   let urlContext = URL_CONTEXT;
 
   const controller = {
@@ -204,21 +210,33 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       close,
     };
   };
-  const ownerHandle = {
-    openProject: vi.fn(openOwnerProject) as unknown as OwnerOpenProject & ReturnType<typeof vi.fn>,
+  const ownerHandleCalls = {
+    openProject: vi.fn((definition: InspectedProjectDefinition) => openOwnerProject(definition)),
     deleteProject: vi.fn(async (_id: string): Promise<void> => {}),
     close: vi.fn(async (): Promise<void> => {}),
-  } satisfies OwnerHandle;
-  const owner = {
-    start: vi.fn(async (_input: unknown) => ownerHandle),
   };
+  const ownerHandle: OwnerHandle = {
+    openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
+      return ownerHandleCalls.openProject(definition) as Promise<ProjectSession<TReady>>;
+    },
+    deleteProject: ownerHandleCalls.deleteProject,
+    close: ownerHandleCalls.close,
+  };
+  const owner = {
+    start: vi.fn(async (_input: Parameters<OpenWorkbenchDependencies['owner']['start']>[0]) => {
+      if (ownerStartFailure !== undefined) throw ownerStartFailure;
+      return Object.freeze({
+        owner: ownerHandle,
+        storage: ownerStorageSnapshot,
+      });
+    }),
+  } satisfies OpenWorkbenchDependencies['owner'];
 
   const dependencies = {
     urlContext: () => urlContext,
     capabilities: () => ({ ...capabilities }),
     locks: { request: sharedLocks.request },
     serviceWorker,
-    storage,
     owner,
     timers: {
       setTimeout: clock.setTimeout,
@@ -237,7 +255,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     serviceWorker,
     storage,
     owner,
-    ownerHandle,
+    ownerHandle: ownerHandleCalls,
     ownerProjectCloses,
     opfsBackend,
     memoryBackend,
@@ -249,6 +267,12 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     },
     failDurabilityProof(error: unknown) {
       durabilityFailure = error;
+    },
+    failOwnerStart(error: unknown) {
+      ownerStartFailure = error;
+    },
+    setOwnerStorageSnapshot(snapshot: WorkbenchStorageSnapshot) {
+      ownerStorageSnapshot = Object.freeze(snapshot);
     },
     setUrlContext(value: { readonly apiBaseUrl: string; readonly clientUrl: string }) {
       urlContext = Object.freeze({ ...value });
@@ -890,7 +914,7 @@ describe('openWorkbench service-worker proof', () => {
 });
 
 describe('openWorkbench storage and project cardinality', () => {
-  it('required exposes durable OPFS and never falls back on open or proof failure', async () => {
+  it('required exposes the owner-selected durable OPFS snapshot and owner failures', async () => {
     const success = harness();
     const workbench = await success.open(validOptions());
     expect(workbench.snapshot().storage).toEqual({
@@ -898,26 +922,45 @@ describe('openWorkbench storage and project cardinality', () => {
       backend: 'opfs',
       durability: 'durable',
     });
+    expect(success.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'required' } }),
+    );
+    expect(success.storage.openOpfs).not.toHaveBeenCalled();
+    expect(success.storage.proveDurability).not.toHaveBeenCalled();
+    expect(success.storage.openMemory).not.toHaveBeenCalled();
     await workbench.close();
 
     const openFailure = harness();
-    openFailure.failOpfsOpen(new Error('OPFS permission denied'));
+    openFailure.failOwnerStart(new Error('OPFS permission denied'));
     await expect(openFailure.open(validOptions())).rejects.toThrow(/OPFS permission denied/);
+    expect(openFailure.storage.openOpfs).not.toHaveBeenCalled();
+    expect(openFailure.storage.proveDurability).not.toHaveBeenCalled();
     expect(openFailure.storage.openMemory).not.toHaveBeenCalled();
-    expect(openFailure.owner.start).not.toHaveBeenCalled();
+    expect(openFailure.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'required' } }),
+    );
     expect(openFailure.locks.held).toBe(false);
 
     const proofFailure = harness();
-    proofFailure.failDurabilityProof(new Error('OPFS durability proof failed'));
+    proofFailure.failOwnerStart(new Error('OPFS durability proof failed'));
     await expect(proofFailure.open(validOptions())).rejects.toThrow(/OPFS durability proof failed/);
+    expect(proofFailure.storage.openOpfs).not.toHaveBeenCalled();
+    expect(proofFailure.storage.proveDurability).not.toHaveBeenCalled();
     expect(proofFailure.storage.openMemory).not.toHaveBeenCalled();
-    expect(proofFailure.owner.start).not.toHaveBeenCalled();
+    expect(proofFailure.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'required' } }),
+    );
     expect(proofFailure.locks.held).toBe(false);
   });
 
-  it('preferred visibly falls back to ephemeral memory after an OPFS proof failure', async () => {
+  it('preferred publishes the exact visible fallback selected by the owner', async () => {
     const h = harness();
-    h.failDurabilityProof(new Error('quota exhausted'));
+    h.setOwnerStorageSnapshot({
+      policy: 'preferred',
+      backend: 'memory',
+      durability: 'ephemeral',
+      fallback: { reason: 'quota exhausted' },
+    });
     const options = withOption(['storage', 'persistence'], 'preferred');
 
     const workbench = await h.open(options);
@@ -928,11 +971,11 @@ describe('openWorkbench storage and project cardinality', () => {
       durability: 'ephemeral',
       fallback: { reason: 'quota exhausted' },
     });
-    expect(h.storage.openOpfs).toHaveBeenCalledTimes(1);
-    expect(h.storage.proveDurability).toHaveBeenCalledTimes(1);
-    expect(h.storage.openMemory).toHaveBeenCalledTimes(1);
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.owner.start).toHaveBeenCalledWith(
-      expect.objectContaining({ storage: h.memoryBackend }),
+      expect.objectContaining({ storage: { persistence: 'preferred' } }),
     );
 
     await workbench.close();
@@ -940,6 +983,11 @@ describe('openWorkbench storage and project cardinality', () => {
 
   it('ephemeral intentionally uses memory and never touches OPFS state', async () => {
     const h = harness();
+    h.setOwnerStorageSnapshot({
+      policy: 'ephemeral',
+      backend: 'memory',
+      durability: 'ephemeral',
+    });
     const options = withOption(['storage', 'persistence'], 'ephemeral');
     const workbench = await h.open(options);
 
@@ -950,9 +998,9 @@ describe('openWorkbench storage and project cardinality', () => {
     });
     expect(h.storage.openOpfs).not.toHaveBeenCalled();
     expect(h.storage.proveDurability).not.toHaveBeenCalled();
-    expect(h.storage.openMemory).toHaveBeenCalledTimes(1);
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.owner.start).toHaveBeenCalledWith(
-      expect.objectContaining({ storage: h.memoryBackend }),
+      expect.objectContaining({ storage: { persistence: 'ephemeral' } }),
     );
 
     await workbench.close();

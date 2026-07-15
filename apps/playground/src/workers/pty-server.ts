@@ -21,7 +21,12 @@ import type {
   TerminalResizeSource,
   TerminalSize,
 } from '@riftydev/shell';
-import type { OwnerToPageFrame, PageToOwnerFrame, PtyStream } from '../glue/pty-protocol.ts';
+import type {
+  OwnerPtyRunAdmission,
+  OwnerToPageFrame,
+  PageToOwnerFrame,
+  PtyStream,
+} from '../glue/pty-protocol.ts';
 
 /**
  * Async stdin pipe fed by `pty:stdin` frames; `read()` resolves a queued chunk,
@@ -90,6 +95,7 @@ class StdinQueue implements StdinReader {
 
 interface RunState {
   readonly rid: string;
+  readonly admission: OwnerPtyRunAdmission;
   readonly stdin: StdinQueue;
   readonly controller: AbortController;
   readonly terminal: MutableTerminalResizeSource;
@@ -169,6 +175,7 @@ export interface PtyServerDeps {
 
 export interface PtyServer {
   handleFrame(frame: PageToOwnerFrame): void | Promise<void>;
+  activeAdmission(ptySid: string): OwnerPtyRunAdmission | null;
   dispose(): void;
 }
 
@@ -220,6 +227,9 @@ class PtySessionActor {
       return Promise.resolve();
     }
     if (this.#active) {
+      if (this.#active.rid === frame.rid) {
+        throw new Error(`ProtocolError: duplicate active PTY run id ${this.#sid}/${frame.rid}`);
+      }
       this.#emitRejectedExit(
         frame,
         `ProjectBusyError: pty session ${this.#sid} already running ${this.#active.rid}`,
@@ -237,6 +247,10 @@ class PtySessionActor {
     this.#dimensions = { cols: frame.cols, rows: frame.rows };
     const run: RunState = {
       rid: frame.rid,
+      admission: Object.freeze({
+        ptySid: this.#sid,
+        ptyRid: frame.rid,
+      }) as OwnerPtyRunAdmission,
       stdin: new StdinQueue(),
       controller: new AbortController(),
       terminal: new MutableTerminalResizeSource(this.#dimensions.cols, this.#dimensions.rows),
@@ -251,6 +265,10 @@ class PtySessionActor {
     run.done = done;
     this.#deps.send({ type: 'pty:run-ready', sid: this.#sid, rid: frame.rid });
     return done;
+  }
+
+  activeAdmission(): OwnerPtyRunAdmission | null {
+    return this.#state === 'open' ? (this.#active?.admission ?? null) : null;
   }
 
   resizeSession(frame: Extract<PageToOwnerFrame, { type: 'pty:session-resize' }>): void {
@@ -629,6 +647,9 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
 
   return {
     handleFrame,
+    activeAdmission(ptySid): OwnerPtyRunAdmission | null {
+      return sessions.get(ptySid)?.activeAdmission() ?? null;
+    },
     dispose(): void {
       for (const actor of sessions.values()) actor.dispose();
       sessions.clear();

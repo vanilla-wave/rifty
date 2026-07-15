@@ -270,6 +270,183 @@ describe('pty-server', () => {
     await expect(run).resolves.toBe(130);
   });
 
+  it('reports no active admission while a session is idle or after its run exits', async () => {
+    const { server } = harness();
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    expect(server.activeAdmission('s1')).toBeNull();
+
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'r1',
+      line: '',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    expect(server.activeAdmission('s1')).toBeNull();
+  });
+
+  it('returns the exact immutable actor-minted admission only while the PTY run is active', async () => {
+    const gate = deferred();
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    const run = Promise.resolve(
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r1',
+        line: 'echo active',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    try {
+      const admission = server.activeAdmission('s1');
+      expect(admission).toEqual({ ptySid: 's1', ptyRid: 'r1' });
+      expect(Object.isFrozen(admission)).toBe(true);
+    } finally {
+      gate.resolve();
+      await run;
+    }
+  });
+
+  it('mints a distinct admission for each sequential run on the same session', async () => {
+    const gates = [deferred(), deferred()];
+    let runIndex = 0;
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gates[runIndex++]!.promise,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    const firstRun = Promise.resolve(
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r1',
+        line: 'echo first',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    const first = server.activeAdmission('s1');
+    gates[0]!.resolve();
+    await firstRun;
+
+    const secondRun = Promise.resolve(
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r2',
+        line: 'echo second',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    try {
+      const second = server.activeAdmission('s1');
+      expect(first).toEqual({ ptySid: 's1', ptyRid: 'r1' });
+      expect(second).toEqual({ ptySid: 's1', ptyRid: 'r2' });
+      expect(second).not.toBe(first);
+    } finally {
+      gates[1]!.resolve();
+      await secondRun;
+    }
+  });
+
+  it('keeps active run A admission when concurrent run B is rejected', async () => {
+    const gate = deferred();
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    const firstRun = Promise.resolve(
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'run-a',
+        line: 'echo held',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    const admissionA = server.activeAdmission('s1');
+
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'run-b',
+      line: 'echo rejected',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    expect(server.activeAdmission('s1')).toBe(admissionA);
+    expect(server.activeAdmission('s1')).toEqual({ ptySid: 's1', ptyRid: 'run-a' });
+    expect(out).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        sid: 's1',
+        rid: 'run-b',
+        error: expect.stringMatching(/already running run-a/),
+      }),
+    );
+
+    gate.resolve();
+    await firstRun;
+    expect(server.activeAdmission('s1')).toBeNull();
+  });
+
+  it('corrupt-input fault: duplicate active rid cannot emit a false exit for run A', async () => {
+    const gate = deferred();
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      beforeRun: () => gate.promise,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1' });
+    const frame = {
+      type: 'pty:exec' as const,
+      sid: 's1',
+      rid: 'run-a',
+      line: 'echo held',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    };
+    const firstRun = Promise.resolve(server.handleFrame(frame));
+    const admissionA = server.activeAdmission('s1');
+
+    expect(() => server.handleFrame({ ...frame, line: 'echo duplicate' })).toThrow(
+      /ProtocolError: duplicate active PTY run id s1\/run-a/,
+    );
+    expect(server.activeAdmission('s1')).toBe(admissionA);
+    expect(
+      out.filter((candidate) => candidate.type === 'pty:exit' && candidate.rid === 'run-a'),
+    ).toEqual([]);
+
+    gate.resolve();
+    await firstRun;
+    expect(
+      out.filter((candidate) => candidate.type === 'pty:exit' && candidate.rid === 'run-a'),
+    ).toHaveLength(1);
+  });
+
   it('round-trips session close before page admission through the real client and actor', async () => {
     const gate = deferred();
     const pageFrames: PageToOwnerFrame[] = [];

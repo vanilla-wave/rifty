@@ -7,7 +7,7 @@ import {
 } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
-import { createOpenWorkbench } from './open-workbench.ts';
+import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 import {
   type InspectedProjectDefinition,
@@ -21,6 +21,9 @@ import type { ServiceWorkerControlWorker } from './service-worker-control.ts';
 type OpenWorkbench = ReturnType<typeof createOpenWorkbench>;
 type WorkbenchOptions = Parameters<OpenWorkbench>[0];
 type OpenWorkbenchDependencies = Parameters<typeof createOpenWorkbench>[0];
+type OwnerStartInput = Parameters<OpenWorkbenchDependencies['owner']['start']>[0];
+type OwnerStartValue = Awaited<ReturnType<OpenWorkbenchDependencies['owner']['start']>>;
+type OwnerHandle = OwnerStartValue['owner'];
 type CapabilityName = 'dom' | 'worker' | 'crossOriginIsolated' | 'webLocks';
 type CapabilitySnapshot = Record<CapabilityName, boolean>;
 type TimerCallback = () => void;
@@ -302,6 +305,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   let durabilityFailure: unknown;
   let memoryOpenFailure: unknown;
   let ownerStartFailure: unknown;
+  let ownerStorageSnapshot: WorkbenchStorageSnapshot = Object.freeze({
+    policy: 'required',
+    backend: 'opfs',
+    durability: 'durable',
+  });
   let ownerCloseImplementation = async (): Promise<void> => {};
   let ownerDeleteProjectImplementation = async (_id: string): Promise<void> => {};
   const ownerProjectSessions: TestSession<unknown>[] = [];
@@ -363,34 +371,38 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     }),
   };
 
-  type OwnerOpenProject = <TReady>(
-    definition: InspectedProjectDefinition,
-  ) => Promise<ProjectSession<TReady>>;
-  const openProject: OwnerOpenProject = async <TReady>(definition: InspectedProjectDefinition) =>
-    ownerOpenProjectImplementation(definition as InspectedProjectDefinition) as Promise<
-      ProjectSession<TReady>
-    >;
-  const ownerHandle = {
-    openProject: vi.fn(openProject),
+  const ownerHandleCalls = {
+    openProject: vi.fn((definition: InspectedProjectDefinition) =>
+      ownerOpenProjectImplementation(definition),
+    ),
     deleteProject: vi.fn((id: string) => ownerDeleteProjectImplementation(id)),
     close: vi.fn(() => ownerCloseImplementation()),
   };
-  const owner = {
-    start: vi.fn(async (_input: unknown) => {
-      if (ownerStartFailure !== undefined) throw ownerStartFailure;
-      return ownerHandle;
-    }),
+  const ownerHandle: OwnerHandle = {
+    // The inspected definition carries TReady only as a phantom; the test
+    // boundary records an erased call, then restores that same phantom here.
+    openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
+      return ownerHandleCalls.openProject(definition) as Promise<ProjectSession<TReady>>;
+    },
+    deleteProject: ownerHandleCalls.deleteProject,
+    close: ownerHandleCalls.close,
   };
+  const owner = {
+    start: vi.fn(async (_input: OwnerStartInput) => {
+      if (ownerStartFailure !== undefined) throw ownerStartFailure;
+      return Object.freeze({
+        owner: ownerHandle,
+        storage: ownerStorageSnapshot,
+      });
+    }),
+  } satisfies OpenWorkbenchDependencies['owner'];
 
   const dependencies = {
     urlContext: () => URL_CONTEXT,
     capabilities: () => ({ ...capabilities }),
     locks: { request: sharedLocks.request },
     serviceWorker,
-    storage,
-    // The mutable harness erases the phantom TReady; the typed contract below
-    // proves the real facade preserves it across owner ingress.
-    owner: owner as unknown as OpenWorkbenchDependencies['owner'],
+    owner,
     timers: {
       setTimeout: clock.setTimeout,
       clearTimeout: clock.clearTimeout,
@@ -408,7 +420,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     serviceWorker,
     storage,
     owner,
-    ownerHandle,
+    ownerHandle: ownerHandleCalls,
     ownerProjectSessions,
     opfsBackend,
     memoryBackend,
@@ -448,6 +460,9 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     },
     clearOwnerStartFailure(): void {
       ownerStartFailure = undefined;
+    },
+    setOwnerStorageSnapshot(snapshot: WorkbenchStorageSnapshot): void {
+      ownerStorageSnapshot = Object.freeze(snapshot);
     },
     setOwnerOpenProjectImplementation(
       implementation: (inspected: InspectedProjectDefinition) => Promise<ProjectSession<unknown>>,
@@ -496,7 +511,7 @@ describe('openWorkbench normalized composition', () => {
           presetPins: {},
         },
       },
-      storage: h.opfsBackend,
+      storage: { persistence: 'required' },
     });
     const input = h.owner.start.mock.calls[0]?.[0] as {
       readonly packageAcquisition?: {
@@ -1032,8 +1047,13 @@ describe('openWorkbench close fault contract', () => {
 });
 
 describe('openWorkbench storage fault contract', () => {
-  it('preferred keeps successful OPFS durable and does not open memory', async () => {
+  it('preferred publishes the exact durable snapshot selected by the owner', async () => {
     const h = harness();
+    h.setOwnerStorageSnapshot({
+      policy: 'preferred',
+      backend: 'opfs',
+      durability: 'durable',
+    });
     const workbench = await h.open(withPersistence('preferred'));
 
     expect(workbench.snapshot().storage).toEqual({
@@ -1041,38 +1061,24 @@ describe('openWorkbench storage fault contract', () => {
       backend: 'opfs',
       durability: 'durable',
     });
-    expect(h.storage.openOpfs).toHaveBeenCalledTimes(1);
-    expect(h.storage.proveDurability).toHaveBeenCalledWith(h.opfsBackend);
-    expect(h.storage.openMemory).not.toHaveBeenCalled();
-    expect(h.owner.start).toHaveBeenCalledWith(expect.objectContaining({ storage: h.opfsBackend }));
-    await workbench.close();
-  });
-
-  it('preferred exposes the exact OPFS-open failure when it falls back to memory', async () => {
-    const h = harness();
-    const failure = new Error('OPFS permission denied');
-    h.failOpfsOpen(failure);
-
-    const workbench = await h.open(withPersistence('preferred'));
-
-    expect(workbench.snapshot().storage).toEqual({
-      policy: 'preferred',
-      backend: 'memory',
-      durability: 'ephemeral',
-      fallback: { reason: failure.message },
-    });
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
     expect(h.storage.proveDurability).not.toHaveBeenCalled();
-    expect(h.storage.openMemory).toHaveBeenCalledTimes(1);
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.owner.start).toHaveBeenCalledWith(
-      expect.objectContaining({ storage: h.memoryBackend }),
+      expect.objectContaining({ storage: { persistence: 'preferred' } }),
     );
     await workbench.close();
   });
 
-  it('preferred exposes the exact OPFS-proof failure when it falls back to memory', async () => {
+  it('preferred exposes the exact owner-reported OPFS-open fallback reason', async () => {
     const h = harness();
-    const failure = new Error('OPFS durability proof failed');
-    h.failDurabilityProof(failure);
+    const failure = new Error('OPFS permission denied');
+    h.setOwnerStorageSnapshot({
+      policy: 'preferred',
+      backend: 'memory',
+      durability: 'ephemeral',
+      fallback: { reason: failure.message },
+    });
 
     const workbench = await h.open(withPersistence('preferred'));
 
@@ -1082,70 +1088,129 @@ describe('openWorkbench storage fault contract', () => {
       durability: 'ephemeral',
       fallback: { reason: failure.message },
     });
-    expect(h.storage.openMemory).toHaveBeenCalledTimes(1);
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.owner.start).toHaveBeenCalledWith(
-      expect.objectContaining({ storage: h.memoryBackend }),
+      expect.objectContaining({ storage: { persistence: 'preferred' } }),
+    );
+    await workbench.close();
+  });
+
+  it('preferred exposes the exact owner-reported OPFS-proof fallback reason', async () => {
+    const h = harness();
+    const failure = new Error('OPFS durability proof failed');
+    h.setOwnerStorageSnapshot({
+      policy: 'preferred',
+      backend: 'memory',
+      durability: 'ephemeral',
+      fallback: { reason: failure.message },
+    });
+
+    const workbench = await h.open(withPersistence('preferred'));
+
+    expect(workbench.snapshot().storage).toEqual({
+      policy: 'preferred',
+      backend: 'memory',
+      durability: 'ephemeral',
+      fallback: { reason: failure.message },
+    });
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'preferred' } }),
     );
     await workbench.close();
   });
 
   it.each(['open', 'proof'] as const)(
-    'preserves both the OPFS-%s and memory failures when preferred fallback cannot open',
+    'preserves both owner OPFS-%s and memory failures when preferred initialization fails',
     async (boundary) => {
       const h = harness();
       const opfsFailure = new Error(`OPFS ${boundary} failed`);
       const memoryFailure = new Error('memory open failed');
-      if (boundary === 'open') h.failOpfsOpen(opfsFailure);
-      else h.failDurabilityProof(opfsFailure);
-      h.failMemoryOpen(memoryFailure);
+      const ownerFailure = new AggregateError(
+        [opfsFailure, memoryFailure],
+        `Preferred storage failed: ${opfsFailure.message}; ${memoryFailure.message}`,
+      );
+      h.failOwnerStart(ownerFailure);
 
       const error = await h.open(withPersistence('preferred')).catch((caught: unknown) => caught);
 
-      expect(error).toBeInstanceOf(AggregateError);
+      expect(error).toBe(ownerFailure);
       expect((error as AggregateError).errors).toEqual([opfsFailure, memoryFailure]);
-      expect(h.owner.start).not.toHaveBeenCalled();
+      expect(h.owner.start).toHaveBeenCalledWith(
+        expect.objectContaining({ storage: { persistence: 'preferred' } }),
+      );
+      expect(h.storage.openOpfs).not.toHaveBeenCalled();
+      expect(h.storage.proveDurability).not.toHaveBeenCalled();
+      expect(h.storage.openMemory).not.toHaveBeenCalled();
       expect(h.locks.held).toBe(false);
     },
   );
 
-  it('ephemeral propagates its memory failure and never touches OPFS', async () => {
+  it('ephemeral delegates selection to the owner and never page-probes OPFS or memory', async () => {
     const h = harness();
-    const failure = new Error('ephemeral memory unavailable');
-    h.failMemoryOpen(failure);
+    h.setOwnerStorageSnapshot({
+      policy: 'ephemeral',
+      backend: 'memory',
+      durability: 'ephemeral',
+    });
 
-    await expect(h.open(withPersistence('ephemeral'))).rejects.toBe(failure);
+    const workbench = await h.open(withPersistence('ephemeral'));
+
+    expect(workbench.snapshot().storage).toEqual({
+      policy: 'ephemeral',
+      backend: 'memory',
+      durability: 'ephemeral',
+    });
     expect(h.storage.openOpfs).not.toHaveBeenCalled();
     expect(h.storage.proveDurability).not.toHaveBeenCalled();
-    expect(h.owner.start).not.toHaveBeenCalled();
-    expect(h.locks.held).toBe(false);
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'ephemeral' } }),
+    );
+    await workbench.close();
   });
 
-  it('required preserves its OPFS failure, never falls back, and releases admission for retry', async () => {
+  it('required preserves owner storage failure and releases Web Lock and page claim for retry', async () => {
     const h = harness();
     const failure = new Error('required OPFS unavailable');
-    h.failOpfsOpen(failure);
+    h.failOwnerStart(failure);
 
     await expect(h.open(validOptions())).rejects.toBe(failure);
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({ storage: { persistence: 'required' } }),
+    );
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
     expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.locks.held).toBe(false);
 
-    h.clearOpfsOpenFailure();
+    h.clearOwnerStartFailure();
     const retried = await h.open(validOptions());
     await retried.close();
   });
 
-  it('releases admission after preferred memory failure and can retry the full selection', async () => {
+  it('releases admission after preferred owner storage failure and can retry selection', async () => {
     const h = harness();
     const opfsFailure = new Error('OPFS denied');
     const memoryFailure = new Error('memory denied');
-    h.failOpfsOpen(opfsFailure);
-    h.failMemoryOpen(memoryFailure);
+    h.failOwnerStart(new AggregateError([opfsFailure, memoryFailure]));
 
     await expect(h.open(withPersistence('preferred'))).rejects.toBeInstanceOf(AggregateError);
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.locks.held).toBe(false);
 
-    h.clearOpfsOpenFailure();
-    h.clearMemoryOpenFailure();
+    h.clearOwnerStartFailure();
+    h.setOwnerStorageSnapshot({
+      policy: 'preferred',
+      backend: 'opfs',
+      durability: 'durable',
+    });
     const retried = await h.open(withPersistence('preferred'));
     expect(retried.snapshot().storage.backend).toBe('opfs');
     await retried.close();
@@ -1157,6 +1222,9 @@ describe('openWorkbench storage fault contract', () => {
     h.failOwnerStart(failure);
 
     await expect(h.open(validOptions())).rejects.toBe(failure);
+    expect(h.storage.openOpfs).not.toHaveBeenCalled();
+    expect(h.storage.proveDurability).not.toHaveBeenCalled();
+    expect(h.storage.openMemory).not.toHaveBeenCalled();
     expect(h.locks.held).toBe(false);
 
     h.clearOwnerStartFailure();

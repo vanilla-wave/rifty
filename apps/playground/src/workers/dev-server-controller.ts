@@ -15,6 +15,7 @@
  */
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import type { DevServerStatus } from '../glue/pty-protocol.ts';
+import type { PreviewProducerOrigin } from './preview-registry.ts';
 
 /** One foreground command context, with the cancellation required by a server run. */
 export interface DevServerRunContext extends CommandContext {
@@ -44,11 +45,15 @@ export type SupervisedDevServerHandle = Omit<DevServerHandle, 'stop'> & {
 
 /** Registry surface the controller drives (PreviewRegistry satisfies it). */
 export interface DevServerLifecycleSink {
-  devStarting(ptySid?: string): void;
-  setDevServer(port: number, previewScope?: string, ptySid?: string, cwd?: string): void;
+  devStarting(origin: PreviewProducerOrigin): void;
+  setDevServer(
+    port: number,
+    previewScope: string | undefined,
+    opts: { readonly origin: PreviewProducerOrigin; readonly cwd?: string },
+  ): void;
   devStopped(): void;
   /** Boot or post-ready failure; clears this controller's preview slot. */
-  devBootFailed(message: string, ptySid?: string): void;
+  devBootFailed(message: string, origin: PreviewProducerOrigin): void;
 }
 
 export interface DevServerControllerDeps {
@@ -56,9 +61,12 @@ export interface DevServerControllerDeps {
   readonly lifecycle: DevServerLifecycleSink;
   /**
    * Boots the real dev server + bridges from the complete foreground command
-   * context; `sid` is the owning pty session (threaded to port updates).
+   * context; PTY origin carries admission captured before the async child launch.
    */
-  readonly boot: (ctx: DevServerRunContext, sid?: string) => Promise<SupervisedDevServerHandle>;
+  readonly boot: (
+    ctx: DevServerRunContext,
+    origin: PreviewProducerOrigin,
+  ) => Promise<SupervisedDevServerHandle>;
 }
 
 export interface DevServerController {
@@ -67,7 +75,7 @@ export interface DevServerController {
    * `signal` aborts or the physical child fails. One terminalization path stops
    * the handle and clears the registry slot. A second concurrent run throws.
    */
-  run(ctx: DevServerRunContext, sid?: string): Promise<ProcessExit>;
+  run(ctx: DevServerRunContext, origin: PreviewProducerOrigin): Promise<ProcessExit>;
   readonly status: DevServerStatus;
 }
 
@@ -97,17 +105,17 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
     get status() {
       return status;
     },
-    async run(ctx: DevServerRunContext, sid?: string): Promise<ProcessExit> {
+    async run(ctx: DevServerRunContext, origin: PreviewProducerOrigin): Promise<ProcessExit> {
       if (status !== 'stopped') throw new Error('dev server already running');
       status = 'starting';
-      deps.lifecycle.devStarting(sid);
+      deps.lifecycle.devStarting(origin);
       let failed = false;
       let runFailure: unknown;
       let physicalExit: ProcessExit | undefined;
       try {
-        active = await deps.boot(ctx, sid);
+        active = await deps.boot(ctx, origin);
         status = 'running';
-        deps.lifecycle.setDevServer(active.port, active.previewScope, sid, ctx.cwd);
+        deps.lifecycle.setDevServer(active.port, active.previewScope, { origin, cwd: ctx.cwd });
         const outcome = await Promise.race([
           onceAborted(ctx.signal).then(() => ({ kind: 'aborted' as const })),
           active.failure.then((failure) => ({ kind: 'failed' as const, failure })),
@@ -148,7 +156,7 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
       if (failed) {
         deps.lifecycle.devBootFailed(
           runFailure instanceof Error ? runFailure.message : String(runFailure),
-          sid,
+          origin,
         );
         if (physicalExit) throw new DevServerRunError(runFailure, physicalExit);
         throw runFailure;
@@ -166,11 +174,11 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
 export async function runDevServerShellCommand(
   controller: DevServerController,
   ctx: CommandContext,
-  sid?: string,
+  origin: PreviewProducerOrigin,
 ): Promise<ProcessExit> {
   const signal = ctx.signal ?? new AbortController().signal;
   try {
-    return await controller.run({ ...ctx, signal }, sid);
+    return await controller.run({ ...ctx, signal }, origin);
   } catch (error) {
     ctx.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     if (error instanceof DevServerRunError) return error.exit;

@@ -134,13 +134,23 @@ export type PtyDevConfigReady = {
   error?: string;
 };
 
+/** Owner-local capability minted by the PTY actor; never sent over the wire. */
+declare const ownerPtyRunAdmissionBrand: unique symbol;
+export type OwnerPtyRunAdmission = {
+  readonly ptySid: string;
+  readonly ptyRid: string;
+  readonly [ownerPtyRunAdmissionBrand]: true;
+};
+
+type PreviewPortIdentity = { ptySid: string; ptyRid: string } | { ptySid?: never; ptyRid?: never };
+
 /** One previewable listening port (dev server or a `node <file>` server). */
-export type PreviewPortEntry = {
+export type PreviewPortEntry = PreviewPortIdentity & {
   port: number;
   url: string;
   label: string;
   source: 'dev-server' | 'preview' | 'node';
-  /** Owning session/run id (for label + teardown correlation). */
+  /** Source-local child/slot id (for label + teardown correlation). */
   sid: string;
   /** Run-scoped preview bridge discriminator for the page↔worker hop. */
   previewScope?: string;
