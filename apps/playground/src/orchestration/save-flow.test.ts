@@ -1,13 +1,10 @@
 import { createRoot } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
+import type { Dialog, SaveDialog } from '../glue/page-store.ts';
 import { createPageStore } from '../glue/page-store.ts';
 import type { ProjectIndex } from '../glue/project-index.ts';
-import {
-  type PendingSwitchTarget,
-  type SaveApplication,
-  type SaveFlowDeps,
-  createSaveFlow,
-} from './save-flow.ts';
+import { createProjectOwnerCoordinator } from './project-owner-coordinator.ts';
+import { type SaveApplication, type SaveFlowDeps, createSaveFlow } from './save-flow.ts';
 
 // Behavioral heirs of the retired App.test save/switch greps (epic
 // playground-testable-core, slice 4b). Fakes are the App-side ports only
@@ -28,7 +25,9 @@ function failedOutcome(kind: 'not-applied' | 'unknown', message: string): SaveAp
 type Harness = ReturnType<typeof harness>;
 
 function harness(overrides: Partial<SaveFlowDeps> = {}) {
-  const dialog: { current: ({ kind: string } & PendingSwitchTarget) | null } = { current: null };
+  const dialog: { current: Dialog } = {
+    current: { kind: 'save', defaultName: '' },
+  };
   let idSeq = 0;
   const deps = {
     store: {
@@ -39,15 +38,16 @@ function harness(overrides: Partial<SaveFlowDeps> = {}) {
       }),
       requestSwitch: vi.fn(),
       confirmSwitchTo: vi.fn(),
-      confirmSave: vi.fn(),
+      confirmSave: vi.fn((_name: string, _id: string, intent: SaveDialog) => {
+        if (dialog.current === intent) dialog.current = null;
+      }),
     },
     workspace: {
-      waitForPendingSwitch: vi.fn(async () => true),
-      switchPending: vi.fn(() => false),
       trackSwitch: vi.fn(async (run: Promise<boolean>) => run),
       switchTo: vi.fn(async () => true),
-      ensureStarted: vi.fn(),
+      ensureStarted: vi.fn(async () => {}),
     },
+    projectOwner: createProjectOwnerCoordinator(),
     pickStarterUnguarded: vi.fn(async () => {}),
     ownerRoot: vi.fn(() => '/scratch'),
     rootForId: (id: string) => (id === 'scratch' ? '/scratch' : `/projects/${id}`),
@@ -60,7 +60,9 @@ function harness(overrides: Partial<SaveFlowDeps> = {}) {
       application: Promise.resolve(appliedOutcome(id)),
       durable: Promise.resolve<ProjectIndex | null>(indexWith(id)),
     })),
-    openSaveDialog: vi.fn(),
+    openSaveDialog: vi.fn(() => {
+      dialog.current = { kind: 'save', defaultName: '' };
+    }),
     showSaveError: vi.fn(),
     showEphemeralSaveNotice: vi.fn(),
   };
@@ -69,10 +71,125 @@ function harness(overrides: Partial<SaveFlowDeps> = {}) {
   return { deps, dialog, flow: createSaveFlow(deps as SaveFlowDeps) };
 }
 
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+  readonly reject: (error: Error) => void;
+} {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: Error) => void = () => {};
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
 async function settle(): Promise<void> {
-  // Drain chained microtasks (trackSave finally + auto-switch guards).
+  // Drain coordinator admission and phase-observer microtasks.
   for (let i = 0; i < 8; i++) await Promise.resolve();
 }
+
+describe('project-owner admission (concurrent-same-key fault)', () => {
+  it('does not bind Save while another owner operation holds the coordinator', async () => {
+    const h = harness();
+    const saveIntent: SaveDialog = { kind: 'save', defaultName: 'mine' };
+    h.dialog.current = saveIntent;
+    const headStarted = deferred<void>();
+    const releaseHead = deferred<void>();
+    const head = h.deps.projectOwner.run(
+      () => true,
+      async () => {
+        headStarted.resolve();
+        await releaseHead.promise;
+      },
+    );
+    await headStarted.promise;
+
+    const saving = h.flow.confirmSave('mine');
+    await settle();
+    expect(h.deps.saveIndexPhases).not.toHaveBeenCalled();
+
+    releaseHead.resolve();
+    await head;
+    await saving;
+    expect(h.deps.saveIndexPhases).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a Save whose exact dialog intent was replaced before queue admission', async () => {
+    const h = harness();
+    const saveIntent: SaveDialog = { kind: 'save', defaultName: 'mine' };
+    h.dialog.current = saveIntent;
+    const headStarted = deferred<void>();
+    const releaseHead = deferred<void>();
+    const head = h.deps.projectOwner.run(
+      () => true,
+      async () => {
+        headStarted.resolve();
+        await releaseHead.promise;
+      },
+    );
+    await headStarted.promise;
+
+    const saving = h.flow.confirmSave('mine');
+    h.dialog.current = { kind: 'save', defaultName: 'replacement' };
+    releaseHead.resolve();
+    await head;
+    await saving;
+
+    expect(h.deps.createProjectId).not.toHaveBeenCalled();
+    expect(h.deps.saveIndexPhases).not.toHaveBeenCalled();
+  });
+
+  it('commits an admitted Save against its captured dialog without consuming a replacement', async () => {
+    const application = deferred<SaveApplication>();
+    const saveIntent: SaveDialog = { kind: 'save', defaultName: 'mine' };
+    const replacement: SaveDialog = { kind: 'save', defaultName: 'replacement' };
+    let savedId = '';
+    const h = harness({
+      saveIndexPhases: vi.fn((id: string) => {
+        savedId = id;
+        return {
+          application: application.promise,
+          durable: Promise.resolve(indexWith(id)),
+        };
+      }),
+    });
+    h.dialog.current = saveIntent;
+
+    const saving = h.flow.confirmSave('mine');
+    await settle();
+    h.dialog.current = replacement;
+    application.resolve(appliedOutcome(savedId));
+    await saving;
+
+    expect(h.deps.store.confirmSave).toHaveBeenCalledWith('mine', savedId, saveIntent);
+    expect(h.dialog.current).toBe(replacement);
+  });
+
+  it('fences later owner operations when Save applied but durability cannot be proved', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const h = harness({
+        saveIndexPhases: vi.fn((id: string) => ({
+          application: Promise.resolve(appliedOutcome(id)),
+          durable: Promise.resolve<ProjectIndex | null>(null),
+        })),
+      });
+      h.dialog.current = { kind: 'save', defaultName: 'mine' };
+
+      await h.flow.confirmSave('mine');
+      const bindLater = vi.fn(() => 'unsafe');
+
+      await expect(h.deps.projectOwner.run(() => true, bindLater)).rejects.toThrow();
+      expect(bindLater).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
+});
 
 describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', () => {
   it('posts the on-disk move FIRST, reading the starter while the store is still scratch-active', async () => {
@@ -98,13 +215,16 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
 
   it('allocates a fresh collision-free project id per save', async () => {
     const h = harness();
+    const firstIntent = h.dialog.current;
     await h.flow.confirmSave('a');
+    const secondIntent: SaveDialog = { kind: 'save', defaultName: 'b' };
+    h.dialog.current = secondIntent;
     await h.flow.confirmSave('b');
     await settle();
     const ids = h.deps.saveIndexPhases.mock.calls.map((c) => c[0]);
     expect(ids[0]).not.toBe(ids[1]);
-    expect(h.deps.store.confirmSave).toHaveBeenNthCalledWith(1, 'a', ids[0]);
-    expect(h.deps.store.confirmSave).toHaveBeenNthCalledWith(2, 'b', ids[1]);
+    expect(h.deps.store.confirmSave).toHaveBeenNthCalledWith(1, 'a', ids[0], firstIntent);
+    expect(h.deps.store.confirmSave).toHaveBeenNthCalledWith(2, 'b', ids[1], secondIntent);
   });
 
   it('admits one Save while its owner apply proof is pending', async () => {
@@ -125,12 +245,17 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
 
     const first = h.flow.confirmSave('first');
     const duplicate = h.flow.confirmSave('duplicate');
+    await settle();
     expect(saveIndexPhases).toHaveBeenCalledTimes(1);
     expect(h.deps.createProjectId).toHaveBeenCalledTimes(1);
 
     resolveApplication(appliedOutcome(savedId));
     await Promise.all([first, duplicate]);
-    expect(h.deps.store.confirmSave).toHaveBeenCalledWith('first', savedId);
+    expect(h.deps.store.confirmSave).toHaveBeenCalledWith(
+      'first',
+      savedId,
+      expect.objectContaining({ kind: 'save' }),
+    );
   });
 
   it('a blank name is a no-op (no post, no flip)', async () => {
@@ -145,7 +270,11 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
     await h.flow.confirmSave('draft');
     await settle();
     expect(h.deps.saveIndexPhases).not.toHaveBeenCalled();
-    expect(h.deps.store.confirmSave).toHaveBeenCalledWith('draft', expect.stringMatching(/^p-/));
+    expect(h.deps.store.confirmSave).toHaveBeenCalledWith(
+      'draft',
+      expect.stringMatching(/^p-/),
+      expect.objectContaining({ kind: 'save' }),
+    );
     expect(h.deps.showEphemeralSaveNotice).toHaveBeenCalledWith('draft');
     expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
   });
@@ -173,6 +302,8 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
             durable: Promise.reject(new Error('owner exited before durable')),
           }),
         });
+        const intent: SaveDialog = { kind: 'save', defaultName: 'x' };
+        store.openDialog(intent);
 
         await h.flow.confirmSave('x');
         await settle();
@@ -198,6 +329,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
 
   it('flips the page at applied while durability remains pending, then preserves it on owner exit', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       await createRoot(async (dispose) => {
         const store = createPageStore();
@@ -223,13 +355,15 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
             };
           },
         });
+        const intent: SaveDialog = { kind: 'save', defaultName: 'kept' };
+        store.openDialog(intent);
 
         const saving = h.flow.confirmSave('kept');
         await settle();
         expect(store.activeId()).toBe('scratch');
 
         resolveApplication(appliedOutcome(savedId));
-        await saving;
+        await settle();
         expect(store.activeId()).toBe(savedId);
         expect(store.scratch()).toBeNull();
         expect(store.projects()).toContainEqual(
@@ -237,7 +371,7 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
         );
 
         rejectDurable(new Error('workspace owner exited after apply'));
-        await settle();
+        await saving;
         expect(store.activeId()).toBe(savedId);
         expect(h.deps.showSaveError).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledWith(
@@ -247,12 +381,13 @@ describe('confirmSave — durable post + page-mirror flip (ADR-0165 §7/§8)', (
         dispose();
       });
     } finally {
+      error.mockRestore();
       warn.mockRestore();
     }
   });
 });
 
-describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
+describe('plain-Save root reconciliation (torn-state fault)', () => {
   function autoSwitchHarness(overrides: Partial<SaveFlowDeps> = {}): Harness {
     const h = harness(overrides);
     // After confirmSave the store mirror is on the saved project.
@@ -269,6 +404,30 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
     const id = h.deps.saveIndexPhases.mock.calls[0]?.[0] ?? '';
     expect(h.deps.workspace.switchTo).toHaveBeenCalledWith(id);
     expect(h.deps.workspace.trackSwitch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reconciles the saved root when a later non-navigation intent is superseded', async () => {
+    const durability = deferred<ProjectIndex | null>();
+    let savedId = '';
+    const h = autoSwitchHarness({
+      saveIndexPhases: (id: string) => {
+        savedId = id;
+        return {
+          application: Promise.resolve(appliedOutcome(id)),
+          durable: durability.promise,
+        };
+      },
+    });
+
+    const saving = h.flow.confirmSave('mine');
+    await settle();
+    const bindSuperseded = vi.fn();
+    const superseded = h.deps.projectOwner.run(() => false, bindSuperseded);
+    durability.resolve(indexWith(savedId));
+    await Promise.all([saving, superseded]);
+
+    expect(bindSuperseded).not.toHaveBeenCalled();
+    expect(h.deps.workspace.switchTo).toHaveBeenCalledWith(savedId);
   });
 
   it('skips when the owner is already rooted at the saved project', async () => {
@@ -292,28 +451,26 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
     expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
   });
 
-  it('skips when another switch is already pending', async () => {
-    const h = autoSwitchHarness({});
-    h.deps.workspace.switchPending.mockReturnValue(true);
-    await h.flow.confirmSave('mine');
-    await settle();
-    expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
-  });
-
   it('skips when the save never became durable (index missing the project)', async () => {
-    const h = autoSwitchHarness({
-      saveIndexPhases: (id: string) => ({
-        application: Promise.resolve(appliedOutcome(id)),
-        durable: Promise.resolve<ProjectIndex | null>({
-          activeId: 'scratch',
-          scratch: null,
-          projects: [],
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const h = autoSwitchHarness({
+        saveIndexPhases: (id: string) => ({
+          application: Promise.resolve(appliedOutcome(id)),
+          durable: Promise.resolve<ProjectIndex | null>({
+            activeId: 'scratch',
+            scratch: null,
+            projects: [],
+          }),
         }),
-      }),
-    });
-    await h.flow.confirmSave('mine');
-    await settle();
-    expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+      });
+      await h.flow.confirmSave('mine');
+      expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
   });
 
   it('a Save-then-continue stashed mid-flight suppresses the stale auto-switch', async () => {
@@ -330,17 +487,18 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
         };
       },
     });
-    await h.flow.confirmSave('mine');
+    const saving = h.flow.confirmSave('mine');
+    await settle();
     // A switch dialog stashes a target while the auto-switch still awaits durability…
     h.dialog.current = { kind: 'switch', pendingId: 'p-next' };
     h.flow.switchSaveThen();
     releaseDurable(indexWith(savedId));
-    await settle();
+    await saving;
     // …the pending target owns the continuation; the stale auto-switch must not fire.
     expect(h.deps.workspace.switchTo).not.toHaveBeenCalledWith(savedId);
   });
 
-  it('a launcher switch fired after Save cancels the stale auto-switch (last intent wins)', async () => {
+  it('serializes saved-root reconciliation before a later launcher switch', async () => {
     let releaseDurable: (index: ProjectIndex | null) => void = () => {};
     let savedId = '';
     const h = autoSwitchHarness({
@@ -354,16 +512,17 @@ describe('plain-Save auto-switch (respawn the owner at the saved root)', () => {
         };
       },
     });
-    await h.flow.confirmSave('mine');
+    const saving = h.flow.confirmSave('mine');
+    await settle();
     const id = savedId;
     // The user switches elsewhere while the save durability is still in flight…
     const launcher = h.flow.launcherSwitch('p-other');
     releaseDurable(indexWith(id));
-    await launcher;
-    await settle();
-    // …so the auto-switch must NOT fire for the saved id (only the launcher's target).
-    expect(h.deps.workspace.switchTo).not.toHaveBeenCalledWith(id);
-    expect(h.deps.workspace.switchTo).toHaveBeenCalledWith('p-other');
+    await Promise.all([saving, launcher]);
+    // The admitted Save first reconciles the mirror's project root; the later
+    // launcher then performs its own FIFO transition.
+    expect(h.deps.workspace.switchTo).toHaveBeenNthCalledWith(1, id);
+    expect(h.deps.workspace.switchTo).toHaveBeenNthCalledWith(2, 'p-other');
   });
 });
 
@@ -395,18 +554,24 @@ describe('Save-then-continue / Discard-then-continue (ADR-0165 §9)', () => {
   });
 
   it('the resume waits for durability and is dropped when the save never landed', async () => {
-    const h = harness({
-      saveIndexPhases: (id: string) => ({
-        application: Promise.resolve(appliedOutcome(id)),
-        durable: Promise.resolve<ProjectIndex | null>(null),
-      }),
-    });
-    h.dialog.current = { kind: 'switch', pendingId: 'p-target' };
-    h.flow.switchSaveThen();
-    await h.flow.confirmSave('kept');
-    await settle();
-    expect(h.deps.store.confirmSwitchTo).not.toHaveBeenCalled();
-    expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const h = harness({
+        saveIndexPhases: (id: string) => ({
+          application: Promise.resolve(appliedOutcome(id)),
+          durable: Promise.resolve<ProjectIndex | null>(null),
+        }),
+      });
+      h.dialog.current = { kind: 'switch', pendingId: 'p-target' };
+      h.flow.switchSaveThen();
+      await h.flow.confirmSave('kept');
+      expect(h.deps.store.confirmSwitchTo).not.toHaveBeenCalled();
+      expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
   });
 
   it('switchDiscardThen drops the dialog and applies the target immediately', async () => {
@@ -422,7 +587,7 @@ describe('Save-then-continue / Discard-then-continue (ADR-0165 §9)', () => {
   it('switchDiscardThen continues ONLY a switch dialog — any other kind just closes', async () => {
     const h = harness();
     // pendingId present but kind ≠ switch: only the SWITCH dialog's target continues.
-    h.dialog.current = { kind: 'rename', pendingId: 'p-x' };
+    h.dialog.current = { kind: 'rename', id: 'p-x', current: 'x' };
     h.flow.switchDiscardThen();
     await settle();
     expect(h.deps.store.setDialog).toHaveBeenCalledWith(null);
@@ -458,6 +623,30 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
     expect(h.deps.workspace.ensureStarted).toHaveBeenCalledWith(true);
   });
 
+  it('retains the owner lease until same-root ensureStarted reaches terminal', async () => {
+    const ensured = deferred<void>();
+    const h = harness({
+      ownerRoot: () => '/projects/p-1',
+      workspace: {
+        trackSwitch: vi.fn(async (run: Promise<boolean>) => run),
+        switchTo: vi.fn(async () => true),
+        ensureStarted: vi.fn(() => ensured.promise),
+      },
+    });
+
+    const launcher = h.flow.launcherSwitch('p-1');
+    await settle();
+    const bindLater = vi.fn();
+    const later = h.deps.projectOwner.run(() => true, bindLater);
+    await settle();
+    expect(bindLater).not.toHaveBeenCalled();
+
+    ensured.resolve();
+    await launcher;
+    await later;
+    expect(bindLater).toHaveBeenCalledTimes(1);
+  });
+
   it('a dirty-scratch prompt swallows the switch (the dialog decides)', async () => {
     const h = harness();
     h.deps.store.requestSwitch.mockImplementation(() => {
@@ -466,13 +655,6 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
     await h.flow.launcherSwitch('p-1');
     expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
     expect(h.deps.workspace.ensureStarted).not.toHaveBeenCalled();
-  });
-
-  it('an unrecovered pending switch aborts before touching the store', async () => {
-    const h = harness();
-    h.deps.workspace.waitForPendingSwitch.mockResolvedValue(false);
-    await h.flow.launcherSwitch('p-1');
-    expect(h.deps.store.requestSwitch).not.toHaveBeenCalled();
   });
 
   it('waits out an in-flight save DURABILITY before switching (owner teardown must not race the flush)', async () => {
@@ -489,20 +671,22 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
         };
       },
     });
-    await h.flow.confirmSave('mine');
+    const saving = h.flow.confirmSave('mine');
+    await settle();
     const order: string[] = [];
     h.deps.store.requestSwitch.mockImplementation(() => order.push('switch'));
     const launcher = h.flow.launcherSwitch('p-2').then(() => order.push('done'));
     await settle();
     expect(order).toEqual([]); // gated on the durable wait
     release(indexWith(savedId));
-    await launcher;
+    await Promise.all([saving, launcher]);
     expect(order).toEqual(['switch', 'done']);
   });
 
   it('keeps a failed post-apply durability proof latched against a later owner teardown', async () => {
     let rejectDurable: (error: Error) => void = () => {};
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const h = harness({
         saveIndexPhases: (id: string) => ({
@@ -513,15 +697,17 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
         }),
       });
 
-      await h.flow.confirmSave('mine');
-      rejectDurable(new Error('flush failed after apply'));
+      const saving = h.flow.confirmSave('mine');
       await settle();
+      rejectDurable(new Error('flush failed after apply'));
+      await saving;
 
       await h.flow.launcherSwitch('p-2');
 
       expect(h.deps.store.requestSwitch).not.toHaveBeenCalled();
       expect(h.deps.workspace.switchTo).not.toHaveBeenCalled();
     } finally {
+      error.mockRestore();
       warn.mockRestore();
     }
   });
@@ -571,42 +757,6 @@ describe('launcherSwitch gates (marks a same-root open ready without respawning)
     } finally {
       error.mockRestore();
       warn.mockRestore();
-    }
-  });
-});
-
-describe('beginStarterPick gates', () => {
-  it('passes when nothing is in flight', async () => {
-    const h = harness();
-    await expect(h.flow.beginStarterPick()).resolves.toBe(true);
-  });
-
-  it('aborts when the pending switch cannot be recovered', async () => {
-    const h = harness();
-    h.deps.workspace.waitForPendingSwitch.mockResolvedValue(false);
-    await expect(h.flow.beginStarterPick()).resolves.toBe(false);
-  });
-
-  it('waits for the in-flight save APPLY (not durability) and aborts when it failed', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      let resolveApplication: (application: SaveApplication) => void = () => {};
-      const h = harness({
-        saveIndexPhases: (id: string) => ({
-          application: new Promise<SaveApplication>((resolve) => {
-            resolveApplication = resolve;
-          }),
-          durable: Promise.resolve(indexWith(id)),
-        }),
-      });
-      const saving = h.flow.confirmSave('mine');
-      const pick = h.flow.beginStarterPick();
-      await settle();
-      resolveApplication(failedOutcome('not-applied', 'owner proved no apply'));
-      await expect(pick).resolves.toBe(false);
-      await saving;
-    } finally {
-      error.mockRestore();
     }
   });
 });

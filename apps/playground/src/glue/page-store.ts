@@ -83,9 +83,9 @@ export interface PageStore {
   confirmPickStarter(starterId: string): void;
   markDirty(): void;
   openDialog(d: Dialog): void;
-  confirmSave(name: string, newId: string): void;
-  confirmRename(name: string): void;
-  confirmReset(): void;
+  confirmSave(name: string, newId: string, intent: SaveDialog): void;
+  confirmRename(id: string, name: string, intent: RenameDialog): void;
+  confirmReset(id: ActiveId, intent: ResetDialog): void;
   confirmDelete(): void;
   undoDelete(): void;
   // setters
@@ -195,39 +195,38 @@ export function createPageStore(): PageStore {
   // newId is allocated by the caller (saveScratchAsProject decides the on-disk
   // id; App threads it). Flip the mirror pointer LAST, mirroring the on-disk
   // copy->flip->delete order (§7).
-  function confirmSave(name: string, newId: string): void {
+  function finishIntent(intent: Exclude<Dialog, null>, toast: Toast): void {
+    if (dialog() !== intent) return;
+    setDialog(null);
+    setToast(toast);
+  }
+
+  function confirmSave(name: string, newId: string, intent: SaveDialog): void {
     const s = scratch();
     if (!s) return;
     const proj: Project = { id: newId, name, starter: s.starter, editedAt: 'just now' };
     setProjects(projects().some((p) => p.id === newId) ? projects() : [...projects(), proj]);
     setScratch(null);
     setActiveId(newId);
-    setDialog(null);
-    setToast({ kind: 'info', text: `Saved as ${name}` });
+    finishIntent(intent, { kind: 'info', text: `Saved as ${name}` });
   }
-  function confirmRename(name: string): void {
-    const d = dialog();
-    const id = d && d.kind === 'rename' ? d.id : null;
+  function confirmRename(id: string, name: string, intent: RenameDialog): void {
     const trimmed = name.trim();
-    if (!id || !trimmed) {
-      setDialog(null);
+    if (!trimmed) {
+      if (dialog() === intent) setDialog(null);
       return;
     }
     setProjects(projects().map((p) => (p.id === id ? { ...p, name: trimmed } : p)));
-    setDialog(null);
-    setToast({ kind: 'info', text: `Renamed to ${trimmed}` });
+    finishIntent(intent, { kind: 'info', text: `Renamed to ${trimmed}` });
   }
-  function confirmReset(): void {
-    const d = dialog();
-    const id = d && d.kind === 'reset' ? d.id : null;
+  function confirmReset(id: ActiveId, intent: ResetDialog): void {
     const s = scratch();
     if (id === 'scratch' && s) {
       setScratch({ ...s, dirty: false, editedAt: 'no edits yet' });
-    } else if (id) {
+    } else {
       setProjects(projects().map((p) => (p.id === id ? { ...p, editedAt: 'just now' } : p)));
     }
-    setDialog(null);
-    setToast({ kind: 'info', text: 'Reset to starter' });
+    finishIntent(intent, { kind: 'info', text: 'Reset to starter' });
   }
   function confirmDelete(): void {
     const d = dialog();

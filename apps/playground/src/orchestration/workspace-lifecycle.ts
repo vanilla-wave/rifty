@@ -94,8 +94,6 @@ export interface WorkspaceLifecycle<O extends WorkspaceOwnerLike> {
    * later editor write behind the "choose a project" guard).
    */
   trackSwitch(run: Promise<boolean>): Promise<boolean>;
-  waitForPendingSwitch(): Promise<boolean>;
-  switchPending(): boolean;
   /**
    * Re-root + RELAUNCH the restored project on reload: root mismatch (saved
    * project) → owner respawn via switchTo; same root (dirty scratch draft) →
@@ -110,7 +108,6 @@ export function createWorkspaceLifecycle<O extends WorkspaceOwnerLike>(
 ): WorkspaceLifecycle<O> {
   let started = deps.initiallyStarted;
   let startInFlight: Promise<O> | null = null;
-  let pendingSwitch: Promise<boolean> | null = null;
   const [ownerReady, setOwnerReady] = createSignal(false);
 
   async function ensureStarted(markReady = true): Promise<O> {
@@ -189,26 +186,16 @@ export function createWorkspaceLifecycle<O extends WorkspaceOwnerLike>(
   }
 
   function trackSwitch(run: Promise<boolean>): Promise<boolean> {
-    const tracked = run
-      .catch((err: unknown) => {
-        console.error('[project-switch] switch failed', err);
-        const message = err instanceof Error ? err.message : String(err);
-        deps.showSwitchError(`Switch failed: ${message}`);
-        if (!started && deps.currentOwner().isAlive()) {
-          started = true;
-          setOwnerReady(true);
-        }
-        return false;
-      })
-      .finally(() => {
-        if (pendingSwitch === tracked) pendingSwitch = null;
-      });
-    pendingSwitch = tracked;
-    return tracked;
-  }
-
-  async function waitForPendingSwitch(): Promise<boolean> {
-    return (await pendingSwitch) ?? true;
+    return run.catch((err: unknown) => {
+      console.error('[project-switch] switch failed', err);
+      const message = err instanceof Error ? err.message : String(err);
+      deps.showSwitchError(`Switch failed: ${message}`);
+      if (!started && deps.currentOwner().isAlive()) {
+        started = true;
+        setOwnerReady(true);
+      }
+      return false;
+    });
   }
 
   async function restoreOnReload(idx: ProjectIndex): Promise<void> {
@@ -227,8 +214,6 @@ export function createWorkspaceLifecycle<O extends WorkspaceOwnerLike>(
     ensureStarted,
     switchTo,
     trackSwitch,
-    waitForPendingSwitch,
-    switchPending: () => pendingSwitch !== null,
     restoreOnReload,
   };
 }

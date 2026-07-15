@@ -101,6 +101,7 @@ import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
+import { createProjectOwnerCoordinator } from './orchestration/project-owner-coordinator.ts';
 import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
@@ -569,6 +570,10 @@ export function App(props: AppProps) {
     console.error('[workspace-owner] hidden empty boot failed', err);
   });
 
+  // One FIFO owns every external operation that can mutate or replace the live
+  // project owner. Internal switch/new-scratch steps run inside the held lease.
+  const projectOwner = createProjectOwnerCoordinator();
+
   // Headless workspace-owner lifecycle core (ADR-0197 slice 2) bound to the REAL
   // ports: the reactive owner handle, the terminal-manager rebind, the durable
   // index persist, the snapshot-frame readiness handshakes and the dev-server core.
@@ -668,7 +673,14 @@ export function App(props: AppProps) {
     closeLauncher: () => store.closeLauncher(),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
     warmEditorStack,
-    restore: (idx) => void workspace.restoreOnReload(idx),
+    restore: (idx) => {
+      void projectOwner
+        .run(
+          () => true,
+          async () => workspace.restoreOnReload(idx),
+        )
+        .catch((err: unknown) => console.error('[project-index] restore failed', err));
+    },
     pickDeepLinkStarter: (id) => void onPickStarter(id),
   });
 
@@ -1716,6 +1728,7 @@ export function App(props: AppProps) {
   const saveFlow = createSaveFlow({
     store,
     workspace,
+    projectOwner,
     pickStarterUnguarded: (starter) =>
       presetBoot.pickStarter(starter, {
         commit: (s) => store.confirmPickStarter(s),
@@ -1751,6 +1764,7 @@ export function App(props: AppProps) {
     subscribeSnapshot: (cb) => snapshotFs.subscribe(cb),
     requestSnapshot: () => requestVfsSnapshot(workspaceOwner().snapshotPort),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
+    projectOwner,
     flushEditorWrites: () => flushPendingEditorWrites(),
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     activeStarterId,
@@ -1802,16 +1816,26 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
-    if (!(await saveFlow.beginStarterPick())) return;
     indexBoot.markBootDecisionMade();
-    // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
-    // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
-    // commit — a dirty scratch opens the switch dialog and the boot aborts there.
-    await presetBoot.pickStarter(id, {
-      commit: (starter) => store.pickStarter(starter),
-      guardDirtyScratch: true,
-      preserveDirtySameStarter: true,
-    });
+    try {
+      await projectOwner.run(
+        () => true,
+        async () => {
+          // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
+          // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
+          // commit — a dirty scratch opens the switch dialog and the boot aborts there.
+          await presetBoot.pickStarter(id, {
+            commit: (starter) => store.pickStarter(starter),
+            guardDirtyScratch: true,
+            preserveDirtySameStarter: true,
+          });
+        },
+      );
+    } catch (err: unknown) {
+      console.error('[project-index] starter pick failed', err);
+      const message = err instanceof Error ? err.message : String(err);
+      store.setToast({ kind: 'error', text: `Starter pick failed: ${message}` });
+    }
   }
 
   // Switch active root from the launcher/chip — the save-flow core gates it over

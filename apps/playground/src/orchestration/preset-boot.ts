@@ -10,7 +10,7 @@
  * the behavioral-test seam (ADR-0197 §4). The dev-server core (slice 1) is
  * injected as a port (dependency spine).
  */
-import { createSignal, untrack } from 'solid-js';
+import { createSignal } from 'solid-js';
 import type { Preset } from '../presets.ts';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 
@@ -119,9 +119,8 @@ export interface PresetBoot {
     bootLinesOverride?: readonly string[],
   ): Promise<void>;
   /**
-   * Gallery-pick flow, serialized through the transition queue. Awaits the
-   * queued boot only when a transition is already in flight (a fresh pick is
-   * fire-and-forget — the veil reports progress).
+   * Gallery-pick flow, serialized through the transition queue. Resolves only
+   * after the owner transition + preset boot reaches a terminal outcome.
    */
   pickStarter(id: string, opts: PickStarterOpts): Promise<void>;
 }
@@ -218,11 +217,11 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
   ): Promise<void> {
     const wasDirty = opts.guardDirtyScratch ? deps.dirtyScratchPick() : false;
     const tsGate = wasDirty ? undefined : (eagerGate ?? beginTsTransition());
-    if (!wasDirty) deps.setOwnerReady(false);
-    opts.commit(id); // dirty pick: the store opened the switch dialog — abort here
-    if (wasDirty) return;
     let gateOwnedByRunPreset = false;
     try {
+      if (!wasDirty) deps.setOwnerReady(false);
+      opts.commit(id); // dirty pick: the store opened the switch dialog — abort here
+      if (wasDirty) return;
       const preset = deps.presetForId(id);
       await deps.paintStarterUi(preset);
       deps.markEditorContextReady();
@@ -252,14 +251,7 @@ export function createPresetBoot<S extends PresetBootSessionLike>(
   async function pickStarter(id: string, opts: PickStarterOpts): Promise<void> {
     const eagerGate = opts.eagerTsGate ? beginTsTransition() : undefined;
     deps.warmEditorStack();
-    const run = (): Promise<void> => bootPickedStarter(id, eagerGate, opts);
-    // Mid-transition picks QUEUE and are awaited (the caller must observe the
-    // serialized boot); a fresh pick is fire-and-forget behind the veil.
-    if (untrack(transitioning)) {
-      await queueTransition(run);
-      return;
-    }
-    void queueTransition(run);
+    await queueTransition(() => bootPickedStarter(id, eagerGate, opts));
   }
 
   return {

@@ -197,6 +197,10 @@
   the boot and releases the TS transition gate. Same-path starter tabs reopen
   only after a fresh scratch snapshot, so they cannot retain the prior starter's
   bytes while the explorer and preview already show the new tree.
+- Save, Reset, Rename, reload restore, and launcher/Starter switches now share
+  one FIFO project-owner lease. Canceled dialog intents never bind, late mirror
+  commits retain their captured identity, and applied Save holds admission
+  through durable proof before any owner teardown.
 - Cold reload recovery no longer deletes the hidden owner's live `/scratch`
   root while it is publishing the saved-project index. Cleanup is deferred to
   the respawned project owner, which replans the same stale-source deletion.

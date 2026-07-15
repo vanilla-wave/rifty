@@ -358,7 +358,6 @@ describe('gallery-pick flow', () => {
   it('a clean pick: veil-blind commit, paint → owner → stop-before-write → scratch → boot, owner-ready flip around', async () => {
     const { h, boot } = setup();
     await boot.pickStarter('real-vite', pickOpts(h));
-    await tick(20); // fresh pick is fire-and-forget — let the queued boot settle
     expect(h.log.slice(0, 13)).toEqual([
       'warmEditor',
       'ownerReady:false',
@@ -442,15 +441,19 @@ describe('gallery-pick flow', () => {
     expect(h.log).toContain('commit:vite8');
   });
 
-  it('a fresh pick is fire-and-forget: pickStarter resolves while the boot is still in flight', async () => {
+  it('a fresh pick promise stays pending until the boot reaches a terminal outcome', async () => {
     const { h, boot } = setup((h) => {
       h.holdBoot = true;
     });
-    await boot.pickStarter('real-vite', pickOpts(h));
-    expect(h.log).not.toContain('reinitTs'); // resolved while the boot is held
+    let settled = false;
+    const pick = boot.pickStarter('real-vite', pickOpts(h)).finally(() => {
+      settled = true;
+    });
     while (!h.releaseBoot) await tick(5); // let the queued boot reach the hold
+    expect(settled).toBe(false);
+    expect(h.log).not.toContain('reinitTs');
     h.releaseBoot();
-    await tick(10);
+    await pick;
     expect(h.log).toContain('reinitTs');
   });
 

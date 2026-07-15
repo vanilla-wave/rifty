@@ -306,7 +306,9 @@ describe('page-store save/rename/reset/delete (ADR-0165 §9)', () => {
     createRoot((dispose) => {
       const s = createPageStore();
       s.hydrateIndex(dirtyScratch);
-      s.confirmSave('react-starter', 'p2');
+      const intent = { kind: 'save', defaultName: 'react-starter' } as const;
+      s.openDialog(intent);
+      s.confirmSave('react-starter', 'p2', intent);
       expect(s.scratch()).toBeNull();
       const created = s.projects().find((p) => p.name === 'react-starter');
       expect(created?.id).toBe('p2');
@@ -316,14 +318,74 @@ describe('page-store save/rename/reset/delete (ADR-0165 §9)', () => {
     });
   });
 
+  it('concurrent-same-key: late Save preserves a newer dialog', () => {
+    createRoot((dispose) => {
+      const s = createPageStore();
+      s.hydrateIndex(dirtyScratch);
+      const save = { kind: 'save', defaultName: 'react-starter' } as const;
+      const rename = { kind: 'rename', id: 'p1', current: 'node-api' } as const;
+      s.openDialog(save);
+      s.openDialog(rename);
+
+      s.confirmSave('react-starter', 'p2', save);
+
+      expect(s.activeId()).toBe('p2');
+      expect(s.projects().find((p) => p.id === 'p2')?.name).toBe('react-starter');
+      expect(s.dialog()).toBe(rename);
+      dispose();
+    });
+  });
+
   it('confirmRename updates the name + toast', () => {
     createRoot((dispose) => {
       const s = createPageStore();
       s.hydrateIndex(dirtyScratch);
-      s.openDialog({ kind: 'rename', id: 'p1', current: 'node-api' });
-      s.confirmRename('renamed-api');
+      const intent = { kind: 'rename', id: 'p1', current: 'node-api' } as const;
+      s.openDialog(intent);
+      s.confirmRename('p1', 'renamed-api', intent);
       expect(s.projects().find((p) => p.id === 'p1')?.name).toBe('renamed-api');
       expect(s.toast()?.text).toContain('Renamed');
+      dispose();
+    });
+  });
+
+  it('concurrent-same-key: late Rename preserves a newer dialog', () => {
+    createRoot((dispose) => {
+      const s = createPageStore();
+      s.hydrateIndex({
+        ...dirtyScratch,
+        projects: [
+          ...dirtyScratch.projects,
+          { id: 'p2', name: 'second', starter: 'react', editedAt: 'now' },
+        ],
+      });
+      const first = { kind: 'rename', id: 'p1', current: 'node-api' } as const;
+      const second = { kind: 'rename', id: 'p2', current: 'second' } as const;
+      s.openDialog(first);
+      s.openDialog(second);
+
+      s.confirmRename('p1', 'renamed-api', first);
+
+      expect(s.projects().find((p) => p.id === 'p1')?.name).toBe('renamed-api');
+      expect(s.projects().find((p) => p.id === 'p2')?.name).toBe('second');
+      expect(s.dialog()).toBe(second);
+      dispose();
+    });
+  });
+
+  it('concurrent-same-key: late Reset preserves a newer dialog', () => {
+    createRoot((dispose) => {
+      const s = createPageStore();
+      s.hydrateIndex(dirtyScratch);
+      const reset = { kind: 'reset', id: 'p1' } as const;
+      const rename = { kind: 'rename', id: 'p1', current: 'node-api' } as const;
+      s.openDialog(reset);
+      s.openDialog(rename);
+
+      s.confirmReset('p1', reset);
+
+      expect(s.projects().find((p) => p.id === 'p1')?.editedAt).toBe('just now');
+      expect(s.dialog()).toBe(rename);
       dispose();
     });
   });

@@ -9,7 +9,9 @@
  * the behavioral-test seam (ADR-0197 §4). The dev-server core (slice 1) is
  * injected as a port (dependency spine).
  */
+import type { Dialog, RenameDialog, ResetDialog } from '../glue/page-store.ts';
 import type { ActiveId } from '../glue/project-index.ts';
+import type { ProjectOwnerCoordinator } from './project-owner-coordinator.ts';
 
 /** An owner republish can be lost mid-switch; never hang the refresh on it. */
 const SNAPSHOT_FRAME_TIMEOUT_MS = 2000;
@@ -17,10 +19,12 @@ const SNAPSHOT_FRAME_TIMEOUT_MS = 2000;
 export interface ResetRefreshDeps {
   store: {
     activeId(): ActiveId;
-    dialog(): { readonly kind: string; readonly id?: string } | null;
-    confirmReset(): void;
-    confirmRename(name: string): void;
+    dialog(): Dialog;
+    confirmReset(id: ActiveId, intent: ResetDialog): void;
+    confirmRename(id: string, name: string, intent: RenameDialog): void;
   };
+  /** Sole FIFO authority for owner-bound mutations and replacements. */
+  projectOwner: ProjectOwnerCoordinator;
   /** Slice-1 dev-server core injected as a port (ADR-0197 spine). */
   devServer: {
     sessionId(): string | null;
@@ -50,9 +54,9 @@ export interface ResetRefresh {
   waitForActiveSnapshotFrame(): Promise<void>;
   /** Fresh frame → reopen initial tabs → reboot a running dev server (§6). */
   refreshActiveAfterReset(): Promise<void>;
-  /** Confirm Reset: flush edits → durable re-seed → mirror flip → live refresh. */
+  /** Confirm Reset: FIFO admission → flush → durable re-seed → explicit mirror commit. */
   confirmReset(): void;
-  /** Confirm Rename: durable rename post (pre-flip id) → mirror flip. */
+  /** Confirm Rename: FIFO admission → proved durable post → explicit mirror commit. */
   confirmRename(name: string): void;
 }
 
@@ -97,36 +101,51 @@ export function createResetRefresh(deps: ResetRefreshDeps): ResetRefresh {
   // "restores the clean starter files" promise is true on screen, not just on disk.
   // Memory mode skips the durable post (page-mirror only).
   function confirmReset(): void {
-    const d = deps.store.dialog();
-    const id = d && d.kind === 'reset' ? (d.id ?? null) : null;
-    const activeReset = id === deps.store.activeId();
-    void (async (): Promise<void> => {
-      await deps.flushEditorWrites();
-      if (id && !deps.ephemeral()) {
-        if (id === 'scratch') {
-          await deps.resetScratchIndex(deps.activeStarterId());
-        } else {
-          await deps.resetProjectIndex(id);
-        }
-      }
-      deps.store.confirmReset();
-      if (activeReset) await refreshActiveAfterReset();
-    })().catch((err: unknown) => console.error('[project-index] reset failed', err));
+    const intent = deps.store.dialog();
+    if (!intent || intent.kind !== 'reset') return;
+    void deps.projectOwner
+      .run(
+        () => deps.store.dialog() === intent,
+        async () => {
+          await deps.flushEditorWrites();
+          // The dialog can be canceled/replaced while editor writes drain. Do
+          // not bind its owner post after that asynchronous boundary.
+          if (deps.store.dialog() !== intent) return;
+          const activeReset = intent.id === deps.store.activeId();
+          if (!deps.ephemeral()) {
+            if (intent.id === 'scratch') {
+              await deps.resetScratchIndex(deps.activeStarterId());
+            } else {
+              await deps.resetProjectIndex(intent.id);
+            }
+          }
+          deps.store.confirmReset(intent.id, intent);
+          if (activeReset) await refreshActiveAfterReset();
+        },
+      )
+      .catch((err: unknown) => console.error('[project-index] reset failed', err));
   }
 
-  // Confirm Rename: post the durable on-disk rename to the owner (it rewrites the
-  // index `name` + re-publishes) reading the dialog's target id BEFORE the store
-  // flips it, then flip the page mirror (immediate UX; the owner reconciles).
+  // The coordinator validates the exact dialog object at FIFO head. Once the
+  // owner post is admitted it runs to a terminal result; the explicit commit
+  // updates that captured project without dismissing a newer dialog.
   function confirmRename(name: string): void {
-    const d = deps.store.dialog();
-    const id = d && d.kind === 'rename' ? (d.id ?? null) : null;
+    const intent = deps.store.dialog();
+    if (!intent || intent.kind !== 'rename') return;
     const trimmed = name.trim();
-    if (id && trimmed && !deps.ephemeral()) {
-      void deps
-        .renameProjectIndex(id, trimmed)
-        .catch((err: unknown) => console.error('[project-index] rename failed', err));
+    if (!trimmed) {
+      deps.store.confirmRename(intent.id, name, intent);
+      return;
     }
-    deps.store.confirmRename(name);
+    void deps.projectOwner
+      .run(
+        () => deps.store.dialog() === intent,
+        async () => {
+          if (!deps.ephemeral()) await deps.renameProjectIndex(intent.id, trimmed);
+          deps.store.confirmRename(intent.id, name, intent);
+        },
+      )
+      .catch((err: unknown) => console.error('[project-index] rename failed', err));
   }
 
   return { waitForActiveSnapshotFrame, refreshActiveAfterReset, confirmReset, confirmRename };
