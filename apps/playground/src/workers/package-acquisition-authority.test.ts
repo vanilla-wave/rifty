@@ -749,6 +749,94 @@ describe('package-acquisition authority', () => {
     expect(maximumActive).toBe(1);
   });
 
+  it('fault: quiesces prior FIFO work through detached stamp settlement without waiting for later admission', async () => {
+    const secondRoot = '/projects/later';
+    const secondPackageJson = '{"name":"later","dependencies":{"vite":"^5.4.0"}}\n';
+    const secondProject: PackageAcquisitionProject = {
+      projectId: 'later',
+      root: secondRoot,
+      slug: 'later',
+      identity: installArtifactIdentity,
+    };
+    const vfs = await seededVfs();
+    await vfs.mkdir(secondRoot, { recursive: true });
+    await vfs.writeFile(`${secondRoot}/package.json`, secondPackageJson);
+    const firstInstallStarted = deferred<void>();
+    const firstInstallGate = deferred<void>();
+    const firstPromotionStarted = deferred<void>();
+    const firstPromotionGate = deferred<void>();
+    const secondInstallStarted = deferred<void>();
+    const secondInstallGate = deferred<void>();
+    let installNumber = 0;
+    let flushNumber = 0;
+    const stamps = createInstallStampAuthority({ vfs });
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      stampTransition: {
+        flush: () => {
+          flushNumber += 1;
+          if (flushNumber !== 1) return Promise.resolve(undefined);
+          firstPromotionStarted.resolve();
+          return firstPromotionGate.promise.then(() => undefined);
+        },
+      },
+      adapter: adapterWith({
+        install: async (request) => {
+          installNumber += 1;
+          if (installNumber === 1) {
+            firstInstallStarted.resolve();
+            await firstInstallGate.promise;
+          } else {
+            secondInstallStarted.resolve();
+            await secondInstallGate.promise;
+          }
+          await vfs.mkdir(`${request.project.root}/node_modules/vite`, { recursive: true });
+          await vfs.writeFile(`${request.project.root}/node_modules/vite/package.json`, '{}\n');
+          return {
+            result: installResult('registry'),
+            packageJsonText: request.project.root === ROOT ? PACKAGE_JSON : secondPackageJson,
+          };
+        },
+      }),
+    });
+
+    const first = authority.dispatch({
+      type: 'terminal-install',
+      project: PROJECT,
+      argv: [],
+    });
+    await firstInstallStarted.promise;
+    let quiesced = false;
+    const quiescence = authority.quiesce().then(() => {
+      quiesced = true;
+    });
+    let secondSettled = false;
+    const second = authority
+      .dispatch({ type: 'terminal-install', project: secondProject, argv: [] })
+      .then((result) => {
+        secondSettled = true;
+        return result;
+      });
+
+    firstInstallGate.resolve();
+    await expect(first).resolves.toMatchObject({ outcome: 'installed' });
+    await firstPromotionStarted.promise;
+    await secondInstallStarted.promise;
+    expect(quiesced).toBe(false);
+
+    firstPromotionGate.resolve();
+    await quiescence;
+    expect(quiesced).toBe(true);
+    expect(secondSettled).toBe(false);
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+
+    secondInstallGate.resolve();
+    await expect(second).resolves.toMatchObject({ outcome: 'installed' });
+    await authority.quiesce();
+  });
+
   it('captures a warm trusted same-project tree before terminal demotion', async () => {
     const vfs = await seededVfs();
     await writeInstalledTree(vfs);

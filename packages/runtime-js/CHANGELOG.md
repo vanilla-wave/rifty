@@ -19,17 +19,30 @@
 
 ### Fixed
 
+- **Parent `worker_threads.Worker` events are EventEmitter-only (ADR-0270).**
+  Assigned `onmessage`/`onerror` expandos stay inert like Node instead of
+  receiving every frame a second time. This prevents emnapi's Node bridge from
+  spawning duplicate pthreads with one `startArg`; MessagePort callbacks remain
+  supported.
+
+- **JavaScript `require.extensions` hooks now compile replacement source
+  through the real CJS module record (ADR-0269).** CJS-local and
+  `createRequire` views share one callable `.js` loader, and
+  `module._compile(source, filename)` preserves filename-relative resolution;
+  this restores Vite's bundled CommonJS config-loading path.
+
+- **Node-entry launch roles no longer leak through `process.env` (ADR-0267).**
+  A versioned URL-entry bootstrap carries the cloned host runtime snapshot plus
+  each fresh program/worker-thread role. Recursive `execSync` and
+  `worker_threads.Worker` now keep omitted/explicit guest env snapshots exact;
+  a valid Node-entry protocol outranks guest WASI-shaped keys, while worker
+  thread id/data and TTY metadata stay out of band. Versioned payload, launch,
+  and terminal records reject extra fields before use.
+
 - **Every Node stdin entry path keeps unsupported pull/raw APIs loud.** The
   runtime-owned seeded reader now throws surface-specific `NotImplementedError`
   for readable listeners, `read`, `pipe`, async iteration, and `setRawMode`,
   while preserving real flowing data, EOF, pause/resume, and UTF-8 decoding.
-
-- **Recursive Node workers retain host bootstrap capabilities without breaking
-  Node env replacement.** URL + reserved `RIFTY_*` values install atomically;
-  URL-only reconfiguration invalidates stale assets. `execSync` and
-  `worker_threads` snapshot the calling process cwd/env, while host values and
-  operation controls win their reserved keys. The `execSync` IPC boundary now
-  rejects missing/malformed cwd or env instead of inventing context (ADR-0231).
 
 - **Fallback child-process stdout/stderr declare their push-fed read hook.**
   Handle/Worker events remain the only producer while the base Readable now

@@ -134,6 +134,24 @@ describe('createBinExecutor', () => {
     expect(fake.req()).toMatchObject({ cols: 120, rows: 40 });
   });
 
+  it('prepares host-only launch metadata before hooks and spawn', async () => {
+    const fake = makeFakeSpawn();
+    const onStart = vi.fn();
+    const exec = createBinExecutor({
+      spawn: fake.spawn,
+      prepareRequest: (req) => ({ ...req, previewScope: 'scope-a' }),
+      onStart,
+    });
+    const { ctx } = makeCtx({ env: { USER_VALUE: 'kept' } });
+
+    const run = exec('/proj/node_modules/.bin/vite', [], ctx);
+    fake.emitExit(0);
+    await run;
+
+    expect(fake.req()).toMatchObject({ previewScope: 'scope-a', env: { USER_VALUE: 'kept' } });
+    expect(onStart).toHaveBeenCalledWith(fake.req(), ctx);
+  });
+
   it('propagates a non-zero exit code', async () => {
     const fake = makeFakeSpawn();
     const exec = createBinExecutor({ spawn: fake.spawn });

@@ -91,6 +91,7 @@ export function createPreviewReadiness(
   let closeResolve: (() => void) | null = null;
   let closeReject: ((reason?: unknown) => void) | null = null;
   let closeFinished = false;
+  let routeWasMounted = false;
 
   const asError = (error: unknown): Error =>
     error instanceof Error ? error : new Error(String(error));
@@ -147,15 +148,25 @@ export function createPreviewReadiness(
     const errors = [releaseError, subscriptionError].filter(
       (candidate): candidate is Error => candidate !== null,
     );
-    if (errors.length === 0) closeResolve?.();
-    else {
+    void (async () => {
+      if (routeWasMounted) {
+        try {
+          await dependencies.proveServiceWorkerControl(new AbortController().signal);
+        } catch (proofError) {
+          errors.push(asError(proofError));
+        }
+      }
+      if (errors.length === 0) {
+        closeResolve?.();
+        return;
+      }
       closeReject?.(
         new AggregateError(
           errors,
           `Preview readiness close failed: ${errors.map((candidate) => candidate.message).join('; ')}`,
         ),
       );
-    }
+    })();
   };
 
   const fail = (error: Error): void => {
@@ -197,6 +208,7 @@ export function createPreviewReadiness(
       fail(asError(error));
       return;
     }
+    routeWasMounted = true;
     const current: Attempt = { key: keyOf(entry), entry, abort, tearDown };
     attempt = current;
     if (pending.settled || closed || wait !== pending) return;

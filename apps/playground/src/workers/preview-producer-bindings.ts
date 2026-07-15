@@ -11,8 +11,6 @@ import {
 } from './preview-registry.ts';
 import { binNameOf } from './vite-cli-prep.ts';
 
-export const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
-
 export type ActivePtyAdmission = (ptySid: string) => OwnerPtyRunAdmission | null;
 export type PreviewOriginCapture = () => PreviewProducerOrigin;
 
@@ -76,7 +74,7 @@ export function createInstalledBinPreviewHooks(options: {
         origin,
         cwd: ctx.cwd,
         labelBase: binNameOf(req.shimPath),
-        ...(req.env.RIFTY_PREVIEW_SCOPE ? { previewScope: req.env.RIFTY_PREVIEW_SCOPE } : {}),
+        ...(req.previewScope ? { previewScope: req.previewScope } : {}),
       });
     },
     onMessage(req, message) {
@@ -114,6 +112,7 @@ export function createNodePreviewRunHooks(options: {
   const origin = options.captureOrigin();
   return {
     sid: options.sid,
+    previewScope: options.previewScope,
     onListening: (sid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
         origin,

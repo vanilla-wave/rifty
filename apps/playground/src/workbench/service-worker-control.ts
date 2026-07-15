@@ -1,7 +1,7 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 
 export interface ServiceWorkerControlWorker {
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer: Transferable[]): void;
 }
 
 export interface ServiceWorkerControlContainer {
@@ -43,21 +43,32 @@ export function proveRiftyServiceWorkerControl(
   }
   return new Promise((resolve, reject) => {
     let settled = false;
-    let activeController: ServiceWorkerControlWorker | null = null;
+    let activeAttempt:
+      | {
+          readonly controller: ServiceWorkerControlWorker;
+          readonly port: MessagePort;
+          readonly onMessage: (event: MessageEvent<unknown>) => void;
+        }
+      | undefined;
     let timerId: number | undefined;
     let controllerListenerAttached = false;
-    let messageListenerAttached = false;
     let abortListenerAttached = false;
+
+    const closeActiveAttempt = (): void => {
+      if (activeAttempt === undefined) return;
+      const attempt = activeAttempt;
+      activeAttempt = undefined;
+      attempt.port.removeEventListener('message', attempt.onMessage);
+      attempt.port.close();
+    };
 
     const cleanup = (): void => {
       if (timerId !== undefined) options.timers.clearTimeout(timerId);
       if (controllerListenerAttached) {
         options.container.removeEventListener('controllerchange', onControllerChange);
       }
-      if (messageListenerAttached) {
-        options.container.removeEventListener('message', onMessage);
-      }
       if (abortListenerAttached) options.signal?.removeEventListener('abort', onAbort);
+      closeActiveAttempt();
     };
 
     const finish = (error?: Error): void => {
@@ -77,37 +88,43 @@ export function proveRiftyServiceWorkerControl(
         finish(toError(error));
         return;
       }
-      if (controller === activeController) return;
-      activeController = controller;
+      closeActiveAttempt();
       if (controller === null) return;
+      let channel: MessageChannel;
       try {
-        controller.postMessage({
-          type: SW_PING,
-          frameVersion: SW_FRAME_VERSION,
-          routingVersion: SW_ROUTING_VERSION,
-        });
-      } catch (error) {
-        finish(toError(error));
-      }
-    };
-
-    const onMessage: EventListener = (event): void => {
-      if (!(event instanceof MessageEvent)) return;
-      let currentController: ServiceWorkerControlWorker | null;
-      try {
-        currentController = options.container.controller;
+        channel = new MessageChannel();
       } catch (error) {
         finish(toError(error));
         return;
       }
-      if (
-        event.source !== activeController ||
-        event.source !== currentController ||
-        !isMatchingPong(event.data)
-      ) {
-        return;
+      const onMessage = (event: MessageEvent<unknown>): void => {
+        if (activeAttempt?.port !== channel.port1) return;
+        let currentController: ServiceWorkerControlWorker | null;
+        try {
+          currentController = options.container.controller;
+        } catch (error) {
+          finish(toError(error));
+          return;
+        }
+        if (currentController !== controller || !isMatchingPong(event.data)) return;
+        finish();
+      };
+      activeAttempt = { controller, port: channel.port1, onMessage };
+      try {
+        channel.port1.addEventListener('message', onMessage);
+        channel.port1.start();
+        controller.postMessage(
+          {
+            type: SW_PING,
+            frameVersion: SW_FRAME_VERSION,
+            routingVersion: SW_ROUTING_VERSION,
+          },
+          [channel.port2],
+        );
+      } catch (error) {
+        channel.port2.close();
+        finish(toError(error));
       }
-      finish();
     };
 
     const onAbort: EventListener = (): void =>
@@ -115,13 +132,11 @@ export function proveRiftyServiceWorkerControl(
 
     try {
       timerId = options.timers.setTimeout(() => {
-        const awaited = activeController === null ? 'a controller' : 'PONG';
+        const awaited = activeAttempt === undefined ? 'a controller' : 'PONG';
         finish(new Error(`Service-worker control proof timed out waiting for ${awaited}`));
       }, options.timeoutMs);
       options.container.addEventListener('controllerchange', onControllerChange);
       controllerListenerAttached = true;
-      options.container.addEventListener('message', onMessage);
-      messageListenerAttached = true;
       options.signal?.addEventListener('abort', onAbort, { once: true });
       abortListenerAttached = options.signal !== undefined;
     } catch (error) {

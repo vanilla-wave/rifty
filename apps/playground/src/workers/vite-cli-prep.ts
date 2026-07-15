@@ -1,30 +1,18 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
-import type { CommandContext } from '@riftydev/shell';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
+import type { BinSpawnRequest } from '../glue/bin-executor.ts';
 import { applyViteCliActionPatch, viteCliActionPatchApplied } from './vite-cli-install-policy.ts';
 import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
+const VITE_BIN_SUFFIX = '/.bin/vite';
 
 declare global {
   // Pins detached async CLI actions (Vite's bundled CAC parse() does not await them).
   // eslint-disable-next-line no-var
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
-}
-
-// Env → CLI-prep decoding: the owner sets RIFTY_VITE_CLI_* on the child;
-// node-entry-bootstrap threads proc.env through these (moved here for node
-// testability — the bootstrap is a worker-only entry).
-export function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
-  return value === 'dev' ||
-    value === 'build' ||
-    value === 'preview' ||
-    value === 'optimize' ||
-    value === 'info'
-    ? value
-    : null;
 }
 
 export interface ViteCliPreparation {
@@ -34,19 +22,22 @@ export interface ViteCliPreparation {
   readonly esbuildWasmUrl: string;
 }
 
-/** Decode one complete bootstrap-owned Vite preparation or no preparation. */
-export function viteCliPreparationFromEnv(options: {
+/** Derive one complete Vite preparation from the executed entry + real argv. */
+export function viteCliPreparationFromArgs(options: {
   readonly root: string;
-  readonly mode: string | undefined;
+  readonly args: readonly string[];
   readonly executedBinPath: string;
   readonly esbuildWasmUrl: string;
 }): ViteCliPreparation | null {
-  const mode = viteCliModeFromEnv(options.mode);
-  return mode === null
+  const binPath = normalizePath(options.executedBinPath);
+  const nodeModules = binPath.endsWith(VITE_BIN_SUFFIX)
+    ? binPath.slice(0, -VITE_BIN_SUFFIX.length)
+    : '';
+  return !nodeModules.endsWith('/node_modules')
     ? null
     : {
         root: options.root,
-        mode,
+        mode: viteCliMode(options.args),
         executedBinPath: options.executedBinPath,
         esbuildWasmUrl: options.esbuildWasmUrl,
       };
@@ -77,7 +68,6 @@ function validateCliActionPatch(vitePackageRoot: string): void {
   }
 }
 
-const VITE_BIN_SUFFIX = '/.bin/vite';
 function vitePackageRoot(root: string, executedBinPath?: string): string {
   if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
   const binPath = normalizePath(executedBinPath);
@@ -237,22 +227,21 @@ export function createPreviewScope(): string {
   return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
 }
 
-export function withViteCliEnv(
-  binPath: string,
-  args: readonly string[],
-  ctx: CommandContext,
-): CommandContext {
-  if (binNameOf(binPath) !== 'vite') return ctx;
-  const mode = viteCliMode(args);
+export function prepareViteBinSpawnRequest(request: BinSpawnRequest): BinSpawnRequest {
+  if (binNameOf(request.shimPath) !== 'vite') return request;
+  const mode = viteCliMode(request.args);
   const previewMode = mode === 'dev' || mode === 'preview';
   return {
-    ...ctx,
+    ...request,
     env: {
-      ...ctx.env,
-      RIFTY_VITE_CLI_MODE: mode,
-      ...(previewMode
-        ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
-        : {}),
+      ...request.env,
+      // Public napi-rs selector: rifty installs WASI bindings and no native
+      // platform package. This is guest-visible library configuration, not a
+      // host launch-role/control channel (ADR-0051/0162).
+      NAPI_RS_FORCE_WASI: '1',
     },
+    ...(previewMode && request.previewScope === undefined
+      ? { previewScope: createPreviewScope() }
+      : {}),
   };
 }

@@ -6,7 +6,7 @@ created: 2026-06-08
 why: embedders need one package that owns real project lifecycle, files, packages, terminals, and preview; exporting playground controllers would export their coordination burden and keep Vite above the correct seam
 user_story: As a SaaS developer embedding rifty with my own UI, I want to provide project files and call `.run()` on a durable browser project, while Workbench owns the real Node/VFS/PTY lifecycle and exposes no playground or Vite-host internals.
 epic: embeddable-dev-loop
-sources: [ADR-0263, ADR-0264, ADR-0225, ADR-0230, ADR-0231, ADR-0078, ADR-0135, ADR-0185]
+sources: [ADR-0263, ADR-0264, ADR-0225, ADR-0230, ADR-0267, ADR-0078, ADR-0135, ADR-0185]
 code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src]
 ---
 
@@ -405,7 +405,7 @@ crosses the boundary.
   published Playground companion, vocabulary, exact configuration,
   cardinality, state authorities, and runtime seam. The implementer does not
   create another Workbench surface.
-- ADR-0225/0230/0231 own live resize, stdin/EOF flow, and recursive worker
+- ADR-0225/0230/0267 own live resize, stdin/EOF flow, and recursive worker
   bootstrap. Their Node-visible behavior is parity-gated before extraction.
 - ADR-0264 owns truthful pre-run resize and preserves ADR-0225's mandatory-rid
   live fence.
@@ -428,7 +428,7 @@ class, a RED test, and a sibling sweep. Repeated class/state owner stops point
 fixes and forces redesign/split. Each merged SHA is green; file moves are
 mechanical commits separate from behavior.
 
-0. **Decision contract (this docs commit).** Land ADR-0263/0264/0225/0230/0231,
+0. **Decision contract (this docs commit).** Land ADR-0263/0264/0225/0230/0267,
    this ready item, and aligned epic/downstream contracts. No extraction.
 1. **Parallel prerequisites.** (A) Restore runtime-js/kernel stdin EOF,
    pause/resume, logical IPC/process-control separation, and recursive bootstrap

@@ -87,7 +87,12 @@ export const SW_PREVIEW_REQUEST = 'rifty:preview:request';
 /** Discriminator constant for the SW→client request frame. */
 export type SwPreviewRequestType = typeof SW_PREVIEW_REQUEST;
 
-/** Ping/pong handshake frame — used for SW liveness checks. */
+/**
+ * Ping/pong handshake frames used for SW liveness checks. New hosts transfer a
+ * dedicated reply `MessagePort` with each ping; the SW replies on that port so
+ * a pong proves the exact attempt. A zero-port ping retains the legacy
+ * `event.source` reply path.
+ */
 export interface SwPingFrame {
   type: typeof SW_PING;
   frameVersion: string;

@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Failed Worker init no longer leaks its half-built process.** If the
+  bootstrap `postMessage` throws synchronously (for example, an uncloneable
+  entry payload), spawn now detaches its SAB ring, terminates the Worker, and
+  closes both ends of every stdio/IPC channel before rethrowing the same error.
 - **Worker stdout/stderr no longer loses final chunks on natural exit.**
   Worker-backed process exit arrives on the Worker message channel while stdio
   bytes arrive on separate MessagePorts, so a final CLI line could land after
@@ -21,6 +25,11 @@
 
 ### Added
 
+- **Entry-scoped URL-worker bootstrap envelope.** `WorkerEntryDescriptor` URL
+  entries may carry typed `{protocol, payload}` metadata inside the existing
+  init message. Worker boot publishes it as a non-enumerable shared global
+  before pre-entry; kernel transports the opaque payload without runtime
+  knowledge. Source entries cannot carry it.
 - **Worker stdin EOF and live TTY control (ADR-0225/0230).** Ending
   `WorkerProcessHandle.stdin()` now posts an ordered `stdin:eof` frame before
   closing its data port. `WorkerProcessHandle.resize(cols, rows)` uses the

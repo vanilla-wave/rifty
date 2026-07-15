@@ -147,7 +147,6 @@ import {
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
 import {
-  PTY_SESSION_ENV,
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
   createPreviewOriginCapture,
@@ -155,7 +154,7 @@ import {
 } from './preview-producer-bindings.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import { createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
+import { createPreviewScope } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -255,18 +254,6 @@ function isFullInstall(args: readonly string[]): boolean {
   const sub = args[0];
   if (sub !== 'install' && sub !== 'i') return false;
   return args.slice(1).every((a) => a.startsWith('-'));
-}
-
-function withPreviewScope(ctx: CommandContext, previewScope?: string): CommandContext {
-  return {
-    ...ctx,
-    env: {
-      ...ctx.env,
-      // An already-minted scope (e.g. the vite CLI env prep) is preserved so the
-      // child's serveCrossRealmPreview and the page bridge key on the same value.
-      RIFTY_PREVIEW_SCOPE: previewScope ?? ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope(),
-    },
-  };
 }
 
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
@@ -618,14 +605,14 @@ async function bootShellOwner(opts: {
         allocateSid: () => `bin-${++binRunSeq}`,
         previews,
       }),
+      (req) => ({ ...req, previewScope: req.previewScope ?? createPreviewScope() }),
     );
     const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
       // Every installed CLI crosses this package-authority seam. The preset boot
       // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
       // arbitrary CLIs need the same template-seed guarantee without name dispatch.
       await reassertActiveDevTemplateNodeModules();
-      const viteCtx = withViteCliEnv(binPath, args, ctx);
-      return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
+      return childBinExecutor(binPath, args, ctx);
     };
     // Node-server scripts use the dedicated supervised server child and block the
     // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
@@ -639,10 +626,7 @@ async function bootShellOwner(opts: {
     // deleted since.
     const shell = new Shell({
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
-      env: {
-        ...(seed?.env ?? {}),
-        ...(ptySid === undefined ? {} : { [PTY_SESSION_ENV]: ptySid }),
-      },
+      env: { ...(seed?.env ?? {}) },
       execBin: ownerBinExecutor,
       mutationGuard: ((intents, apply) =>
         packageMutations.guardedMutation(intents, async () => apply())) satisfies VfsMutationGuard,
@@ -712,7 +696,7 @@ async function bootShellOwner(opts: {
       return ownerNodeExecutor(
         entryPath,
         [...scriptArgs],
-        withPreviewScope(ctx, previewScope),
+        ctx,
         createNodePreviewRunHooks({
           captureOrigin,
           previews,

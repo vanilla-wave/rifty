@@ -176,17 +176,13 @@ export interface PtyServerDeps {
 export interface PtyServer {
   handleFrame(frame: PageToOwnerFrame): void | Promise<void>;
   activeAdmission(ptySid: string): OwnerPtyRunAdmission | null;
-  dispose(): void;
+  /** Fences new frames, then settles every owned session and shell. */
+  close(): Promise<void>;
+  /** Compatibility alias for callers that still use disposable vocabulary. */
+  dispose(): Promise<void>;
 }
 
 const enc = new TextEncoder();
-const INTERNAL_ENV_KEYS = ['RIFTY_INTERNAL_PTY_SID'] as const;
-
-function publicEnv(env: Record<string, string>): Record<string, string> {
-  const out = { ...env };
-  for (const key of INTERNAL_ENV_KEYS) delete out[key];
-  return out;
-}
 
 /** Resolves when the signal aborts (immediately for an already-aborted one). */
 function abortSettled(signal: AbortSignal): Promise<void> {
@@ -388,8 +384,8 @@ class PtySessionActor {
     );
   }
 
-  dispose(): void {
-    void this.#shutdown();
+  shutdown(): Promise<void> {
+    return this.#shutdown();
   }
 
   async #execute(
@@ -447,7 +443,7 @@ class PtySessionActor {
       code,
       exit,
       cwd: this.#shell.cwd,
-      env: publicEnv(this.#shell.envSnapshot()),
+      env: { ...this.#shell.envSnapshot() },
       ...(error === undefined ? {} : { error }),
     });
   }
@@ -475,7 +471,7 @@ class PtySessionActor {
       code: 1,
       exit: { code: 1, signal: null },
       cwd: this.#shell.cwd,
-      env: publicEnv(this.#shell.envSnapshot()),
+      env: { ...this.#shell.envSnapshot() },
       error,
     });
   }
@@ -493,16 +489,103 @@ class PtySessionActor {
     this.#state = 'closing';
     const run = this.#active;
     run?.controller.abort();
-    this.#shutdownPromise = Promise.resolve(run?.done).then(async () => {
-      await this.#shell.dispose();
+    this.#shutdownPromise = (async () => {
+      const failures: unknown[] = [];
+      try {
+        await run?.done;
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await this.#shell.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
       this.#state = 'closed';
-    });
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        throw new AggregateError(failures, `pty session ${this.#sid} shutdown failed`);
+      }
+    })();
     return this.#shutdownPromise;
   }
 }
 
 export function createPtyServer(deps: PtyServerDeps): PtyServer {
   const sessions = new Map<string, PtySessionActor>();
+  let state: 'open' | 'closing' | 'closed' = 'open';
+  let closePromise: Promise<void> | undefined;
+
+  function closedError(): string {
+    return `ClosedHandleError: pty server is ${state}`;
+  }
+
+  function rejectClosedFrame(frame: PageToOwnerFrame): void {
+    const error = closedError();
+    switch (frame.type) {
+      case 'pty:open':
+        deps.send({ type: 'pty:ready', sid: frame.sid, error });
+        return;
+      case 'pty:exec':
+        deps.send({
+          type: 'pty:exit',
+          sid: frame.sid,
+          rid: frame.rid,
+          code: 1,
+          exit: { code: 1, signal: null },
+          cwd: '/',
+          env: {},
+          error,
+        });
+        return;
+      case 'pty:stdin':
+      case 'pty:stdin-eof':
+        deps.send({
+          type: 'pty:stdin-ack',
+          sid: frame.sid,
+          rid: frame.rid,
+          opId: frame.opId,
+          ok: false,
+          error,
+        });
+        return;
+      case 'pty:signal':
+      case 'pty:dev-server-req':
+      case 'pty:preview-req':
+        return;
+      case 'pty:resize':
+        deps.send({
+          type: 'pty:resize-ack',
+          sid: frame.sid,
+          rid: frame.rid,
+          opId: frame.opId,
+          ok: false,
+          error,
+        });
+        return;
+      case 'pty:session-resize':
+        deps.send({
+          type: 'pty:session-resize-ack',
+          sid: frame.sid,
+          opId: frame.opId,
+          ok: false,
+          error,
+        });
+        return;
+      case 'pty:close':
+        deps.send({
+          type: 'pty:close-ack',
+          sid: frame.sid,
+          opId: frame.opId,
+          ok: false,
+          error,
+        });
+        return;
+      case 'pty:dev-config':
+        deps.send({ type: 'pty:dev-config-ready', id: frame.id, error });
+        return;
+    }
+  }
 
   function missingRunAck(
     frame:
@@ -533,6 +616,10 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
   }
 
   function handleFrame(frame: PageToOwnerFrame): void | Promise<void> {
+    if (state !== 'open') {
+      rejectClosedFrame(frame);
+      return;
+    }
     switch (frame.type) {
       case 'pty:open': {
         const existing = sessions.get(frame.sid);
@@ -627,6 +714,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       }
       case 'pty:dev-config': {
         return Promise.resolve(
+          // TODO(backlog: playground/pty-dev-config-sync-throw-escapes-error-ack)
           deps.onDevConfig?.({
             templateId: frame.templateId,
             slug: frame.slug,
@@ -645,14 +733,43 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     }
   }
 
+  function close(): Promise<void> {
+    if (closePromise) return closePromise;
+    state = 'closing';
+    const actors = [...sessions.entries()].sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    );
+    const shutdowns = actors.map(([, actor]) => actor.shutdown());
+    closePromise = Promise.allSettled(shutdowns).then((results) => {
+      sessions.clear();
+      state = 'closed';
+      const failures: Error[] = [];
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        const sid = actors[index]?.[0];
+        if (result?.status !== 'rejected' || sid === undefined) continue;
+        const message =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
+        failures.push(new Error(`pty session ${sid}: ${message}`, { cause: result.reason }));
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(
+          failures,
+          `PtyServer close failed for ${failures.length} session(s)`,
+        );
+      }
+    });
+    return closePromise;
+  }
+
   return {
     handleFrame,
     activeAdmission(ptySid): OwnerPtyRunAdmission | null {
-      return sessions.get(ptySid)?.activeAdmission() ?? null;
+      return state === 'open' ? (sessions.get(ptySid)?.activeAdmission() ?? null) : null;
     },
-    dispose(): void {
-      for (const actor of sessions.values()) actor.dispose();
-      sessions.clear();
+    close,
+    dispose(): Promise<void> {
+      return close();
     },
   };
 }

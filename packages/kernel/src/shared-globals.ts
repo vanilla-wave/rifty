@@ -12,6 +12,11 @@
  *      `process`. The kernel never installs a Node-shaped `globalThis.process`;
  *      that Node-API knowledge lives in `@riftydev/runtime-js`.
  *
+ *   3. {@link KernelEntryBootstrapEnvelope} — optional runtime-agnostic data
+ *      attached to one URL entry. The worker bootstrap publishes it before
+ *      the pre-entry hook; higher runtimes select their own protocol and
+ *      decode the opaque payload.
+ *
  * Values live on `globalThis` under string keys (cross-bundle sharing — no
  * module identity to rely on across the Worker boundary). The `publish*` /
  * `read*` helpers are the only sanctioned API; reaching into `globalThis[...]`
@@ -66,6 +71,14 @@ export interface KernelProcessSpec {
   readonly stdio: KernelProcessStdioPorts;
 }
 
+/** Runtime-agnostic metadata attached to one URL worker entry. */
+export interface KernelEntryBootstrapEnvelope {
+  /** Higher-layer protocol discriminator; kernel does not interpret it. */
+  readonly protocol: string;
+  /** Structured-cloneable higher-layer data; kernel keeps it opaque. */
+  readonly payload: unknown;
+}
+
 /**
  * Internal hook keys. Exported only so conformance tests can assert the
  * publish path; production code goes through {@link publishKernelSyncApi} /
@@ -73,10 +86,12 @@ export interface KernelProcessSpec {
  */
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
+export const KERNEL_ENTRY_BOOTSTRAP_KEY = '__riftyKernelEntryBootstrap__' as const;
 
 interface GlobalWithKernelHooks {
   [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall;
   [KERNEL_PROCESS_SPEC_KEY]?: KernelProcessSpec;
+  [KERNEL_ENTRY_BOOTSTRAP_KEY]?: KernelEntryBootstrapEnvelope | null;
 }
 
 function asGlobal(): GlobalWithKernelHooks {
@@ -137,4 +152,24 @@ export function publishKernelProcessSpec(spec: KernelProcessSpec): void {
  */
 export function readKernelProcessSpec(): KernelProcessSpec | null {
   return asGlobal()[KERNEL_PROCESS_SPEC_KEY] ?? null;
+}
+
+/**
+ * Publish the bootstrap envelope for this realm's URL entry. `null` records
+ * that the entry carries no envelope and clears any prior test-host value.
+ * The property is non-enumerable so it does not leak into ordinary global
+ * discovery; the higher runtime reads it through {@link readKernelEntryBootstrap}.
+ */
+export function publishKernelEntryBootstrap(bootstrap: KernelEntryBootstrapEnvelope | null): void {
+  Object.defineProperty(globalThis, KERNEL_ENTRY_BOOTSTRAP_KEY, {
+    value: bootstrap,
+    writable: false,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+/** Read this entry's bootstrap envelope; `null` when absent or unpublished. */
+export function readKernelEntryBootstrap(): KernelEntryBootstrapEnvelope | null {
+  return asGlobal()[KERNEL_ENTRY_BOOTSTRAP_KEY] ?? null;
 }

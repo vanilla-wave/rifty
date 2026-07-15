@@ -13,7 +13,6 @@
  * fallback; this adapter requires `crossOriginIsolated` + SAB IPC (ADR-0011).
  */
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
-import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import { isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
@@ -48,7 +47,7 @@ import {
   equalHostCommitRequests,
 } from './owner-vfs-protocol.ts';
 import { PLAYGROUND_NODE_WORKER_RUNTIME_ENV } from './playground-node-worker-runtime.ts';
-import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
+export { wirePreviewBridge } from './preview-port-wiring.ts';
 import {
   type ExecOptions,
   type PtyOpenSeed,
@@ -96,42 +95,6 @@ function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
   if (randomUUID) return randomUUID();
   return `owner-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-/**
- * Wire the PAGE side of the co-resident preview (ADR-0148). The owner worker
- * serves `/preview/<port>/` (its `setupPreviewBridge` + `serveCrossRealmPreview`,
- * keyed by `ownerToken`); this registers the matching page-side cross-realm
- * bridge so the SW route reaches the owner. Call it when the owner reports the
- * dev server running (the `pty:dev-server` frame carries the port + token); the
- * returned teardown runs on stop.
- *
- * Replaces {@link startRealVite}'s per-run preview wiring — the worker is no
- * longer spawned per dev run (it IS the persistent owner), only the page-side
- * route is (un)registered as the dev server starts/stops.
- */
-export function wirePreviewBridge(
-  port: number,
-  ownerToken: string,
-  previewScope?: string,
-): () => void {
-  // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
-  // routes through this handler over BroadcastChannel to the owner's
-  // `serveCrossRealmPreview`.
-  const previewBridge = bridgeCrossRealmPreview(
-    port,
-    previewScope === undefined ? {} : { scope: previewScope },
-  );
-  registerPort(port, previewBridge);
-  // ADR-0086: typed handle → SW requests take the struct fast-path.
-  // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
-  // port to THIS window (multi-window isolation).
-  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken, ports: [port] });
-  return (): void => {
-    tearSwBridge();
-    unregisterPort(port);
-    previewBridge.dispose();
-  };
 }
 
 /**

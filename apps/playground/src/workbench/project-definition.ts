@@ -1,3 +1,9 @@
+import {
+  DEFAULT_VITE8_CONFIG_JS,
+  DEFAULT_VITE8_CONFIG_PATH,
+  DEFAULT_VITE8_VERSION,
+  VITE_CONFIG_FILENAMES,
+} from '../vite-project-policy.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 
 declare const projectDefinitionReady: unique symbol;
@@ -23,6 +29,15 @@ interface ProjectDefinitionData {
   readonly files: Readonly<Record<string, Uint8Array>>;
 }
 
+/** Package-internal structured-clone payload; never part of the public root. */
+export interface ProjectDefinitionWire {
+  readonly kind: 'vite';
+  readonly id: string;
+  /** Page claim checked against exact owner-received bytes at owner ingress. */
+  readonly identity: string;
+  readonly files: Readonly<Record<string, Uint8Array>>;
+}
+
 export interface InspectedProjectDefinition<TReady = unknown> extends ProjectDefinitionData {
   readonly [inspectedProjectDefinitionReady]: TReady;
 }
@@ -32,10 +47,15 @@ type StoredProjectDefinition = ProjectDefinitionData;
 const definitions = new WeakMap<object, StoredProjectDefinition>();
 const encoder = new TextEncoder();
 const manifestDecoder = new TextDecoder('utf-8', { fatal: true });
-const DEFAULT_VITE_VERSION = '8.0.16';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function assertId(value: unknown): string {
@@ -95,6 +115,21 @@ function cloneFiles(value: unknown): Record<string, Uint8Array> {
   return files;
 }
 
+function cloneWireFiles(value: unknown): Record<string, Uint8Array> {
+  if (!isPlainRecord(value)) {
+    throw new TypeError('Project definition wire files must be a plain object');
+  }
+  const files: Record<string, Uint8Array> = {};
+  for (const [rawPath, data] of Object.entries(value)) {
+    const path = assertProjectPath(rawPath);
+    if (!(data instanceof Uint8Array)) {
+      throw new TypeError(`Project definition wire file ${path} must be a Uint8Array`);
+    }
+    files[path] = data.slice();
+  }
+  return files;
+}
+
 function dependencyMap(value: unknown, field: string): Record<string, string> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) throw new TypeError(`${field} must be an object`);
@@ -150,7 +185,7 @@ function parseManifest(files: Record<string, Uint8Array>): Record<string, unknow
 function normalizeManifest(
   files: Record<string, Uint8Array>,
   options: ViteProjectDefinitionOptions,
-): void {
+): boolean {
   const manifest = parseManifest(files);
   const dependencies = mergeDependencies(
     dependencyMap(manifest.dependencies, 'package.json dependencies'),
@@ -174,14 +209,29 @@ function normalizeManifest(
   } else if (dependencyVite !== undefined && devDependencyVite !== undefined) {
     throw new TypeError('Vite must be declared in exactly one final dependency section');
   } else if (dependencyVite === undefined && devDependencyVite === undefined) {
-    devDependencies = { ...(devDependencies ?? {}), vite: DEFAULT_VITE_VERSION };
+    devDependencies = { ...(devDependencies ?? {}), vite: DEFAULT_VITE8_VERSION };
   }
 
   if (dependencies === undefined) Reflect.deleteProperty(manifest, 'dependencies');
   else manifest.dependencies = dependencies;
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
+  // TODO(backlog: playground/workbench-implicit-vite-module-scope)
   files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  return (
+    viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined
+  );
+}
+
+function normalizeDefaultVite8Config(
+  files: Record<string, Uint8Array>,
+  usesBuiltInDefault: boolean,
+): void {
+  if (!usesBuiltInDefault) return;
+  const configOwned = VITE_CONFIG_FILENAMES.some((name) =>
+    Object.prototype.hasOwnProperty.call(files, `/${name}`),
+  );
+  if (!configOwned) files[DEFAULT_VITE8_CONFIG_PATH] = encoder.encode(DEFAULT_VITE8_CONFIG_JS);
 }
 
 function bytesHex(bytes: Uint8Array): string {
@@ -212,7 +262,7 @@ function createViteDefinition(
   if (!isRecord(options)) throw new TypeError('projects.vite options must be an object');
   const id = assertId(options.id);
   const files = cloneFiles(options.files);
-  normalizeManifest(files, options);
+  normalizeDefaultVite8Config(files, normalizeManifest(files, options));
   const stored: StoredProjectDefinition = Object.freeze({
     kind: 'vite',
     id,
@@ -242,4 +292,51 @@ export function inspectProjectDefinition<TReady>(
     identity: stored.identity,
     files: frozenFileSnapshot(stored.files),
   }) as InspectedProjectDefinition<TReady>;
+}
+
+/** Snapshot page-inspected intent into the sole clone-safe owner payload. */
+export function projectDefinitionWire(
+  definition: InspectedProjectDefinition,
+): ProjectDefinitionWire {
+  return Object.freeze({
+    kind: definition.kind,
+    id: definition.id,
+    identity: definition.identity,
+    files: frozenFileSnapshot(definition.files),
+  });
+}
+
+/**
+ * Owner ingress for project intent. Derived values are born here; neither an
+ * identity nor a storage path supplied by the page is trusted as authority.
+ */
+export function inspectProjectDefinitionWire(value: unknown): InspectedProjectDefinition {
+  if (!isRecord(value) || !hasExactKeys(value, ['kind', 'id', 'identity', 'files'])) {
+    throw new TypeError('Invalid project definition wire');
+  }
+  if (value.kind !== 'vite') throw new TypeError('Invalid project definition wire kind');
+  const id = assertId(value.id);
+  if (typeof value.identity !== 'string' || value.identity.length === 0) {
+    throw new TypeError('Invalid project definition wire identity');
+  }
+  const files = cloneWireFiles(value.files);
+  const identity = exactIdentity('vite', id, files);
+  if (value.identity !== identity) {
+    throw new TypeError('Project definition wire identity does not match exact received bytes');
+  }
+  return Object.freeze({
+    kind: 'vite',
+    id,
+    storageSegment: projectStorageSegment(id),
+    identity,
+    files: frozenFileSnapshot(files),
+  }) as InspectedProjectDefinition;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value);
+  return (
+    actual.length === expected.length &&
+    expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
 }

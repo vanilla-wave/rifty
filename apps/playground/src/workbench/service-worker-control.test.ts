@@ -1,5 +1,5 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ServiceWorkerControlAbortedError,
   type ServiceWorkerControlContainer,
@@ -9,9 +9,11 @@ import {
 
 class Worker implements ServiceWorkerControlWorker {
   readonly messages: unknown[] = [];
+  readonly transfers: Transferable[][] = [];
 
-  postMessage(message: unknown): void {
+  postMessage(message: unknown, transfer: Transferable[] = []): void {
     this.messages.push(message);
+    this.transfers.push(transfer);
   }
 }
 
@@ -70,12 +72,59 @@ function messageEvent(source: ServiceWorkerControlWorker, data: unknown): Messag
   return event;
 }
 
+const exactPong = Object.freeze({
+  type: SW_PONG,
+  from: 'service-worker',
+  frameVersion: SW_FRAME_VERSION,
+  routingVersion: SW_ROUTING_VERSION,
+});
+
+function transferredReplyPort(worker: Worker, attempt = 0): MessagePort {
+  const port = worker.transfers[attempt]?.[0];
+  if (!(port instanceof MessagePort)) throw new Error('missing transferred reply port');
+  return port;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('rifty service-worker control proof', () => {
-  it('never accepts a matching PONG from a different message source', async () => {
+  it('correlates every controller attempt to its dedicated reply port', async () => {
+    const container = new Container();
+    const previous = new Worker();
+    const replacement = new Worker();
+    const timers = new TestTimers();
+    const close = vi.spyOn(MessagePort.prototype, 'close');
+    container.controller = previous;
+
+    let resolved = false;
+    const proof = proveRiftyServiceWorkerControl({ container, timeoutMs: 1_000, timers });
+    void proof.then(() => {
+      resolved = true;
+    });
+
+    const staleReplyPort = transferredReplyPort(previous);
+    container.controller = replacement;
+    container.emit('controllerchange');
+    const currentReplyPort = transferredReplyPort(replacement);
+    expect(currentReplyPort).not.toBe(staleReplyPort);
+
+    staleReplyPort.postMessage(exactPong);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resolved).toBe(false);
+
+    currentReplyPort.postMessage(exactPong);
+    await expect(proof).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
+  it('never accepts an uncorrelated matching PONG from the global container bus', async () => {
     const container = new Container();
     const controller = new Worker();
     const impostor = new Worker();
     const timers = new TestTimers();
+    const close = vi.spyOn(MessagePort.prototype, 'close');
     container.controller = controller;
 
     const proof = proveRiftyServiceWorkerControl({
@@ -84,20 +133,13 @@ describe('rifty service-worker control proof', () => {
       timers,
     });
 
-    container.emit(
-      'message',
-      messageEvent(impostor, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
+    container.emit('message', messageEvent(impostor, exactPong));
     timers.fireAll();
 
     await expect(proof).rejects.toThrow('timed out');
     expect(container.listenerCount('message')).toBe(0);
     expect(timers.pending).toBe(0);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('cleans the proof after a synchronous controller postMessage failure', async () => {
@@ -148,27 +190,11 @@ describe('rifty service-worker control proof', () => {
 
     container.controller = replacement;
     container.emit('controllerchange', new Event('controllerchange'));
-    container.emit(
-      'message',
-      messageEvent(previous, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
+    transferredReplyPort(previous).postMessage(exactPong);
     await Promise.resolve();
     const acceptedPrevious = resolved;
 
-    container.emit(
-      'message',
-      messageEvent(replacement, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
+    transferredReplyPort(replacement).postMessage(exactPong);
     await expect(proof).resolves.toBeUndefined();
 
     expect(acceptedPrevious).toBe(false);
@@ -192,35 +218,15 @@ describe('rifty service-worker control proof', () => {
       { type: SW_PING, frameVersion: SW_FRAME_VERSION, routingVersion: SW_ROUTING_VERSION },
     ]);
 
-    container.emit(
-      'message',
-      messageEvent(impostor, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
-    container.emit(
-      'message',
-      messageEvent(controller, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION + 1,
-      }),
-    );
-    expect(container.listenerCount('message')).toBe(1);
+    container.emit('message', messageEvent(impostor, exactPong));
+    const replyPort = transferredReplyPort(controller);
+    replyPort.postMessage({
+      ...exactPong,
+      routingVersion: SW_ROUTING_VERSION + 1,
+    });
+    expect(container.listenerCount('message')).toBe(0);
 
-    container.emit(
-      'message',
-      messageEvent(controller, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
+    replyPort.postMessage(exactPong);
     await expect(proof).resolves.toBeUndefined();
     expect(container.listenerCount('controllerchange')).toBe(0);
     expect(container.listenerCount('message')).toBe(0);
@@ -237,15 +243,7 @@ describe('rifty service-worker control proof', () => {
     container.controller = controller;
     container.emit('controllerchange');
     expect(controller.messages).toHaveLength(1);
-    container.emit(
-      'message',
-      messageEvent(controller, {
-        type: SW_PONG,
-        from: 'service-worker',
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      }),
-    );
+    transferredReplyPort(controller).postMessage(exactPong);
 
     await expect(proof).resolves.toBeUndefined();
     expect(container.listenerCount('controllerchange')).toBe(0);
@@ -253,10 +251,13 @@ describe('rifty service-worker control proof', () => {
     expect(timers.pending).toBe(0);
   });
 
-  it('cancels both controller and message waits without a late success', async () => {
+  it('closes the active reply port on abort without a late success', async () => {
     const container = new Container();
+    const controller = new Worker();
     const abort = new AbortController();
     const timers = new TestTimers();
+    const close = vi.spyOn(MessagePort.prototype, 'close');
+    container.controller = controller;
     const proof = proveRiftyServiceWorkerControl({
       container,
       timeoutMs: 1_000,
@@ -269,6 +270,7 @@ describe('rifty service-worker control proof', () => {
     expect(container.listenerCount('controllerchange')).toBe(0);
     expect(container.listenerCount('message')).toBe(0);
     expect(timers.pending).toBe(0);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('rejects in a finite bound when no controller appears', async () => {

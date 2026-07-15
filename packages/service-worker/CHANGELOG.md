@@ -21,6 +21,11 @@
 
 ### Fixed
 
+- **Service Worker control proof is attempt-correlated.** Each host PING now
+  transfers a dedicated reply `MessagePort`; controller replacement, abort,
+  timeout, and settlement close the old local port, so a delayed old PONG
+  cannot prove the current controller attempt. Zero-port PING keeps the legacy
+  source reply for older hosts.
 - **Doc drift:** the `rifty:preview:ready` example frame in
   `owner-binding-worker.ts` now shows `routingVersion: '5'`, matching the bumped
   `SW_ROUTING_VERSION` constant (the runtime path was already correct; only the

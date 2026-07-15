@@ -58,11 +58,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
-| 0231 | Host-owned bootstrap config for recursive node workers |
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
 | 0239 | fromWeb arguments have one staged validation owner |
 | 0240 | Writable completion separates internal and public phases |
+| 0267 | Entry-scoped host bootstrap metadata for recursive Node workers |
+| 0269 | shared require.extensions compile hooks for CJS loaders |
+| 0270 | worker_threads.Worker parent events are EventEmitter-only |
 
 ### runtime-wasi
 
@@ -101,6 +103,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0125 | Preview owner binding — async resolution, ready-window preference, clientId sentinels |
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
 | 0265 | Owner-correlated preview readiness by PTY run |
+| 0271 | Correlated service-worker control proofs fence Workbench preview revocation |
 
 ### npm-client
 
@@ -262,6 +265,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0216 | 0261 | background durability, learned-pin SWR, and stamp fault history grafted |
 | 0224 | 0263 | sealed root retained; finite Playground companion owns first-party plans/tools without exposing the owner |
 | 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
+| 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
 
 ## Corrections (active)
 

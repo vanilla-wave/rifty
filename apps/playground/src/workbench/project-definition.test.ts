@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { inspectProjectDefinition, projects } from './project-definition.ts';
+import {
+  inspectProjectDefinition,
+  inspectProjectDefinitionWire,
+  projectDefinitionWire,
+  projects,
+} from './project-definition.ts';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -268,6 +273,63 @@ describe('ProjectDefinition', () => {
     expect(devDependencyOwned.devDependencies).toEqual({ vite: '9.0.0' });
   });
 
+  // Fault class: sibling-drift. The implicit package version and its visible
+  // runtime policy are one default and must be normalized at one boundary.
+  it('adds the visible Vite 8 policy with the implicit default before identity', () => {
+    const policy = `export default {
+  server: { hmr: false },
+  optimizeDeps: { noDiscovery: true, include: [] },
+};
+`;
+    const definition = snapshot({ id: 'default-vite-policy', files: {} });
+    const explicitSameBytes = snapshot({
+      id: 'default-vite-policy',
+      files: { '/vite.config.js': policy },
+    });
+    const editedPolicy = snapshot({
+      id: 'default-vite-policy',
+      files: { '/vite.config.js': `${policy}// user edit\n` },
+    });
+
+    expect(fileText(definition, '/vite.config.js')).toBe(policy);
+    expect(definition.identity).toBe(explicitSameBytes.identity);
+    expect(definition.identity).not.toBe(editedPolicy.identity);
+    expect(
+      inspectProjectDefinitionWire(structuredClone(projectDefinitionWire(definition))),
+    ).toEqual(definition);
+  });
+
+  it.each([
+    '/vite.config.js',
+    '/vite.config.mjs',
+    '/vite.config.ts',
+    '/vite.config.cjs',
+    '/vite.config.mts',
+    '/vite.config.cts',
+  ])('preserves user-owned %s without injecting a sibling config', (path) => {
+    const source = `export default { marker: ${JSON.stringify(path)} };\n`;
+    const definition = snapshot({ id: `user-config-${path}`, files: { [path]: source } });
+
+    expect(fileText(definition, path)).toBe(source);
+    expect(
+      Object.keys(definition.files).filter((candidate) => candidate.startsWith('/vite.config.')),
+    ).toEqual([path]);
+  });
+
+  it.each([
+    ['viteVersion', { viteVersion: '8.0.16' }],
+    ['manifest dependency', { files: { '/package.json': '{"dependencies":{"vite":"8.0.16"}}' } }],
+    ['dependency option', { dependencies: { vite: '7.3.1' } }],
+    ['devDependency option', { devDependencies: { vite: '9.0.0' } }],
+  ] satisfies ReadonlyArray<readonly [string, Partial<Omit<DefinitionOptions, 'id'>>]>)(
+    'leaves config ownership to an explicit Vite declaration from %s',
+    (_label, supplied) => {
+      const definition = snapshot({ id: 'explicit-vite-policy', files: {}, ...supplied });
+
+      expect(definition.files['/vite.config.js']).toBeUndefined();
+    },
+  );
+
   it('uses viteVersion as the sole final Vite declaration', () => {
     const definition = projects.vite({
       id: 'explicit-vite',
@@ -413,5 +475,96 @@ describe('ProjectDefinition', () => {
     expect(new Set(values.map((value) => value.storageSegment))).toHaveProperty('size', ids.length);
 
     expect(() => projects.vite({ id: '', files: {} })).toThrow();
+  });
+
+  describe('owner wire', () => {
+    it('round-trips through structured clone while the owner recomputes derived identity', () => {
+      const inspected = snapshot({
+        id: 'wire-round-trip',
+        files: {
+          '/index.html': '<main>real bytes</main>',
+          '/binary.dat': new Uint8Array([0, 127, 255]),
+        },
+      });
+
+      const wire = projectDefinitionWire(inspected);
+      const cloned = structuredClone(wire);
+      const ownerInspected = inspectProjectDefinitionWire(cloned);
+
+      expect(ownerInspected).toEqual(inspected);
+      expect(ownerInspected.files['/binary.dat']).not.toBe(inspected.files['/binary.dat']);
+      expect(ownerInspected.storageSegment).toBe('wire-round-trip');
+      expect(Object.isFrozen(ownerInspected)).toBe(true);
+      expect(Object.isFrozen(ownerInspected.files)).toBe(true);
+    });
+
+    // Fault class: provenance-lie. The wire carries the page claim only as a
+    // comparison value; owner ingress derives identity from exact received bytes.
+    it('rejects changed bytes even when the page identity claim is retained', () => {
+      const inspected = snapshot({ id: 'wire-bytes', files: { '/message.txt': 'before' } });
+      const wire = structuredClone(projectDefinitionWire(inspected));
+      (wire.files as Record<string, Uint8Array>)['/message.txt'] = encoder.encode('after');
+
+      expect(() => inspectProjectDefinitionWire(wire)).toThrow(/identity/i);
+    });
+
+    it('rejects a changed page identity claim instead of accepting owner-derived bytes silently', () => {
+      const inspected = snapshot({ id: 'wire-identity', files: { '/message.txt': 'same' } });
+      const wire = { ...structuredClone(projectDefinitionWire(inspected)), identity: 'forged' };
+
+      expect(() => inspectProjectDefinitionWire(wire)).toThrow(/identity/i);
+    });
+
+    it.each([
+      ['extra root field', (wire: Record<string, unknown>) => ({ ...wire, extra: true })],
+      [
+        'missing identity',
+        (wire: Record<string, unknown>) => {
+          const { identity: _identity, ...rest } = wire;
+          return rest;
+        },
+      ],
+      ['wrong kind', (wire: Record<string, unknown>) => ({ ...wire, kind: 'node' })],
+      ['empty id', (wire: Record<string, unknown>) => ({ ...wire, id: '' })],
+      ['non-record files', (wire: Record<string, unknown>) => ({ ...wire, files: [] })],
+      [
+        'non-byte file',
+        (wire: Record<string, unknown>) => ({ ...wire, files: { '/index.html': 'text' } }),
+      ],
+      [
+        'project traversal',
+        (wire: Record<string, unknown>) => ({
+          ...wire,
+          files: { '/../outside': new Uint8Array([1]) },
+        }),
+      ],
+    ])('rejects corrupt definition wire: %s', (_label, corrupt) => {
+      const inspected = snapshot({ id: 'wire-invalid', files: { '/index.html': 'ok' } });
+      const wire = structuredClone(projectDefinitionWire(inspected)) as unknown as Record<
+        string,
+        unknown
+      >;
+
+      expect(() => inspectProjectDefinitionWire(corrupt(wire))).toThrow(TypeError);
+    });
+
+    it('defensively snapshots both page egress and owner ingress bytes', () => {
+      const inspected = snapshot({
+        id: 'wire-copies',
+        files: { '/value.bin': new Uint8Array([1]) },
+      });
+      const wire = projectDefinitionWire(inspected);
+      const firstWireBytes = wire.files['/value.bin'];
+      if (firstWireBytes === undefined) throw new Error('missing wire fixture');
+      firstWireBytes[0] = 2;
+
+      const freshWire = projectDefinitionWire(inspected);
+      const ownerInspected = inspectProjectDefinitionWire(structuredClone(freshWire));
+      const freshWireBytes = freshWire.files['/value.bin'];
+      if (freshWireBytes === undefined) throw new Error('missing fresh wire fixture');
+      freshWireBytes[0] = 3;
+
+      expect(ownerInspected.files['/value.bin']).toEqual(new Uint8Array([1]));
+    });
   });
 });

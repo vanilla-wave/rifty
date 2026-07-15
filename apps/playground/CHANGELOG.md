@@ -12,16 +12,30 @@
 - Deployment and acquisition URL references resolve once against the document
   API base and satisfy destination-specific browser rules before any lock,
   service-worker, storage, or owner effect.
+- The owner package authority now quiesces prior FIFO work through detached
+  stamp settlement. Owner package state registers, activates, and ensures exact
+  per-project configs in one admission without a placeholder bootstrap project.
 
 ### Changed (app-local Workbench Vite vertical)
 
+- The built-in Vite 8 project default now materializes the same visible
+  `vite.config.js` policy as the Vite 8 starter before project identity; any
+  caller-supplied Vite version or recognized config variant remains user-owned.
 - Workbench owner/runtime adapters now publish the owner-selected storage
   snapshot and bind Vite readiness, exit, and cleanup to the exact admitted PTY
   run plus routed preview proof. Run close remains claimed until preview-route
   cleanup settles and reports teardown failures instead of racing the next run.
+- Preview readiness that mounted a route now closes only after a correlated
+  post-GOODBYE service-worker control proof. Public run close, project close,
+  and physical retirement therefore fence stale route readiness;
+  teardown/controller faults stay loud (ADR-0271).
 - Preview-producing dev, installed-bin, and Node children capture owner-supplied
-  PTY identity at shell construction. Guest environment overrides can no longer
-  relabel a late preview event as a different run.
+  PTY identity at shell construction. Guest environment is preserved as ordinary
+  Node state—even a former `RIFTY_INTERNAL_PTY_SID` name—and cannot relabel a
+  late preview event as a different run.
+- Owner PTY shutdown is one idempotent awaited barrier: it fences late frames,
+  settles every run and real shell child, and reports all session failures in
+  stable identity order.
 
 ### Added (foreground Node stdin and resize)
 
@@ -68,14 +82,14 @@
   `.bin`, recursive `execSync`, and `worker_threads`; the branch-local stdin
   guard is removed.
 
-- Page, workspace owner, node/bin, dev-server, and TS-LSP realms now install and
-  propagate one validated worker/WASM bootstrap snapshot. Explicit user env can
-  replace user variables without erasing deployment capabilities. The inherited
-  esbuild URL is the sole fetched source; every recursive Node entry installs
-  SQLite before user code; operation controls override host metadata. Owner and
-  relay dispatchers now serve real recursive `execSync` beside the same VFS
-  handlers. Worker entries read the installed process through one Vite-safe seam,
-  so production bundles retain the inherited snapshot (ADR-0231).
+- Page, owner, node/bin, dev-server, and recursive worker realms now propagate
+  deployment capabilities through a versioned URL-entry bootstrap, while guest
+  `process.env` remains the exact inherited/replacement Node environment.
+  Program, worker-thread, PTY, and preview identities are fresh typed launch
+  metadata; exact executed entry + argv select Vite preparation, so Rolldown
+  pthreads cannot inherit a parent Vite role (ADR-0267). Vite children set the
+  public upstream `NAPI_RS_FORCE_WASI=1` selector because the browser install
+  carries the WASI binding rather than a native `.node` package.
 
 ### Changed (exact Vite esbuild runtime)
 

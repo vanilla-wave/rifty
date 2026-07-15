@@ -946,6 +946,242 @@ describe('pty-server', () => {
     });
   });
 
+  it('server close fences late frames and awaits every real shell background child', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const made: string[] = [];
+    const aborted: string[] = [];
+    const started = new Map([
+      ['z-session', deferred()],
+      ['a-session', deferred()],
+    ]);
+    const physicalExit = new Map([
+      ['z-session', deferred()],
+      ['a-session', deferred()],
+    ]);
+    const onDevConfig = vi.fn();
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: (_seed, sid) => {
+        made.push(sid);
+        const shell = new Shell({ cwd: '/', env: {} });
+        shell.registerCommand('held-child', async (_args, ctx) => {
+          ctx.signal?.addEventListener(
+            'abort',
+            () => {
+              aborted.push(sid);
+            },
+            { once: true },
+          );
+          started.get(sid)?.resolve();
+          await physicalExit.get(sid)?.promise;
+          return 143;
+        });
+        return shell;
+      },
+      onDevConfig,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'z-session' });
+    server.handleFrame({ type: 'pty:open', sid: 'a-session' });
+    await Promise.all([
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 'z-session',
+        rid: 'run-z',
+        line: 'held-child &',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 'a-session',
+        rid: 'run-a',
+        line: 'held-child &',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    ]);
+    await Promise.all([...started.values()].map((gate) => gate.promise));
+
+    const closing = server.close();
+    expect(server.close()).toBe(closing);
+    expect(server.dispose()).toBe(closing);
+    server.handleFrame({ type: 'pty:open', sid: 'late-session' });
+    server.handleFrame({
+      type: 'pty:exec',
+      sid: 'late-session',
+      rid: 'late-run',
+      line: 'echo too-late',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    server.handleFrame({
+      type: 'pty:dev-config',
+      id: 'late-config',
+      templateId: 'typescript',
+      slug: 'late',
+      setup: 'instant',
+    });
+
+    await vi.waitFor(() => expect(new Set(aborted)).toEqual(new Set(['a-session', 'z-session'])));
+    expect(
+      await settledOr(
+        closing.then(() => 'settled' as const),
+        'pending',
+      ),
+    ).toBe('pending');
+    expect(made).toEqual(['z-session', 'a-session']);
+    expect(onDevConfig).not.toHaveBeenCalled();
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:ready',
+      sid: 'late-session',
+      error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
+    });
+    expect(wireFrames(out)).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        sid: 'late-session',
+        rid: 'late-run',
+        code: 1,
+        error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
+      }),
+    );
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:dev-config-ready',
+      id: 'late-config',
+      error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
+    });
+
+    physicalExit.get('z-session')?.resolve();
+    expect(
+      await settledOr(
+        closing.then(() => 'settled' as const),
+        'pending',
+      ),
+    ).toBe('pending');
+    physicalExit.get('a-session')?.resolve();
+    await closing;
+
+    server.handleFrame({ type: 'pty:open', sid: 'after-close' });
+    expect(made).toEqual(['z-session', 'a-session']);
+    expect(wireFrames(out)).toContainEqual({
+      type: 'pty:ready',
+      sid: 'after-close',
+      error: expect.stringMatching(/ClosedHandleError.*server.*closed/i),
+    });
+  });
+
+  it('server close aggregates every actor failure in stable session-id order', async () => {
+    const aborted: string[] = [];
+    const started = new Map([
+      ['z-session', deferred()],
+      ['a-session', deferred()],
+    ]);
+    const physicalExit = new Map([
+      ['z-session', deferred()],
+      ['a-session', deferred()],
+    ]);
+    const server = createPtyServer({
+      send: (frame) => {
+        if (frame.type === 'pty:exit' && frame.rid.startsWith('run-')) {
+          throw new Error(`transport exit failed for ${frame.sid}`);
+        }
+      },
+      makeShell: (_seed, sid) => {
+        const shell = new Shell({ cwd: '/', env: {} });
+        shell.registerCommand('held-child', async (_args, ctx) => {
+          ctx.signal?.addEventListener(
+            'abort',
+            () => {
+              aborted.push(sid);
+            },
+            { once: true },
+          );
+          started.get(sid)?.resolve();
+          await physicalExit.get(sid)?.promise;
+          return 143;
+        });
+        return shell;
+      },
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'z-session' });
+    server.handleFrame({ type: 'pty:open', sid: 'a-session' });
+    await Promise.all([
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 'z-session',
+        rid: 'bg-z',
+        line: 'held-child &',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+      server.handleFrame({
+        type: 'pty:exec',
+        sid: 'a-session',
+        rid: 'bg-a',
+        line: 'held-child &',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    ]);
+    await Promise.all([...started.values()].map((gate) => gate.promise));
+    const runZ = server.handleFrame({
+      type: 'pty:exec',
+      sid: 'z-session',
+      rid: 'run-z',
+      line: 'sleep 5',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    const runA = server.handleFrame({
+      type: 'pty:exec',
+      sid: 'a-session',
+      rid: 'run-a',
+      line: 'sleep 5',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    await Promise.resolve();
+
+    const closing = server.close();
+    expect(server.dispose()).toBe(closing);
+    await vi.waitFor(() => expect(new Set(aborted)).toEqual(new Set(['a-session', 'z-session'])));
+    expect(
+      await settledOr(
+        closing.then(() => 'settled' as const),
+        'pending',
+      ),
+    ).toBe('pending');
+    physicalExit.get('z-session')?.resolve();
+    expect(
+      await settledOr(
+        closing.then(() => 'settled' as const),
+        'pending',
+      ),
+    ).toBe('pending');
+    physicalExit.get('a-session')?.resolve();
+    const failure = await closing.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await Promise.allSettled([runZ, runA]);
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    const errors = (failure as { readonly errors: readonly unknown[] }).errors;
+    expect(errors.map((error) => (error instanceof Error ? error.message : String(error)))).toEqual(
+      [
+        'pty session a-session: transport exit failed for a-session',
+        'pty session z-session: transport exit failed for z-session',
+      ],
+    );
+  });
+
   it('rejects pty:open loudly while the session actor is closing', async () => {
     const { server, out } = harness();
     server.handleFrame({ type: 'pty:open', sid: 's1' });
@@ -1131,7 +1367,7 @@ describe('pty-server', () => {
     expect(seen).toEqual(['terminal-9']);
   });
 
-  it('strips internal pty env keys from persisted exit env', async () => {
+  it('round-trips guest env keys that resemble former internal PTY metadata', async () => {
     const out: OwnerToPageFrame[] = [];
     const server = createPtyServer({
       send: (f) => out.push(f),
@@ -1148,7 +1384,7 @@ describe('pty-server', () => {
       isTTY: true,
     });
     const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
-    expect(exit && exit.type === 'pty:exit' && exit.env.RIFTY_INTERNAL_PTY_SID).toBeUndefined();
+    expect(exit && exit.type === 'pty:exit' && exit.env.RIFTY_INTERNAL_PTY_SID).toBe('terminal-1');
   });
 
   it('exec on an unknown session emits pty:exit{error} instead of silently hanging the page run', async () => {

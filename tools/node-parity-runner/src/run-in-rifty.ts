@@ -311,7 +311,9 @@ function timeoutMs(value: number, label: string): number {
 }
 
 function isSeededProcessCase(testCase: ParityCase): boolean {
-  return testCase.stdin !== undefined || testCase.kind === 'tty-resize';
+  return (
+    testCase.stdin !== undefined || testCase.kind === 'worker-env' || testCase.kind === 'tty-resize'
+  );
 }
 
 function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
@@ -570,6 +572,159 @@ async function installSqliteMode(): Promise<void> {
   await import('@riftydev/net/sqlite/register-builtins');
   const { initSqliteEngine } = await import('@riftydev/net/sqlite/engine');
   await initSqliteEngine();
+}
+
+/**
+ * Physical kernel-backed Worker mode for ADR-0267 env parity.
+ *
+ * The normal parity runner intentionally uses runtime-js's same-realm fallback;
+ * that fallback has no separate process realm and therefore cannot prove exact
+ * inherited/replacement `process.env` or the typed host-bootstrap boundary. This
+ * mode adapts a real native Node Worker to the kernel's DOM WorkerLike seam, then
+ * lets production spawn/lifecycle/process code create the child. It runs inside
+ * the runner's disposable outer Worker so every process-global binding is
+ * discarded after the case.
+ */
+async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
+  const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
+    '../../../packages/kernel/src/index.ts'
+  );
+  const { clearKernelWorkerUrl, clearWorkerFactoryForTests, setWorkerFactoryForTests } =
+    await import('../../../packages/kernel/src/spawn-worker.ts');
+  const { configureNodeEntryWorker, resetNodeEntryWorkerUrl } = await import(
+    '../../../packages/runtime-js/src/builtins/node-entry-url.ts'
+  );
+  type WorkerLike = import('../../../packages/kernel/src/spawn-worker.ts').WorkerLike;
+  type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
+
+  let nativeWorkerConstructions = 0;
+  let validatedInitMessages = 0;
+
+  function validateInitMessage(message: unknown): void {
+    const init = message as Partial<WorkerInitMessage> | null;
+    const entry = init?.spec?.entry;
+    if (init?.type !== 'init' || entry?.kind !== 'url') {
+      throw new TypeError('worker-env parity requires a URL kernel init message');
+    }
+    const envelope = entry.bootstrap;
+    if (envelope?.protocol !== 'rifty.node-entry/v1') {
+      throw new TypeError('worker-env parity requires the typed node-entry bootstrap protocol');
+    }
+    const payload = envelope.payload as
+      | { readonly hostRuntime?: Readonly<Record<string, unknown>> }
+      | undefined;
+    if (payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only') {
+      throw new TypeError('worker-env parity init is missing its out-of-band host marker');
+    }
+    validatedInitMessages++;
+  }
+
+  class NativeKernelWorkerAdapter implements WorkerLike {
+    readonly #worker: Worker;
+    readonly #listeners = new Map<
+      (event: MessageEvent) => void,
+      { readonly type: string; readonly wrapped: (...args: unknown[]) => void }
+    >();
+
+    constructor() {
+      nativeWorkerConstructions++;
+      this.#worker = new Worker(new URL('./worker-env-kernel-worker.ts', import.meta.url), {
+        execArgv: ['--import', 'tsx'],
+        workerData: { files: testCase.setup?.files ?? {} },
+      });
+    }
+
+    postMessage(message: unknown, transfer: ReadonlyArray<Transferable> = []): void {
+      validateInitMessage(message);
+      this.#worker.postMessage(message, transfer as never);
+    }
+
+    terminate(): void {
+      void this.#worker.terminate();
+    }
+
+    addEventListener(type: string, listener: (event: MessageEvent) => void): void {
+      const wrapped =
+        type === 'message'
+          ? (value: unknown) => listener({ data: value } as MessageEvent)
+          : (error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error);
+              listener({ data: undefined, message, error } as unknown as MessageEvent);
+            };
+      this.#listeners.set(listener, { type, wrapped });
+      if (type === 'message') this.#worker.on('message', wrapped);
+      else if (type === 'error') this.#worker.on('error', wrapped);
+      else if (type === 'messageerror') this.#worker.on('messageerror', wrapped);
+      else throw new TypeError(`worker-env adapter does not support ${type}`);
+    }
+
+    removeEventListener(type: string, listener: (event: MessageEvent) => void): void {
+      const installed = this.#listeners.get(listener);
+      if (installed === undefined || installed.type !== type) return;
+      this.#listeners.delete(listener);
+      if (type === 'message') this.#worker.off('message', installed.wrapped);
+      else if (type === 'error') this.#worker.off('error', installed.wrapped);
+      else if (type === 'messageerror') this.#worker.off('messageerror', installed.wrapped);
+    }
+  }
+
+  const previousProcessDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const previousCrossOriginDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'crossOriginIsolated',
+  );
+  const previousKernelWorkerUrl = getKernelWorkerUrl();
+  const previousCwd = getProcessCwd();
+  const cleanups = new CleanupStack();
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
+
+  try {
+    cleanups.defer(() => {
+      if (nativeWorkerConstructions !== 2 || validatedInitMessages !== 2) {
+        throw new Error(
+          `worker-env parity expected 2 physical typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
+        );
+      }
+    });
+    cleanups.defer(clearWorkerFactoryForTests);
+    cleanups.defer(resetNodeEntryWorkerUrl);
+    cleanups.defer(() => {
+      if (previousKernelWorkerUrl === null) clearKernelWorkerUrl();
+      else setKernelWorkerUrl(previousKernelWorkerUrl);
+    });
+    cleanups.defer(() =>
+      restoreGlobalDescriptor('crossOriginIsolated', previousCrossOriginDescriptor),
+    );
+    cleanups.defer(() => setProcessCwd(previousCwd));
+    cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
+    cleanups.defer(() => restoreGlobalDescriptor('process', previousProcessDescriptor));
+
+    const parentProcess = new NodeProcess();
+    parentProcess.env = Object.create(null) as Record<string, string | undefined>;
+    Object.defineProperty(globalThis, 'process', {
+      value: parentProcess,
+      writable: true,
+      configurable: true,
+      enumerable: previousProcessDescriptor?.enumerable ?? false,
+    });
+    refreshRuntimeJsProcessBuiltin();
+    Object.defineProperty(globalThis, 'crossOriginIsolated', {
+      value: true,
+      configurable: true,
+    });
+    setKernelWorkerUrl('parity://kernel-worker');
+    configureNodeEntryWorker('parity://node-entry', {
+      RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
+    });
+    setWorkerFactoryForTests(() => new NativeKernelWorkerAdapter());
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
+  }
+
+  return () => cleanups.dispose();
 }
 
 /**
@@ -949,6 +1104,13 @@ export async function runInRiftyInCurrentRealm(
       cleanups.defer(teardownExecSync);
     }
 
+    // ADR-0267: only a physical kernel child can prove that typed host
+    // bootstrap metadata stays outside exact inherited/replacement guest env.
+    if (testCase.kind === 'worker-env') {
+      const teardownWorkerEnv = await installWorkerEnvMode(testCase);
+      cleanups.defer(teardownWorkerEnv);
+    }
+
     // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
     // into the quickjs engine via `globalThis.__RIFTY_VM_ENGINE = 'quickjs'`, and
     // that engine evaluates synchronously via `getQuickJsModuleSync()`. Memoised,
@@ -1030,7 +1192,7 @@ export async function runInRiftyInCurrentRealm(
 
     // Mirror the real Worker lifecycle: global timers installed by bootstrap
     // hold the keepalive refcount until every scheduled callback has fired.
-    await awaitDrain({ capMs: 1000 });
+    await awaitDrain({ capMs: testCase.kind === 'worker-env' ? 10_000 : 1_000 });
     await seededProcess?.drainStdio();
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a

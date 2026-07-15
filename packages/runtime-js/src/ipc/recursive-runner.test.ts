@@ -6,10 +6,7 @@ import { NodeProcess } from '../builtins/process.ts';
 import * as recursiveRunner from './recursive-runner.ts';
 
 type RecursiveRunnerContract = typeof recursiveRunner & {
-  buildRecursiveWorkerEnv(
-    userEnv: Readonly<Record<string, string>>,
-    runtimeEnv: Readonly<Record<string, string>>,
-  ): Record<string, string>;
+  buildRecursiveWorkerEnv(userEnv: Readonly<Record<string, string>>): Record<string, string>;
 };
 
 const { makeRecursiveRunner } = recursiveRunner;
@@ -31,31 +28,24 @@ function seededProcess(env: Readonly<Record<string, string>>): NodeProcess {
 describe('makeRecursiveRunner', () => {
   afterEach(() => resetNodeEntryWorkerUrl());
 
-  it('merges user env, then host bootstrap values, then operation controls', () => {
+  it('keeps the guest env exact; host bootstrap and launch role are out of band', () => {
     expect(
-      buildRecursiveWorkerEnv(
-        {
-          USER_VALUE: 'explicit',
-          RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
-          RIFTY_BIN: 'user',
-          RIFTY_REMOTE_FS: 'user',
-        },
-        {
-          RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-          RIFTY_BIN: 'host',
-          RIFTY_REMOTE_FS: 'host',
-        },
-      ),
+      buildRecursiveWorkerEnv({
+        USER_VALUE: 'explicit',
+        RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
+        RIFTY_BIN: 'user',
+        RIFTY_REMOTE_FS: 'user',
+      }),
     ).toEqual({
       USER_VALUE: 'explicit',
-      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-      RIFTY_BIN: '0',
-      RIFTY_REMOTE_FS: '1',
+      RIFTY_SQLITE_WASM_URL: 'https://user.test/sqlite.wasm',
+      RIFTY_BIN: 'user',
+      RIFTY_REMOTE_FS: 'user',
     });
   });
 
   it('inherits runtime-owned loud stdin in the RIFTY_NODE_SERVE-unset execSync child', () => {
-    const env = buildRecursiveWorkerEnv({}, { RIFTY_KERNEL_WORKER_URL: 'kernel.js' });
+    const env = buildRecursiveWorkerEnv({});
     expect(env.RIFTY_NODE_SERVE).toBeUndefined();
     const stdin = seededProcess(env).stdin as NodeProcess['stdin'] & {
       read(): unknown;
@@ -102,6 +92,6 @@ describe('makeRecursiveRunner', () => {
         env: {},
         cwd: '/project',
       }),
-    ).toThrow(/node-entry.*runtime config.*not configured/i);
+    ).toThrow(/node-entry.*bootstrap config.*not configured/i);
   });
 });

@@ -48,7 +48,9 @@ interface Deferred<T> {
 
 interface TestServiceWorkerController extends ServiceWorkerControlWorker {
   readonly label: string;
-  readonly postMessage: ReturnType<typeof vi.fn<(message: unknown) => void>>;
+  readonly postMessage: ReturnType<
+    typeof vi.fn<(message: unknown, transfer: Transferable[]) => void>
+  >;
 }
 
 interface TestSession<TReady> {
@@ -299,7 +301,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   };
   let automaticPongSource: TestServiceWorkerController | null | undefined;
   let postMessageImplementation:
-    | ((controller: TestServiceWorkerController, message: unknown) => void)
+    | ((
+        controller: TestServiceWorkerController,
+        message: unknown,
+        transfer: Transferable[],
+      ) => void)
     | null = null;
   let opfsOpenFailure: unknown;
   let durabilityFailure: unknown;
@@ -325,13 +331,19 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     controllerNumber += 1;
     const controller: TestServiceWorkerController = {
       label,
-      postMessage: vi.fn((message: unknown): void => {
+      postMessage: vi.fn((message: unknown, transfer: Transferable[]): void => {
         if (postMessageImplementation !== null) {
-          postMessageImplementation(controller, message);
+          postMessageImplementation(controller, message, transfer);
           return;
         }
         if (automaticPong === null) return;
-        container.dispatchMessage(automaticPongSource ?? controller, automaticPong);
+        if (automaticPongSource !== undefined) {
+          container.dispatchMessage(automaticPongSource, automaticPong);
+          return;
+        }
+        const replyPort = transfer[0];
+        if (!(replyPort instanceof MessagePort)) throw new Error('missing SW control reply port');
+        replyPort.postMessage(automaticPong);
       }),
     };
     return controller;
@@ -429,7 +441,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       automaticPongSource = source;
     },
     setPostMessageImplementation(
-      implementation: (controller: TestServiceWorkerController, message: unknown) => void,
+      implementation: (
+        controller: TestServiceWorkerController,
+        message: unknown,
+        transfer: Transferable[],
+      ) => void,
     ): void {
       postMessageImplementation = implementation;
     },
@@ -592,11 +608,14 @@ describe('openWorkbench controlling service-worker proof', () => {
     h.container.setController(replacement);
     const workbench = await opening;
 
-    expect(replacement.postMessage).toHaveBeenCalledWith({
-      type: SW_PING,
-      frameVersion: SW_FRAME_VERSION,
-      routingVersion: SW_ROUTING_VERSION,
-    });
+    expect(replacement.postMessage).toHaveBeenCalledWith(
+      {
+        type: SW_PING,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      [expect.any(MessagePort)],
+    );
     expect(h.listenerCount).toBe(0);
     expect(h.clock.pending).toBe(0);
     await workbench.close();
@@ -676,13 +695,17 @@ describe('openWorkbench controlling service-worker proof', () => {
       routingVersion: SW_ROUTING_VERSION,
       from: 'service-worker',
     };
-    h.setPostMessageImplementation((controller) => {
+    let replacementReplyPort: MessagePort | undefined;
+    h.setPostMessageImplementation((controller, _message, transfer) => {
+      const replyPort = transfer[0];
+      if (!(replyPort instanceof MessagePort)) throw new Error('missing SW control reply port');
       if (controller === h.controller) {
         h.container.setController(replacement);
-        h.container.dispatchMessage(h.controller, exactPong);
+        replyPort.postMessage(exactPong);
+        replacementReplyPort?.postMessage(exactPong);
         return;
       }
-      h.container.dispatchMessage(replacement, exactPong);
+      replacementReplyPort = replyPort;
     });
 
     const workbench = await h.open(validOptions());

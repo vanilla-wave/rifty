@@ -2,10 +2,11 @@ import { type InstallOptions, type InstallResult, RegistryClient } from '@riftyd
 import { Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
+import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
-import { createOwnerPackageState } from './owner-package-state.ts';
+import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 
 const ROOT = '/project';
@@ -296,4 +297,172 @@ it('uses exact session project identity while a full install enters during promo
   expect(switchedInstallSawPriorManifest).toBe(false);
   releasePromotion();
   await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+it('activates and ensures independent real project configs without an initial placeholder', async () => {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-package-multi-project-test',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  const projectConfig = (id: 'a' | 'b'): OwnerPackageConfig => {
+    const root = `/projects/${id}`;
+    const packageJson = `${JSON.stringify({
+      name: `workbench-${id}`,
+      version: '1.0.0',
+      dependencies: { vite: '5.4.21' },
+    })}\n`;
+    return {
+      cfg: {
+        ...config,
+        root,
+        entryPath: `${root}/src/main.ts`,
+        packageName: `workbench-${id}`,
+        packageJson,
+      },
+      templateId: `workbench-vite-${id}`,
+      slug: `workbench-project-${id}`,
+      fromScratch: true,
+    };
+  };
+  const configA = projectConfig('a');
+  const configB = projectConfig('b');
+  for (const project of [configA, configB]) {
+    authority.mkdirSync(project.cfg.root, { recursive: true });
+    authority.writeFileSync(
+      `${project.cfg.root}/package.json`,
+      new TextEncoder().encode(project.cfg.packageJson),
+    );
+  }
+  const installs: string[] = [];
+  const state = createOwnerPackageState({
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: { RIFTY_RUNTIME: 'workbench-test' },
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    install: async (arg1) => {
+      const opts = arg1 as InstallOptions;
+      installs.push(opts.cwd);
+      authority.mkdirSync(`${opts.cwd}/node_modules/vite`, { recursive: true });
+      authority.writeFileSync(
+        `${opts.cwd}/node_modules/vite/package.json`,
+        new TextEncoder().encode('{}\n'),
+      );
+      await opts.vfs.writeFile(`${opts.cwd}/package-lock.json`, '{}\n');
+      return installResult();
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  await expect(state.activateAndEnsure(configA)).resolves.toMatchObject({
+    outcome: 'installed',
+  });
+  await expect(state.activateAndEnsure(configB)).resolves.toMatchObject({
+    outcome: 'installed',
+  });
+  await state.quiesce();
+  await expect(state.activateAndEnsure(projectConfig('a'))).resolves.toMatchObject({
+    outcome: 'existing',
+    identity: installArtifactIdentity,
+  });
+  await state.quiesce();
+
+  expect(installs).toEqual(['/projects/a', '/projects/b']);
+  const stamps = createInstallStampAuthority({
+    vfs: pair.vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  await expect(
+    stamps.check({
+      root: configA.cfg.root,
+      slug: configA.slug,
+      expectedPackageJsonText: configA.cfg.packageJson,
+    }),
+  ).resolves.toMatchObject({ status: 'trusted' });
+  await expect(
+    stamps.check({
+      root: configB.cfg.root,
+      slug: configB.slug,
+      expectedPackageJsonText: configB.cfg.packageJson,
+    }),
+  ).resolves.toMatchObject({ status: 'trusted' });
+});
+
+it('fault: binds back-to-back activation manifests to their FIFO registration slots', async () => {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-package-activation-registration-test',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  const root = '/projects/shared';
+  const projectConfig = (name: 'first' | 'second'): OwnerPackageConfig => ({
+    cfg: {
+      ...config,
+      root,
+      entryPath: `${root}/src/main.ts`,
+      packageName: name,
+      packageJson: `${JSON.stringify({
+        name,
+        version: '1.0.0',
+        dependencies: { vite: '5.4.21' },
+      })}\n`,
+    },
+    templateId: `workbench-${name}`,
+    slug: 'shared-project',
+    fromScratch: true,
+  });
+  const firstConfig = projectConfig('first');
+  const secondConfig = projectConfig('second');
+  authority.mkdirSync(root, { recursive: true });
+  authority.writeFileSync(
+    `${root}/package.json`,
+    new TextEncoder().encode(firstConfig.cfg.packageJson),
+  );
+  const installedManifests: string[] = [];
+  const state = createOwnerPackageState({
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    install: async (arg1) => {
+      const opts = arg1 as InstallOptions;
+      installedManifests.push(
+        new TextDecoder().decode(authority.readFileBytesSync(`${opts.cwd}/package.json`)),
+      );
+      authority.mkdirSync(`${opts.cwd}/node_modules/vite`, { recursive: true });
+      authority.writeFileSync(
+        `${opts.cwd}/node_modules/vite/package.json`,
+        new TextEncoder().encode('{}\n'),
+      );
+      await opts.vfs.writeFile(`${opts.cwd}/package-lock.json`, '{}\n');
+      return installResult();
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  const first = state.activateAndEnsure(firstConfig);
+  const second = state.activateAndEnsure(secondConfig);
+  await Promise.all([first, second]);
+  await state.quiesce();
+
+  expect(installedManifests).toEqual([firstConfig.cfg.packageJson, secondConfig.cfg.packageJson]);
 });

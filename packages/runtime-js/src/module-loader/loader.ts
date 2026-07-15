@@ -4,7 +4,7 @@ import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
-import { executeCjs } from './cjs.ts';
+import { type CjsExtensions, type CjsRequire, executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
@@ -83,13 +83,6 @@ setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
   return loader.import(script, script);
 });
 
-type LoaderRequire = ((specifier: string) => unknown) & {
-  resolve: (specifier: string) => string;
-  cache: Record<string, unknown>;
-  extensions: Record<string, never>;
-  main: undefined;
-};
-
 type CjsImportJob =
   | {
       readonly kind: 'module';
@@ -118,6 +111,10 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     paths: opts.paths,
     autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
   });
+  const cjsExtensions = Object.create(null) as CjsExtensions;
+  cjsExtensions['.js'] = (module, filename) => {
+    module._compile(readResolvedById(filename).source, filename);
+  };
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   // Node keeps CJS execution records (`require.cache`) and ESM ModuleJobs as
@@ -253,6 +250,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   const deps = {
     registry,
     resolver,
+    extensions: cjsExtensions,
+    makeRequire,
     workspace,
     sourceMaps,
     transformSource: cachedTransform,
@@ -326,7 +325,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     return resolver.resolve(id, { fromFile: id, esm: false });
   }
 
-  __setCreateRequireImpl((from: string): LoaderRequire => {
+  function makeRequire(from: string): CjsRequire {
     const req = ((specifier: string): unknown => {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
       if (resolved.kind === 'esm') {
@@ -338,16 +337,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
         );
       }
       return deps.loadSync(resolved.id);
-    }) as LoaderRequire;
+    }) as CjsRequire;
     req.resolve = (specifier: string): string =>
       resolver.resolve(specifier, { fromFile: from, esm: false }).id;
     // TODO(backlog: runtime-js/require-cache-module-record-surface): this is
     // intentionally not claimed as Node-compatible until backed by registry.
     req.cache = Object.create(null) as Record<string, unknown>;
-    req.extensions = Object.create(null) as Record<string, never>;
+    req.extensions = cjsExtensions;
     req.main = undefined;
     return req;
-  });
+  }
+
+  __setCreateRequireImpl(makeRequire);
 
   return {
     require(specifier, from = cwd) {

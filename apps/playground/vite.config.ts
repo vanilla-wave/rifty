@@ -90,6 +90,12 @@ export default defineConfig({
     exclude: ['monaco-editor'],
     // Pre-bundle deps first seen from Worker/child graphs. Late discovery makes
     // dev Vite re-optimize and FULL-RELOAD the page mid-session (drops owner state).
-    include: ['sql.js', 'typescript'],
+    include: [
+      '@riftydev/runtime-js > @jitl/quickjs-wasmfile-release-sync',
+      '@riftydev/runtime-js > acorn',
+      '@riftydev/runtime-js > quickjs-emscripten-core',
+      'sql.js',
+      'typescript',
+    ],
   },
 });

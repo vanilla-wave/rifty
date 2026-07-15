@@ -41,6 +41,7 @@ import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
+  type AcquisitionProvenance,
   type PackageAcquisitionProject,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
@@ -56,8 +57,8 @@ export interface OwnerPackageConfig {
 }
 
 export interface OwnerPackageStateOptions {
-  readonly initial: OwnerPackageConfig;
-  readonly primeInitialPrefetch: boolean;
+  readonly initial?: OwnerPackageConfig;
+  readonly primeInitialPrefetch?: boolean;
   readonly vfs: Vfs;
   readonly fsSync: OwnerVfsAuthority;
   readonly installStampClaims: InstallStampClaimIo;
@@ -74,6 +75,10 @@ export interface OwnerPackageStateOptions {
 
 export interface OwnerPackageState {
   readonly mutations: PackageMutationExecutor;
+  /** Register, activate, and install/reuse one exact project through one FIFO admission. */
+  activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
+  /** Settle package commands and durability work admitted before this call. */
+  quiesce(): Promise<void>;
   /** Registers the terminal-facing config and starts its optional prefetch. */
   configure(config: OwnerPackageConfig): void;
   /** Restore an instant config without ever turning boot into an implicit install. */
@@ -108,9 +113,11 @@ function decodeChunk(chunk: string | Uint8Array): string {
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
   const configs = new Map<string, OwnerPackageConfig>();
   let configured = options.initial;
-  let activeProject = packageProject(options.initial);
+  let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
-  configs.set(configKey(activeProject.root, activeProject.slug), options.initial);
+  if (options.initial) {
+    configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
+  }
 
   const registry = options.registry ?? createProxiedRegistryClient();
   const resolverUrl = options.resolverUrl ?? getResolverUrl;
@@ -187,7 +194,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     flush: options.flush,
     projectSlug: (root) => {
       const normalized = normalizePath(root);
-      return normalized === normalizePath(activeProject.root)
+      return activeProject && normalized === normalizePath(activeProject.root)
         ? activeProject.slug
         : `root:${normalized}`;
     },
@@ -288,8 +295,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               },
               resolverClosureHash: () => resolverPin(config.templateId),
               resolverPrefetch: () =>
+                configured !== undefined &&
                 configKey(configured.cfg.root, configured.slug) ===
-                configKey(request.project.root, request.project.slug)
+                  configKey(request.project.root, request.project.slug)
                   ? installPrefetch
                   : undefined,
             }
@@ -345,6 +353,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           );
         }
         activeProject = command.to;
+        activeTemplateId = configFor(command.to).templateId;
       },
     },
   });
@@ -353,7 +362,10 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     packages,
     fs: options.fsSync,
     assertPortablePaths: (paths) => options.fsSync.assertPortablePaths(paths),
-    activeProject: () => activeProject,
+    activeProject: () => {
+      if (!activeProject) throw new Error('package acquisition project is not active');
+      return activeProject;
+    },
   });
 
   const reassertTemplateNodeModules = async (config: OwnerPackageConfig): Promise<void> => {
@@ -402,6 +414,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     }
   };
 
+  const activateAndEnsure = (config: OwnerPackageConfig): Promise<AcquisitionProvenance> => {
+    return packages.dispatch({
+      type: 'activate-and-ensure',
+      register: () => configure(config),
+      from: () => activeProject,
+      to: packageProject(config),
+      packageJsonText: config.cfg.packageJson,
+      replaceTreeOnMiss: true,
+    });
+  };
+
   const transition = async (config: OwnerPackageConfig): Promise<void> => {
     configs.set(configKey(config.cfg.root, config.slug), config);
     const checked = config.fromScratch
@@ -413,7 +436,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       : null;
     const clean = shouldCleanForDevBootWithInstallState({
       lastTemplateId: activeTemplateId,
-      lastRoot: activeProject.root,
+      lastRoot: activeProject?.root ?? null,
       nextTemplateId: config.templateId,
       nextRoot: config.cfg.root,
       fromScratch: config.fromScratch,
@@ -428,14 +451,18 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       resetPackages: clean && !config.fromScratch,
       ...(clean && !config.fromScratch ? { packageJsonText: config.cfg.packageJson } : {}),
     });
-    activeTemplateId = config.templateId;
     if (!config.fromScratch) await restore(config);
   };
 
-  if (options.primeInitialPrefetch) primePrefetch(options.initial);
+  if (options.primeInitialPrefetch) {
+    if (!options.initial) throw new Error('initial package config required to prime prefetch');
+    primePrefetch(options.initial);
+  }
 
   return {
     mutations,
+    activateAndEnsure,
+    quiesce: () => packages.quiesce(),
     configure,
     restore,
     transition,
