@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
+import type { OwnerPtyRunAdmission, OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import {
   type DevServerFailure,
   type DevServerRunContext,
@@ -8,7 +8,16 @@ import {
   createDevServerController,
   runDevServerShellCommand,
 } from './dev-server-controller.ts';
-import { createPreviewRegistry } from './preview-registry.ts';
+import {
+  HOST_PREVIEW_ORIGIN,
+  type PreviewProducerOrigin,
+  createPreviewRegistry,
+} from './preview-registry.ts';
+
+function ptyOrigin(ptySid: string, ptyRid: string): PreviewProducerOrigin {
+  const admission = Object.freeze({ ptySid, ptyRid }) as OwnerPtyRunAdmission;
+  return { kind: 'pty', admission };
+}
 
 function fakeBoot(port: number) {
   let stopped = 0;
@@ -52,7 +61,7 @@ describe('createDevServerController', () => {
     const { boot, stopped } = fakeBoot(5174);
     const { ctrl, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal));
+    const run = ctrl.run(commandContext(ac.signal), HOST_PREVIEW_ORIGIN);
     await Promise.resolve();
     await Promise.resolve();
     expect(dev().map((f) => [f.status, f.port])).toEqual([
@@ -71,7 +80,7 @@ describe('createDevServerController', () => {
     const { boot } = fakeBoot(5174);
     const { ctrl, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal), 'terminal-7');
+    const run = ctrl.run(commandContext(ac.signal), ptyOrigin('terminal-7', 'run-7'));
     await Promise.resolve();
     await Promise.resolve();
     expect(dev()).toEqual([
@@ -105,12 +114,12 @@ describe('createDevServerController', () => {
       };
     });
     const ac = new AbortController();
-    const first = ctrl.run(commandContext(ac.signal));
+    const first = ctrl.run(commandContext(ac.signal), HOST_PREVIEW_ORIGIN);
     await Promise.resolve();
     await Promise.resolve();
-    await expect(ctrl.run(commandContext(new AbortController().signal))).rejects.toThrow(
-      /already running/i,
-    );
+    await expect(
+      ctrl.run(commandContext(new AbortController().signal), HOST_PREVIEW_ORIGIN),
+    ).rejects.toThrow(/already running/i);
     expect(boots).toBe(1);
     ac.abort();
     await first;
@@ -122,7 +131,7 @@ describe('createDevServerController', () => {
     registry.publishDev();
     expect(dev().at(-1)).toEqual({ type: 'pty:dev-server', status: 'stopped' });
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal));
+    const run = ctrl.run(commandContext(ac.signal), HOST_PREVIEW_ORIGIN);
     await Promise.resolve();
     await Promise.resolve();
     frames.length = 0;
@@ -149,9 +158,9 @@ describe('createDevServerController', () => {
         stop: async () => ({ code: null, signal: 'SIGTERM' }) as const,
       };
     });
-    await expect(ctrl.run(commandContext(new AbortController().signal))).rejects.toThrow(
-      /vite blew up/,
-    );
+    await expect(
+      ctrl.run(commandContext(new AbortController().signal), HOST_PREVIEW_ORIGIN),
+    ).rejects.toThrow(/vite blew up/);
     expect(dev().at(-1)).toEqual({
       type: 'pty:dev-server',
       status: 'stopped',
@@ -160,7 +169,7 @@ describe('createDevServerController', () => {
     expect(ctrl.status).toBe('stopped');
     // recoverable: a subsequent run boots again
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal));
+    const run = ctrl.run(commandContext(ac.signal), HOST_PREVIEW_ORIGIN);
     await Promise.resolve();
     await Promise.resolve();
     expect(ctrl.status).toBe('running');
@@ -178,10 +187,9 @@ describe('createDevServerController', () => {
     const abort = new AbortController();
     abort.abort();
 
-    await expect(ctrl.run(commandContext(abort.signal), 'terminal-pre-ready')).resolves.toEqual({
-      code: null,
-      signal: 'SIGTERM',
-    });
+    await expect(
+      ctrl.run(commandContext(abort.signal), ptyOrigin('terminal-pre-ready', 'run-pre-ready')),
+    ).resolves.toEqual({ code: null, signal: 'SIGTERM' });
     expect(dev().at(-1)).toEqual({
       type: 'pty:dev-server',
       status: 'stopped',
@@ -205,7 +213,7 @@ describe('createDevServerController', () => {
       stderr: { write: (chunk: string) => stderr.push(chunk) },
     };
 
-    await expect(runDevServerShellCommand(controller, ctx)).resolves.toEqual({
+    await expect(runDevServerShellCommand(controller, ctx, HOST_PREVIEW_ORIGIN)).resolves.toEqual({
       code: 7,
       signal: null,
     });
@@ -219,10 +227,12 @@ describe('createDevServerController', () => {
     const { boot } = fakeBoot(5174);
     const { ctrl, registry, dev } = wired(boot);
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal), 'terminal-1');
+    const run = ctrl.run(commandContext(ac.signal), ptyOrigin('terminal-1', 'run-1'));
     await Promise.resolve();
     await Promise.resolve();
-    registry.addNode('node-1', [3000], 'scope-n', { ptySid: 'terminal-2' });
+    registry.addNode('node-1', [3000], 'scope-n', {
+      origin: ptyOrigin('terminal-2', 'run-2'),
+    });
     ac.abort();
     await run;
     expect(dev().at(-1)).toMatchObject({ status: 'running', port: 3000, sid: 'terminal-2' });
@@ -243,7 +253,7 @@ describe('createDevServerController', () => {
       },
     }));
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal), 'terminal-crash');
+    const run = ctrl.run(commandContext(ac.signal), ptyOrigin('terminal-crash', 'run-crash'));
     const outcome = run.then(
       () => ({ ok: true as const }),
       (error: unknown) => ({ ok: false as const, error }),
@@ -290,7 +300,7 @@ describe('createDevServerController', () => {
       stop: async () => ({ code: 7, signal: null }) as const,
     }));
     const ac = new AbortController();
-    const run = ctrl.run(commandContext(ac.signal));
+    const run = ctrl.run(commandContext(ac.signal), HOST_PREVIEW_ORIGIN);
     await vi.waitFor(() => expect(ctrl.status).toBe('running'));
 
     reportFailure?.({
@@ -320,7 +330,10 @@ describe('createDevServerController', () => {
       };
     });
     const firstAbort = new AbortController();
-    const first = ctrl.run(commandContext(firstAbort.signal), 'terminal-stop-fault');
+    const first = ctrl.run(
+      commandContext(firstAbort.signal),
+      ptyOrigin('terminal-stop-fault', 'run-stop-fault'),
+    );
     await vi.waitFor(() => expect(ctrl.status).toBe('running'));
 
     firstAbort.abort();
@@ -335,7 +348,10 @@ describe('createDevServerController', () => {
     });
 
     const secondAbort = new AbortController();
-    const second = ctrl.run(commandContext(secondAbort.signal), 'terminal-retry');
+    const second = ctrl.run(
+      commandContext(secondAbort.signal),
+      ptyOrigin('terminal-retry', 'run-retry'),
+    );
     await vi.waitFor(() => expect(ctrl.status).toBe('running'));
     secondAbort.abort();
     await second;

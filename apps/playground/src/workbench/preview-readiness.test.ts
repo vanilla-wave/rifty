@@ -5,6 +5,9 @@ import {
   createPreviewReadiness,
 } from './preview-readiness.ts';
 
+const TARGET_PTY_SID = 'terminal-a';
+const TARGET_PTY_RID = 'run-a';
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (error: unknown) => void;
@@ -15,9 +18,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAdvertisement {
+type CorrelatedAdvertisement = PreviewAdvertisement & {
+  readonly ptySid: string;
+  readonly ptyRid: string;
+};
+
+function advertisement(overrides: Partial<CorrelatedAdvertisement> = {}): CorrelatedAdvertisement {
   return {
     ownerToken: 'owner-a',
+    ptySid: TARGET_PTY_SID,
+    ptyRid: TARGET_PTY_RID,
     port: 5173,
     url: '/preview/5173/',
     source: 'dev-server',
@@ -92,6 +102,8 @@ describe('preview readiness', () => {
     const h = harness();
     const ready = h.readiness.waitFor({
       ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
       matches: (entry) => entry.source === 'dev-server',
     });
 
@@ -113,9 +125,53 @@ describe('preview readiness', () => {
     });
   });
 
+  it.each([
+    ['a sibling PTY', { ptySid: 'terminal-sibling', ptyRid: TARGET_PTY_RID, sid: 'sibling-child' }],
+    ['a stale prior run', { ptySid: TARGET_PTY_SID, ptyRid: 'run-stale', sid: 'stale-child' }],
+  ] as const)(
+    'scans past %s and an uncorrelated source to the exact run in one owner snapshot',
+    async (_case, stale) => {
+      const h = harness();
+      const ready = h.readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      });
+
+      h.publish([
+        advertisement({
+          ...stale,
+          port: 4173,
+          url: '/preview/4173/',
+        }),
+        {
+          ownerToken: 'owner-a',
+          port: 3000,
+          url: '/preview/3000/',
+          source: 'node',
+          sid: 'owner-host-source',
+        },
+        advertisement(),
+      ]);
+      h.swProofs[0]?.resolve();
+      await Promise.resolve();
+      h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+      await expect(ready).resolves.toMatchObject({ port: 5173, url: '/preview/5173/' });
+      expect(h.events).toContain('mount:owner-a:5173');
+      expect(h.events).not.toContain('mount:owner-a:4173');
+      expect(h.events).not.toContain('mount:owner-a:3000');
+    },
+  );
+
   it('revokes a disappearing candidate and ignores its late proof', async () => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     h.publish([advertisement()]);
     expect(h.swProofs).toHaveLength(1);
@@ -133,13 +189,51 @@ describe('preview readiness', () => {
     await expect(ready).resolves.toMatchObject({ port: 5174, url: '/preview/5174/' });
   });
 
+  it('revokes an exact candidate replaced by a wrong PTY pair and ignores its late proof', async () => {
+    const h = harness();
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
+
+    h.publish([advertisement()]);
+    expect(h.swProofs).toHaveLength(1);
+    h.publish([
+      advertisement({
+        ptySid: 'terminal-sibling',
+        ptyRid: TARGET_PTY_RID,
+        port: 4173,
+        url: '/preview/4173/',
+      }),
+    ]);
+    expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
+
+    h.swProofs[0]?.resolve();
+    await Promise.resolve();
+    expect(h.httpProofs).toHaveLength(0);
+
+    h.publish([advertisement({ port: 5174, url: '/preview/5174/' })]);
+    h.swProofs[1]?.resolve();
+    await Promise.resolve();
+    h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+    await expect(ready).resolves.toMatchObject({ port: 5174, url: '/preview/5174/' });
+    expect(h.events).not.toContain('mount:owner-a:4173');
+  });
+
   it.each([
     ['url', { url: '/preview/5173/replaced/' }],
     ['source', { source: 'node' as const }],
     ['session', { sid: 'replacement-run' }],
   ] as const)('restarts proof when the advertised %s identity changes', async (_label, change) => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     h.publish([advertisement()]);
     expect(h.swProofs).toHaveLength(1);
@@ -164,7 +258,12 @@ describe('preview readiness', () => {
 
   it('rejects a failed controlling-service-worker proof and revokes the route', async () => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     h.publish([advertisement()]);
     h.swProofs[0]?.reject(new Error('controlling service worker changed'));
@@ -176,7 +275,12 @@ describe('preview readiness', () => {
 
   it('rejects a non-success routed response without inventing LIVE', async () => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     h.publish([advertisement()]);
     h.swProofs[0]?.resolve();
@@ -189,7 +293,12 @@ describe('preview readiness', () => {
 
   it('close aborts pending proof, tears down the route, and is idempotent', async () => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
     h.publish([advertisement()]);
 
     const first = h.readiness.close();
@@ -202,7 +311,12 @@ describe('preview readiness', () => {
 
   it('close revokes a route after readiness has already resolved', async () => {
     const h = harness();
-    const ready = h.readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
     h.publish([advertisement()]);
     h.swProofs[0]?.resolve();
     await Promise.resolve();
@@ -232,7 +346,12 @@ describe('preview readiness', () => {
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
 
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     await expect(ready).rejects.toBe(mountFailure);
     expect(detach).toHaveBeenCalledTimes(1);
@@ -267,7 +386,12 @@ describe('preview readiness', () => {
       proveServiceWorkerControl: vi.fn(async () => {}),
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     publish([first]);
     const handle = await ready;
@@ -306,7 +430,12 @@ describe('preview readiness', () => {
       proveServiceWorkerControl: vi.fn(() => proof.promise),
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
     publishSnapshot(listener, [advertisement()]);
     const failure = new Error('SW proof failed');
 
@@ -321,6 +450,8 @@ describe('preview readiness', () => {
     let closing: Promise<void> | null = null;
     const ready = h.readiness.waitFor({
       ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
       matches: () => {
         closing = h.readiness.close();
         return true;
@@ -356,7 +487,12 @@ describe('preview readiness', () => {
       proveServiceWorkerControl,
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
     publishSnapshot(listener, [advertisement()]);
 
     await expect(ready).rejects.toBeInstanceOf(PreviewReadinessClosedError);
@@ -387,7 +523,12 @@ describe('preview readiness', () => {
       proveServiceWorkerControl: vi.fn(async () => {}),
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
     publishSnapshot(listener, [advertisement()]);
     await ready;
 
@@ -415,7 +556,12 @@ describe('preview readiness', () => {
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
 
-    const ready = readiness.waitFor({ ownerToken: 'owner-a', matches: () => true });
+    const ready = readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
 
     await expect(ready).rejects.toBeInstanceOf(PreviewReadinessClosedError);
     await expect(closing).resolves.toBeUndefined();
@@ -437,9 +583,14 @@ describe('preview readiness', () => {
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
 
-    await expect(readiness.waitFor({ ownerToken: 'owner-a', matches: () => true })).rejects.toBe(
-      failure,
-    );
+    await expect(
+      readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      }),
+    ).rejects.toBe(failure);
     expect(requestSnapshot).not.toHaveBeenCalled();
   });
 
@@ -459,9 +610,14 @@ describe('preview readiness', () => {
       probe: vi.fn(async () => ({ ok: true, status: 200 })),
     });
 
-    await expect(readiness.waitFor({ ownerToken: 'owner-a', matches: () => true })).rejects.toBe(
-      failure,
-    );
+    await expect(
+      readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      }),
+    ).rejects.toBe(failure);
     expect(detach).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,6 +34,21 @@ export interface ProjectTerminalRun {
   close(): Promise<ProcessExit>;
 }
 
+export interface ProjectTerminalAdmission {
+  readonly ptySid: string;
+  readonly ptyRid: string;
+}
+
+const runAdmissions = new WeakMap<ProjectTerminalRun, Promise<ProjectTerminalAdmission>>();
+
+/** Package-internal PTY actor admission; never reconstructed by a consumer. */
+export function projectTerminalAdmission(
+  run: ProjectTerminalRun,
+): Promise<ProjectTerminalAdmission> {
+  const admission = runAdmissions.get(run);
+  return admission ?? Promise.reject(new TypeError('Unknown ProjectTerminal run'));
+}
+
 export interface ProjectTerminal {
   run(line: string): ProjectTerminalRun;
   write(data: string | Uint8Array): Promise<void>;
@@ -82,6 +97,7 @@ export function createProjectTerminal(_options: {
     | 'released';
   type RunState = {
     readonly line: string;
+    readonly admission: Deferred<ProjectTerminalAdmission>;
     readonly ready: Deferred<void>;
     readonly exited: Deferred<ProcessExit>;
     handle: ProjectTerminalRun;
@@ -174,6 +190,7 @@ export function createProjectTerminal(_options: {
 
   function failRun(state: RunState, error: Error): void {
     if (state.lifecycle !== 'released') state.lifecycle = 'settled';
+    state.admission.reject(error);
     state.stopOutcome?.reject(error);
     state.ready.reject(error);
     state.exited.reject(error);
@@ -289,6 +306,13 @@ export function createProjectTerminal(_options: {
 
   function admit(state: RunState, rid: string): void {
     if (state !== active || terminalFailure !== null || terminalClosed) return;
+    if (
+      state.lifecycle === 'session-closing' ||
+      state.lifecycle === 'settled' ||
+      state.lifecycle === 'released'
+    ) {
+      return;
+    }
     if (typeof rid !== 'string' || rid.length === 0) {
       failRun(state, new Error(`Project terminal ${id} received an empty run id`));
       return;
@@ -297,13 +321,6 @@ export function createProjectTerminal(_options: {
       if (state.rid !== rid) {
         failRun(state, new Error(`Project terminal ${id} received two run ids`));
       }
-      return;
-    }
-    if (
-      state.lifecycle === 'session-closing' ||
-      state.lifecycle === 'settled' ||
-      state.lifecycle === 'released'
-    ) {
       return;
     }
     state.rid = rid;
@@ -317,9 +334,6 @@ export function createProjectTerminal(_options: {
       });
     }
     if (state.lifecycle === 'stopping') {
-      state.ready.reject(
-        new ClosedHandleError(`Project terminal run ${id} readiness`, 'stop requested'),
-      );
       try {
         port.signal(id, rid);
       } catch (error) {
@@ -328,6 +342,7 @@ export function createProjectTerminal(_options: {
       return;
     }
     state.lifecycle = 'admitted';
+    state.admission.resolve(Object.freeze({ ptySid: id, ptyRid: rid }));
     state.ready.resolve(undefined);
     pumpInput(state);
     pumpResize(state);
@@ -410,6 +425,7 @@ export function createProjectTerminal(_options: {
   }
 
   function createRun(line: string): ProjectTerminalRun {
+    const admission = deferred<ProjectTerminalAdmission>();
     const ready = deferred<void>();
     const exited = deferred<ProcessExit>();
     const idleBarrier = Promise.all([...idleResizeWaiters].map((waiter) => waiter.promise)).then(
@@ -433,6 +449,10 @@ export function createProjectTerminal(_options: {
         state.stopOutcome = stopOutcome;
         state.stopPromise = stopOutcome.promise;
         const controlError = new ClosedHandleError(`Project terminal run ${id}`, 'stop requested');
+        if (state.rid === null) {
+          state.admission.reject(controlError);
+          state.ready.reject(controlError);
+        }
         rejectInput(state, controlError);
         rejectResizes(state, controlError);
         if (state.rid !== null) {
@@ -451,6 +471,7 @@ export function createProjectTerminal(_options: {
     };
     const state: RunState = {
       line,
+      admission,
       ready,
       exited,
       handle,
@@ -468,6 +489,7 @@ export function createProjectTerminal(_options: {
       resizeQueue: [],
       resizeInFlight: null,
     };
+    runAdmissions.set(handle, admission.promise);
     active = state;
 
     void Promise.all([openPromise, idleBarrier]).then(
@@ -498,9 +520,9 @@ export function createProjectTerminal(_options: {
             state.lifecycle = 'settled';
             state.exit = terminal.exit;
             if (state.rid === null) {
-              state.ready.reject(
-                new Error(`Project terminal ${id} exited before owner run admission`),
-              );
+              const failure = new Error(`Project terminal ${id} exited before owner run admission`);
+              state.admission.reject(failure);
+              state.ready.reject(failure);
             }
             rejectInput(state, new ClosedHandleError(`Project terminal run ${id}`, terminal.exit));
             rejectResizes(
@@ -675,6 +697,12 @@ export function createProjectTerminal(_options: {
         }
         closeOutcome.resolve(undefined);
       })();
+      void Promise.resolve().then(() => {
+        if (state !== null && state.rid === null && state.lifecycle === 'session-closing') {
+          state.admission.reject(closingError);
+          state.ready.reject(closingError);
+        }
+      });
       return closeOutcome.promise;
     },
   };

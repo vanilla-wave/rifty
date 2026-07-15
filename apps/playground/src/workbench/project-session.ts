@@ -10,6 +10,7 @@ export {
 export interface ProjectRuntimeRun<TReady> {
   readonly run: ProjectTerminalRun;
   readonly ready: Promise<TReady>;
+  readonly closed: Promise<void>;
 }
 
 export interface ProjectRuntime<TReady> {
@@ -78,6 +79,7 @@ export function createProjectSession<TReady>(_options: {
         runClaimed = false;
         throw error;
       }
+      void started.closed.catch(() => {});
 
       let runClosePromise: Promise<ProcessExit> | null = null;
       const ready = Promise.race([
@@ -102,18 +104,29 @@ export function createProjectSession<TReady>(_options: {
           } catch (error) {
             terminalClose = Promise.reject(errorFrom(error));
           }
-          void terminalClose.then(
-            (exit) => {
-              if (activeRun === run) activeRun = null;
-              runClaimed = false;
-              closeOutcome.resolve(exit);
-            },
-            (error: unknown) => {
-              if (activeRun === run) activeRun = null;
-              runClaimed = false;
-              closeOutcome.reject(errorFrom(error));
-            },
-          );
+          void Promise.allSettled([terminalClose, started.closed]).then((results) => {
+            if (activeRun === run) activeRun = null;
+            runClaimed = false;
+            const errors = results.flatMap((result) =>
+              result.status === 'rejected' ? [errorFrom(result.reason)] : [],
+            );
+            if (errors.length === 1) {
+              closeOutcome.reject(errors[0] as Error);
+              return;
+            }
+            if (errors.length > 1) {
+              closeOutcome.reject(
+                new AggregateError(errors, errors.map((error) => error.message).join('; ')),
+              );
+              return;
+            }
+            const terminalResult = results[0];
+            if (terminalResult?.status !== 'fulfilled') {
+              closeOutcome.reject(new Error('Project run close lost its terminal result'));
+              return;
+            }
+            closeOutcome.resolve(terminalResult.value);
+          });
           return closeOutcome.promise;
         },
       };

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { type PtyFrame, isOwnerToPage, isPageToOwner } from './pty-protocol.ts';
+import {
+  type PreviewPortEntry,
+  type PtyFrame,
+  isOwnerToPage,
+  isPageToOwner,
+} from './pty-protocol.ts';
 
 describe('pty-protocol', () => {
   it('classifies page→owner frames', () => {
@@ -168,13 +173,49 @@ describe('pty-protocol', () => {
 });
 
 describe('pty:preview frames', () => {
+  it('requires PTY session and run identity together or neither', () => {
+    const uncorrelated = {
+      port: 3000,
+      url: '/preview/3000/',
+      label: 'host source',
+      source: 'node',
+      sid: 'host-1',
+    } satisfies PreviewPortEntry;
+    const correlated = {
+      ...uncorrelated,
+      sid: 'node-1',
+      ptySid: 'terminal-1',
+      ptyRid: 'run-1',
+    } satisfies PreviewPortEntry;
+
+    // @ts-expect-error PTY correlation cannot lose the admitted run id.
+    const missingRid: PreviewPortEntry = { ...correlated, ptyRid: undefined };
+    // @ts-expect-error PTY correlation cannot invent a run without its session.
+    const missingSid: PreviewPortEntry = { ...correlated, ptySid: undefined };
+
+    expect([uncorrelated, correlated]).toHaveLength(2);
+    expect([missingRid, missingSid]).toHaveLength(2);
+  });
+
   it('classifies pty:preview as owner→page', () => {
     const f: PtyFrame = {
       type: 'pty:preview',
-      ports: [{ port: 3000, url: '/preview/3000/', label: 'server.js', source: 'node', sid: 's1' }],
+      ports: [
+        {
+          port: 3000,
+          url: '/preview/3000/',
+          label: 'server.js',
+          source: 'node',
+          sid: 'node-1',
+          ptySid: 'terminal-1',
+          ptyRid: 'run-1',
+        },
+      ],
     };
     expect(isOwnerToPage(f)).toBe(true);
     expect(isPageToOwner(f)).toBe(false);
+    expect(f.ports[0]?.ptySid).toBe('terminal-1');
+    expect(f.ports[0]?.ptyRid).toBe('run-1');
   });
   it('classifies pty:preview-req as page→owner', () => {
     const f: PtyFrame = { type: 'pty:preview-req' };

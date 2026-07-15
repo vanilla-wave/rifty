@@ -1,4 +1,4 @@
-export interface PreviewAdvertisement {
+interface PreviewAdvertisementBase {
   readonly ownerToken: string;
   readonly port: number;
   readonly url: string;
@@ -6,6 +6,12 @@ export interface PreviewAdvertisement {
   readonly sid: string;
   readonly previewScope?: string;
 }
+
+export type PreviewAdvertisement = PreviewAdvertisementBase &
+  (
+    | { readonly ptySid: string; readonly ptyRid: string }
+    | { readonly ptySid?: never; readonly ptyRid?: never }
+  );
 
 export interface PreviewHandle {
   readonly ownerToken: string;
@@ -42,6 +48,8 @@ export interface PreviewReadinessDependencies {
 export interface PreviewReadiness {
   waitFor(options: {
     readonly ownerToken: string;
+    readonly ptySid: string;
+    readonly ptyRid: string;
     readonly matches: (entry: PreviewAdvertisement) => boolean;
   }): Promise<PreviewHandle>;
   close(): Promise<void>;
@@ -56,6 +64,8 @@ export function createPreviewReadiness(
 
   type Wait = {
     readonly ownerToken: string;
+    readonly ptySid: string;
+    readonly ptyRid: string;
     readonly matches: (entry: PreviewAdvertisement) => boolean;
     readonly promise: Promise<PreviewHandle>;
     readonly resolve: (handle: PreviewHandle) => void;
@@ -93,6 +103,8 @@ export function createPreviewReadiness(
       entry.source,
       entry.sid,
       entry.previewScope ?? null,
+      entry.ptySid ?? null,
+      entry.ptyRid ?? null,
     ]);
 
   const clearTimeoutIfNeeded = (): void => {
@@ -170,6 +182,7 @@ export function createPreviewReadiness(
   ): PreviewAdvertisement | null => {
     for (const entry of entries) {
       if (entry.ownerToken !== pending.ownerToken) continue;
+      if (entry.ptySid !== pending.ptySid || entry.ptyRid !== pending.ptyRid) continue;
       if (pending.matches(entry)) return entry;
     }
     return null;
@@ -272,6 +285,8 @@ export function createPreviewReadiness(
       void promise.catch(() => {});
       const pending: Wait = {
         ownerToken: options.ownerToken,
+        ptySid: options.ptySid,
+        ptyRid: options.ptyRid,
         matches: options.matches,
         promise,
         resolve,
