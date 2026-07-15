@@ -125,7 +125,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0194 | eddy v1.2 — stateless bundle store, shared resolve caches, learned pins |
 | 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
-| 0249 | Owner-managed shadow runtime assets in a workspace-private content store |
+| 0249 | Owner-managed shadow runtime assets in a Workbench content store |
 | 0258 | Structured install acquisition provenance |
 
 ### playground
@@ -310,6 +310,7 @@ superseded.
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
 | 0231 esbuild asset-URL bootstrap clause | 0249 / note 2026-07-15 | `RIFTY_ESBUILD_WASM_URL` is removed; verified bytes arrive through ADR-0266's explicit capability port; kernel/node/SQLite bootstrap config stands |
 | 0261 install-claim schema + full esbuild-policy identity clauses | 0249 / note 2026-07-15 | v4 adds exact lockfile digest; asset-only pin fields no longer invalidate the dependency tree; owner/root/non-transferability/durability rules stand |
+| 0263 host-resolved esbuild WASM + sealed-root surface clauses | 0249 / note 2026-07-15 | `deployment.wasm` retains host-owned SQLite only; Workbench adds semantic runtime-asset inspect/clear and open progress without exposing owner protocols |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |

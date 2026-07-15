@@ -7,7 +7,7 @@ why: per-package proof (native oracle + contract suites + browser spec) is linea
 user_story: As a contributor adding one shadow package, I want my PR to prove MY capsule plus cheap global gates, but today esbuild's full proof pipeline is monolithic repo-global wiring that each new package would replicate into every PR
 epic: honest-shadow-substitutions
 blocked_by: []
-sources: [docs/adr/toolchain-build/0226-upstream-derived-filesystem-enabled-esbuild-runtime.md, docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workspace-content-store.md]
+sources: [docs/adr/toolchain-build/0226-upstream-derived-filesystem-enabled-esbuild-runtime.md, docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md]
 code: [tools/shadow-registry/src/index.ts, tools/shadow-registry/esbuild-runtime-policy.json, tools/shadow-registry/tools/generate-esbuild-runtime.ts, tools/checks/pr-check.mjs]
 ---
 

@@ -6,8 +6,8 @@ created: 2026-07-13
 why: bakedOverrides/internalsShims are module-level exports; an embedder cannot add their own substitution without forking the repo
 user_story: As an embedder shipping rifty in my product, I want to declare my own package substitution (trigger, overlay files, pinned assets) at API construction, but today the registry is compiled in
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-asset-store]
-sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workspace-content-store.md, docs/backlog/epics/embeddable-dev-loop.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md]
+blocked_by: [distribution/workbench-runtime-assets]
+sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/backlog/epics/embeddable-dev-loop.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md]
 code: [tools/shadow-registry/src/index.ts, packages/npm-client/src/shadow-shims.ts, packages/npm-client/src/overrides.ts, src/index.ts]
 ---
 
@@ -23,8 +23,11 @@ distinct values, with builtins as defaults:
 - `ShadowRuntimeAdapterRegistry`: host code keyed by adapter id, with explicit
   start/read/teardown behavior and parity ownership.
 
-Proposed construction fields are `shadowCatalogs` and
-`shadowRuntimeAdapters`. Each catalog has a stable id, schema version, and
+Proposed construction exposes declarative `shadowCatalogs`; the
+Worker-loadable runtime-adapter composition remains undecided. Passing
+`shadowRuntimeAdapters: Record<string, function>` through `openWorkbench`
+is rejected: owner boot accepts clone-safe data and ADR-0263 forbids a generic
+runtime registry. Each catalog has a stable id, schema version, and
 canonical digest. Builtin/custom and custom/custom id or trigger-range overlap
 is a construction error; disabling a builtin requires an explicit builtin id,
 never replacement by ordering. Overlay targets and archive members are
@@ -37,12 +40,12 @@ resolver.
 
 Applied asset descriptors ride the owner `ShadowAssetManager`; runtime bytes
 never grant executable hooks to registry data. A local catalog may reference a
-locally registered adapter. A remote catalog cannot activate host code by id
-alone: construction also requires a local allowlist binding of exact
-`(catalog id, catalog digest, adapter id)` to that adapter capability. Missing or
-mismatched binding throws `ESHADOWADAPTERBINDING`. Overlay/substitution config
-joins install-artifact identity; exact assets use the manager's separate
-required-set digest.
+locally bundled/loaded adapter only after a later ADR chooses a Worker-reachable
+mechanism and exact configuration identity. A remote catalog cannot activate
+host code by id alone. Missing or mismatched exact
+`(catalog id, catalog digest, adapter id)` binding throws
+`ESHADOWADAPTERBINDING`. Overlay/substitution config joins install-artifact
+identity; exact assets use the manager's separate required-set digest.
 
 Remote catalogs provide declarative data only; runtime adapters are trusted host
 code supplied locally and bound as above. Catalog data is not a sandbox:

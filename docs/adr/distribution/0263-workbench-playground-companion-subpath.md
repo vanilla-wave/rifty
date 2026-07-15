@@ -63,6 +63,13 @@ decisions unchanged.
   the host composition root. Vite is the first verified host bundler; others
   remain explicit unverified gaps.
 
+Correction 2026-07-15 (ADR-0249): host-resolved WASM means host-owned SQLite,
+not npm-derived runtime assets. `WorkbenchDeployment.wasm` retains `sqlite`
+and drops `esbuild`; the owner obtains esbuild from the verified npm pipeline.
+The sealed root also exposes semantic `runtimeAssets.inspect()/clear()` and
+optional typed runtime-asset progress on `openProject`; manager/storage/protocol
+internals remain non-public.
+
 The companion exposes one composition entry and clone-safe neutral plans:
 
 ```ts

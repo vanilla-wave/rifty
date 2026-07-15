@@ -3,11 +3,11 @@ area: npm-client
 status: draft
 title: Retire the @esbuild/wasi-preview1 alias override — synthesize the delegate, stop downloading ~20MB nobody reads
 created: 2026-07-13
-why: install pulls the full alias package whose bytes the delegate shim immediately shadows; with the shadow asset store (ADR-0249) the executed bytes have their own honest path
+why: install pulls the full alias package whose bytes the delegate shim immediately shadows; with the Workbench runtime-asset path (ADR-0249) the executed bytes have their own honest path
 user_story: As a developer installing a vite project, I want cold install to not download ~20MB of alias bytes that are overwritten by a 175-byte delegate and read by nobody, but today the override stays load-bearing because nothing measured whether dropping it breaks real-Vite e2e
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-asset-store]
-sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workspace-content-store.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md, docs/adr/playground/0261-root-bound-serialized-install-trust-claims-and-non-transferable-claim-ingress.md]
+blocked_by: [distribution/workbench-runtime-assets]
+sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md, docs/adr/playground/0261-root-bound-serialized-install-trust-claims-and-non-transferable-claim-ingress.md]
 code: [tools/shadow-registry/src/index.ts, packages/npm-client/src/shadow-shims.ts, packages/npm-client/src/overrides.ts, packages/npm-client/src/installer-lockfile-reader.ts]
 ---
 
