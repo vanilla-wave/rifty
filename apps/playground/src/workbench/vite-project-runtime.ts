@@ -20,6 +20,7 @@ export function createViteProjectRuntime(
     readonly run: ProjectTerminalRun;
     readiness: PreviewReadiness | null;
     readinessClose: Promise<void> | null;
+    retirement: Promise<void> | null;
     physicalSettled: boolean;
     cancelled: boolean;
   };
@@ -49,18 +50,29 @@ export function createViteProjectRuntime(
     return state.readinessClose;
   };
 
-  const retireAfterPhysicalExit = (state: RunState): void => {
-    if (state.physicalSettled) return;
+  const retireAfterPhysicalExit = (state: RunState): Promise<void> => {
+    if (state.retirement !== null) return state.retirement;
     state.physicalSettled = true;
     state.cancelled = true;
-    if (active === state) active = null;
-    void Promise.resolve()
-      .then(() => closeReadiness(state))
-      .then(
-        () => states.delete(state),
-        () => {},
-      );
+    state.retirement = (async () => {
+      try {
+        await closeReadiness(state);
+        states.delete(state);
+        if (active === state) active = null;
+      } catch (error) {
+        closing = true;
+        throw asError(error);
+      }
+    })();
+    void state.retirement.catch(() => {});
+    return state.retirement;
   };
+
+  const waitForRetirement = (state: RunState): Promise<void> =>
+    state.run.exited.then(
+      () => retireAfterPhysicalExit(state),
+      () => retireAfterPhysicalExit(state),
+    );
 
   return Object.freeze({
     start() {
@@ -72,6 +84,7 @@ export function createViteProjectRuntime(
         run,
         readiness: null,
         readinessClose: null,
+        retirement: null,
         physicalSettled: false,
         cancelled: false,
       };
@@ -96,12 +109,10 @@ export function createViteProjectRuntime(
         });
       });
       void ready.catch(() => {});
-      void run.exited.then(
-        () => retireAfterPhysicalExit(state),
-        () => retireAfterPhysicalExit(state),
-      );
+      const runClosed = waitForRetirement(state);
+      void runClosed.catch(() => {});
 
-      return Object.freeze({ run, ready });
+      return Object.freeze({ run, ready, closed: runClosed });
     },
 
     close() {
@@ -121,10 +132,8 @@ export function createViteProjectRuntime(
             }
           });
         const runResults = await Promise.allSettled(runClosures);
-        const readinessResults = await Promise.allSettled(
-          owned.map((state) => closeReadiness(state)),
-        );
-        const errors = [...runResults, ...readinessResults].flatMap((result) =>
+        const retirementResults = await Promise.allSettled(owned.map(waitForRetirement));
+        const errors = [...runResults, ...retirementResults].flatMap((result) =>
           result.status === 'rejected' ? [asError(result.reason)] : [],
         );
         active = null;

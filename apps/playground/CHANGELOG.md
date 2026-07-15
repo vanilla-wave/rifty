@@ -17,7 +17,8 @@
 
 - Workbench owner/runtime adapters now publish the owner-selected storage
   snapshot and bind Vite readiness, exit, and cleanup to the exact admitted PTY
-  run plus routed preview proof.
+  run plus routed preview proof. Run close remains claimed until preview-route
+  cleanup settles and reports teardown failures instead of racing the next run.
 - Preview-producing dev, installed-bin, and Node children capture owner-supplied
   PTY identity at shell construction. Guest environment overrides can no longer
   relabel a late preview event as a different run.

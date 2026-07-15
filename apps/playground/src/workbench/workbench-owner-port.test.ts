@@ -59,8 +59,8 @@ function ownerInput(
 function harness(snapshot: unknown = REQUIRED_STORAGE) {
   const ready = deferred<void>();
   const closed = deferred<unknown>();
-  // Contract stubs do not consume these boundary promises yet. Observe both so
-  // the RED suite reports assertion failures, never test-process noise.
+  // Keep explicit rejection observers when a case fails before the port consumes
+  // either boundary promise.
   void ready.promise.catch(() => {});
   void closed.promise.catch(() => {});
   const close = vi.fn<() => void>();
