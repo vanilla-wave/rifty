@@ -21,6 +21,13 @@ Observed four consecutive times while validating PR #145:
 - `pnpm vitest run --reporter=dot --bail=1` over the same tree passed standalone
   (526 files / 6259 tests before the final added palette test).
 
+Recurred twice on the Workbench Vite vertical SHA `9397feaf`: `test:run`
+aborted after 48.7–53.2 s with no failed assertion while every sibling check
+finished. The identical standalone suite passed (539 files / 6551 tests), and
+full Vitest also passed beside `build:libs`; a Vite false sourcemap warning was
+non-fatal. The gate needs child signal/resource telemetry before choosing its
+bounded concurrency policy.
+
 This points to the gate's host-load envelope, not a repeatable product test
 failure. Refine with bounded-concurrency measurements and the exact child exit
 signal/resource telemetry. The fix must keep every current check and must not
