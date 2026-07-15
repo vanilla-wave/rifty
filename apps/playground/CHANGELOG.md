@@ -12,6 +12,9 @@
 - Deployment and acquisition URL references resolve once against the document
   API base and satisfy destination-specific browser rules before any lock,
   service-worker, storage, or owner effect.
+- The owner package authority now quiesces prior FIFO work through detached
+  stamp settlement. Owner package state registers, activates, and ensures exact
+  per-project configs in one admission without a placeholder bootstrap project.
 
 ### Changed (app-local Workbench Vite vertical)
 

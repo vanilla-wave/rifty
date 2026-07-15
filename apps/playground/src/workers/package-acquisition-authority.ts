@@ -104,6 +104,18 @@ export interface ProjectSwitchCommand {
   readonly packageJsonText?: string;
 }
 
+export interface ActivateAndEnsurePackagesCommand {
+  readonly type: 'activate-and-ensure';
+  /** Bind adapter-owned config at the FIFO head before any active-project observation. */
+  readonly register: () => void;
+  /** Resolve at the FIFO head so back-to-back activations observe the actual predecessor. */
+  readonly from: PackageAcquisitionProject | null | (() => PackageAcquisitionProject | null);
+  readonly to: PackageAcquisitionProject;
+  readonly packageJsonText: string;
+  readonly replaceTreeOnMiss?: boolean;
+  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
+}
+
 export type PackageMutationTransition =
   | { readonly mode: 'demote'; readonly project: PackageAcquisitionProject }
   | { readonly mode: 'revoke'; readonly root: string };
@@ -124,7 +136,8 @@ export type PackageAcquisitionCommand =
   | PackageJsonEditCommand
   | ResetPackagesCommand
   | GuardedPackageMutationCommand
-  | ProjectSwitchCommand;
+  | ProjectSwitchCommand
+  | ActivateAndEnsurePackagesCommand;
 
 export type PackageInstallRequest =
   | Pick<EnsurePackagesCommand, 'type' | 'project' | 'packageJsonText'>
@@ -252,7 +265,10 @@ export type PackageAcquisitionFailure =
 export interface PackageAcquisitionAuthority {
   /** Live projects observed by this owner; retained conservatively after revoke. */
   knownProjects?(): readonly PackageAcquisitionProject[];
+  /** Wait for commands admitted before this call and their detached stamp settlements. */
+  quiesce(): Promise<void>;
   dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: ActivateAndEnsurePackagesCommand): Promise<AcquisitionProvenance>;
   dispatch(command: TerminalInstallCommand): Promise<AcquisitionProvenance | undefined>;
   dispatch(command: PackageJsonEditCommand): Promise<void>;
   dispatch(command: ResetPackagesCommand): Promise<void>;
@@ -262,9 +278,15 @@ export interface PackageAcquisitionAuthority {
 }
 
 interface QueueEntry {
+  readonly admission: number;
   readonly command: PackageAcquisitionCommand;
   readonly resolve: (value: AcquisitionProvenance | undefined) => void;
   readonly reject: (reason: unknown) => void;
+}
+
+interface AdmissionWaiter {
+  readonly through: number;
+  readonly resolve: () => void;
 }
 
 function reasonOf(error: unknown): string {
@@ -306,7 +328,12 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #queue: QueueEntry[] = [];
   readonly #terminalActivity = new Map<string, string>();
   readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
+  readonly #detachedSettlements = new Map<Promise<void>, number>();
+  readonly #admissionWaiters = new Set<AdmissionWaiter>();
   #draining = false;
+  #lastAdmission = 0;
+  #completedAdmission = 0;
+  #executingAdmission: number | null = null;
 
   constructor(options: PackageAcquisitionAuthorityOptions) {
     this.#stamps = options.stamps;
@@ -325,7 +352,21 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#knownProjects.set(root, { ...project, root });
   }
 
+  async quiesce(): Promise<void> {
+    const through = this.#lastAdmission;
+    if (through === 0) return;
+    await this.#waitForAdmission(through);
+    while (true) {
+      const pending = [...this.#detachedSettlements]
+        .filter(([, admission]) => admission <= through)
+        .map(([settlement]) => settlement);
+      if (pending.length === 0) return;
+      await Promise.allSettled(pending);
+    }
+  }
+
   dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: ActivateAndEnsurePackagesCommand): Promise<AcquisitionProvenance>;
   dispatch(command: TerminalInstallCommand): Promise<AcquisitionProvenance | undefined>;
   dispatch(command: PackageJsonEditCommand): Promise<void>;
   dispatch(command: ResetPackagesCommand): Promise<void>;
@@ -333,8 +374,10 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   dispatch(command: ProjectSwitchCommand): Promise<void>;
   dispatch(command: PackageAcquisitionCommand): Promise<AcquisitionProvenance | undefined>;
   dispatch(command: PackageAcquisitionCommand): Promise<unknown> {
+    const admission = ++this.#lastAdmission;
     const pending = new Promise<AcquisitionProvenance | undefined>((resolve, reject) => {
       this.#queue.push({
+        admission,
         command,
         resolve: (value) => resolve(value),
         reject,
@@ -355,16 +398,48 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       while (this.#queue.length > 0) {
         const entry = this.#queue.shift();
         if (!entry) break;
+        this.#executingAdmission = entry.admission;
         try {
           const value = await this.#execute(entry.command);
           entry.resolve(value);
         } catch (error) {
           entry.reject(error);
+        } finally {
+          this.#executingAdmission = null;
+          this.#completeAdmission(entry.admission);
         }
       }
     } finally {
       this.#draining = false;
     }
+  }
+
+  #waitForAdmission(through: number): Promise<void> {
+    if (this.#completedAdmission >= through) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.#admissionWaiters.add({ through, resolve });
+    });
+  }
+
+  #completeAdmission(admission: number): void {
+    this.#completedAdmission = admission;
+    for (const waiter of this.#admissionWaiters) {
+      if (waiter.through > admission) continue;
+      this.#admissionWaiters.delete(waiter);
+      waiter.resolve();
+    }
+  }
+
+  #trackDetachedSettlement(settlement: Promise<void>): void {
+    const admission = this.#executingAdmission;
+    if (admission === null) {
+      throw new Error('detached package settlement has no FIFO admission');
+    }
+    this.#detachedSettlements.set(settlement, admission);
+    const forget = (): void => {
+      this.#detachedSettlements.delete(settlement);
+    };
+    void settlement.then(forget, forget);
   }
 
   async #execute(command: PackageAcquisitionCommand): Promise<AcquisitionProvenance | undefined> {
@@ -412,6 +487,21 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         }
         await this.#adapter.switchProject(command);
         return;
+      case 'activate-and-ensure': {
+        command.register();
+        const from = typeof command.from === 'function' ? command.from() : command.from;
+        if (from) this.#rememberProject(from);
+        this.#rememberProject(command.to);
+        await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
+        return this.#ensure({
+          type: 'ensure',
+          project: command.to,
+          packageJsonText: command.packageJsonText,
+          fallback: 'install',
+          ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+          ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
+        });
+      }
       default:
         return unreachable(command);
     }
@@ -797,7 +887,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     };
 
     if (this.#stampTransition?.flush) {
-      void settle();
+      this.#trackDetachedSettlement(settle());
       return;
     }
     await settle();
