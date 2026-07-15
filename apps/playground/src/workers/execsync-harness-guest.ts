@@ -15,8 +15,7 @@
  * (kernel pre-entry hook) and `process.env` carries the env the page put on the
  * spawn spec.
  *
- * Two assertions, both written to guest stdout (the page reads them off
- * `handle.stdout()`):
+ * Normal-mode observations are written to guest stdout:
  *   1. `BLOCKED=<text>` — a plain `execSync('node /blocked.js')` proving the
  *      blocking round-trip returns the child's stdout.
  *   2. `HEX=<hex>` — `execSync('node /child.js')` where the child writes raw
@@ -24,6 +23,8 @@
  *      `fffe00`. A broken v2 frame mangles to U+FFFD → `efbfbd...`; a broken
  *      dispatcher hangs → the page times out. Only the real SAB + v2-frame path
  *      yields `fffe00`.
+ *   3. `LOADER=<text>` — recursive node-entry loader + owner FS round-trip.
+ * Fault mode catches the same real call and emits `CONFIG_ERROR=<message>`.
  *
  * The child scripts are seeded into the PAGE realm's sync mirror by the page
  * harness (the execSync handler's resolver reads the page mirror — same
@@ -77,25 +78,40 @@ if (!isSabIpcSupported()) {
   fail('isSabIpcSupported() is false in the guest realm (no SAB / COI?)');
 }
 
-// 1. Blocking round-trip with a plain ASCII result. Proves the SAB call blocks
-//    this realm and returns the child's captured stdout.
-const blocked = execSync('node /blocked.js');
-emit(`BLOCKED=${new TextDecoder().decode(blocked)}`);
+const fault = globalThis.process.env.RIFTY_EXECSYNC_FAULT;
+if (fault === 'missing-node-entry-runtime-config') {
+  let observedError = '';
+  try {
+    execSync('node /blocked.js');
+  } catch (error) {
+    observedError = error instanceof Error ? error.message : String(error);
+  }
+  if (observedError === '')
+    fail('execSync unexpectedly succeeded without node-entry runtime config');
+  emit(`CONFIG_ERROR=${observedError}`);
+} else {
+  if (fault !== undefined) fail(`unknown RIFTY_EXECSYNC_FAULT: ${fault}`);
 
-// 2. The load-bearing assertion: non-UTF-8 bytes survive the v2 binary frame
-//    byte-exact. `child.js` writes [0xff,0xfe,0x00]; a correct round-trip yields
-//    hex 'fffe00' (computed from raw bytes — no TextDecoder, which would mangle).
-const out = execSync('node /child.js');
-emit(`HEX=${toHex(out)}`);
+  // 1. Blocking round-trip with a plain ASCII result. Proves the SAB call blocks
+  //    this realm and returns the child's captured stdout.
+  const blocked = execSync('node /blocked.js');
+  emit(`BLOCKED=${new TextDecoder().decode(blocked)}`);
 
-// 3. ADR-0137 acceptance: the recursive child runs through the node-entry
-//    bootstrap + module loader. `/scripts/build.js` starts with a `#!` shebang
-//    (stripped, not a SyntaxError), does a relative `import './config.js'`
-//    (resolved against the owner store over fs.* RPC), and reads `./pkg.json`
-//    via `fs.readFileSync` (the owner store, not an empty mirror). Result is
-//    `built:demo-pkg`. The OLD raw `kind:'source'` path threw on the shebang,
-//    could not resolve the import, and read an empty mirror — this is the gap.
-const built = execSync('node /scripts/build.js');
-emit(`LOADER=${new TextDecoder().decode(built)}`);
+  // 2. The load-bearing assertion: non-UTF-8 bytes survive the v2 binary frame
+  //    byte-exact. `child.js` writes [0xff,0xfe,0x00]; a correct round-trip yields
+  //    hex 'fffe00' (computed from raw bytes — no TextDecoder, which would mangle).
+  const out = execSync('node /child.js');
+  emit(`HEX=${toHex(out)}`);
+
+  // 3. ADR-0137 acceptance: the recursive child runs through the node-entry
+  //    bootstrap + module loader. `/scripts/build.js` starts with a `#!` shebang
+  //    (stripped, not a SyntaxError), does a relative `import './config.js'`
+  //    (resolved against the owner store over fs.* RPC), and reads `./pkg.json`
+  //    via `fs.readFileSync` (the owner store, not an empty mirror). Result is
+  //    `built:demo-pkg`. The OLD raw `kind:'source'` path threw on the shebang,
+  //    could not resolve the import, and read an empty mirror — this is the gap.
+  const built = execSync('node /scripts/build.js');
+  emit(`LOADER=${new TextDecoder().decode(built)}`);
+}
 
 emit('DONE');

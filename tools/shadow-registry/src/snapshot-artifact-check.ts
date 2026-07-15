@@ -35,6 +35,8 @@ export interface SnapshotArtifactExpectation {
   readonly deps: Readonly<Record<string, string>>;
   readonly shims: Readonly<Record<string, SnapshotShim>>;
   readonly canonicalize: (snapshot: CheckedDepSnapshot) => string;
+  /** Prove every post-restore installed-tree transform can consume these bytes. */
+  readonly validateInstallFiles?: (files: ReadonlyMap<string, Uint8Array>) => void;
 }
 
 function stale(label: string, reason: string): never {
@@ -154,6 +156,24 @@ export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpec
     stale(expectation.label, 'dependency request differs from the current template');
   }
   proveCurrentShimBytes(snapshot, expectation.label, expectation.shims);
+  if (expectation.validateInstallFiles) {
+    const files = new Map(
+      snapshot.nodeModules.files.map((file) => [
+        file.path,
+        new Uint8Array(Buffer.from(file.content, 'base64')),
+      ]),
+    );
+    try {
+      expectation.validateInstallFiles(files);
+    } catch (error) {
+      stale(
+        expectation.label,
+        error instanceof Error
+          ? error.message
+          : `installed-tree transform failed: ${String(error)}`,
+      );
+    }
+  }
 
   const canonical = gzipSync(Buffer.from(expectation.canonicalize(snapshot)), { level: 9 });
   if (!Buffer.from(expectation.bytes).equals(canonical)) {

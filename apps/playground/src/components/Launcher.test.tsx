@@ -15,6 +15,7 @@ const base = {
   projects: [{ id: 'p1', name: 'node-api', starter: 'node', editedAt: '4m ago' }],
   scratch: { starter: 'react', dirty: true, editedAt: 'edited just now' },
   activeId: 'scratch' as const,
+  ownerBlocked: false,
   storage: 'opfs' as const,
   menuFor: null,
   q: '',
@@ -48,5 +49,14 @@ describe('Launcher', () => {
     expect(renderToString(() => Launcher({ ...base, open: false }))).not.toContain(
       'data-testid="launcher"',
     );
+  });
+  it('passes the project-owner admission state into both launcher tabs', () => {
+    const projects = renderToString(() => Launcher({ ...base, ownerBlocked: true }));
+    expect(projects).toContain('data-switch-disabled="true"');
+
+    const starters = renderToString(() =>
+      Launcher({ ...base, tab: 'starters', ownerBlocked: true }),
+    );
+    expect(starters).toMatch(/data-preset="real-vite"[^>]*disabled/);
   });
 });

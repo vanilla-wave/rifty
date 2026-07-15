@@ -15,10 +15,11 @@ A plain Vite + React app in `apps/` (private, never published) standing in for t
 
 ## Acceptance
 
-- `apps/embed-example` — Vite + React host importing only published-surface entry points of `@riftydev/sdk`/`@riftydev/workbench`/`@riftydev/react` (workspace-resolved); `check:arch` forbids playground/`src/internal/*` imports.
-- Host wiring = exactly the doc's steps, nothing else: COOP/COEP headers on the route, `sw.js` build + registration, WASM asset copy, worker URLs, `registryUrl` from env (D-004).
-- CI e2e (chromium) against `vite build` + preview of the example: mount → `npm install` output scrolls in `RiftyTerminal` → vite dev server LIVE in `RiftyPreview` → edit a file in `RiftyEditor` → preview updates via HMR. Assertions reuse the playground e2e oracles (LIVE state, preview readiness), isolated port per worktree.
-- Embedding doc (`embedding.md` in `docs/public/`): every step the example needs and nothing more; honest notes — "verified on Vite; other bundlers untested", COOP/COEP route consequences for third-party content (OAuth popups, foreign iframes) with the dedicated-route recommendation, host-SW scope note, self-hosted registry requirement with `hosting-*` links.
+- `apps/embed-example` — Vite + React host importing `@riftydev/workbench` only through its root and documented worker subpaths, plus published `@riftydev/react`/service-worker/WASM assets; `check:arch` forbids playground, lower glue, and `src/internal/*` imports.
+- Host composition root contains every Vite-specific query import (`?worker&url`, `?url`) and builds exact `WorkbenchDeployment`; Workbench contains none. The host also supplies required `packageAcquisition.registryUrl`, optional direct `eddy`, and explicit `StoragePolicy` (D-004).
+- CI e2e (chromium) against `vite build` + preview of the example: mount → registry-backed install output scrolls in `RiftyTerminal` → Vite run reaches SW-proven LIVE preview → conditional editor save reflects durably → preview updates via HMR → files CRUD/terminal close/project close leave no route or worker. Assertions reuse the playground oracles, isolated port per worktree.
+- Embedding doc (`embedding.md` in `docs/public/`): every step the example needs and nothing more; exact `deployment`/`packageAcquisition`/`storage` shapes; honest notes — "verified on Vite; other bundlers untested", COOP/COEP route consequences, origin-wide single-Workbench claim, SW scope, and self-hosted registry/Eddy links.
+- Final consumer test builds and packs the first-party closure, installs tarballs without workspace resolution, builds this Vite host, then runs the Chromium flow. A workspace-resolved app alone cannot close acceptance.
 - New-dir tooling wiring complete if the app lands outside existing globs (workspace, vitest, check:arch, backlog SCAN_ROOTS — see services/ precedent).
 
 ## Parity cases

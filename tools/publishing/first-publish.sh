@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of the rifty packages with a token (13: the 12 libs +
+# One-time FIRST publish of the rifty packages with a token (15: the 14 libs +
 # the @riftydev/eddy service). Pass --only <filter> to bootstrap a single new
 # name later (e.g. --only @riftydev/eddy) without re-publishing the rest.
 #

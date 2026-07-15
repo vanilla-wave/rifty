@@ -17,7 +17,7 @@
  * is genuinely missing.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -66,6 +66,19 @@ const FIXED = {
   GIT_COMMITTER_DATE: '1600000000 +0000',
   LC_ALL: 'C',
 };
+const AUTHOR = {
+  name: 'Test',
+  email: 't@example.com',
+  timestamp: 1_600_000_000,
+  timezoneOffset: 0,
+};
+const CLAIM = 'node_modules/.rifty-install-stamp.json';
+
+function assertNoClaim(paths: readonly string[]): void {
+  const claim = paths.find((path) => path.endsWith(`/${CLAIM}`));
+  if (claim === undefined) return;
+  throw Object.assign(new Error(`EPERM: reserved install claim, '${claim}'`), { code: 'EPERM' });
+}
 
 /**
  * Bridge `node:http` ⇄ `git http-backend` (a CGI). Spawns the CGI per request
@@ -141,6 +154,7 @@ describe.skipIf(!AVAILABLE)('git smart-HTTP clone integration', () => {
   let port: number;
   let reposDir: string;
   let workDir: string;
+  let guardedWorkDir: string;
   let expectedSha: string;
 
   beforeAll(async () => {
@@ -170,6 +184,36 @@ describe.skipIf(!AVAILABLE)('git smart-HTTP clone integration', () => {
       .toString()
       .trim();
 
+    // A second remote carries a safe branch and a later main commit whose
+    // ordinary path sorts before a reserved claim. It drives both clone and
+    // pull all-or-nothing preflight over the real smart-HTTP transport.
+    execFileSync('git', ['init', '--bare', '-b', 'main', 'guarded.git'], { cwd: reposDir });
+    guardedWorkDir = mkdtempSync(join(tmpdir(), 'rifty-git-guarded-work-'));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: guardedWorkDir, env });
+    writeFileSync(join(guardedWorkDir, 'a.txt'), 'safe\n');
+    execFileSync('git', ['add', 'a.txt'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['commit', '-m', 'safe'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['remote', 'add', 'origin', join(reposDir, 'guarded.git')], {
+      cwd: guardedWorkDir,
+      env,
+    });
+    execFileSync('git', ['push', 'origin', 'main:main', 'main:safe'], {
+      cwd: guardedWorkDir,
+      env,
+    });
+    execFileSync('git', ['checkout', '-b', 'ordinary'], { cwd: guardedWorkDir, env });
+    writeFileSync(join(guardedWorkDir, 'a.txt'), 'ordinary update\n');
+    execFileSync('git', ['add', 'a.txt'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['commit', '-m', 'ordinary'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['push', 'origin', 'ordinary'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['checkout', 'main'], { cwd: guardedWorkDir, env });
+    writeFileSync(join(guardedWorkDir, 'a.txt'), 'unsafe\n');
+    mkdirSync(join(guardedWorkDir, 'node_modules'), { recursive: true });
+    writeFileSync(join(guardedWorkDir, CLAIM), 'foreign claim\n');
+    execFileSync('git', ['add', 'a.txt', CLAIM], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['commit', '-m', 'reserved claim'], { cwd: guardedWorkDir, env });
+    execFileSync('git', ['push', 'origin', 'main'], { cwd: guardedWorkDir, env });
+
     const started = await startGitServer(reposDir);
     server = started.server;
     port = started.port;
@@ -179,6 +223,7 @@ describe.skipIf(!AVAILABLE)('git smart-HTTP clone integration', () => {
     server?.close();
     if (reposDir) rmSync(reposDir, { recursive: true, force: true });
     if (workDir) rmSync(workDir, { recursive: true, force: true });
+    if (guardedWorkDir) rmSync(guardedWorkDir, { recursive: true, force: true });
   });
 
   it('clones a real smart-HTTP repo into the VFS (canonical objects)', async () => {
@@ -192,5 +237,85 @@ describe.skipIf(!AVAILABLE)('git smart-HTTP clone integration', () => {
     // The cloned HEAD must equal the bare repo's HEAD sha bit-for-bit — proves
     // refs negotiation, packfile, and checkout all preserved canonical objects.
     expect(await g.resolveRef('HEAD')).toBe(expectedSha);
+  });
+
+  it('rejects a real clone target before writing its earlier ordinary file', async () => {
+    const vfs = new MemoryVfs();
+    const g = makeGit({
+      fs: vfsToGitFs(vfs),
+      dir: '/c',
+      http: HTTP,
+      corsProxy: '',
+      assertPortablePaths: assertNoClaim,
+    });
+
+    await expect(
+      g.clone({ url: `http://127.0.0.1:${port}/guarded.git`, singleBranch: true }),
+    ).rejects.toMatchObject({ code: 'EPERM' });
+
+    expect(await vfs.exists('/c/a.txt')).toBe(false);
+    expect(await vfs.exists(`/c/${CLAIM}`)).toBe(false);
+    expect(await vfs.exists('/c/.git')).toBe(false);
+  });
+
+  it('does not claim cleanup ownership of a pre-existing clone gitdir', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/owned/.git', { recursive: true });
+    await vfs.writeFile('/owned/.git/sentinel', 'caller-owned\n');
+    const g = makeGit({
+      fs: vfsToGitFs(vfs),
+      dir: '/owned',
+      http: HTTP,
+      corsProxy: '',
+      assertPortablePaths: assertNoClaim,
+    });
+
+    await expect(
+      g.clone({ url: `http://127.0.0.1:${port}/guarded.git`, singleBranch: true }),
+    ).rejects.toMatchObject({ code: 'EPERM' });
+
+    expect(await vfs.readFileText('/owned/.git/sentinel')).toBe('caller-owned\n');
+    expect(await vfs.exists('/owned/a.txt')).toBe(false);
+  });
+
+  it('fetches then rejects a real pull target before changing HEAD or worktree bytes', async () => {
+    const vfs = new MemoryVfs();
+    const g = makeGit({
+      fs: vfsToGitFs(vfs),
+      dir: '/p',
+      http: HTTP,
+      corsProxy: '',
+      assertPortablePaths: assertNoClaim,
+    });
+    const url = `http://127.0.0.1:${port}/guarded.git`;
+    await g.clone({ url, ref: 'safe', singleBranch: true });
+    const safeHead = await g.resolveRef('HEAD');
+
+    await expect(
+      g.pull({ url, ref: 'safe', remoteRef: 'main', singleBranch: true, author: AUTHOR }),
+    ).rejects.toMatchObject({ code: 'EPERM' });
+
+    expect(await vfs.readFileText('/p/a.txt')).toBe('safe\n');
+    expect(await vfs.exists(`/p/${CLAIM}`)).toBe(false);
+    expect(await g.resolveRef('HEAD')).toBe(safeHead);
+  });
+
+  it('applies an accepted two-phase pull over real smart-HTTP', async () => {
+    const vfs = new MemoryVfs();
+    const g = makeGit({
+      fs: vfsToGitFs(vfs),
+      dir: '/p',
+      http: HTTP,
+      corsProxy: '',
+      assertPortablePaths: assertNoClaim,
+    });
+    const url = `http://127.0.0.1:${port}/guarded.git`;
+    await g.clone({ url, ref: 'safe', singleBranch: true });
+    const before = await g.resolveRef('HEAD');
+
+    await g.pull({ url, ref: 'safe', remoteRef: 'ordinary', singleBranch: true, author: AUTHOR });
+
+    expect(await vfs.readFileText('/p/a.txt')).toBe('ordinary update\n');
+    expect(await g.resolveRef('HEAD')).not.toBe(before);
   });
 });

@@ -18,7 +18,16 @@ export interface PaletteItem {
   /** Dim mono hint on the right (e.g. a path or shortcut). */
   readonly hint?: string;
   readonly icon?: IconName;
+  /** Live admission predicate; checked again for keyboard activation. */
+  readonly disabled?: () => boolean;
   run(): void;
+}
+
+export function activatePaletteItem(item: PaletteItem, onClose: () => void): boolean {
+  if (item.disabled?.()) return false;
+  onClose();
+  item.run();
+  return true;
 }
 
 export function CommandPalette(props: {
@@ -88,8 +97,7 @@ export function CommandPalette(props: {
   function runAt(index: number): void {
     const item = filtered()[index];
     if (!item) return;
-    props.onClose();
-    item.run();
+    activatePaletteItem(item, props.onClose);
   }
 
   function trapTab(e: KeyboardEvent): void {
@@ -162,6 +170,7 @@ export function CommandPalette(props: {
                         type="button"
                         class="rf-palette__item"
                         data-active={flatIndex(item) === cursor()}
+                        disabled={item.disabled?.()}
                         onMouseEnter={() => setCursor(flatIndex(item))}
                         onClick={() => runAt(flatIndex(item))}
                       >

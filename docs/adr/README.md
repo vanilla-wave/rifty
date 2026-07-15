@@ -16,6 +16,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0072 | OPFS sync content cache + async write-through |
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
+| 0260 | Host-injected VFS mutation intents |
 
 ### kernel
 
@@ -27,6 +28,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
+| 0266 | Opaque named capability ports on Worker bootstrap |
 
 ### runtime-js
 
@@ -57,6 +59,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
+| 0231 | Host-owned bootstrap config for recursive node workers |
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
 | 0239 | fromWeb arguments have one staged validation owner |
@@ -122,6 +125,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0249 | Owner-managed shadow runtime assets in a workspace-private content store |
+| 0258 | Structured install acquisition provenance |
 
 ### playground
 
@@ -154,9 +158,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
-| 0216 | Install tail latency: background command durability, generation-guarded stamps, learned-pin SWR |
-| 0241 | Install artifact identity for dependency trees |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
+| 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
 
 ### toolchain-build
 
@@ -174,6 +177,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0196 | Browser-unit test lane is a thin Playwright harness on the playground dev server |
 | 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
 | 0242 | Generated esbuild diagnostic provenance and target errno normalization |
+| 0255 | Disposable worker realm for seeded-process parity cases |
 
 ### protocol
 
@@ -213,6 +217,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0150 | Supervised child processes over SAB sync-views (D P6) |
 | 0167 | git capability over VFS via isomorphic-git |
 | 0198 | Byte-transparent shell data plane; string display plane |
+| 0256 | Owned abort settlement and asynchronous shell disposal |
+| 0257 | Exact process exit through shell command results |
 
 ### terminal
 
@@ -227,6 +233,15 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0116 | Persisted terminal session state |
 | 0120 | AI command suggestions |
 | 0122 | Raw stdin and mouse reporting |
+| 0225 | Cross-realm PTY resize control plane |
+| 0230 | Owner PTY stdin pump for supervised Node children |
+| 0264 | Owner-acknowledged idle PTY dimensions |
+
+### distribution
+
+| # | Title |
+|---|---|
+| 0263 | Workbench Playground companion subpath |
 
 ## Superseded (removed)
 
@@ -245,6 +260,9 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 | 0169 | 0177 | workspace TypeScript rule; absent-workspace vendored fallback removed |
+| 0216 | 0261 | background durability, learned-pin SWR, and stamp fault history grafted |
+| 0224 | 0263 | sealed root retained; finite Playground companion owns first-party plans/tools without exposing the owner |
+| 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
 
 ## Corrections (active)
 
@@ -277,16 +295,20 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
+| 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 | 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
 | 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |
 | 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0182 launch speed quote | 0182 note 2026-07-07 | production `auto` browser benchmark is 1.88x; the older ~6x remains only the Node/sandbox model, and h2/h3 claims stay gated by the transport-matrix item |
-| 0187 command-site "returns only when durable" clause | 0216 | `npm install` exit no longer awaits the drain; the drain→gate→stamp sequence runs in background with pending-first demotion + generation-guarded promotion (every other 0187 clause stands) |
-| 0194 §8 learned-pin 30-min hard-TTL clause | 0216 | freshness is serve-stale-while-revalidate: fresh <1800s, stale ≤24h (served with the as-of line + one manifest-only background revalidate), dropped past 24h |
+| 0187 command-site "returns only when durable" clause | 0261 | `npm install` exit no longer awaits the drain; one stamp authority fences mutation and promotes in background (every other 0187 clause stands) |
+| 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
+| 0231 esbuild asset-URL bootstrap clause | 0249 / note 2026-07-15 | `RIFTY_ESBUILD_WASM_URL` is removed; verified bytes arrive through ADR-0266's explicit capability port; kernel/node/SQLite bootstrap config stands |
+| 0261 install-claim schema + full esbuild-policy identity clauses | 0249 / note 2026-07-15 | v4 adds exact lockfile digest; asset-only pin fields no longer invalidate the dependency tree; owner/root/non-transferability/durability rules stand |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |
@@ -358,5 +380,7 @@ Removed, no successor (resolve to git history):
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
 - `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
+- `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
+- `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record
 
 Retired ADR numbers (process moved to `AGENTS.md` / `docs/process/decision-workflow.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve there, not to a file. Older docs may also cite `CLAUDE.md` — it is a symlink to `AGENTS.md`. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `docs/process/decision-workflow.md`.)

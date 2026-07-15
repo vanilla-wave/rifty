@@ -142,8 +142,29 @@ export async function extractTarGz(tgz: Uint8Array): Promise<Record<string, Uint
   const out: Record<string, Uint8Array> = {};
   for (const e of parseTarEntries(tar)) {
     const stripped = e.name.startsWith('package/') ? e.name.slice('package/'.length) : e.name;
-    if (!stripped) continue;
-    out[stripped] = e.data;
+    const path = normalizePackageEntryPath(stripped);
+    if (path === null) continue;
+    out[path] = e.data;
   }
   return out;
+}
+
+/** Tar member names are POSIX paths. Canonicalise `.` but never let a member
+ * escape the package directory; link-time normalisation would be too late. */
+function normalizePackageEntryPath(path: string): string | null {
+  if (path.startsWith('/')) throw invalidPackageTarPath(path);
+  const parts: string[] = [];
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') throw invalidPackageTarPath(path);
+    parts.push(part);
+  }
+  return parts.length === 0 ? null : parts.join('/');
+}
+
+function invalidPackageTarPath(path: string): Error {
+  return Object.assign(new Error(`Invalid package tar path escapes package root: ${path}`), {
+    code: 'EINVALIDPACKAGETAR' as const,
+    path,
+  });
 }

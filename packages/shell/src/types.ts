@@ -1,3 +1,5 @@
+import type { VfsMutationGuard } from '@riftydev/vfs';
+
 /**
  * Public types for the shell.
  *
@@ -23,6 +25,29 @@ export interface StdinReader {
   read(): Promise<Uint8Array | null>;
 }
 
+/** Current terminal grid, in character cells. */
+export interface TerminalSize {
+  readonly cols: number;
+  readonly rows: number;
+}
+
+/** Run-scoped source of current and future foreground terminal dimensions. */
+export interface TerminalResizeSource {
+  current(): TerminalSize;
+  subscribe(listener: (size: TerminalSize) => void): () => void;
+}
+
+/** Process-control signals currently supported by shell-backed runtimes. */
+export type ProcessExitSignal = 'SIGINT' | 'SIGTERM';
+
+/** Exact Node-style process exit: code and signal are mutually exclusive. */
+export type ProcessExit =
+  | { readonly code: number; readonly signal: null }
+  | { readonly code: null; readonly signal: ProcessExitSignal };
+
+/** Built-ins return a status; process-backed commands preserve the exact exit. */
+export type ShellCommandResult = number | ProcessExit;
+
 export interface CommandContext {
   cwd: string;
   env: Record<string, string>;
@@ -39,12 +64,18 @@ export interface CommandContext {
   /** Terminal width / height when {@link isTTY}; consumers fall back to 80×24. */
   readonly cols?: number;
   readonly rows?: number;
+  /** Present only for an interactive foreground sink. */
+  readonly terminal?: TerminalResizeSource;
   /**
    * Aborts when the foreground command is cancelled (Ctrl+C / SIGINT). A
    * long-running command observes this to return early (conventionally exit
    * `130`); absent ⇒ never cancelled (ADR-0089).
    */
   readonly signal?: AbortSignal;
+  /** Host policy boundary for authoritative VFS mutations. */
+  readonly mutationGuard?: VfsMutationGuard;
+  /** Synchronous namespace policy over one complete absolute-path plan. */
+  readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 }
 
-export type ShellCommand = (args: string[], ctx: CommandContext) => Promise<number>;
+export type ShellCommand = (args: string[], ctx: CommandContext) => Promise<ShellCommandResult>;

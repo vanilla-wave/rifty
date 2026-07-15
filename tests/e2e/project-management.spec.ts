@@ -219,10 +219,9 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     const hint = hintLocator(page);
 
     await openProjects(page);
-    await page
-      .locator('.rf-pcard', { hasText: `Alpha-${tag}` })
-      .first()
-      .click();
+    const target = page.locator('.rf-pcard', { hasText: `Alpha-${tag}` }).first();
+    await expect(target).toHaveAttribute('role', 'button', { timeout: OPFS_POLL });
+    await target.click();
     const dialog = page.locator('.rf-dialog[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     await expect(dialog).toContainText('Discard unsaved scratch');
@@ -246,10 +245,9 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     const hint = hintLocator(page);
 
     await openProjects(page);
-    await page
-      .locator('.rf-pcard', { hasText: `Alpha-${tag}` })
-      .first()
-      .click();
+    const target = page.locator('.rf-pcard', { hasText: `Alpha-${tag}` }).first();
+    await expect(target).toHaveAttribute('role', 'button', { timeout: OPFS_POLL });
+    await target.click();
     const dialog = page.locator('.rf-dialog[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
@@ -292,10 +290,10 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // Make a DIFFERENT scratch active so the reset target is NON-active (no live
     // dev-server restart in the assertion path — purely the on-disk re-seed).
     await pickStarter(page, 'node-worker');
-    await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
-    await waitDurableScratch(page, 'node-worker');
+    await expectPaletteStarterAdmissionBlocked(page);
 
-    await resetProjectViaMenu(page, projName);
+    await resetProjectViaMenu(page, projName, { expectOwnerBusy: true });
+    await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
 
     // The stray edit is GONE (tree wiped) and the starter baseline is back —
     // proving Reset is a real on-disk restore, not a page-mirror no-op.
@@ -308,20 +306,55 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
   });
 });
 
+async function expectPaletteStarterAdmissionBlocked(page: Page): Promise<void> {
+  await expect(page.locator('.rf-livepill[data-state="switching"]')).toBeVisible({
+    timeout: 5_000,
+  });
+  await page.click('[data-action="open-palette"]');
+  const palette = page.locator('[data-testid="command-palette"]');
+  const firstTemplate = palette.getByRole('button', { name: /Project files/ });
+  await expect(firstTemplate).toBeDisabled();
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+}
+
 /** Open the row menu for project `name` and click "Reset to starter…" → "Reset files". */
-async function resetProjectViaMenu(page: Page, name: string): Promise<void> {
+async function resetProjectViaMenu(
+  page: Page,
+  name: string,
+  opts: { readonly expectOwnerBusy?: boolean } = {},
+): Promise<void> {
   await openProjects(page);
   const card = page.locator('.rf-pcard', { hasText: name }).first();
+  if (opts.expectOwnerBusy) {
+    await expect(page.locator('.rf-scratch').getByRole('button', { name: 'Open' })).toBeDisabled();
+    await expect(card).toHaveAttribute('tabindex', '-1');
+    await expect(card).toHaveAttribute('data-switch-disabled', 'true');
+    await expect(card).not.toHaveAttribute('role', 'button');
+    await card.click();
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible();
+    await card.press('Enter');
+    await expect(page.locator('[data-testid="launcher"]')).toBeVisible();
+  }
   await card.locator('.rf-pcard__menu').click();
-  // Scope to the row menu: the `.rf-pcard` is itself role=button, so its accessible
-  // name CONTAINS "Reset to starter…" — a page-level getByRole would be ambiguous.
+  // Scope to the row menu; a page-level role query can also match the card's text.
   await card
     .locator('.rf-rowmenu')
     .getByRole('button', { name: /Reset to starter/ })
     .click();
   const dialog = page.locator('.rf-dialog[role="dialog"]');
   await expect(dialog).toBeVisible({ timeout: 5_000 });
-  await dialog.getByRole('button', { name: 'Reset files' }).click();
+  const reset = dialog.getByRole('button', { name: 'Reset files' });
+  if (opts.expectOwnerBusy) {
+    const ownerTransition = page.locator('.rf-livepill[data-state="switching"]');
+    await expect(ownerTransition).toBeVisible({ timeout: 5_000 });
+    await expect(reset).toBeDisabled();
+    await expect(reset).toBeEnabled({ timeout: OPFS_POLL });
+    await expect(ownerTransition).toHaveCount(0);
+  }
+  await reset.click();
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });

@@ -41,7 +41,7 @@ import type { RowAction } from './components/ProjectsTab.tsx';
 import { ScmPanel } from './components/ScmPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
-import type { TerminalModeHint } from './components/TerminalPanel.tsx';
+import type { TerminalDims, TerminalModeHint } from './components/TerminalPanel.tsx';
 import type { EditorApi, EditorDocumentEvent } from './components/editor-host-core.ts';
 import { Icon } from './components/icons.tsx';
 import { DELETE_GRACE_MS, createAppProjectStore } from './glue/app-project-store.ts';
@@ -75,6 +75,7 @@ import {
   setActiveIndex,
 } from './glue/project-index-port.ts';
 import { type ActiveId, rootForId } from './glue/project-index.ts';
+import type { PtyRunResult } from './glue/pty-client.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
@@ -82,7 +83,7 @@ import {
 } from './glue/realVite.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
+import type { StarterGroup } from './glue/starter.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { terminalWelcomeBanner } from './glue/terminal-welcome-banner.ts';
@@ -94,19 +95,17 @@ import {
   upsertTsLsInitDiagnostic,
 } from './glue/ts-ls-init-diagnostic.ts';
 import type { TsLanguageServiceProvidersHandle } from './glue/ts-ls-monaco-providers.ts';
-import {
-  type VfsSnapshotEntry,
-  requestVfsSnapshot,
-  subscribeVfsSnapshot,
-} from './glue/vfs-snapshot-port.ts';
+import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { createDevServerLifecycle } from './orchestration/dev-server-lifecycle.ts';
 import { createEditorOpQueue } from './orchestration/editor-op-queue.ts';
 import { createOwnerFileReader } from './orchestration/owner-file-read.ts';
 import { createPresetBoot } from './orchestration/preset-boot.ts';
 import { createProjectIndexBoot } from './orchestration/project-index-boot.ts';
+import { createProjectOwnerCoordinator } from './orchestration/project-owner-coordinator.ts';
 import { createResetRefresh } from './orchestration/reset-refresh.ts';
 import { createSaveFlow } from './orchestration/save-flow.ts';
 import { createScm } from './orchestration/scm.ts';
+import { closeTerminalSession } from './orchestration/terminal-session-close.ts';
 import { createTerminalStatePersistence } from './orchestration/terminal-state-persistence.ts';
 import { createWorkspaceFiles } from './orchestration/workspace-files.ts';
 import { createWorkspaceLifecycle } from './orchestration/workspace-lifecycle.ts';
@@ -154,7 +153,6 @@ const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
 const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
-const ownerWriteEnc = new TextEncoder();
 
 function createWorkspaceId(): string {
   return `ws-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
@@ -179,6 +177,12 @@ function loadWorkspaceId(storage: Storage | undefined = globalThis.sessionStorag
  * No worker is spawned and no bridges are served.
  */
 function createUnavailableOwner(): WorkspaceOwnerHandle {
+  const unavailableResult = (opts: {
+    onChunk(chunk: string, stream: 'stdout' | 'stderr'): void;
+  }): Promise<PtyRunResult> => {
+    opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
+    return Promise.resolve({ exitCode: 1, exit: { code: 1, signal: null } });
+  };
   return {
     workspaceId: 'unavailable',
     root: '/scratch',
@@ -186,14 +190,18 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     snapshotPort: UNAVAILABLE_OWNER_PORT,
     ready: Promise.resolve(),
     closed: Promise.resolve(0),
-    openSession: () => Promise.resolve(),
-    exec: (_sid, _line, opts) => {
-      opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
-      return Promise.resolve(1);
+    get ownerEpoch(): never {
+      throw new Error(OWNER_UNAVAILABLE_MSG);
     },
-    writeStdin: () => {},
+    openSession: () => Promise.resolve(),
+    exec: (_sid, _line, opts) => unavailableResult(opts).then((result) => result.exitCode),
+    execResult: (_sid, _line, opts) => unavailableResult(opts),
+    writeStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    endStdin: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    resizeSession: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    resize: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     signal: () => {},
-    closeSession: () => {},
+    closeSession: () => Promise.resolve(),
     isAlive: () => false,
     writeFile: () => {},
     writeFrame: () => {
@@ -201,6 +209,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     },
     writeFrameAcked: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     flushDurable: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    applyHostCommit: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    durabilityBarrier: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     readFileBytes: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
@@ -323,8 +333,9 @@ export function App(props: AppProps) {
     owner: fileWriteOwner,
     onScratchDirty: (starter) => {
       if (saveAffordance(storageMode).ephemeral) return;
-      void markScratchDirtyIndex(workspaceOwner().snapshotPort, starter).catch((err: unknown) =>
-        console.error('[project-index] mark scratch dirty failed', err),
+      const owner = workspaceOwner();
+      void markScratchDirtyIndex(owner.snapshotPort, starter, { ownerClosed: owner.closed }).catch(
+        (err: unknown) => console.error('[project-index] mark scratch dirty failed', err),
       );
     },
     // §56: the page-mirror delete + Undo is REAL (launcher updates, restore works).
@@ -560,6 +571,10 @@ export function App(props: AppProps) {
     console.error('[workspace-owner] hidden empty boot failed', err);
   });
 
+  // One FIFO owns every external operation that can mutate or replace the live
+  // project owner. Internal switch/new-scratch steps run inside the held lease.
+  const projectOwner = createProjectOwnerCoordinator();
+
   // Headless workspace-owner lifecycle core (ADR-0197 slice 2) bound to the REAL
   // ports: the reactive owner handle, the terminal-manager rebind, the durable
   // index persist, the snapshot-frame readiness handshakes and the dev-server core.
@@ -606,7 +621,8 @@ export function App(props: AppProps) {
     // Memory mode has no durable index → the switch skips the activeId persist.
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
     persistActiveId: async (id) => {
-      await setActiveIndex(workspaceOwner().snapshotPort, id);
+      const owner = workspaceOwner();
+      await setActiveIndex(owner.snapshotPort, id, { ownerClosed: owner.closed });
     },
     transition: {
       begin: () => presetBoot.beginTransition(),
@@ -647,7 +663,10 @@ export function App(props: AppProps) {
     recordPresenceHint: (idx) => recordProjectPresenceHint(idx, globalThis.localStorage),
     hasPresenceHint: () => hasPersistedProjectHint(globalThis.localStorage),
     // Read the port at fire time — an owner respawn (switch) moves the live channel.
-    postDeleteProjectTree: (id) => deleteProjectTree(workspaceOwner().snapshotPort, id),
+    postDeleteProjectTree: (id) => {
+      const owner = workspaceOwner();
+      return deleteProjectTree(owner.snapshotPort, id, { ownerClosed: owner.closed });
+    },
     openLauncherOnStarters: () => {
       store.setLauncherTab('starters');
       store.openLauncher();
@@ -655,7 +674,14 @@ export function App(props: AppProps) {
     closeLauncher: () => store.closeLauncher(),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
     warmEditorStack,
-    restore: (idx) => void workspace.restoreOnReload(idx),
+    restore: (idx) => {
+      void projectOwner
+        .run(
+          () => true,
+          async () => workspace.restoreOnReload(idx),
+        )
+        .catch((err: unknown) => console.error('[project-index] restore failed', err));
+    },
     pickDeepLinkStarter: (id) => void onPickStarter(id),
   });
 
@@ -711,6 +737,17 @@ export function App(props: AppProps) {
     },
     ensureOwnerStarted: () => workspace.ensureStarted(false),
     establishScratch: (id, opts) => durableNewScratch(id, opts),
+    ensureScratchOwnerRoot: async () => {
+      if (workspaceOwner().root === rootForId('scratch')) return;
+      const switched = await workspace.trackSwitch(workspace.switchTo('scratch'));
+      if (!switched || workspaceOwner().root !== rootForId('scratch')) {
+        throw new Error('Starter boot could not establish the /scratch owner');
+      }
+    },
+    refreshStarterEditorContext: async () => {
+      await resetRefresh.waitForActiveSnapshotFrame();
+      resetEditorToActiveInitialFiles();
+    },
     ephemeralStorage: saveAffordance(storageMode).ephemeral,
     seedWorkspace: (preset) => files.seedOwner(preset),
   });
@@ -781,7 +818,7 @@ export function App(props: AppProps) {
     currentOwner: () => workspaceOwner(),
     ownerUnavailable: (owner) => owner.snapshotPort === UNAVAILABLE_OWNER_PORT,
     reader: ownerFileReader,
-    bridgeGit: (owner) => bridgeGitOwnerRpc(owner.snapshotPort),
+    bridgeGit: (owner) => bridgeGitOwnerRpc(owner.snapshotPort, { ownerClosed: owner.closed }),
     subscribeStatus: (owner, cb) => subscribeGitStatus(owner.snapshotPort, cb),
     requestStatus: (owner) => requestGitStatus(owner.snapshotPort),
     requestVfsSnapshot: (owner) => requestVfsSnapshot(owner.snapshotPort),
@@ -873,6 +910,21 @@ export function App(props: AppProps) {
       setTerminalFocusEpoch((epoch) => epoch + 1);
     }
     refreshTerminalState();
+    closeTerminalSession({
+      detachWriter: () => terminalWriters.delete(id),
+      closeRemote: () => manager.closeSession(id),
+      onClosed: () => {
+        hiddenSessionIds.delete(id);
+        refreshTerminalState();
+      },
+      onError: (error: unknown) => {
+        // The manager handle is locally closed even when the dead owner cannot
+        // ACK teardown; keep the tombstone hidden.
+        flashError(
+          `Terminal close failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    });
   }
 
   function attachTerminalWriter(
@@ -973,7 +1025,11 @@ export function App(props: AppProps) {
   }
 
   function writeTerminalStdin(id: string, data: TerminalRawInput): void {
-    manager.writeStdin(id, data);
+    void manager.writeStdin(id, data).catch((error: unknown) => console.error(error));
+  }
+
+  function resizeTerminal(id: string, dims: TerminalDims): void {
+    void manager.resize(id, dims).catch((error: unknown) => console.error(error));
   }
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
@@ -986,15 +1042,35 @@ export function App(props: AppProps) {
   // explorer reflects the owner tree (where `npm install` lands) before AND after
   // any vite run. Subscribed once at setup (no signal dependency), torn on unmount.
   createEffect(() => {
-    const unsubscribe = subscribeVfsSnapshot(workspaceOwner().snapshotPort, (frame) => {
-      snapshotFs.update(frame);
-      setNodeModulesPresent(frame.nodeModulesPresent);
+    const owner = workspaceOwner();
+    let active = true;
+    snapshotFs.clear();
+    setNodeModulesPresent(false);
+    const unsubscribe = subscribeVfsSnapshot(owner.snapshotPort, (frame) => {
+      try {
+        snapshotFs.update(frame);
+      } finally {
+        setNodeModulesPresent(snapshotFs.nodeModulesPresent);
+      }
     });
-    // Readiness handshake (ADR-0146 owner republishes its snapshot): ask the owner to publish now — covers
-    // the case where the owner came up before this subscription (its startup
-    // publish would have been missed), replacing the owner-side retry-storm.
-    requestVfsSnapshot(workspaceOwner().snapshotPort);
-    onCleanup(unsubscribe);
+    if (owner.snapshotPort !== UNAVAILABLE_OWNER_PORT) {
+      void owner.ready
+        .then(() => {
+          if (!active) return;
+          snapshotFs.bindOwner(owner.ownerEpoch, owner.root);
+          // Readiness handshake (ADR-0146): bind the expected ready nonce first,
+          // then request a fresh frame. A delayed prior-owner frame on the reused
+          // workspace channel can never claim the new mirror.
+          requestVfsSnapshot(owner.snapshotPort);
+        })
+        .catch((error: unknown) => {
+          if (active) console.error('[vfs-snapshot] owner readiness failed', error);
+        });
+    }
+    onCleanup(() => {
+      active = false;
+      unsubscribe();
+    });
   });
 
   // (Re)bind the owner-backed SCM core (git-status feed + branch/history reads
@@ -1616,37 +1692,6 @@ export function App(props: AppProps) {
     editorApi?.openInitialFiles(paths);
   }
 
-  function starterSnapshotEntries(preset: Preset, root: string): VfsSnapshotEntry[] {
-    const dirs = new Set<string>();
-    const files = Object.entries(seedFilesForStarter(starterById(preset.id), root)).sort(
-      ([left], [right]) => left.localeCompare(right),
-    );
-    for (const [path] of files) {
-      let slash = path.lastIndexOf('/');
-      while (slash > root.length) {
-        const dir = path.slice(0, slash);
-        dirs.add(dir);
-        slash = dir.lastIndexOf('/');
-      }
-    }
-    return [
-      ...[...dirs].sort().map((path) => ({ path, kind: 'dir' as const, size: 0 })),
-      ...files.map(([path, content]) => {
-        const data = ownerWriteEnc.encode(content);
-        return { path, kind: 'file' as const, size: data.byteLength, content: data };
-      }),
-    ];
-  }
-
-  function paintPickedStarterSnapshot(preset: Preset): void {
-    snapshotFs.update({
-      type: 'snapshot',
-      root: activeRoot(),
-      entries: starterSnapshotEntries(preset, activeRoot()),
-      nodeModulesPresent: false,
-    });
-  }
-
   function reinitializeTsForPickedPreset(): void {
     setTsProjectRevision((revision) => revision + 1);
   }
@@ -1654,7 +1699,6 @@ export function App(props: AppProps) {
   async function loadPresetUi(preset: Preset): Promise<void> {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
-    paintPickedStarterSnapshot(preset);
     resetEditorToActiveInitialFiles();
   }
 
@@ -1685,6 +1729,7 @@ export function App(props: AppProps) {
   const saveFlow = createSaveFlow({
     store,
     workspace,
+    projectOwner,
     pickStarterUnguarded: (starter) =>
       presetBoot.pickStarter(starter, {
         commit: (s) => store.confirmPickStarter(s),
@@ -1700,8 +1745,12 @@ export function App(props: AppProps) {
       `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`,
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     // Read the port at fire time (the live channel); memory mode never posts.
-    saveIndexPhases: (id, name, starter) =>
-      saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),
+    saveIndexPhases: (id, name, starter) => {
+      const owner = workspaceOwner();
+      return saveProjectIndexPhases(owner.snapshotPort, id, name, starter, {
+        ownerClosed: owner.closed,
+      });
+    },
     openSaveDialog,
     showSaveError: (message) => store.setToast({ kind: 'error', text: message }),
     showEphemeralSaveNotice: (name) =>
@@ -1716,13 +1765,23 @@ export function App(props: AppProps) {
     subscribeSnapshot: (cb) => snapshotFs.subscribe(cb),
     requestSnapshot: () => requestVfsSnapshot(workspaceOwner().snapshotPort),
     resetEditorInitialFiles: () => resetEditorToActiveInitialFiles(),
+    projectOwner,
     flushEditorWrites: () => flushPendingEditorWrites(),
     ephemeral: () => saveAffordance(storageMode).ephemeral,
     activeStarterId,
     // Owner index posts read the port at fire time (the live channel).
-    resetScratchIndex: (starter) => resetScratchIndex(workspaceOwner().snapshotPort, starter),
-    resetProjectIndex: (id) => resetProjectIndex(workspaceOwner().snapshotPort, id),
-    renameProjectIndex: (id, name) => renameProjectIndex(workspaceOwner().snapshotPort, id, name),
+    resetScratchIndex: (starter) => {
+      const owner = workspaceOwner();
+      return resetScratchIndex(owner.snapshotPort, starter, { ownerClosed: owner.closed });
+    },
+    resetProjectIndex: (id) => {
+      const owner = workspaceOwner();
+      return resetProjectIndex(owner.snapshotPort, id, { ownerClosed: owner.closed });
+    },
+    renameProjectIndex: (id, name) => {
+      const owner = workspaceOwner();
+      return renameProjectIndex(owner.snapshotPort, id, name, { ownerClosed: owner.closed });
+    },
   });
 
   async function flushPendingEditorWrites(): Promise<void> {
@@ -1742,16 +1801,15 @@ export function App(props: AppProps) {
   // page-mirror flip is immediate UX; this re-creates the durable scratch entry +
   // re-seeds /scratch so the NEXT Save's `saveScratchAsProject` precondition holds
   // (after a prior Save the owner index is `scratch:null`). Read the port at fire
-  // time; skipped in memory mode (no durable index). The owner is not respawned on
-  // a pick — it stays rooted at /scratch and re-seeds the live tree.
+  // time; skipped in memory mode (no durable index). Preset boot then keeps an
+  // existing /scratch owner or respawns a named-project owner at /scratch.
   async function durableNewScratch(
     id: string,
     opts: { readonly preserveDirtySameStarter?: boolean } = {},
   ): Promise<void> {
     if (!saveAffordance(storageMode).ephemeral) {
-      await newScratchIndex(workspaceOwner().snapshotPort, id, opts).catch((err: unknown) =>
-        console.error('[project-index] new scratch failed', err),
-      );
+      const owner = workspaceOwner();
+      await newScratchIndex(owner.snapshotPort, id, { ...opts, ownerClosed: owner.closed });
     }
   }
 
@@ -1759,16 +1817,26 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
-    if (!(await saveFlow.beginStarterPick())) return;
     indexBoot.markBootDecisionMade();
-    // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
-    // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
-    // commit — a dirty scratch opens the switch dialog and the boot aborts there.
-    await presetBoot.pickStarter(id, {
-      commit: (starter) => store.pickStarter(starter),
-      guardDirtyScratch: true,
-      preserveDirtySameStarter: true,
-    });
+    try {
+      await projectOwner.run(
+        () => true,
+        async () => {
+          // The pick flow (paint → owner → stop-before-write → scratch → seed → boot)
+          // lives in the preset-boot core; the store's dirty-guarded pickStarter is the
+          // commit — a dirty scratch opens the switch dialog and the boot aborts there.
+          await presetBoot.pickStarter(id, {
+            commit: (starter) => store.pickStarter(starter),
+            guardDirtyScratch: true,
+            preserveDirtySameStarter: true,
+          });
+        },
+      );
+    } catch (err: unknown) {
+      console.error('[project-index] starter pick failed', err);
+      const message = err instanceof Error ? err.message : String(err);
+      store.setToast({ kind: 'error', text: `Starter pick failed: ${message}` });
+    }
   }
 
   // Switch active root from the launcher/chip — the save-flow core gates it over
@@ -1967,6 +2035,7 @@ export function App(props: AppProps) {
         label: preset.label,
         hint: preset.id,
         icon: 'layers',
+        disabled: projectOwner.blocked,
         // Route through the gallery pick path so the STORE's active starter follows
         // the chosen template (ADR-0165 §4) — keeps activeStarterId/template coherent.
         run: () => onPickStarter(preset.id),
@@ -2076,8 +2145,8 @@ export function App(props: AppProps) {
     return items;
   }
 
-  // Items snapshot, built once per palette open — not a getter, so typing in
-  // the palette doesn't re-walk the VFS on every keystroke.
+  // Items snapshot, built once per palette open, so typing doesn't re-walk the
+  // VFS. Per-item admission accessors remain live while the palette is open.
   const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
   function openPalette(): void {
     setPaletteData(paletteItems());
@@ -2414,6 +2483,7 @@ export function App(props: AppProps) {
               onLink={onTerminalLink}
               onSignal={stopSession}
               onRawInput={writeTerminalStdin}
+              onResize={resizeTerminal}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
@@ -2476,6 +2546,7 @@ export function App(props: AppProps) {
         projects={store.projects()}
         scratch={store.scratch()}
         activeId={store.activeId()}
+        ownerBlocked={projectOwner.blocked()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}
@@ -2498,6 +2569,7 @@ export function App(props: AppProps) {
 
       <ProjectDialogs
         dialog={store.dialog()}
+        ownerBlocked={projectOwner.blocked()}
         saveName={saveName()}
         renameName={renameName()}
         targetName={dialogTargetName()}

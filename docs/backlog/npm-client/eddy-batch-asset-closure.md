@@ -8,7 +8,7 @@ user_story: As a vite user on an eddy-enabled deployment, I want shadow assets t
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-asset-store]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workspace-content-store.md, docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/adr/npm-client/0194-eddy-v1-2-stateless-bundle-store-shared-resolve-caches-learned-pins.md, docs/adr/npm-client/0195-eddy-wire-protocol-v1-1-get-by-hash-cors-simple-post-streaming-client-prefetch-seam.md]
-code: [packages/npm-client/src/eddy-request.ts, packages/npm-client/src/eddy-bundle.ts, packages/npm-client/src/eddy-prefetch.ts]
+code: [packages/npm-client/src/eddy-request.ts, packages/npm-client/src/eddy-bundle.ts, packages/npm-client/src/eddy-prefetch.ts, tools/perf/bench.mjs, tools/perf/src/aggregate.mjs, tools/perf/src/aggregate.test.ts, perf/benchmarks.json]
 ---
 
 ## Context
@@ -42,8 +42,15 @@ hits never enter either transport.
   gates; no readiness receipt publishes until the whole required set validates.
 - STD and Eddy share the one manager writer and produce byte-identical objects;
   receipts differ only in truthful transport/cache fields.
-- Cold-fill benchmark row (STD vs eddy, same harness as the install ladder)
-  recorded in the bench matrix.
+- Extend the store item's committed `shadowAssetColdFillMs.standard` record with
+  a matched `eddy` row; preserve STD verbatim. Use the same phase boundary,
+  asset set, five fresh Chromium contexts, storage class, client/origin cache
+  regime, `--transport` HTTP mode, and protocol-proof rules; start with empty
+  learned-pin state. Every run proves receipt `fillTransport=eddy`; fallback to
+  STD or any incomplete/mixed proof records Eddy `unmeasured`. Record Eddy
+  bundle response-body bytes separately and compute
+  `speedupX = standard.median / eddy.median` only when both complete rows are
+  measured.
 
 ## Parity cases
 

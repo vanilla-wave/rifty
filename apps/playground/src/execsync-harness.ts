@@ -20,8 +20,8 @@
  *     seed the child scripts here (same source-of-truth split as the
  *     conformance test: parent writes the script, parent resolver reads it).
  *
- * The guest then runs two `execSync` calls and emits its results on stdout,
- * which we surface into the DOM with stable testids the spec asserts.
+ * Normal mode runs the byte/loader cases. Fault mode invalidates the node-entry
+ * runtime snapshot and surfaces the error from the same blocking SAB call.
  */
 
 import {
@@ -30,10 +30,12 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
-import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
-import { getNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
+import {
+  getNodeEntryWorkerUrl,
+  setNodeEntryWorkerUrl,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import { syncMirror } from '@riftydev/vfs';
+import { installOwnerSyncRuntimeHandlers } from './glue/owner-sync-runtime-handlers.ts';
 
 const dec = new TextDecoder();
 
@@ -66,6 +68,14 @@ const ACCEPTANCE_PKG_JSON = '{"name":"demo-pkg"}';
 // workspace shape; a `.js` outside a module scope is CJS and a top-level
 // `import` is a parse error — the loader's `detectKind`).
 const ACCEPTANCE_PACKAGE_JSON = '{"type":"module"}';
+const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker runtime config is not configured';
+
+export type ExecSyncHarnessOptions =
+  | { readonly fault?: undefined }
+  | {
+      readonly fault: 'missing-node-entry-runtime-config';
+      readonly nodeEntryUrl: string;
+    };
 
 interface HarnessResult {
   readonly status: 'pass' | 'fail';
@@ -73,6 +83,7 @@ interface HarnessResult {
   readonly blocked: string;
   /** ADR-0137 loader acceptance result (`built:demo-pkg`), or '' on miss. */
   readonly loader: string;
+  readonly configError: string;
   readonly detail: string;
 }
 
@@ -94,6 +105,7 @@ function paint(result: HarnessResult): void {
   root.appendChild(mk('execsync-hex', 'hex', result.hex));
   root.appendChild(mk('execsync-blocked', 'blocked', result.blocked));
   root.appendChild(mk('execsync-loader', 'loader', result.loader));
+  root.appendChild(mk('execsync-config-error', 'config-error', result.configError));
   root.appendChild(mk('execsync-detail', 'detail', result.detail));
 
   document.body.innerHTML = '';
@@ -105,7 +117,7 @@ function paint(result: HarnessResult): void {
  * the DOM. Any throw is caught and painted as a `fail` so the spec sees a
  * deterministic node instead of timing out on an unhandled rejection.
  */
-export async function runExecSyncHarness(): Promise<void> {
+export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): Promise<void> {
   try {
     // Page-realm VFS: `syncMirror()` returns the default in-memory mirror on the
     // main thread (no initBackend — OPFS sync is worker-only and would throw
@@ -124,6 +136,11 @@ export async function runExecSyncHarness(): Promise<void> {
       throw new Error(
         'getNodeEntryWorkerUrl() is null — main.tsx must call setNodeEntryWorkerUrl first',
       );
+    }
+    if (options.fault === 'missing-node-entry-runtime-config') {
+      // Fault injection uses the public compatibility seam: URL remains
+      // available, but its paired host bootstrap snapshot is invalidated.
+      setNodeEntryWorkerUrl(options.nodeEntryUrl);
     }
 
     // Seed the child scripts into the PAGE mirror — the execSync child reads them
@@ -144,17 +161,9 @@ export async function runExecSyncHarness(): Promise<void> {
     // mirror over `fs.*` sync-RPC — so the page dispatcher must serve `fs.*`
     // (ADR-0150). Without this, the child reads its own empty realm mirror →
     // ENOENT. This is the owner's role the real workspace owner plays.
-    installRuntimeJsFsHandlers(getKernelDispatcher(), () => mirror);
-
-    // Register the runtime-js 'execSync' handler on the PAGE dispatcher. Resolver
-    // is an ENOENT pre-check over the page mirror; null for a missing script →
-    // the handler surfaces a proper ENOENT (matches the runtime-js builtin's own
-    // resolver). The runner (default makeRecursiveRunner) reads the real source
-    // through the node-entry child + module loader.
-    installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
-      if (!mirror.existsSync(path)) return null;
-      return mirror.readFileBytesSync(path);
-    });
+    // Page test harness, workspace owner, and relay child share this exact
+    // authoritative-VFS registration recipe.
+    installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => mirror);
 
     // Bundled as its own worker chunk by Vite (string URL form).
     const guestUrl = new URL('./workers/execsync-harness-guest.ts', import.meta.url).toString();
@@ -169,6 +178,7 @@ export async function runExecSyncHarness(): Promise<void> {
           // execSync gate (getKernelWorkerUrl() !== null) passes. The value is
           // used only for the gate; the recursive child runs on THIS dispatcher.
           RIFTY_EXECSYNC_KERNEL_WORKER_URL: String(kernelWorkerUrl),
+          ...(options.fault === undefined ? {} : { RIFTY_EXECSYNC_FAULT: options.fault }),
         },
         cwd: '/',
       },
@@ -196,21 +206,27 @@ export async function runExecSyncHarness(): Promise<void> {
     const hex = matchLine(stdout, 'HEX');
     const blocked = matchLine(stdout, 'BLOCKED');
     const loader = matchLine(stdout, 'LOADER');
+    const configError = matchLine(stdout, 'CONFIG_ERROR');
     const guestErr = matchLine(stdout, 'ERROR');
 
     const ok =
-      exitCode === 0 &&
-      hex === 'fffe00' &&
-      blocked === 'blocked-result' &&
-      loader === 'built:demo-pkg';
+      options.fault === 'missing-node-entry-runtime-config'
+        ? exitCode === 0 && configError === MISSING_RUNTIME_CONFIG_ERROR
+        : exitCode === 0 &&
+          hex === 'fffe00' &&
+          blocked === 'blocked-result' &&
+          loader === 'built:demo-pkg';
     paint({
       status: ok ? 'pass' : 'fail',
       hex,
       blocked,
       loader,
+      configError,
       detail: ok
-        ? 'real SAB + Atomics.waitAsync + v2 binary frame + node-entry loader round-trip'
-        : `exit=${exitCode} guestErr=${guestErr} stderr=${stderr.trim().slice(0, 400)}`,
+        ? options.fault === 'missing-node-entry-runtime-config'
+          ? 'real SAB execSync rejected missing recursive bootstrap config before spawn'
+          : 'real SAB + Atomics.waitAsync + v2 binary frame + node-entry loader round-trip'
+        : `exit=${exitCode} configError=${configError} guestErr=${guestErr} stderr=${stderr.trim().slice(0, 400)}`,
     });
   } catch (err) {
     paint({
@@ -218,6 +234,7 @@ export async function runExecSyncHarness(): Promise<void> {
       hex: '',
       blocked: '',
       loader: '',
+      configError: '',
       detail: err instanceof Error ? (err.stack ?? err.message) : String(err),
     });
   }

@@ -11,6 +11,26 @@ import { extractTarGz } from './unpacker.ts';
 const enc = new TextEncoder();
 
 describe('extractTarGz — typeflag handling', () => {
+  it.each([
+    'package/../.rifty-install-stamp.json',
+    'package/a/../../.rifty-install-stamp.json',
+    '/absolute/.rifty-install-stamp.json',
+  ])('rejects an escaping member before returning any package files: %s', async (entry) => {
+    const content = enc.encode('forged');
+    const tar = concat(
+      buildHeader('package/keep.js', content.length),
+      padToBlock(content),
+      buildHeader(entry, content.length),
+      padToBlock(content),
+      trailer,
+    );
+
+    await expect(extractTarGz(await gzip(tar))).rejects.toMatchObject({
+      code: 'EINVALIDPACKAGETAR',
+      path: entry.startsWith('package/') ? entry.slice('package/'.length) : entry,
+    });
+  });
+
   it("throws NotImplementedError('npm-client.tar.symlink') for symlink entries (typeflag '2')", async () => {
     const data = enc.encode(''); // symlinks carry the target in linkname, not body
     const header = buildHeader('package/link', 0, '2', { linkname: 'real.js' });

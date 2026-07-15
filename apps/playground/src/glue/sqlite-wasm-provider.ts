@@ -10,7 +10,6 @@
  * hardcoded external URLs), HTTP-cached after the first realm's fetch.
  */
 import { setSqliteEngineSyncProvider } from '@riftydev/net/sqlite/engine';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 export function fetchWasmBytesSync(url: string): Uint8Array {
   const xhr = new XMLHttpRequest();
@@ -27,6 +26,9 @@ export function fetchWasmBytesSync(url: string): Uint8Array {
   return bytes;
 }
 
-export function installSqliteWasmSyncProvider(url: string = sqlWasmUrl): void {
+export function installSqliteWasmSyncProvider(url: string): void {
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error('node:sqlite wasm URL must be non-empty');
+  }
   setSqliteEngineSyncProvider(() => fetchWasmBytesSync(url));
 }

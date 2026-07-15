@@ -42,7 +42,6 @@ Readable/Writable/Duplex/Transform/PassThrough, backpressure, async iterators, `
 open:
 - `docs/backlog/kernel/process-equals-web-worker` — real Worker per child (not in-realm `new Function`).
 - `docs/backlog/kernel/binary-stdio-messageport-backpressure` — pipe stdio over `MessagePort` with backpressure.
-- `docs/backlog/kernel/worker-per-process-residuals` — per-process cwd + residual worker-process wiring.
 
 ## M7 — Network
 

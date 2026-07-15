@@ -6,6 +6,7 @@ const baseProps = {
   projects: [{ id: 'p1', name: 'node-api', starter: 'node', editedAt: '4m ago' }],
   scratch: { starter: 'react', dirty: true, editedAt: 'edited just now' },
   activeId: 'scratch' as const,
+  ownerBlocked: false,
   storage: 'opfs' as const,
   menuFor: null as string | null,
   glyphFor: () => ({ text: 'N', color: '#9BD060', label: 'Node API', port: 3000 }),
@@ -44,5 +45,16 @@ describe('ProjectsTab', () => {
     const html = renderToString(() => ProjectsTab(baseProps));
     expect(html).toContain('data-action="reset-browser-sandbox"');
     expect(html).toContain('Reset sandbox');
+  });
+
+  it('concurrent-same-key fault: blocks direct owner switches while keeping navigation available', () => {
+    const html = renderToString(() =>
+      ProjectsTab({ ...baseProps, menuFor: 'p1', ownerBlocked: true }),
+    );
+    expect(html).toMatch(/class="rf-pcard"[^>]*tabindex="-1"[^>]*data-switch-disabled="true"/);
+    expect(html).not.toMatch(/class="rf-pcard"[^>]*aria-disabled/);
+    expect(html).toMatch(/class="rf-rowmenu__item"[^>]*disabled[^>]*>.*Switch to project/s);
+    expect(html).toMatch(/data-action="reset-browser-sandbox"(?![^>]*disabled)/);
+    expect(html).toContain('New from starter');
   });
 });

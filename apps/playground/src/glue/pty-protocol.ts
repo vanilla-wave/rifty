@@ -1,5 +1,7 @@
 // pty channel frame protocol (ADR-0146). Carried as kernel fork-IPC payload
 // { type:'rifty:pty', frame } alongside rifty:vfs-write. Structured-clone-safe only.
+import type { ProcessExit } from '@riftydev/shell';
+
 export type PtyStream = 'stdout' | 'stderr';
 
 export type PtyOpen = {
@@ -19,12 +21,35 @@ export type PtyExec = {
   rows: number;
   isTTY: boolean;
 };
-export type PtyStdin = { type: 'pty:stdin'; sid: string; rid: string; data: Uint8Array };
-export type PtyStdinEof = { type: 'pty:stdin-eof'; sid: string; rid: string };
+export type PtyStdin = {
+  type: 'pty:stdin';
+  sid: string;
+  rid: string;
+  opId: string;
+  data: Uint8Array;
+};
+export type PtyStdinEof = { type: 'pty:stdin-eof'; sid: string; rid: string; opId: string };
 export type PtySignal = { type: 'pty:signal'; sid: string; rid: string; signal: 'SIGINT' };
-export type PtyClose = { type: 'pty:close'; sid: string };
+export type PtyResize = {
+  type: 'pty:resize';
+  sid: string;
+  rid: string;
+  opId: string;
+  cols: number;
+  rows: number;
+};
+export type PtySessionResize = {
+  type: 'pty:session-resize';
+  sid: string;
+  opId: string;
+  cols: number;
+  rows: number;
+};
+export type PtyClose = { type: 'pty:close'; sid: string; opId: string };
 
-export type PtyReady = { type: 'pty:ready'; sid: string };
+export type PtyReady = { type: 'pty:ready'; sid: string; error?: string };
+/** Owner actor accepted `rid` as this session's one active run. */
+export type PtyRunReady = { type: 'pty:run-ready'; sid: string; rid: string };
 export type PtyChunk = {
   type: 'pty:chunk';
   sid: string;
@@ -37,11 +62,38 @@ export type PtyExit = {
   type: 'pty:exit';
   sid: string;
   rid: string;
+  /** Shell status used by the terminal (`130` for an interrupted owned run). */
   code: number;
+  /** Physical final command exit; independent from the shell status (ADR-0257). */
+  exit: ProcessExit;
   cwd: string;
   env: Record<string, string>;
   error?: string;
 };
+
+type PtyAckResult = { ok: true } | { ok: false; error: string };
+export type PtyResizeAck = {
+  type: 'pty:resize-ack';
+  sid: string;
+  rid: string;
+  opId: string;
+} & PtyAckResult;
+export type PtySessionResizeAck = {
+  type: 'pty:session-resize-ack';
+  sid: string;
+  opId: string;
+} & PtyAckResult;
+export type PtyStdinAck = {
+  type: 'pty:stdin-ack';
+  sid: string;
+  rid: string;
+  opId: string;
+} & PtyAckResult;
+export type PtyCloseAck = {
+  type: 'pty:close-ack';
+  sid: string;
+  opId: string;
+} & PtyAckResult;
 
 /** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner). */
 export type DevServerStatus = 'starting' | 'running' | 'stopped';
@@ -108,14 +160,21 @@ export type PageToOwnerFrame =
   | PtyStdin
   | PtyStdinEof
   | PtySignal
+  | PtyResize
+  | PtySessionResize
   | PtyClose
   | PtyDevServerReq
   | PtyDevConfig
   | PtyPreviewReq;
 export type OwnerToPageFrame =
   | PtyReady
+  | PtyRunReady
   | PtyChunk
   | PtyExit
+  | PtyResizeAck
+  | PtySessionResizeAck
+  | PtyStdinAck
+  | PtyCloseAck
   | PtyDevServer
   | PtyPreview
   | PtyDevConfigReady;
@@ -134,6 +193,8 @@ const PAGE_TO_OWNER = new Set([
   'pty:stdin',
   'pty:stdin-eof',
   'pty:signal',
+  'pty:resize',
+  'pty:session-resize',
   'pty:close',
   'pty:dev-server-req',
   'pty:dev-config',
@@ -141,8 +202,13 @@ const PAGE_TO_OWNER = new Set([
 ]);
 const OWNER_TO_PAGE = new Set([
   'pty:ready',
+  'pty:run-ready',
   'pty:chunk',
   'pty:exit',
+  'pty:resize-ack',
+  'pty:session-resize-ack',
+  'pty:stdin-ack',
+  'pty:close-ack',
   'pty:dev-server',
   'pty:preview',
   'pty:dev-config-ready',

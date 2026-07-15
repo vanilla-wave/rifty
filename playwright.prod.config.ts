@@ -14,6 +14,7 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 export default defineConfig({
   testDir: './tests/e2e-prod',
   fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   // Fail-fast on CI: the prod smoke is 3 serial specs against a fresh build —

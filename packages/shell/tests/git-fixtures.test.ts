@@ -26,6 +26,7 @@ import { asyncVfs } from '@riftydev/vfs';
 import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { git } from '../src/commands/git.ts';
+import { shellCommandExitCode } from '../src/shell.ts';
 import { makeCtx } from './_ctx.ts';
 
 /**
@@ -74,7 +75,7 @@ async function readFile(path: string): Promise<string> {
 /** Run a `git` subcommand against REPO, return captured stdout, assert exit 0. */
 async function runGit(args: string[]): Promise<string> {
   const { ctx, out } = makeCtx({ cwd: REPO, env: ENV });
-  const code = await git(args, ctx);
+  const code = shellCommandExitCode(await git(args, ctx));
   expect(code).toBe(0);
   return out();
 }
@@ -82,7 +83,7 @@ async function runGit(args: string[]): Promise<string> {
 /** Run a `git` subcommand, return BOTH streams + exit (no exit assertion). */
 async function runGitFull(args: string[]): Promise<{ out: string; err: string; code: number }> {
   const { ctx, out, err } = makeCtx({ cwd: REPO, env: ENV });
-  const code = await git(args, ctx);
+  const code = shellCommandExitCode(await git(args, ctx));
   return { out: out(), err: err(), code };
 }
 

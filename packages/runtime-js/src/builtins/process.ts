@@ -18,7 +18,7 @@
  * real package breaks.
  */
 import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
-import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -107,10 +107,13 @@ function encodeChunk(chunk: string | Uint8Array): Uint8Array {
 
 type StdioCallback = () => void;
 
-interface NodeStdioWriter {
+interface NodeStdioWriter extends EventEmitter {
   write(chunk: string | Uint8Array): boolean;
   isTTY: boolean;
   fd: number;
+  columns?: number;
+  rows?: number;
+  getWindowSize?(): [number, number];
   clearLine?(dir?: number, cb?: StdioCallback): boolean;
   cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
   moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
@@ -123,7 +126,13 @@ function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallb
   return ok;
 }
 
-function attachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
+function attachTtyControls(
+  stream: NodeStdioWriter,
+  size: { readonly cols: number; readonly rows: number },
+): NodeStdioWriter {
+  stream.columns = size.cols;
+  stream.rows = size.rows;
+  stream.getWindowSize = () => [stream.columns ?? 0, stream.rows ?? 0];
   stream.clearLine = (dir, cb): boolean => {
     const direction = dir ?? 0;
     const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
@@ -148,11 +157,16 @@ function attachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
 }
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStdioWriter {
-  const stream: NodeStdioWriter = {
+function makeStdioWriter(
+  port: MessagePort,
+  fd: number,
+  isTTY: boolean,
+  size: { readonly cols: number; readonly rows: number },
+): NodeStdioWriter {
+  const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
-    write(chunk) {
+    write(chunk: string | Uint8Array) {
       const bytes = encodeChunk(chunk);
       // Transfer the buffer only when we own it (TextEncoder output). A passed-in
       // Uint8Array may share its backing buffer with the caller, so copy instead.
@@ -164,16 +178,72 @@ function makeStdioWriter(port: MessagePort, fd: number, isTTY: boolean): NodeStd
       }
       return true;
     },
-  };
-  return isTTY ? attachTtyControls(stream) : stream;
+  }) as NodeStdioWriter;
+  return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
 export interface NodeStdin extends EventEmitter {
   isTTY: boolean;
   fd: number;
-  setEncoding(encoding: string | null): void;
-  resume(): void;
-  pause(): void;
+  setEncoding(encoding?: string | null): NodeStdin;
+  resume(): NodeStdin;
+  pause(): NodeStdin;
+  read(size?: number): never;
+  pipe(destination: unknown): never;
+  setRawMode(enabled: boolean): never;
+  [Symbol.asyncIterator](): never;
+}
+
+type StdinListener = (...args: unknown[]) => void;
+
+function throwStdinGap(feature: string): never {
+  throw new NotImplementedError(feature);
+}
+
+/** Runtime-owned loud boundary shared by every spec-seeded and host process. */
+class NodeStdinEmitter extends EventEmitter implements NodeStdin {
+  readonly #onDataListener: () => void;
+
+  declare isTTY: boolean;
+  declare fd: number;
+  declare setEncoding: NodeStdin['setEncoding'];
+  declare resume: NodeStdin['resume'];
+  declare pause: NodeStdin['pause'];
+
+  constructor(onDataListener: () => void) {
+    super();
+    this.#onDataListener = onDataListener;
+  }
+
+  override addListener(event: string | symbol, listener: StdinListener): this {
+    if (event === 'readable') throwStdinGap('process.stdin.readable');
+    const result = super.addListener(event, listener);
+    if (event === 'data') this.#onDataListener();
+    return result;
+  }
+
+  override prependListener(event: string | symbol, listener: StdinListener): this {
+    if (event === 'readable') throwStdinGap('process.stdin.readable');
+    const result = super.prependListener(event, listener);
+    if (event === 'data') this.#onDataListener();
+    return result;
+  }
+
+  read(): never {
+    return throwStdinGap('process.stdin.read');
+  }
+
+  pipe(): never {
+    return throwStdinGap('process.stdin.pipe');
+  }
+
+  setRawMode(): never {
+    return throwStdinGap('process.stdin.setRawMode');
+  }
+
+  [Symbol.asyncIterator](): never {
+    return throwStdinGap('process.stdin[Symbol.asyncIterator]');
+  }
 }
 
 /**
@@ -189,10 +259,18 @@ function makeStdinReader(
   stdin: NodeStdin;
   push(data: string | Uint8Array): void;
 } {
-  const stdin = new EventEmitter() as NodeStdin;
   let encoding: string | null = null;
   const pending: Array<string | Uint8Array> = [];
   let decoder = new TextDecoder();
+  let flowing = false;
+  let explicitlyPaused = false;
+  let eofReceived = false;
+  let endEmitted = false;
+  const stdin = new NodeStdinEmitter(() => {
+    if (explicitlyPaused) return;
+    flowing = true;
+    queueMicrotask(flush);
+  });
 
   const normalize = (data: string | Uint8Array): string | Uint8Array | null => {
     if (typeof data === 'string') return data;
@@ -202,53 +280,62 @@ function makeStdinReader(
     }
     return data;
   };
-  const flush = (): void => {
-    if (stdin.listenerCount('data') === 0) return;
-    while (pending.length > 0) {
-      const chunk = pending.shift();
-      if (chunk !== undefined) stdin.emit('data', chunk);
+  function flush(): void {
+    while (flowing && pending.length > 0) {
+      const data = pending.shift();
+      if (data === undefined) continue;
+      const chunk = normalize(data);
+      if (chunk !== null) stdin.emit('data', chunk);
     }
-  };
+    if (!flowing || pending.length > 0 || !eofReceived || endEmitted) return;
+    if (encoding && /^utf-?8$/iu.test(encoding)) {
+      const tail = decoder.decode();
+      if (tail.length > 0) stdin.emit('data', tail);
+    }
+    endEmitted = true;
+    stdin.emit('end');
+  }
   const push = (data: string | Uint8Array): void => {
-    const chunk = normalize(data);
-    if (chunk == null) return;
-    if (stdin.listenerCount('data') === 0) {
-      pending.push(chunk);
-      return;
-    }
-    stdin.emit('data', chunk);
+    if (eofReceived) return;
+    pending.push(data);
+    flush();
+  };
+  const end = (): void => {
+    if (eofReceived) return;
+    eofReceived = true;
+    flush();
   };
 
   Object.assign(stdin, {
     isTTY,
     fd: 0,
     setEncoding(next: string | null) {
-      encoding = next;
+      const requested = next ?? 'utf8';
+      if (!/^utf-?8$/iu.test(requested)) {
+        throw new NotImplementedError(`process.stdin.setEncoding('${requested}')`);
+      }
+      if (encoding === 'utf8') return stdin;
+      encoding = 'utf8';
       decoder = new TextDecoder();
+      return stdin;
     },
     resume() {
+      explicitlyPaused = false;
+      flowing = true;
       flush();
+      return stdin;
     },
-    pause() {},
+    pause() {
+      explicitlyPaused = true;
+      flowing = false;
+      return stdin;
+    },
   });
-  stdin.on('newListener', (event) => {
-    if (event === 'data') queueMicrotask(flush);
-  });
-  stdin.on('end', () => {
-    if (!encoding || !/^utf-?8$/iu.test(encoding)) return;
-    const tail = decoder.decode();
-    if (tail.length === 0) return;
-    if (stdin.listenerCount('data') === 0) {
-      pending.push(tail);
-      return;
-    }
-    stdin.emit('data', tail);
-  });
-
   if (port) {
     port.onmessage = (ev: MessageEvent): void => {
       const data = ev.data;
       if (typeof data === 'string' || data instanceof Uint8Array) push(data);
+      else if (isStdinEofFrame(data)) end();
     };
     port.start();
   }
@@ -257,6 +344,28 @@ function makeStdinReader(
 
 function envFlag(env: Readonly<Record<string, string | undefined>>, key: string): boolean {
   return env[key] === '1';
+}
+
+function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === 'stdin:eof'
+  );
+}
+
+function ttyDimension(
+  env: Readonly<Record<string, string | undefined>>,
+  key: 'RIFTY_TTY_COLS' | 'RIFTY_TTY_ROWS',
+  fallback: number,
+): number {
+  const raw = env[key];
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${key} must be a positive integer; received ${raw}`);
+  }
+  return value;
 }
 
 /** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
@@ -334,6 +443,7 @@ export class NodeProcess extends EventEmitter {
   readonly #stdinPush: (data: string | Uint8Array) => void;
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
+  #controlClosed = false;
   // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
   readonly #ipcBacklog: unknown[] = [];
@@ -348,8 +458,22 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'));
-      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'));
+      const size = {
+        cols: ttyDimension(spec.env, 'RIFTY_TTY_COLS', 80),
+        rows: ttyDimension(spec.env, 'RIFTY_TTY_ROWS', 24),
+      };
+      this.stdout = makeStdioWriter(
+        spec.stdio.stdout,
+        1,
+        envFlag(spec.env, 'RIFTY_STDOUT_IS_TTY'),
+        size,
+      );
+      this.stderr = makeStdioWriter(
+        spec.stdio.stderr,
+        2,
+        envFlag(spec.env, 'RIFTY_STDERR_IS_TTY'),
+        size,
+      );
       const reader = makeStdinReader(spec.stdio.stdin, envFlag(spec.env, 'RIFTY_STDIN_IS_TTY'));
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -359,22 +483,22 @@ export class NodeProcess extends EventEmitter {
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      this.stdout = {
-        write: (chunk) => {
+      this.stdout = Object.assign(new EventEmitter(), {
+        write: (chunk: string | Uint8Array) => {
           console.log(chunk);
           return true;
         },
         isTTY: false,
         fd: 1,
-      };
-      this.stderr = {
-        write: (chunk) => {
+      }) as NodeStdioWriter;
+      this.stderr = Object.assign(new EventEmitter(), {
+        write: (chunk: string | Uint8Array) => {
           console.error(chunk);
           return true;
         },
         isTTY: false,
         fd: 2,
-      };
+      }) as NodeStdioWriter;
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -448,13 +572,16 @@ export class NodeProcess extends EventEmitter {
       const frame = ev.data as IpcFrame | undefined;
       if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
       if (frame.kind === 'ipc:message') {
+        if (this.#ipcDisconnected) return;
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(frame.payload);
         } else {
           this.emit('message', frame.payload);
         }
+      } else if (frame.kind === 'ipc:tty-resize') {
+        this.#resizeTty(frame.cols, frame.rows);
       } else if (frame.kind === 'ipc:disconnect') {
-        this.#tearDownIpc();
+        this.#disconnectIpc();
       }
     };
     port.start();
@@ -484,7 +611,7 @@ export class NodeProcess extends EventEmitter {
         return true;
       } catch {
         // Port may have been detached by the parent — treat as disconnect.
-        this.#tearDownIpc();
+        this.#closeControl();
         return false;
       }
     };
@@ -496,19 +623,41 @@ export class NodeProcess extends EventEmitter {
       } catch {
         /* peer may have closed already */
       }
-      this.#tearDownIpc();
+      this.#disconnectIpc();
     };
   }
 
-  #tearDownIpc(): void {
+  #resizeTty(cols: number, rows: number): void {
+    if (!Number.isSafeInteger(cols) || cols <= 0 || !Number.isSafeInteger(rows) || rows <= 0) {
+      throw new RangeError(`TTY resize must use positive integer cells; received ${cols}x${rows}`);
+    }
+    let changed = false;
+    for (const stream of [this.stdout, this.stderr]) {
+      if (!stream.isTTY || (stream.columns === cols && stream.rows === rows)) continue;
+      stream.columns = cols;
+      stream.rows = rows;
+      changed = true;
+      stream.emit('resize');
+    }
+    if (changed) this.emit('SIGWINCH');
+  }
+
+  #disconnectIpc(): void {
     if (this.#ipcDisconnected) return;
     this.#ipcDisconnected = true;
+    this.#ipcBacklog.length = 0;
+    this.emit('disconnect');
+  }
+
+  #closeControl(): void {
+    if (this.#controlClosed) return;
+    this.#controlClosed = true;
     try {
       this.#ipcPort?.close();
     } catch {
       /* peer may have closed */
     }
-    this.emit('disconnect');
+    this.#disconnectIpc();
   }
 }
 

@@ -10,6 +10,27 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type ParityCase, caseCwd } from './types.ts';
 
+// Rifty process modes temporarily replace the shared harness global. Keep the
+// genuine host process for native runner selection and platform checks.
+const HOST_PROCESS = process;
+const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
+const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
+const DEFAULT_CASE_TIMEOUT_MS = 30_000;
+const KILL_CLOSE_GRACE_MS = 1_000;
+
+export interface RunInNodeOptions {
+  readonly timeoutMs?: number;
+}
+
+function caseTimeoutMs(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(
+      `RunInNodeOptions.timeoutMs must be a positive safe integer; received ${value}`,
+    );
+  }
+  return value;
+}
+
 /**
  * Preamble injected ahead of a `kind: 'http'` case so the SAME case `code`
  * runs unchanged in real Node. It defines the request-driver global
@@ -60,8 +81,27 @@ const HTTP_NODE_PREAMBLE = `
 }
 `;
 
+const TTY_RESULT_MARKER = '__RIFTY_TTY_RESULT__';
+const TTY_RESIZE_NODE_PREAMBLE = `
+'use strict';
+{
+  const { execFileSync: __execFileSync } = require('node:child_process');
+  const __setTtySize = (cols, rows) => {
+    __execFileSync('stty', ['cols', String(cols), 'rows', String(rows)], {
+      stdio: ['inherit', 'ignore', 'inherit'],
+    });
+  };
+  __setTtySize(80, 24);
+  globalThis.__riftyTtyResize = __setTtySize;
+}
+`;
+
 /** Absolute path to the workspace-vendored `tsx` CLI (the full-TS-transform runner). */
 const TSX_CLI = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
+
+function quotePosixShellArg(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
 
 /**
  * Choose the executable + argv to run a case entry in Node.
@@ -84,10 +124,56 @@ function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] 
   if (testCase.kind === 'ts-esm') {
     return [TSX_CLI, [entry]];
   }
-  return [process.execPath, [entry]];
+  if (testCase.kind === 'tty-resize') {
+    if (testCase.stdin) {
+      throw new Error("ParityCase kind 'tty-resize' does not support injected stdin");
+    }
+    if (HOST_PROCESS.platform === 'linux') {
+      return [
+        'script',
+        [
+          '-q',
+          '-e',
+          '-c',
+          `exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`,
+          '/dev/null',
+        ],
+      ];
+    }
+    if (
+      HOST_PROCESS.platform === 'darwin' ||
+      HOST_PROCESS.platform === 'freebsd' ||
+      HOST_PROCESS.platform === 'openbsd' ||
+      HOST_PROCESS.platform === 'netbsd'
+    ) {
+      return ['script', ['-q', '/dev/null', HOST_PROCESS.execPath, entry]];
+    }
+    throw new Error(
+      `ParityCase kind 'tty-resize' needs POSIX script(1)+stty(1); unsupported platform ${HOST_PROCESS.platform}`,
+    );
+  }
+  return [HOST_PROCESS.execPath, [entry]];
 }
 
-export async function runInNode(testCase: ParityCase): Promise<string> {
+/** Discard PTY transcript/CRLF noise and retain the case's single explicit record. */
+function extractTtyResult(transcript: string): string {
+  const records = transcript.split(/\r?\n/u).flatMap((line) => {
+    const marker = line.indexOf(TTY_RESULT_MARKER);
+    return marker === -1 ? [] : [line.slice(marker)];
+  });
+  if (records.length !== 1) {
+    throw new Error(
+      `TTY parity case must print exactly one ${TTY_RESULT_MARKER} record; found ${records.length}: ${JSON.stringify(transcript)}`,
+    );
+  }
+  return `${records[0]}\n`;
+}
+
+export async function runInNode(
+  testCase: ParityCase,
+  options: RunInNodeOptions = {},
+): Promise<string> {
+  const timeoutMs = caseTimeoutMs(options.timeoutMs ?? DEFAULT_CASE_TIMEOUT_MS);
   // `workDir` is the case's cwd — it holds setup files so `fs.readdirSync('.')`
   // sees only the case's fixtures (no harness scaffolding). `entryDir` holds
   // a COPY of those same setup files PLUS the entry script, so a case calling
@@ -116,7 +202,11 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     // For the opt-in http mode, prepend the request-driver preamble so the case
     // can call `__riftyHttpRequest` under real Node exactly as it does in rifty.
     const source =
-      testCase.kind === 'http' ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}` : testCase.code;
+      testCase.kind === 'http'
+        ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}`
+        : testCase.kind === 'tty-resize'
+          ? `${TTY_RESIZE_NODE_PREAMBLE}\n${testCase.code}`
+          : testCase.code;
     await writeFile(entry, source, 'utf8');
 
     // `ts-esm`: mark the entry dir as a `type:module` scope so Node parses the
@@ -146,6 +236,28 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
       });
       let out = '';
       let err = '';
+      let settled = false;
+      let timeoutError: Error | undefined;
+      const timers: {
+        caseTimeout?: ReturnType<typeof setTimeout>;
+        killClose?: ReturnType<typeof setTimeout>;
+      } = {};
+      const clearTimers = (): void => {
+        if (timers.caseTimeout !== undefined) HOST_CLEAR_TIMEOUT(timers.caseTimeout);
+        if (timers.killClose !== undefined) HOST_CLEAR_TIMEOUT(timers.killClose);
+      };
+      const rejectOnce = (error: unknown): void => {
+        if (settled) return;
+        settled = true;
+        clearTimers();
+        reject(error);
+      };
+      const resolveOnce = (value: string): void => {
+        if (settled) return;
+        settled = true;
+        clearTimers();
+        resolve(value);
+      };
       proc.stdout!.on('data', (c) => {
         out += c.toString('utf8');
       });
@@ -153,14 +265,52 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
         err += c.toString('utf8');
       });
       proc.on('close', (code) => {
-        if (code !== 0) reject(new Error(`Node exited ${code}: ${err.trim() || out.trim()}`));
-        else resolve(out);
+        if (timeoutError) {
+          rejectOnce(timeoutError);
+        } else if (code !== 0) {
+          rejectOnce(new Error(`Node exited ${code}: ${err.trim() || out.trim()}`));
+        } else {
+          try {
+            resolveOnce(testCase.kind === 'tty-resize' ? extractTtyResult(out) : out);
+          } catch (error) {
+            rejectOnce(error);
+          }
+        }
       });
-      proc.on('error', reject);
+      proc.on('error', (error) => rejectOnce(error));
       if (testCase.stdin && proc.stdin) {
         for (const chunk of testCase.stdin) proc.stdin.write(chunk);
         proc.stdin.end();
       }
+      timers.caseTimeout = HOST_SET_TIMEOUT(() => {
+        timeoutError = new Error(
+          `Node parity case timed out after ${timeoutMs}ms${err.trim() || out.trim() ? `: ${err.trim() || out.trim()}` : ''}`,
+        );
+        proc.stdin?.destroy();
+        try {
+          proc.kill('SIGKILL');
+        } catch (error) {
+          rejectOnce(
+            new AggregateError(
+              [timeoutError, error],
+              'Node parity case timed out and native child termination failed',
+            ),
+          );
+          return;
+        }
+        // `close` is the normal settlement so temp fixtures are not removed under
+        // a still-live child. Bound even a broken host kill/reap path loudly.
+        timers.killClose = HOST_SET_TIMEOUT(
+          () =>
+            rejectOnce(
+              new AggregateError(
+                [timeoutError!],
+                `Node parity child did not close within ${KILL_CLOSE_GRACE_MS}ms after SIGKILL`,
+              ),
+            ),
+          KILL_CLOSE_GRACE_MS,
+        );
+      }, timeoutMs);
     });
   } finally {
     await rm(workDir, { recursive: true, force: true });

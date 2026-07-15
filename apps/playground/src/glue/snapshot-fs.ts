@@ -10,14 +10,22 @@
  * absent (excluded at the source); {@link nodeModulesPresent} records that it
  * exists in the worker so the UI can hint it without listing thousands of files.
  */
-import type { VfsDirent } from '@riftydev/vfs';
+import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { FsOpsTarget } from './fs-ops.ts';
+import type {
+  OwnerEpoch,
+  OwnerVfsRevisionFrame,
+  PathVersion,
+  TreeRevision,
+} from './owner-vfs-protocol.ts';
 import type { VfsSnapshotEntry, VfsSnapshotFrame } from './vfs-snapshot-port.ts';
 
 interface Node {
   readonly kind: 'file' | 'dir';
   readonly size: number;
+  readonly version?: PathVersion;
   readonly content?: Uint8Array;
+  readonly contentOmitted?: 'size-cap';
 }
 
 function readOnlyThrow(op: string, path: string): never {
@@ -32,8 +40,11 @@ export class SnapshotFs implements FsOpsTarget {
   /** dir path → sorted immediate-child names (dirs before files). */
   #children = new Map<string, VfsDirent[]>();
   #nodeModulesPresent = false;
+  #ownerEpoch: OwnerEpoch | null = null;
+  #treeRevision: TreeRevision | null = null;
   /** Notified after every applied frame — the owner→page publish event. */
   #listeners = new Set<() => void>();
+  #revisionListeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
 
   constructor(root: string) {
     this.#root = root;
@@ -52,6 +63,12 @@ export class SnapshotFs implements FsOpsTarget {
     return () => this.#listeners.delete(listener);
   }
 
+  /** Subscribe only to owner-issued revisions after this mirror applied them. */
+  subscribeRevisions(listener: (frame: OwnerVfsRevisionFrame) => void): () => void {
+    this.#revisionListeners.add(listener);
+    return () => this.#revisionListeners.delete(listener);
+  }
+
   get root(): string {
     return this.#root;
   }
@@ -60,30 +77,93 @@ export class SnapshotFs implements FsOpsTarget {
     return this.#nodeModulesPresent;
   }
 
-  /** Replace the entire view from a fresh full-tree frame. */
+  /**
+   * Fence the mirror to one owner lifetime. A changed owner clears the old
+   * tree before its first frame; delayed frames from the prior owner stay out.
+   */
+  bindOwner(ownerEpoch: OwnerEpoch, root = this.#root): void {
+    if (this.#ownerEpoch === ownerEpoch) {
+      if (root !== this.#root) {
+        throw new Error(`SnapshotFs owner ${ownerEpoch} cannot rebind to a different root`);
+      }
+      return;
+    }
+    this.#ownerEpoch = ownerEpoch;
+    this.#treeRevision = null;
+    this.#reset(root);
+    this.#notify();
+  }
+
+  /** Replace the view only with a newer frame from the bound owner. */
   update(frame: VfsSnapshotFrame): void {
+    if (!Number.isSafeInteger(frame.treeRevision) || frame.treeRevision < 0) {
+      throw new Error(`invalid owner tree revision ${String(frame.treeRevision)}`);
+    }
+    if (this.#ownerEpoch === null) return;
+    if (frame.ownerEpoch !== this.#ownerEpoch) return;
+    if (frame.root !== this.#root) return;
+    if (this.#treeRevision !== null) {
+      if (frame.treeRevision < this.#treeRevision) return;
+    }
+
+    const nodes = validatedSnapshotNodes(frame);
+    if (frame.treeRevision === this.#treeRevision) {
+      // A no-op commit can legitimately republish the current revision. The
+      // coordinator still needs this post-send reflection event, but only from
+      // an exact complete frame for the already-applied revision.
+      if (!sameNodes(nodes, this.#nodes) || frame.nodeModulesPresent !== this.#nodeModulesPresent) {
+        throw new Error(`owner snapshot revision ${String(frame.treeRevision)} changed content`);
+      }
+      this.#notify(frame, false);
+      return;
+    }
     this.#root = frame.root;
     this.#nodeModulesPresent = frame.nodeModulesPresent;
-    const nodes = new Map<string, Node>();
-    nodes.set(frame.root, { kind: 'dir', size: 0 });
-    for (const e of frame.entries) {
-      nodes.set(e.path, { kind: e.kind, size: e.size, content: e.content });
-    }
     this.#nodes = nodes;
+    this.#treeRevision = frame.treeRevision;
     this.#reindex();
+    this.#notify(frame);
+  }
+
+  /** Drop all entries and require an explicit owner bind before accepting again. */
+  clear(): void {
+    this.#ownerEpoch = null;
+    this.#treeRevision = null;
+    this.#reset(this.#root);
     this.#notify();
   }
 
-  /** Drop all entries (called when leaving real-vite, so a stale tree never lingers). */
-  clear(): void {
-    this.#nodes = new Map([[this.#root, { kind: 'dir', size: 0 } as Node]]);
+  #notify(frame?: OwnerVfsRevisionFrame, viewChanged = true): void {
+    const failures: unknown[] = [];
+    if (viewChanged) {
+      for (const listener of this.#listeners) {
+        try {
+          listener();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+    if (frame !== undefined) {
+      for (const listener of this.#revisionListeners) {
+        try {
+          listener(frame);
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'SnapshotFs listeners failed');
+    }
+  }
+
+  #reset(root: string): void {
+    this.#root = root;
+    this.#nodes = new Map([[root, { kind: 'dir', size: 0 } as Node]]);
     this.#nodeModulesPresent = false;
     this.#reindex();
-    this.#notify();
-  }
-
-  #notify(): void {
-    for (const listener of this.#listeners) listener();
   }
 
   #reindex(): void {
@@ -122,13 +202,13 @@ export class SnapshotFs implements FsOpsTarget {
     if (!node.content) {
       throw new Error(`"${path}" is ${node.size} bytes — too large to preview from the worker`);
     }
-    return node.content;
+    return node.content.slice();
   }
 
   readdirSync(path: string): readonly VfsDirent[] {
     const list = this.#children.get(path);
     if (!list) throw new Error(`ENOENT: no such directory "${path}"`);
-    return list;
+    return list.map((entry) => ({ ...entry }));
   }
 
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
@@ -155,6 +235,118 @@ export class SnapshotFs implements FsOpsTarget {
   entries(): VfsSnapshotEntry[] {
     return [...this.#nodes]
       .filter(([path]) => path !== this.#root)
-      .map(([path, n]) => ({ path, kind: n.kind, size: n.size, content: n.content }));
+      .map(([path, node]) => {
+        if (node.version === undefined) {
+          throw new Error(`owner snapshot version missing for ${path}`);
+        }
+        return {
+          path,
+          kind: node.kind,
+          size: node.size,
+          version: node.version,
+          content: node.content?.slice(),
+          contentOmitted: node.contentOmitted,
+        };
+      });
   }
+}
+
+function validatedSnapshotNodes(frame: VfsSnapshotFrame): Map<string, Node> {
+  if (frame.type !== 'snapshot') throw new Error('invalid owner snapshot frame type');
+  if (typeof frame.nodeModulesPresent !== 'boolean') {
+    throw new Error('invalid owner snapshot node_modules presence');
+  }
+  if (!Array.isArray(frame.entries)) throw new Error('invalid owner snapshot entries');
+
+  const nodes = new Map<string, Node>();
+  nodes.set(frame.root, { kind: 'dir', size: 0 });
+  for (const entry of frame.entries) {
+    const path = entry?.path;
+    if (
+      typeof path !== 'string' ||
+      !isAbsolute(path) ||
+      normalizePath(path) !== path ||
+      path === frame.root ||
+      (frame.root !== '/' && !path.startsWith(`${frame.root}/`))
+    ) {
+      throw new Error(`owner snapshot path is not a canonical descendant of ${frame.root}`);
+    }
+    if (nodes.has(path)) throw new Error(`owner snapshot path is duplicated: ${path}`);
+    nodes.set(path, snapshotNode(entry));
+  }
+
+  for (const path of nodes.keys()) {
+    if (path === frame.root) continue;
+    const parent = nodes.get(dirname(path));
+    if (!parent || parent.kind !== 'dir') {
+      throw new Error(`owner snapshot directory parent missing for ${path}`);
+    }
+  }
+  return nodes;
+}
+
+function snapshotNode(entry: VfsSnapshotEntry): Node {
+  if (entry.kind !== 'file' && entry.kind !== 'dir') {
+    throw new Error(`invalid owner snapshot kind for ${entry.path}`);
+  }
+  if (typeof entry.version !== 'string' || entry.version.length === 0) {
+    throw new Error(`owner snapshot version missing for ${entry.path}`);
+  }
+  if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+    throw new Error(`invalid owner snapshot size for ${entry.path}`);
+  }
+  if (entry.kind === 'dir') {
+    if (entry.size !== 0) throw new Error(`owner snapshot directory has size for ${entry.path}`);
+    if (entry.content !== undefined || entry.contentOmitted !== undefined) {
+      throw new Error(`owner snapshot directory carries file content for ${entry.path}`);
+    }
+  } else if (entry.content === undefined) {
+    if (entry.contentOmitted !== 'size-cap') {
+      throw new Error(`owner snapshot content omission is not explicit for ${entry.path}`);
+    }
+  } else {
+    if (entry.contentOmitted !== undefined) {
+      throw new Error(`owner snapshot content and omission conflict for ${entry.path}`);
+    }
+    if (!(entry.content instanceof Uint8Array)) {
+      throw new Error(`owner snapshot content is not bytes for ${entry.path}`);
+    }
+    if (entry.content.byteLength !== entry.size) {
+      throw new Error(`owner snapshot content size mismatch for ${entry.path}`);
+    }
+  }
+  return {
+    kind: entry.kind,
+    size: entry.size,
+    version: entry.version,
+    content: entry.content?.slice(),
+    contentOmitted: entry.contentOmitted,
+  };
+}
+
+function sameNodes(left: ReadonlyMap<string, Node>, right: ReadonlyMap<string, Node>): boolean {
+  if (left.size !== right.size) return false;
+  for (const [path, node] of left) {
+    const other = right.get(path);
+    if (
+      !other ||
+      node.kind !== other.kind ||
+      node.size !== other.size ||
+      node.version !== other.version ||
+      node.contentOmitted !== other.contentOmitted ||
+      !sameBytes(node.content, other.content)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameBytes(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }

@@ -1,7 +1,7 @@
 /** `touch FILE...` — create empty files, or bump mtime if they already exist. */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError, guardVfsMutations, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { enc, resolve, strerror } from './_shared.ts';
 
@@ -41,17 +41,29 @@ export const touch: ShellCommand = async (args, ctx) => {
     return 1;
   }
   const fs = syncMirror();
-  let exit = 0;
-  for (const a of files) {
-    const p = resolve(ctx.cwd, a);
-    try {
-      if (fs.existsSync(p)) bumpMtime(p);
-      else fs.writeFileSync(p, enc.encode(''));
-    } catch (err) {
-      const msg = err instanceof VfsError ? strerror(err) : (err as Error).message;
-      ctx.stderr.write(`touch: cannot touch '${a}': ${msg}\n`);
-      exit = 1;
-    }
-  }
-  return exit;
+  const targets = files.map((path) => {
+    const absolute = resolve(ctx.cwd, path);
+    return { path, absolute, exists: fs.existsSync(absolute) };
+  });
+  return await guardVfsMutations(
+    ctx.mutationGuard,
+    targets.map(({ absolute, exists }) => ({
+      kind: exists ? ('utimes' as const) : ('write' as const),
+      path: absolute,
+    })),
+    () => {
+      let exit = 0;
+      for (const { path, absolute } of targets) {
+        try {
+          if (fs.existsSync(absolute)) bumpMtime(absolute);
+          else fs.writeFileSync(absolute, enc.encode(''));
+        } catch (err) {
+          const msg = err instanceof VfsError ? strerror(err) : (err as Error).message;
+          ctx.stderr.write(`touch: cannot touch '${path}': ${msg}\n`);
+          exit = 1;
+        }
+      }
+      return exit;
+    },
+  );
 };

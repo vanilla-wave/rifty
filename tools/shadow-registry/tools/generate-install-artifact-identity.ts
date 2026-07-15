@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { viteCliActionPatchPolicy } from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
 import { identityForRecipe } from '../src/install-artifact-recipe.ts';
 
@@ -44,14 +45,18 @@ async function readRuntimeOutputIdentity(): Promise<RuntimeManifest['output'] | 
 }
 
 export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifactIdentityFile> {
-  const recipe = {
-    schema: 1,
+  return { schema: 1, identity: identityForRecipe(await buildInstallArtifactRecipe()) };
+}
+
+export async function buildInstallArtifactRecipe() {
+  return {
+    schema: 2,
     bakedOverrides,
     internalsShims,
+    viteCliActionPatch: viteCliActionPatchPolicy,
     esbuildRuntimePolicy: await readJson(policyUrl),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };
-  return { schema: 1, identity: identityForRecipe(recipe) };
 }
 
 async function main(): Promise<void> {

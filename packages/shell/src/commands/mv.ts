@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, basename, joinPath, syncMirror } from '@riftydev/vfs';
+import { VfsError, basename, guardVfsMutations, joinPath, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { resolve, strerror } from './_shared.ts';
 
@@ -89,24 +89,24 @@ export const mv: ShellCommand = async (args, ctx) => {
   const dstAbs = resolve(ctx.cwd, dst);
   const dstIsDir = fs.existsSync(dstAbs) && fs.statSync(dstAbs).isDirectory;
 
-  // Single-source: when DST is an existing dir, land at DST/basename (GNU — for
-  // BOTH file and dir sources). ENOTEMPTY now surfaces only when DST/basename
-  // already exists and is non-empty (a real overwrite), matching GNU. Otherwise
-  // a direct rename onto DST.
-  if (sources.length === 1) {
-    const srcAbs = resolve(ctx.cwd, sources[0] as string);
-    const target = dstIsDir ? joinPath(dstAbs, basename(srcAbs)) : dstAbs;
-    return move(srcAbs, target, opts, ctx) === 0 ? 0 : 1;
-  }
-  if (!dstIsDir) {
+  if (sources.length > 1 && !dstIsDir) {
     ctx.stderr.write(`mv: target '${dst}' is not a directory\n`);
     return 1;
   }
-
-  let exit = 0;
-  for (const src of sources) {
-    const srcAbs = resolve(ctx.cwd, src);
-    if (move(srcAbs, joinPath(dstAbs, basename(srcAbs)), opts, ctx) !== 0) exit = 1;
-  }
-  return exit;
+  const moves = sources.map((source) => {
+    const sourcePath = resolve(ctx.cwd, source);
+    const targetPath = dstIsDir ? joinPath(dstAbs, basename(sourcePath)) : dstAbs;
+    return { sourcePath, targetPath };
+  });
+  return await guardVfsMutations(
+    ctx.mutationGuard,
+    moves.map(({ sourcePath, targetPath }) => ({ kind: 'rename', sourcePath, targetPath })),
+    () => {
+      let exit = 0;
+      for (const { sourcePath, targetPath } of moves) {
+        if (move(sourcePath, targetPath, opts, ctx) !== 0) exit = 1;
+      }
+      return exit;
+    },
+  );
 };

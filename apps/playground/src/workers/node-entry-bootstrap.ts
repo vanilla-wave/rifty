@@ -30,20 +30,29 @@
  * write, over RPC.
  */
 
-import { readKernelSyncApi } from '@riftydev/kernel';
+import { getKernelDispatcher, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
+import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
-import { installLoudStdin } from './node-stdin-guard.ts';
-import { prepareViteCli, viteCliModeFromEnv } from './vite-cli-prep.ts';
+import {
+  installNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfigFromProcess,
+} from './node-worker-runtime-config.ts';
+import { prepareViteCli, viteCliPreparationFromEnv } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfigFromProcess(
+  proc,
+  'node-entry-bootstrap',
+);
+installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
 const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
@@ -73,12 +82,28 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
       'node-entry: RIFTY_REMOTE_FS=1 but no kernel sync call published — cannot reach the owner store',
     );
   }
-  installRemoteSyncFs(syncApi.call);
+  const remoteFs = installRemoteSyncFs(syncApi.call);
+
+  // This realm owns the dispatcher for every kernel Worker it creates. Relay
+  // the upstream-authoritative mirror so a nested Worker can load its entry/fs
+  // and recursively exec without forking an empty VFS.
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs);
 }
 
-const viteCliMode = viteCliModeFromEnv(proc.env.RIFTY_VITE_CLI_MODE);
-if (viteCliMode !== null) {
-  await prepareViteCli(proc.cwd(), viteCliMode, entryPath);
+// Every recursive Node entry gets the same host-provided sqlite engine source.
+// Install before Vite prep and both run/serve branches: user code may require
+// node:sqlite immediately, and a late provider cannot repair a cached namespace.
+registerSqliteBuiltin();
+installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
+
+const vitePreparation = viteCliPreparationFromEnv({
+  root: proc.cwd(),
+  mode: proc.env.RIFTY_VITE_CLI_MODE,
+  executedBinPath: entryPath,
+  esbuildWasmUrl: nodeWorkerRuntimeConfig.esbuildWasmUrl,
+});
+if (vitePreparation !== null) {
+  await prepareViteCli(vitePreparation);
 }
 
 const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
@@ -99,21 +124,12 @@ const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
 // preventDefault) — never silently swallowed either way.
 //
 // `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
-// correct argv/cwd/stdin + fork-IPC `send`. No swap, so `installLoudStdin(proc)` and
-// `proc.cwd()` act on the SAME object user code reads. The else-branch (.bin/execSync)
-// already has Buffer + nextTick from the gated pre-entry install; the RIFTY_NODE_SERVE
-// branch additionally registers net builtins + the stdin guard (not needed there).
+// correct argv/cwd/stdin + fork-IPC `send`. No swap, so every entry path reads the
+// same runtime-owned flowing stdin and its loud unsupported pull/raw surfaces.
+// The else-branch (.bin/execSync) already has Buffer + nextTick from pre-entry;
+// RIFTY_NODE_SERVE additionally registers net builtins.
 if (proc.env.RIFTY_NODE_SERVE === '1') {
   registerNetBuiltins();
-  // node:sqlite for any user program — registered always, engine paid only at
-  // first require via the sync wasm provider.
-  registerSqliteBuiltin();
-  installSqliteWasmSyncProvider();
-  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0155 §5,
-  // ADR-0157 §4): make the consume surface throw loudly instead of hanging on
-  // input that never arrives (Fidelity — no silent divergence).
-  // backlog/kernel/worker-per-process-residuals + terminal/raw-stdin-deferred-items.
-  installLoudStdin(proc);
   await runNodeProgramLifecycle({
     runEntry: () =>
       runNodeEntry({

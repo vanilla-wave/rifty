@@ -16,9 +16,27 @@ describe('pty-protocol', () => {
     expect(isOwnerToPage(f)).toBe(false);
   });
   it('classifies owner→page frames', () => {
-    const f: PtyFrame = { type: 'pty:exit', sid: 's1', rid: 'r1', code: 0, cwd: '/', env: {} };
+    const f: PtyFrame = {
+      type: 'pty:exit',
+      sid: 's1',
+      rid: 'r1',
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    };
     expect(isOwnerToPage(f)).toBe(true);
     expect(isPageToOwner(f)).toBe(false);
+  });
+  it('classifies owner-authoritative run admission as owner→page', () => {
+    const admitted: PtyFrame = {
+      type: 'pty:run-ready',
+      sid: 's1',
+      rid: 'r1',
+    };
+
+    expect(isOwnerToPage(admitted)).toBe(true);
+    expect(isPageToOwner(admitted)).toBe(false);
   });
   it('chunk frames carry Uint8Array data + monotonic seq shape', () => {
     const f: PtyFrame = {
@@ -64,11 +82,88 @@ describe('pty-protocol', () => {
     expect(isOwnerToPage(f)).toBe(true);
     expect(isPageToOwner(f)).toBe(false);
   });
-  it('does not advertise pty:resize — dropped wired no-op; dims stay per-exec (backlog: live-resize)', () => {
-    // pty:resize was a fully-wired no-op the owner silently ignored. We removed
-    // it from the protocol rather than keep advertising an unimplemented frame.
-    // Cast: pty:resize is no longer part of the PtyFrame union.
-    expect(isPageToOwner({ type: 'pty:resize' } as unknown as PtyFrame)).toBe(false);
+  it('classifies live resize and its owner acknowledgement', () => {
+    const resize = {
+      type: 'pty:resize',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'op1',
+      cols: 120,
+      rows: 40,
+    } as unknown as PtyFrame;
+    const ack = {
+      type: 'pty:resize-ack',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'op1',
+      ok: true,
+    } as unknown as PtyFrame;
+
+    expect(isPageToOwner(resize)).toBe(true);
+    expect(isOwnerToPage(resize)).toBe(false);
+    expect(isOwnerToPage(ack)).toBe(true);
+    expect(isPageToOwner(ack)).toBe(false);
+  });
+
+  it('classifies acknowledged stdin/EOF and per-session close operations', () => {
+    const stdin = {
+      type: 'pty:stdin',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'op1',
+      data: new Uint8Array([1]),
+    } as unknown as PtyFrame;
+    const eof = {
+      type: 'pty:stdin-eof',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'op2',
+    } as unknown as PtyFrame;
+    const close = { type: 'pty:close', sid: 's1', opId: 'op3' } as unknown as PtyFrame;
+    const stdinAck = {
+      type: 'pty:stdin-ack',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'op1',
+      ok: true,
+    } as unknown as PtyFrame;
+    const closeAck = {
+      type: 'pty:close-ack',
+      sid: 's1',
+      opId: 'op3',
+      ok: true,
+    } as unknown as PtyFrame;
+
+    expect([stdin, eof, close].every(isPageToOwner)).toBe(true);
+    expect([stdinAck, closeAck].every(isOwnerToPage)).toBe(true);
+  });
+
+  it('keeps idle session resize distinct from mandatory-rid live resize', () => {
+    const idle: PtyFrame = {
+      type: 'pty:session-resize',
+      sid: 's1',
+      opId: 'session-resize-1',
+      cols: 100,
+      rows: 30,
+    };
+    const idleAck: PtyFrame = {
+      type: 'pty:session-resize-ack',
+      sid: 's1',
+      opId: 'session-resize-1',
+      ok: true,
+    };
+    const live: PtyFrame = {
+      type: 'pty:resize',
+      sid: 's1',
+      rid: 'r1',
+      opId: 'resize-1',
+      cols: 100,
+      rows: 30,
+    };
+
+    expect(isPageToOwner(idle)).toBe(true);
+    expect(isOwnerToPage(idleAck)).toBe(true);
+    expect(live).toMatchObject({ type: 'pty:resize', rid: 'r1' });
   });
 });
 

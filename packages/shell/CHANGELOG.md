@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- **Terminal Git checks complete worktree plans before namespace ingress.**
+  `ShellOptions.assertPortablePaths` synchronously validates absolute paths for
+  checkout/switch/restore/reset/merge/cherry-pick/stash/clone/pull plus direct
+  apply/revert/rm/mv writers before their first worktree, index, or HEAD write;
+  the existing async mutation guard remains the sole outer FIFO.
+- **Supervised abort can await physical handler settlement (ADR-0230/0256).**
+  `RunOptions.awaitAbortSettlement` keeps owner teardown pending after SIGINT
+  until the command handler settles; background-job disposal now does the same.
+- **Cancellation cannot fork a trailing background job.** A host abort that
+  settles the foreground prefix now stops before the outer `;`/`&&`/`|| ... &`
+  dispatcher; the cancelled result remains SIGINT/130 instead of becoming a
+  fresh job's success.
 - **`cat -A` now implies `-v` like GNU (review 2026-07-06 #10).** `-A`=`-vET`
   renders non-printing bytes in GNU `^X`/`M-x` notation (`0x80`→`M-^@`,
   `0xff`→`M-^?`, DEL→`^?`); `-v`, `-e` (=`-vE`), `-t` (=`-vT`) and plain `-T`
@@ -57,6 +69,23 @@
 
 ### Added
 
+- **Host-owned VFS mutation guard (ADR-0260).** `ShellOptions.mutationGuard`
+  batches each logical `rm`/`mv`/`cp`/`mkdir`/`touch`, stdout redirect, and git
+  mutation through the shared `@riftydev/vfs` intent contract before bytes
+  change. Git publishes exact worktree paths where known, root-wide intents for
+  branch/tree operations, and narrow `.git`/config intents for metadata writers
+  so repositories nested under `node_modules` cannot bypass package trust;
+  read-only porcelain stays unguarded. Background Shell clones retain the same
+  guard. Guarded Git plans pin their governing repository root and abort before
+  mutation if it changes while queued. Guards: `mutation-guard.test.ts`.
+- **Exact process exits survive shell composition (ADR-0257).** Process-backed
+  commands may return discriminated `{code, signal}`; `Shell.run()` retains it
+  beside `exitCode` through `&&`/`||`/`;`, pipelines, nested npm hooks, and owned
+  abort settlement. Invalid rich pairs and numeric statuses fail loudly.
+- **Run-scoped terminal dimensions (ADR-0225).** `RunOptions` and
+  `CommandContext` carry `TerminalResizeSource`; TTY contexts read live
+  `cols`/`rows`, while redirects and non-final pipe stages remain non-TTY and
+  receive no resize source.
 - **Shell input redirect `cmd < file`.** A `< file` operand (anywhere in a simple command, rightmost wins — mirrors the `>`/`>>` scan) reads the VFS file as the command's stdin via the same one-shot reader the pipe hand-off uses; an explicit `< file` overrides any inherited pipe stdin. A missing/unreadable file → `cmd: file: No such file or directory` exit 1 and the command does not run. Composes with pipes (`grep x < f | wc -l`). Background `cmd < file &` stays a loud ceiling. Guards: `input-redirect.test.ts`.
 - **Shell pipes `a | b`.** The dispatcher now splits a segment on `|` and runs the stages left→right, BUFFERING each stage's stdout into the next stage's `ctx.stdin` (a one-shot reader). Only the final stage streams stdout to the terminal; every stage's stderr passes through (bash never pipes stderr); pipeline exit = the last stage's exit (POSIX). To make chains work, `cat`/`grep`/`wc`/`head`/`tail` now drain `ctx.stdin` when given no FILE operand (a `-` operand also reads stdin, GNU) — so `cat f | grep x | wc -l`, `ls | wc -l` work. A piped BACKGROUND job (`a | b &`) stays a loud ceiling. `>`/`>>` redirect composes per-stage. Guards: `pipes.test.ts`.
 - **`help` builtin.** `help` lists the live command registry (sorted; includes host-registered `node`/`npm`/`vite`) plus a note that those run programs; `help <cmd>` prints a one-line synopsis, unknown topic → `help: no help topic for '<cmd>'` exit 1. Lists from the live `commandNames()` so it can't drift from the real set. Guards: `help.test.ts`.

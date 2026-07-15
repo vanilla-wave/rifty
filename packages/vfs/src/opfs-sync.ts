@@ -123,6 +123,24 @@ export interface PersistFailureReport {
 const PERSIST_REPORT_SAMPLE = 20;
 
 /**
+ * Reporting bound for one queued OPFS side effect. The browser operation
+ * itself cannot be cancelled and remains on the FIFO tail; only `flush()`
+ * reporting is released so durability callers fail loudly instead of hanging.
+ */
+const PERSIST_OPERATION_REPORT_TIMEOUT_MS = 30_000;
+
+interface PersistOperation {
+  readonly path: string;
+  readonly op: PersistFailure['op'];
+  readonly sequence: number;
+}
+
+interface TrackedPersistFailure {
+  readonly failure: PersistFailure;
+  readonly operationSequence: number;
+}
+
+/**
  * Walks an OPFS directory tree and yields `{ path, kind, size, children? }`
  * for every entry under `root`. The root itself is reported as
  * `'/' → dir`. Exported for unit tests; not part of the public surface.
@@ -181,6 +199,8 @@ export class OpfsFsSync implements FsSync {
   private readonly pending: Array<Promise<void>> = [];
   /** Serialises OPFS side effects so durable state follows sync call order. */
   private pendingTail: Promise<void> = Promise.resolve();
+  /** Real FIFO tail ownership; independent of bounded reporting entries. */
+  private pendingTailActive = false;
   /**
    * Paired async OPFS surface used for content write-through, content
    * preload, and durable file-bearing structural moves/deletes. `null` when
@@ -428,18 +448,18 @@ export class OpfsFsSync implements FsSync {
    * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
-    this.enqueuePending(async () => {
+    this.enqueuePending({ path, op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
-        this.persistFailures.delete(path);
+        this.healPersistFailure(path, operation.sequence);
         // A persisted dir proves its ancestors exist on disk too — heal any
         // stale ancestor mkdir failure.
-        this.healAncestorPersistFailures(path);
+        this.healAncestorPersistFailures(path, operation.sequence);
       } catch (err) {
         // Mirror already reflects intent; a failed persist (quota, perm)
         // reconciles on next refresh — but the divergence is RECORDED so a
         // durability-gated caller (install stamp) can refuse to trust it.
-        this.recordPersistFailure(path, 'mkdir', err);
+        this.recordPersistFailure(path, 'mkdir', err, operation.sequence);
       }
     });
   }
@@ -451,7 +471,7 @@ export class OpfsFsSync implements FsSync {
    * reconciles any mismatch.
    */
   private persistRmAsync(path: string, recursive: boolean): void {
-    this.enqueuePending(async () => {
+    this.enqueuePending({ path, op: 'rm' }, async (operation) => {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
@@ -459,15 +479,15 @@ export class OpfsFsSync implements FsSync {
         // and mirror now agree the paths are gone, so an unhealed child write
         // failure is moot — leaving it would make a durable tree look torn
         // and wrongly skip/revoke install stamps.
-        this.clearPersistFailuresUnder(path);
+        this.clearPersistFailuresUnder(path, operation.sequence);
       } catch (err) {
         // See `persistMkdirAsync` — mismatch reconciles on refresh; recorded
         // meanwhile. A missing OPFS entry is already-removed = success.
         if ((err as { name?: string }).name === 'NotFoundError') {
-          this.clearPersistFailuresUnder(path);
+          this.clearPersistFailuresUnder(path, operation.sequence);
           return;
         }
-        this.recordPersistFailure(path, 'rm', err);
+        this.recordPersistFailure(path, 'rm', err, operation.sequence);
       }
     });
   }
@@ -475,10 +495,12 @@ export class OpfsFsSync implements FsSync {
   /** Heal `path` and every ledger entry beneath it (recursive rm / moved-away
    * subtree): once disk agrees the subtree is gone, its unhealed write
    * failures no longer describe a divergence. */
-  private clearPersistFailuresUnder(path: string): void {
+  private clearPersistFailuresUnder(path: string, operationSequence: number): void {
     const prefix = path === '/' ? '/' : `${path}/`;
     for (const key of [...this.persistFailures.keys()]) {
-      if (key === path || key.startsWith(prefix)) this.persistFailures.delete(key);
+      if (key === path || key.startsWith(prefix)) {
+        this.healPersistFailure(key, operationSequence);
+      }
     }
   }
 
@@ -487,11 +509,11 @@ export class OpfsFsSync implements FsSync {
    * chain is already present. A stale ancestor mkdir failure no longer
    * describes a divergence — clear it. Guarded on a non-empty ledger so the
    * common (nothing-failed) path stays O(1). */
-  private healAncestorPersistFailures(path: string): void {
+  private healAncestorPersistFailures(path: string, operationSequence: number): void {
     if (this.persistFailures.size === 0) return;
     let parent = dirnameNormalized(path);
     while (parent !== '/') {
-      this.persistFailures.delete(parent);
+      this.healPersistFailure(parent, operationSequence);
       const next = dirnameNormalized(parent);
       if (next === parent) break;
       parent = next;
@@ -587,21 +609,21 @@ export class OpfsFsSync implements FsSync {
   private enqueueWriteThrough(normalized: string, data: Uint8Array): void {
     const surface = this.asyncSurface;
     if (!surface) return;
-    this.enqueuePending(async () => {
+    this.enqueuePending({ path: normalized, op: 'write' }, async (operation) => {
       try {
         await surface.writeFile(normalized, data);
-        this.persistFailures.delete(normalized);
+        this.healPersistFailure(normalized, operation.sequence);
         // A persisted write proves every ANCESTOR directory exists on disk:
         // OpfsVfs.writeFile no longer creates parents, so success itself is the
         // proof. Heal stale ancestor mkdir failures, else a durable tree can
         // wrongly revoke its install stamp.
-        this.healAncestorPersistFailures(normalized);
+        this.healAncestorPersistFailures(normalized, operation.sequence);
       } catch (err) {
         // Persist failure (quota, perm) leaves OPFS behind the cache; next
         // refreshIndex/preload reconciles. Cache stays correct for sync
         // callers in this realm — but the divergence is RECORDED: a caller
         // that promises durability (install stamp) must be able to see it.
-        this.recordPersistFailure(normalized, 'write', err);
+        this.recordPersistFailure(normalized, 'write', err, operation.sequence);
       }
     });
   }
@@ -616,31 +638,91 @@ export class OpfsFsSync implements FsSync {
    * would make over-cap failures unhealable (`total` never returns to 0 after
    * a big quota event); only the REPORT is sampled.
    */
-  private readonly persistFailures = new Map<string, PersistFailure>();
+  private readonly persistFailures = new Map<string, TrackedPersistFailure>();
+  private persistOperationSequence = 0;
 
-  private recordPersistFailure(path: string, op: PersistFailure['op'], err: unknown): void {
+  private recordPersistFailure(
+    path: string,
+    op: PersistFailure['op'],
+    err: unknown,
+    operationSequence: number,
+  ): void {
+    const current = this.persistFailures.get(path);
+    if (current && current.operationSequence > operationSequence) return;
     const message = err instanceof Error ? err.message : String(err);
-    this.persistFailures.set(path, { path, op, message });
+    this.persistFailures.set(path, {
+      failure: { path, op, message },
+      operationSequence,
+    });
   }
 
-  /** Adds `p` to {@link pending} and self-removes it on settle. */
-  private trackPending(p: Promise<void>): void {
-    this.pending.push(p);
-    void p.finally(() => {
-      const i = this.pending.indexOf(p);
+  private healPersistFailure(path: string, operationSequence: number): void {
+    const current = this.persistFailures.get(path);
+    if (current && current.operationSequence <= operationSequence) {
+      this.persistFailures.delete(path);
+    }
+  }
+
+  /**
+   * Tracks bounded REPORTING for `p`. Timeout does not cancel or skip the
+   * underlying operation: `pendingTail` keeps waiting, preserving FIFO. Its
+   * eventual success/failure still runs the ordinary ledger heal/replace path.
+   */
+  private trackPending(operation: PersistOperation, p: Promise<void>): void {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settleReporting!: () => void;
+    const reporting = new Promise<void>((resolve) => {
+      settleReporting = () => {
+        if (settled) return;
+        settled = true;
+        if (timer !== null) clearTimeout(timer);
+        resolve();
+      };
+      timer = setTimeout(() => {
+        this.recordPersistFailure(
+          operation.path,
+          operation.op,
+          new Error(
+            `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
+          ),
+          operation.sequence,
+        );
+        settleReporting();
+      }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
+    });
+    void p.then(settleReporting, settleReporting);
+    this.pending.push(reporting);
+    void reporting.finally(() => {
+      const i = this.pending.indexOf(reporting);
       if (i >= 0) this.pending.splice(i, 1);
     });
   }
 
-  private enqueuePending(task: () => Promise<void>): void {
+  private enqueuePending(
+    operation: Omit<PersistOperation, 'sequence'>,
+    task: (operation: PersistOperation) => Promise<void>,
+  ): void {
     // FIFO is load-bearing (ADR-0187 Corrected): the install stamp's "durable
     // stamp implies durable tree" is delivered by write-through ORDER plus the
     // persist-failure ledger gate (order alone can't survive a swallowed
     // per-op failure). Parallelizing this queue requires per-path ordering +
     // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
-    const p = this.pending.length === 0 ? task() : this.pendingTail.then(task, task);
-    this.pendingTail = p.catch(() => {});
-    this.trackPending(p);
+    // Chain from the REAL operation tail. The first task still starts
+    // synchronously so it captures its already-defensively-copied bytes before
+    // the caller can reuse a buffer. Reporting promises may time out and
+    // self-remove while this tail remains active; `pendingTailActive`, not
+    // `pending.length`, therefore owns FIFO admission.
+    const sequenced = { ...operation, sequence: ++this.persistOperationSequence };
+    const run = () => task(sequenced);
+    const p = this.pendingTailActive ? this.pendingTail.then(run, run) : run();
+    this.pendingTailActive = true;
+    const tail = p.catch(() => {});
+    this.pendingTail = tail;
+    void tail.finally(() => {
+      if (this.pendingTail === tail) this.pendingTailActive = false;
+    });
+    this.trackPending(sequenced, p);
   }
 
   /**
@@ -656,9 +738,9 @@ export class OpfsFsSync implements FsSync {
   async flush(): Promise<PersistFailureReport> {
     await Promise.allSettled([...this.pending]);
     const failures: PersistFailure[] = [];
-    for (const failure of this.persistFailures.values()) {
+    for (const tracked of this.persistFailures.values()) {
       if (failures.length >= PERSIST_REPORT_SAMPLE) break;
-      failures.push(failure);
+      failures.push(tracked.failure);
     }
     // `anyFailure` scans the WHOLE ledger (not the sample) so a durability gate
     // never misses a torn-tree path beyond the first PERSIST_REPORT_SAMPLE.
@@ -1013,58 +1095,63 @@ export class OpfsFsSync implements FsSync {
     }>,
   ): void {
     const surface = this.asyncSurface;
-    this.enqueuePending(async () => {
-      try {
-        if (fileMoves.length > 0 && !surface) return;
-        const orderedDirs = [...dirCreates].sort(
-          (a, b) => segments(a).length - segments(b).length || a.localeCompare(b),
-        );
-        for (const dir of orderedDirs) {
-          await this.persistDirectoryPath(dir, true);
-          this.persistFailures.delete(dir);
-          this.healAncestorPersistFailures(dir);
-        }
-        if (surface) {
-          for (const move of fileMoves) {
-            const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
-            await surface.writeFile(move.newPath, bytes);
-          }
-        }
-        // Remove the source subtree AFTER the destinations wrote durably.
-        // Already-gone (NotFoundError) counts as a successful removal (same
-        // rule as persistRmAsync): a rename whose source never reached disk
-        // must still HEAL its durably-written destinations below, not record
-        // bogus per-destination failures for a move that actually persisted.
+    this.enqueuePending(
+      { path: fileMoves[0]?.newPath ?? srcRoot, op: 'rename' },
+      async (operation) => {
         try {
-          if (surface) {
-            await surface.rm(srcRoot, { recursive: true });
-          } else {
-            const parent = await this.resolveParent(srcRoot);
-            await parent.removeEntry(basename(srcRoot), { recursive: true });
+          if (fileMoves.length > 0 && !surface) return;
+          const orderedDirs = [...dirCreates].sort(
+            (a, b) => segments(a).length - segments(b).length || a.localeCompare(b),
+          );
+          for (const dir of orderedDirs) {
+            await this.persistDirectoryPath(dir, true);
+            this.healPersistFailure(dir, operation.sequence);
+            this.healAncestorPersistFailures(dir, operation.sequence);
           }
+          if (surface) {
+            for (const move of fileMoves) {
+              const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
+              await surface.writeFile(move.newPath, bytes);
+            }
+          }
+          // Remove the source subtree AFTER the destinations wrote durably.
+          // Already-gone (NotFoundError) counts as a successful removal (same
+          // rule as persistRmAsync): a rename whose source never reached disk
+          // must still HEAL its durably-written destinations below, not record
+          // bogus per-destination failures for a move that actually persisted.
+          try {
+            if (surface) {
+              await surface.rm(srcRoot, { recursive: true });
+            } else {
+              const parent = await this.resolveParent(srcRoot);
+              await parent.removeEntry(basename(srcRoot), { recursive: true });
+            }
+          } catch (err) {
+            if ((err as { name?: string }).name !== 'NotFoundError') throw err;
+          }
+          // A fully-persisted move heals both sides of the ledger: each
+          // destination just got written durably, and the removed source
+          // subtree no longer describes any divergence (same rule as
+          // `persistRmAsync`). Without this, a pre-rename write failure on a
+          // moved path would read as torn forever.
+          for (const move of fileMoves) {
+            this.healPersistFailure(move.newPath, operation.sequence);
+            this.healAncestorPersistFailures(move.newPath, operation.sequence);
+          }
+          this.clearPersistFailuresUnder(srcRoot, operation.sequence);
         } catch (err) {
-          if ((err as { name?: string }).name !== 'NotFoundError') throw err;
+          // Mismatch reconciles on the next refreshIndex (same posture as
+          // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION
+          // path — those are the files a reload would find missing; a later
+          // successful write-through of the same path heals the entry.
+          for (const move of fileMoves) {
+            this.recordPersistFailure(move.newPath, 'rename', err, operation.sequence);
+          }
+          if (fileMoves.length === 0) {
+            this.recordPersistFailure(srcRoot, 'rename', err, operation.sequence);
+          }
         }
-        // A fully-persisted move heals both sides of the ledger: each
-        // destination just got written durably, and the removed source
-        // subtree no longer describes any divergence (same rule as
-        // `persistRmAsync`). Without this, a pre-rename write failure on a
-        // moved path would read as torn forever.
-        for (const move of fileMoves) {
-          this.persistFailures.delete(move.newPath);
-          this.healAncestorPersistFailures(move.newPath);
-        }
-        this.clearPersistFailuresUnder(srcRoot);
-      } catch (err) {
-        // Mismatch reconciles on the next refreshIndex (same posture as
-        // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION
-        // path — those are the files a reload would find missing; a later
-        // successful write-through of the same path heals the entry.
-        for (const move of fileMoves) {
-          this.recordPersistFailure(move.newPath, 'rename', err);
-        }
-        if (fileMoves.length === 0) this.recordPersistFailure(srcRoot, 'rename', err);
-      }
-    });
+      },
+    );
   }
 }

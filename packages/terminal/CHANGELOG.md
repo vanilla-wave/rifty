@@ -4,6 +4,9 @@
 
 ### Added
 
+- `RiftyTerminalOptions.onResize(cols, rows)` reports each live xterm grid
+  change after fit/explicit resize and detaches with terminal disposal, letting
+  hosts propagate real foreground TTY resize (ADR-0225).
 - `TerminalState.devCommand` (`{ line, cwd }`) — optional recorded dev-server
   command, round-tripped by the sync + async state stores; validated on parse
   (non-empty line, absolute cwd; malformed → dropped, cwd/env kept).

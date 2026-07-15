@@ -468,6 +468,8 @@ export interface RiftyTerminalOptions {
   onSignal?(signal: 'SIGINT'): void;
   /** Raw stdin bytes received while a foreground command is running. */
   onRawInput?(data: TerminalRawInput): void;
+  /** Called after xterm changes its character-cell grid (fit or explicit resize). */
+  onResize?(cols: number, rows: number): void;
   /**
    * Called when editable terminal input is redirected to a running foreground
    * command instead of becoming a new command line.
@@ -605,6 +607,7 @@ export class RiftyTerminal {
     this.term.onBinary((data) => {
       this.handleBinaryInput(data);
     });
+    this.disposables.push(this.term.onResize(({ cols, rows }) => this.opts.onResize?.(cols, rows)));
     this.disposables.push(this.term.onScroll((line) => this.opts.onViewportChange?.(line)));
     this.loadConstructorAddons();
     this.term.attachCustomKeyEventHandler((event) => {

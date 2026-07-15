@@ -22,3 +22,8 @@ export {
 export { syncMirror, asyncVfs } from './sync-mirror.ts';
 export type { FsSync } from './sync-mirror.ts';
 export { detectVfsBackend, initBackend } from './boot.ts';
+export {
+  guardVfsMutations,
+  type VfsMutationGuard,
+  type VfsMutationIntent,
+} from './mutation-intent.ts';

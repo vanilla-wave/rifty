@@ -25,6 +25,7 @@ import { terminalWelcomeBanner } from '../glue/terminal-welcome-banner.ts';
 import { Icon } from './icons.tsx';
 import { TERMINAL_APPEARANCE } from './terminal-appearance.ts';
 import { createBufferRefreshScheduler } from './terminal-buffer-scheduler.ts';
+import { terminalMirrorText } from './terminal-mirror-text.ts';
 
 /** Live terminal dimensions handed to `onLine` so the shell sees `ctx.cols/rows`. */
 export interface TerminalDims {
@@ -65,6 +66,7 @@ export function TerminalPanel(props: {
   /** Ctrl+C from the terminal — wire to the shell session's `interrupt()`. */
   onSignal?(): void;
   onRawInput?(data: TerminalRawInput): void;
+  onResize?(dims: TerminalDims): void;
   onLink?(uri: string, event: MouseEvent): void;
   focusEpoch?: number;
   testId?: string;
@@ -168,7 +170,7 @@ export function TerminalPanel(props: {
     // later refresh) is missed — the CI-only `data-terminal-buffer` marker flake.
     void t
       .snapshotBufferSettled({ excludeModes: true })
-      .then((text) => setTerminalBuffer(text))
+      .then((text) => setTerminalBuffer(terminalMirrorText(text)))
       .catch(() => setTerminalBuffer(''));
   }
 
@@ -353,6 +355,7 @@ export function TerminalPanel(props: {
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
       webgl: navigator.webdriver ? false : undefined,
       onSignal: props.onSignal ? () => props.onSignal?.() : undefined,
+      onResize: (cols, rows) => props.onResize?.({ cols, rows }),
     });
     disposeTheme = watchPreferredTerminalTheme(globalThis, (theme) => term?.setTheme(theme));
     term.mount(container);

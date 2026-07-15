@@ -1,27 +1,25 @@
 /**
  * Run case code through the rifty module loader and capture stdout.
  *
- * Scope: the loader is the rifty path under test. We deliberately do NOT
- * monkey-patch global `process` or `Promise.prototype.then` here — that would
- * leak into the runner itself. Behaviours that depend on rifty's promise/
- * nextTick patches are covered by the conformance suite, which can install
- * the patches in a controlled `beforeAll`/`afterAll` scope. The parity runner
- * does temporarily mirror the Worker's tracked timer globals so detached timer
+ * Scope: the loader is the rifty path under test. Default modes do not replace
+ * global `process` or `Promise.prototype.then`. Stdin/TTY/exec-sync modes install
+ * an isolated worker-style process and restore its exact descriptor in `finally`.
+ * Promise/nextTick behavior stays in conformance's controlled patch scope. The
+ * parity runner temporarily mirrors the Worker's tracked timer globals so detached timer
  * chains participate in the real keepalive drain. It otherwise focuses on
  * module-shape semantics: `node:path`, `node:buffer`, `node:util`,
  * `node:querystring`, `node:events`, `node:url`, etc.
  *
  * Console is replaced for the duration of the case, then restored.
  */
-import {
-  riftyProcess,
-  setProcessCwd,
-  writeProcessStdin,
-} from '@riftydev/runtime-js/builtins/process';
+import { Worker } from 'node:worker_threads';
+import { NodeProcess, getProcessCwd, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { asyncVfs, syncMirror } from '@riftydev/vfs';
+import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
+import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
 // `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
 // selection between cases, and `ensureVmEngineReady` preloads the QuickJS WASM
@@ -68,6 +66,8 @@ declare global {
   var __riftyHttpRequest:
     | ((port: number, path: string, init?: RequestInit) => Promise<RiftyHttpResponse>)
     | undefined;
+  /** Injected only for the OS-PTY/process-control parity case. */
+  var __riftyTtyResize: ((cols: number, rows: number) => void) | undefined;
 }
 
 const TIMER_GLOBAL_KEYS = [
@@ -79,20 +79,417 @@ const TIMER_GLOBAL_KEYS = [
   'clearImmediate',
 ] as const;
 
+type Cleanup = () => void;
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/** Fault-safe LIFO ownership for the process-global resources used by one case. */
+class CleanupStack {
+  readonly #entries: Cleanup[] = [];
+  #disposed = false;
+
+  defer(cleanup: Cleanup): void {
+    if (this.#disposed) throw new Error('cannot acquire a resource after cleanup');
+    this.#entries.push(cleanup);
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    const errors: Error[] = [];
+    while (this.#entries.length > 0) {
+      try {
+        this.#entries.pop()?.();
+      } catch (error) {
+        errors.push(asError(error));
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'parity harness cleanup failed');
+  }
+}
+
+const NO_FAILURE = Symbol('no parity case failure');
+
+function disposePreservingFailure(
+  cleanups: CleanupStack,
+  failure: unknown | typeof NO_FAILURE,
+): void {
+  try {
+    cleanups.dispose();
+  } catch (cleanupError) {
+    if (failure === NO_FAILURE) throw cleanupError;
+    const cleanupErrors =
+      cleanupError instanceof AggregateError
+        ? cleanupError.errors.map(asError)
+        : [asError(cleanupError)];
+    throw new AggregateError(
+      [asError(failure), ...cleanupErrors],
+      'parity case failed and cleanup also failed',
+    );
+  }
+}
+
 /** Mirror worker bootstrap timers for one case, then restore the harness realm exactly. */
 function installCaseTimerGlobals(): () => void {
-  const globals = globalThis as unknown as Record<string, unknown>;
   const previous = TIMER_GLOBAL_KEYS.map((key) => ({
     key,
-    own: Object.hasOwn(globals, key),
-    value: globals[key],
+    descriptor: Object.getOwnPropertyDescriptor(globalThis, key),
   }));
-  installTimerGlobals();
-  return () => {
-    for (const { key, own, value } of previous) {
-      if (own) globals[key] = value;
-      else Reflect.deleteProperty(globals, key);
+  const cleanups = new CleanupStack();
+  for (const { key, descriptor } of previous) {
+    cleanups.defer(() => restoreGlobalDescriptor(key, descriptor));
+  }
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
+  try {
+    installTimerGlobals();
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
+  }
+  return () => cleanups.dispose();
+}
+
+function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  else Reflect.deleteProperty(globalThis, name);
+}
+
+interface SeededProcessMode {
+  feedStdin(chunks: readonly Uint8Array[]): Promise<void>;
+  writeConsoleStdout(text: string): void;
+  writeConsoleStderr(text: string): void;
+  drainStdio(): Promise<void>;
+  stdoutText(): string;
+  teardown(): void;
+}
+
+const STDIO_DRAIN_KIND = 'rifty:parity-stdio-drain';
+
+interface StdioDrainFrame {
+  readonly kind: typeof STDIO_DRAIN_KIND;
+  readonly id: number;
+}
+
+function isStdioDrainFrame(value: unknown): value is StdioDrainFrame {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<StdioDrainFrame>;
+  return candidate.kind === STDIO_DRAIN_KIND && Number.isSafeInteger(candidate.id);
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  let size = 0;
+  for (const chunk of chunks) size += chunk.byteLength;
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/** Own one stdio peer: collect bytes FIFO and prove the queue drained before close. */
+class StdioPortCapture {
+  readonly #chunks: Uint8Array[] = [];
+  readonly #source: MessagePort;
+  readonly #peer: MessagePort;
+  readonly #label: 'stdout' | 'stderr';
+  #drainId = 0;
+  #drained = false;
+  #fault: Error | undefined;
+  #pending:
+    | {
+        readonly id: number;
+        readonly resolve: () => void;
+        readonly reject: (error: Error) => void;
+      }
+    | undefined;
+
+  constructor(source: MessagePort, peer: MessagePort, label: 'stdout' | 'stderr') {
+    this.#source = source;
+    this.#peer = peer;
+    this.#label = label;
+  }
+
+  start(): void {
+    this.#peer.onmessage = (event: MessageEvent): void => {
+      const value = event.data;
+      if (value instanceof Uint8Array) {
+        this.#chunks.push(new Uint8Array(value));
+        return;
+      }
+      if (isStdioDrainFrame(value) && value.id === this.#pending?.id) {
+        const pending = this.#pending;
+        this.#pending = undefined;
+        this.#drained = true;
+        pending.resolve();
+        return;
+      }
+      this.#fail(new TypeError(`rifty parity ${this.#label} port received a malformed frame`));
+    };
+    this.#peer.onmessageerror = (): void => {
+      this.#fail(new Error(`rifty parity ${this.#label} port could not deserialize a frame`));
+    };
+    this.#peer.start();
+  }
+
+  drain(): Promise<void> {
+    if (this.#fault) return Promise.reject(this.#fault);
+    if (this.#drained) return Promise.resolve();
+    if (this.#pending) {
+      return Promise.reject(new Error(`rifty parity ${this.#label} drain already pending`));
     }
+    return new Promise<void>((resolve, reject) => {
+      const id = ++this.#drainId;
+      this.#pending = { id, resolve, reject };
+      try {
+        this.#source.postMessage({ kind: STDIO_DRAIN_KIND, id } satisfies StdioDrainFrame);
+      } catch (error) {
+        this.#pending = undefined;
+        const fault = asError(error);
+        this.#fault = fault;
+        reject(fault);
+      }
+    });
+  }
+
+  bytes(): Uint8Array {
+    if (!this.#drained) throw new Error(`rifty parity ${this.#label} read before drain`);
+    return concatBytes(this.#chunks);
+  }
+
+  dispose(): void {
+    const pending = this.#pending;
+    this.#pending = undefined;
+    pending?.reject(new Error(`rifty parity ${this.#label} drain cancelled during teardown`));
+    this.#peer.onmessage = null;
+    this.#peer.onmessageerror = null;
+  }
+
+  #fail(error: Error): void {
+    this.#fault ??= error;
+    const pending = this.#pending;
+    this.#pending = undefined;
+    pending?.reject(this.#fault);
+  }
+}
+
+export interface RunInRiftyOptions {
+  /** Same-realm fault-injection seam for the browser MessageChannel boundary. */
+  readonly createMessageChannel?: () => MessageChannel;
+  /** Receiver-side deadline for processing the stdin EOF transport frame. */
+  readonly stdinTimeoutMs?: number;
+  /** Parent-owned execution deadline; settlement still awaits Worker termination. */
+  readonly caseTimeoutMs?: number;
+}
+
+const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
+const DEFAULT_CASE_TIMEOUT_MS = 30_000;
+const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
+const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
+
+interface SerializedWorkerError {
+  readonly name: string;
+  readonly message: string;
+  readonly stack?: string;
+}
+
+type RiftyWorkerResponse =
+  | { readonly ok: true; readonly stdout: string }
+  | { readonly ok: false; readonly error: SerializedWorkerError };
+
+function timeoutMs(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${label} must be a positive safe integer; received ${value}`);
+  }
+  return value;
+}
+
+function isSeededProcessCase(testCase: ParityCase): boolean {
+  return testCase.stdin !== undefined || testCase.kind === 'tty-resize';
+}
+
+function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === 'stdin:eof'
+  );
+}
+
+/** One isolated worker-style process for stdin/TTY cases; owns every port/global it installs. */
+function installSeededProcessMode(
+  cwd: string,
+  tty: boolean,
+  createMessageChannel: () => MessageChannel,
+  stdinTimeoutMs: number,
+): SeededProcessMode {
+  const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const priorResize = Object.getOwnPropertyDescriptor(globalThis, '__riftyTtyResize');
+  const priorCwd = getProcessCwd();
+  const cleanups = new CleanupStack();
+  // Registered before acquisition so partial MessageChannel construction still
+  // restores the ambient realm. Each step is independent: one teardown fault
+  // cannot suppress port closure or the remaining global restores.
+  cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
+  cleanups.defer(() => setProcessCwd(priorCwd));
+  cleanups.defer(() => restoreGlobalDescriptor('__riftyTtyResize', priorResize));
+  cleanups.defer(() => restoreGlobalDescriptor('process', priorProcess));
+
+  const ownChannel = (): MessageChannel => {
+    const channel = createMessageChannel();
+    cleanups.defer(() => channel.port1.close());
+    cleanups.defer(() => channel.port2.close());
+    return channel;
+  };
+
+  let stdout: MessageChannel;
+  let stderr: MessageChannel;
+  let stdin: MessageChannel;
+  let ipc: MessageChannel;
+  let stdoutCapture: StdioPortCapture;
+  let stderrCapture: StdioPortCapture;
+  let seeded: NodeProcess | undefined;
+  let cancelFeed: (() => void) | undefined;
+  let acknowledgeFeed: (() => void) | undefined;
+  let feedStarted = false;
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
+
+  try {
+    stdout = ownChannel();
+    stdoutCapture = new StdioPortCapture(stdout.port1, stdout.port2, 'stdout');
+    cleanups.defer(() => stdoutCapture.dispose());
+    stdoutCapture.start();
+    stderr = ownChannel();
+    stderrCapture = new StdioPortCapture(stderr.port1, stderr.port2, 'stderr');
+    cleanups.defer(() => stderrCapture.dispose());
+    stderrCapture.start();
+    stdin = ownChannel();
+    ipc = ownChannel();
+    seeded = new NodeProcess({
+      pid: 2,
+      ppid: 1,
+      argv: ['node', '/work/main.js'],
+      env: tty
+        ? {
+            RIFTY_STDIN_IS_TTY: '1',
+            RIFTY_STDOUT_IS_TTY: '1',
+            RIFTY_STDERR_IS_TTY: '1',
+            RIFTY_TTY_COLS: '80',
+            RIFTY_TTY_ROWS: '24',
+          }
+        : {},
+      cwd,
+      stdio: {
+        stdout: stdout.port1,
+        stderr: stderr.port1,
+        stdin: stdin.port1,
+        ipc: ipc.port1,
+      },
+    });
+    // The runtime's receiver was installed by NodeProcess above. Register the
+    // harness ACK second on the hidden transport port, so EOF is acknowledged
+    // only after the runtime receiver processed the frame. Never observe feed
+    // completion through public process.stdin listeners: listenerCount(),
+    // removeAllListeners(), and removeListener meta-events belong to the guest.
+    const onStdinFrameProcessed = (event: MessageEvent): void => {
+      if (isStdinEofFrame(event.data)) acknowledgeFeed?.();
+    };
+    stdin.port1.addEventListener('message', onStdinFrameProcessed);
+    cleanups.defer(() => stdin.port1.removeEventListener('message', onStdinFrameProcessed));
+    cleanups.defer(() => {
+      seeded?.removeAllListeners();
+      seeded?.stdout.removeAllListeners();
+      seeded?.stderr.removeAllListeners();
+      seeded?.stdin.removeAllListeners();
+    });
+    Object.defineProperty(globalThis, 'process', {
+      value: seeded,
+      writable: true,
+      enumerable: priorProcess?.enumerable ?? false,
+      configurable: true,
+    });
+    if (tty) {
+      Object.defineProperty(globalThis, '__riftyTtyResize', {
+        value: (cols: number, rows: number): void => {
+          ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols, rows });
+        },
+        writable: true,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    refreshRuntimeJsProcessBuiltin();
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
+  }
+
+  let tornDown = false;
+  cleanups.defer(() => cancelFeed?.());
+  return {
+    feedStdin(chunks): Promise<void> {
+      if (!seeded) return Promise.reject(new Error('seeded process is unavailable'));
+      if (tornDown) return Promise.reject(new Error('seeded process is already torn down'));
+      if (feedStarted) return Promise.reject(new Error('seeded process stdin was already fed'));
+      feedStarted = true;
+      return new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const timers: { feed?: ReturnType<typeof setTimeout> } = {};
+        const settle = (error?: unknown): void => {
+          if (settled) return;
+          settled = true;
+          if (timers.feed !== undefined) HOST_CLEAR_TIMEOUT(timers.feed);
+          acknowledgeFeed = undefined;
+          cancelFeed = undefined;
+          if (error === undefined) resolve();
+          else reject(asError(error));
+        };
+        acknowledgeFeed = () => settle();
+        cancelFeed = () => settle(new Error('rifty stdin parity feed cancelled during teardown'));
+        timers.feed = HOST_SET_TIMEOUT(
+          () =>
+            settle(
+              new Error(
+                `rifty stdin parity transport did not process EOF within ${stdinTimeoutMs}ms`,
+              ),
+            ),
+          stdinTimeoutMs,
+        );
+        try {
+          for (const chunk of chunks) stdin.port2.postMessage(chunk);
+          stdin.port2.postMessage({ kind: 'stdin:eof' });
+        } catch (error) {
+          settle(error);
+        }
+      });
+    },
+    writeConsoleStdout(text): void {
+      if (!seeded) throw new Error('seeded process is unavailable');
+      seeded.stdout.write(text);
+    },
+    writeConsoleStderr(text): void {
+      if (!seeded) throw new Error('seeded process is unavailable');
+      seeded.stderr.write(text);
+    },
+    async drainStdio(): Promise<void> {
+      await Promise.all([stdoutCapture.drain(), stderrCapture.drain()]);
+    },
+    stdoutText(): string {
+      return new TextDecoder().decode(stdoutCapture.bytes());
+    },
+    teardown(): void {
+      if (tornDown) return;
+      tornDown = true;
+      cleanups.dispose();
+    },
   };
 }
 
@@ -118,29 +515,42 @@ async function installHttpMode(): Promise<() => void> {
     '@riftydev/net'
   );
   const prevClaimWindow = getDefaultClaimWindowMs();
-  setDefaultClaimWindowMs(0);
-  globalThis.__riftyHttpRequest = async (port, path, init) => {
-    const resp = await dispatchToPort(
-      port,
-      new Request(`http://preview.local:${port}${path}`, init),
-    );
-    return {
-      status: resp.status,
-      statusText: resp.statusText,
-      contentType: resp.headers.get('content-type'),
-      body: await resp.text(),
-    };
-  };
-  return () => {
-    // Mirror close(): release the bind-claim AND unregister, so the owner-answerer
-    // does not linger and falsely deny a later case that reuses the port.
-    for (const p of listPorts()) {
-      releasePort(p);
-      unregisterPort(p);
+  const priorRequest = Object.getOwnPropertyDescriptor(globalThis, '__riftyHttpRequest');
+  const priorPorts = new Set(listPorts());
+  const cleanups = new CleanupStack();
+  cleanups.defer(() => setDefaultClaimWindowMs(prevClaimWindow));
+  cleanups.defer(() => restoreGlobalDescriptor('__riftyHttpRequest', priorRequest));
+  cleanups.defer(() => {
+    // Only this case's binds are owned here. A pre-existing registry entry is
+    // ambient harness state and must survive an HTTP parity case unchanged.
+    for (const port of listPorts()) {
+      if (priorPorts.has(port)) continue;
+      releasePort(port);
+      unregisterPort(port);
     }
-    setDefaultClaimWindowMs(prevClaimWindow);
-    globalThis.__riftyHttpRequest = undefined;
-  };
+  });
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
+  try {
+    setDefaultClaimWindowMs(0);
+    globalThis.__riftyHttpRequest = async (port, path, init) => {
+      const resp = await dispatchToPort(
+        port,
+        new Request(`http://preview.local:${port}${path}`, init),
+      );
+      return {
+        status: resp.status,
+        statusText: resp.statusText,
+        contentType: resp.headers.get('content-type'),
+        body: await resp.text(),
+      };
+    };
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
+  }
+  return () => cleanups.dispose();
 }
 
 /**
@@ -196,14 +606,17 @@ async function installExecSyncMode(): Promise<() => void> {
   // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
   // kernel and the runtime-js loader are not workspace deps of the runner.
   const {
+    KERNEL_SYNC_CALL_KEY,
     SabRing,
     createSabRing,
+    getKernelWorkerUrl,
     encodeRequest,
     decodeReply,
     SyncRpcDispatcher,
     publishKernelSyncApi,
     setKernelWorkerUrl,
   } = await import('../../../packages/kernel/src/index.ts');
+  const { clearKernelWorkerUrl } = await import('../../../packages/kernel/src/spawn-worker.ts');
   const { syncMirror } = await import(
     '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts'
   );
@@ -216,133 +629,176 @@ async function installExecSyncMode(): Promise<() => void> {
   // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
   // Atomics already exist in Node; only `crossOriginIsolated` is missing.
   const g = globalThis as typeof globalThis & { crossOriginIsolated?: boolean };
-  const hadCOI = 'crossOriginIsolated' in g ? g.crossOriginIsolated : undefined;
-  Object.defineProperty(g, 'crossOriginIsolated', { value: true, configurable: true });
-  setKernelWorkerUrl('parity://exec-sync');
   // Untyped view for swapping the ambient `process` to `riftyProcess` during a
   // child run (Node's `Process` type rejects the `NodeProcess` shim assignment).
   const procHost = globalThis as { process?: unknown };
+  const previousCrossOriginDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'crossOriginIsolated',
+  );
+  const previousKernelWorkerUrl = getKernelWorkerUrl();
+  const previousGlobalProcessDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const previousRiftyEnv = riftyProcess.env;
+  const cleanups = new CleanupStack();
+  cleanups.defer(() =>
+    restoreGlobalDescriptor('crossOriginIsolated', previousCrossOriginDescriptor),
+  );
+  cleanups.defer(() => {
+    if (previousKernelWorkerUrl === null) clearKernelWorkerUrl();
+    else setKernelWorkerUrl(previousKernelWorkerUrl);
+  });
+  cleanups.defer(() => {
+    riftyProcess.env = previousRiftyEnv;
+  });
+  cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
+  cleanups.defer(() => restoreGlobalDescriptor('process', previousGlobalProcessDescriptor));
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
 
-  /**
-   * Synchronous loader-run child runner (ADR-0137). Loads the CJS entry through
-   * the REAL rifty loader against the sync mirror — shebang stripped, relative
-   * `require` + sibling `fs.readFileSync` resolved — capturing the child's
-   * `process.stdout.write(...)` bytes verbatim (byte-exact, ADR-0084 #23). The
-   * loader reads the ambient global `process`; we install `riftyProcess` with a
-   * capturing `stdout` for the run (the Worker realm shape, scoped) and restore.
-   */
-  function runChildSync(
-    scriptPath: string,
-    cwd: string,
-  ): {
-    stdout: Uint8Array;
-    exitCode: number;
-  } {
-    const chunks: Uint8Array[] = [];
-    const enc = new TextEncoder();
-    const capture = {
-      write(chunk: unknown): boolean {
-        if (chunk instanceof Uint8Array) chunks.push(new Uint8Array(chunk));
-        else chunks.push(enc.encode(String(chunk)));
-        return true;
+  try {
+    Object.defineProperty(g, 'crossOriginIsolated', { value: true, configurable: true });
+    setKernelWorkerUrl('parity://exec-sync');
+    riftyProcess.env = Object.create(null) as Record<string, string | undefined>;
+    Object.defineProperty(globalThis, 'process', {
+      value: riftyProcess,
+      configurable: true,
+      writable: true,
+      enumerable: previousGlobalProcessDescriptor?.enumerable ?? false,
+    });
+    refreshRuntimeJsProcessBuiltin();
+
+    /**
+     * Synchronous loader-run child runner (ADR-0137). Loads the CJS entry through
+     * the REAL rifty loader against the sync mirror — shebang stripped, relative
+     * `require` + sibling `fs.readFileSync` resolved — capturing the child's
+     * `process.stdout.write(...)` bytes verbatim (byte-exact, ADR-0084 #23). The
+     * loader reads the ambient global `process`; we install `riftyProcess` with a
+     * capturing `stdout` for the run (the Worker realm shape, scoped) and restore.
+     */
+    function runChildSync(
+      scriptPath: string,
+      cwd: string,
+      env: Readonly<Record<string, string>>,
+    ): {
+      stdout: Uint8Array;
+      exitCode: number;
+    } {
+      const chunks: Uint8Array[] = [];
+      const enc = new TextEncoder();
+      const capture = {
+        write(chunk: unknown): boolean {
+          if (chunk instanceof Uint8Array) chunks.push(new Uint8Array(chunk));
+          else chunks.push(enc.encode(String(chunk)));
+          return true;
+        },
+        isTTY: false,
+        fd: 1,
+      };
+      const prevGlobalProcess = procHost.process;
+      const prevStdout = riftyProcess.stdout;
+      const prevExitCode = riftyProcess.exitCode;
+      const prevEnv = riftyProcess.env;
+      const prevCwd = getProcessCwd();
+      (riftyProcess as { stdout: unknown }).stdout = capture;
+      riftyProcess.exitCode = 0;
+      riftyProcess.env = { ...env };
+      setProcessCwd(cwd);
+      procHost.process = riftyProcess;
+      let exitCode = 0;
+      try {
+        const loader = createModuleLoader(syncMirror(), { cwd });
+        // Absolutize the entry against cwd (the loader treats bare `build.js` as a
+        // package specifier — Node-faithful), mirroring the handler's
+        // `resolveNodeEntry`; real Node runs the child in the case tmpdir cwd.
+        const entryAbs = normalizePath(
+          isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
+        );
+        loader.require(entryAbs, entryAbs);
+        exitCode = riftyProcess.exitCode;
+      } catch {
+        exitCode = riftyProcess.exitCode || 1;
+      } finally {
+        procHost.process = prevGlobalProcess;
+        (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+        riftyProcess.exitCode = prevExitCode;
+        riftyProcess.env = prevEnv;
+        setProcessCwd(prevCwd);
+      }
+      let total = 0;
+      for (const c of chunks) total += c.byteLength;
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        out.set(c, off);
+        off += c.byteLength;
+      }
+      return { stdout: out, exitCode };
+    }
+
+    // Real dispatcher + ring + framing. The synchronous handler returns the
+    // child's stdout BYTES — the dispatcher emits a v2 binary frame (ADR-0084
+    // #23), so the value round-trips byte-exact.
+    const dispatcher = new SyncRpcDispatcher();
+    cleanups.defer(() => dispatcher.detachAll());
+    dispatcher.register('execSync', (rawPayload) => {
+      const payload = rawPayload as {
+        cmd: string;
+        opts?: { cwd?: string; env?: Readonly<Record<string, string>> };
+      };
+      const tokens = payload.cmd.split(/\s+/).filter(Boolean);
+      if (tokens[0] !== 'node' || tokens.length < 2) {
+        throw Object.assign(new Error(`execSync only supports 'node <script>': ${payload.cmd}`), {
+          code: 'EUNSUPPORTED',
+        });
+      }
+      const cwd = payload.opts?.cwd ?? '/';
+      const rawArg = tokens[1] ?? '';
+      const scriptPath = normalizePath(isAbsolute(rawArg) ? rawArg : joinPath(cwd, rawArg));
+      if (!syncMirror().existsSync(scriptPath)) {
+        throw Object.assign(new Error(`execSync: script not found: ${scriptPath}`), {
+          code: 'ENOENT',
+        });
+      }
+      const result = runChildSync(scriptPath, cwd, payload.opts?.env ?? {});
+      if (result.exitCode !== 0) {
+        throw Object.assign(new Error(`Command failed: ${payload.cmd}`), {
+          code: 'ECHILDFAILED',
+          exitCode: result.exitCode,
+        });
+      }
+      return result.stdout;
+    });
+
+    const { sab, ring } = createSabRing();
+    const dispatcherRing = SabRing.attach(sab);
+    dispatcher.attach(dispatcherRing);
+
+    const previousSyncCallDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      KERNEL_SYNC_CALL_KEY,
+    );
+    cleanups.defer(() => restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, previousSyncCallDescriptor));
+    publishKernelSyncApi({
+      call: (method, payload) => {
+        ring.writeRequest(encodeRequest({ method, payload }));
+        dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
+        const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
+        const reply = decodeReply(replyBytes);
+        if (reply.ok) return reply.value;
+        const e = reply.error ?? { name: 'Error', message: 'unknown' };
+        const err = new Error(e.message);
+        err.name = e.name;
+        if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
+        throw err;
       },
-      isTTY: false,
-      fd: 1,
-    };
-    const prevGlobalProcess = procHost.process;
-    const prevStdout = riftyProcess.stdout;
-    const prevExitCode = riftyProcess.exitCode;
-    (riftyProcess as { stdout: unknown }).stdout = capture;
-    riftyProcess.exitCode = 0;
-    procHost.process = riftyProcess;
-    let exitCode = 0;
-    try {
-      const loader = createModuleLoader(syncMirror(), { cwd });
-      // Absolutize the entry against cwd (the loader treats bare `build.js` as a
-      // package specifier — Node-faithful), mirroring the handler's
-      // `resolveNodeEntry`; real Node runs the child in the case tmpdir cwd.
-      const entryAbs = normalizePath(
-        isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
-      );
-      loader.require(entryAbs, entryAbs);
-      exitCode = riftyProcess.exitCode;
-    } catch {
-      exitCode = riftyProcess.exitCode || 1;
-    } finally {
-      procHost.process = prevGlobalProcess;
-      (riftyProcess as { stdout: unknown }).stdout = prevStdout;
-      riftyProcess.exitCode = prevExitCode;
-    }
-    let total = 0;
-    for (const c of chunks) total += c.byteLength;
-    const out = new Uint8Array(total);
-    let off = 0;
-    for (const c of chunks) {
-      out.set(c, off);
-      off += c.byteLength;
-    }
-    return { stdout: out, exitCode };
+    });
+
+    return () => cleanups.dispose();
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
   }
-
-  // Real dispatcher + ring + framing. The synchronous handler returns the
-  // child's stdout BYTES — the dispatcher emits a v2 binary frame (ADR-0084
-  // #23), so the value round-trips byte-exact.
-  const dispatcher = new SyncRpcDispatcher();
-  dispatcher.register('execSync', (rawPayload) => {
-    const payload = rawPayload as { cmd: string; opts?: { cwd?: string } };
-    const tokens = payload.cmd.split(/\s+/).filter(Boolean);
-    if (tokens[0] !== 'node' || tokens.length < 2) {
-      throw Object.assign(new Error(`execSync only supports 'node <script>': ${payload.cmd}`), {
-        code: 'EUNSUPPORTED',
-      });
-    }
-    const cwd = payload.opts?.cwd ?? '/';
-    const rawArg = tokens[1] ?? '';
-    const scriptPath = normalizePath(isAbsolute(rawArg) ? rawArg : joinPath(cwd, rawArg));
-    if (!syncMirror().existsSync(scriptPath)) {
-      throw Object.assign(new Error(`execSync: script not found: ${scriptPath}`), {
-        code: 'ENOENT',
-      });
-    }
-    const result = runChildSync(scriptPath, cwd);
-    if (result.exitCode !== 0) {
-      throw Object.assign(new Error(`Command failed: ${payload.cmd}`), {
-        code: 'ECHILDFAILED',
-        exitCode: result.exitCode,
-      });
-    }
-    return result.stdout;
-  });
-
-  const { sab, ring } = createSabRing();
-  const dispatcherRing = SabRing.attach(sab);
-  dispatcher.attach(dispatcherRing);
-
-  publishKernelSyncApi({
-    call: (method, payload) => {
-      ring.writeRequest(encodeRequest({ method, payload }));
-      dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
-      const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
-      const reply = decodeReply(replyBytes);
-      if (reply.ok) return reply.value;
-      const e = reply.error ?? { name: 'Error', message: 'unknown' };
-      const err = new Error(e.message);
-      err.name = e.name;
-      if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
-      throw err;
-    },
-  });
-
-  return () => {
-    dispatcher.detachAll();
-    Object.defineProperty(g, '__riftyKernelSyncCall', { value: undefined, configurable: true });
-    if (hadCOI === undefined) {
-      Reflect.deleteProperty(g, 'crossOriginIsolated');
-    } else {
-      Object.defineProperty(g, 'crossOriginIsolated', { value: hadCOI, configurable: true });
-    }
-    setKernelWorkerUrl('');
-  };
 }
 
 /**
@@ -375,7 +831,20 @@ function buildTsTransform(): TransformSourceHook {
     }).then((r) => r.code);
 }
 
-export async function runInRifty(testCase: ParityCase): Promise<string> {
+/** Worker-entry seam. Public callers use {@link runInRifty}. */
+export async function runInRiftyInCurrentRealm(
+  testCase: ParityCase,
+  options: RunInRiftyOptions = {},
+): Promise<string> {
+  const feedTimeoutMs = timeoutMs(
+    options.stdinTimeoutMs ?? DEFAULT_STDIN_TIMEOUT_MS,
+    'RunInRiftyOptions.stdinTimeoutMs',
+  );
+  const createMessageChannel = options.createMessageChannel ?? (() => new MessageChannel());
+  const priorProcessCwd = getProcessCwd();
+  const priorSyncMirror = syncMirror();
+  const priorAsyncVfs = asyncVfs();
+  const priorVmEngineDescriptor = Object.getOwnPropertyDescriptor(globalThis, '__RIFTY_VM_ENGINE');
   const vfs = new MemoryFsSync();
   const files: Record<string, string> = {};
   if (testCase.setup?.files) {
@@ -425,87 +894,144 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   // (self-proof: cases/fs/empty-cwd-materialized).
   const cwd = caseCwd(testCase);
   if (cwd !== '/') fsMirror.mkdirSync(cwd, { recursive: true });
-  setSyncMirror(fsMirror);
-
-  // Mirror Node's view: process.cwd() = ParityCase.cwd (default '/'). Important
-  // so `fs.readFileSync('a.txt')` resolves against the same anchor as the Node
-  // child running with cwd=<workDir>/<cwd>. Use the runtime's per-Worker cwd
-  // cell rather than monkey-patching the `process` object (ADR-0019).
-  setProcessCwd(cwd);
-
-  // `ts-esm` threads the real esbuild type-strip hook (ADR-0052) so `.ts`
-  // resolves and its types are stripped before the AST ESM rewrite, with the
-  // esbuild guest cwd/preopen pinned to the loader's `/work` workspace.
-  const loader =
-    testCase.kind === 'ts-esm'
-      ? createModuleLoader(vfs, {
-          cwd: '/work',
-          workspace: '/work',
-          transformSource: buildTsTransform(),
-        })
-      : createModuleLoader(vfs, { cwd: '/work' });
-
-  // Opt-in net mode: register `node:http` and inject the request driver so the
-  // case can drive its own server through the port registry (no OS socket).
-  const teardownHttp = testCase.kind === 'http' ? await installHttpMode() : null;
-
-  // Opt-in sqlite mode: register `node:sqlite` and bring up the sql.js engine so
-  // the synchronous `DatabaseSync` constructor in the case `code` resolves and
-  // has its WASM handle ready (ADR-0065). No teardown — see `installSqliteMode`.
-  if (testCase.kind === 'sqlite') await installSqliteMode();
-
-  // Opt-in exec-sync mode (ADR-0084 #23): wire the real SAB binary-frame path so
-  // the case's `child_process.execSync` returns byte-exact stdout to diff against
-  // real Node. Teardown clears the published shim + host-capability stubs.
-  const teardownExecSync = testCase.kind === 'exec-sync' ? await installExecSyncMode() : null;
-
-  // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
-  // into the quickjs engine via `globalThis.__RIFTY_VM_ENGINE = 'quickjs'`, and
-  // that engine evaluates synchronously via `getQuickJsModuleSync()`. Memoised,
-  // so this is a one-time bring-up shared across all cases.
-  await ensureVmEngineReady();
-
-  // The runner evaluates cases IN-PROCESS, so the `vm` engine selection — driven
-  // by `globalThis.__RIFTY_VM_ENGINE` (e.g. a case opting into 'quickjs') and the
-  // explicit override — must not leak into the next case. Snapshot here, restore
-  // in `finally`. Default stays rewrite for every case that does not opt in.
-  const priorVmEngineGlobal = (globalThis as Record<string, unknown>).__RIFTY_VM_ENGINE;
-  const restoreTimerGlobals = installCaseTimerGlobals();
-
-  const captured: string[] = [];
-  const writeStdout = (...args: unknown[]) => {
-    captured.push(`${formatArgs(args)}\n`);
-  };
-  const writeStderr = (...args: unknown[]) => {
-    captured.push(`${formatArgs(args)}\n`);
-  };
-  const original = {
-    log: console.log,
-    info: console.info,
-    debug: console.debug,
-    warn: console.warn,
-    error: console.error,
-  };
-  console.log = writeStdout;
-  console.info = writeStdout;
-  console.debug = writeStdout;
-  console.warn = writeStderr;
-  console.error = writeStderr;
+  const cleanups = new CleanupStack();
+  let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
   try {
-    if (testCase.kind === 'ts-esm') {
-      await loader.import('./main.ts', '/work/__entry.ts');
-    } else if (testCase.kind === 'esm') {
-      await loader.import('./main.mjs', '/work/__entry.mjs');
-    } else {
-      loader.require('./main.js', '/work/__entry.js');
+    // One outer ownership scope begins BEFORE the first process-global mutation.
+    // Every subsequently acquired mode pushes its teardown immediately; unwind
+    // is exact LIFO even when setup or guest evaluation throws.
+    cleanups.defer(() => resetKeepalive());
+    cleanups.defer(() => setVmEngineOverride(undefined));
+    cleanups.defer(() => restoreGlobalDescriptor('__RIFTY_VM_ENGINE', priorVmEngineDescriptor));
+    cleanups.defer(() =>
+      setSyncMirror(priorSyncMirror, priorAsyncVfs ? { async: priorAsyncVfs } : {}),
+    );
+    setSyncMirror(fsMirror);
+
+    // Mirror Node's view: process.cwd() = ParityCase.cwd (default '/'). Important
+    // so `fs.readFileSync('a.txt')` resolves against the same anchor as the Node
+    // child running with cwd=<workDir>/<cwd>. Use the runtime's per-Worker cwd
+    // cell rather than monkey-patching the `process` object (ADR-0019).
+    cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
+    cleanups.defer(() => setProcessCwd(priorProcessCwd));
+    setProcessCwd(cwd);
+    refreshRuntimeJsProcessBuiltin();
+
+    // `ts-esm` threads the real esbuild type-strip hook (ADR-0052) so `.ts`
+    // resolves and its types are stripped before the AST ESM rewrite, with the
+    // esbuild guest cwd/preopen pinned to the loader's `/work` workspace.
+    const loader =
+      testCase.kind === 'ts-esm'
+        ? createModuleLoader(vfs, {
+            cwd: '/work',
+            workspace: '/work',
+            transformSource: buildTsTransform(),
+          })
+        : createModuleLoader(vfs, { cwd: '/work' });
+
+    // Opt-in net mode: register `node:http` and inject the request driver so the
+    // case can drive its own server through the port registry (no OS socket).
+    if (testCase.kind === 'http') {
+      const teardownHttp = await installHttpMode();
+      cleanups.defer(teardownHttp);
     }
-    if (testCase.stdin) {
-      for (const chunk of testCase.stdin) writeProcessStdin(chunk);
-      (riftyProcess.stdin as { emit(event: string): void }).emit('end');
+
+    // Opt-in sqlite mode: register `node:sqlite` and bring up the sql.js engine so
+    // the synchronous `DatabaseSync` constructor in the case `code` resolves and
+    // has its WASM handle ready (ADR-0065). No teardown — see `installSqliteMode`.
+    if (testCase.kind === 'sqlite') await installSqliteMode();
+
+    // Opt-in exec-sync mode (ADR-0084 #23): wire the real SAB binary-frame path so
+    // the case's `child_process.execSync` returns byte-exact stdout to diff against
+    // real Node. Teardown clears the published shim + host-capability stubs.
+    if (testCase.kind === 'exec-sync') {
+      const teardownExecSync = await installExecSyncMode();
+      cleanups.defer(teardownExecSync);
     }
+
+    // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
+    // into the quickjs engine via `globalThis.__RIFTY_VM_ENGINE = 'quickjs'`, and
+    // that engine evaluates synchronously via `getQuickJsModuleSync()`. Memoised,
+    // so this is a one-time bring-up shared across all cases.
+    await ensureVmEngineReady();
+
+    const seededProcess = isSeededProcessCase(testCase)
+      ? installSeededProcessMode(
+          cwd,
+          testCase.kind === 'tty-resize',
+          createMessageChannel,
+          feedTimeoutMs,
+        )
+      : null;
+    if (seededProcess) cleanups.defer(() => seededProcess.teardown());
+
+    const restoreTimerGlobals = installCaseTimerGlobals();
+    cleanups.defer(restoreTimerGlobals);
+
+    const captured: string[] = [];
+    const writeStdout = (...args: unknown[]) => {
+      const text = `${formatArgs(args)}\n`;
+      if (seededProcess) seededProcess.writeConsoleStdout(text);
+      else captured.push(text);
+    };
+    const writeStderr = (...args: unknown[]) => {
+      const text = `${formatArgs(args)}\n`;
+      if (seededProcess) seededProcess.writeConsoleStderr(text);
+      else captured.push(text);
+    };
+    const original = {
+      log: console.log,
+      info: console.info,
+      debug: console.debug,
+      warn: console.warn,
+      error: console.error,
+    };
+    cleanups.defer(() => {
+      console.log = original.log;
+    });
+    cleanups.defer(() => {
+      console.info = original.info;
+    });
+    cleanups.defer(() => {
+      console.debug = original.debug;
+    });
+    cleanups.defer(() => {
+      console.warn = original.warn;
+    });
+    cleanups.defer(() => {
+      console.error = original.error;
+    });
+    console.log = writeStdout;
+    console.info = writeStdout;
+    console.debug = writeStdout;
+    console.warn = writeStderr;
+    console.error = writeStderr;
+
+    // Native Node receives stdin as soon as the child is spawned. Start the real
+    // MessagePort feed before entry evaluation too, then await BOTH operations.
+    // This lets ESM top-level await consume stdin. Feed completion is the hidden
+    // receiver-side EOF ACK; the disposable Worker's case deadline owns a guest
+    // that never resumes the public stream or otherwise fails to settle.
+    const stdinFeed =
+      testCase.stdin === undefined
+        ? Promise.resolve()
+        : (seededProcess?.feedStdin(testCase.stdin) ??
+          Promise.reject(new Error('stdin parity case has no seeded process')));
+    const entryEvaluation = Promise.resolve().then(async () => {
+      if (testCase.kind === 'ts-esm') {
+        await loader.import('./main.ts', '/work/__entry.ts');
+      } else if (testCase.kind === 'esm') {
+        await loader.import('./main.mjs', '/work/__entry.mjs');
+      } else {
+        loader.require('./main.js', '/work/__entry.js');
+      }
+    });
+    await Promise.all([entryEvaluation, stdinFeed]);
+
     // Mirror the real Worker lifecycle: global timers installed by bootstrap
     // hold the keepalive refcount until every scheduled callback has fired.
     await awaitDrain({ capMs: 1000 });
+    await seededProcess?.drainStdio();
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a
       // microtask) and prints from the awaited `__riftyHttpRequest` round-trip.
@@ -517,25 +1043,114 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
         await new Promise((r) => setTimeout(r, 5));
       }
     }
+    return seededProcess?.stdoutText() ?? captured.join('');
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    console.log = original.log;
-    console.info = original.info;
-    console.debug = original.debug;
-    console.warn = original.warn;
-    console.error = original.error;
-    restoreTimerGlobals();
-    resetSyncMirror();
-    resetKeepalive();
-    setProcessCwd('/workspace');
-    if (testCase.stdin) {
-      riftyProcess.stdin.removeAllListeners('data');
-      riftyProcess.stdin.setEncoding(null);
-    }
-    teardownHttp?.();
-    teardownExecSync?.();
-    // Restore the vm-engine selection so an opt-in case does not poison the next.
-    (globalThis as Record<string, unknown>).__RIFTY_VM_ENGINE = priorVmEngineGlobal;
-    setVmEngineOverride(undefined);
+    disposePreservingFailure(cleanups, failure);
   }
-  return captured.join('');
+}
+
+function workerError(serialized: SerializedWorkerError): Error {
+  const error = new Error(serialized.message);
+  error.name = serialized.name;
+  if (serialized.stack !== undefined) error.stack = serialized.stack;
+  return error;
+}
+
+/**
+ * A seeded-process case can fail or time out before guest work settles. Only a
+ * realm boundary can stop that guest physically; promise races leave callbacks
+ * alive against the next case's process-global harness state (ADR-0255).
+ */
+function runInDisposableWorker(
+  testCase: ParityCase,
+  stdinTimeoutMs: number,
+  caseTimeoutMs: number,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const worker = new Worker(new URL('./run-in-rifty-worker.ts', import.meta.url), {
+      execArgv: ['--import', 'tsx'],
+      workerData: { testCase, stdinTimeoutMs },
+    });
+    let settling = false;
+
+    const terminateThen = (
+      outcome:
+        | { readonly ok: true; readonly stdout: string }
+        | { readonly ok: false; error: Error },
+    ): void => {
+      if (settling) return;
+      settling = true;
+      HOST_CLEAR_TIMEOUT(caseTimer);
+      void worker.terminate().then(
+        () => {
+          if (outcome.ok) resolve(outcome.stdout);
+          else reject(outcome.error);
+        },
+        (terminationError: unknown) => {
+          const errors = outcome.ok
+            ? [asError(terminationError)]
+            : [outcome.error, asError(terminationError)];
+          reject(new AggregateError(errors, 'rifty parity Worker termination failed'));
+        },
+      );
+    };
+
+    worker.once('message', (message: unknown) => {
+      const response = message as Partial<RiftyWorkerResponse> | null;
+      if (response?.ok === true && typeof response.stdout === 'string') {
+        terminateThen({ ok: true, stdout: response.stdout });
+        return;
+      }
+      if (
+        response?.ok === false &&
+        response.error !== undefined &&
+        typeof response.error.name === 'string' &&
+        typeof response.error.message === 'string'
+      ) {
+        terminateThen({ ok: false, error: workerError(response.error) });
+        return;
+      }
+      terminateThen({
+        ok: false,
+        error: new TypeError('rifty parity Worker returned a malformed result'),
+      });
+    });
+    worker.once('messageerror', (error) => terminateThen({ ok: false, error }));
+    worker.once('error', (error) => terminateThen({ ok: false, error }));
+    worker.once('exit', (code) => {
+      if (settling) return;
+      settling = true;
+      HOST_CLEAR_TIMEOUT(caseTimer);
+      reject(new Error(`rifty parity Worker exited ${code} before returning a result`));
+    });
+    const caseTimer = HOST_SET_TIMEOUT(
+      () =>
+        terminateThen({
+          ok: false,
+          error: new Error(`rifty parity case timed out after ${caseTimeoutMs}ms`),
+        }),
+      caseTimeoutMs,
+    );
+  });
+}
+
+export async function runInRifty(
+  testCase: ParityCase,
+  options: RunInRiftyOptions = {},
+): Promise<string> {
+  const stdinTimeoutMs = timeoutMs(
+    options.stdinTimeoutMs ?? DEFAULT_STDIN_TIMEOUT_MS,
+    'RunInRiftyOptions.stdinTimeoutMs',
+  );
+  const caseTimeoutMs = timeoutMs(
+    options.caseTimeoutMs ?? DEFAULT_CASE_TIMEOUT_MS,
+    'RunInRiftyOptions.caseTimeoutMs',
+  );
+  if (isSeededProcessCase(testCase) && options.createMessageChannel === undefined) {
+    return runInDisposableWorker(testCase, stdinTimeoutMs, caseTimeoutMs);
+  }
+  return runInRiftyInCurrentRealm(testCase, options);
 }

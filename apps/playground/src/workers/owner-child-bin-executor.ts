@@ -18,21 +18,24 @@ import {
   type BinWorkerHandle,
   createBinExecutor,
 } from '../glue/bin-executor.ts';
+import { childTerminalEnv } from '../glue/child-terminal.ts';
 
 /** Pure: build the spawn spec for a resolved bin request (unit-tested). */
-export function buildChildSpawnSpec(req: BinSpawnRequest, nodeEntryUrl: string): SpawnWorkerSpec {
-  const isTTY = req.isTTY ? '1' : '0';
+export function buildChildSpawnSpec(
+  req: BinSpawnRequest,
+  nodeEntryUrl: string,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+): SpawnWorkerSpec {
   return {
     entry: { kind: 'url', url: nodeEntryUrl },
     argv: ['rifty', req.shimPath, ...req.args],
     env: {
       ...req.env,
+      ...nodeWorkerRuntimeEnv,
       RIFTY_BIN: '1',
       RIFTY_REMOTE_FS: '1',
       RIFTY_NODE_SERVE: '1',
-      RIFTY_STDIN_IS_TTY: '0',
-      RIFTY_STDOUT_IS_TTY: isTTY,
-      RIFTY_STDERR_IS_TTY: isTTY,
+      ...childTerminalEnv(req),
     },
     cwd: req.cwd,
     serve: true,
@@ -42,6 +45,7 @@ export function buildChildSpawnSpec(req: BinSpawnRequest, nodeEntryUrl: string):
 /** Build the owner's child-spawning BinExecutor. `nodeEntryUrl` = node-entry bootstrap worker URL. */
 export function createOwnerChildBinExecutor(
   nodeEntryUrl: string,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onExit'> = {},
 ): BinExecutor {
   return createBinExecutor({
@@ -49,7 +53,7 @@ export function createOwnerChildBinExecutor(
     spawn: (req): BinWorkerHandle => {
       const handle = globalProcessManager.spawnWorker(
         req.shimPath,
-        buildChildSpawnSpec(req, nodeEntryUrl),
+        buildChildSpawnSpec(req, nodeEntryUrl, nodeWorkerRuntimeEnv),
         1,
       );
       if (handle.kind !== 'worker') {

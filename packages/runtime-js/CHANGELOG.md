@@ -4,11 +4,32 @@
 
 ### Added
 
+- Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
+  metadata update, rename, and copy through the optional shared VFS mutation
+  guard; async guards defer the reply while unguarded calls stay synchronous
+  (ADR-0260).
+- **Flowing process stdin and Node TTY resize (ADR-0225/0230).** Seeded
+  `process.stdin` now has real pause/resume, split-UTF-8 decoding, explicit
+  ordered EOF/end, and stream-returning `setEncoding`. TTY stdout/stderr expose
+  live `columns`/`rows`/`getWindowSize()` and emit stream `resize` before
+  process `SIGWINCH`; logical IPC disconnect no longer kills that control path.
 - Realm-local exact esbuild CJS-outer slot with typed publish/read APIs. The
   runtime owns identity across Vite imports without cloning esbuild's API
   object (ADR-0226).
 
 ### Fixed
+
+- **Every Node stdin entry path keeps unsupported pull/raw APIs loud.** The
+  runtime-owned seeded reader now throws surface-specific `NotImplementedError`
+  for readable listeners, `read`, `pipe`, async iteration, and `setRawMode`,
+  while preserving real flowing data, EOF, pause/resume, and UTF-8 decoding.
+
+- **Recursive Node workers retain host bootstrap capabilities without breaking
+  Node env replacement.** URL + reserved `RIFTY_*` values install atomically;
+  URL-only reconfiguration invalidates stale assets. `execSync` and
+  `worker_threads` snapshot the calling process cwd/env, while host values and
+  operation controls win their reserved keys. The `execSync` IPC boundary now
+  rejects missing/malformed cwd or env instead of inventing context (ADR-0231).
 
 - **Fallback child-process stdout/stderr declare their push-fed read hook.**
   Handle/Worker events remain the only producer while the base Readable now

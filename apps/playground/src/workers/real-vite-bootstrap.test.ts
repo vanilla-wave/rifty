@@ -77,9 +77,7 @@ describe('residual source pins', () => {
     // the served bridges themselves; this pins the order.
     const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
     const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');
-    const readyAt = source.indexOf(
-      "kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port })",
-    );
+    const readyAt = source.indexOf("type: 'rifty:workspace-owner-ready'");
     expect(onMessageAt).toBeGreaterThan(-1);
     expect(bridgeAt).toBeGreaterThan(onMessageAt);
     expect(readyAt).toBeGreaterThan(bridgeAt);

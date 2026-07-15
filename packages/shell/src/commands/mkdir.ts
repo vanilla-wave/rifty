@@ -1,7 +1,7 @@
 /** `mkdir [-p|--parents] DIR...` — create directories. `-p` ⇒ recursive. */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError, guardVfsMutations, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { resolve, strerror } from './_shared.ts';
 
@@ -36,15 +36,22 @@ export const mkdir: ShellCommand = async (args, ctx) => {
     return 1;
   }
   const fs = syncMirror();
-  let exit = 0;
-  for (const p of paths) {
-    try {
-      fs.mkdirSync(resolve(ctx.cwd, p), { recursive });
-    } catch (err) {
-      const msg = err instanceof VfsError ? strerror(err) : (err as Error).message;
-      ctx.stderr.write(`mkdir: cannot create directory '${p}': ${msg}\n`);
-      exit = 1;
-    }
-  }
-  return exit;
+  const targets = paths.map((path) => ({ path, absolute: resolve(ctx.cwd, path) }));
+  return await guardVfsMutations(
+    ctx.mutationGuard,
+    targets.map(({ absolute }) => ({ kind: 'mkdir' as const, path: absolute })),
+    () => {
+      let exit = 0;
+      for (const { path, absolute } of targets) {
+        try {
+          fs.mkdirSync(absolute, { recursive });
+        } catch (err) {
+          const msg = err instanceof VfsError ? strerror(err) : (err as Error).message;
+          ctx.stderr.write(`mkdir: cannot create directory '${path}': ${msg}\n`);
+          exit = 1;
+        }
+      }
+      return exit;
+    },
+  );
 };

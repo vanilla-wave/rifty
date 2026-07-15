@@ -44,6 +44,8 @@ export type GitAuthProvider = (url: string) => { username: string; password?: st
  *  - `http`     — isomorphic-git http plugin; defaults to `riftyGitHttp()`.
  *  - `corsProxy`— CORS proxy base URL; defaults to `getGitCorsProxyUrl()` (D-004).
  *  - `onAuth`   — credential provider for smart-HTTP basic auth.
+ *  - `assertPortablePaths` — synchronous host policy over a complete worktree
+ *    mutation plan. It must throw before Git writes the first worktree byte.
  */
 export interface MakeGitOptions {
   fs: import('./fs-adapter.ts').GitFs;
@@ -51,6 +53,7 @@ export interface MakeGitOptions {
   http?: import('./http-plugin.ts').GitHttp;
   corsProxy?: string;
   onAuth?: GitAuthProvider;
+  assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 }
 
 /** Args for `clone()` — smart-HTTP only (transport guarded). */

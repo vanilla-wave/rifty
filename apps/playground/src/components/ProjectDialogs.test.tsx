@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { Dialog } from '../glue/page-store.ts';
 import { ProjectDialogs } from './ProjectDialogs.tsx';
 
-const render = (dialog: Dialog, extra: Partial<Parameters<typeof ProjectDialogs>[0]> = {}) =>
+type DialogProps = Parameters<typeof ProjectDialogs>[0];
+
+const render = (dialog: Dialog, extra: Partial<DialogProps> = {}) =>
   renderToString(() =>
     ProjectDialogs({
       dialog,
+      ownerBlocked: false,
       saveName: 'react-starter',
       renameName: 'node-api',
       targetName: 'node-api',
@@ -25,6 +28,9 @@ const render = (dialog: Dialog, extra: Partial<Parameters<typeof ProjectDialogs>
       ...extra,
     }),
   );
+
+const disabledCount = (html: string): number =>
+  html.match(/\sdisabled(?:=""|(?=[\s>]))/g)?.length ?? 0;
 
 describe('ProjectDialogs', () => {
   it('save: name prefilled + "autosaves" copy', () => {
@@ -59,5 +65,22 @@ describe('ProjectDialogs', () => {
   });
   it('renders nothing when dialog is null', () => {
     expect(render(null)).not.toContain('rf-dialog');
+  });
+
+  it('concurrent-same-key fault: blocks owner confirms but leaves cancel and unrelated deletes available', () => {
+    expect(
+      disabledCount(render({ kind: 'save', defaultName: 'react' }, { ownerBlocked: true })),
+    ).toBe(1);
+    expect(
+      disabledCount(
+        render({ kind: 'rename', id: 'p1', current: 'node-api' }, { ownerBlocked: true }),
+      ),
+    ).toBe(1);
+    expect(disabledCount(render({ kind: 'reset', id: 'p1' }, { ownerBlocked: true }))).toBe(1);
+    expect(disabledCount(render({ kind: 'switch', pendingId: 'p1' }, { ownerBlocked: true }))).toBe(
+      1,
+    );
+    expect(disabledCount(render({ kind: 'delete', id: 'p1' }, { ownerBlocked: true }))).toBe(0);
+    expect(disabledCount(render({ kind: 'reset-sandbox' }, { ownerBlocked: true }))).toBe(0);
   });
 });

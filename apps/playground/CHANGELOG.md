@@ -2,6 +2,71 @@
 
 ## [Unreleased]
 
+### Added (app-local Workbench contract)
+
+- A sealed app-local Workbench core now owns immutable Vite project
+  definitions, injective project identity, serialized seed/delete durability,
+  typed project/run/terminal lifetimes, controlling-service-worker preview
+  proof, storage selection, and origin/page admission. This is the verified
+  extraction seam; no raw owner transport or controller factory is exposed.
+- Deployment and acquisition URL references resolve once against the document
+  API base and satisfy destination-specific browser rules before any lock,
+  service-worker, storage, or owner effect.
+
+### Added (foreground Node stdin and resize)
+
+- Each owner terminal now has one `PtySessionActor` with a synchronous run
+  claim and ACK-backed stdin/EOF, resize, and close operations. Pre-ready input
+  stays ordered, resize latches the latest grid, and closing waits for process
+  exit plus shell disposal without affecting sibling terminals.
+- The mounted xterm grid now flows through the page terminal manager to the
+  active owner run; closing a terminal performs the real owner teardown instead
+  of only hiding its tab.
+- The shared Node/`.bin` foreground driver now pumps one stdin chunk at a
+  time, sends explicit EOF, cancels late reads on exit, and terminates loudly
+  on source/write/end faults. Active TTY runs forward current and live terminal
+  dimensions and unsubscribe on every exit/fault path. A closed resize control
+  returns a negative PTY ACK; `kill()` false/throw settles loudly instead of
+  waiting forever for an exit event (ADR-0225/0230).
+- Node-server dev children use the same child-TTY env/resize chokepoint as
+  Node/`.bin`: spawn metadata, current/live grids, and abort/stop/exit/error
+  cleanup cannot drift between the three adapters (ADR-0225).
+- Post-ready dev-child exit, error, and resize faults now converge through one
+  controller terminalization path. Exact `(code, signal)` survives supervision,
+  LIVE/preview state clears, and a closed resize control receives a negative ACK.
+- Dev-server abort before readiness now kills and physically settles the child;
+  natural pre-ready exits retain the same exact provenance as Node and `.bin`.
+  One strict child-exit normalizer rejects invalid pairs across all adapters.
+- `pty:exit` now transports the shell status beside the independent physical
+  exit. The owner handle exposes both, while owner death rejects runs instead
+  of inventing exit 137.
+- PTY close now waits for the supervised child's physical exit, including
+  control-pump faults and background jobs. Stop/close before child attachment
+  rejects queued stdin/EOF instead of falsely ACKing delivery.
+- Owner death and session closing reject pending and future PTY operations with
+  `ClosedHandleError`; terminal rebind/dispose also rejects already-forwarded
+  control waiters without routing an old `rid` through a replacement owner.
+- Idle terminal dimensions now cross a distinct owner-ACKed operation before
+  `run()`. Run admission waits behind admitted idle resize, while failed live
+  resize cannot poison the next run's acknowledged dimensions (ADR-0264).
+- The hidden terminal text mirror removes xterm's ANSI cursor/style replay, so an
+  idle prompt remains observable after exact foreground child settlement.
+
+### Fixed (recursive Node bootstrap)
+
+- Node-entry serve children now use the same runtime-owned loud stdin gaps as
+  `.bin`, recursive `execSync`, and `worker_threads`; the branch-local stdin
+  guard is removed.
+
+- Page, workspace owner, node/bin, dev-server, and TS-LSP realms now install and
+  propagate one validated worker/WASM bootstrap snapshot. Explicit user env can
+  replace user variables without erasing deployment capabilities. The inherited
+  esbuild URL is the sole fetched source; every recursive Node entry installs
+  SQLite before user code; operation controls override host metadata. Owner and
+  relay dispatchers now serve real recursive `execSync` beside the same VFS
+  handlers. Worker entries read the installed process through one Vite-safe seam,
+  so production bundles retain the inherited snapshot (ADR-0231).
+
 ### Changed (exact Vite esbuild runtime)
 
 - Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer
@@ -25,14 +90,15 @@
   without silent resurrection. Chromium proves the marker and deletion across
   an OPFS owner respawn.
 
-### Changed (install artifact identity, ADR-0241)
+### Changed (root-bound install claims, ADR-0261; supersedes ADR-0241)
 
-- Dependency snapshots and install stamps use schema v2 with exact
-  `package.json` text plus the generated installer/shim/runtime identity.
-  Legacy or mismatched claims are untrusted and re-run arrival; one shared
-  constructor/parser owns async and sync stamp shapes. Committed snapshots
-  were fully rebaked. CI is read-only: stale metadata, shim bytes, or canonical
-  archive drift requires a full bake; no checker can relabel an old tree.
+- Install claims use schema v3 with their canonical absolute root, exact
+  `package.json` text, and generated installer/shim/runtime identity. Legacy,
+  copied, malformed, or mismatched claims are untrusted and re-run arrival;
+  only the owner authority may mutate their reserved paths. Dependency
+  snapshots remain claim-free v2 payloads and were fully rebaked. CI is
+  read-only: stale metadata, shim bytes, or canonical archive drift requires a
+  full bake; no checker can relabel an old tree.
 
 ### Fixed (File Explorer context menu placement)
 
@@ -40,11 +106,40 @@
   chrome, and use normal hit-tested actions; project-card menus retain their
   separate anchored geometry.
 
-### Changed (install-tail-latency, ADR-0216)
+### Changed (install-tail-latency, ADR-0261; supersedes ADR-0216)
 
-- **Install exit stops awaiting the OPFS durability drain** (ADR-0216,
-  supersedes ADR-0187's command-site durable-on-exit clause): the drain →
-  full-ledger gate → stamp → stamp-drain sequence (gate semantics intact) now
+- One owner-realm install-stamp authority now serializes absent, pending, and
+  trusted transitions for boot restore and terminal installs. Per-claim epochs
+  replace generation/promotionId chains; promotion uses byte-exact package.json
+  identity plus full-ledger tree/claim durability, while an unproven trusted
+  demote restores the mirror and aborts before mutation. The owner VFS reserves
+  claim paths behind one construction-local capability across direct, aliased,
+  recursive, Git, Shell, runtime, page, archive, snapshot, and npm ingress.
+- One owner-realm package-acquisition FIFO now owns instant snapshot restore,
+  terminal npm mutation, exact acquisition provenance, and stamp promotion.
+  Terminal project identity and whole-root reset claims resolve at the FIFO
+  head, so a queued switch uses its new config and nested claims are revoked
+  before project replacement.
+  Snapshot-only boot never installs; rejected partial restores re-prepare the
+  tree before fallback, while durability failures remain loud with exact causes.
+  Snapshot metadata, archive paths/bytes, and reserved ingress are fully planned
+  before demotion, so snapshot-only rejection leaves the destination byte-exact.
+- Save no longer carries a speculative stamp re-key writer: stamped
+  node_modules is derived and omitted. User workspace archives now reject
+  derived node_modules before replacing source, so crafted archives cannot
+  forge a trust claim outside the authority (ADR-0261, ADR-0224).
+- Owner package composition now binds npm, instant restore, project switching,
+  mutation routing, and install claims behind one state module. A second full
+  install admitted during pending promotion preserves the first install's exact
+  manifest/tree only for the same authority-recorded project slug; same-root
+  project switches still clean. Template-owned node_modules seeds reassert at
+  initial boot, config switch, and dev run through the same package FIFO; a
+  missing seed revokes stale trust before writing. A real OPFS watchdog fault
+  proves promotion refuses the hung tree finitely and leaves the claim untrusted.
+
+- **Install exit stops awaiting the OPFS durability drain** (ADR-0261,
+  supersedes ADR-0187's command-site durable-on-exit clause): one full-ledger
+  proof while pending, followed by the best-effort final trusted marker, now
   runs in background after `npm install` returns, so a `&&`-chained dev
   server starts immediately; dirty-drain/stamp warnings still print,
   asynchronously. Reloads stay TRUST-safe via the boot path's pending-first
@@ -52,16 +147,16 @@
   `pending` before the first tree mutation (a mid-install or mid-drain reload
   re-arrives — this also NARROWS the pre-existing torn-window where a bare
   re-install's reload could trust the old stamp, and a failed install no
-  longer resurrects it), the trusted stamp attests the INSTALL-TIME deps+slug
-  snapshot, and a per-tree generation guard (cross-terminal) cancels an older
-  sequence's stamp instead of racing it — deliberately no await-chain (a
-  wedged drain must not park later installs). A reload inside the ~0.5–2s
+  longer resurrects it), the trusted claim attests the exact install-time
+  request/root/slug/artifact identity, and a per-root epoch fences an older
+  promoter instead of racing it. The proof stays outside the transition FIFO,
+  so a wedged drain cannot park later installs. A reload inside the ~0.5–2s
   window costs a re-install (self-heal), never a torn trusted tree. Measured
   install→vite-ready (eddy path, real-vite preset, local, n=5 median):
   3429ms → 3072ms (−357ms; the drain also overlaps vite boot, so the full
   ~490ms profiled drain does not all land on this marker).
 - **Learned pins serve-stale-while-revalidate inside a hard 24h bound**
-  (ADR-0216, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
+  (ADR-0261, extends ADR-0194 §8): a pin older than the 30min fresh TTL but
   ≤ 24h now still rides the immutable pinned GET (install AND boot prefetch);
   the terminal prints
   `npm: eddy cached resolution (as-of <resolvedAt>), refreshing in background`
@@ -74,11 +169,74 @@
   server-vouched resolutions: the post-install write-back fires only for
   POST-adopted bundles — a GET/prefetch cache serve never rewrites the pin,
   so repeat installs cannot self-renew a stale closure past the bound.
-  Deliberate npm deviation recorded in ADR-0216; `prefer:'online'` bypass
+  Deliberate npm deviation recorded in ADR-0261; `prefer:'online'` bypass
   unchanged; revocation safety net: §Revocation runbook in
   `docs/public/hosting-eddy.md`.
 
-### Fixed (install-tail-latency review round 5, ADR-0216 r5 notes + audit)
+### Added (owner VFS revisions and documents)
+
+- One owner-realm VFS authority now assigns exact per-path versions and a
+  monotonic tree revision across sync, async, guest, npm, remote-fs, reset, and
+  profile-wide metadata mutations. Host commits use exact CAS; the page waits
+  for owner reflection and the bounded durability barrier before resolving.
+- Page snapshots are fenced to an explicit owner epoch, project root, and
+  nondecreasing revision, with defensive byte/dirent copies. Collection faults,
+  mid-walk owner changes, and malformed path/version graphs cannot certify a
+  reflected revision. Editable documents preserve local and remote conflict
+  bytes, follow owner serial order for save-versus-rename/delete/reset, and
+  require an explicit dirty-close choice.
+- Every project-index mutation now enters one owner FIFO. A reset parked on
+  durable package revocation cannot overwrite a later rename, switch, dirty
+  mark, Save, delete, or scratch transition with a stale captured index. Passive
+  readers see only the last durability-proven index; Save's early applied phase
+  remains operation-scoped until both persistence barriers pass. Pre-applied
+  Save retries share one owner `opId` record and replay its phase result instead
+  of entering the FIFO twice. An unproven durability failure fences that owner
+  before any later mutation can publish its mirror; the page flips Save only
+  after owner apply. A failed post-apply Save durability proof stays latched
+  against later owner teardown; a proved pre-apply failure does not poison a
+  switch. Exact receipt → release → close confirmation then removes the bounded
+  terminal record.
+- Page→owner mutations retain their reply path after handoff: VFS commits,
+  explorer writes, Git, archive import, project-index updates, and dev-config
+  assignment settle only on ACK/NACK, send failure, or certified owner exit.
+  Read requests and post-ACK durability observations remain bounded. A generic
+  project-index mutation whose terminal ACK is lost now rejects with an explicit
+  unknown outcome after a finite bound; exact disposition recovery remains a
+  separate lifecycle-authority contract.
+- Starter picks now establish durable `/scratch`, then reconcile the immutable
+  owner root to `/scratch` before publishing or booting. Picks from a saved or
+  restored project can no longer leave UI paths on scratch while snapshots and
+  the dev server still serve the named project; reconciliation failure aborts
+  the boot and releases the TS transition gate. Same-path starter tabs reopen
+  only after a fresh scratch snapshot, so they cannot retain the prior starter's
+  bytes while the explorer and preview already show the new tree.
+- Save, Reset, Rename, reload restore, and launcher/Starter switches now share
+  one FIFO project-owner lease. Canceled dialog intents never bind, late mirror
+  commits retain their captured identity, and applied Save holds admission
+  through durable proof before any owner teardown. Owner-bound controls now
+  reflect that lease's busy/fenced state instead of queuing invisible actions
+  behind a terminal boot.
+- Cold reload recovery no longer deletes the hidden owner's live `/scratch`
+  root while it is publishing the saved-project index. Cleanup is deferred to
+  the respawned project owner, which replans the same stale-source deletion.
+- The hidden-empty owner is no longer treated as a prior dev template. Its first
+  real config preserves a trusted user-extended dependency tree across reload
+  instead of revoking it as a template switch.
+- Dev-server boot may reuse or reserve its terminal in the background, but it no
+  longer overrides a newer user-selected terminal during a starter transition.
+- Recursive copy rejects an ordinary source mapped onto a reserved install
+  claim before mutation. Broad Git directory writes recursively discover and
+  revoke inactive nested claims instead of preserving stale provenance.
+- Each conditional VFS operation has one exact request/in-flight/outcome record:
+  async duplicates share one execution and divergent bytes cannot enter it.
+  Success, applied failure, and pre-apply NACK all use exact retained terminal
+  receipt → release → cleanup; snapshot-publication failure carries semantic
+  applied evidence. Unsolicited, malformed, wrong-owner, divergent, and forged
+  terminals cannot settle; an admitted request ends only at certified release or
+  owner exit.
+
+### Fixed (install-tail-latency review round 5, ADR-0261 predecessor audit)
 
 - **Demote+proof ordered BEFORE `prepareInstall`**: a from-scratch clear whose
   OPFS rm never persisted erased the MIRROR stamp while the durable trusted
@@ -89,9 +247,8 @@
 - **The stamp unmoved-guard is BYTE-exact** (`lossy-aggregate`, new
   fault-class row): the flattened dep-map compare let a dependencies↔
   devDependencies move or an `overrides` edit through with an identical flat
-  map — a trusted stamp for a tree resolved under different inputs. Boot-side
-  flat compare is pre-existing and recorded in
-  `playground/install-stamp-invalidation`.
+  map — a trusted stamp for a tree resolved under different inputs. Boot and
+  command paths now share the same exact-byte authority check.
 - **Pin CAS compares the SERVABLE view**: a hard-expired (>24h) raw entry
   reads as absent everywhere else, so the foreground relearn's expect-absent
   write always lost to its stale bytes — the key could never relearn until an
@@ -102,11 +259,10 @@
   pins self-bound at ≤24h). `resolvedVia:'post'` docs corrected to
   SERVER-VOUCHED (the answer may be eddy's mutable-tier cache ≤TTL; only
   `prefer:'online'` recomputes).
-- ADR-0216 records the mandatory 3+-round audit: recurring-class table
+- ADR-0261 grafts the mandatory 3+-round audit: recurring-class table
   (torn-state ×5 rounds, concurrent-same-key ×3, sibling-drift,
-  lossy-aggregate) + admitted gaps (item-contract writer-set invariant,
-  app-layer Vfs outside the contract suite) + the NOT-delivered stamp-authority
-  chokepoint said loudly.
+  lossy-aggregate); the single stamp/package authorities and writer gate close
+  its admitted writer-set and app-layer chokepoint gaps.
 
 ### Fixed (install-tail-latency review round 4, ADR-0216 r4 notes)
 
@@ -1375,7 +1531,7 @@
   a scratch entry keyed on the spawn `RIFTY_RFV_STARTER` when `/scratch` exists but
   the index is a cold-boot empty) — the index becomes the real source the page mirror
   hydrates from. Save/reset carry the page's CURRENT active starter so a mid-session
-  starter pick (no respawn) records the right starter. New e2e: the full
+  starter pick records the right starter. New e2e: the full
   save→switch-away→switch-back round-trip with two FRONTEND-starter projects, each
   tree intact + distinct across owner respawns, asserted straight off OPFS
   (`project-switch.spec.ts`). RED-checked: no-op the owner `index-save` handler →

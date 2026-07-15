@@ -44,9 +44,9 @@ const streamInteropAdrSrc = readFileSync(
 
 describe('App terminal startup wiring', () => {
   it('cold boot spawns the hidden empty workspace owner and never auto-boots a preset', () => {
-    // Launcher gating + the one-shot boot decision are behavioral in
-    // orchestration/project-index-boot.test.ts; here the spawn binding only.
-    expect(source).toContain('const initialOwnerHandle = createHiddenEmptyWorkspaceOwner();');
+    // The real default-owner boot is behavioral in tests/e2e/m0-boot.spec.ts;
+    // launcher gating + the one-shot decision live in project-index-boot tests.
+    // Keep only the hidden-template selection pin here.
     expect(source).toContain('template: HIDDEN_EMPTY_TEMPLATE');
     // (a) project-first cold boot: chooser, no auto-boot of the default preset.
     expect(source).not.toContain('void runVitePreset(DEFAULT_PRESET);');
@@ -94,13 +94,12 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('paints a picked starter before boot (ordering glue; behavior in the preset-boot core)', () => {
+  it('never fabricates an owner snapshot while a picked starter boots', () => {
     const loadPresetUi = source.match(
       /async function loadPresetUi\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
     )?.[0];
     expect(loadPresetUi).toBeDefined();
     expect(loadPresetUi).toContain('setActivePreset(preset.id);');
-    expect(loadPresetUi).toContain('paintPickedStarterSnapshot(preset);');
     expect(loadPresetUi).toContain('resetEditorToActiveInitialFiles();');
     // (a) program-write model stays deleted
     expect(source).not.toContain('discardPendingProgramWrite');
@@ -390,9 +389,7 @@ describe('App binds the orchestration cores (ADR-0197)', () => {
     // Save/switch decisions are behavioral in orchestration/save-flow.test.ts;
     // the switch-then dialog paths are e2e-covered (project-management).
     expect(source).toContain('const saveFlow = createSaveFlow({');
-    expect(source).toContain(
-      'saveProjectIndexPhases(workspaceOwner().snapshotPort, id, name, starter),',
-    );
+    expect(source).toContain('saveProjectIndexPhases(owner.snapshotPort, id, name, starter, {');
     expect(source).toContain('onConfirmSave={() => void saveFlow.confirmSave(saveName())}');
   });
 

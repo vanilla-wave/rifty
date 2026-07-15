@@ -16,21 +16,39 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  type VfsMutationGuard,
+  guardVfsMutations,
+  isAbsolute,
+  joinPath,
+  normalizePath,
+  syncMirror,
+} from '@riftydev/vfs';
 import { resolveBin } from './bin-resolver.ts';
 import { builtinCommands } from './builtins.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
-import type { CommandContext, ShellCommand, StdinReader } from './types.ts';
+import type {
+  CommandContext,
+  ProcessExit,
+  ShellCommand,
+  ShellCommandResult,
+  StdinReader,
+  TerminalResizeSource,
+} from './types.ts';
 
 /**
  * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
  * resolves its exit code (ADR-0137). Receives the absolute shim path, the
  * post-glob argv, and the command context (stdout/stderr/cwd/env/signal).
  */
-export type BinExecutor = (binPath: string, args: string[], ctx: CommandContext) => Promise<number>;
+export type BinExecutor = (
+  binPath: string,
+  args: string[],
+  ctx: CommandContext,
+) => Promise<ShellCommandResult>;
 
 export interface ShellOptions {
   cwd?: string;
@@ -42,10 +60,16 @@ export interface ShellOptions {
    * no Node runtime here") rather than the 127 of a genuine miss.
    */
   execBin?: BinExecutor;
+  /** Host policy boundary for every authoritative VFS mutation. */
+  mutationGuard?: VfsMutationGuard;
+  /** Synchronous namespace policy; never acquires the mutation FIFO. */
+  assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 }
 
 export interface RunResult {
   exitCode: number;
+  /** Exact final executed command exit (ADR-0257). */
+  exit: ProcessExit;
   stdout: string;
   stderr: string;
 }
@@ -72,6 +96,12 @@ export interface RunOptions {
    */
   readonly signal?: AbortSignal;
   /**
+   * Keep an aborted run owned until its command handler settles. Hosts that
+   * supervise a physical child use this so teardown cannot acknowledge before
+   * the child's exit event (ADR-0230). Default keeps the prompt-abort contract.
+   */
+  readonly awaitAbortSettlement?: boolean;
+  /**
    * Whether the run's stdout sink is an interactive terminal. Propagated to
    * `ctx.isTTY` for non-redirected segments (a redirected/piped child always
    * gets a non-TTY context). Default `false` — the color-safe default (GNU
@@ -80,6 +110,8 @@ export interface RunOptions {
   readonly isTTY?: boolean;
   readonly cols?: number;
   readonly rows?: number;
+  /** Run-scoped live terminal dimensions for foreground process propagation. */
+  readonly terminal?: TerminalResizeSource;
   readonly stdin?: CommandContext['stdin'];
 }
 
@@ -94,11 +126,66 @@ interface BackgroundJob {
   readonly command: string;
   readonly tokens: readonly Token[];
   readonly controller: AbortController;
+  done?: Promise<void>;
   status: ShellJobListItem['status'];
 }
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+const SIGTERM_EXIT = 143;
+
+function isProcessExit(value: ShellCommandResult): value is ProcessExit {
+  return typeof value === 'object' && value !== null;
+}
+
+function assertProcessExit(exit: ProcessExit): void {
+  const codeExit =
+    typeof exit.code === 'number' &&
+    Number.isSafeInteger(exit.code) &&
+    exit.code >= 0 &&
+    exit.signal === null;
+  const signalExit = exit.code === null && (exit.signal === 'SIGINT' || exit.signal === 'SIGTERM');
+  if (!codeExit && !signalExit) {
+    throw new TypeError('process exit must contain exactly one supported code or signal');
+  }
+}
+
+function assertShellStatus(status: number): void {
+  if (!Number.isSafeInteger(status) || status < 0) {
+    throw new TypeError(
+      `shell command status must be a non-negative safe integer; received ${status}`,
+    );
+  }
+}
+
+/** Numeric shell status for a builtin status or exact supported process exit. */
+export function shellCommandExitCode(result: ShellCommandResult): number {
+  if (!isProcessExit(result)) {
+    assertShellStatus(result);
+    return result;
+  }
+  assertProcessExit(result);
+  if (result.code !== null) return result.code;
+  return result.signal === 'SIGINT' ? SIGINT_EXIT : SIGTERM_EXIT;
+}
+
+function exactExit(result: ShellCommandResult): ProcessExit {
+  if (isProcessExit(result)) {
+    assertProcessExit(result);
+    return result;
+  }
+  assertShellStatus(result);
+  return { code: result, signal: null };
+}
+
+function runResult(result: ShellCommandResult, stdout: string, stderr: string): RunResult {
+  return {
+    exitCode: shellCommandExitCode(result),
+    exit: exactExit(result),
+    stdout,
+    stderr,
+  };
+}
 
 /**
  * Segment-internal result: `stdoutBytes` is the byte-exact data plane
@@ -225,11 +312,15 @@ export class Shell {
   private readonly backgroundJobs: BackgroundJob[] = [];
   private backgroundSeq = 0;
   private readonly execBin?: BinExecutor;
+  private readonly mutationGuard?: VfsMutationGuard;
+  private readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
     this.env = { ...(options.env ?? {}) };
     this.execBin = options.execBin;
+    this.mutationGuard = options.mutationGuard;
+    this.assertPortablePaths = options.assertPortablePaths;
     const builtins = builtinCommands(
       (p) => {
         this._cwd = p;
@@ -267,10 +358,15 @@ export class Shell {
     return [...this.commands.keys()].sort();
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     for (const job of this.backgroundJobs) {
       if (job.status === 'Running') job.controller.abort();
     }
+    await Promise.all(
+      this.backgroundJobs
+        .map((job) => job.done)
+        .filter((done): done is Promise<void> => done !== undefined),
+    );
   }
 
   private suggestCommand(cmd: string): string | null {
@@ -304,11 +400,13 @@ export class Shell {
     // Inline env overrides (`FOO=bar cmd $FOO`) apply to the command, NOT to
     // expansion on the same line — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
     const tokens = tokenize(line, this.env);
-    if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+    if (tokens.length === 0) return runResult(0, '', '');
 
     // A run cancelled before dispatch starts NOTHING — including a trailing
     // background job, which would otherwise fork before the segment pre-check.
-    if (options.signal?.aborted) return { exitCode: 130, stdout: '', stderr: '' };
+    if (options.signal?.aborted) {
+      return runResult({ code: null, signal: 'SIGINT' }, '', '');
+    }
 
     const background = this.trailingBackground(line, tokens);
     if (background) {
@@ -316,6 +414,10 @@ export class Shell {
         return this.startBackgroundJob(background.line, background.backgroundTokens, options);
       }
       const foreground = await this.runTokens(background.foregroundTokens, options);
+      // `runTokens` owns cancellation only for its foreground prefix. Re-check
+      // the host signal before the outer trailing-background dispatcher forks
+      // an independent job (`;` / `||` must not turn SIGINT into a fresh run).
+      if (options.signal?.aborted) return foreground;
       if (
         (background.joiner === '&&' && foreground.exitCode !== 0) ||
         (background.joiner === '||' && foreground.exitCode === 0)
@@ -329,6 +431,7 @@ export class Shell {
       );
       return {
         exitCode: started.exitCode,
+        exit: started.exit,
         stdout: foreground.stdout + started.stdout,
         stderr: foreground.stderr + started.stderr,
       };
@@ -364,6 +467,7 @@ export class Shell {
     let stdout = '';
     let stderr = '';
     let lastExitCode = 0;
+    let lastExit: ProcessExit = { code: 0, signal: null };
     let executedAny = false;
 
     try {
@@ -396,6 +500,7 @@ export class Shell {
         stdout += segResult.stdout;
         stderr += segResult.stderr;
         lastExitCode = segResult.exitCode;
+        lastExit = segResult.exit;
         executedAny = true;
         // Ctrl+C aborts the whole line — stop the chain.
         if (controller.signal.aborted) break;
@@ -409,10 +514,10 @@ export class Shell {
       // Nothing ran: either every segment was empty (trailing `;` tails — exit
       // 0) or the run was aborted before its first segment — SIGINT's 130,
       // matching a shell's kill-before-start.
-      return { exitCode: controller.signal.aborted ? 130 : 0, stdout: '', stderr: '' };
+      return runResult(controller.signal.aborted ? { code: null, signal: 'SIGINT' } : 0, '', '');
     }
 
-    return { exitCode: lastExitCode, stdout, stderr };
+    return { exitCode: lastExitCode, exit: lastExit, stdout, stderr };
   }
 
   private trailingBackground(
@@ -489,8 +594,9 @@ export class Shell {
     this.backgroundJobs.push(job);
     const started = this.formatJob(job);
     options.onChunk?.(started, 'stdout');
-    void this.runBackgroundJob(job, options);
-    return { exitCode: 0, stdout: started, stderr: '' };
+    job.done = this.runBackgroundJob(job, options);
+    void job.done;
+    return runResult(0, started, '');
   }
 
   private async runBackgroundJob(job: BackgroundJob, options: RunOptions): Promise<void> {
@@ -502,6 +608,8 @@ export class Shell {
         isTTY: options.isTTY,
         cols: options.cols,
         rows: options.rows,
+        terminal: options.terminal,
+        awaitAbortSettlement: true,
       });
       job.status = result.exitCode === 0 ? 'Done' : `Exit ${result.exitCode}`;
     } catch (err) {
@@ -513,7 +621,13 @@ export class Shell {
   }
 
   private cloneForBackground(): Shell {
-    const shell = new Shell({ cwd: this._cwd, env: this.env, execBin: this.execBin });
+    const shell = new Shell({
+      cwd: this._cwd,
+      env: this.env,
+      execBin: this.execBin,
+      mutationGuard: this.mutationGuard,
+      assertPortablePaths: this.assertPortablePaths,
+    });
     for (const [name, command] of this.customCommands) shell.registerCommand(name, command);
     return shell;
   }
@@ -540,7 +654,7 @@ export class Shell {
     signal: AbortSignal,
     abortPromise: Promise<typeof ABORTED>,
   ): Promise<RunResult> {
-    if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+    if (segmentTokens.length === 0) return runResult(0, '', '');
 
     // Split into pipeline stages on `|`. One stage is the common path; a
     // multi-stage pipeline BUFFERS each stage's stdout into the next's stdin.
@@ -553,6 +667,7 @@ export class Shell {
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let exit: ProcessExit = { code: 0, signal: null };
     for (let s = 0; s < stages.length; s++) {
       const isLast = s === stages.length - 1;
       // Only the final stage streams stdout to the terminal; every stage's
@@ -568,13 +683,14 @@ export class Shell {
       );
       stderr += res.stderr;
       exitCode = res.exitCode;
+      exit = res.exit;
       if (signal.aborted) break; // SIGINT cancels the whole pipeline
       if (isLast) stdout = res.stdout;
       // Byte-exact hand-off (ADR-0198): the captured stdout BYTES feed the next
       // stage — re-encoding the display string minted U+FFFD into binary data.
       else pipeStdin = bufferStdin(res.stdoutBytes);
     }
-    return { exitCode, stdout, stderr };
+    return { exitCode, exit, stdout, stderr };
   }
 
   /**
@@ -594,6 +710,7 @@ export class Shell {
   ): Promise<SegmentResult> {
     const empty = (): SegmentResult => ({
       exitCode: 0,
+      exit: { code: 0, signal: null },
       stdout: '',
       stderr: '',
       stdoutBytes: new Uint8Array(),
@@ -686,7 +803,10 @@ export class Shell {
         stderr += text;
       }
     };
-    const result = (exitCode: number): SegmentResult => {
+    const result = (
+      commandResult: ShellCommandResult,
+      exitCodeOverride?: number,
+    ): SegmentResult => {
       // Flush the streaming display decoders: a trailing incomplete UTF-8
       // sequence held by a tap must land (as U+FFFD) in onChunk / stderr
       // instead of silently vanishing (review 2026-07-05).
@@ -698,7 +818,13 @@ export class Shell {
         stderr += stderrTail;
       }
       const stdoutBytes = concatBytes(stdoutChunks);
-      return { exitCode, stdout: decoder.decode(stdoutBytes), stderr, stdoutBytes };
+      return {
+        exitCode: exitCodeOverride ?? shellCommandExitCode(commandResult),
+        exit: exactExit(commandResult),
+        stdout: decoder.decode(stdoutBytes),
+        stderr,
+        stdoutBytes,
+      };
     };
 
     // `< file` reads the file as stdin (overrides inherited pipe stdin). A miss
@@ -718,6 +844,8 @@ export class Shell {
       }
     }
 
+    const isTTY = redirectTo || !streamStdout ? false : (options.isTTY ?? false);
+    const terminal = isTTY ? options.terminal : undefined;
     const ctx: CommandContext = {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
@@ -733,11 +861,18 @@ export class Shell {
       },
       // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
       // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
-      isTTY: redirectTo || !streamStdout ? false : (options.isTTY ?? false),
-      cols: options.cols,
-      rows: options.rows,
+      isTTY,
+      get cols() {
+        return terminal?.current().cols ?? options.cols;
+      },
+      get rows() {
+        return terminal?.current().rows ?? options.rows;
+      },
+      terminal,
       stdin: stageStdin,
       signal,
+      mutationGuard: this.mutationGuard,
+      assertPortablePaths: this.assertPortablePaths,
     };
 
     if (!handler) {
@@ -768,31 +903,42 @@ export class Shell {
       handler = (a, c) => execBin(binPath, a, c);
     }
 
-    let exitCode = 0;
+    let commandResult: ShellCommandResult = 0;
+    let exitCodeOverride: number | undefined;
     try {
       const handlerPromise = handler(args, ctx);
       const raced = await Promise.race([handlerPromise, abortPromise]);
       if (raced === ABORTED) {
-        // SIGINT won the race: resolve now (exit 130). The handler keeps
-        // running until it honors ctx.signal — swallow its eventual settle so
-        // a late rejection isn't an unhandled rejection (cooperative abort).
-        void handlerPromise.then(undefined, () => {});
-        exitCode = SIGINT_EXIT;
+        if (options.awaitAbortSettlement) {
+          const settled = await handlerPromise;
+          shellCommandExitCode(settled);
+          commandResult = isProcessExit(settled) ? settled : { code: null, signal: 'SIGINT' };
+        } else {
+          // Prompt-abort hosts detach from a non-cooperative handler; supervise
+          // physical children with awaitAbortSettlement instead.
+          void handlerPromise.then(undefined, () => {});
+          commandResult = { code: null, signal: 'SIGINT' };
+        }
+        exitCodeOverride = SIGINT_EXIT;
       } else {
-        exitCode = raced;
+        // Validate rich exits while command errors still use the shell's clean
+        // diagnostic path rather than leaking a host stack.
+        shellCommandExitCode(raced);
+        commandResult = raced;
       }
     } catch (err) {
       // Clean shell diagnostic — never dump a JS stack trace to the terminal.
       // Commands throw NotImplementedError for unsupported flags/features; its
       // message ("Not implemented: shell.X.flag (…)") is the right altitude.
       emit(`${cmd}: ${(err as Error).message}\n`, 'stderr');
-      exitCode = 1;
+      commandResult = 1;
+      exitCodeOverride = undefined;
     }
 
     // Flush to the redirect target. Truncate/create even when the command wrote
     // nothing — bash opens `> f` before running, so `grep nomatch x > f` empties
     // f. Skip only on a SIGINT abort: don't persist a partial buffer.
-    if (redirectTo && exitCode !== SIGINT_EXIT) {
+    if (redirectTo && (exitCodeOverride ?? shellCommandExitCode(commandResult)) !== SIGINT_EXIT) {
       try {
         const path = normalizePath(
           isAbsolute(redirectTo.path) ? redirectTo.path : joinPath(this._cwd, redirectTo.path),
@@ -801,15 +947,17 @@ export class Shell {
         // The captured BYTES flow to the file verbatim (ADR-0198) — encoding
         // the display string minted U+FFFD into binary payloads.
         const payload = concatBytes(stdoutChunks);
-        if (redirectTo.append && fs.existsSync(path)) {
-          const existing = fs.readFileBytesSync(path);
-          const next = new Uint8Array(existing.length + payload.length);
-          next.set(existing, 0);
-          next.set(payload, existing.length);
-          fs.writeFileSync(path, next);
-        } else {
-          fs.writeFileSync(path, payload);
-        }
+        await guardVfsMutations(this.mutationGuard, [{ kind: 'write', path }], () => {
+          if (redirectTo.append && fs.existsSync(path)) {
+            const existing = fs.readFileBytesSync(path);
+            const next = new Uint8Array(existing.length + payload.length);
+            next.set(existing, 0);
+            next.set(payload, existing.length);
+            fs.writeFileSync(path, next);
+          } else {
+            fs.writeFileSync(path, payload);
+          }
+        });
         stdoutChunks.length = 0;
       } catch (err) {
         // Loud failure: don't silently dump the redirected payload onto stdout
@@ -820,11 +968,11 @@ export class Shell {
           'stderr',
         );
         stdoutChunks.length = 0;
-        exitCode = 1;
+        commandResult = 1;
       }
     }
 
-    return result(exitCode);
+    return result(commandResult, exitCodeOverride);
   }
 
   /**

@@ -21,6 +21,7 @@ import { channelNameFor } from '@riftydev/net';
 import type { VfsDirent } from '@riftydev/vfs';
 import { joinPath } from '@riftydev/vfs';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
+import type { OwnerVfsRevisionFrame, PathVersion } from './owner-vfs-protocol.ts';
 
 /** Dirs never walked into a snapshot — heavy or derived, not user project source. */
 export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', '.vite', 'dist'];
@@ -33,12 +34,16 @@ export interface VfsSnapshotEntry {
   readonly path: string;
   readonly kind: 'file' | 'dir';
   readonly size: number;
+  /** Opaque owner-issued identity; content/size are never used as identity. */
+  readonly version: PathVersion;
   /** Present for files small enough to inline (see {@link SNAPSHOT_MAX_CONTENT_BYTES}). */
   readonly content?: Uint8Array;
+  /** Only valid reason for an owner-certified file to omit its bytes. */
+  readonly contentOmitted?: 'size-cap';
 }
 
 /** A full-tree replace frame. The receiver swaps its store wholesale per frame. */
-export interface VfsSnapshotFrame {
+export interface VfsSnapshotFrame extends OwnerVfsRevisionFrame {
   readonly type: 'snapshot';
   readonly root: string;
   readonly entries: readonly VfsSnapshotEntry[];
@@ -59,9 +64,12 @@ export interface VfsSnapshotRequestFrame {
 
 /** The narrow sync-mirror slice {@link collectSnapshot} reads (keeps tests tiny). */
 export interface SnapshotSource {
+  readonly ownerEpoch: OwnerVfsRevisionFrame['ownerEpoch'];
+  readonly treeRevision: OwnerVfsRevisionFrame['treeRevision'];
   readdirSync(path: string): readonly VfsDirent[];
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number };
   readFileBytesSync(path: string): Uint8Array;
+  versionOf(path: string): PathVersion | null;
 }
 
 export interface CollectOptions {
@@ -79,18 +87,21 @@ export function collectSnapshot(
   root: string,
   options: CollectOptions = {},
 ): VfsSnapshotFrame {
+  const ownerEpoch = fs.ownerEpoch;
+  const treeRevision = fs.treeRevision;
+  if (typeof ownerEpoch !== 'string' || ownerEpoch.length === 0) {
+    throw new Error('owner snapshot epoch must be non-empty');
+  }
+  if (!Number.isSafeInteger(treeRevision) || treeRevision < 0) {
+    throw new Error(`invalid owner tree revision ${String(treeRevision)}`);
+  }
   const exclude = new Set(options.exclude ?? SNAPSHOT_EXCLUDE_DIRS);
   const maxContent = options.maxContentBytes ?? SNAPSHOT_MAX_CONTENT_BYTES;
   const entries: VfsSnapshotEntry[] = [];
   let nodeModulesPresent = false;
 
   const walk = (dir: string): void => {
-    let children: readonly VfsDirent[];
-    try {
-      children = fs.readdirSync(dir);
-    } catch {
-      return; // dir vanished between reads
-    }
+    const children = fs.readdirSync(dir);
     const sorted = [...children].sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       const an = a.name.toLowerCase();
@@ -104,33 +115,44 @@ export function collectSnapshot(
           if (child.name === 'node_modules') nodeModulesPresent = true;
           continue; // record presence, don't descend
         }
-        entries.push({ path, kind: 'dir', size: 0 });
+        entries.push({ path, kind: 'dir', size: 0, version: requiredVersion(fs, path) });
         walk(path);
       } else {
-        const entry = fileEntry(fs, path, maxContent);
-        if (entry) entries.push(entry);
+        entries.push(fileEntry(fs, path, maxContent));
       }
     }
   };
 
   walk(root);
-  return { type: 'snapshot', root, entries, nodeModulesPresent };
+  if (fs.ownerEpoch !== ownerEpoch || fs.treeRevision !== treeRevision) {
+    throw new Error(
+      `owner identity changed during snapshot collection from ${ownerEpoch}@${String(treeRevision)}`,
+    );
+  }
+  return {
+    type: 'snapshot',
+    root,
+    ownerEpoch,
+    treeRevision,
+    entries,
+    nodeModulesPresent,
+  };
 }
 
-function fileEntry(fs: SnapshotSource, path: string, maxContent: number): VfsSnapshotEntry | null {
-  let size = 0;
-  try {
-    size = fs.statSync(path).size ?? 0;
-  } catch {
-    return null;
+function fileEntry(fs: SnapshotSource, path: string, maxContent: number): VfsSnapshotEntry {
+  const size = fs.statSync(path).size ?? 0;
+  const version = requiredVersion(fs, path);
+  if (size > maxContent) {
+    return { path, kind: 'file', size, version, contentOmitted: 'size-cap' };
   }
-  if (size > maxContent) return { path, kind: 'file', size };
-  try {
-    const content = fs.readFileBytesSync(path);
-    return { path, kind: 'file', size: content.byteLength, content };
-  } catch {
-    return { path, kind: 'file', size };
-  }
+  const content = fs.readFileBytesSync(path);
+  return { path, kind: 'file', size: content.byteLength, content, version };
+}
+
+function requiredVersion(fs: SnapshotSource, path: string): PathVersion {
+  const version = fs.versionOf(path);
+  if (version === null) throw new Error(`owner VFS version missing for snapshot path ${path}`);
+  return version;
 }
 
 /** Synthetic channel URL keyed by the owner bridge key (mirrors the write port's). */

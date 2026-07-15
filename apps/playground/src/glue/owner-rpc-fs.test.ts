@@ -1,6 +1,7 @@
 import { syncMirror } from '@riftydev/vfs';
-import { resetSyncMirror } from '@riftydev/vfs/internal';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type OwnerVfsAuthority, createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import { createFileAsync, renamePathAsync } from './fs-ops.ts';
 import { OwnerRpcFs } from './owner-rpc-fs.ts';
 import { SnapshotFs } from './snapshot-fs.ts';
@@ -19,15 +20,19 @@ function seed(path: string, text: string): void {
 
 describe('OwnerRpcFs', () => {
   let snapshot: SnapshotFs;
+  let authority: OwnerVfsAuthority;
   let frames: VfsWriteFrame[];
   let writer: { writeFrameAcked(frame: VfsWriteFrame): Promise<void> };
 
   beforeEach(() => {
     resetSyncMirror();
+    authority = createOwnerVfsAuthority(syncMirror(), { ownerEpoch: 'owner-rpc-test' });
+    setSyncMirror(authority);
     syncMirror().mkdirSync('/workspace', { recursive: true });
     syncMirror().mkdirSync('/workspace/src', { recursive: true });
     snapshot = new SnapshotFs('/workspace');
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.bindOwner(authority.ownerEpoch);
+    snapshot.update(collectSnapshot(authority, '/workspace'));
     frames = [];
     writer = {
       writeFrameAcked: (frame) => {
@@ -38,6 +43,7 @@ describe('OwnerRpcFs', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetSyncMirror();
   });
 
@@ -48,7 +54,7 @@ describe('OwnerRpcFs', () => {
   function publish(frame = frames.shift()): void {
     if (!frame) throw new Error('expected owner frame');
     applyVfsWriteFrame(frame);
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.update(collectSnapshot(authority, '/workspace'));
   }
 
   it('creates files and directories only after the owner republishes', async () => {
@@ -78,7 +84,7 @@ describe('OwnerRpcFs', () => {
 
   it('renames, copies, and deletes through owner frames reflected by SnapshotFs', async () => {
     seed('/workspace/src/a.txt', 'A');
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.update(collectSnapshot(authority, '/workspace'));
     const fs = rpc();
 
     const renamed = fs.renamePath('/workspace/src/a.txt', '/workspace/src/b.txt');
@@ -114,7 +120,7 @@ describe('OwnerRpcFs', () => {
     seed('/workspace/src/a.txt', 'A');
     seed('/workspace/src/b.txt', 'B');
     syncMirror().mkdirSync('/workspace/lib', { recursive: true });
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.update(collectSnapshot(authority, '/workspace'));
     const fs = rpc();
 
     const moved = fs.renameMany([
@@ -222,9 +228,41 @@ describe('OwnerRpcFs', () => {
     expect(snapshot.existsSync('/workspace/never-published.txt')).toBe(false);
   });
 
+  it('keeps an admitted write pending beyond the reflection timeout until its ACK arrives', async () => {
+    vi.useFakeTimers();
+    let ack!: () => void;
+    writer = {
+      writeFrameAcked(frame) {
+        frames.push(frame);
+        return new Promise<void>((resolve) => {
+          ack = resolve;
+        });
+      },
+    };
+    const fs = new OwnerRpcFs(snapshot, () => writer, { timeoutMs: 5 });
+    let outcome = 'pending';
+
+    const created = fs.createFile('/workspace/slow-owner.txt');
+    void created.then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    expect(outcome).toBe('pending');
+
+    publish();
+    ack();
+    await expect(created).resolves.toBeUndefined();
+    expect(snapshot.existsSync('/workspace/slow-owner.txt')).toBe(true);
+  });
+
   it('does not resolve a same-size write until a later owner snapshot publish is observed', async () => {
     seed('/workspace/src/same.txt', 'old');
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.update(collectSnapshot(authority, '/workspace'));
     const fs = rpc();
 
     let settled = false;
@@ -236,7 +274,7 @@ describe('OwnerRpcFs', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(dec.decode(snapshot.readFileBytesSync('/workspace/src/same.txt'))).toBe('old');
-    snapshot.update(collectSnapshot(syncMirror(), '/workspace'));
+    snapshot.update(collectSnapshot(authority, '/workspace'));
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(dec.decode(snapshot.readFileBytesSync('/workspace/src/same.txt'))).toBe('old');

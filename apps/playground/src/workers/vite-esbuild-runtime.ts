@@ -1,6 +1,5 @@
 import { type RuntimeEsbuildCjsOuter, publishRuntimeEsbuild } from '@riftydev/runtime-js';
 import type { FsSync } from '@riftydev/vfs';
-import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import { fetchAssetBytesBounded } from '../glue/bounded-asset-fetch.ts';
 // @ts-expect-error — hash-pinned generated JS has no hand-maintained declaration; narrowed below.
 import * as generatedRuntime from './generated/esbuild-runtime.js';
@@ -14,7 +13,9 @@ interface GeneratedRuntimeModule {
 }
 
 const generated = generatedRuntime as unknown as GeneratedRuntimeModule;
-let wasmModulePromise: Promise<WebAssembly.Module> | undefined;
+let wasmModuleLoad:
+  | { readonly url: string; readonly promise: Promise<WebAssembly.Module> }
+  | undefined;
 const EXACT_ESBUILD_VITE_VERSION = '7.3.6';
 // Pinned 0.28.0 asset is ~13.3 MiB; growth beyond 16 MiB needs provenance review.
 const ESBUILD_WASM_MAX_BYTES = 16 * 1024 * 1024;
@@ -51,20 +52,29 @@ export function decideViteEsbuildRuntime(options: {
   );
 }
 
-function compileEsbuildWasm(): Promise<WebAssembly.Module> {
-  wasmModulePromise ??= fetchAssetBytesBounded(esbuildWasmUrl, {
-    label: 'esbuild-wasm asset',
-    maxBytes: ESBUILD_WASM_MAX_BYTES,
-  }).then((bytes) => WebAssembly.compile(bytes));
-  return wasmModulePromise;
+function compileEsbuildWasm(esbuildWasmUrl: string): Promise<WebAssembly.Module> {
+  if (wasmModuleLoad !== undefined && wasmModuleLoad.url !== esbuildWasmUrl) {
+    throw new Error(
+      `vite esbuild runtime cannot replace inherited wasm URL ${wasmModuleLoad.url} with ${esbuildWasmUrl}`,
+    );
+  }
+  wasmModuleLoad ??= {
+    url: esbuildWasmUrl,
+    promise: fetchAssetBytesBounded(esbuildWasmUrl, {
+      label: 'esbuild-wasm asset',
+      maxBytes: ESBUILD_WASM_MAX_BYTES,
+    }).then((bytes) => WebAssembly.compile(bytes)),
+  };
+  return wasmModuleLoad.promise;
 }
 
 /** Start once in this Worker; publish only the exact successful CJS outer. */
 async function startAndPublishViteEsbuild(options: {
   readonly fs: FsSync;
   readonly cwd: string;
+  readonly esbuildWasmUrl: string;
 }): Promise<void> {
-  const wasm = await compileEsbuildWasm();
+  const wasm = await compileEsbuildWasm(options.esbuildWasmUrl);
   const outer = await generated.startEsbuildRuntime({ wasm, fs: options.fs, cwd: options.cwd });
   publishRuntimeEsbuild(outer);
 }
@@ -74,6 +84,7 @@ export async function prepareViteEsbuildRuntime(options: {
   readonly fs: FsSync;
   readonly cwd: string;
   readonly packageRoot: string;
+  readonly esbuildWasmUrl: string;
 }): Promise<void> {
   if (decideViteEsbuildRuntime(options) === 'skip-rolldown') return;
   await startAndPublishViteEsbuild(options);

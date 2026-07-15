@@ -1528,6 +1528,21 @@ describe('RiftyTerminal — dimensions', () => {
     expect(term.cols).toBeGreaterThan(0);
     expect(term.rows).toBeGreaterThan(0);
   });
+
+  it('notifies the host exactly once for each xterm grid change', () => {
+    const seen: Array<{ cols: number; rows: number }> = [];
+    const term = new RiftyTerminal({
+      onInput: () => {},
+      onResize: (cols, rows) => seen.push({ cols, rows }),
+    });
+
+    internalXterm(term).resize(132, 43);
+
+    expect(seen).toEqual([{ cols: 132, rows: 43 }]);
+    term.dispose();
+    internalXterm(term).resize(140, 50);
+    expect(seen).toEqual([{ cols: 132, rows: 43 }]);
+  });
 });
 
 describe('RiftyTerminal — font measurement', () => {

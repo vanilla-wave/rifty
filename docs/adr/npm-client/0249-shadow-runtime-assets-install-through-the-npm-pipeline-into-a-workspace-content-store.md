@@ -12,9 +12,10 @@ Date: 2026-07
 
 Two delivery paths disagree today. Install pulls the
 `@esbuild/wasi-preview1` alias (~20MB) whose bytes the delegate shadows. The
-executed `esbuild.wasm` (13.3MB) instead ships as
-`esbuild-wasm/esbuild.wasm?url`: outside npm provenance, coupled to the app
-bundle, and not durable when the HTTP cache is evicted.
+executed `esbuild.wasm` (13,918,738 bytes / 13.3MiB) instead enters through
+`playground-node-worker-runtime.ts` as `esbuild-wasm/esbuild.wasm?url`, then
+travels in ADR-0231's `RIFTY_ESBUILD_WASM_URL`: outside npm provenance,
+coupled to the app bundle, and not durable when the HTTP cache is evicted.
 
 The first proposal put a CAS at `/.rifty/shadow-assets`, filled it in the
 background, and let Vite children lazily fetch misses. That path is not
@@ -32,10 +33,11 @@ allows `npm install` to report success before offline-required bytes exist.
   `NotImplementedError('shadow-registry.<name>@<version>.assets')`.
 - npm-client exports `createShadowAssetManager`, its store/transport adapters,
   and `ShadowAssetManagerPort`. The workspace owner constructs exactly one after
-  backend boot from raw-owner storage, configured transports/learned pins, and
-  the boot storage class; it injects the port into shell install and child
-  adapters. `InstallOptions.shadowAssets` is optional only for callers whose
-  applied required set is empty. A non-empty set without it throws
+  backend boot from a construction-local private-store capability, configured
+  transports/learned pins, actual backend, and the separately threaded browser
+  persistence grant; it injects the port into shell install and child adapters.
+  `InstallOptions.shadowAssets` is optional only for callers whose applied
+  required set is empty. A non-empty set without it throws
   `NotImplementedError('npm.install.shadowAssets')` before link/shim/lockfile
   mutation. SDK/tests may inject the real manager over an in-memory store.
 - The owner-resident `ShadowAssetManager` deep module owns registry clients,
@@ -56,43 +58,53 @@ allows `npm install` to report success before offline-required bytes exist.
   planning the supervised consumer's exact set, the owner creates one
   `MessageChannel` for a non-empty set and starts the manager server on `port1`
   before spawn. Generic `SpawnWorkerSpec.capabilityPorts` carries `port2` under
-  that key. Kernel treats names/protocols as opaque: it snapshots the record,
-  rejects empty/duplicate-port entries, transfers every port exactly once in the
-  same init post as stdio, preserves it in `WorkerSpawnSpec`, and publishes it
-  in `KernelProcessSpec` before pre-entry/import. `node-entry-bootstrap` reads
-  the named port and passes its adapter through `prepareViteCli` before any Vite
-  import. It is never exposed on Node `process`, multiplexed over guest Node IPC,
-  or encoded in env. Missing capability for a non-empty Vite runtime set throws
+  that key through ADR-0266's opaque transfer/publication seam.
+  `node-entry-bootstrap` reads the named port and passes its adapter through
+  `prepareViteCli` before any Vite import. The asset is removed from
+  `NodeWorkerRuntimeConfig` and `RIFTY_ESBUILD_WASM_URL`; it is never exposed on
+  Node `process`, multiplexed over guest Node IPC, or encoded in env. Missing
+  capability for a non-empty Vite runtime set throws
   `NotImplementedError('vite.esbuild.shadowAssets')`. Owner attaches idempotent
   session cleanup to child exit before returning its handle. Spawn failure
   closes both ends; exit/kill closes the owner session without aborting shared
   flights. Child `dispose()` rejects local requests, best-effort cancels, then
-  closes; normal/setup-failure finalization closes all child capability ports.
-  Graceful manager shutdown sends terminal error then closes; abrupt owner death
-  is bounded by the client deadline. `serve:true` termination relies on the
-  already-attached owner cleanup because the realm is terminated directly.
-- The playground injects a workspace-private store adapter backed by the raw
-  owner VFS at
-  `/.rifty-private/workspaces/<workspaceSlug>/shadow-assets/v1/{objects,receipts,ready,tmp}`.
-  This is a raw-root sibling of `<workspaceVfsPrefix>`, not its descendant, so
-  scoped guest paths and ancestor operations cannot reach it. Snapshots and
-  exports walk only the guest root. Explicit workspace-cache clear removes the
-  private sibling; any lifecycle that deletes the durable workspace root must
-  delete both siblings. Project deletion does not clear workspace-shared assets.
-  Logical `/.rifty/*` is forbidden because it is profile-wide.
+  closes. Graceful manager shutdown sends terminal error then closes; abrupt
+  owner death is bounded by the client deadline. `serve:true` termination relies
+  on the already-attached owner cleanup because the realm is terminated directly.
+- Before `ScopedFsSync` is installed, one workspace-storage composition root
+  closes over the unscoped backend. It validates an exact, non-empty,
+  well-formed `workspaceId`, then derives one injective `workspaceStorageKey`:
+  canonical `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` ids remain byte-identical;
+  every other admitted id is `~` plus unpadded base64url of its exact UTF-8
+  bytes. Both the guest prefix and private root use this key; lossy replacement
+  with `_` is forbidden. The root returns only the guest-scoped VFS plus a
+  workspace-private store capability rooted at
+  `/.rifty-private/workspaces/<workspaceStorageKey>/shadow-assets/v1/{objects,receipts,ready,tmp}`.
+  Raw storage never escapes that closure or the ordinary `OwnerVfsAuthority`.
+  The private root is a raw-root sibling of `<workspaceVfsPrefix>`, not its
+  descendant, so scoped guest paths and ancestor operations cannot reach it.
+  Snapshots and exports walk only the guest root. Explicit workspace-cache
+  clear removes the private sibling; lifecycle deletion of the durable
+  workspace removes both siblings. Project deletion retains workspace-shared
+  assets. Logical `/.rifty/*` is forbidden because it is profile-wide.
 - `install()` derives the exact required set from substitutions actually
   applied. It awaits `ensure`; exit 0 means every required object is verified
   and the set receipt has the backend's readiness acknowledgement. OPFS also
-  requires a clean flush for all private asset paths. Receipt storage class is
-  `opfs-persisted` only when boot reports `persistedAfter=true`, otherwise
-  `opfs-best-effort`; memory is `memory-session`. The latter two show warnings.
+  requires a clean flush for all private asset paths. Page boot threads
+  `persistedAfter` as a typed owner-bootstrap fact; owner must not infer it from
+  OPFS or its `durable|ephemeral` receipt. Storage class is `opfs-persisted`
+  only for actual OPFS plus `persistedAfter=true`, `opfs-best-effort` for OPFS
+  without the grant, and `memory-session` for memory. The latter two warn.
   Only `opfs-persisted` claims browser-eviction resistance; best-effort reload
   proof is conditional on origin storage still existing, and memory claims no
   reload survival.
 - Install has two observable phases: dependency tree, then shadow assets. On
   success `InstallResult.shadowAssets` is
   `{status:'not-required'} | {status:'ready', receipt}`. Existing tree fields
-  form `InstallTreeResult`. Post-tree asset failure rejects with
+  form `InstallTreeResult`, including ADR-0258's dependency-only acquisition
+  `provenance`. Asset transport/cache facts live only in the asset receipt/error;
+  they do not change the compatibility projection `InstallResult.source`.
+  Post-tree asset failure rejects with
   `ShadowAssetInstallError {code:'ESHADOWASSET', treeResult:
   InstallTreeResult, requiredSetDigest, asset, phase, transports, recovery,
   cause}`. `cause` preserves the typed underlying failure; tarball mismatch is
@@ -103,26 +115,37 @@ allows `npm install` to report success before offline-required bytes exist.
   untyped `DOMException`.
   Direct callers still see failure; the structured tree result proves which
   phase completed.
-- The playground shell remains the sole tree-stamp writer. On normal result or
-  `ESHADOWASSET`, it schedules the existing tree drain/stamp from `treeResult`
-  before returning command status; the stamp attests dependency-tree completion
-  and its exact lockfile basis, never asset readiness. It preserves the matching
-  `package.json`, prints “tree ready,
-  asset failed”, and returns nonzero for the asset error. Pre-tree failures keep
-  existing package.json rollback and leave the already-demoted stamp pending;
-  it never re-promotes prior trust after a failed mutation attempt. A stamp
-  failure never becomes an asset success claim.
+- ADR-0261's `PackageAcquisitionAuthority` and `InstallStampAuthority` remain
+  the sole tree-claim owners; shell is presentation only. The Playground install
+  adapter converts only typed `ESHADOWASSET` into an internal
+  `post-tree-failure` outcome carrying `treeResult`, exact post-install
+  `package.json`, exact lockfile digest, and the original error. Acquisition
+  schedules ordinary background promotion from those tree facts, then rethrows
+  the original asset error. Shell keeps matching package/tree, prints “tree
+  ready, asset failed”, and returns nonzero. Pre-tree throws keep existing
+  package rollback and pending/absent claim behavior. Tree promotion never
+  attests asset readiness; its refusal never becomes asset success.
 - Dependency-tree identity and asset-set identity are independent. One pure
   pre-mutation planner derives `AppliedSubstitution[]` from exact resolved
   versions during install or from a lockfile whose exact bytes are attested by
-  the trusted tree stamp. `InstallStamp.version:3` records
+  the trusted tree claim. `InstallStamp.version:4` retains ADR-0261's root,
+  slug, exact package text, artifact identity, deps, packages, and durability
+  fields and adds
   `lockfileSha256`, lowercase hex sha256 of the exact stored
-  `package-lock.json` bytes; reuse re-reads and hashes those bytes before
-  planning. Missing/mismatched lockfile bytes or a v2 stamp invalidate reuse and
-  run normal install; the planner never trusts an edited guest lockfile. Install,
-  trusted-stamp reuse, and snapshot restore use that planner; every reuse runs
-  `ensure` before runtime. Planner validates exact descriptors and manager
-  availability before tree publication.
+  `package-lock.json` bytes. Fresh-install and snapshot-plan outcomes carry the
+  digest into promotion; the authority re-reads/hashes in its final commit slot.
+  Trusted checks re-read/hash before returning `existing`. Missing/mismatched
+  lockfile bytes or a v1-v3 claim are misses and run normal acquisition; the
+  planner never trusts an edited guest lockfile.
+- Fresh install runs planner/ensure inside npm-client. Before returning a
+  trusted `existing` tree, and after applying a verified snapshot before
+  returning `snapshot`, `PackageAcquisitionAuthority` invokes one injected
+  owner asset hook using the same planner and manager. Snapshot/fresh outcomes
+  both carry the exact digest required for v4 promotion. Post-tree hook failure
+  still allows independent tree promotion, then fails the acquisition loudly.
+  Every successful arrival path ensures assets before runtime; no fast path
+  bypasses the manager. Planner validates descriptors and manager availability
+  before a fresh tree publishes.
   A pin-only change flips the canonical asset-set digest, not
   `installArtifactIdentity`; the recipe projects only tree-affecting overlay
   and generated-adapter fields. An explicit `npm install` may still run normal
@@ -170,15 +193,22 @@ allows `npm install` to report success before offline-required bytes exist.
   recover as misses. Quota errors report usage and the explicit recovery; they
   never auto-delete. A shared/profile CAS or automatic GC requires a separate
   lease and generation contract.
-- Snapshot restore may preflight `ensure`, but first use joins the same owner
-  flight and waits with visible progress. There is no fire-and-forget success
-  path. Multiple browser tabs remain the existing explicitly tracked
+- Snapshot restore and first use join the same owner flight and wait with
+  visible progress. There is no fire-and-forget success path. Multiple browser
+  tabs remain the existing explicitly tracked
   `playground/multi-tab-undefined-behavior` gap; this ADR claims one authority
   only within a workspace owner.
 - Removing heavy bytes from the app bundle changes the delivery plane only.
   Every package still needs a package-specific, parity-proven runtime adapter
   implementing its real API, process, and teardown behavior. A data catalog
   cannot install executable lifecycle hooks.
+
+This ADR supersedes ADR-0231 only for the esbuild asset-URL bootstrap clause:
+kernel/node/SQLite host config stands, while `RIFTY_ESBUILD_WASM_URL` is removed.
+It supersedes ADR-0261 only for install-claim version/schema and artifact-policy
+projection: v4 adds exact lockfile identity, and asset-only policy fields no
+longer invalidate the dependency tree. ADR-0261's owner, root binding,
+non-transferability, promotion, and durability rules stand.
 
 ## Consequences
 
@@ -196,8 +226,18 @@ allows `npm install` to report success before offline-required bytes exist.
   success and can preserve tree state without parsing terminal text.
 - Workspace isolation duplicates assets and retention is conservative. Both
   are preferred to cross-workspace authority or unsafe reclamation.
+- Generated canonical workspace ids retain their existing roots. A legacy
+  non-canonical lossy-slug root is never adopted because its owner is
+  ambiguous; the exact id opens its injective root.
 - Asset readiness can fail after a valid dependency tree exists. The command
   reports failure while preserving independently attestable tree state; direct
   callers can distinguish tree failure from post-tree asset failure.
+- Cold standard installs add a serial post-tree asset-fill phase before exit 0.
+  The admitted esbuild member is 13,918,738 bytes; this is extracted member
+  size, not transferred tarball size. Fetch is byte-capped and
+  no-progress-bounded, not total-time-bounded. This ADR quotes no seconds; the
+  store item records real-browser STD wall time and decoded packument/tarball
+  response-body bytes, and the Eddy item later adds the matched row.
+- Existing v3 install claims miss once so v4 can attest exact lockfile bytes.
 - This does not generalize ABI/API adaptation for Sass, SWC, sharp, or future
   binary-backed packages; each remains a separate parity decision.

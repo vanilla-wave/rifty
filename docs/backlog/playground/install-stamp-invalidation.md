@@ -4,16 +4,14 @@ status: draft
 title: Install-stamp invalidation strategy
 created: 2026-06-12
 why: stamp trusts node_modules wholesale; a corrupted-but-stamped tree boots a broken dev server with no self-heal
-user_story: As a playground dev with OPFS `node_modules` truncated by a crash mid-flush, want boot to re-install the corrupt-but-stamped tree, but `installStampSatisfied` skips `install()` on matching `.rifty-install-stamp.json` so dev server boots broken till I hand-run `npm install`.
+user_story: As a playground dev with `node_modules` corrupted after a trusted claim was written, want boot to reject that tree instead of starting broken until I hand-run `npm install`.
 sources: [docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
-code: [apps/playground/src/glue/install-stamp.ts]
+code: [apps/playground/src/glue/install-stamp-authority.ts]
 ---
 
 ## Context
 
-ADR-0135: worker bootstrap skips `install()` when `<root>/node_modules/.rifty-install-stamp.json` matches package.json effective deps and `node_modules/` exists. Stamp = "this tree was fully installed for deps D"; nothing verifies the tree afterwards (partial OPFS flush on crash, manual deletions in explorer). Current escape hatch: terminal `npm install` ignores the stamp and re-installs.
-
-Boot-side identity is a LOSSY flat map (review r5, 2026-07-11): `installStampSatisfied*` compares dependencies ∪ devDependencies ∪ optionalDependencies — a section move or an `overrides` edit changes the installer request with an identical flat map, so boot can reuse a tree resolved under stale inputs. The command-site stamp guard is already byte-exact (ADR-0216 r5 note); closing boot needs a stamp identity that covers sections + overrides (schema bump, one-time re-install).
+ADR-0261 closes root/request/policy drift with exact root, `package.json` text, and install-artifact identity, and proves owner-observed writes before promotion. The residual is later content corruption outside that proof window: a trusted claim does not hash or revalidate the full tree. Current escape hatch: terminal `npm install` demotes the claim and re-installs.
 
 ## Options or Next
 
@@ -24,4 +22,4 @@ Boot-side identity is a LOSSY flat map (review r5, 2026-07-11): `installStampSat
 
 ## Reversibility
 
-REVERSIBLE — provisional judgment recorded here; skip predicate is one function (`installStampSatisfied`).
+REVERSIBLE — provisional judgment recorded here; reuse is owned by one authority check.

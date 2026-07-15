@@ -41,7 +41,7 @@ async function saveScratchAs(page: Page, name: string): Promise<string> {
   await expect(dialog).toBeVisible({ timeout: 5_000 });
   await dialog.locator('input.rf-dialog__input').fill(name);
   await dialog.getByRole('button', { name: 'Save project' }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  await expect(dialog).toHaveCount(0, { timeout: OWNER_DURABLE_TIMEOUT });
   const id = await projectIdForName(page, name);
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });

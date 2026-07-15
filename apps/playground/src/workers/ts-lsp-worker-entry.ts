@@ -32,6 +32,10 @@
 // set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`).
 import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json?url';
 import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
+import {
+  installNodeWorkerRuntimeConfig,
+  readNodeWorkerRuntimeConfigFromProcess,
+} from './node-worker-runtime-config.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 // Realign globalThis.Buffer to THIS worker bundle's copy. In a PROD build every
@@ -42,6 +46,9 @@ import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 // kind:url children. Every kind:url child must reinstall before booting code that
 // can touch Buffer.
 installBundleLocalBuffer();
+installNodeWorkerRuntimeConfig(
+  readNodeWorkerRuntimeConfigFromProcess(globalThis.process, 'ts-lsp-child'),
+);
 
 (globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
 

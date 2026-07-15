@@ -21,7 +21,7 @@ separate infra change (LFS or a deploy-time bake pipeline) outside this Vite 8
 support pass. Tracked here; revisit when re-bakes become frequent or another
 instant template pushes the committed total materially higher.
 
-Update 2026-07-12 (ADR-0241): CI now proves exact package input, install-artifact
+Update 2026-07-12 (superseded by ADR-0261): CI now proves exact package input, install-artifact
 identity, and embedded shadow bytes for every committed snapshot. Silent policy
 drift is closed; range-resolution cadence and Git storage remain open here.
 

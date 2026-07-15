@@ -115,12 +115,16 @@ class Harness {
           return s;
         },
         activeSessionId: () => this.active,
-        select: (id) => this.selected.push(id),
+        select: (id) => {
+          this.selected.push(id);
+          this.active = id;
+        },
         stop: (id) => this.stopped.push(id),
         freshConsole: (id, banner) => this.freshConsoles.push({ id, banner }),
         createSession: () => {
           const id = `t${this.nextId++}`;
           this.created.push(id);
+          this.active = id;
           return this.session(id, 'idle');
         },
         refreshState: () => {
@@ -352,13 +356,13 @@ describe('dev session pick/reserve (ordinary terminals, no named vite tab)', () 
     dispose();
   });
 
-  it('prefers the previous dev session when idle and visible (and selects it)', () => {
+  it('reuses the previous dev session without stealing a newer user selection', () => {
     const { h, dev, dispose } = setup((harness) => {
       harness.session('t2', 'idle');
     });
     dev.claimSession('t2');
     expect(dev.pickSession().id).toBe('t2');
-    expect(h.selected).toContain('t2');
+    expect(h.selected).not.toContain('t2');
     dispose();
   });
 
@@ -370,8 +374,20 @@ describe('dev session pick/reserve (ordinary terminals, no named vite tab)', () 
       harness.session('t3', 'idle');
     });
     expect(dev.pickSession().id).toBe('t3');
+    expect(h.active).toBe('t1');
     h.session('t3', 'running');
     expect(dev.pickSession().id).toBe(h.created[0]);
+    expect(h.active).toBe('t1');
+    dispose();
+  });
+
+  it('reserves a replacement without moving focus from the user session', async () => {
+    const { h, dev, dispose } = setup((harness) => {
+      harness.session('t1', 'running');
+    });
+    const replacement = await dev.reserveSession(h.sessions.get('t1') as Session);
+    expect(replacement.id).toBe(h.created[0]);
+    expect(h.active).toBe('t1');
     dispose();
   });
 
