@@ -1,7 +1,11 @@
-import { NotImplementedError } from '@riftydev/io';
+import { ClosedHandleError, ProjectBusyError } from './errors.ts';
 import type { PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
 import type { ProjectRuntime } from './project-session.ts';
-import { type ProjectTerminal, projectTerminalAdmission } from './project-terminal.ts';
+import {
+  type ProjectTerminal,
+  type ProjectTerminalRun,
+  projectTerminalAdmission,
+} from './project-terminal.ts';
 
 export interface ViteProjectRuntimeDependencies {
   readonly terminal: ProjectTerminal;
@@ -9,19 +13,130 @@ export interface ViteProjectRuntimeDependencies {
   readonly createPreviewReadiness: () => PreviewReadiness;
 }
 
-/** Internal Vite runtime; Contract+RED until the owner-correlated composition lands. */
 export function createViteProjectRuntime(
   dependencies: ViteProjectRuntimeDependencies,
 ): ProjectRuntime<PreviewHandle> {
-  void dependencies;
-  void projectTerminalAdmission;
-  const gap = (): NotImplementedError => new NotImplementedError('workbench.vite-project-runtime');
+  type RunState = {
+    readonly run: ProjectTerminalRun;
+    readiness: PreviewReadiness | null;
+    readinessClose: Promise<void> | null;
+    physicalSettled: boolean;
+    cancelled: boolean;
+  };
+
+  const states = new Set<RunState>();
+  let active: RunState | null = null;
+  let closing = false;
+  let closed = false;
+  let closePromise: Promise<void> | null = null;
+
+  const asError = (error: unknown): Error =>
+    error instanceof Error ? error : new Error(String(error));
+
+  const closeReadiness = (state: RunState): Promise<void> => {
+    if (state.readinessClose !== null) return state.readinessClose;
+    const readiness = state.readiness;
+    if (readiness === null) {
+      state.readinessClose = Promise.resolve();
+      return state.readinessClose;
+    }
+    try {
+      state.readinessClose = readiness.close();
+    } catch (error) {
+      state.readinessClose = Promise.reject(asError(error));
+    }
+    void state.readinessClose.catch(() => {});
+    return state.readinessClose;
+  };
+
+  const retireAfterPhysicalExit = (state: RunState): void => {
+    if (state.physicalSettled) return;
+    state.physicalSettled = true;
+    state.cancelled = true;
+    if (active === state) active = null;
+    void Promise.resolve()
+      .then(() => closeReadiness(state))
+      .then(
+        () => states.delete(state),
+        () => {},
+      );
+  };
+
   return Object.freeze({
     start() {
-      throw gap();
+      if (closing || closed) throw new ClosedHandleError('Vite project runtime');
+      if (active !== null) throw new ProjectBusyError('Vite project runtime');
+
+      const run = dependencies.terminal.run('vite');
+      const state: RunState = {
+        run,
+        readiness: null,
+        readinessClose: null,
+        physicalSettled: false,
+        cancelled: false,
+      };
+      states.add(state);
+      active = state;
+
+      const ready = projectTerminalAdmission(run).then(async (admission) => {
+        if (state.cancelled || closing || closed) {
+          throw new ClosedHandleError('Vite project runtime run');
+        }
+        const readiness = dependencies.createPreviewReadiness();
+        state.readiness = readiness;
+        if (state.cancelled || closing || closed) {
+          await closeReadiness(state);
+          throw new ClosedHandleError('Vite project runtime run');
+        }
+        return readiness.waitFor({
+          ownerToken: dependencies.ownerToken,
+          ptySid: admission.ptySid,
+          ptyRid: admission.ptyRid,
+          matches: (entry) => entry.source === 'node',
+        });
+      });
+      void ready.catch(() => {});
+      void run.exited.then(
+        () => retireAfterPhysicalExit(state),
+        () => retireAfterPhysicalExit(state),
+      );
+
+      return Object.freeze({ run, ready });
     },
-    close(): Promise<void> {
-      return Promise.reject(gap());
+
+    close() {
+      if (closePromise !== null) return closePromise;
+      closing = true;
+      closePromise = (async () => {
+        const owned = [...states];
+        for (const state of owned) state.cancelled = true;
+
+        const runClosures = owned
+          .filter((state) => !state.physicalSettled)
+          .map((state) => {
+            try {
+              return state.run.close();
+            } catch (error) {
+              return Promise.reject(asError(error));
+            }
+          });
+        const runResults = await Promise.allSettled(runClosures);
+        const readinessResults = await Promise.allSettled(
+          owned.map((state) => closeReadiness(state)),
+        );
+        const errors = [...runResults, ...readinessResults].flatMap((result) =>
+          result.status === 'rejected' ? [asError(result.reason)] : [],
+        );
+        active = null;
+        states.clear();
+        closed = true;
+        if (errors.length === 1) throw errors[0] as Error;
+        if (errors.length > 1) {
+          throw new AggregateError(errors, errors.map((error) => error.message).join('; '));
+        }
+      })();
+      void closePromise.catch(() => {});
+      return closePromise;
     },
   });
 }

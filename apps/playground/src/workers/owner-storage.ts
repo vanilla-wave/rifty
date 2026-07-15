@@ -1,5 +1,3 @@
-import { NotImplementedError } from '@riftydev/vfs';
-
 export type OwnerStoragePersistence = 'required' | 'preferred' | 'ephemeral';
 
 export type OwnerStorageSnapshot =
@@ -34,11 +32,46 @@ export interface OwnerStorageInstallers<OpfsBackend> {
 
 /** Owner-authoritative storage selection; page code never predicts this result. */
 export async function selectOwnerStorage<OpfsBackend>(
-  _policy: OwnerStoragePersistence,
-  _installers: OwnerStorageInstallers<OpfsBackend>,
+  policy: OwnerStoragePersistence,
+  installers: OwnerStorageInstallers<OpfsBackend>,
 ): Promise<OwnerStorageSnapshot> {
-  throw new NotImplementedError(
-    'workbench.selectOwnerStorage',
-    'Contract+RED: owner storage selection is not implemented',
-  );
+  if (policy === 'ephemeral') {
+    await installers.openMemory();
+    return Object.freeze({
+      policy: 'ephemeral',
+      backend: 'memory',
+      durability: 'ephemeral',
+    });
+  }
+
+  let opfsFailure: unknown;
+  try {
+    const backend = await installers.openOpfs();
+    await installers.proveOpfs(backend);
+    return Object.freeze({ policy, backend: 'opfs', durability: 'durable' });
+  } catch (error) {
+    if (policy === 'required') throw error;
+    opfsFailure = error;
+  }
+
+  try {
+    await installers.openMemory();
+  } catch (memoryFailure) {
+    throw new AggregateError(
+      [opfsFailure, memoryFailure],
+      `Preferred storage failed: ${failureMessage(opfsFailure)}; ${failureMessage(memoryFailure)}`,
+    );
+  }
+
+  const fallback = Object.freeze({ reason: failureMessage(opfsFailure) });
+  return Object.freeze({
+    policy: 'preferred',
+    backend: 'memory',
+    durability: 'ephemeral',
+    fallback,
+  });
+}
+
+function failureMessage(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
 }

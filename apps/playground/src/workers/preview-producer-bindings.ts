@@ -16,7 +16,7 @@ export const PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
 export type ActivePtyAdmission = (ptySid: string) => OwnerPtyRunAdmission | null;
 export type PreviewOriginCapture = () => PreviewProducerOrigin;
 
-/** Contract seam: trusted actor identity is supplied outside guest command state. */
+/** Bind trusted actor identity outside guest command state; invoke once at child launch. */
 export function createPreviewOriginCapture(
   activeAdmission: ActivePtyAdmission,
   ptySid?: string,
@@ -37,36 +37,14 @@ export function createPreviewOriginCapture(
   return Object.freeze(capture);
 }
 
-/** Capture once at child launch; the env sid locates actor state but never labels output. */
-export function capturePreviewOrigin(
-  activeAdmission: ActivePtyAdmission,
-  ctx: Pick<CommandContext, 'env'>,
-): PreviewProducerOrigin {
-  const ptySid = ctx.env[PTY_SESSION_ENV];
-  if (ptySid === undefined || ptySid.length === 0) return HOST_PREVIEW_ORIGIN;
-  const admission = activeAdmission(ptySid);
-  if (admission === null) {
-    throw new Error(`Preview producer has no active PTY admission for ${ptySid}`);
-  }
-  if (admission.ptySid !== ptySid) {
-    throw new Error(
-      `Preview producer admission mismatch: requested ${ptySid}, received ${admission.ptySid}`,
-    );
-  }
-  return { kind: 'pty', admission };
-}
-
 export async function runPtyDevServerShellCommand(options: {
-  readonly activeAdmission?: ActivePtyAdmission;
-  readonly captureOrigin?: PreviewOriginCapture;
+  readonly captureOrigin: PreviewOriginCapture;
   readonly controller: DevServerController;
   readonly ctx: CommandContext;
 }): Promise<ProcessExit> {
   let origin: PreviewProducerOrigin;
   try {
-    origin =
-      options.captureOrigin?.() ??
-      capturePreviewOrigin(options.activeAdmission ?? (() => null), options.ctx);
+    origin = options.captureOrigin();
   } catch (error) {
     options.ctx.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return { code: 1, signal: null };
@@ -84,20 +62,17 @@ interface InstalledBinLaunch {
 
 /** Hooks used by the real installed-bin executor; onStart is the capture boundary. */
 export function createInstalledBinPreviewHooks(options: {
-  readonly activeAdmission?: ActivePtyAdmission;
-  readonly captureOrigin?: PreviewOriginCapture;
-  readonly allocateSid?: () => string;
+  readonly captureOrigin: PreviewOriginCapture;
+  /** Owner-wide allocator; per-shell counters collide across sibling terminals. */
+  readonly allocateSid: () => string;
   readonly previews: PreviewRegistry;
 }): Pick<BinExecutorDeps, 'onStart' | 'onMessage' | 'onExit'> {
-  let sequence = 0;
   const launches = new WeakMap<BinSpawnRequest, InstalledBinLaunch>();
   return {
     onStart(req, ctx) {
-      const origin =
-        options.captureOrigin?.() ??
-        capturePreviewOrigin(options.activeAdmission ?? (() => null), ctx);
+      const origin = options.captureOrigin();
       launches.set(req, {
-        sid: options.allocateSid?.() ?? `bin-${++sequence}`,
+        sid: options.allocateSid(),
         origin,
         cwd: ctx.cwd,
         labelBase: binNameOf(req.shimPath),
@@ -130,24 +105,19 @@ export function createInstalledBinPreviewHooks(options: {
 
 /** Hooks used by the real node child executor; construction is the launch boundary. */
 export function createNodePreviewRunHooks(options: {
-  readonly activeAdmission?: ActivePtyAdmission;
-  readonly captureOrigin?: PreviewOriginCapture;
+  readonly captureOrigin: PreviewOriginCapture;
   readonly previews: PreviewRegistry;
-  readonly ctx?: CommandContext;
-  readonly cwd?: string;
+  readonly cwd: string;
   readonly sid: string;
   readonly previewScope: string;
 }): NodeRunHooks {
-  const origin =
-    options.captureOrigin?.() ??
-    capturePreviewOrigin(options.activeAdmission ?? (() => null), options.ctx ?? { env: {} });
-  const cwd = options.cwd ?? options.ctx?.cwd ?? '/';
+  const origin = options.captureOrigin();
   return {
     sid: options.sid,
     onListening: (sid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
         origin,
-        cwd,
+        cwd: options.cwd,
       }),
     onExit: (sid) => options.previews.removeBySid(sid),
   };

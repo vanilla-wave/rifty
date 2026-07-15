@@ -150,6 +150,7 @@ import {
   PTY_SESSION_ENV,
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
+  createPreviewOriginCapture,
   runPtyDevServerShellCommand,
 } from './preview-producer-bindings.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
@@ -166,10 +167,6 @@ const dec = new TextDecoder();
 const TS_LSP_TYPESCRIPT_READY_TIMEOUT_MS = 60_000;
 const TS_LSP_TYPESCRIPT_READY_POLL_MS = 50;
 const TS_LSP_TYPESCRIPT_ENTRY_RELATIVE_PATH = 'node_modules/typescript/lib/typescript.js';
-function ptySidFromContext(ctx: CommandContext): string | undefined {
-  const sid = ctx.env[PTY_SESSION_ENV];
-  return sid && sid.length > 0 ? sid : undefined;
-}
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -588,19 +585,6 @@ async function bootShellOwner(opts: {
   // register/unregister events); the preview registry derives the LIVE pill from
   // it. No bin-name dispatch: webpack-dev-server or a bare server CLI gets the
   // same preview + pill wiring vite does.
-  const childBinExecutor = createOwnerChildBinExecutor(
-    opts.nodeEntryWorkerUrl,
-    opts.nodeWorkerRuntimeEnv,
-    createInstalledBinPreviewHooks({ activeAdmission: activePtyAdmission, previews }),
-  );
-  const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
-    // Every installed CLI crosses this package-authority seam. The preset boot
-    // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
-    // arbitrary CLIs need the same template-seed guarantee without name dispatch.
-    await reassertActiveDevTemplateNodeModules();
-    const viteCtx = withViteCliEnv(binPath, args, ctx);
-    return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
-  };
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
@@ -616,22 +600,38 @@ async function bootShellOwner(opts: {
     opts.nodeEntryWorkerUrl,
     opts.nodeWorkerRuntimeEnv,
   );
+  let binRunSeq = 0;
   let nodeRunSeq = 0;
-
-  // Node-server scripts use the dedicated supervised server child and block the
-  // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
-  const runDevServer = async (ctx: CommandContext): Promise<ShellCommandResult> => {
-    return runPtyDevServerShellCommand({
-      activeAdmission: activePtyAdmission,
-      controller: devServer,
-      ctx,
-    });
-  };
 
   const makeShell = (
     seed?: { cwd?: string; env?: Record<string, string> },
     ptySid?: string,
   ): Shell => {
+    // The PTY server supplies ptySid out of band when it constructs this session.
+    // Guest env may mirror or override the legacy marker, but never selects an actor.
+    const captureOrigin = createPreviewOriginCapture(activePtyAdmission, ptySid);
+    const childBinExecutor = createOwnerChildBinExecutor(
+      opts.nodeEntryWorkerUrl,
+      opts.nodeWorkerRuntimeEnv,
+      createInstalledBinPreviewHooks({
+        captureOrigin,
+        allocateSid: () => `bin-${++binRunSeq}`,
+        previews,
+      }),
+    );
+    const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
+      // Every installed CLI crosses this package-authority seam. The preset boot
+      // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
+      // arbitrary CLIs need the same template-seed guarantee without name dispatch.
+      await reassertActiveDevTemplateNodeModules();
+      const viteCtx = withViteCliEnv(binPath, args, ctx);
+      return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
+    };
+    // Node-server scripts use the dedicated supervised server child and block the
+    // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
+    const runDevServer = (ctx: CommandContext): Promise<ProcessExit> =>
+      runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
+
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
     // HERE against the owner's tree (single-store-owner: the page holds no
@@ -657,10 +657,7 @@ async function bootShellOwner(opts: {
         scriptCommand: string,
         scriptCtx: CommandContext,
       ): Promise<ShellCommandResult> => {
-        const scriptShell = makeShell(
-          { cwd: scriptCtx.cwd, env: scriptCtx.env },
-          ptySidFromContext(scriptCtx),
-        );
+        const scriptShell = makeShell({ cwd: scriptCtx.cwd, env: scriptCtx.env }, ptySid);
         return runNestedShellCommand(scriptShell, scriptCommand, scriptCtx);
       };
       const runNodeCliTemplate = async (
@@ -717,9 +714,9 @@ async function bootShellOwner(opts: {
         [...scriptArgs],
         withPreviewScope(ctx, previewScope),
         createNodePreviewRunHooks({
-          activeAdmission: activePtyAdmission,
+          captureOrigin,
           previews,
-          ctx,
+          cwd: ctx.cwd,
           sid,
           previewScope,
         }),

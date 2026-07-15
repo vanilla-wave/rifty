@@ -13,6 +13,15 @@
   API base and satisfy destination-specific browser rules before any lock,
   service-worker, storage, or owner effect.
 
+### Changed (app-local Workbench Vite vertical)
+
+- Workbench owner/runtime adapters now publish the owner-selected storage
+  snapshot and bind Vite readiness, exit, and cleanup to the exact admitted PTY
+  run plus routed preview proof.
+- Preview-producing dev, installed-bin, and Node children capture owner-supplied
+  PTY identity at shell construction. Guest environment overrides can no longer
+  relabel a late preview event as a different run.
+
 ### Added (foreground Node stdin and resize)
 
 - Each owner terminal now has one `PtySessionActor` with a synchronous run
