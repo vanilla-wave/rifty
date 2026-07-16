@@ -12,7 +12,7 @@ import {
   inspectProjectDefinition,
   projectStorageSegment,
 } from './project-definition.ts';
-import type { ProjectSession } from './project-session.ts';
+import { type ProjectSession, registerProjectSessionBeforeClose } from './project-session.ts';
 import {
   type ServiceWorkerControlContainer,
   type ServiceWorkerControlTimers,
@@ -70,6 +70,28 @@ export interface Workbench {
   close(): Promise<void>;
 }
 
+export interface WorkbenchInternals {
+  readonly owner: WorkbenchOwnerHandle;
+  openProjectWithOwner<TReady>(
+    definition: ProjectDefinition<TReady>,
+    openOwner: (inspected: InspectedProjectDefinition<TReady>) => Promise<ProjectSession<TReady>>,
+  ): Promise<ProjectSession<TReady>>;
+  rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady>;
+  registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void;
+}
+
+const workbenchInternals = new WeakMap<object, WorkbenchInternals>();
+
+/** Package-private companion composition; no owner handle crosses the public Workbench. */
+export function inspectWorkbenchInternals(workbench: Workbench): WorkbenchInternals {
+  const internals =
+    typeof workbench === 'object' && workbench !== null
+      ? workbenchInternals.get(workbench)
+      : undefined;
+  if (internals === undefined) throw new TypeError('Invalid or forged Workbench');
+  return internals;
+}
+
 export type NormalizedWorkbenchOwnerInput = WorkbenchOwnerStartInput;
 
 interface CapabilitySnapshot {
@@ -105,6 +127,11 @@ export interface OpenWorkbenchDependencies {
   readonly locks: LockPort;
   readonly serviceWorker: WorkbenchServiceWorkerPort;
   readonly owner: WorkbenchOwnerPort;
+  readonly openOwnerProject?: <TReady>(input: {
+    readonly owner: WorkbenchOwnerHandle;
+    readonly definition: ProjectDefinition<TReady>;
+    readonly inspected: InspectedProjectDefinition<TReady>;
+  }) => Promise<ProjectSession<TReady>>;
   readonly timers: ServiceWorkerControlTimers;
 }
 
@@ -205,7 +232,13 @@ async function initializeWorkbench(
       }),
     );
     owner = started.owner;
-    return createWorkbench(owner, started.storage, lease, releasePageClaim);
+    return createWorkbench(
+      owner,
+      started.storage,
+      lease,
+      releasePageClaim,
+      dependencies.openOwnerProject,
+    );
   } catch (error) {
     const failures: unknown[] = [error];
     if (owner !== null) {
@@ -232,8 +265,10 @@ function createWorkbench(
   storage: WorkbenchStorageSnapshot,
   lease: OriginLease,
   releasePageClaim: () => void,
+  openOwnerProject: OpenWorkbenchDependencies['openOwnerProject'],
 ): Workbench {
   const snapshot = Object.freeze({ storage }) satisfies WorkbenchSnapshot;
+  const rawSessions = new WeakMap<object, ProjectSession<unknown>>();
   let state: ProjectOperation = { kind: 'idle' };
 
   const assertIdle = (): void => {
@@ -295,39 +330,54 @@ function createWorkbench(
       terminals: session.terminals,
       close: () => beginClose().promise,
     });
+    rawSessions.set(trackedSession, session);
     const trackedProject = Object.freeze({ session: trackedSession, beginClose });
     return trackedProject;
+  };
+
+  const openTrackedProject = <TReady>(
+    definition: ProjectDefinition<TReady>,
+    explicitOwnerOpen?: (
+      inspected: InspectedProjectDefinition<TReady>,
+    ) => Promise<ProjectSession<TReady>>,
+  ): Promise<ProjectSession<TReady>> => {
+    let inspected: InspectedProjectDefinition<TReady>;
+    try {
+      inspected = inspectProjectDefinition(definition);
+      assertIdle();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+
+    const ownerPromise = Promise.resolve().then(() => {
+      if (explicitOwnerOpen !== undefined) return explicitOwnerOpen(inspected);
+      return openOwnerProject === undefined
+        ? owner.openProject(inspected)
+        : openOwnerProject({ owner, definition, inspected });
+    });
+    const opening = { kind: 'opening', ownerPromise } as const;
+    state = opening;
+    const result = ownerPromise.then(
+      (session) => {
+        if (state !== opening) throw new ClosedHandleError('Workbench project open');
+        const tracked = trackSession(session);
+        state = { kind: 'active', project: tracked };
+        return tracked.session;
+      },
+      (error: unknown) => {
+        if (state === opening) state = { kind: 'idle' };
+        throw error;
+      },
+    );
+    void result.catch(() => {});
+    return result;
   };
 
   const workbench: Workbench = {
     snapshot: () => snapshot,
 
     openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>> {
-      let inspected: InspectedProjectDefinition<TReady>;
-      try {
-        inspected = inspectProjectDefinition(definition);
-        assertIdle();
-      } catch (error) {
-        return Promise.reject(error);
-      }
-
-      const ownerPromise = Promise.resolve().then(() => owner.openProject(inspected));
-      const opening = { kind: 'opening', ownerPromise } as const;
-      state = opening;
-      const result = ownerPromise.then(
-        (session) => {
-          if (state !== opening) throw new ClosedHandleError('Workbench project open');
-          const tracked = trackSession(session);
-          state = { kind: 'active', project: tracked };
-          return tracked.session;
-        },
-        (error: unknown) => {
-          if (state === opening) state = { kind: 'idle' };
-          throw error;
-        },
-      );
-      void result.catch(() => {});
-      return result;
+      return openTrackedProject(definition);
     },
 
     deleteProject(id: string): Promise<void> {
@@ -393,6 +443,36 @@ function createWorkbench(
       return promise;
     },
   };
+
+  workbenchInternals.set(
+    workbench,
+    Object.freeze({
+      owner,
+      openProjectWithOwner<TReady>(
+        definition: ProjectDefinition<TReady>,
+        openOwner: (
+          inspected: InspectedProjectDefinition<TReady>,
+        ) => Promise<ProjectSession<TReady>>,
+      ): Promise<ProjectSession<TReady>> {
+        if (typeof openOwner !== 'function') {
+          return Promise.reject(new TypeError('Workbench owner opener must be a function'));
+        }
+        return openTrackedProject(definition, openOwner);
+      },
+      rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady> {
+        const raw =
+          typeof session === 'object' && session !== null ? rawSessions.get(session) : undefined;
+        if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
+        return raw as ProjectSession<TReady>;
+      },
+      registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void {
+        const raw =
+          typeof session === 'object' && session !== null ? rawSessions.get(session) : undefined;
+        if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
+        registerProjectSessionBeforeClose(raw, hook);
+      },
+    }),
+  );
 
   return workbench;
 }
@@ -532,6 +612,11 @@ function validateWorkbenchOptions(
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');
   const wasm = record(deployment.wasm, 'deployment.wasm');
   const acquisition = record(root.packageAcquisition, 'packageAcquisition');
+  if (Reflect.ownKeys(acquisition).includes('snapshotUrl')) {
+    throw new TypeError(
+      'packageAcquisition.snapshotUrl is retired; trusted snapshots belong to Playground definitions',
+    );
+  }
   const storage = record(root.storage, 'storage');
 
   const timeoutValue = deployment.previewProbeTimeoutMs;

@@ -11,6 +11,7 @@ import {
   ProjectBusyError,
   ProjectRunExitedBeforeReadyError,
   createProjectSession,
+  registerProjectSessionBeforeClose,
 } from './project-session.ts';
 import { createProjectTerminal } from './project-terminal.ts';
 
@@ -134,6 +135,10 @@ class SessionPortFixture {
     const gate = deferred<void>();
     this.openGates.set(sid, gate);
     return gate.promise;
+  }
+
+  snapshot(): { readonly cwd: '/'; readonly env: Record<string, string> } {
+    return { cwd: '/', env: {} };
   }
 
   resolveOpen(sid: string): void {
@@ -332,6 +337,35 @@ describe('ProjectSession lifecycle contract', () => {
     expect(h.ownerCloseOrder).toEqual([{ terminalCalls: ['terminal-default'], runtimeCalls: 1 }]);
     await expect(closing).resolves.toBeUndefined();
     expect(h.session.close()).toBe(closing);
+  });
+
+  it('drains private pre-close work before every core teardown sibling and aggregates failures', async () => {
+    const h = createHarness();
+    const gate = deferred<void>();
+    const toolFailure = new Error('tool drain failed');
+    const events: string[] = [];
+    registerProjectSessionBeforeClose(h.session, async () => {
+      events.push('tools:start');
+      await gate.promise;
+      events.push('tools:end');
+      throw toolFailure;
+    });
+
+    const closing = h.session.close();
+    await settleMicrotasks();
+    expect(events).toEqual(['tools:start']);
+    expect(h.port.closeCalls).toEqual([]);
+    expect(h.runtimeCloseCalls()).toBe(0);
+    expect(h.ownerCloseCalls()).toBe(0);
+
+    gate.resolve();
+    const failure = await closing.catch((error: unknown) => error);
+
+    expect(events).toEqual(['tools:start', 'tools:end']);
+    expect(h.port.closeCalls).toEqual(['terminal-default']);
+    expect(h.runtimeCloseCalls()).toBe(1);
+    expect(h.ownerCloseCalls()).toBe(1);
+    expect(failure).toBe(toolFailure);
   });
 
   it('claims the default run in the same tick, exposes ready/exited, and stays busy until run.close completes', async () => {

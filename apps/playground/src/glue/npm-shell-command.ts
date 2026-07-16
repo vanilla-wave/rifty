@@ -200,6 +200,27 @@ function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
   );
 }
 
+function npmPrefixInvocation(
+  args: readonly string[],
+  context: CommandContext,
+): { readonly args: readonly string[]; readonly context: CommandContext } | null {
+  const first = args[0];
+  if (first !== '--prefix' && !first?.startsWith('--prefix=')) {
+    return { args, context };
+  }
+  const inline = first.startsWith('--prefix=');
+  const prefix = inline ? first.slice('--prefix='.length) : args[1];
+  if (prefix === undefined || prefix.length === 0 || prefix.includes('\0')) {
+    context.stderr.write('npm: --prefix requires a non-empty path\n');
+    return null;
+  }
+  const cwd = normalizePath(prefix.startsWith('/') ? prefix : `${context.cwd}/${prefix}`);
+  return {
+    args: args.slice(inline ? 1 : 2),
+    context: { ...context, cwd },
+  };
+}
+
 /**
  * Build the `npm` shell command. The composition root (`App.tsx`) registers it
  * on a `ShellSession`; this factory stays Solid-free so unit tests can exercise
@@ -207,7 +228,10 @@ function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   const packages = deps.packageAcquisitionAuthority ?? createNpmPackageAcquisitionAuthority(deps);
-  return async (args, ctx) => {
+  return async (rawArgs, rawContext) => {
+    const invocation = npmPrefixInvocation(rawArgs, rawContext);
+    if (invocation === null) return 1;
+    const { args, context: ctx } = invocation;
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
     // keep npm's observable usage-exit contract: these forms return 1.

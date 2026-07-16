@@ -1,6 +1,27 @@
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type {
+  PlaygroundProjectCatalog,
+  PlaygroundProjectOpenOptions,
+  PlaygroundSessionTools,
+} from './playground.ts';
 import type { InspectedProjectDefinition } from './project-definition.ts';
+import type { ProjectDefinition } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
+
+export interface PlaygroundOwnerSessionToolLifecycle {
+  readonly tools: PlaygroundSessionTools;
+  close(): Promise<void>;
+}
+
+/** Package-private semantic companion extension on the same physical owner. */
+export interface PlaygroundWorkbenchOwnerHandle {
+  readonly catalog: PlaygroundProjectCatalog;
+  openProject<TReady>(
+    definition: ProjectDefinition<TReady>,
+    options?: PlaygroundProjectOpenOptions,
+  ): Promise<ProjectSession<TReady>>;
+  sessionTools(session: ProjectSession<unknown>): PlaygroundOwnerSessionToolLifecycle;
+}
 
 export interface WorkbenchOwnerStartInput {
   readonly deployment: {
@@ -25,6 +46,13 @@ export interface WorkbenchOwnerStartInput {
     };
   };
   readonly storage: { readonly persistence: OwnerStoragePersistence };
+  /** First-party companion only; captured historical selection, never guest env. */
+  readonly legacyWorkspacePrefix?: string;
+  /** First-party companion only; one immutable page URL snapshot for definition ingress. */
+  readonly playgroundUrlContext?: {
+    readonly apiBaseUrl: string;
+    readonly clientUrl: string;
+  };
 }
 
 /** Physical worker handle; the adapter owns it until fully closed. */
@@ -36,6 +64,7 @@ export interface RawWorkspaceOwnerHandle {
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
+  readonly playground?: PlaygroundWorkbenchOwnerHandle;
   close(): void;
 }
 
@@ -45,6 +74,7 @@ export interface WorkbenchOwnerHandle {
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
+  readonly playground?: PlaygroundWorkbenchOwnerHandle;
   /** Stable/idempotent; settles only after the physical owner has exited. */
   close(): Promise<void>;
 }
@@ -157,6 +187,8 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
     deleteProject(id: string): Promise<void> {
       return raw.deleteProject(id);
     },
+
+    ...(raw.playground === undefined ? {} : { playground: raw.playground }),
 
     close(): Promise<void> {
       closePromise ??= closeRawOwner(raw);

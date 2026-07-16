@@ -1,16 +1,23 @@
 /// <reference lib="webworker" />
 
+import { makeGit, vfsToGitFs } from '@riftydev/git';
 import { getKernelDispatcher } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
+import { resolveOwnerGitCommitIdentity } from '../glue/git-owner-port.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
+import { ensureStarterInitialCommit } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { serializeWorkbenchOwnerError } from '../workbench/errors.ts';
+import {
+  type PlaygroundOwnerToPageMessage,
+  inspectPlaygroundOwnerToPageMessage,
+} from '../workbench/internal/playground-owner-protocol.ts';
 import {
   type PageToWorkbenchOwnerMessage,
   type WorkbenchOwnerBootConfig,
@@ -18,6 +25,7 @@ import {
   inspectPageToWorkbenchOwnerMessage,
   inspectWorkbenchOwnerToPageMessage,
 } from '../workbench/owner-protocol.ts';
+import type { PlaygroundCatalogSnapshot } from '../workbench/playground.ts';
 import {
   type ProjectMaterializer,
   createProjectMaterializer,
@@ -26,8 +34,15 @@ import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts'
 import { createOwnerPackageState } from './owner-package-state.ts';
 import {
   type OwnerVfsAuthority,
+  type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  type PlaygroundProjectAuthority,
+  createPlaygroundProjectAuthority,
+} from './playground-project-authority.ts';
+import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
+import tsLspWorkerUrl from './ts-lsp-worker-entry.ts?worker&url';
 import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
@@ -35,7 +50,10 @@ import {
   createWorkbenchOwnerController,
 } from './workbench-owner-controller.ts';
 import { installWorkbenchOwnerStorage } from './workbench-owner-storage.ts';
-import { workbenchPackageConfig } from './workbench-package-config.ts';
+import {
+  workbenchFirstMaterializationPackageConfig,
+  workbenchPackageConfig,
+} from './workbench-package-config.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
@@ -76,6 +94,11 @@ function createInbox(): Inbox {
 function sendOwnerMessage(ipc: KernelIpc, message: WorkbenchOwnerToPageMessage): void {
   if (ipc.send === undefined) throw new Error('Workbench owner requires fork IPC send support');
   ipc.send(inspectWorkbenchOwnerToPageMessage(message));
+}
+
+function sendPlaygroundOwnerMessage(ipc: KernelIpc, message: PlaygroundOwnerToPageMessage): void {
+  if (ipc.send === undefined) throw new Error('Workbench owner requires fork IPC send support');
+  ipc.send(inspectPlaygroundOwnerToPageMessage(message));
 }
 
 function assertCleanDurability(report: Awaited<ReturnType<OwnerVfsAuthority['flush']>>): void {
@@ -126,6 +149,46 @@ function withOwnerClose(
   });
 }
 
+function createCompanionOwnerClose(
+  authority: PlaygroundProjectAuthority,
+  unsubscribeCatalog: () => void,
+  packageQuiesce: () => Promise<void>,
+  vfsAuthority: OwnerVfsAuthority,
+): () => Promise<void> {
+  let closePromise: Promise<void> | null = null;
+  return () => {
+    if (closePromise !== null) return closePromise;
+    closePromise = (async () => {
+      const failures: unknown[] = [];
+      try {
+        unsubscribeCatalog();
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await authority.close();
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await packageQuiesce();
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        assertCleanDurability(await vfsAuthority.flush());
+      } catch (error) {
+        failures.push(error);
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'Playground owner authority close failed');
+      }
+    })();
+    return closePromise;
+  };
+}
+
 function firstMessage(raw: unknown, ipc: KernelIpc): WorkbenchOwnerBootConfig | null {
   let message: PageToWorkbenchOwnerMessage;
   try {
@@ -164,12 +227,11 @@ async function bootstrap(): Promise<void> {
   if (config === null) return;
 
   const storage = await installWorkbenchOwnerStorage(config.storage.persistence);
-  const { authority, appliedMutations, installStampClaims } = createOwnerVfsAuthorityComposition(
+  const ownerComposition: OwnerVfsAuthorityComposition = createOwnerVfsAuthorityComposition(
     syncMirror(),
-    {
-      initialRoots: ['/', '/.rifty'],
-    },
+    { initialRoots: ['/', '/.rifty'] },
   );
+  const { authority, appliedMutations, installStampClaims } = ownerComposition;
   setSyncMirror(authority, { async: new SyncMirrorVfs() });
 
   const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig({
@@ -195,17 +257,62 @@ async function bootstrap(): Promise<void> {
     resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
     resolverPin: (templateId) => eddy?.presetPins[templateId],
   });
-  const projectStore = createWorkbenchProjectStore(authority);
-  const coreMaterializer = createProjectMaterializer({
-    owner: projectStore,
-    acquisition: {
-      ensure: (request) =>
-        packageState.activateAndEnsure(
-          workbenchPackageConfig(request.definition, request.projectRoot),
-        ),
-    },
-  });
-  const materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
+  let materializer: ProjectMaterializer | undefined;
+  let playgroundAuthority: PlaygroundProjectAuthority | undefined;
+  let initialPlaygroundCatalog: PlaygroundCatalogSnapshot | undefined;
+  let closeAuthority: (() => Promise<void>) | undefined;
+  if (config.playgroundUrlContext === undefined) {
+    const projectStore = createWorkbenchProjectStore(authority);
+    const coreMaterializer = createProjectMaterializer({
+      owner: projectStore,
+      acquisition: {
+        ensure: (request) =>
+          packageState.activateAndEnsure(
+            workbenchPackageConfig(request.definition, request.projectRoot),
+          ),
+      },
+    });
+    materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
+    closeAuthority = () => (materializer as ProjectMaterializer).close();
+  } else {
+    playgroundAuthority = await createPlaygroundProjectAuthority({
+      authority,
+      installStampClaims,
+      persistence: config.storage.persistence,
+      ...(config.legacyWorkspacePrefix === undefined
+        ? {}
+        : { legacyWorkspacePrefix: config.legacyWorkspacePrefix }),
+      now: () => new Date().toISOString(),
+      createStageId: () => globalThis.crypto.randomUUID(),
+      acquisition: {
+        ensure: (request) =>
+          packageState.activateAndEnsure(
+            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot),
+          ),
+      },
+    });
+    let initialReplay = true;
+    const unsubscribeCatalog = playgroundAuthority.subscribeCatalog((catalog) => {
+      if (initialReplay) {
+        initialReplay = false;
+        initialPlaygroundCatalog = catalog;
+        return;
+      }
+      sendPlaygroundOwnerMessage(ipc, {
+        type: 'workbench:playground-catalog-updated',
+        catalog,
+      });
+    });
+    if (initialReplay || initialPlaygroundCatalog === undefined) {
+      throw new Error('Playground authority did not replay its initial catalog');
+    }
+    closeAuthority = createCompanionOwnerClose(
+      playgroundAuthority,
+      unsubscribeCatalog,
+      () => packageState.quiesce(),
+      authority,
+    );
+  }
 
   let activeProjectRoot: string | null = null;
   let activeProjectVfs: ReturnType<typeof createWorkbenchProjectVfs> | null = null;
@@ -223,8 +330,22 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  if (closeAuthority === undefined) {
+    throw new Error('Workbench owner close authority was not constructed');
+  }
+  const companionController =
+    config.playgroundUrlContext === undefined || playgroundAuthority === undefined
+      ? undefined
+      : Object.freeze({
+          urlContext: config.playgroundUrlContext,
+          authority: playgroundAuthority,
+          send: (message: PlaygroundOwnerToPageMessage) => sendPlaygroundOwnerMessage(ipc, message),
+        });
+
   const controller = createWorkbenchOwnerController({
-    materializer,
+    ...(materializer === undefined ? {} : { materializer }),
+    closeAuthority,
+    ...(companionController === undefined ? {} : { playground: companionController }),
     send: (message) => sendOwnerMessage(ipc, message),
     async createProject(input) {
       const projectRoot = input.materialized.projectRoot;
@@ -244,6 +365,9 @@ async function bootstrap(): Promise<void> {
               packageMutations: packageState.mutations,
               durability: storage.durability,
               emit: (frame) => input.emit({ type: 'vfs', frame }),
+              ...(input.recordMutation === undefined
+                ? {}
+                : { recordMutation: input.recordMutation }),
               fatal: (error) => rejectOwnerLifetime(error),
             }),
           createRuntime: (vfs) =>
@@ -257,6 +381,9 @@ async function bootstrap(): Promise<void> {
               nodeWorkerRuntimeEnv,
               mutationGuard: vfs.mutationGuard,
               publicationBarrier: vfs.publicationBarrier,
+              ...(input.recordMutation === undefined
+                ? {}
+                : { recordMutation: input.recordMutation }),
               send(frame) {
                 const output: WorkbenchOwnerProjectRuntimeOutput =
                   frame.type === 'pty:preview'
@@ -272,8 +399,62 @@ async function bootstrap(): Promise<void> {
         activeProjectRoot = null;
         throw error;
       }
+      let playgroundTools:
+        | Awaited<ReturnType<typeof createOwnerPlaygroundSessionTools>>
+        | undefined;
+      if (playgroundAuthority !== undefined) {
+        const vfs = new SyncMirrorVfs();
+        try {
+          await ensureStarterInitialCommit(vfs, projectRoot);
+          const git = makeGit({
+            fs: vfsToGitFs(vfs),
+            dir: projectRoot,
+            assertPortablePaths: (paths) => authority.assertPortablePaths(paths),
+          });
+          playgroundTools = await createOwnerPlaygroundSessionTools({
+            projectRoot,
+            owner: ownerComposition,
+            packages: packageState,
+            projectVfs,
+            vfs,
+            git,
+            commitIdentity: await resolveOwnerGitCommitIdentity(git),
+            tsWorkerUrl: tsLspWorkerUrl,
+            nodeWorkerRuntimeEnv,
+            send: (frame) => {
+              input.emit({ type: 'playground-tools', frame });
+              return undefined;
+            },
+            ...(input.recordMutation === undefined ? {} : { recordMutation: input.recordMutation }),
+            log: (line) => globalThis.process.stdout.write(line),
+          });
+        } catch (error) {
+          const outcomes = await Promise.allSettled([runtime.close(), projectVfs.close()]);
+          const failures = [error];
+          for (const outcome of outcomes) {
+            if (outcome.status === 'rejected' && !failures.includes(outcome.reason)) {
+              failures.push(outcome.reason);
+            }
+          }
+          activeProjectRoot = null;
+          if (failures.length === 1) throw failures[0];
+          throw new AggregateError(
+            failures,
+            'Playground project session-tools construction and cleanup failed',
+          );
+        }
+      }
       activeProjectVfs = projectVfs;
       return Object.freeze({
+        ...(playgroundTools === undefined
+          ? {}
+          : {
+              playgroundTools: Object.freeze({
+                initialScmSnapshot: playgroundTools.initialScmSnapshot,
+                handle: (frame: Parameters<typeof playgroundTools.handle>[0]) =>
+                  playgroundTools.handle(frame),
+              }),
+            }),
         handleFrame(message: Parameters<WorkbenchOwnerProjectRuntime['handleFrame']>[0]) {
           return message.type === 'vfs'
             ? projectVfs.handleFrame(message.frame)
@@ -281,6 +462,13 @@ async function bootstrap(): Promise<void> {
         },
         async close() {
           const failures: unknown[] = [];
+          if (playgroundTools !== undefined) {
+            try {
+              await playgroundTools.close();
+            } catch (error) {
+              failures.push(error);
+            }
+          }
           try {
             await runtime.close();
           } catch (error) {
@@ -320,6 +508,15 @@ async function bootstrap(): Promise<void> {
     dispatch(message);
   }
   if (!shutdownQueued) {
+    if (companionController !== undefined) {
+      if (initialPlaygroundCatalog === undefined) {
+        throw new Error('Playground initial catalog is unavailable at owner readiness');
+      }
+      sendPlaygroundOwnerMessage(ipc, {
+        type: 'workbench:playground-ready',
+        catalog: initialPlaygroundCatalog,
+      });
+    }
     sendOwnerMessage(ipc, { type: 'workbench:owner-ready', storage });
   }
 

@@ -38,6 +38,10 @@ export interface PreparedDepSnapshotRestore {
   apply(): void;
 }
 
+export type VerifiedDepSnapshot =
+  | { readonly status: 'matched'; readonly snapshot: DepSnapshotV2 }
+  | { readonly status: 'mismatch' };
+
 /** One byte-stable top-level order for bake and provenance tooling. */
 export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
   return JSON.stringify({
@@ -178,7 +182,7 @@ export function prepareDepSnapshotRestore(
  * (vite dev among them) serve `.gz` with `Content-Encoding: gzip`, so the
  * browser hands us already-decoded JSON; others serve the raw gzip bytes.
  */
-export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2> {
+async function fetchDepSnapshotBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = await fetchAssetBytesBounded(url, {
@@ -202,9 +206,37 @@ export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2> {
     }
   }
 
+  return decoded;
+}
+
+function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV2 {
   try {
-    return parseDepSnapshot(new TextDecoder().decode(decoded));
+    return parseDepSnapshot(new TextDecoder().decode(bytes));
   } catch (error) {
-    throw new DepSnapshotFetchError(url, 'parse', error);
+    throw new DepSnapshotFetchError(
+      url,
+      'parse',
+      new Error(`dependency snapshot ${url}: ${errorReason(error)}`, { cause: error }),
+    );
   }
+}
+
+async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+  let hex = '';
+  for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
+  return `sha256:${hex}`;
+}
+
+export async function fetchVerifiedDepSnapshot(
+  url: string,
+  expectedSnapshotId: string,
+): Promise<VerifiedDepSnapshot> {
+  const bytes = await fetchDepSnapshotBytes(url);
+  if ((await sha256Identity(bytes)) !== expectedSnapshotId) return { status: 'mismatch' };
+  return { status: 'matched', snapshot: parseFetchedDepSnapshot(url, bytes) };
+}
+
+export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2> {
+  return parseFetchedDepSnapshot(url, await fetchDepSnapshotBytes(url));
 }

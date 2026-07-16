@@ -520,6 +520,7 @@ async function proveAdoptionBoundaryRestarts(
   boundaries: readonly DurablePersistBoundary[],
   id: 'project-a' | 'project-b',
   starterId: string,
+  expectedCatalog: PlaygroundCatalogSnapshot,
   indexBefore: Uint8Array,
   includesTombstone: boolean,
   unrelatedSourcesBefore: Readonly<Record<string, Readonly<Record<string, readonly number[]>>>>,
@@ -532,7 +533,7 @@ async function proveAdoptionBoundaryRestarts(
     const fs = createDurableOwnerFsFromTree(boundary.durableState);
     const reopened = await openAuthority(fs, { legacyWorkspacePrefix: LEGACY_PREFIX });
     expect(reopened.catalog.snapshot(), `adoption boundary ${String(index)}`).toEqual(
-      companionSnapshot(),
+      expectedCatalog,
     );
     const root = await adopt(reopened, id, starterId);
     expect(snapshotTree(fs, root)).toEqual(expectedAdoptedTree(id));
@@ -2349,6 +2350,7 @@ describe('legacy torn-state recovery', () => {
             completedBoundaries,
             id,
             starterId,
+            publicBefore,
             indexBefore,
             includesTombstone,
             unrelatedSourcesBefore,
@@ -2387,6 +2389,7 @@ describe('legacy torn-state recovery', () => {
           fs.durabilityBoundaries,
           id,
           starterId,
+          publicBefore,
           indexBefore,
           includesTombstone,
           unrelatedSourcesBefore,

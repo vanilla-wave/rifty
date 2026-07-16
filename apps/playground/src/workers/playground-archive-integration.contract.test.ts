@@ -2,6 +2,7 @@ import { type GitIdentity, makeGit, vfsToGitFs } from '@riftydev/git';
 import { RegistryClient } from '@riftydev/npm-client';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { InstallStampAuthorityError } from '../glue/install-stamp-authority.ts';
 import { createInstallStamp } from '../glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
@@ -40,9 +41,13 @@ import {
 import { type WorkbenchProjectVfs, createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v1/projects/project-a/.playground-archive-v1';
+const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
+const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0","dependencies":{"kleur":"4.1.5"}}\n';
 const ORIGINAL_SOURCE = 'export const value = "original";\n';
 const IMPORTED_SOURCE = 'export const value = "imported";\n';
+const PHASE_PROMOTING = 'promoting\n';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 let ownerSequence = 0;
@@ -213,10 +218,32 @@ function expectEventBefore(timeline: readonly string[], before: string, after: s
   expect(afterIndex, `${after} missing from ${timeline.join(' -> ')}`).toBeGreaterThan(beforeIndex);
 }
 
+function nestedErrors(error: unknown, seen = new Set<unknown>()): readonly unknown[] {
+  if (seen.has(error)) return [];
+  seen.add(error);
+  const nested =
+    error instanceof AggregateError
+      ? error.errors
+      : error instanceof Error && error.cause !== undefined
+        ? [error.cause]
+        : [];
+  return [error, ...nested.flatMap((candidate) => nestedErrors(candidate, seen))];
+}
+
 function instrumentOwner(
   composition: OwnerVfsAuthorityComposition,
   timeline: string[],
 ): OwnerVfsAuthorityComposition {
+  const recordPromotion = (path: string): void => {
+    if (
+      composition.authority.statSyncOrNull(ARCHIVE_TRANSACTION_PHASE)?.isFile === true &&
+      path.startsWith(`${PROJECT_ROOT}/`) &&
+      path !== `${PROJECT_ROOT}/node_modules` &&
+      !timeline.includes('archive:promote')
+    ) {
+      timeline.push('archive:promote');
+    }
+  };
   const recordReflection = (): void => {
     if (
       timeline.includes('claim:revoke') &&
@@ -249,6 +276,22 @@ function instrumentOwner(
       throw error;
     }
   });
+  const rmSync = composition.authority.rmSync.bind(composition.authority);
+  vi.spyOn(composition.authority, 'rmSync').mockImplementation((path, options) => {
+    if (
+      path === `${PROJECT_ROOT}/node_modules` &&
+      composition.authority.statSyncOrNull(ARCHIVE_TRANSACTION_PHASE)?.isFile === true
+    ) {
+      timeline.push('package-tree:reset');
+    }
+    recordPromotion(path);
+    return rmSync(path, options);
+  });
+  const writeFileSync = composition.authority.writeFileSync.bind(composition.authority);
+  vi.spyOn(composition.authority, 'writeFileSync').mockImplementation((path, data) => {
+    recordPromotion(path);
+    return writeFileSync(path, data);
+  });
   return Object.freeze({
     authority: composition.authority,
     appliedMutations: composition.appliedMutations,
@@ -257,13 +300,6 @@ function instrumentOwner(
       write: (root: string, data: Uint8Array, options: { readonly mkdirTree: boolean }) =>
         composition.installStampClaims.write(root, data, options),
       remove(root: string) {
-        if (root === PROJECT_ROOT) {
-          expect(
-            decoder.decode(composition.authority.readFileBytesSync(`${PROJECT_ROOT}/src/main.ts`)),
-          ).toBe(IMPORTED_SOURCE);
-          expect(composition.authority.statSyncOrNull(`${PROJECT_ROOT}/src/old.ts`)).toBeNull();
-          timeline.push('archive:promote');
-        }
         composition.installStampClaims.remove(root);
         if (root === PROJECT_ROOT) timeline.push('claim:revoke');
       },
@@ -279,6 +315,7 @@ interface ArchiveHarness {
   readonly content: ProjectContentController;
   readonly archive: PlaygroundArchive;
   readonly scm: PlaygroundScm;
+  readonly constructionTimeline: readonly string[];
   readonly timeline: string[];
   readonly publicSnapshots: readonly (readonly string[])[];
   readonly scmSnapshots: readonly PlaygroundScmSnapshot[];
@@ -396,6 +433,7 @@ async function harness(
     files: content.files,
     documents: content.documents,
     invalidate: content.invalidate,
+    awaitOwnerByteAdmission: content.awaitOwnerByteAdmission,
     invalidateAll(reason: ProjectDocumentInvalidation) {
       timeline.push('documents:invalidate-all');
       content.invalidateAll(reason);
@@ -429,6 +467,7 @@ async function harness(
     if (scmReplayed) timeline.push('scm:publish');
     scmReplayed = true;
   });
+  const constructionTimeline = Object.freeze(timeline.slice());
   timeline.length = 0;
 
   return {
@@ -439,6 +478,7 @@ async function harness(
     content,
     archive,
     scm: sessionScm,
+    constructionTimeline,
     timeline,
     publicSnapshots,
     scmSnapshots,
@@ -459,10 +499,10 @@ async function harness(
 }
 
 const IMPORTED_PUBLIC_PATHS = Object.freeze([
+  '/package.json',
   '/src',
   '/src/imported.ts',
   '/src/main.ts',
-  '/package.json',
 ]);
 
 function expectNoPendingPrimitives(fs: DurableOwnerFs): void {
@@ -483,7 +523,11 @@ function expectSuccessfulImportState(
   before: ExactTree,
   initialScmSnapshot: PlaygroundScmSnapshot | undefined,
 ): ExactTree {
-  expectEventBefore(h.timeline, 'archive:promote', 'claim:revoke');
+  // Fault class: torn-state. Trusted package metadata must be durably revoked
+  // by the package authority before the first live project replacement.
+  expectEventBefore(h.timeline, 'claim:revoke', 'package-tree:reset');
+  expectEventBefore(h.timeline, 'package-tree:reset', 'archive:promote');
+  expectEventBefore(h.timeline, 'claim:revoke', 'archive:promote');
   expectEventBefore(h.timeline, 'documents:invalidate-all', 'resolve');
   const resolveIndex = h.timeline.indexOf('resolve');
   const filePublicationIndices = eventIndices(h.timeline, 'files:publish');
@@ -616,6 +660,32 @@ async function recoverRecordedDurabilityBoundary(input: {
 }
 
 describe('Playground archive owner/session integration', () => {
+  it('recovers a promoting transaction through the package authority before the page baseline', async () => {
+    const seeded = await harness();
+    expectNoPendingPrimitives(seeded.fs);
+    seeded.fs.sealDurableState();
+    const before = seeded.fs.durableSnapshot();
+    write(seeded.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/package.json`, PACKAGE_JSON);
+    write(seeded.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/src/main.ts`, IMPORTED_SOURCE);
+    write(
+      seeded.owner.authority,
+      `${ARCHIVE_TRANSACTION_STAGE}/src/imported.ts`,
+      'export const imported = true;\n',
+    );
+    write(seeded.owner.authority, ARCHIVE_TRANSACTION_PHASE, PHASE_PROMOTING);
+    await seeded.owner.authority.flush();
+    const crashed = seeded.fs.restartFromDurableState();
+    seeded.crash();
+
+    const recovered = await harness(crashed, { seed: false });
+    expect(recovered.fs.liveSnapshot()).toEqual(expectedImportedWholeTree(before));
+    expect(recovered.fs.durableSnapshot()).toEqual(expectedImportedWholeTree(before));
+    expectEventBefore(recovered.constructionTimeline, 'claim:revoke', 'package-tree:reset');
+    expectEventBefore(recovered.constructionTimeline, 'package-tree:reset', 'archive:promote');
+    expectNoPendingPrimitives(recovered.fs);
+    await recovered.close();
+  });
+
   it('keeps the public handle semantic and resolves only after the ordered durable replacement', async () => {
     const h = await harness();
     expectTypeOf(h.archive).toEqualTypeOf<PlaygroundArchive>();
@@ -698,7 +768,17 @@ describe('Playground archive owner/session integration', () => {
         if (outcome.kind !== 'failed') throw new Error(`Archive ordinal ${String(failAt)} passed`);
         injectedFailures += 1;
         expect(first.fs.didInjectFailure).toBe(true);
-        expect(String(outcome.error)).toMatch(message);
+        const failures = nestedErrors(outcome.error);
+        const stampFailure = failures.find(
+          (failure): failure is InstallStampAuthorityError =>
+            failure instanceof InstallStampAuthorityError,
+        );
+        if (stampFailure !== undefined) {
+          expect(stampFailure).toMatchObject({ code: 'INSTALL_STAMP_REVOKE_UNPROVEN' });
+        }
+        expect(
+          stampFailure !== undefined || failures.some((failure) => message.test(String(failure))),
+        ).toBe(true);
         expect(first.fs.trace).toContainEqual(
           expect.objectContaining({ ordinal: failAt, outcome: 'injected-failure' }),
         );

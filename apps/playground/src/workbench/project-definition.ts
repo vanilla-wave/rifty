@@ -6,6 +6,7 @@ import {
 } from '../vite-project-policy.ts';
 import { nodeProjectShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
+import { serializeProjectPackageJson } from './internal/project-package-json.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 
 declare const projectDefinitionReady: unique symbol;
@@ -209,17 +210,6 @@ function mergeDependencies(
   return { ...(base ?? {}), ...(overrides ?? {}) };
 }
 
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-function canonicalJson(value: JsonValue): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key] as JsonValue)}`)
-    .join(',')}}`;
-}
-
 function parseManifest(files: Record<string, Uint8Array>): Record<string, unknown> {
   const bytes = files['/package.json'];
   if (bytes === undefined) return {};
@@ -270,7 +260,7 @@ function normalizeManifest(
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
   // TODO(backlog: playground/workbench-implicit-vite-module-scope)
-  files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  files['/package.json'] = encoder.encode(serializeProjectPackageJson(manifest));
   return (
     viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined
   );
@@ -309,7 +299,7 @@ function normalizeNodeManifest(
     scripts.dev = nodeProjectShellCommand(serverEntryPath, []);
     manifest.scripts = scripts;
   }
-  files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  files['/package.json'] = encoder.encode(serializeProjectPackageJson(manifest));
 }
 
 function nodeEntryPath(value: unknown, files: Record<string, Uint8Array>): string {

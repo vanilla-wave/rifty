@@ -4,6 +4,12 @@
 
 ### Added (app-local Workbench contract)
 
+- Companion session tools now expose one frozen semantic preview registry for
+  every live project port. Browser routes are mounted and control-proved before
+  publication; raw owner/PTy identities remain private (ADR-0278).
+- Companion project terminals now expose fresh frozen project-rooted cwd/env
+  snapshots and accept one exact persisted seed; stale cwd restores to `/`
+  without dropping guest environment entries (ADR-0278).
 - A sealed app-local Workbench core now owns immutable Vite project
   definitions, injective project identity, serialized seed/delete durability,
   typed project/run/terminal lifetimes, controlling-service-worker preview
@@ -31,6 +37,23 @@
 
 ### Fixed (finite Node Workbench review)
 
+- The first-party App now migrates only the selected legacy terminal root,
+  persists owner-acknowledged project cwd/env, subscribes to semantic previews,
+  and stops the exact retained primary `ProjectRun` (ADR-0278).
+- Restored nested terminal cwd no longer mis-resolves primary Node, Vite, npm
+  install, or npm-script commands; runtime commands address the project root
+  without changing the user's shell cwd.
+- Companion terminal seeds cross the private open protocol and are validated
+  by the owner VFS before a session is exposed; stale dirs reset to `/` while
+  opaque guest env survives unchanged.
+- Baked snapshots and Workbench definitions now share one byte-canonical
+  package manifest, so exact snapshot identity restores instead of silently
+  falling back to a real install.
+- Owner package mutations now dirty the active catalog record by semantic kind:
+  deferred bare install records dependency materialization, while any explicit
+  package spec records the real manifest and lockfile changes.
+- Archive import and startup recovery now revoke package trust and clear
+  dependency bytes through the package authority before live project promotion.
 - Owner-side Files, terminal, child, and package mutations now publish one
   post-apply project state; Documents invalidate before Files reflection and
   mutation replies (ADR-0275).

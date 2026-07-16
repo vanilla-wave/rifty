@@ -55,6 +55,8 @@ class PtyBoundary {
   readonly closeCalls: string[] = [];
   alive = true;
 
+  constructor(private readonly cwd = '/') {}
+
   isAlive(): boolean {
     return this.alive;
   }
@@ -63,6 +65,10 @@ class PtyBoundary {
     const gate = deferred<void>();
     this.openGates.set(sid, gate);
     return gate.promise;
+  }
+
+  snapshot(): { readonly cwd: string; readonly env: Record<string, string> } {
+    return { cwd: this.cwd, env: {} };
   }
 
   resolveOpen(sid: string): void {
@@ -178,14 +184,17 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
     ptyRid: 'run-1',
     port: 5173,
     url: '/preview/5173/',
+    label: 'node :5173',
     source: 'node',
     sid: 'bin-vite-1',
     ...overrides,
   };
 }
 
-function createHarness(options: { readonly readinessCloseGate?: Deferred<void> } = {}) {
-  const pty = new PtyBoundary();
+function createHarness(
+  options: { readonly readinessCloseGate?: Deferred<void>; readonly cwd?: string } = {},
+) {
+  const pty = new PtyBoundary(options.cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createViteProjectRuntime({
@@ -231,6 +240,17 @@ async function proveExactPreview(h: ReturnType<typeof createHarness>) {
 }
 
 describe('Vite project runtime Contract+RED', () => {
+  it('passes the project root explicitly when restored terminal cwd is nested', async () => {
+    const h = createHarness({ cwd: '/src/nested' });
+    h.session.run();
+
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+
+    expect(h.pty.execCalls[0]?.line).toBe('vite ../..');
+    expect(h.terminal.snapshot().cwd).toBe('/src/nested');
+  });
+
   it('claims synchronously, runs exactly vite, and waits for owner admission before preview', async () => {
     const h = createHarness();
     const run = h.session.run();

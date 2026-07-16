@@ -1,4 +1,11 @@
-import { type VfsMutationGuard, basename, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
+import {
+  type VfsMutationGuard,
+  type VfsMutationIntent,
+  basename,
+  dirname,
+  isAbsolute,
+  normalizePath,
+} from '@riftydev/vfs';
 import {
   type OwnerVfsCommitTerminal,
   handleOwnerVfsCommitCleanup,
@@ -39,6 +46,8 @@ export interface WorkbenchProjectVfsOptions {
   readonly packageMutations: PackageMutationExecutor;
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly emit: (frame: OwnerProjectVfsFrame) => void;
+  /** Companion metadata reflection, awaited before the originating mutation settles. */
+  readonly recordMutation?: (kind: 'guest' | 'file', treeRevision: number) => Promise<void>;
   /** Delivery failure must end the owner lifetime; stale project state cannot continue. */
   readonly fatal: (error: Error) => void;
 }
@@ -48,10 +57,28 @@ export interface WorkbenchProjectVfs {
   publishSnapshot(): void;
   /** Package FIFO + applied semantic evidence + publication before settlement. */
   readonly mutationGuard: VfsMutationGuard;
+  /** Owner-private transaction: an explicitly recoverable failure advances no page state. */
+  recoverableMutation<T>(
+    intents: readonly VfsMutationIntent[],
+    apply: () =>
+      | WorkbenchRecoverableMutationResult<T>
+      | Promise<WorkbenchRecoverableMutationResult<T>>,
+  ): Promise<T>;
+  /** FIFO-head prepare, package-authority reset, then recoverable whole-project replace. */
+  recoverableProjectReplace<T>(
+    prepare: () => void | Promise<void>,
+    apply: () =>
+      | WorkbenchRecoverableMutationResult<T>
+      | Promise<WorkbenchRecoverableMutationResult<T>>,
+  ): Promise<T>;
   /** Join publication of every owner revision already applied at call time. */
   publicationBarrier(): Promise<void>;
   close(): Promise<void>;
 }
+
+export type WorkbenchRecoverableMutationResult<T> =
+  | { readonly status: 'committed'; readonly value: T }
+  | { readonly status: 'recoverable-failure'; readonly error: Error };
 
 interface DeferredCompletion {
   readonly promise: Promise<void>;
@@ -372,19 +399,158 @@ export function createWorkbenchProjectVfs(
         return preflight ? await preflight() : { status: 'ready' };
       });
     },
+    reset(target, prepare) {
+      return options.packageMutations.reset(target, async () => {
+        if (fatalError !== null) throw fatalError;
+        const plan = await prepare();
+        if (fatalError !== null) throw fatalError;
+        if (plan.status === 'noop') return plan;
+        if (plan.resetDependencyTree) {
+          return {
+            ...plan,
+            mutate: async (resetDependencyTree) => {
+              if (fatalError !== null) throw fatalError;
+              await plan.mutate(resetDependencyTree);
+            },
+          };
+        }
+        return {
+          ...plan,
+          mutate: async () => {
+            if (fatalError !== null) throw fatalError;
+            await plan.mutate();
+          },
+        };
+      });
+    },
   };
 
-  const mutationGuard: VfsMutationGuard = (intents, apply) => {
+  type MutationOutcome<T> =
+    | { readonly kind: 'publish-success'; readonly value: T }
+    | { readonly kind: 'publish-failure'; readonly error: unknown }
+    | { readonly kind: 'suppress-failure'; readonly error: Error };
+
+  const settleMutationOutcome = <T>(outcome: MutationOutcome<T>): T => {
+    if (outcome.kind === 'publish-success') return outcome.value;
+    throw outcome.error;
+  };
+
+  const applyMutation = async <T>(
+    intents: readonly VfsMutationIntent[],
+    mutationKind: 'guest' | null,
+    apply: () => MutationOutcome<T> | Promise<MutationOutcome<T>>,
+  ): Promise<MutationOutcome<T>> => {
+    const priorTreeRevision = options.authority.treeRevision;
+    const scoped = await options.appliedMutations.withSemanticReplacements(intents, apply);
+    if (scoped.kind === 'suppress-failure') {
+      // The caller has retained enough private durable state for startup
+      // recovery. No tentative/recovered revision crosses to the page.
+      cursor.acknowledge(options.authority.treeRevision);
+    } else {
+      if (mutationKind !== null) {
+        await recordAppliedMutation(mutationKind, priorTreeRevision);
+      }
+      await publishThroughCurrent(true);
+    }
+    return scoped;
+  };
+
+  const recordAppliedMutation = async (
+    kind: 'guest' | 'file',
+    priorTreeRevision: number,
+  ): Promise<void> => {
+    const treeRevision = options.authority.treeRevision;
+    if (treeRevision <= priorTreeRevision) return;
+    await options.recordMutation?.(kind, treeRevision);
+  };
+
+  const admitMutation = <T>(
+    intents: readonly VfsMutationIntent[],
+    mutationKind: 'guest' | null,
+    apply: () => MutationOutcome<T> | Promise<MutationOutcome<T>>,
+  ): Promise<T> => {
     startPublicationAdmission();
     const operation = (async () => {
       try {
-        return await activePackageMutations.guardedMutation(intents, async () => {
-          try {
-            return await options.appliedMutations.withSemanticReplacements(intents, apply);
-          } finally {
-            await publishThroughCurrent(true);
-          }
+        const outcome = await activePackageMutations.guardedMutation(intents, () =>
+          applyMutation(intents, mutationKind, apply),
+        );
+        return settleMutationOutcome(outcome);
+      } finally {
+        finishPublicationAdmission();
+      }
+    })();
+    track(operation.then(() => undefined));
+    return operation;
+  };
+
+  const mutationGuard: VfsMutationGuard = (intents, apply) => {
+    return admitMutation(intents, 'guest', async () => {
+      try {
+        return { kind: 'publish-success', value: await apply() };
+      } catch (error) {
+        return { kind: 'publish-failure', error };
+      }
+    });
+  };
+
+  const recoverableMutation = async <T>(
+    intents: readonly VfsMutationIntent[],
+    apply: () =>
+      | WorkbenchRecoverableMutationResult<T>
+      | Promise<WorkbenchRecoverableMutationResult<T>>,
+  ): Promise<T> => {
+    await publicationBarrier();
+    return admitMutation(intents, null, async () => {
+      const result = await apply();
+      return result.status === 'committed'
+        ? { kind: 'publish-success', value: result.value }
+        : { kind: 'suppress-failure', error: result.error };
+    });
+  };
+
+  const recoverableProjectReplace = async <T>(
+    prepare: () => void | Promise<void>,
+    apply: () =>
+      | WorkbenchRecoverableMutationResult<T>
+      | Promise<WorkbenchRecoverableMutationResult<T>>,
+  ): Promise<T> => {
+    await publicationBarrier();
+    const intents = Object.freeze([{ kind: 'replace' as const, path: projectRoot }]);
+    startPublicationAdmission();
+    const operation = (async () => {
+      let outcome: MutationOutcome<T> | undefined;
+      try {
+        await activePackageMutations.reset({ root: projectRoot }, async () => {
+          await prepare();
+          return {
+            status: 'ready',
+            resetDependencyTree: true,
+            mutate: async (resetDependencyTree) => {
+              outcome = await applyMutation(intents, null, async () => {
+                try {
+                  if (resetDependencyTree === undefined) {
+                    throw new Error('recoverable project replacement package reset is missing');
+                  }
+                  await resetDependencyTree();
+                  const result = await apply();
+                  return result.status === 'committed'
+                    ? { kind: 'publish-success', value: result.value }
+                    : { kind: 'suppress-failure', error: result.error };
+                } catch (error) {
+                  return { kind: 'suppress-failure', error: errorFrom(error) };
+                }
+              });
+            },
+          };
         });
+        if (outcome === undefined) {
+          throw new Error('recoverable project replacement did not apply');
+        }
+        return settleMutationOutcome(outcome);
+      } catch (error) {
+        if (outcome === undefined) cursor.acknowledge(options.authority.treeRevision);
+        throw error;
       } finally {
         finishPublicationAdmission();
       }
@@ -431,13 +597,17 @@ export function createWorkbenchProjectVfs(
         admit: (request) =>
           options.authority.admitHostCommit(
             request,
-            (candidate) =>
-              applyPackageAwareHostCommit(
+            async (candidate) => {
+              const priorTreeRevision = options.authority.treeRevision;
+              const ack = await applyPackageAwareHostCommit(
                 options.authority,
                 activePackageMutations,
                 projectRoot,
                 candidate,
-              ),
+              );
+              await recordAppliedMutation('file', priorTreeRevision);
+              return ack;
+            },
             () => {
               try {
                 rawPublishCurrent();
@@ -591,6 +761,8 @@ export function createWorkbenchProjectVfs(
       startPump();
     },
     mutationGuard,
+    recoverableMutation,
+    recoverableProjectReplace,
     publicationBarrier,
     close() {
       if (closePromise !== null) return closePromise;

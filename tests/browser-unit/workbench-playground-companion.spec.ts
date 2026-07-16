@@ -314,6 +314,441 @@ test('Playground companion installs and executes a Node CLI through one real Wor
   ).toBe(true);
 });
 
+test('terminal snapshots and the semantic preview registry round-trip through exact project runs', async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  await gotoHarness(page);
+
+  const result = await page.evaluate(async () => {
+    type ProcessExit = { readonly code: number | null; readonly signal: string | null };
+    type ProjectTerminalSnapshot = {
+      readonly cwd: string;
+      readonly env: Readonly<Record<string, string>>;
+    };
+    type ProjectTerminalRun = {
+      readonly ready: Promise<void>;
+      readonly exited: Promise<ProcessExit>;
+      stop(): Promise<ProcessExit>;
+      close(): Promise<ProcessExit>;
+    };
+    type ProjectTerminal = {
+      snapshot(): ProjectTerminalSnapshot;
+      run(line: string): ProjectTerminalRun;
+      attach(listener: (chunk: string, stream: 'stdout' | 'stderr') => void): () => void;
+      close(): Promise<void>;
+    };
+    type ProjectRun = {
+      readonly terminal: ProjectTerminal;
+      readonly ready: Promise<void>;
+      readonly exited: Promise<ProcessExit>;
+      stop(): Promise<ProcessExit>;
+      close(): Promise<ProcessExit>;
+    };
+    type PlaygroundPreview = {
+      readonly port: number;
+      readonly url: string;
+      readonly label: string;
+      readonly source: 'dev-server' | 'preview' | 'node';
+    };
+    type PlaygroundPreviewRegistry = {
+      snapshot(): readonly PlaygroundPreview[];
+      subscribe(listener: (snapshot: readonly PlaygroundPreview[]) => void): () => void;
+    };
+    type ProjectDefinition = object;
+    type ProjectSession = {
+      run(): ProjectRun;
+      readonly terminals: { open(): ProjectTerminal };
+      close(): Promise<void>;
+    };
+    type PlaygroundWorkbench = {
+      readonly playground: {
+        define(plan: {
+          readonly kind: 'node-cli';
+          readonly id: string;
+          readonly starterId: string;
+          readonly templateId: string;
+          readonly files: Readonly<Record<string, string | Uint8Array>>;
+          readonly firstMaterialization: { readonly kind: 'install' };
+          readonly entryPath: string;
+          readonly args: readonly string[];
+        }): ProjectDefinition;
+        readonly catalog: {
+          createScratch(input: { readonly definition: ProjectDefinition }): Promise<unknown>;
+        };
+        forSession(session: ProjectSession): {
+          readonly previews: PlaygroundPreviewRegistry;
+        };
+      };
+      openProject(
+        definition: ProjectDefinition,
+        options?: { readonly initialTerminalState?: ProjectTerminalSnapshot },
+      ): Promise<ProjectSession>;
+      close(): Promise<void>;
+    };
+    type CompanionEntry = {
+      openPlaygroundWorkbench(options: {
+        readonly deployment: {
+          readonly workers: {
+            readonly owner: string;
+            readonly kernel: string;
+            readonly node: string;
+            readonly devServer: string;
+          };
+          readonly serviceWorker: { readonly url: string; readonly scope: string };
+          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly previewProbeTimeoutMs: number;
+        };
+        readonly packageAcquisition: { readonly registryUrl: string };
+        readonly storage: { readonly persistence: 'ephemeral' };
+      }): Promise<PlaygroundWorkbench>;
+    };
+    type HostAssets = {
+      readonly workers: {
+        readonly owner: string;
+        readonly kernel: string;
+        readonly node: string;
+        readonly devServer: string;
+      };
+      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+    };
+
+    const PRIMARY_PORT = 43_170;
+    const SIBLING_PORTS = [43_171, 43_172] as const;
+    const allPorts = [PRIMARY_PORT, ...SIBLING_PORTS];
+    const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timer = window.setTimeout(
+          () => reject(new Error(`${label} timed out after ${String(timeoutMs)}ms`)),
+          timeoutMs,
+        );
+        operation.then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error: unknown) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        );
+      });
+    const waitUntil = async (
+      predicate: () => boolean,
+      label: string,
+      timeoutMs: number,
+    ): Promise<void> => {
+      const deadline = performance.now() + timeoutMs;
+      while (!predicate()) {
+        if (performance.now() >= deadline) {
+          throw new Error(`${label} timed out after ${String(timeoutMs)}ms`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    };
+    const portsOf = (entries: readonly PlaygroundPreview[]): number[] =>
+      entries.map(({ port }) => port);
+    const fetchPreviews = async (
+      entries: readonly PlaygroundPreview[],
+    ): Promise<
+      readonly { readonly port: number; readonly status: number; readonly body: string }[]
+    > =>
+      Promise.all(
+        entries.map(async (entry) => {
+          const response = await withTimeout(
+            fetch(new URL(entry.url, location.href), { cache: 'no-store' }),
+            `preview ${String(entry.port)} response`,
+            30_000,
+          );
+          return {
+            port: entry.port,
+            status: response.status,
+            body: await withTimeout(response.text(), `preview ${String(entry.port)} body`, 30_000),
+          };
+        }),
+      );
+
+    const [companionModule, hostAssetsModule] = await Promise.all([
+      import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+      import('/src/browser-unit/workbench-vite-host-assets.ts'),
+    ]);
+    const companionEntry = companionModule as unknown as CompanionEntry;
+    const hostAssets = (hostAssetsModule as { readonly workbenchViteHostAssets: HostAssets })
+      .workbenchViteHostAssets;
+    const ownerWorkerUrl = new URL(hostAssets.workers.owner, location.href);
+    const ownerWorkerBaseUrl = new URL('.', ownerWorkerUrl);
+    const ownerWorkerReference = ownerWorkerUrl.href.slice(ownerWorkerBaseUrl.href.length);
+    const baseElement = document.createElement('base');
+    baseElement.href = ownerWorkerBaseUrl.href;
+    document.head.prepend(baseElement);
+
+    let workbench: PlaygroundWorkbench | null = null;
+    let session: ProjectSession | null = null;
+    let primaryRun: ProjectRun | null = null;
+    let siblingTerminal: ProjectTerminal | null = null;
+    let siblingRun: ProjectTerminalRun | null = null;
+    let unsubscribe: (() => void) | null = null;
+    try {
+      workbench = await withTimeout(
+        companionEntry.openPlaygroundWorkbench({
+          deployment: {
+            workers: { ...hostAssets.workers, owner: ownerWorkerReference },
+            serviceWorker: { url: '/sw.js', scope: '/' },
+            wasm: hostAssets.wasm,
+            previewProbeTimeoutMs: 30_000,
+          },
+          packageAcquisition: { registryUrl: '/npm-registry' },
+          storage: { persistence: 'ephemeral' },
+        }),
+        'Playground Workbench open',
+        120_000,
+      );
+      const definition = workbench.playground.define({
+        kind: 'node-cli',
+        id: 'scratch',
+        starterId: 'browser-unit-terminal-preview-starter',
+        templateId: 'browser-unit-terminal-preview-cli-v1',
+        files: {
+          '/package.json': '{"name":"terminal-preview-roundtrip","private":true,"type":"module"}\n',
+          '/src/nested/.keep': '',
+          '/src/server.mjs': [
+            "import http from 'node:http';",
+            'const ports = process.argv.slice(2).map(Number);',
+            'for (const port of ports) {',
+            '  http.createServer((_request, response) => {',
+            "    response.setHeader('content-type', 'text/plain');",
+            "    response.end('ADR0278:' + String(port));",
+            '  }).listen(port, () => console.log(`LISTENING:${port}`));',
+            '}',
+            '',
+          ].join('\n'),
+        },
+        firstMaterialization: { kind: 'install' },
+        entryPath: '/src/server.mjs',
+        args: [String(PRIMARY_PORT)],
+      });
+      await withTimeout(
+        workbench.playground.catalog.createScratch({ definition }),
+        'Scratch creation',
+        30_000,
+      );
+
+      const initialTerminalState = Object.freeze({
+        cwd: '/src',
+        env: Object.freeze({ ROUND_TRIP: 'seeded', RIFTY_GUEST_MARKER: 'opaque' }),
+      });
+      session = await withTimeout(
+        workbench.openProject(definition, { initialTerminalState }),
+        'project open with terminal state',
+        120_000,
+      );
+      const previews = workbench.playground.forSession(session).previews;
+      const previewHistory: number[][] = [];
+      unsubscribe = previews.subscribe((snapshot) => previewHistory.push(portsOf(snapshot)));
+
+      primaryRun = session.run();
+      let primaryOutput = '';
+      const detachPrimaryOutput = primaryRun.terminal.attach((chunk) => {
+        primaryOutput += chunk;
+      });
+      const primaryInitial = primaryRun.terminal.snapshot();
+      siblingTerminal = session.terminals.open();
+      const siblingInitial = siblingTerminal.snapshot();
+      await withTimeout(primaryRun.ready, 'primary Node admission', 30_000);
+      await Promise.race([
+        waitUntil(
+          () => portsOf(previews.snapshot()).join(',') === String(PRIMARY_PORT),
+          'primary semantic preview publication',
+          120_000,
+        ),
+        primaryRun.exited.then((exit) => {
+          throw new Error(
+            `primary exited before preview: ${JSON.stringify({ exit, primaryOutput, previewHistory })}`,
+          );
+        }),
+      ]);
+
+      siblingRun = siblingTerminal.run(`node ./server.mjs ${SIBLING_PORTS.map(String).join(' ')}`);
+      await withTimeout(siblingRun.ready, 'sibling Node admission', 30_000);
+      await waitUntil(
+        () => portsOf(previews.snapshot()).join(',') === allPorts.join(','),
+        'multi-port semantic preview publication',
+        60_000,
+      );
+      const live = previews.snapshot();
+      const liveFrozen = Object.isFrozen(live) && live.every((entry) => Object.isFrozen(entry));
+      const liveKeys = live.map((entry) => Reflect.ownKeys(entry).map(String).sort());
+      const liveBodies = await fetchPreviews(live);
+
+      const primaryStop = await withTimeout(primaryRun.stop(), 'exact primary stop', 30_000);
+      const primaryExit = await withTimeout(primaryRun.exited, 'primary exit', 30_000);
+      const primaryClose = await withTimeout(primaryRun.close(), 'primary close', 30_000);
+      detachPrimaryOutput();
+      primaryRun = null;
+      await waitUntil(
+        () => portsOf(previews.snapshot()).join(',') === SIBLING_PORTS.join(','),
+        'primary preview withdrawal',
+        30_000,
+      );
+      const afterPrimaryStop = previews.snapshot();
+      const survivorBodies = await fetchPreviews(afterPrimaryStop);
+
+      const siblingStop = await withTimeout(siblingRun.stop(), 'sibling stop', 30_000);
+      const siblingExit = await withTimeout(siblingRun.exited, 'sibling exit', 30_000);
+      const siblingClose = await withTimeout(siblingRun.close(), 'sibling close', 30_000);
+      siblingRun = null;
+      await waitUntil(() => previews.snapshot().length === 0, 'sibling preview withdrawal', 30_000);
+
+      siblingRun = siblingTerminal.run('cd nested');
+      await withTimeout(siblingRun.ready, 'state command admission', 30_000);
+      const stateOutcome = await withTimeout(
+        siblingRun.exited.then((exit) => ({ exit, snapshot: siblingTerminal?.snapshot() })),
+        'state command exit',
+        30_000,
+      );
+      if (stateOutcome.snapshot === undefined) throw new Error('state terminal was released early');
+      const stateExit = stateOutcome.exit;
+      const postExit = stateOutcome.snapshot;
+      const postExitFrozen = Object.isFrozen(postExit) && Object.isFrozen(postExit.env);
+      const stateClose = await withTimeout(siblingRun.close(), 'state command close', 30_000);
+      siblingRun = null;
+      const finalFirstSessionPreviews = previews.snapshot();
+      unsubscribe();
+      unsubscribe = null;
+      await withTimeout(session.close(), 'first project session close', 60_000);
+      session = null;
+      siblingTerminal = null;
+
+      session = await withTimeout(
+        workbench.openProject(definition, { initialTerminalState: postExit }),
+        'project reopen with terminal snapshot',
+        120_000,
+      );
+      const reopenedPreviews = workbench.playground.forSession(session).previews;
+      primaryRun = session.run();
+      const reopenedPrimary = primaryRun.terminal.snapshot();
+      siblingTerminal = session.terminals.open();
+      const reopenedSibling = siblingTerminal.snapshot();
+      await withTimeout(primaryRun.ready, 'reopened primary admission', 30_000);
+      await waitUntil(
+        () => portsOf(reopenedPreviews.snapshot()).join(',') === String(PRIMARY_PORT),
+        'reopened primary semantic preview publication',
+        60_000,
+      );
+      const reopenedStop = await withTimeout(
+        primaryRun.stop(),
+        'reopened exact primary stop',
+        30_000,
+      );
+      const reopenedClose = await withTimeout(primaryRun.close(), 'reopened primary close', 30_000);
+      primaryRun = null;
+      await waitUntil(
+        () => reopenedPreviews.snapshot().length === 0,
+        'reopened primary preview withdrawal',
+        30_000,
+      );
+      await withTimeout(siblingTerminal.close(), 'reopened sibling terminal close', 30_000);
+      siblingTerminal = null;
+      await withTimeout(session.close(), 'reopened project session close', 60_000);
+      session = null;
+      await withTimeout(workbench.close(), 'Playground Workbench close', 60_000);
+      workbench = null;
+
+      return {
+        initialTerminalState,
+        primaryInitial,
+        siblingInitial,
+        previewHistory,
+        live,
+        liveFrozen,
+        liveKeys,
+        liveBodies,
+        primaryStop,
+        primaryExit,
+        primaryClose,
+        afterPrimaryStop,
+        survivorBodies,
+        siblingStop,
+        siblingExit,
+        siblingClose,
+        stateExit,
+        stateClose,
+        postExit,
+        postExitFrozen,
+        finalFirstSessionPreviews,
+        reopenedPrimary,
+        reopenedSibling,
+        reopenedStop,
+        reopenedClose,
+      };
+    } finally {
+      unsubscribe?.();
+      if (siblingRun !== null) await siblingRun.close().catch(() => {});
+      if (primaryRun !== null) await primaryRun.close().catch(() => {});
+      if (siblingTerminal !== null) await siblingTerminal.close().catch(() => {});
+      if (session !== null) await session.close().catch(() => {});
+      if (workbench !== null) await workbench.close().catch(() => {});
+      baseElement.remove();
+    }
+  });
+
+  expect(result.primaryInitial).toEqual(result.initialTerminalState);
+  expect(result.siblingInitial).toEqual(result.initialTerminalState);
+  expect(result.previewHistory[0]).toEqual([]);
+  expect(result.live.map(({ port }) => port)).toEqual([43_170, 43_171, 43_172]);
+  expect(result.live.map(({ label }) => label)).toEqual([
+    'node :43170',
+    'node :43171',
+    'node :43172',
+  ]);
+  expect(result.live.map(({ source }) => source)).toEqual(['node', 'node', 'node']);
+  expect(result.live.map(({ url }) => new URL(url, 'http://localhost').pathname)).toEqual([
+    '/preview/43170/',
+    '/preview/43171/',
+    '/preview/43172/',
+  ]);
+  expect(result.liveFrozen).toBe(true);
+  expect(result.liveKeys).toEqual([
+    ['label', 'port', 'source', 'url'],
+    ['label', 'port', 'source', 'url'],
+    ['label', 'port', 'source', 'url'],
+  ]);
+  expect(result.liveBodies).toEqual([
+    { port: 43_170, status: 200, body: 'ADR0278:43170' },
+    { port: 43_171, status: 200, body: 'ADR0278:43171' },
+    { port: 43_172, status: 200, body: 'ADR0278:43172' },
+  ]);
+
+  const stopped = { code: null, signal: 'SIGTERM' };
+  expect(result.primaryStop).toEqual(stopped);
+  expect(result.primaryExit).toEqual(stopped);
+  expect(result.primaryClose).toEqual(stopped);
+  expect(result.afterPrimaryStop.map(({ port }) => port)).toEqual([43_171, 43_172]);
+  expect(result.survivorBodies).toEqual([
+    { port: 43_171, status: 200, body: 'ADR0278:43171' },
+    { port: 43_172, status: 200, body: 'ADR0278:43172' },
+  ]);
+  expect(result.siblingStop).toEqual(stopped);
+  expect(result.siblingExit).toEqual(stopped);
+  expect(result.siblingClose).toEqual(stopped);
+  expect(result.finalFirstSessionPreviews).toEqual([]);
+
+  expect(result.stateExit).toEqual({ code: 0, signal: null });
+  expect(result.stateClose).toEqual({ code: 0, signal: null });
+  expect(result.postExit).toEqual({
+    cwd: '/src/nested',
+    env: {
+      ROUND_TRIP: 'seeded',
+      RIFTY_GUEST_MARKER: 'opaque',
+    },
+  });
+  expect(result.postExitFrozen).toBe(true);
+  expect(result.reopenedPrimary).toEqual(result.postExit);
+  expect(result.reopenedSibling).toEqual(result.postExit);
+  expect(result.reopenedStop).toEqual(stopped);
+  expect(result.reopenedClose).toEqual(stopped);
+});
+
 test('real instant Vite preset keeps mapper port 5174 through snapshot restore and preview', async ({
   page,
 }) => {

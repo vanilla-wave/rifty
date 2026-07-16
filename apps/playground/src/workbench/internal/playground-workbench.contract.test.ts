@@ -15,7 +15,10 @@ import {
   type NodeCliPlaygroundPlan,
   type NodeServerPlaygroundPlan,
   type PlaygroundArchive,
+  type PlaygroundPreview,
+  type PlaygroundPreviewRegistry,
   type PlaygroundProjectCatalog,
+  type PlaygroundProjectOpenOptions,
   type PlaygroundProjectPlan,
   type PlaygroundScm,
   type PlaygroundScmBlob,
@@ -41,7 +44,11 @@ import {
   type ProjectSession,
   createProjectSession,
 } from '../project-session.ts';
-import { createProjectTerminal } from '../project-terminal.ts';
+import {
+  type ProjectTerminal,
+  type ProjectTerminalSnapshot,
+  createProjectTerminal,
+} from '../project-terminal.ts';
 import * as rootModule from '../public.ts';
 import type { PreviewHandle, ProjectDefinition } from '../public.ts';
 import {
@@ -100,10 +107,32 @@ type ExpectedPlaygroundArchive = {
   import(archiveJson: string): Promise<void>;
 };
 
+type ExpectedProjectTerminalSnapshot = {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+};
+
+type ExpectedPlaygroundProjectOpenOptions = {
+  readonly initialTerminalState?: ProjectTerminalSnapshot;
+};
+
+type ExpectedPlaygroundPreview = {
+  readonly port: number;
+  readonly url: string;
+  readonly label: string;
+  readonly source: 'dev-server' | 'preview' | 'node';
+};
+
+type ExpectedPlaygroundPreviewRegistry = {
+  snapshot(): readonly PlaygroundPreview[];
+  subscribe(listener: (snapshot: readonly PlaygroundPreview[]) => void): () => void;
+};
+
 type ExpectedPlaygroundSessionTools = {
   readonly typescript: PlaygroundTypeScript;
   readonly scm: PlaygroundScm;
   readonly archive: PlaygroundArchive;
+  readonly previews: PlaygroundPreviewRegistry;
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -145,6 +174,12 @@ function createContent() {
     treeRevision: 1,
     nodeModulesPresent: false,
     entries: [
+      {
+        path: `${CONTENT_ROOT}/src`,
+        kind: 'dir',
+        size: 0,
+        version: 'dir-v1',
+      },
       {
         path: `${CONTENT_ROOT}/src/main.ts`,
         kind: 'file',
@@ -203,6 +238,7 @@ function createOwnerSession<TReady>(
       closed: neverClosed.promise,
       isAlive: () => true,
       openSession: async () => {},
+      snapshot: () => ({ cwd: '/', env: {} }),
       execResult: async () => {
         throw new Error('Playground companion contract did not run a terminal command');
       },
@@ -254,6 +290,7 @@ interface RootHarness {
   readonly workbench: Workbench;
   readonly ownerStart: ReturnType<typeof vi.fn>;
   readonly ownerOpen: ReturnType<typeof vi.fn>;
+  readonly ownerSessions: readonly ProjectSession<unknown>[];
   readonly ownerDelete: ReturnType<typeof vi.fn>;
   readonly ownerClose: ReturnType<typeof vi.fn>;
   readonly events: string[];
@@ -263,6 +300,7 @@ interface RootHarness {
 
 async function createRootHarness(): Promise<RootHarness> {
   const events: string[] = [];
+  const ownerSessions: ProjectSession<unknown>[] = [];
   let beforeCoreClose = async (): Promise<void> => {};
   let coreRuntimeFailure: Error | null = null;
   const ownerOpen = vi.fn((_definition: InspectedProjectDefinition) => {});
@@ -270,11 +308,13 @@ async function createRootHarness(): Promise<RootHarness> {
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>> => {
     ownerOpen(definition);
-    return createOwnerSession<TReady>(
+    const session = createOwnerSession<TReady>(
       () => beforeCoreClose(),
       () => coreRuntimeFailure,
       events,
     );
+    ownerSessions.push(session as ProjectSession<unknown>);
+    return session;
   };
   const ownerClose = vi.fn(async () => {
     events.push('owner:close');
@@ -335,6 +375,7 @@ async function createRootHarness(): Promise<RootHarness> {
     workbench,
     ownerStart,
     ownerOpen,
+    ownerSessions,
     ownerDelete,
     ownerClose,
     events,
@@ -444,11 +485,23 @@ function archiveTool(): PlaygroundArchive {
   } satisfies PlaygroundArchive);
 }
 
+function previewTool(): PlaygroundPreviewRegistry {
+  const snapshot: readonly PlaygroundPreview[] = Object.freeze([]);
+  return Object.freeze({
+    snapshot: () => snapshot,
+    subscribe(listener: (value: readonly PlaygroundPreview[]) => void) {
+      listener(snapshot);
+      return () => {};
+    },
+  });
+}
+
 function tools(overrides: { readonly archive?: PlaygroundArchive } = {}): PlaygroundSessionTools {
   return Object.freeze({
     typescript: typescriptTool(),
     scm: scmTool(),
     archive: overrides.archive ?? archiveTool(),
+    previews: previewTool(),
   } satisfies PlaygroundSessionTools);
 }
 
@@ -557,6 +610,11 @@ describe('Playground companion sealed contract', () => {
     expectTypeOf<PlaygroundScmDiff>().toEqualTypeOf<ExpectedPlaygroundScmDiff>();
     expectTypeOf<PlaygroundScm>().toEqualTypeOf<ExpectedPlaygroundScm>();
     expectTypeOf<PlaygroundArchive>().toEqualTypeOf<ExpectedPlaygroundArchive>();
+    expectTypeOf<PlaygroundPreview>().toEqualTypeOf<ExpectedPlaygroundPreview>();
+    expectTypeOf<PlaygroundPreviewRegistry>().toEqualTypeOf<ExpectedPlaygroundPreviewRegistry>();
+    expectTypeOf<ProjectTerminalSnapshot>().toEqualTypeOf<ExpectedProjectTerminalSnapshot>();
+    expectTypeOf<PlaygroundProjectOpenOptions>().toEqualTypeOf<ExpectedPlaygroundProjectOpenOptions>();
+    expectTypeOf<ProjectTerminal['snapshot']>().returns.toEqualTypeOf<ProjectTerminalSnapshot>();
     expectTypeOf<PlaygroundSessionTools>().toEqualTypeOf<ExpectedPlaygroundSessionTools>();
   });
 
@@ -1217,6 +1275,86 @@ describe('Playground plan validation', () => {
 });
 
 describe('Playground session authority and teardown', () => {
+  it('rejects malformed initial terminal state before invoking the project-open effect', async () => {
+    const root = await createRootHarness();
+    let openProjectCalls = 0;
+    const openProject = <TReady>(definition: ProjectDefinition<TReady>) => {
+      openProjectCalls += 1;
+      return root.workbench.openProject(definition);
+    };
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      openProject,
+      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      registerBeforeClose: () => {},
+    });
+    const definition = facade.playground.define(vitePlan());
+    const cwdRead = vi.fn(() => '/');
+    const malformed = Object.defineProperty({ env: {} }, 'cwd', {
+      enumerable: true,
+      get: cwdRead,
+    });
+
+    const outcome = await facade
+      .openProject(definition, { initialTerminalState: malformed } as never)
+      .then(
+        (session) => session,
+        (error: unknown) => error,
+      );
+    if (!(outcome instanceof Error)) await (outcome as ProjectSession<unknown>).close();
+
+    expect(outcome).toBeInstanceOf(TypeError);
+    expect(cwdRead).not.toHaveBeenCalled();
+    expect(openProjectCalls).toBe(0);
+    expect(root.ownerOpen).not.toHaveBeenCalled();
+    await facade.close();
+  });
+
+  it('defensively owns and freezes initial terminal state before invoking project open', async () => {
+    const root = await createRootHarness();
+    const admitted: PlaygroundProjectOpenOptions[] = [];
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      openProject: <TReady>(
+        definition: ProjectDefinition<TReady>,
+        projectOptions: PlaygroundProjectOpenOptions,
+      ) => {
+        admitted.push(projectOptions);
+        return root.workbench.openProject(definition);
+      },
+      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      registerBeforeClose: () => {},
+    });
+    const definition = facade.playground.define(vitePlan());
+    const env = { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' };
+    const initialTerminalState = { cwd: '/src', env };
+
+    const opening = facade.openProject(definition, { initialTerminalState });
+    initialTerminalState.cwd = '/mutated';
+    env.PATH = '/mutated';
+    const session = await opening;
+
+    expect(admitted).toEqual([
+      {
+        initialTerminalState: {
+          cwd: '/src',
+          env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+        },
+      },
+    ]);
+    expect(Object.isFrozen(admitted[0])).toBe(true);
+    expect(Object.isFrozen(admitted[0]?.initialTerminalState)).toBe(true);
+    expect(Object.isFrozen(admitted[0]?.initialTerminalState?.env)).toBe(true);
+    await session.close();
+    await facade.close();
+  });
+
   it('gates inherited open by companion identity and active catalog ref, then serializes delete through the catalog', async () => {
     const root = await createRootHarness();
     const projectCatalog = catalog();
@@ -1284,7 +1422,7 @@ describe('Playground session authority and teardown', () => {
 
     expect(first.playground.forSession(firstSession)).toBe(firstTools);
     expect(Object.isFrozen(firstTools)).toBe(true);
-    expect(Object.keys(firstTools).sort()).toEqual(['archive', 'scm', 'typescript']);
+    expect(Object.keys(firstTools).sort()).toEqual(['archive', 'previews', 'scm', 'typescript']);
     expect(Object.keys(firstTools.scm).sort()).toEqual([
       'commit',
       'diff',
@@ -1296,11 +1434,22 @@ describe('Playground session authority and teardown', () => {
       'unstage',
     ]);
     expect(Object.keys(firstTools.archive).sort()).toEqual(['export', 'import']);
-    for (const handle of [firstTools, firstTools.typescript, firstTools.scm, firstTools.archive]) {
-      expect(handle).not.toHaveProperty('close');
+    for (const handle of [
+      firstTools,
+      firstTools.typescript,
+      firstTools.scm,
+      firstTools.archive,
+      firstTools.previews,
+    ]) {
       expect(handle).not.toHaveProperty('dispose');
     }
+    for (const handle of [firstTools, firstTools.scm, firstTools.archive, firstTools.previews]) {
+      expect(handle).not.toHaveProperty('close');
+    }
+    expect(firstTools.typescript.close).toEqual(expect.any(Function));
     expect(firstCreateTools).toHaveBeenCalledTimes(1);
+    expect(firstCreateTools).toHaveBeenCalledWith(firstRoot.ownerSessions[0]);
+    expect(firstCreateTools).not.toHaveBeenCalledWith(firstSession);
     expect(firstRoot.ownerStart).toHaveBeenCalledTimes(1);
     expect(firstRoot.ownerOpen).toHaveBeenCalledTimes(1);
     expect(() => first.playground.forSession(secondSession)).toThrow(TypeError);

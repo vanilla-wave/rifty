@@ -1,6 +1,16 @@
 import type { ProcessExit } from '@riftydev/shell';
 import { ClosedHandleError, ProjectBusyError, StdinClosedError } from './errors.ts';
+import {
+  type ProjectTerminalSnapshot,
+  ownProjectTerminalSnapshot,
+} from './project-terminal-state.ts';
 export { ClosedHandleError, ProjectBusyError, StdinClosedError } from './errors.ts';
+export type { ProjectTerminalSnapshot } from './project-terminal-state.ts';
+
+export interface ProjectTerminalPortState {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+}
 
 export interface ProjectTerminalExecOptions {
   readonly cols: number;
@@ -13,7 +23,8 @@ export interface ProjectTerminalExecOptions {
 export interface ProjectTerminalPort {
   readonly closed: Promise<unknown>;
   isAlive(): boolean;
-  openSession(sid: string): Promise<void>;
+  openSession(sid: string, initialState?: ProjectTerminalPortState): Promise<void>;
+  snapshot(sid: string): ProjectTerminalSnapshot;
   execResult(
     sid: string,
     line: string,
@@ -50,6 +61,7 @@ export function projectTerminalAdmission(
 }
 
 export interface ProjectTerminal {
+  snapshot(): ProjectTerminalSnapshot;
   run(line: string): ProjectTerminalRun;
   write(data: string | Uint8Array): Promise<void>;
   end(): Promise<void>;
@@ -61,8 +73,9 @@ export interface ProjectTerminal {
 export function createProjectTerminal(_options: {
   readonly id: string;
   readonly port: ProjectTerminalPort;
+  readonly initialState?: ProjectTerminalPortState;
 }): ProjectTerminal {
-  const { id, port } = _options;
+  const { id, port, initialState } = _options;
   if (typeof id !== 'string' || id.length === 0) {
     throw new TypeError('Project terminal id must be a non-empty string');
   }
@@ -350,7 +363,12 @@ export function createProjectTerminal(_options: {
 
   let openPromise: Promise<void>;
   try {
-    openPromise = port.openSession(id);
+    openPromise = port.openSession(
+      id,
+      initialState === undefined
+        ? undefined
+        : { cwd: initialState.cwd, env: { ...initialState.env } },
+    );
   } catch (error) {
     openPromise = Promise.reject(error);
   }
@@ -544,6 +562,11 @@ export function createProjectTerminal(_options: {
   }
 
   const terminal: ProjectTerminal = {
+    snapshot() {
+      assertOpen();
+      return ownProjectTerminalSnapshot(port.snapshot(id));
+    },
+
     run(line) {
       assertOpen();
       if (typeof line !== 'string' || line.trim().length === 0) {

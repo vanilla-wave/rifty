@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { gzipSync } from 'node:zlib';
 import { globalProcessManager } from '@riftydev/kernel';
 import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
-import type { ProcessExit } from '@riftydev/shell';
+import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import {
   MemoryFsSync,
   createMemoryFs,
@@ -17,6 +17,7 @@ import type { InstallFn } from '../glue/npm-shell-command.ts';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { projectTerminalStateFromOwner } from '../workbench/internal/playground-terminal-state.ts';
 import { createNodeCliProjectRuntime } from '../workbench/node-project-runtime.ts';
 import { createPreviewReadiness } from '../workbench/preview-readiness.ts';
 import { createUnusedProjectContent } from '../workbench/project-content.test-fixture.ts';
@@ -35,7 +36,10 @@ import {
   type ProjectSession,
   createProjectSession,
 } from '../workbench/project-session.ts';
-import { createProjectTerminal } from '../workbench/project-terminal.ts';
+import {
+  type ProjectTerminalPortState,
+  createProjectTerminal,
+} from '../workbench/project-terminal.ts';
 import { createViteProjectRuntime } from '../workbench/vite-project-runtime.ts';
 import { type OwnerPackageState, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
@@ -373,12 +377,14 @@ function logicalOverCapDecompressionStream(
 function logicalOverCapByteStream(boundary: {
   pulls: number;
   cancelled: boolean;
+  exhausted: boolean;
 }): ReadableStream<Uint8Array> {
   const chunk = new Uint8Array(1024 * 1024);
-  const chunkCount = DEFAULT_ASSET_MAX_BYTES / chunk.byteLength + 1;
+  const chunkCount = DEFAULT_ASSET_MAX_BYTES / chunk.byteLength + 32;
   return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (boundary.pulls === chunkCount) {
+        boundary.exhausted = true;
         controller.close();
         return;
       }
@@ -556,7 +562,7 @@ const SNAPSHOT_FALLBACK_CASES: readonly SnapshotFallbackCase[] = [
       name: `128MiB streamed fetched-byte cap with ${lengthKind} Content-Length`,
       slug: `fetch-stream-cap-${lengthKind}-length`,
       prepare: (_definition, assetUrl) => {
-        const boundary = { pulls: 0, cancelled: false };
+        const boundary = { pulls: 0, cancelled: false, exhausted: false };
         return {
           snapshotId: `sha256:${(lengthKind === 'missing' ? '5' : '6').repeat(64)}`,
           templateId: 'vite-deps-current',
@@ -571,7 +577,9 @@ const SNAPSHOT_FALLBACK_CASES: readonly SnapshotFallbackCase[] = [
             }),
           assertBoundary: () => {
             expect(boundary.pulls * 1024 * 1024).toBeGreaterThan(DEFAULT_ASSET_MAX_BYTES);
+            expect(boundary.pulls).toBeLessThan(DEFAULT_ASSET_MAX_BYTES / (1024 * 1024) + 32);
             expect(boundary.cancelled).toBe(true);
+            expect(boundary.exhausted).toBe(false);
           },
         };
       },
@@ -976,7 +984,10 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     const port = {
       closed,
       isAlive: () => alive,
-      openSession: pty.openSession,
+      openSession: (sid: string, initialState?: ProjectTerminalPortState) =>
+        pty.openSession(sid, initialState ?? { cwd: materialized.projectRoot }),
+      snapshot: (sid: string) =>
+        projectTerminalStateFromOwner(materialized.projectRoot, pty.snapshot(sid)),
       execResult: pty.execResult,
       writeStdin: pty.writeStdin,
       endStdin: pty.endStdin,
@@ -1362,6 +1373,8 @@ describe('Workbench companion first materialization Contract+RED', () => {
     ).toBeGreaterThan(eventIndex(h.timeline.events, 'snapshot:fetch:end'));
   });
 
+  // One Workbench owns one active ProjectSession/VFS cursor. Exercise duplicate
+  // consumers at the reachable sibling npm ingress, through the same package FIFO.
   it('serializes two consumers of one deferred install into one install and one exact warm reuse', async () => {
     const releaseInstall = deferred();
     let gateInstall = false;
@@ -1388,47 +1401,49 @@ describe('Workbench companion first materialization Contract+RED', () => {
       );
     }
 
-    const firstSession = await h.session(definition, materialized);
-    const secondSession = await h.session(definition, materialized);
+    const terminalOutput = (consumer: string) => ({
+      write(chunk: string | Uint8Array) {
+        const text = typeof chunk === 'string' ? chunk : decoder.decode(chunk);
+        h.timeline.events.push(`terminal:${consumer}:${text.replaceAll('\n', '\\n')}`);
+      },
+    });
+    const context = (consumer: string): CommandContext => ({
+      cwd: materialized.projectRoot,
+      env: {},
+      stdout: terminalOutput(consumer),
+      stderr: terminalOutput(consumer),
+    });
+    const firstNpm = h.packageState.createNpmCommand(async () => 1);
+    const secondNpm = h.packageState.createNpmCommand(async () => 1);
     gateInstall = true;
-    const firstRun = firstSession.run();
-    const secondRun = secondSession.run();
+    const firstRun = firstNpm(['install'], context('first'));
+    const secondRun = secondNpm(['install'], context('second'));
     await vi.waitFor(() => expect(h.timeline.events).toContain('install:two-runs:gate'));
-    const firstBeforeRelease = await settlePromptly(firstRun.exited);
-    const secondBeforeRelease = await settlePromptly(secondRun.exited);
+    const firstBeforeRelease = await settlePromptly(firstRun);
+    const secondBeforeRelease = await settlePromptly(secondRun);
     const installsBeforeRelease = h.timeline.installs.length;
     const activeBeforeRelease = h.timeline.activeInstalls;
-    const childrenBeforeRelease = h.children.length;
     releaseInstall.resolve();
 
-    const firstChild = await waitForChild(h, 0);
-    const secondChild = await waitForChild(h, 1);
-    firstChild.finish('vite: concurrent first output\n');
-    secondChild.finish('vite: concurrent second output\n');
-    await Promise.all([firstRun.exited, secondRun.exited]);
-    await Promise.all([firstRun.close(), secondRun.close()]);
-    await Promise.all([firstSession.close(), secondSession.close()]);
+    await expect(Promise.all([firstRun, secondRun])).resolves.toEqual([0, 0]);
+    const warm = await h.open(definition);
     await h.close();
 
     expect.soft(firstBeforeRelease).toEqual({ status: 'pending' });
     expect.soft(secondBeforeRelease).toEqual({ status: 'pending' });
     expect.soft(installsBeforeRelease).toBe(1);
     expect.soft(activeBeforeRelease).toBe(1);
-    expect.soft(childrenBeforeRelease).toBe(0);
     expect.soft(fetchSnapshot).not.toHaveBeenCalled();
     expect.soft(h.timeline.installs).toHaveLength(1);
     expect.soft(h.timeline.maxActiveInstalls).toBe(1);
-    expect(
-      h.timeline.events.filter((event) => event === `exec:npm install && vite --port ${VITE_PORT}`),
-    ).toHaveLength(1);
-    expect(
-      h.timeline.events.filter((event) => event === `exec:vite --port ${VITE_PORT}`),
-    ).toHaveLength(1);
-    expect(
-      h.timeline.events.filter(
-        (event) => event.startsWith('child:spawn:') && event.includes(`--port ${VITE_PORT}`),
-      ),
-    ).toHaveLength(2);
+    expect
+      .soft(h.timeline.events.filter((event) => event.includes('$ npm install')))
+      .toHaveLength(1);
+    expect.soft(warm.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'existing', packages: 1 },
+    });
+    expect.soft(h.children).toEqual([]);
   });
 
   it('hashes decompressed snapshot bytes, accepts gzip recompression, and reuses the exact warm claim', async () => {

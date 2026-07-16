@@ -815,6 +815,37 @@ describe('Playground catalog baseline provenance', () => {
 });
 
 describe('Playground catalog single owner and busy gate', () => {
+  it('acknowledges an exact project-rooted terminal seed from the real owner tree', async () => {
+    const h = await harness();
+    await h.catalog.createScratch({ definition: definition('scratch') });
+    const env = { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' };
+    const requested = { cwd: '/src', env };
+
+    const opening = h.owner.openProject(definition('scratch'), requested);
+    requested.cwd = '/mutated-after-admission';
+    env.PATH = '/mutated-after-admission';
+    const opened = await opening;
+
+    expect(opened.initialTerminalState).toEqual({
+      cwd: '/src',
+      env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+    });
+    expect(Object.isFrozen(opened.initialTerminalState)).toBe(true);
+    expect(Object.isFrozen(opened.initialTerminalState?.env)).toBe(true);
+    await close(opened);
+
+    const stale = await h.owner.openProject(definition('scratch'), {
+      cwd: '/deleted',
+      env: { KEEP: 'yes', RIFTY_OWNER_TOKEN: 'still-guest-data' },
+    });
+    expect(stale.initialTerminalState).toEqual({
+      cwd: '/',
+      env: { KEEP: 'yes', RIFTY_OWNER_TOKEN: 'still-guest-data' },
+    });
+    await close(stale);
+    await h.owner.close();
+  });
+
   it.each([
     ['guest', '/mutation-guest.txt', true],
     ['scm', '/.git/index', true],

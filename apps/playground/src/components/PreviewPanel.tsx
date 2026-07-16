@@ -35,9 +35,14 @@ import {
   onCleanup,
 } from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
-import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
 import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-panel-core.ts';
+
+export interface PreviewPanelEntry {
+  readonly port: number;
+  readonly url: string;
+  readonly label: string;
+}
 
 // `unreachable` = the route never answered ok (dev server down); `error` = the
 // route responded but the in-page frame didn't commit. Distinct so the overlay
@@ -51,7 +56,7 @@ type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 // the old `source === 'preview'` special case, backlog:
 // playground/generic-dev-server-lifecycle). Else current-if-live, else last.
 export function reconcileSelectedPort(
-  entries: PreviewPortEntry[],
+  entries: readonly PreviewPanelEntry[],
   current: number,
   knownPorts?: ReadonlySet<number>,
 ): number {
@@ -68,7 +73,7 @@ export function PreviewPanel(props: {
   /** Toast bridge for copy-URL feedback. */
   onNotify?: (message: string, tone: 'error' | 'success') => void;
   /** Live previewable ports (ADR-0155). Non-empty → switcher; empty → manual port input. */
-  ports?: Accessor<PreviewPortEntry[]>;
+  ports?: Accessor<readonly PreviewPanelEntry[]>;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -76,10 +81,11 @@ export function PreviewPanel(props: {
   const [frameEpoch, setFrameEpoch] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
-  const previewUrl = (): string => previewUrlFor(port());
+  const previewUrl = (): string =>
+    entries().find((entry) => entry.port === port())?.url ?? previewUrlFor(port());
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
-  const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
+  const entries = createMemo<readonly PreviewPanelEntry[]>(() => props.ports?.() ?? []);
 
   // Keep the selected port valid against the live set: a NEWLY appended server
   // auto-selects, a removed selection falls back to the last entry. The warm-up

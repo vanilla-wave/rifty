@@ -10,7 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
-import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
+import {
+  type OwnerPackageConfig,
+  type OwnerPackageMutationKind,
+  createOwnerPackageState,
+} from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
   type WorkbenchProjectRuntime,
@@ -213,6 +217,7 @@ function harness(
   onSend?: (frame: OwnerToPageFrame, runtime: () => WorkbenchProjectRuntime) => void,
   activePackageConfig: OwnerPackageConfig = packageConfig,
   publicationBarrier: () => Promise<void> = async () => {},
+  recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>,
 ) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -274,6 +279,7 @@ function harness(
     nodeWorkerRuntimeEnv,
     mutationGuard,
     publicationBarrier,
+    ...(recordMutation === undefined ? {} : { recordMutation }),
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
@@ -680,6 +686,19 @@ describe('Workbench project runtime', () => {
         cwd: ROOT,
       }),
     );
+    await h.runtime.close();
+  });
+
+  it('binds terminal npm commands to owner package-mutation reflection', async () => {
+    const recordMutation = vi.fn(
+      async (_kind: OwnerPackageMutationKind, _treeRevision: number) => {},
+    );
+    const h = harness(undefined, packageConfig, async () => {}, recordMutation);
+    const createNpmCommand = vi.spyOn(h.packageState, 'createNpmCommand');
+
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
+
+    expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), { recordMutation });
     await h.runtime.close();
   });
 

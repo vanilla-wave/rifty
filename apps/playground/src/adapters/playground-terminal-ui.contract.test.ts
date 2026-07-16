@@ -1,0 +1,195 @@
+import type { ProcessExit } from '@riftydev/shell';
+import { describe, expect, it, vi } from 'vitest';
+import type { ProjectRun, ProjectSession } from '../workbench/project-session.ts';
+import type {
+  ProjectTerminal,
+  ProjectTerminalRun,
+  ProjectTerminalSnapshot,
+} from '../workbench/project-terminal.ts';
+import { createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function terminalHarness() {
+  const listeners = new Set<(chunk: string, stream: 'stdout' | 'stderr') => void>();
+  const runExit = deferred<ProcessExit>();
+  const run = {
+    ready: Promise.resolve(),
+    exited: runExit.promise,
+    stop: vi.fn(async () => ({ code: null, signal: 'SIGINT' }) as ProcessExit),
+    close: vi.fn(async () => ({ code: 0, signal: null }) as ProcessExit),
+  } satisfies ProjectTerminalRun;
+  let terminalState: ProjectTerminalSnapshot = Object.freeze({
+    cwd: '/src',
+    env: Object.freeze({ TERM: 'xterm' }),
+  });
+  const terminal = {
+    snapshot: vi.fn(() => terminalState),
+    run: vi.fn(() => run),
+    write: vi.fn(async () => {}),
+    end: vi.fn(async () => {}),
+    resize: vi.fn(async () => {}),
+    attach(listener: (chunk: string, stream: 'stdout' | 'stderr') => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    close: vi.fn(async () => {}),
+  } satisfies ProjectTerminal;
+  return {
+    terminal,
+    run,
+    runExit,
+    setState(cwd: string, env: Readonly<Record<string, string>>) {
+      terminalState = Object.freeze({ cwd, env: Object.freeze({ ...env }) });
+    },
+    emit(chunk: string, stream: 'stdout' | 'stderr' = 'stdout') {
+      for (const listener of listeners) listener(chunk, stream);
+    },
+  };
+}
+
+describe('Playground semantic terminal UI adapter', () => {
+  it('projects exact owner-acknowledged cwd/env before and after a terminal run', async () => {
+    const primary = terminalHarness();
+    const exited = deferred<ProcessExit>();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: exited.promise,
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn() },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+
+    const started = ui.startProject('Project');
+    expect(ui.sessions()).toMatchObject([{ cwd: '/src', env: { TERM: 'xterm' } }]);
+
+    primary.setState('/src/after', { AFTER: 'run' });
+    exited.resolve({ code: 0, signal: null });
+    await started.exited;
+
+    expect(ui.sessions()).toMatchObject([{ cwd: '/src/after', env: { AFTER: 'run' } }]);
+    await ui.dispose();
+  });
+
+  it('captures runtime install output before xterm mounts and replays it in observable order', async () => {
+    const primary = terminalHarness();
+    const ready = deferred<unknown>();
+    const exited = deferred<ProcessExit>();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: ready.promise,
+      exited: exited.promise,
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn() },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+
+    const started = ui.startProject('Project');
+    primary.emit('$ npm install\n');
+    primary.emit('npm: + kleur@4.1.5\n');
+    const output: string[] = [];
+    ui.attach(started.id, (chunk) => output.push(chunk));
+
+    expect(output.join('')).toBe('$ npm install\nnpm: + kleur@4.1.5\n');
+    expect(ui.sessions()).toMatchObject([{ id: started.id, title: 'Project', status: 'running' }]);
+
+    ready.resolve(undefined);
+    exited.resolve({ code: 0, signal: null });
+    await started.exited;
+    expect(ui.sessions()[0]).toMatchObject({ status: 'idle', exitCode: 0 });
+    expect(projectRun.close).toHaveBeenCalledTimes(1);
+    await ui.dispose();
+  });
+
+  it('delegates primary stop to the exact ProjectRun without terminal-id reconstruction', async () => {
+    const primary = terminalHarness();
+    const exactExit = { code: null, signal: 'SIGINT' } as ProcessExit;
+    const stopOutcome = Promise.resolve(exactExit);
+    const projectStop = vi.fn(() => stopOutcome);
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: new Promise<ProcessExit>(() => {}),
+      stop: projectStop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn() },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+
+    ui.startProject('Project');
+    const firstStop = ui.stopProject();
+    const secondStop = ui.stopProject();
+
+    expect(firstStop).toBe(stopOutcome);
+    expect(secondStop).toBe(stopOutcome);
+    expect(projectStop).toHaveBeenCalledTimes(2);
+    expect(primary.run.stop).not.toHaveBeenCalled();
+    expect(session.run).toHaveBeenCalledTimes(1);
+    await ui.dispose();
+  });
+
+  it('routes interactive line, stdin, resize and signal only through ProjectTerminal', async () => {
+    const primary = terminalHarness();
+    const interactive = terminalHarness();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: new Promise<ProcessExit>(() => {}),
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn(() => interactive.terminal) },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    const opened = ui.createSession('Terminal 1');
+
+    const line = ui.runLine(opened.id, 'node cli.mjs', { cols: 92, rows: 31 });
+    await Promise.resolve();
+    expect(interactive.terminal.resize).toHaveBeenCalledWith(92, 31);
+    expect(interactive.terminal.run).toHaveBeenCalledWith('node cli.mjs');
+    await ui.write(opened.id, 'answer\n');
+    await ui.resize(opened.id, 100, 40);
+    await ui.stop(opened.id);
+    interactive.runExit.resolve({ code: 7, signal: null });
+
+    await expect(line).resolves.toBe(7);
+    expect(interactive.terminal.write).toHaveBeenCalledWith('answer\n');
+    expect(interactive.run.stop).toHaveBeenCalledTimes(1);
+    expect(interactive.run.close).toHaveBeenCalledTimes(1);
+    await ui.dispose();
+  });
+});

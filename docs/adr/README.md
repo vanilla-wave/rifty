@@ -248,7 +248,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0273 | Workbench files and documents handle contract |
 | 0274 | Session-scoped opaque Workbench file versions |
 | 0275 | Owner-applied project mutation stream |
-| 0277 | Playground companion semantic contract |
+| 0278 | Playground companion terminal state and preview registry |
 
 ## Superseded (removed)
 
@@ -272,6 +272,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
 | 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
 | 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
+| 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
 
 ## Corrections (active)
 

@@ -1,7 +1,39 @@
+import type { InstallAcquisitionProvenance } from '@riftydev/npm-client';
 import { ClosedHandleError, ProjectDefinitionMismatchError } from './errors.ts';
 import { type InspectedProjectDefinition, projectStorageSegment } from './project-definition.ts';
 
 export { ClosedHandleError, ProjectDefinitionMismatchError } from './errors.ts';
+
+export type ProjectFirstMaterialization =
+  | { readonly kind: 'install' }
+  | {
+      readonly kind: 'snapshot';
+      readonly snapshot: {
+        readonly snapshotId: string;
+        readonly assetUrl: string;
+        readonly templateId: string;
+      };
+    };
+
+export type ProjectAcquisitionProvenance =
+  | { readonly outcome: 'existing'; readonly identity: string; readonly packages: number }
+  | {
+      readonly outcome: 'snapshot';
+      readonly snapshotId: string;
+      readonly identity: string;
+      readonly packages: number;
+    }
+  | ({ readonly outcome: 'installed' } & InstallAcquisitionProvenance);
+
+export interface ProjectSnapshotFailure {
+  readonly snapshotId: string;
+  readonly reason: string;
+}
+
+/** Owner-born package decision consumed once the default terminal exists. */
+export type ProjectAcquisitionPlan =
+  | { readonly kind: 'ready'; readonly provenance: ProjectAcquisitionProvenance }
+  | { readonly kind: 'install'; readonly snapshotFailures: readonly ProjectSnapshotFailure[] };
 
 export interface ProjectMaterializationRecord {
   readonly definitionIdentity: string;
@@ -29,30 +61,30 @@ export interface ProjectAcquisitionRequest {
   readonly definition: InspectedProjectDefinition;
 }
 
-export interface ProjectAcquisitionPort {
-  ensure(request: ProjectAcquisitionRequest): Promise<unknown>;
+export interface ProjectAcquisitionPort<TAcquisition = unknown> {
+  ensure(request: ProjectAcquisitionRequest): Promise<TAcquisition>;
 }
 
-export interface ProjectMaterializerDependencies {
+export interface ProjectMaterializerDependencies<TAcquisition = unknown> {
   readonly owner: ProjectMaterializationOwner;
-  readonly acquisition: ProjectAcquisitionPort;
+  readonly acquisition: ProjectAcquisitionPort<TAcquisition>;
 }
 
-export interface MaterializedProject {
+export interface MaterializedProject<TAcquisition = unknown> {
   readonly projectKey: string;
   readonly projectRoot: string;
-  readonly acquisition: unknown;
+  readonly acquisition: TAcquisition;
 }
 
-export interface ProjectMaterializer {
-  open(definition: InspectedProjectDefinition): Promise<MaterializedProject>;
+export interface ProjectMaterializer<TAcquisition = unknown> {
+  open(definition: InspectedProjectDefinition): Promise<MaterializedProject<TAcquisition>>;
   delete(id: string): Promise<void>;
   close(): Promise<void>;
 }
 
-export function createProjectMaterializer(
-  dependencies: ProjectMaterializerDependencies,
-): ProjectMaterializer {
+export function createProjectMaterializer<TAcquisition>(
+  dependencies: ProjectMaterializerDependencies<TAcquisition>,
+): ProjectMaterializer<TAcquisition> {
   const { owner, acquisition } = dependencies;
   let closing = false;
   let closed = false;
@@ -80,7 +112,7 @@ export function createProjectMaterializer(
     return result;
   };
 
-  const materializer: ProjectMaterializer = {
+  const materializer: ProjectMaterializer<TAcquisition> = {
     open(definition) {
       return enqueue(async () => {
         const projectKey = definition.storageSegment;

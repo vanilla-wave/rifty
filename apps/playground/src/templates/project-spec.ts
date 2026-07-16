@@ -24,6 +24,7 @@ import type {
   ProjectPackageConfig,
   VitePackageConfig,
 } from '../workbench/internal/project-package-config.ts';
+import { serializeProjectPackageJson } from '../workbench/internal/project-package-json.ts';
 
 export type {
   NodeCliPackageConfig as NodeCliBootstrapConfig,
@@ -58,6 +59,8 @@ interface ProjectSpecBase {
    * an instant preset is truly instant. Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
+  /** SHA-256 of the exact uncompressed serialized v2 snapshot bytes. */
+  readonly bakedNodeModulesSnapshotId?: string;
   /**
    * Template id recorded inside the baked snapshot. Defaults to this spec's id;
    * set when a template deliberately shares another template's node_modules tree.
@@ -192,19 +195,15 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
   const scripts = projectScripts(spec);
-  const json = `${JSON.stringify(
-    {
-      name,
-      version,
-      private: true,
-      type: 'module',
-      scripts,
-      dependencies: spec.install,
-      ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
-    },
-    null,
-    2,
-  )}\n`;
+  const json = serializeProjectPackageJson({
+    name,
+    version,
+    private: true,
+    type: 'module',
+    scripts,
+    dependencies: spec.install,
+    ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
+  });
   return { name, version, json };
 }
 

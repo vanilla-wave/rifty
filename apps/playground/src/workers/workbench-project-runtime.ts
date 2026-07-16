@@ -17,7 +17,11 @@ import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
-import type { OwnerPackageConfig, OwnerPackageState } from './owner-package-state.ts';
+import type {
+  OwnerPackageConfig,
+  OwnerPackageMutationKind,
+  OwnerPackageState,
+} from './owner-package-state.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   createInstalledBinPreviewHooks,
@@ -43,6 +47,8 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-applied VFS state must precede every observable PTY completion. */
   readonly publicationBarrier: () => Promise<void>;
+  /** Companion metadata reflection for terminal package mutations. */
+  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
 }
@@ -175,14 +181,17 @@ export function createWorkbenchProjectRuntime(
       mutationGuard: options.mutationGuard,
       assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
     });
-    const npm = options.packageState.createNpmCommand(async (name, command, ctx) => {
-      if (name === 'dev' && devServer !== null) {
-        await options.packageState.reassertTemplateNodeModules(options.packageConfig);
-        return runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
-      }
-      const nested = makeShell({ cwd: ctx.cwd, env: ctx.env }, ptySid);
-      return runNestedShellCommand(nested, command, ctx);
-    });
+    const npm = options.packageState.createNpmCommand(
+      async (name, command, ctx) => {
+        if (name === 'dev' && devServer !== null) {
+          await options.packageState.reassertTemplateNodeModules(options.packageConfig);
+          return runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
+        }
+        const nested = makeShell({ cwd: ctx.cwd, env: ctx.env }, ptySid);
+        return runNestedShellCommand(nested, command, ctx);
+      },
+      options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation },
+    );
     shell.registerCommand('npm', npm);
     const spawnNodeEntry = (
       entryPath: string,

@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     }
     assertSnapshotArtifactCurrent({
       bytes,
+      snapshotId: spec.bakedNodeModulesSnapshotId,
       label: spec.id,
       templateId: spec.id,
       packageJsonText,

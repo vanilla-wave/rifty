@@ -24,7 +24,12 @@ export type PackageMutationIntents =
   | (() => readonly VfsMutationIntent[]);
 export type PackageResetPlan =
   | { readonly status: 'noop' }
-  | { readonly status: 'ready'; readonly mutate: PackageMutation };
+  | {
+      readonly status: 'ready';
+      /** Supplies the sole acquisition-adapter tree reset inside the mutation scope. */
+      readonly resetDependencyTree?: true;
+      readonly mutate: (resetDependencyTree?: PackageMutation) => Promise<void>;
+    };
 export type PackageResetPreparation = () => Promise<PackageResetPlan>;
 export type PackageEditPreflight<T> = () => Promise<
   { readonly status: 'ready' } | { readonly status: 'noop'; readonly value: T }

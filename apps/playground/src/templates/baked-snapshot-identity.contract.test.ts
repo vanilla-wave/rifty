@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { inspectProjectDefinition, projects } from '../workbench/project-definition.ts';
+import { buildProjectPackageJson } from './project-spec.ts';
 import { allProjectSpecs } from './registry.ts';
 
 const PUBLIC_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../public');
@@ -31,6 +33,41 @@ function readGeneratedManifest(): BakedSnapshotIdentityManifest {
 }
 
 describe('baked snapshot identity contract', () => {
+  // Fault class: sibling-drift. Bake/template and Workbench definition must
+  // consume one byte-exact manifest serialization; semantic JSON equality is insufficient.
+  it.each(
+    allProjectSpecs()
+      .filter((spec) => spec.bakedNodeModulesUrl !== undefined)
+      .map((spec) => [spec.id, spec] as const),
+  )('keeps %s template, definition, and snapshot manifest bytes identical', (_id, spec) => {
+    if (spec.runtime !== 'vite' || spec.bakedNodeModulesUrl === undefined) {
+      throw new Error(`${spec.id}: baked snapshot contract currently requires a Vite template`);
+    }
+    const templatePackageJson = buildProjectPackageJson(spec).json;
+    const definition = inspectProjectDefinition(
+      projects.vite({
+        id: `snapshot-contract-${spec.id}`,
+        files: { '/package.json': templatePackageJson },
+        dependencies: spec.install,
+        ...(spec.devDependencies === undefined ? {} : { devDependencies: spec.devDependencies }),
+      }),
+    );
+    const definitionPackageJsonBytes = definition.files['/package.json'];
+    if (definitionPackageJsonBytes === undefined) {
+      throw new Error(`${spec.id}: definition omitted /package.json`);
+    }
+    const definitionPackageJson = new TextDecoder().decode(definitionPackageJsonBytes);
+    const snapshot = JSON.parse(
+      gunzipSync(readFileSync(artifactPath(spec.bakedNodeModulesUrl))).toString('utf8'),
+    ) as { readonly packageJsonText?: unknown };
+
+    expect(templatePackageJson).toBe(definitionPackageJson);
+    expect(snapshot.packageJsonText).toBe(definitionPackageJson);
+    expect(spec.bakedNodeModulesSnapshotId).toBe(
+      serializedSnapshotIdentity(spec.bakedNodeModulesUrl),
+    );
+  });
+
   it.each(allProjectSpecs().map((spec) => [spec.id, spec] as const))(
     'keeps %s URL and bake-owned identity paired',
     (_id, spec) => {

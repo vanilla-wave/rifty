@@ -3,7 +3,11 @@ import type { RegistryClient } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand, ShellCommandResult } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
-import { type DepSnapshotV2, prepareDepSnapshotRestore } from '../glue/dep-snapshot.ts';
+import {
+  type DepSnapshotV2,
+  fetchVerifiedDepSnapshot,
+  prepareDepSnapshotRestore,
+} from '../glue/dep-snapshot.ts';
 import {
   learnedPinForPackageJsonSync,
   readLearnedPin,
@@ -38,6 +42,10 @@ import {
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
+import type {
+  ProjectAcquisitionPlan,
+  ProjectFirstMaterialization,
+} from '../workbench/project-materialization.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
@@ -49,11 +57,21 @@ import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 
 const enc = new TextEncoder();
 
+export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'package-lock';
+
+export interface OwnerNpmCommandOptions {
+  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+}
+
 export interface OwnerPackageConfig {
   readonly cfg: ProjectPackageConfig;
   readonly templateId: string;
   readonly slug: string;
   readonly fromScratch: boolean;
+}
+
+export interface FirstMaterializationOwnerPackageConfig extends OwnerPackageConfig {
+  readonly firstMaterialization: ProjectFirstMaterialization;
 }
 
 export interface OwnerPackageStateOptions {
@@ -76,6 +94,9 @@ export interface OwnerPackageStateOptions {
 export interface OwnerPackageState {
   readonly mutations: PackageMutationExecutor;
   /** Register, activate, and install/reuse one exact project through one FIFO admission. */
+  activateAndEnsure(
+    config: FirstMaterializationOwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan>;
   activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   /** Settle package commands and durability work admitted before this call. */
   quiesce(): Promise<void>;
@@ -90,6 +111,7 @@ export interface OwnerPackageState {
   /** The npm command already bound to the same acquisition/stamp authority. */
   createNpmCommand(
     runScript: (name: string, command: string, ctx: CommandContext) => Promise<ShellCommandResult>,
+    options?: OwnerNpmCommandOptions,
   ): ShellCommand;
 }
 
@@ -106,8 +128,30 @@ function packageProject(config: OwnerPackageConfig): PackageAcquisitionProject {
   };
 }
 
+function hasFirstMaterialization(
+  config: OwnerPackageConfig,
+): config is FirstMaterializationOwnerPackageConfig {
+  return Object.hasOwn(config, 'firstMaterialization');
+}
+
+function isBareInstallCommand(args: readonly string[]): boolean {
+  const subcommand = args[0];
+  if (subcommand !== 'install' && subcommand !== 'i' && subcommand !== 'add') return false;
+  const parsed = parseNpmInstallRequest(args.slice(1));
+  return parsed.status === 'ready' && parsed.request.packageSpecs.length === 0;
+}
+
 function decodeChunk(chunk: string | Uint8Array): string {
   return typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
+}
+
+function optionalFile(authority: OwnerVfsAuthority, path: string): Uint8Array | null {
+  return authority.statSyncOrNull(path)?.isFile === true ? authority.readFileBytesSync(path) : null;
+}
+
+function equalOptionalBytes(left: Uint8Array | null, right: Uint8Array | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
@@ -115,6 +159,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   let configured = options.initial;
   let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
+  const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
   if (options.initial) {
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
   }
@@ -230,6 +275,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
       }
     },
+    captureDeferredTerminalReuse: () => {
+      if (activeProject === null) return false;
+      const key = configKey(activeProject.root, activeProject.slug);
+      const phase = firstMaterializationPhases.get(key);
+      if (phase === 'preparing' || phase === 'consuming') return true;
+      if (phase === 'deferred') firstMaterializationPhases.set(key, 'consuming');
+      return false;
+    },
     adapter: {
       prepareEnsure: async (command, execution) => {
         if (!command.replaceTreeOnMiss) return;
@@ -317,28 +370,56 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                 stdout: sink,
                 stderr: sink,
               };
-        const installed = await executeNpmInstallOperation(
-          parsed.request,
-          context,
-          operationDeps,
-          execution,
-        );
-        if (installed.status !== 'noop') {
-          await finalizePackageInstallFiles({
-            root: request.project.root,
-            ...(config
-              ? {
-                  seedTemplateFiles: () =>
-                    seedTemplateNodeModulesFiles(
-                      options.fsSync,
-                      config.cfg.root,
-                      config.cfg.seedFiles,
-                    ),
-                }
-              : {}),
-          });
+        if (
+          request.type === 'terminal-install' &&
+          config !== undefined &&
+          hasFirstMaterialization(config)
+        ) {
+          const packageSpecs = request.argv.length === 0 ? '' : ` ${request.argv.join(' ')}`;
+          context.stdout.write(`$ npm install${packageSpecs}\n`);
         }
-        return installed;
+        const firstMaterializationKey =
+          config !== undefined && hasFirstMaterialization(config)
+            ? configKey(config.cfg.root, config.slug)
+            : null;
+        if (
+          firstMaterializationKey !== null &&
+          firstMaterializationPhases.get(firstMaterializationKey) === 'deferred'
+        ) {
+          firstMaterializationPhases.set(firstMaterializationKey, 'consuming');
+        }
+        try {
+          const installed = await executeNpmInstallOperation(
+            parsed.request,
+            context,
+            operationDeps,
+            execution,
+          );
+          if (installed.status !== 'noop') {
+            await finalizePackageInstallFiles({
+              root: request.project.root,
+              ...(config
+                ? {
+                    seedTemplateFiles: () =>
+                      seedTemplateNodeModulesFiles(
+                        options.fsSync,
+                        config.cfg.root,
+                        config.cfg.seedFiles,
+                      ),
+                  }
+                : {}),
+            });
+          }
+          if (firstMaterializationKey !== null) {
+            firstMaterializationPhases.delete(firstMaterializationKey);
+          }
+          return installed;
+        } catch (error) {
+          if (firstMaterializationKey !== null) {
+            firstMaterializationPhases.set(firstMaterializationKey, 'deferred');
+          }
+          throw error;
+        }
       },
       reset: async (command) => clearProjectTree(options.fsSync, command.target.root),
       switchProject: async (command) => {
@@ -414,16 +495,75 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     }
   };
 
-  const activateAndEnsure = (config: OwnerPackageConfig): Promise<AcquisitionProvenance> => {
-    return packages.dispatch({
-      type: 'activate-and-ensure',
+  function activateAndEnsure(
+    config: FirstMaterializationOwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan>;
+  function activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
+  function activateAndEnsure(
+    config: OwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan | AcquisitionProvenance> {
+    if (!hasFirstMaterialization(config)) {
+      return packages.dispatch({
+        type: 'activate-and-ensure',
+        register: () => configure(config),
+        from: () => activeProject,
+        to: packageProject(config),
+        packageJsonText: config.cfg.packageJson,
+        replaceTreeOnMiss: true,
+      });
+    }
+
+    const materialization = config.firstMaterialization;
+    const key = configKey(config.cfg.root, config.slug);
+    firstMaterializationPhases.set(key, 'preparing');
+    const prepared = packages.dispatch({
+      type: 'prepare-first-materialization',
       register: () => configure(config),
       from: () => activeProject,
       to: packageProject(config),
       packageJsonText: config.cfg.packageJson,
+      materialization:
+        materialization.kind === 'install'
+          ? { kind: 'install' }
+          : {
+              kind: 'snapshot',
+              source: {
+                snapshotId: materialization.snapshot.snapshotId,
+                resolve: async () => {
+                  const verified = await fetchVerifiedDepSnapshot(
+                    materialization.snapshot.assetUrl,
+                    materialization.snapshot.snapshotId,
+                  );
+                  if (verified.status === 'mismatch') {
+                    return { status: 'rejected' as const, reason: 'snapshot-id-mismatch' };
+                  }
+                  const snapshot = verified.snapshot;
+                  if (snapshot.templateId !== materialization.snapshot.templateId) {
+                    return { status: 'rejected' as const, reason: 'snapshot-template-mismatch' };
+                  }
+                  return {
+                    status: 'candidate' as const,
+                    snapshot: {
+                      snapshotId: materialization.snapshot.snapshotId,
+                      identity: snapshot.installArtifactIdentity,
+                      packageJsonText: snapshot.packageJsonText,
+                      payload: snapshot,
+                    },
+                  };
+                },
+              },
+            },
       replaceTreeOnMiss: true,
     });
-  };
+    void prepared.then(
+      (plan) => {
+        if (plan.kind === 'install') firstMaterializationPhases.set(key, 'deferred');
+        else firstMaterializationPhases.delete(key);
+      },
+      () => firstMaterializationPhases.delete(key),
+    );
+    return prepared;
+  }
 
   const transition = async (config: OwnerPackageConfig): Promise<void> => {
     configs.set(configKey(config.cfg.root, config.slug), config);
@@ -467,11 +607,75 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     restore,
     transition,
     reassertTemplateNodeModules,
-    createNpmCommand: (runScript) =>
-      createNpmShellCommand({
+    createNpmCommand: (runScript, commandOptions = {}) => {
+      const command = createNpmShellCommand({
         ...baseNpmDeps,
         packageAcquisitionAuthority: packages,
         runScript,
-      }),
+      });
+      return async (args, context) => {
+        const config = configured;
+        if (
+          config === undefined ||
+          normalizePath(context.cwd) !== normalizePath(config.cfg.root) ||
+          commandOptions.recordMutation === undefined
+        ) {
+          return command(args, context);
+        }
+
+        const key = configKey(config.cfg.root, config.slug);
+        const firstDependencyArrival =
+          firstMaterializationPhases.has(key) && isBareInstallCommand(args);
+        const packageJsonPath = normalizePath(`${config.cfg.root}/package.json`);
+        const packageLockPath = normalizePath(`${config.cfg.root}/package-lock.json`);
+        const priorTreeRevision = options.fsSync.treeRevision;
+        const priorPackageJson = optionalFile(options.fsSync, packageJsonPath);
+        const priorPackageLock = optionalFile(options.fsSync, packageLockPath);
+        let result: ShellCommandResult | undefined;
+        let commandFailure: unknown;
+        try {
+          result = await command(args, context);
+        } catch (error) {
+          commandFailure = error;
+        }
+
+        let recordFailure: unknown;
+        try {
+          const treeRevision = options.fsSync.treeRevision;
+          if (treeRevision > priorTreeRevision) {
+            if (firstDependencyArrival) {
+              await commandOptions.recordMutation('dependency', treeRevision);
+            } else {
+              const packageJsonChanged = !equalOptionalBytes(
+                priorPackageJson,
+                optionalFile(options.fsSync, packageJsonPath),
+              );
+              const packageLockChanged = !equalOptionalBytes(
+                priorPackageLock,
+                optionalFile(options.fsSync, packageLockPath),
+              );
+              if (packageJsonChanged) {
+                await commandOptions.recordMutation('package-manifest', treeRevision);
+              }
+              if (packageLockChanged) {
+                await commandOptions.recordMutation('package-lock', treeRevision);
+              }
+            }
+          }
+        } catch (error) {
+          recordFailure = error;
+        }
+
+        if (commandFailure !== undefined && recordFailure !== undefined) {
+          throw new AggregateError(
+            [commandFailure, recordFailure],
+            'npm command and package mutation reflection failed',
+          );
+        }
+        if (commandFailure !== undefined) throw commandFailure;
+        if (recordFailure !== undefined) throw recordFailure;
+        return result as ShellCommandResult;
+      };
+    },
   };
 }

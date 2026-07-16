@@ -1,13 +1,14 @@
-# ADR 0277: Playground companion semantic contract
+# ADR 0278: Playground companion terminal state and preview registry
 
 Status: Accepted
 Date: 2026-07
+Supersedes: ADR-0277
 Refines: ADR-0263
 
 > TL;DR: the Playground companion accepts exact finite project plans, owns a
-> durable semantic catalog, and binds TS/SCM/archive handles to one live
-> Workbench session; transports, owner identity, roots, and UI models stay
-> private.
+> durable semantic catalog, binds TS/SCM/archive/preview handles to one live
+> Workbench session, and exposes project-rooted terminal state; transports,
+> owner identity, physical roots, and UI models stay private.
 
 ## Context
 
@@ -20,6 +21,17 @@ snapshot ports, and raw bridges. Reusing it would retain page-owned
 coordination. The companion instead hides the same owner, mutation ordering,
 project roots, and teardown behind semantic values.
 
+App migration then exposed one missing load-bearing seam in ADR-0277. The
+accepted terminal UX persists owner-resident cwd/env (ADR-0116/0146), and the
+accepted preview UX shows every live port opened by arbitrary `node <file>` and
+installed-bin commands (ADR-0155), not only the definition's primary ready
+port. `ProjectTerminal` exposed neither its owner-acknowledged shell snapshot
+nor the owner PreviewRegistry. Reconstructing either from command strings,
+`ProjectRun.ready`, guest environment variables, or raw `pty:*` frames would
+restore page-owned coordination and lose real owner changes. This successor
+grafts every ADR-0277 decision below and adds only the semantic state needed by
+those already-accepted user behaviors.
+
 ## Decision
 
 ### Entry and plans
@@ -28,6 +40,10 @@ project roots, and teardown behind semantic values.
 openPlaygroundWorkbench(options: WorkbenchOptions): Promise<PlaygroundWorkbench>
 
 interface PlaygroundWorkbench extends Workbench {
+  openProject<TReady>(
+    definition: ProjectDefinition<TReady>,
+    options?: PlaygroundProjectOpenOptions,
+  ): Promise<ProjectSession<TReady>>
   readonly playground: {
     define(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>
     define(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>
@@ -35,6 +51,15 @@ interface PlaygroundWorkbench extends Workbench {
     readonly catalog: PlaygroundProjectCatalog
     forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools
   }
+}
+
+interface ProjectTerminalSnapshot {
+  readonly cwd: string
+  readonly env: Readonly<Record<string, string>>
+}
+
+interface PlaygroundProjectOpenOptions {
+  readonly initialTerminalState?: ProjectTerminalSnapshot
 }
 
 type PlaygroundFirstMaterialization =
@@ -154,6 +179,77 @@ without another install. A rejected `kind: 'snapshot'` probe prints its recorded
 reason and performs the same visible real install before the runtime command.
 Snapshot, fallback, terminal installs, and manifest mutations remain one owner
 FIFO.
+
+### Terminal state and preview registry
+
+The companion overload of `openProject()` accepts one optional
+`initialTerminalState`. It seeds every terminal opened by that
+`ProjectSession`, matching the existing Playground behavior; it is not owner
+configuration or identity. The record has exact keys, a normalized public
+project cwd (`/` or `/...`), and a plain string-to-string env record. Validation
+defensively copies and freezes the value before owner effects. The owner maps
+the public cwd to the exact session root and verifies it is an existing
+directory. A missing/stale directory falls back to public `/` while preserving
+env, as required by ADR-0116. The owner returns that validated state before
+`openProject()` exposes the session, so a synchronous snapshot never reports an
+unacknowledged seed.
+
+The first-party App converts a historical persisted cwd only when it is under
+the selected legacy project's known root; the suffix becomes the public cwd.
+An absent/outside/stale historical cwd becomes `/`. New persistence stores only
+the public project-rooted form. Environment entries remain opaque guest data:
+no key, including a `RIFTY_*`-shaped key, is created, stripped, or trusted as
+owner, project, terminal, or preview identity.
+
+`ProjectTerminal` adds one synchronous semantic read:
+
+```ts
+interface ProjectTerminal {
+  snapshot(): ProjectTerminalSnapshot
+  // run/write/end/resize/attach/close unchanged
+}
+```
+
+The snapshot is a fresh frozen value translated from the exact owner session
+to the public project root. The initial seed is observable immediately; each
+run's cwd/env is committed before `ProjectTerminalRun.exited` settles. A path
+outside the exact project rejects the whole snapshot instead of leaking a
+physical owner root. Snapshot on a closing/closed terminal throws
+`ClosedHandleError`. The page may persist the value, but never owns or mutates
+the live shell state.
+
+The owner PreviewRegistry remains the sole producer of live preview state.
+Companion session tools expose its semantic projection:
+
+```ts
+interface PlaygroundPreview extends PreviewHandle {
+  readonly label: string
+  readonly source: 'dev-server' | 'preview' | 'node'
+}
+
+interface PlaygroundPreviewRegistry {
+  snapshot(): readonly PlaygroundPreview[]
+  subscribe(listener: (snapshot: readonly PlaygroundPreview[]) => void): () => void
+}
+```
+
+Snapshots are frozen, preserve owner insertion/deduplication order, and replay
+on subscribe. They contain every live project dev server, production preview,
+and arbitrary Node/bin listening port. They contain no owner token, physical
+root, PTY sid/rid, child sid, preview scope, request id, or frame. The browser
+implementation performs the missed-push request handshake, reconciles the
+hidden owner entries with one session route authority, and installs each
+preview bridge before publishing its semantic entry. `url` is therefore a
+navigable routed URL, not an advertisement the caller must wire. Entry removal
+releases its hidden route; session close publishes/retains no live entries.
+Bridge or control-proof failure rejects the registry/session path loudly; it
+must not silently omit a real owner port or publish an unrouted URL.
+
+Primary-run control does not widen. The exact `ProjectRun` returned by
+`ProjectSession.run()` remains the sole primary execution handle; the App keeps
+that handle and the palette calls its idempotent `stop()`. Preview entries and
+terminal display ids are observations, never reconstructed stop capabilities.
+No `stopPrimary`, raw signal, or guest-env correlation is added.
 
 ### Catalog
 
@@ -295,6 +391,7 @@ interface PlaygroundSessionTools {
   readonly typescript: PlaygroundTypeScript
   readonly scm: PlaygroundScm
   readonly archive: PlaygroundArchive
+  readonly previews: PlaygroundPreviewRegistry
 }
 ```
 
@@ -530,6 +627,23 @@ session on the same physical Workbench owner. The user-visible restart and
 single-active-root invariant remain; no live root re-point and no second owner
 are introduced.
 
+### Rejected corrections
+
+- Export `PtyClient.snapshot()`, `pty:preview`, owner tokens, or bridge wiring:
+  rejected because transport identity and lifecycle coordination would become
+  caller interface again.
+- Derive previews from `ProjectRun.ready`: rejected because it observes only
+  the primary definition run and cannot represent arbitrary later Node/bin
+  listeners or their removal.
+- Infer preview/run identity from a guest env key: rejected because guest env
+  is user-owned data and spoofable; actor-minted PTY admission remains private.
+- Add `stopPrimary()` to companion tools or stop by terminal/preview id:
+  rejected because `ProjectRun.stop()` already owns the exact execution and a
+  sibling path would split cancellation authority.
+- Move host history/state policy into the package: rejected because ADR-0116
+  deliberately lets the host choose persistence; only live shell state belongs
+  to the owner.
+
 ## Fault matrix
 
 | fault × operation | honest outcome / Contract+RED proof |
@@ -544,12 +658,17 @@ are introduced.
 | `torn-state` × legacy adoption crash | source retained through journaled promote/mark; retry resumes or rolls back without empty catalog |
 | `quota-perm-fail` × catalog/archive/migration durability | mutation rejects without publishing false snapshot; live/source tree remains recoverable |
 | `torn-state` × dirty close/tool work/core close | dirty preflight leaves tools live; admitted tools drain/cancel before core teardown |
+| `provenance-lie` × terminal cwd/env | owner validates seed, translates exact root both ways, and commits exit state before settlement; physical-root escape rejects |
+| `observable-order` × preview registry subscribe | listener attaches before the private request handshake; arbitrary Node/bin ports replay and removal/replacement abort stale route proof before publication |
+| `provenance-lie` × preview route | semantic entry publishes only after its hidden bridge is installed; bridge/control failure is loud |
 
 Contract+RED includes unit fault tests for each semantic boundary plus real
 browser-owner cases for companion minting, real npm/process execution,
-non-default Vite port, selected-legacy boot wiring, and the real TypeScript
-service. Synthetic relay/process fixtures remain unit-ordering evidence only;
-they never close observable acceptance.
+non-default Vite port, selected-legacy boot wiring, persisted cwd/env restore
+and post-exit round trip, arbitrary-command multi-port add/remove/switch, exact
+primary-run stop, and the real TypeScript service. Synthetic relay/process
+fixtures remain unit-ordering evidence only; they never close observable
+acceptance.
 
 ## Consequences
 
@@ -557,6 +676,10 @@ they never close observable acceptance.
   one owner lifetime.
 - The public cost is finite semantic data/handles, not controller or transport
   extensibility.
+- Terminal persistence remains host policy over owner-acknowledged state; the
+  host never becomes the live shell owner.
+- Multi-port preview remains one owner registry plus one browser route
+  authority; callers never wire or correlate transports.
 - App migration must close a session before Save/switch/reset/delete, then open
   the catalog-selected definition; this matches the observable restart model.
 - PR #136 remains an implementation quarry for validators, TS relay, Git,

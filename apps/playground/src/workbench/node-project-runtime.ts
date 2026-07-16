@@ -1,17 +1,23 @@
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
-import { nodeProjectShellCommand } from './internal/node-command.ts';
+import {
+  nodeProjectShellCommand,
+  projectRelativePath,
+  projectRuntimeShellWord,
+} from './internal/node-command.ts';
 import type { PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
+import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import type { ProjectRuntime } from './project-session.ts';
 import {
   type ProjectTerminal,
   type ProjectTerminalRun,
   projectTerminalAdmission,
 } from './project-terminal.ts';
-import { createPreviewProjectRuntime } from './vite-project-runtime.ts';
+import { createPreviewProjectRuntime, projectRuntimeShellLine } from './vite-project-runtime.ts';
 
 interface NodeProjectRuntimeDependencies {
   readonly terminal: ProjectTerminal;
   readonly entryPath: string;
+  readonly acquisition?: ProjectAcquisitionPlan;
 }
 
 export interface NodeServerProjectRuntimeDependencies extends NodeProjectRuntimeDependencies {
@@ -41,7 +47,13 @@ export function createNodeServerProjectRuntime(
     ownerToken: dependencies.ownerToken,
     createPreviewReadiness: dependencies.createPreviewReadiness,
     label: 'Node server project runtime',
-    line: 'npm run dev',
+    line: () => {
+      const cwd = dependencies.terminal.snapshot().cwd;
+      const root = projectRelativePath('/', cwd);
+      const runtimeLine =
+        root === '.' ? 'npm run dev' : `npm --prefix ${projectRuntimeShellWord(root)} run dev`;
+      return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
+    },
     matches: (entry) => entry.source === 'dev-server' && entry.port === port,
   });
 }
@@ -49,7 +61,8 @@ export function createNodeServerProjectRuntime(
 export function createNodeCliProjectRuntime(
   dependencies: NodeCliProjectRuntimeDependencies,
 ): ProjectRuntime<void> {
-  const command = nodeProjectShellCommand(dependencies.entryPath, dependencies.args);
+  nodeProjectShellCommand(dependencies.entryPath, dependencies.args);
+  const args = Object.freeze([...dependencies.args]);
 
   type RunState = {
     readonly run: ProjectTerminalRun;
@@ -70,6 +83,12 @@ export function createNodeCliProjectRuntime(
       if (closing || closed) throw new ClosedHandleError('Node CLI project runtime');
       if (active !== null) throw new ProjectBusyError('Node CLI project runtime');
 
+      const cwd = dependencies.terminal.snapshot().cwd;
+      const command = projectRuntimeShellLine(
+        nodeProjectShellCommand(dependencies.entryPath, args, cwd),
+        dependencies.acquisition,
+        cwd,
+      );
       const run = dependencies.terminal.run(command);
       const retired = run.exited.then(
         () => {
