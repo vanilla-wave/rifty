@@ -248,6 +248,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0273 | Workbench files and documents handle contract |
 | 0274 | Session-scoped opaque Workbench file versions |
 | 0275 | Owner-applied project mutation stream |
+| 0277 | Playground companion semantic contract |
 
 ## Superseded (removed)
 
